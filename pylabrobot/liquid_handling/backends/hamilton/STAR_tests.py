@@ -7,6 +7,7 @@ import unittest.mock
 from typing import Literal, cast
 
 from pylabrobot.arms.standard import CartesianCoords
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import GripDirection, Pickup
 from pylabrobot.plate_reading import PlateReader
@@ -32,9 +33,12 @@ from pylabrobot.resources import (
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
 from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.testing.concurrency import AnyioTestBase, lifespan_kwargs
+from pylabrobot.testing.mock_io import MockIO
 
 from .STAR_backend import (
   CommandSyntaxError,
+  HamiltonLiquidHandler,
   HamiltonNoTipError,
   HardwareError,
   PipChannelInformation,
@@ -56,7 +60,6 @@ class TestSTARResponseParsing(unittest.TestCase):
   """Test parsing of response from Hamilton."""
 
   def setUp(self):
-    super().setUp()
     self.star = STARBackend()
 
   def test_parse_response_params(self):
@@ -313,7 +316,7 @@ class TestiSWAPAxisPredicates(unittest.TestCase):
     self.assertFalse(Axis.GRIPPER.is_in_kinematic_chain, "GRIPPER should NOT be in the chain")
 
 
-class TestiSWAPRequestJointState(unittest.IsolatedAsyncioTestCase):
+class TestiSWAPRequestJointState(AnyioTestBase):
   """`iswap_request_joint_state` composes the per-axis request methods into one dict."""
 
   def _make_backend(self) -> STARBackend:
@@ -344,7 +347,7 @@ class TestiSWAPRequestJointState(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class TestiSWAPRequestPose(unittest.IsolatedAsyncioTestCase):
+class TestiSWAPRequestPose(AnyioTestBase):
   """`iswap_request_pose` reads joints + runs FK against the cached link lengths."""
 
   def _make_backend(self) -> STARBackend:
@@ -394,9 +397,12 @@ class TestiSWAPInformationGuard(unittest.TestCase):
     self.assertIs(b.iswap_information, _DEFAULT_ISWAP_INFORMATION)
 
 
-class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
+class TestChatterboxiSWAPSetup(AnyioTestBase):
   """`STARChatterboxBackend.setup()` populates `_iswap_information` from the
   default record (or a constructor override) when the iSWAP is installed."""
+
+  def assertIs(self, first, second, msg=None):
+    assert first is second, msg or f"{first} is not {second}"
 
   @staticmethod
   def _make_chatterbox(**kwargs) -> STARChatterboxBackend:
@@ -406,8 +412,8 @@ class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
 
   async def test_default_record_assigned_when_iswap_installed(self):
     cb = self._make_chatterbox()
-    await cb.setup()
-    self.assertIs(cb.iswap_information, _DEFAULT_ISWAP_INFORMATION)
+    async with cb:
+      self.assertIs(cb.iswap_information, _DEFAULT_ISWAP_INFORMATION)
 
   async def test_constructor_override_takes_precedence(self):
     custom = iSWAPInformation(
@@ -430,10 +436,10 @@ class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
       },
     )
     cb = self._make_chatterbox(iswap_information=custom)
-    await cb.setup()
-    self.assertIs(cb.iswap_information, custom)
-    self.assertEqual(cb.iswap_information.fw_version, "custom-test")
-    self.assertEqual(cb.iswap_information.link_1_length, 140.0)
+    async with cb:
+      self.assertIs(cb.iswap_information, custom)
+      self.assertEqual(cb.iswap_information.fw_version, "custom-test")
+      self.assertEqual(cb.iswap_information.link_1_length, 140.0)
 
   async def test_skipped_when_iswap_not_installed(self):
     # Build an extended_conf with iSWAP NOT installed.
@@ -441,13 +447,13 @@ class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
     no_iswap_conf.left_x_drive = copy.deepcopy(no_iswap_conf.left_x_drive)
     no_iswap_conf.left_x_drive.iswap_installed = False
     cb = self._make_chatterbox(extended_configuration=no_iswap_conf)
-    await cb.setup()
-    self.assertIsNone(cb._iswap_information)
-    with self.assertRaisesRegex(RuntimeError, "iSWAP information not loaded"):
-      _ = cb.iswap_information
+    async with cb:
+      self.assertIsNone(cb._iswap_information)
+      with self.assertRaisesRegex(RuntimeError, "iSWAP information not loaded"):
+        _ = cb.iswap_information
 
 
-class TestiSWAPYMaxBootstrap(unittest.IsolatedAsyncioTestCase):
+class TestiSWAPYMaxBootstrap(AnyioTestBase):
   """`_iswap_rotation_drive_request_y_max` runs during setup, before
   `iswap_information` exists, so it must not read it (regression: it used to,
   raising "iSWAP information not loaded" mid-`set_up_iswap`)."""
@@ -464,14 +470,19 @@ class TestiSWAPYMaxBootstrap(unittest.IsolatedAsyncioTestCase):
     await b._iswap_rotation_drive_request_y_max()
 
 
-class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
+class TestSTARUSBComms(AnyioTestBase):
   """Test that USB data is parsed correctly."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.star = STARBackend(read_timeout=1, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
-    self.star.io = unittest.mock.AsyncMock()
-    await super().asyncSetUp()
+    self.star.io = MockIO()  # type: ignore
+    # We need to temporarily replace _enter_lifespan with one that forwards to the parent class,
+    # so as not to do any hardware setup on enter, but still start the reader loop.
+    self.star._enter_lifespan = lambda stack, **kwargs: HamiltonLiquidHandler._enter_lifespan(
+      self.star, stack
+    )
+    await stack.enter_async_context(self.star)
 
   async def test_send_command_correct_response(self):
     self.star.io.read.side_effect = [b"C0QMid0001"]
@@ -497,11 +508,19 @@ class STARCommandCatcher(STARBackend):
     super().__init__()
     self.commands = []
 
-  async def setup(self) -> None:  # type: ignore
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs) -> None:
+    # Bypass STARBackend._enter_lifespan to avoid sending commands to mock machine.
     self._num_channels = 8
     self._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self._core_parked = True
+    self._setup_done = True
+
+    def cleanup():
+      self.stop_finished = True
+      self._setup_done = False
+
+    stack.callback(cleanup)
 
   async def send_command(  # type: ignore
     self,
@@ -519,23 +538,18 @@ class STARCommandCatcher(STARBackend):
     )
     self.commands.append(cmd)
 
-  async def stop(self):
-    self.stop_finished = True
 
-
-class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
+class TestSTARLiquidHandlerCommands(AnyioTestBase):
   """Test STAR backend for liquid handling."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack, *, with_lh=True):
     self.STAR = STARBackend(read_timeout=1)
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
-    self.STAR.io = unittest.mock.AsyncMock()
-    self.STAR.io.setup = unittest.mock.AsyncMock()
-    self.STAR.io.write = unittest.mock.MagicMock()
-    self.STAR.io.read = unittest.mock.MagicMock()
+    self.STAR.io = MockIO()  # type: ignore
 
     self.deck = STARLetDeck()
-    self.lh = LiquidHandler(self.STAR, deck=self.deck)
+    if with_lh:
+      self.lh = LiquidHandler(self.STAR, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
@@ -584,12 +598,21 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.STAR.setup = unittest.mock.AsyncMock()
+
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
-    await self.lh.setup()
+
+    # Bypass hardware initialization in _enter_lifespan
+    self.STAR._enter_lifespan = lambda stack, **kwargs: HamiltonLiquidHandler._enter_lifespan(
+      self.STAR, stack
+    )
+
+    if with_lh:
+      await stack.enter_async_context(self.lh)
 
     set_tip_tracking(enabled=False)
+    self.STAR._write_and_read_command.reset_mock()
+    self.STAR.id_ = 0
 
   async def test_core_read_barcode_success(self):
     """core_read_barcode_of_picked_up_resource should send ZB and return a Barcode."""
@@ -699,9 +722,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           labware_description="Cos_96_PCR_0001",
         )
 
-  async def asyncTearDown(self):
-    await self.lh.stop()
-
   async def test_indicator_light(self):
     await self.STAR.set_loading_indicators(bit_pattern=[True] * 54, blink_pattern=[False] * 54)
     self.STAR._write_and_read_command.assert_has_calls(
@@ -712,7 +732,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  def test_ops_to_fw_positions(self):
+  async def test_ops_to_fw_positions(self):
     """Convert channel positions to firmware positions."""
     tip_a1 = self.tip_rack.get_item("A1")
     tip_f1 = self.tip_rack.get_item("F1")
@@ -792,7 +812,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR.io.write.reset_mock()
 
   async def test_tip_drop_56(self):
-    await self.test_tip_pickup_56()  # pick up tips first
+    await self.test_tip_pickup_56.original_func(self)  # pick up tips first
     self.STAR._write_and_read_command.side_effect = [
       "C0TRid0003kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
     ]
@@ -808,7 +828,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate56(self):
     self.maxDiff = None
-    await self.test_tip_pickup_56()  # pick up tips first
+    await self.test_tip_pickup_56.original_func(self)  # pick up tips first
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     for well in self.plate.get_items(["A1", "B1"]):
@@ -1336,6 +1356,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  @lifespan_kwargs(with_lh=False)
   async def test_portrait_tip_rack_handling(self):
     deck = STARLetDeck()
     lh = LiquidHandler(self.STAR, deck=deck)
@@ -1344,24 +1365,23 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert tr.rotation.z == 90
     assert tr.location == Coordinate(82.6, 0, 0)
     deck.assign_child_resource(tip_car, rails=2)
-    await lh.setup()
-
-    await lh.pick_up_tips(tr["A4:A1"])
-    self.STAR._write_and_read_command.side_effect = [
-      "C0TRid0002kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
-    ]
-    await lh.drop_tips(tr["A4:A1"])
-
-    self.STAR._write_and_read_command.assert_has_calls(
-      [
-        _any_write_and_read_command_call(
-          "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2263tz2163th2450td0"
-        ),
-        _any_write_and_read_command_call(
-          "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2263tz2183th2450te2450ti1"
-        ),
+    async with lh:
+      await lh.pick_up_tips(tr["A4:A1"])
+      self.STAR._write_and_read_command.side_effect = [
+        "C0TRid0002kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
       ]
-    )
+      await lh.drop_tips(tr["A4:A1"])
+
+      self.STAR._write_and_read_command.assert_has_calls(
+        [
+          _any_write_and_read_command_call(
+            "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2263tz2163th2450td0"
+          ),
+          _any_write_and_read_command_call(
+            "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2263tz2183th2450te2450ti1"
+          ),
+        ]
+      )
 
   def test_serialize(self):
     serialized = LiquidHandler(backend=STARBackend(), deck=STARLetDeck()).serialize()
@@ -1398,8 +1418,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+class STARIswapMovementTests(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
     self.STAR = STARBackend()
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
     self.deck = STARLetDeck()
@@ -1415,10 +1435,15 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.STAR.setup = unittest.mock.AsyncMock()
+
+    async def mock_enter_lifespan(stack, **kwargs):
+      pass
+
+    self.STAR._enter_lifespan = mock_enter_lifespan
+
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
   async def test_simple_movement(self):
     await self.lh.move_plate(self.plate, self.plt_car[1])
@@ -1525,8 +1550,8 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class STARFoilTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+class STARFoilTests(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
     self.star = STARBackend()
     self.star._write_and_read_command = unittest.mock.AsyncMock()
     self.deck = STARLetDeck()
@@ -1544,11 +1569,15 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
     self.star._num_channels = 8
     self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.star._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.star.setup = unittest.mock.AsyncMock()
+
+    async def mock_enter_lifespan(stack, **kwargs):
+      pass
+
+    self.star._enter_lifespan = mock_enter_lifespan
+
     self.star._core_parked = True
     self.star._iswap_parked = True
-    await self.lh.setup()
-
+    await stack.enter_async_context(self.lh)
     await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
 
   async def test_pierce_foil_wide(self):
@@ -1730,17 +1759,22 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+class TestSTARTipPickupDropAllSizes(AnyioTestBase):
   """Test STAR tip pickup and drop Z position calculations for all tip sizes."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.backend = STARBackend()
     self.backend._write_and_read_command = unittest.mock.AsyncMock()
-    self.backend.io = unittest.mock.AsyncMock()
+    self.backend.io = MockIO()  # type: ignore
     self.backend._num_channels = 8
     self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.backend.setup = unittest.mock.AsyncMock()
+
+    async def mock_enter_lifespan(stack, **kwargs):
+      pass
+
+    self.backend._enter_lifespan = mock_enter_lifespan
+
     self.backend._core_parked = True
     self.backend._iswap_parked = True
 
@@ -1750,7 +1784,7 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
     set_tip_tracking(enabled=False)
 
   def _get_tp_tz_from_calls(self, cmd_prefix: str):
@@ -1851,13 +1885,16 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     tip_rack.unassign()
 
 
-class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
+class TestChannelsMinimumYSpacing(AnyioTestBase):
   """Test that different channel spacing configurations produce different behavior.
 
   Real firmware VY responses captured from hardware (GitHub issue #822):
     - 4-channel 18mm single-rail:  P<n>VYid<id>yc194 388 1  (yc[1]=388 → 18.0mm)
     - 8-channel 9mm standard:      P<n>VYid<id>yc000 194 0  (yc[1]=194 → 9.0mm)
   """
+
+  async def _enter_lifespan(self, stack):
+    pass
 
   # -- can_reach_position: reachability shrinks with wider spacing ----------------
 
@@ -1953,16 +1990,13 @@ class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
     self.assertNotEqual(cmd_9mm, cmd_18mm)
 
 
-class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
-  """Tests for probe_liquid_heights: detection dispatch, replicates, error handling."""
+class STARTestBase(AnyioTestBase):
+  """Shared setup for probe/batch/helper tests."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.STAR = STARBackend(read_timeout=1)
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
-    self.STAR.io = unittest.mock.AsyncMock()
-    self.STAR.io.setup = unittest.mock.AsyncMock()
-    self.STAR.io.write = unittest.mock.MagicMock()
-    self.STAR.io.read = unittest.mock.MagicMock()
+    self.STAR.io = MockIO()  # type: ignore
 
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
@@ -1978,15 +2012,21 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
     self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
-    self.STAR.setup = unittest.mock.AsyncMock()
+
+    async def mock_enter_lifespan(stack, **kwargs):
+      pass
+
+    self.STAR._enter_lifespan = mock_enter_lifespan
+
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
     set_tip_tracking(enabled=False)
 
-  async def asyncTearDown(self):
-    await self.lh.stop()
+
+class TestProbeLiquidHeights(STARTestBase):
+  """Tests for probe_liquid_heights: detection dispatch, replicates, error handling."""
 
   def _put_tips_on_channels(self, channels):
     tip = self.tip_rack.get_tip("A1")

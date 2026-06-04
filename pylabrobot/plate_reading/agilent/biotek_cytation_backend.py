@@ -1,5 +1,4 @@
-import asyncio
-import atexit
+import contextlib
 import logging
 import math
 import re
@@ -8,6 +7,9 @@ import warnings
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 from pylabrobot.plate_reading.backend import ImagerBackend
 from pylabrobot.resources import Plate
@@ -102,42 +104,82 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     self._objective: Optional[Objective] = None
     self._acquiring = False
 
-  async def setup(self, use_cam: bool = False) -> None:
+  @contextlib.contextmanager
+  def _spinnaker_system_context(self):
+    self._spinnaker_system = PySpin.System.GetInstance()
+    try:
+      version = self._spinnaker_system.GetLibraryVersion()
+      logger.debug(
+        f"{self.__class__.__name__} Library version: %d.%d.%d.%d",
+        version.major,
+        version.minor,
+        version.type,
+        version.build,
+      )
+
+      yield self._spinnaker_system
+    finally:
+      # TODO: This looks like a foodgun to me. We are releasing the
+      # system singleton, without knowing if we're the only user
+      # of that system.
+      self._spinnaker_system.ReleaseInstance()
+      self._spinnaker_system = None
+
+  @contextlib.asynccontextmanager
+  async def _camera_context(self, cam):
+    for _ in range(10):
+      try:
+        cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
+        break
+      except:  # noqa
+        await anyio.sleep(0.1)
+    else:
+      raise RuntimeError("Failed to initialize camera.")
+
+    try:
+      yield cam
+    finally:
+      try:
+        if self._acquiring:
+          self.stop_acquisition()
+        self._reset_trigger()
+      finally:
+        cam.DeInit()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, use_cam: bool = False):
+    await super()._enter_lifespan(stack)
     logger.info(f"{self.__class__.__name__} setting up")
 
-    await super().setup()
-
     if use_cam:
-      try:
-        await self._set_up_camera()
-      except:
-        # if setting up the camera fails, we have to close the ftdi connection
-        # so that the user can try calling setup() again.
-        # if we don't close the ftdi connection here, it will be open until the
-        # python kernel is restarted.
-        try:
-          await self.stop()
-        except Exception:
-          pass
-        raise
+      if not USE_PYSPIN:
+        raise RuntimeError(
+          "PySpin is not installed. Please follow the imaging setup instructions. "
+          f"Import error: {_PYSPIN_IMPORT_ERROR}"
+        )
+      if self.imaging_config is None:
+        raise RuntimeError("Imaging configuration is not set.")
 
-  async def stop(self):
-    await super().stop()
+      spinnaker_sys = stack.enter_context(self._spinnaker_system_context())
+      cam = self._identify_camera(spinnaker_sys)
+      await stack.enter_async_context(self._camera_context(cam))
+      self._cam = cam
 
-    if self._acquiring:
-      self.stop_acquisition()
+      nodemap = self._cam.GetNodeMap()
+      await self._setup_trigger(nodemap)
 
-    logger.info(f"{self.__class__.__name__} stopping")
-    await self.stop_shaking()
-    await self.io.stop()
+      # -- Load filter information --
+      if self._filters is None:
+        await self._load_filters()
 
-    self._stop_camera()
+      # -- Load objective information --
+      if self._objectives is None:
+        await self._load_objectives()
 
-    self._objectives = None
-    self._filters = None
-    self._slow_mode = None
-
-    self._clear_imaging_state()
+    @stack.callback
+    def _cleanup_always():
+      self._objectives = None
+      self._filters = None
+      self._clear_imaging_state()
 
   def _clear_imaging_state(self):
     self._exposure = None
@@ -157,82 +199,48 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
   def supports_cooling(self):
     return True
 
-  async def _set_up_camera(self) -> None:
-    atexit.register(self._stop_camera)
+  def _identify_camera(self, spinnaker_sys) -> "PySpin.Camera":
 
-    if not USE_PYSPIN:
-      raise RuntimeError(
-        "PySpin is not installed. Please follow the imaging setup instructions. "
-        f"Import error: {_PYSPIN_IMPORT_ERROR}"
-      )
-    if self.imaging_config is None:
-      raise RuntimeError("Imaging configuration is not set.")
+    cam_list = spinnaker_sys.GetCameras()
+    try:
+      num_cameras = cam_list.GetSize()
+      logger.debug(f"{self.__class__.__name__} number of cameras detected: %d", num_cameras)
 
-    logger.debug(f"{self.__class__.__name__} setting up camera")
+      target_cam = None
+      for cam in cam_list:
+        info = self._get_device_info(cam)
+        serial_number = info["DeviceSerialNumber"]
+        logger.debug(f"{self.__class__.__name__} camera detected: %s", serial_number)
 
-    # -- Retrieve singleton reference to system object (Spinnaker) --
-    self._spinnaker_system = PySpin.System.GetInstance()
-    version = self._spinnaker_system.GetLibraryVersion()
-    logger.debug(
-      f"{self.__class__.__name__} Library version: %d.%d.%d.%d",
-      version.major,
-      version.minor,
-      version.type,
-      version.build,
-    )
+        if (
+          self.imaging_config.camera_serial_number is not None
+          and serial_number == self.imaging_config.camera_serial_number
+        ):
+          target_cam = cam
+          logger.info(
+            f"{self.__class__.__name__} using camera with serial number %s", serial_number
+          )
+          break
+      else:  # if no specific camera was found by serial number so use the first one
+        if num_cameras > 0:
+          target_cam = cam_list.GetByIndex(0)
+          info = self._get_device_info(target_cam)
+          logger.info(
+            f"{self.__class__.__name__} using first camera with serial number %s",
+            info["DeviceSerialNumber"],
+          )
+        else:
+          logger.error(f"{self.__class__.__name__}: No cameras found")
+          target_cam = None
+    finally:
+      cam_list.Clear()
 
-    # -- Get the camera by serial number, or the first. --
-    cam_list = self._spinnaker_system.GetCameras()
-    num_cameras = cam_list.GetSize()
-    logger.debug(f"{self.__class__.__name__} number of cameras detected: %d", num_cameras)
+    if target_cam is None:
+      raise RuntimeError(f"{self.__class__.__name__}: No camera found.")
 
-    for cam in cam_list:
-      info = self._get_device_info(cam)
-      serial_number = info["DeviceSerialNumber"]
-      logger.debug(f"{self.__class__.__name__} camera detected: %s", serial_number)
+    return target_cam
 
-      if (
-        self.imaging_config.camera_serial_number is not None
-        and serial_number == self.imaging_config.camera_serial_number
-      ):
-        self._cam = cam
-        logger.info(f"{self.__class__.__name__} using camera with serial number %s", serial_number)
-        break
-    else:  # if no specific camera was found by serial number so use the first one
-      if num_cameras > 0:
-        self._cam = cam_list.GetByIndex(0)
-        logger.info(
-          f"{self.__class__.__name__} using first camera with serial number %s",
-          info["DeviceSerialNumber"],
-        )
-      else:
-        logger.error(f"{self.__class__.__name__}: No cameras found")
-        self._cam = None
-    cam_list.Clear()
-
-    if self._cam is None:
-      raise RuntimeError(
-        f"{self.__class__.__name__}: No camera found. Make sure the camera is connected and the serial "
-        "number is correct."
-      )
-
-    # -- Initialize camera --
-    for _ in range(10):
-      try:
-        self._cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
-        break
-      except:  # noqa
-        await asyncio.sleep(0.1)
-        pass
-    else:
-      raise RuntimeError(
-        "Failed to initialize camera. Make sure the camera is connected and the "
-        "Spinnaker SDK is installed correctly."
-      )
-    nodemap = self._cam.GetNodeMap()
-
-    # -- Configure trigger to be software --
-    # This is needed for longer exposure times (otherwise 27.8ms is the maximum)
+  async def _setup_trigger(self, nodemap):
     # 1. Set trigger selector to frame start
     ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
     if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
@@ -263,15 +271,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
 
     # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
-    await asyncio.sleep(1)
-
-    # -- Load filter information --
-    if self._filters is None:
-      await self._load_filters()
-
-    # -- Load objective information --
-    if self._objectives is None:
-      await self._load_objectives()
+    await anyio.sleep(1)
 
   @property
   def objectives(self) -> List[Optional[Objective]]:
@@ -421,18 +421,6 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
           self._objectives.append(annulus_part_number2objective[annulus_part_number])
     else:
       raise RuntimeError(f"{self.__class__.__name__}: Unsupported version: {self.version}")
-
-  def _stop_camera(self) -> None:
-    if self._cam is not None:
-      if self._acquiring:
-        self.stop_acquisition()
-
-      self._reset_trigger()
-
-      self._cam.DeInit()
-      self._cam = None
-    if self._spinnaker_system is not None:
-      self._spinnaker_system.ReleaseInstance()
 
   def _reset_trigger(self):
     if self._cam is None:
@@ -601,7 +589,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
       await self.send_command("Y", f"O01{relative_y_str}")
 
     self._pos_x, self._pos_y = x, y
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
 
   async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]):
     if self._cam is None:
@@ -799,7 +787,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
       try:
         node_softwaretrigger_cmd.Execute()
         timeout = int(self._cam.ExposureTime.GetValue() / 1000 + 1000)  # from example
-        image_result = self._cam.GetNextImage(timeout)
+        image_result = await anyio.to_thread.run_sync(self._cam.GetNextImage, timeout)
         if not image_result.IsIncomplete():
           processor = PySpin.ImageProcessor()
           processor.SetColorProcessing(color_processing_algorithm)
@@ -817,7 +805,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
           )
 
       num_tries += 1
-      await asyncio.sleep(0.3)
+      await anyio.sleep(0.3)
     raise TimeoutError("max_image_read_attempts reached")
 
   async def capture(

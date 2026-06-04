@@ -1,9 +1,11 @@
-import asyncio
 import enum
 import logging
 import time
 from typing import Dict, Iterable, List, Optional, Tuple
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
@@ -78,10 +80,12 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     rects.sort()
     return rects
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     logger.info(f"{self.__class__.__name__} setting up")
 
-    await self.io.setup()
+    await self.io._enter_lifespan(stack)
+
     await self.io.usb_reset()
     await self.io.set_latency_timer(16)
     await self.io.set_baudrate(9600)  # 0x38 0x41
@@ -98,14 +102,16 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       self._version = await self.get_firmware_version()
 
     self._shaking = False
-    self._shaking_task: Optional[asyncio.Task] = None
+    self._shake_cancel_scope: Optional[anyio.CancelScope] = None
+    self._tg = await stack.enter_async_context(anyio.create_task_group())
 
-  async def stop(self) -> None:
-    logger.info(f"{self.__class__.__name__} stopping")
-    await self.stop_shaking()
-    await self.io.stop()
+    async def _cleanup():
+      logger.info(f"{self.__class__.__name__} stopping")
+      await self.stop_shaking()
+      self._slow_mode = None
+      self._tg.cancel_scope.cancel()
 
-    self._slow_mode = None
+    stack.push_shielded_async_callback(_cleanup)
 
   @property
   def version(self) -> str:
@@ -159,17 +165,17 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       timeout = self.timeout
     x = None
     res = b""
-    t0 = time.time()
-    while x != terminator:
-      x = await self.io.read(1)
-      res += x
+    try:
+      with anyio.fail_after(timeout):
+        while x != terminator:
+          x = await self.io.read(1)
+          res += x
 
-      if time.time() - t0 > timeout:
-        logger.debug(f"{self.__class__.__name__} received incomplete %s", res)
-        raise TimeoutError(f"{self.__class__.__name__}: Timeout while waiting for response")
-
-      if x == b"":
-        await asyncio.sleep(0.01)
+          if x == b"":
+            await anyio.sleep(0.01)
+    except TimeoutError:
+      logger.debug(f"{self.__class__.__name__} received incomplete %s", res)
+      raise TimeoutError(f"{self.__class__.__name__}: Timeout while waiting for response") from None
 
     logger.debug(f"{self.__class__.__name__} received %s", res)
     return res
@@ -545,9 +551,11 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     Args:
       frequency: speed, in mm. 360 CPM = 6mm; 410 CPM = 5mm; 493 CPM = 4mm; 567 CPM = 3mm; 731 CPM = 2mm; 1096 CPM = 1mm
     """
+    assert not self._shaking
 
     max_duration = 16 * 60  # 16 minutes
-    self._shaking_started = asyncio.Event()
+    shaking_started = anyio.Event()
+    self._shaking_stopped = anyio.Event()
 
     async def shake_maximal_duration():
       """This method will start the shaking, but returns immediately after
@@ -563,34 +571,28 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       resp = await self.send_command("O")
       assert resp == b"\x060000\x03"
 
-      if not self._shaking_started.is_set():
-        self._shaking_started.set()
+      shaking_started.set()
 
     async def shake_continuous():
-      while self._shaking:
-        await shake_maximal_duration()
-
-        # short sleep allows = frequent checks for fast stopping
-        seconds_since_start: float = 0
-        loop_wait_time = 0.25
-        while seconds_since_start < max_duration and self._shaking:
-          seconds_since_start += loop_wait_time
-          await asyncio.sleep(loop_wait_time)
+      try:
+        with anyio.CancelScope() as scope:
+          self._shake_cancel_scope = scope
+          while True:
+            await shake_maximal_duration()
+            await anyio.sleep(max_duration)
+      finally:
+        with anyio.CancelScope(shield=True):
+          await self._abort()
+        self._shaking = False
+        self._shaking_stopped.set()
+        self._shake_cancel_scope = None
 
     self._shaking = True
-    self._shaking_task = asyncio.create_task(shake_continuous())
+    self._tg.start_soon(shake_continuous)
 
-    await self._shaking_started.wait()
+    await shaking_started.wait()
 
   async def stop_shaking(self) -> None:
-    if self._shaking:
-      await self._abort()
-      self._shaking = False
-    if self._shaking_task is not None:
-      self._shaking_task.cancel()
-      try:
-        await self._shaking_task
-      except asyncio.CancelledError:
-        # Task cancellation is expected here; safe to ignore this exception.
-        pass
-      self._shaking_task = None
+    if self._shake_cancel_scope is not None:
+      self._shake_cancel_scope.cancel()
+      await self._shaking_stopped.wait()

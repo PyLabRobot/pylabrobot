@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import math
 import struct
@@ -6,7 +5,10 @@ import sys
 import time
 from typing import Dict, List, Optional, Tuple, Union
 
+import anyio
+
 from pylabrobot import utils
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
@@ -30,17 +32,15 @@ class CLARIOstarBackend(PlateReaderBackend):
       human_readable_device_name="BMG CLARIOstar", device_id=device_id, vid=0x0403, pid=0xBB68
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     await self.io.set_baudrate(125000)
     await self.io.set_line_property(8, 0, 0)  # 8N1
     await self.io.set_latency_timer(2)
 
     await self.initialize()
     await self.request_eeprom_data()
-
-  async def stop(self):
-    await self.io.stop()
 
   async def get_stat(self):
     stat = await self.io.poll_modem_status()
@@ -51,35 +51,32 @@ class CLARIOstarBackend(PlateReaderBackend):
     been read so far."""
 
     d = b""
-    last_read = b""
     end_byte_found = False
-    t = time.time()
 
     # Commands are terminated with 0x0d, but this value may also occur as a part of the response.
     # Therefore, we read until we read a 0x0d, but if that's the last byte we read in a full packet,
     # we keep reading for at least one more cycle. We only check the timeout if the last read was
     # unsuccessful (i.e. keep reading if we are still getting data).
-    while True:
-      last_read = await self.io.read(25)  # 25 is max length observed in pcap
-      if len(last_read) > 0:
-        d += last_read
-        end_byte_found = d[-1] == 0x0D
-        if (
-          len(last_read) < 25 and end_byte_found
-        ):  # if we read less than 25 bytes, we're at the end
-          break
-      else:
-        # If we didn't read any data, check if the last read ended in an end byte. If so, we're done
-        if end_byte_found:
-          break
+    with anyio.move_on_after(timeout) as scope:
+      while True:
+        last_read = await self.io.read(25)  # 25 is max length observed in pcap
+        if len(last_read) > 0:
+          d += last_read
+          end_byte_found = d[-1] == 0x0D
+          if (
+            len(last_read) < 25 and end_byte_found
+          ):  # if we read less than 25 bytes, we're at the end
+            break
+        else:
+          # If we didn't read any data, check if the last read ended in an end byte. If so, we're done
+          if end_byte_found:
+            break
 
-        # Check if we've timed out.
-        if time.time() - t > timeout:
-          logger.warning("timed out reading response")
-          break
+          # If we read data, we don't wait and immediately try to read more.
+          await anyio.sleep(0.0001)
 
-        # If we read data, we don't wait and immediately try to read more.
-        await asyncio.sleep(0.0001)
+    if scope.cancel_called:
+      logger.warning("timed out reading response")
 
     logger.debug("read %s", d.hex())
 
@@ -105,40 +102,40 @@ class CLARIOstarBackend(PlateReaderBackend):
   async def _wait_for_ready_and_return(self, ret, timeout=150):
     """Wait for the plate reader to be ready and return the response."""
     last_status = None
-    t = time.time()
-    while time.time() - t < timeout:
-      await asyncio.sleep(0.1)
+    with anyio.fail_after(timeout):
+      while True:
+        await anyio.sleep(0.1)
 
-      command_status = await self.read_command_status()
+        command_status = await self.read_command_status()
 
-      if len(command_status) != 24:
-        logger.warning(
-          "unexpected response %s. I think a command status response is always 24 bytes",
-          command_status,
-        )
-        continue
+        if len(command_status) != 24:
+          logger.warning(
+            "unexpected response %s. I think a command status response is always 24 bytes",
+            command_status,
+          )
+          continue
 
-      if command_status != last_status:
-        logger.info("status changed %s", command_status.hex())
-        last_status = command_status
-      else:
-        continue
+        if command_status != last_status:
+          logger.info("status changed %s", command_status.hex())
+          last_status = command_status
+        else:
+          continue
 
-      if command_status[2] != 0x18 or command_status[3] != 0x0C or command_status[4] != 0x01:
-        logger.warning(
-          "unexpected response %s. I think 18 0c 01 indicates a command status response",
-          command_status,
-        )
+        if command_status[2] != 0x18 or command_status[3] != 0x0C or command_status[4] != 0x01:
+          logger.warning(
+            "unexpected response %s. I think 18 0c 01 indicates a command status response",
+            command_status,
+          )
 
-      if command_status[5] not in {
-        0x25,
-        0x05,
-      }:  # 25 is busy, 05 is ready. probably.
-        logger.warning("unexpected response %s.", command_status)
+        if command_status[5] not in {
+          0x25,
+          0x05,
+        }:  # 25 is busy, 05 is ready. probably.
+          logger.warning("unexpected response %s.", command_status)
 
-      if command_status[5] == 0x05:
-        logger.debug("status is ready")
-        return ret
+        if command_status[5] == 0x05:
+          logger.debug("status is ready")
+          return ret
 
   async def read_command_status(self):
     status = await self.send(b"\x02\x00\x09\x0c\x80\x00")
@@ -227,7 +224,7 @@ class CLARIOstarBackend(PlateReaderBackend):
     # TODO: find a prettier way to do this. It's essentially copied from _wait_for_ready_and_return.
     last_status = None
     while True:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
 
       command_status = await self.read_command_status()
 
@@ -259,7 +256,7 @@ class CLARIOstarBackend(PlateReaderBackend):
     # TODO: find a prettier way to do this. It's essentially copied from _wait_for_ready_and_return.
     last_status = None
     while True:
-      await asyncio.sleep(0.1)
+      await anyio.sleep(0.1)
 
       command_status = await self.read_command_status()
 

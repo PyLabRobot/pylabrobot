@@ -3,6 +3,8 @@ from unittest.mock import patch
 
 import pytest
 
+from pylabrobot.testing.concurrency import AnyioTestBase
+
 pytest.importorskip("ot_api")
 
 from pylabrobot.liquid_handling import LiquidHandler
@@ -35,7 +37,7 @@ def _mock_health_get():
   }
 
 
-class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
+class OpentronsBackendSetupTests(AnyioTestBase):
   """Tests for setup and stop"""
 
   @patch("ot_api.runs.create")
@@ -44,8 +46,10 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
   @patch("ot_api.labware.add")
   @patch("ot_api.labware.define")
   @patch("ot_api.health.get")
-  async def test_setup(
+  async def _enter_lifespan(
     self,
+    stack,
+    *,
     mock_health_get,
     mock_define,
     mock_add,
@@ -64,7 +68,20 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
 
     self.backend = OpentronsOT2Backend(host="localhost", port=1338)
     self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
-    await self.lh.setup()
+
+    self.mock_create = mock_create
+    self.mock_home = mock_home
+    self.mock_add_mounted_pipettes = mock_add_mounted_pipettes
+    self.mock_define = mock_define
+    self.mock_add = mock_add
+    self.mock_health_get = mock_health_get
+
+    await stack.enter_async_context(self.lh)
+
+  async def test_setup(self):
+    self.mock_create.assert_called_once()
+    self.mock_home.assert_called_once()
+    self.mock_add_mounted_pipettes.assert_called_once()
 
   def test_serialize(self):
     serialized = OpentronsOT2Backend(host="localhost", port=1337).serialize()
@@ -78,7 +95,7 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
+class OpentronsBackendCommandTests(AnyioTestBase):
   """Tests Opentrons commands"""
 
   @patch("ot_api.runs.create")
@@ -87,8 +104,9 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   @patch("ot_api.labware.add")
   @patch("ot_api.labware.define")
   @patch("ot_api.health.get")
-  async def asyncSetUp(
+  async def _enter_lifespan(
     self,
+    stack,
     mock_health_get,
     mock_define,
     mock_add,
@@ -108,7 +126,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     self.backend = OpentronsOT2Backend(host="localhost", port=1338)
     self.deck = OTDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
     self.deck.assign_child_at_slot(self.tip_rack, slot=1)
@@ -147,7 +165,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
     mock_drop_tip.side_effect = assert_parameters
 
-    await self.test_tip_pick_up()
+    await self.test_tip_pick_up.original_func(self)  # type: ignore[attr-defined]
     await self.lh.drop_tips(self.tip_rack["A1"])
 
   @patch("ot_api.lh.aspirate_in_place")
@@ -166,7 +184,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
     mock_aspirate.side_effect = assert_parameters
 
-    await self.test_tip_pick_up()
+    await self.test_tip_pick_up.original_func(self)  # type: ignore[attr-defined]
     self.plate.get_well("A1").tracker.set_volume(10)
     await self.lh.aspirate(self.plate["A1"], vols=[10])
 

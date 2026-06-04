@@ -1,8 +1,8 @@
-import asyncio
 import logging
-import time
 import warnings
 from typing import List, Literal, Optional, Union, cast
+
+import anyio
 
 try:
   import serial
@@ -12,6 +12,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.storage.backend import IncubatorBackend
@@ -92,17 +93,15 @@ class CytomatBackend(IncubatorBackend):
       human_readable_device_name="Cytomat",
     )
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
     await self.initialize()
     await self.wait_for_task_completion()
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
     warnings.warn("Cytomat racks need to be configured with the exe software")
-
-  async def stop(self):
-    await self.io.stop()
 
   def _assemble_command(self, command_type: str, command: str, params: str):
     carriage_return = "\r" if self.model == CytomatType.C2C_425 else "\r\n"
@@ -143,17 +142,16 @@ class CytomatBackend(IncubatorBackend):
     # which costs 1s if there is a true error, but is necessary to avoid false negatives.
     command_str = self._assemble_command(command_type=command_type, command=command, params=params)
     n_retries = 10
-    exc: Optional[BaseException] = None
-    for _ in range(n_retries):
+    for attempt in reversed(range(n_retries)):
       try:
         return await _send_command(command_str)
-      except (CytomatCommandUnknownError, CytomatBusyError) as e:
-        exc = e
-        await asyncio.sleep(0.1)
+      except (CytomatCommandUnknownError, CytomatBusyError):
+        if not attempt:
+          await self.reset_error_register()
+          raise
+        await anyio.sleep(0.1)
         continue
-    assert exc is not None
-    await self.reset_error_register()
-    raise exc
+    raise RuntimeError("Internal error - this should be unreachable.")
 
   async def send_action(
     self, command_type: str, command: str, params: str, timeout: Optional[int] = 60
@@ -201,7 +199,7 @@ class CytomatBackend(IncubatorBackend):
       try:
         resp = await self.send_command("ch", "bs", "")
       except (CytomatCommandUnknownError, CytomatBusyError):
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
         continue
       return OverviewRegisterState.from_resp(resp)
     await self.reset_error_register()
@@ -337,7 +335,7 @@ class CytomatBackend(IncubatorBackend):
   async def wait_for_transfer_station(self, occupied: bool = False):
     """Wait for the transfer station to be occupied, or unoccupied."""
     while (await self.get_overview_register()).transfer_station_occupied != occupied:
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
 
   async def wait_for_task_completion(self, timeout=60) -> OverviewRegisterState:
     """
@@ -346,20 +344,21 @@ class CytomatBackend(IncubatorBackend):
     If the error bit is set in the overview register, the error register is read and the corresponding
     error is raised.
     """
-    start = time.time()
-    while True:
-      overview_register = await self.get_overview_register()
-      if not overview_register.busy_bit_set:
-        # only check for errors once the cytomat is done, so that the user has the chance to
-        # handle the error and proceed if desired.
-        if overview_register.error_register_set:
-          error_register = await self.get_error_register()
-          await self.reset_error_register()
-          raise error_register_map[error_register]
-        return overview_register
-      await asyncio.sleep(1)
-      if time.time() - start > timeout:
-        raise TimeoutError("Cytomat did not complete task in time")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          overview_register = await self.get_overview_register()
+          if not overview_register.busy_bit_set:
+            # only check for errors once the cytomat is done, so that the user has the chance to
+            # handle the error and proceed if desired.
+            if overview_register.error_register_set:
+              error_register = await self.get_error_register()
+              await self.reset_error_register()
+              raise error_register_map[error_register]
+            return overview_register
+          await anyio.sleep(1)
+    except TimeoutError:
+      raise TimeoutError("Cytomat did not complete task in time") from None
 
   async def init_shakers(self):
     return hex_to_binary(await self.send_command("ll", "vi", ""))
@@ -423,11 +422,10 @@ class CytomatBackend(IncubatorBackend):
 
 
 class CytomatChatterbox(CytomatBackend):
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await IncubatorBackend._enter_lifespan(self, stack)
     await self.wait_for_task_completion()
-
-  async def stop(self):
-    print("closing connection to cytomat")
+    stack.callback(lambda: print("closing connection to cytomat"))
 
   async def send_command(self, command_type, command, params):
     print(

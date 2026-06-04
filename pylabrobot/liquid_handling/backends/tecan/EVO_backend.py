@@ -1,4 +1,3 @@
-import asyncio
 from abc import ABCMeta, abstractmethod
 from typing import (
   Dict,
@@ -10,6 +9,9 @@ from typing import (
   Union,
 )
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -165,12 +167,9 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     resp = await self.io.read(timeout=read_timeout)
     return self.parse_response(resp)
 
-  async def setup(self):
-    await super().setup()
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
 
 
 class EVOBackend(TecanLiquidHandler):
@@ -261,13 +260,8 @@ class EVOBackend(TecanLiquidHandler):
   def serialize(self) -> dict:
     return {**super().serialize(), **self.io.serialize()}
 
-  async def setup(self):
-    """Setup
-
-    Creates a USB connection and finds read/write interfaces.
-    """
-
-    await super().setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
 
     self._liha_connected = await self.setup_arm(EVOBackend.LIHA)
     self._mca_connected = await self.setup_arm(EVOBackend.MCA)
@@ -333,19 +327,19 @@ class EVOBackend(TecanLiquidHandler):
 
     # Ensure MCA is initialized before moving
     await self.send_command(EVO.MCA, command="PIA")
-    await asyncio.sleep(0.5)
+    await anyio.sleep(0.5)
 
     # Raise MCA Z-axis first to avoid collision
     await self.send_command(EVO.MCA, command="PAA", params=[None, None, 2000])  # Raise Z-axis
-    await asyncio.sleep(1)
+    await anyio.sleep(1)
 
     # Move MCA to parking position (adjust X, Y as needed)
     await self.send_command(EVO.MCA, command="PAA", params=[6000, 1000, None])
-    await asyncio.sleep(1)
+    await anyio.sleep(1)
 
     # Stop movement to prevent drifting
     await self.send_command(EVO.MCA, command="BMA", params=[0, 0, 0])
-    await asyncio.sleep(0.5)
+    await anyio.sleep(0.5)
 
   # ============== LiquidHandlerBackend methods ==============
 

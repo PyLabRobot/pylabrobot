@@ -1,16 +1,17 @@
 # mypy: disable-error-code="union-attr,assignment,arg-type,attr-defined"
 """Mock FTDI IO for EL406 testing."""
 
-import asyncio
-import unittest
 from unittest.mock import patch
+
+import anyio
 
 from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.resources import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well
+from pylabrobot.testing.concurrency import AnyioTestBase
 
-_real_sleep = asyncio.sleep
+_real_sleep = anyio.sleep
 
 
 async def _noop(*a, **kw):
@@ -50,22 +51,26 @@ PT1536 = _make_plate("test_1536", 1536)
 PT1536F = _make_plate("test_1536_flange", 1536, size_z=10.0)
 
 
-class EL406TestCase(unittest.IsolatedAsyncioTestCase):
-  """Base test case with mock FTDI IO and patched asyncio.sleep."""
+class EL406TestCase(AnyioTestBase):
+  """Base test case with mock FTDI IO and patched anyio.sleep."""
 
-  async def asyncSetUp(self):
-    self._sleep_patcher = patch("asyncio.sleep", side_effect=_noop)
+  async def _enter_lifespan(self, stack):
+    self._sleep_patcher = patch("anyio.sleep", side_effect=_noop)
     self._sleep_patcher.start()
+    stack.callback(self._sleep_patcher.stop)
+
     self.backend = ExperimentalBioTekEL406Backend()
     self.backend.io = MockFTDI()
-    await self.backend.setup()
+
     self.backend.io.set_read_buffer(b"\x06" * 500)
 
-  async def asyncTearDown(self):
-    if self.backend.io is not None:
-      self.backend.io.set_read_buffer(b"\x06" * 500)
-      await self.backend.stop()
-    self._sleep_patcher.stop()
+    await stack.enter_async_context(self.backend)
+
+    def _pre_cleanup():
+      if self.backend.io is not None:
+        self.backend.io.set_read_buffer(b"\x06" * 500)
+
+    stack.callback(_pre_cleanup)
 
 
 class MockFTDI:
@@ -84,10 +89,10 @@ class MockFTDI:
     single_response = b"\x06" + header
     return single_response * 200
 
-  async def setup(self):
-    pass
+  async def __aenter__(self):
+    return self
 
-  async def stop(self):
+  async def __aexit__(self, exc_type, exc_val, exc_tb):
     pass
 
   async def write(self, data: bytes) -> int:

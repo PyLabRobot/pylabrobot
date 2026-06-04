@@ -1,7 +1,7 @@
-import asyncio
 import logging
-import time
 from typing import Optional
+
+import anyio
 
 try:
   from pylibftdi import FtdiError
@@ -37,52 +37,53 @@ class SynergyH1Backend(BioTekPlateReaderBackend):
     if timeout is None:
       timeout = self.timeout
 
-    deadline = time.time() + timeout
     buf = bytearray()
 
     retries = 0
     max_retries = 3
 
-    while True:
-      if time.time() > deadline:
-        logger.debug(
-          f"{self.__class__.__name__} _read_until timed out; partial buffer (hex): %s", buf.hex()
-        )
-        raise TimeoutError(
-          f"{self.__class__.__name__} _read_until timed out waiting for {terminator!r}; partial={buf.hex()}"
-        )
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          try:
+            data = await self.io.read(chunk_size)
+            if len(data) == 0:
+              await anyio.sleep(0.02)
+              continue
 
-      try:
-        data = await self.io.read(chunk_size)
-        if len(data) == 0:
-          await asyncio.sleep(0.02)
-          continue
+            buf.extend(data)
 
-        buf.extend(data)
+            if terminator in buf:
+              idx = buf.index(terminator) + len(terminator)
+              full = bytes(buf[:idx])
+              logger.debug(
+                f"{self.__class__.__name__} _read_until received %d bytes (hex prefix): %s",
+                len(full),
+                full[:200].hex(),
+              )
+              return full
 
-        if terminator in buf:
-          idx = buf.index(terminator) + len(terminator)
-          full = bytes(buf[:idx])
-          logger.debug(
-            f"{self.__class__.__name__} _read_until received %d bytes (hex prefix): %s",
-            len(full),
-            full[:200].hex(),
-          )
-          return full
+          except FtdiError as e:
+            retries += 1
+            logger.warning(
+              f"{self.__class__.__name__} transient FtdiError while reading: %s — retrying", e
+            )
 
-      except FtdiError as e:
-        retries += 1
-        logger.warning(
-          f"{self.__class__.__name__} transient FtdiError while reading: %s — retrying", e
-        )
+            if retries >= max_retries:
+              logger.warning(
+                f"{self.__class__.__name__} too many FtdiError retries ({max_retries}) — stopping",
+                e,
+              )
+              raise
 
-        if retries >= max_retries:
-          logger.warning(
-            f"{self.__class__.__name__} too many FtdiError retries ({max_retries}) — stopping", e
-          )
-          raise
-
-        await asyncio.sleep(0.05)
-        continue
-      except Exception:
-        raise
+            await anyio.sleep(0.05)
+            continue
+          except Exception:
+            raise
+    except TimeoutError:
+      logger.debug(
+        f"{self.__class__.__name__} _read_until timed out; partial buffer (hex): %s", buf.hex()
+      )
+      raise TimeoutError(
+        f"{self.__class__.__name__} _read_until timed out waiting for {terminator!r}; partial={buf.hex()}"
+      )

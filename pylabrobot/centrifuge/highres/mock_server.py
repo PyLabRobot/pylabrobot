@@ -53,6 +53,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, List, Optional
 
+import anyio
+import anyio.streams.buffered
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, AsyncResource
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,7 +118,7 @@ class MockState:
   at_bucket: Optional[int] = None  # 1, 2, or None
   abort_latched: bool = False
   spinning: bool = False  # True while a spin task is active
-  current_motion: Optional[asyncio.Task] = None
+  current_motion: Optional[anyio.CancelScope] = None
   errors: List[str] = field(default_factory=list)
   next_command_id: int = 1
   # The mock's analogue of the real device's spindle-stopped sensor. False
@@ -121,7 +126,7 @@ class MockState:
   # *unless* `simulate_low_g_hang` is True, in which case the sensor stays
   # False and any subsequent `status` waits forever, reproducing the
   # firmware bug we warn about in :meth:`MicroSpinBackend.spin`.
-  spindle_settled: asyncio.Event = field(default_factory=asyncio.Event)
+  spindle_settled: anyio.Event = field(default_factory=anyio.Event)
   #: When True, motion handlers refuse to mark the spindle as settled.
   simulate_low_g_hang: bool = False
 
@@ -333,7 +338,7 @@ _ALIAS_MAP: Dict[str, str] = {alias: spec.name for spec in _COMMAND_TABLE for al
 # ============================================================================
 
 
-class MicroSpinMockServer:
+class MicroSpinMockServer(AsyncResource):
   """A localhost TCP server that speaks the MicroSpin remote-control protocol."""
 
   def __init__(
@@ -342,11 +347,13 @@ class MicroSpinMockServer:
     port: int = 0,
     state: Optional[MockState] = None,
   ) -> None:
+    super().__init__()
     self.host = host
     self.port = port  # 0 = pick a free port; actual port set in start()
     self.state = state or MockState()
-    self._server: Optional[asyncio.AbstractServer] = None
-    self._client_tasks: "set[asyncio.Task]" = set()
+    self._listener: Optional[anyio.abc.Listener] = None
+    self._tg_context: Optional[anyio.abc.TaskGroup] = None
+    self._tg: Optional[anyio.abc.TaskGroup] = None
     # Maps motion commands to their simulated dwell time. Tests can override
     # this map to make every motion instantaneous, or use the real ramps.
     self.motion_dwell: Dict[str, float] = {
@@ -358,80 +365,70 @@ class MicroSpinMockServer:
 
   # ---- lifecycle --------------------------------------------------------
 
-  async def start(self) -> "MicroSpinMockServer":
-    """Bind the listening socket and begin serving clients.
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
 
-    If ``self.port`` was ``0`` (the default), the OS picks a free port and
-    ``self.port`` is updated in-place so callers can read it back.
-    """
-    self._server = await asyncio.start_server(self._handle_client, self.host, self.port)
-    sock = self._server.sockets[0]
-    self.host, self.port = sock.getsockname()[:2]
+    listener = await anyio.create_tcp_listener(local_host=self.host, local_port=self.port)
+    self._listener = await stack.enter_async_context(listener)
+
+    local_address = listener.extra(anyio.abc.SocketAttribute.local_address)
+    assert isinstance(local_address, tuple)
+    self.host = str(local_address[0])
+    self.port = int(local_address[1])
     logger.debug("[mock] listening on %s:%d", self.host, self.port)
-    return self
 
-  async def stop(self) -> None:
-    """Shut down the server, cancelling any in-flight client handlers."""
-    if self.state.current_motion is not None and not self.state.current_motion.done():
-      self.state.current_motion.cancel()
-    for task in list(self._client_tasks):
-      if not task.done():
-        task.cancel()
-    if self._server is not None:
-      self._server.close()
-      if self._client_tasks:
-        await asyncio.gather(*self._client_tasks, return_exceptions=True)
-      await self._server.wait_closed()
-      self._server = None
-    self._client_tasks.clear()
+    self._tg_context = anyio.create_task_group()
+    self._tg = await stack.enter_async_context(self._tg_context)
 
-  async def __aenter__(self) -> "MicroSpinMockServer":
-    return await self.start()
+    # Register task group cancellation callback so all server/client tasks are cancelled before exit!
+    def cancel_tg():
+      assert self._tg is not None
+      self._tg.cancel_scope.cancel()
 
-  async def __aexit__(self, *exc) -> None:
-    await self.stop()
+    stack.callback(cancel_tg)
+
+    # Cancel any active motion on exit
+    def cancel_motion():
+      if self.state.current_motion is not None:
+        self.state.current_motion.cancel()
+
+    stack.callback(cancel_motion)
+
+    async def serve_loop():
+      await listener.serve(self._handle_client_stream)
+
+    self._tg.start_soon(serve_loop)
 
   # ---- per-client loop --------------------------------------------------
 
-  async def _handle_client(
-    self,
-    reader: asyncio.StreamReader,
-    writer: asyncio.StreamWriter,
-  ) -> None:
-    addr = writer.get_extra_info("peername")
+  async def _handle_client_stream(self, stream: anyio.abc.ByteStream) -> None:
+    addr = stream.extra(anyio.abc.SocketAttribute.remote_address)
     logger.debug("[mock] client connected: %s", addr)
-    task = asyncio.current_task()
-    if task is not None:
-      self._client_tasks.add(task)
     try:
+      buf_stream = anyio.streams.buffered.BufferedByteStream(stream)
       while True:
-        raw = await reader.readline()
-        if not raw:
+        try:
+          raw = await buf_stream.receive_until(b"\n", max_bytes=65536)
+        except (anyio.EndOfStream, anyio.IncompleteRead):
           break
         cmd_line = raw.rstrip(b"\r\n").decode("ascii", errors="replace").strip()
         if not cmd_line:
           continue
-        await self._serve_command(cmd_line, writer)
-    except (ConnectionError, asyncio.CancelledError):
+        await self._serve_command_stream(cmd_line, buf_stream)
+    except (ConnectionError, anyio.ClosedResourceError):
       pass
     finally:
-      try:
-        writer.close()
-        await writer.wait_closed()
-      except Exception:
-        pass
-      if task is not None:
-        self._client_tasks.discard(task)
       logger.debug("[mock] client disconnected: %s", addr)
 
-  async def _serve_command(self, cmd_line: str, writer: asyncio.StreamWriter) -> None:
+  async def _serve_command_stream(
+    self, cmd_line: str, buf_stream: anyio.streams.buffered.BufferedByteStream
+  ) -> None:
     cmd_id = self.state.next_command_id
     self.state.next_command_id += 1
 
     # Stage 2: ACK -- the echo is exactly the bytes the client sent (the
     # real device does the same; it doesn't normalise aliases here).
-    writer.write(f"ACK! {cmd_line} {cmd_id}\r\n".encode("ascii"))
-    await writer.drain()
+    await buf_stream.send(f"ACK! {cmd_line} {cmd_id}\r\n".encode("ascii"))
 
     parts = cmd_line.split()
     head = parts[0] if parts else ""
@@ -442,25 +439,23 @@ class MicroSpinMockServer:
     try:
       data_lines = await self._dispatch(canonical, args, cmd_id)
       for line in data_lines:
-        writer.write((line + "\r\n").encode("ascii"))
-      writer.write(f"OK! {cmd_line} {cmd_id}\r\n".encode("ascii"))
+        await buf_stream.send((line + "\r\n").encode("ascii"))
+      await buf_stream.send(f"OK! {cmd_line} {cmd_id}\r\n".encode("ascii"))
     except _MockAborted:
-      writer.write(f"ABORTED! {cmd_line} {cmd_id}\r\n".encode("ascii"))
+      await buf_stream.send(f"ABORTED! {cmd_line} {cmd_id}\r\n".encode("ascii"))
     except _MockError as exc:
       # Push the new error onto the persistent stack in the firmware's
       # `Error N: (HH:MM:SS) <code>: <message>` format, then dump the last
       # N entries from the stack as data lines (real device emits up to 10).
       self.state.push_error(exc.code, exc.message)
       for err in self.state.errors[-_ERROR_DUMP_LIMIT:]:
-        writer.write((err + "\r\n").encode("ascii"))
-      writer.write(f"ERROR! {cmd_line} {cmd_id}\r\n".encode("ascii"))
-    except asyncio.CancelledError:
-      raise
+        await buf_stream.send((err + "\r\n").encode("ascii"))
+      await buf_stream.send(f"ERROR! {cmd_line} {cmd_id}\r\n".encode("ascii"))
+
     except Exception as exc:  # noqa: BLE001
       logger.exception("[mock] handler crashed for %r", cmd_line)
-      writer.write(f"Error: internal mock crash: {exc}\r\n".encode("ascii"))
-      writer.write(f"ERROR! {cmd_line} {cmd_id}\r\n".encode("ascii"))
-    await writer.drain()
+      await buf_stream.send(f"Error: internal mock crash: {exc}\r\n".encode("ascii"))
+      await buf_stream.send(f"ERROR! {cmd_line} {cmd_id}\r\n".encode("ascii"))
 
   # ---- command dispatch -------------------------------------------------
 
@@ -477,19 +472,20 @@ class MicroSpinMockServer:
 
   # ---------- helpers shared by handlers --------------------------------
 
-  def _begin_motion(self, coro_factory):
-    """Start a motion coroutine, clearing/setting the spindle-settled flag."""
-    self.state.spindle_settled.clear()
-
-    async def runner():
-      try:
-        await coro_factory()
-      finally:
-        if not self.state.simulate_low_g_hang:
-          self.state.spindle_settled.set()
-
-    self.state.current_motion = asyncio.create_task(runner())
-    return self.state.current_motion
+  async def _run_motion(self, coro_func: Callable[[], Awaitable[None]]) -> None:
+    """Run a motion coroutine function, clearing/setting the spindle-settled flag."""
+    self.state.spindle_settled = anyio.Event()
+    cancel_scope = anyio.CancelScope()
+    self.state.current_motion = cancel_scope
+    try:
+      with cancel_scope:
+        await coro_func()
+      if cancel_scope.cancel_called:
+        raise _MockAborted()
+    finally:
+      self.state.current_motion = None
+      if not self.state.simulate_low_g_hang:
+        self.state.spindle_settled.set()
 
   def _require_homed(self) -> None:
     if not self.state.homed:
@@ -565,15 +561,8 @@ class MicroSpinMockServer:
 
   async def _h_abort(self, args, cmd_id):
     motion = self.state.current_motion
-    if motion is not None and not motion.done():
+    if motion is not None:
       motion.cancel()
-      # Wait for the cancelled motion handler to finish writing its
-      # ABORTED! terminator before we send our own OK! and the
-      # "Issue the cba ..." data line.
-      try:
-        await motion
-      except (asyncio.CancelledError, _MockAborted, _MockError):
-        pass
     self.state.abort_latched = True
     self.state.spinning = False
     # The real device prints this between abort's ACK and OK as a data line.
@@ -611,18 +600,13 @@ class MicroSpinMockServer:
     self._require_not_aborted()
 
     async def do_home():
-      await asyncio.sleep(self.motion_dwell["home"])
+      await anyio.sleep(self.motion_dwell["home"])
       self.state.spindle_position = 1958
       self.state.door_position = -258
       self.state.homed = True
       self.state.at_bucket = None
 
-    task = self._begin_motion(do_home)
-    try:
-      await task
-    except asyncio.CancelledError:
-      # Cancelled by abort -> ABORTED! terminator
-      raise _MockAborted()
+    await self._run_motion(do_home)
     return []
 
   async def _h_open(self, args, cmd_id):
@@ -638,15 +622,11 @@ class MicroSpinMockServer:
     self._require_homed()
 
     async def do_open():
-      await asyncio.sleep(self.motion_dwell["open"])
+      await anyio.sleep(self.motion_dwell["open"])
       self.state.at_bucket = bucket
       self.state.door_position = 19242  # CENTRIFUGE_DOOR_OPEN-ish
 
-    task = self._begin_motion(do_open)
-    try:
-      await task
-    except asyncio.CancelledError:
-      raise _MockAborted()
+    await self._run_motion(do_open)
     return []
 
   async def _h_spin(self, args, cmd_id):
@@ -672,19 +652,15 @@ class MicroSpinMockServer:
       self.state.spinning = True
       try:
         if door_was_open:
-          await asyncio.sleep(self.motion_dwell["close_door_during_spin"])
+          await anyio.sleep(self.motion_dwell["close_door_during_spin"])
           self.state.door_position = -258
           self.state.at_bucket = None
-        await asyncio.sleep(dwell)
+        await anyio.sleep(dwell)
       finally:
         self.state.spinning = False
         self.state.spindle_position = (self.state.spindle_position + g) % 8192
 
-    task = self._begin_motion(do_spin)
-    try:
-      await task
-    except asyncio.CancelledError:
-      raise _MockAborted()
+    await self._run_motion(do_spin)
     return []
 
   _handlers: Dict[str, Callable[["MicroSpinMockServer", List[str], int], Awaitable[List[str]]]]

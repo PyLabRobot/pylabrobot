@@ -6,11 +6,11 @@ It handles connection management, message routing, and the introspection API.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
@@ -144,19 +144,11 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
           f"{self.io._unique_id} Reconnection attempt {attempt + 1}/{self.max_reconnect_attempts}"
         )
 
-        # Clean up existing connection
-        try:
-          await self.stop()
-        except Exception:
-          pass
+        # Attempt to reconnect with wait time between disconnect and connect
+        wait_time = 1.0 * (2 ** (attempt - 1)) if attempt > 0 else 0.0
+        await self.io.reconnect(wait_time=wait_time)
 
-        # Wait before reconnecting (exponential backoff)
-        if attempt > 0:
-          wait_time = 1.0 * (2 ** (attempt - 1))  # 1s, 2s, 4s, etc.
-          await asyncio.sleep(wait_time)
-
-        # Attempt to reconnect
-        await self.setup()
+        await self._initialize_hamilton()
         self._reconnect_attempts = 0
         logger.info(f"{self.io._unique_id} Reconnection successful")
         return
@@ -289,7 +281,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     logger.warning(f"Unknown IP protocol: {ip_protocol}, attempting CommandResponse parse")
     return CommandResponse.from_bytes(complete_data)
 
-  async def setup(self):
+  async def _initialize_hamilton(self):
     """Initialize Hamilton connection and discover objects.
 
     Hamilton uses strict request-response protocol:
@@ -298,14 +290,6 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     3. Protocol 3 registration
     4. Discover objects via Protocol 3 introspection
     """
-
-    # Step 1: Establish TCP connection
-    await self.io.setup()
-
-    # Set connection state after successful connection
-    self._connected = True
-    self._reconnect_attempts = 0
-
     # Step 2: Initialize connection (Protocol 7)
     await self._initialize_connection()
 
@@ -314,6 +298,22 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     # Step 4: Discover root objects
     await self._discover_root()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
+
+    def cleanup():
+      self._connected = False
+      logger.info("Hamilton backend stopped")
+
+    stack.callback(cleanup)
+
+    # Set connection state after successful connection
+    self._connected = True
+    self._reconnect_attempts = 0
+
+    await self._initialize_hamilton()
 
     logger.info(f"Hamilton backend setup complete. Client ID: {self._client_id}")
 
@@ -570,16 +570,6 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
       raise RuntimeError(f"Hamilton error {action}: {error_message}")
 
     return command.interpret_response(response_message)
-
-  async def stop(self):
-    """Stop the backend and close connection."""
-    try:
-      await self.io.stop()
-    except Exception as e:
-      logger.warning(f"Error during stop: {e}")
-    finally:
-      self._connected = False
-    logger.info("Hamilton backend stopped")
 
   def serialize(self) -> dict:
     """Serialize backend configuration."""

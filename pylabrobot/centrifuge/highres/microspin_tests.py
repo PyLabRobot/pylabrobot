@@ -18,10 +18,10 @@ only cover situations the mock server cannot reasonably reproduce:
 
 from __future__ import annotations
 
-import asyncio
-import unittest
 import warnings
-from typing import List, Tuple
+from typing import Any, List, Tuple, cast
+
+import anyio
 
 from pylabrobot.centrifuge.highres.microspin_backend import (
   MicroSpinAbortedError,
@@ -29,6 +29,8 @@ from pylabrobot.centrifuge.highres.microspin_backend import (
   MicroSpinError,
   MicroSpinProtocolError,
 )
+from pylabrobot.io.socket import Socket
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class _FakeWriter:
@@ -66,9 +68,27 @@ class _FakeReader:
   async def readline(self) -> bytes:
     if not self._lines:
       if self._hang_on_empty:
-        await asyncio.Event().wait()  # never fires
+        await anyio.Event().wait()  # never fires
       return b""  # simulate EOF
     return self._lines.pop(0)
+
+
+class FakeSocket(Socket):
+  def __init__(self, writer: _FakeWriter, reader: _FakeReader):
+    super().__init__(
+      human_readable_device_name="Fake Socket",
+      host="ignored",
+      port=0,
+    )
+    self.writer = writer
+    self.reader = reader
+    self._stream = cast(Any, object())  # non-None to bypass is None checks
+
+  async def write(self, data: bytes, timeout=None):
+    self.writer.write(data)
+
+  async def readline(self, timeout=None):
+    return await self.reader.readline()
 
 
 def _make_backend(server_lines: List[str]) -> Tuple[MicroSpinBackend, _FakeWriter]:
@@ -76,8 +96,7 @@ def _make_backend(server_lines: List[str]) -> Tuple[MicroSpinBackend, _FakeWrite
   backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
   writer = _FakeWriter()
   reader = _FakeReader([s.encode("ascii") for s in server_lines])
-  backend.io._writer = writer  # type: ignore[assignment]
-  backend.io._reader = reader  # type: ignore[assignment]
+  backend.io = FakeSocket(writer, reader)
   return backend, writer
 
 
@@ -86,7 +105,7 @@ def _sent_commands(writer: _FakeWriter) -> List[str]:
   return [line for line in text.split("\r\n") if line]
 
 
-class MicroSpinProtocolEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
+class TestMicroSpinProtocolEdgeCase(AnyioTestBase):
   """Cases the real mock server cannot easily produce (malformed bytes / EOF)."""
 
   async def test_protocol_error_on_bad_ack(self):
@@ -140,7 +159,7 @@ class MicroSpinProtocolEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(cm.exception, MicroSpinError)
 
 
-class MicroSpinStreamResyncTests(unittest.IsolatedAsyncioTestCase):
+class TestMicroSpinStreamResync(AnyioTestBase):
   """After a cancelled/timed-out command, the next command must transparently
   drain the stale response and return its own result. Without this the
   protocol desyncs and every subsequent command reads someone else's data.
@@ -214,23 +233,22 @@ class MicroSpinStreamResyncTests(unittest.IsolatedAsyncioTestCase):
   async def test_send_command_keeps_pending_count_on_cancellation(self):
     """Verify the bookkeeping that enables the drain.
 
-    If `send_command` is cancelled (e.g. by ``asyncio.wait_for``) mid-read,
+    If `send_command` is cancelled (e.g. by ``anyio.fail_after``) mid-read,
     the in-flight terminator must remain in the pending count so the *next*
     call can drain it.
     """
     backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
-    backend.io._writer = _FakeWriter()  # type: ignore[assignment]
-    backend.io._reader = _FakeReader(  # type: ignore[assignment]
-      [b"ACK! home 5\r\n"],  # ACK arrives, but the terminator never does
-      hang_on_empty=True,
-    )
+    writer = _FakeWriter()
+    reader = _FakeReader([b"ACK! home 5\r\n"], hang_on_empty=True)
+    backend.io = FakeSocket(writer, reader)
 
-    with self.assertRaises(asyncio.TimeoutError):
-      await asyncio.wait_for(backend.send_command("home"), timeout=0.05)
+    with self.assertRaises(TimeoutError):
+      with anyio.fail_after(0.05):
+        await backend.send_command("home")
     self.assertEqual(backend._pending_terminator_count, 1)
 
 
-class MicroSpinValidationTests(unittest.IsolatedAsyncioTestCase):
+class TestMicroSpinValidation(AnyioTestBase):
   """Argument validation that raises before any bytes hit the wire."""
 
   async def test_spin_rounds_and_clamps_percents(self):
@@ -371,7 +389,7 @@ class MicroSpinValidationTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(_sent_commands(writer), [])
 
 
-class MicroSpinHelperEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
+class TestMicroSpinHelperEdgeCase(AnyioTestBase):
   """Helper behaviour with carefully-shaped responses we don't get from the mock."""
 
   async def test_request_errors_returns_lines_verbatim(self):
@@ -390,7 +408,7 @@ class MicroSpinHelperEdgeCaseTests(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class MicroSpinResetErrorPathTests(unittest.IsolatedAsyncioTestCase):
+class TestMicroSpinResetErrorPath(AnyioTestBase):
   """Reset's error-handling branches, which need controllable ERROR! at each step."""
 
   async def test_reset_swallows_abort_error_by_default(self):
@@ -455,7 +473,7 @@ class MicroSpinResetErrorPathTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(_sent_commands(writer), ["abort", "clearbuttonabort", "status"])
 
 
-class MicroSpinTimeoutExtensionTests(unittest.IsolatedAsyncioTestCase):
+class TestMicroSpinTimeoutExtension(AnyioTestBase):
   """Monkey-patched send_command to verify long-motion timeout extension."""
 
   async def test_abort_uses_extended_default_timeout(self):
@@ -496,8 +514,6 @@ class MicroSpinTimeoutExtensionTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_wait_for_spindle_stopped_retries_on_per_call_timeout(self):
     """If the per-call status times out, we issue another one."""
-    import asyncio as _asyncio
-
     backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
     call_count = 0
 
@@ -505,7 +521,7 @@ class MicroSpinTimeoutExtensionTests(unittest.IsolatedAsyncioTestCase):
       nonlocal call_count
       call_count += 1
       if call_count < 3:
-        raise _asyncio.TimeoutError("still spinning")
+        raise TimeoutError("still spinning")
       return ["Spindle Position: 1958", "Door Position: -457"]
 
     backend.send_command = fake_send  # type: ignore[method-assign]
@@ -515,15 +531,13 @@ class MicroSpinTimeoutExtensionTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_wait_for_spindle_stopped_raises_when_total_budget_expires(self):
     """With every poll timing out and a tight overall budget, we raise."""
-    import asyncio as _asyncio
-
     backend = MicroSpinBackend(host="ignored", port=0, timeout=2.0)
 
     async def fake_send(cmd, *, timeout=None):
-      raise _asyncio.TimeoutError("still spinning")
+      raise TimeoutError("still spinning")
 
     backend.send_command = fake_send  # type: ignore[method-assign]
-    with self.assertRaises(_asyncio.TimeoutError):
+    with self.assertRaises(TimeoutError):
       await backend.wait_for_spindle_stopped(poll_interval=0.01, timeout=0.05)
 
   async def test_wait_for_spindle_stopped_propagates_microspin_error(self):
@@ -548,7 +562,7 @@ class MicroSpinTimeoutExtensionTests(unittest.IsolatedAsyncioTestCase):
         await backend.wait_for_spindle_stopped(poll_interval=bad)
 
 
-class MicroSpinConstructorTests(unittest.IsolatedAsyncioTestCase):
+class TestMicroSpinConstructor(AnyioTestBase):
   def test_default_port_is_1000(self):
     """Backend, factory, and the class constant must agree on 1000."""
     from pylabrobot.centrifuge import MicroSpin
@@ -570,7 +584,7 @@ class MicroSpinConstructorTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(cf.backend.port, 9001)
 
 
-class MicroSpinSerializeTests(unittest.IsolatedAsyncioTestCase):
+class TestMicroSpinSerialize(AnyioTestBase):
   def test_serialize_includes_connection_info(self):
     backend = MicroSpinBackend(host="10.0.0.5", port=1234, timeout=12.5)
     s = backend.serialize()
@@ -581,7 +595,3 @@ class MicroSpinSerializeTests(unittest.IsolatedAsyncioTestCase):
   def test_serialize_records_default_port(self):
     backend = MicroSpinBackend(host="10.0.0.5")
     self.assertEqual(backend.serialize()["port"], 1000)
-
-
-if __name__ == "__main__":
-  unittest.main()

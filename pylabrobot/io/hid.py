@@ -1,8 +1,10 @@
-import asyncio
+import contextlib
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
@@ -38,12 +40,12 @@ class HID(IOBase):
     self.serial_number = serial_number
     self.device: Optional[hid.Device] = None
     self._unique_id = f"{vid}:{pid}:{serial_number}"
-    self._executor: Optional[ThreadPoolExecutor] = None
+    self._lock = anyio.Lock()
 
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new HID object while capture or validation is active")
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     """
     Sets up the HID device by enumerating connected devices, matching the specified
     VID, PID, and optional serial number, and opening a connection to the device.
@@ -55,7 +57,7 @@ class HID(IOBase):
       )
 
     # --- 1. Enumerate all HID devices ---
-    all_devices = hid.enumerate()
+    all_devices = await anyio.to_thread.run_sync(hid.enumerate)
     candidates = [
       d
       for d in all_devices
@@ -99,22 +101,22 @@ class HID(IOBase):
       chosen = candidates[0]
 
     # --- 5. Open the device ---
-    self.device = hid.Device(
-      path=chosen["path"]  # safer than vid/pid/serial triple
-    )
-    self._executor = ThreadPoolExecutor(max_workers=1)
+    self.device = await anyio.to_thread.run_sync(lambda: hid.Device(path=chosen["path"]))
+
+    async def _cleanup():
+      if self.device is not None:
+        await anyio.to_thread.run_sync(self.device.close)
+      logger.log(LOG_LEVEL_IO, "Closing HID device %s", self._unique_id)
+      capturer.record(HIDCommand(device_id=self._unique_id, action="close", data=""))
+
+    stack.push_shielded_async_callback(_cleanup)
 
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))
 
-  async def stop(self):
-    if self.device is not None:
-      self.device.close()
-    logger.log(LOG_LEVEL_IO, "Closing HID device %s", self._unique_id)
-    capturer.record(HIDCommand(device_id=self._unique_id, action="close", data=""))
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+  async def _dev_call(self, func, *args):
+    async with self._lock:
+      return await anyio.to_thread.run_sync(func, *args)
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
     r"""Writes data to the HID device.
@@ -139,7 +141,6 @@ class HID(IOBase):
       data: The data to write.
       report_id: The report ID to use for the write operation. Defaults to b'\x00'.
     """
-    loop = asyncio.get_running_loop()
     write_data = report_id + data
 
     def _write():
@@ -147,9 +148,7 @@ class HID(IOBase):
         raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
       return self.device.write(write_data)
 
-    if self._executor is None:
-      raise RuntimeError("Call setup() first.")
-    r = await loop.run_in_executor(self._executor, _write)
+    r = await self._dev_call(_write)
     logger.log(
       LOG_LEVEL_IO, "[%s] write %s (report_id: %s)", self._unique_id, data, report_id.hex()
     )
@@ -157,8 +156,6 @@ class HID(IOBase):
     return r
 
   async def read(self, size: int, timeout: int) -> bytes:
-    loop = asyncio.get_running_loop()
-
     def _read():
       if self.device is None:
         raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
@@ -169,9 +166,7 @@ class HID(IOBase):
           return b""
         raise
 
-    if self._executor is None:
-      raise RuntimeError("Call setup() first.")
-    r = await loop.run_in_executor(self._executor, _read)
+    r = await self._dev_call(_read)
     if len(r) > 0:
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
       capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.hex()))
@@ -203,7 +198,7 @@ class HIDValidator(HID):
     )
     self.cr = cr
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     next_command = HIDCommand(**self.cr.next_command())
     if (
       not next_command.module == "hid"
@@ -212,14 +207,16 @@ class HIDValidator(HID):
     ):
       raise ValidationError(f"Next line is {next_command}, expected HID open {self._unique_id}")
 
-  async def stop(self):
-    next_command = HIDCommand(**self.cr.next_command())
-    if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "close"
-    ):
-      raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
+    def _cleanup():
+      next_command = HIDCommand(**self.cr.next_command())
+      if (
+        not next_command.module == "hid"
+        and next_command.device_id == self._unique_id
+        and next_command.action == "close"
+      ):
+        raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
+
+    stack.callback(_cleanup)
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
     next_command = HIDCommand(**self.cr.next_command())

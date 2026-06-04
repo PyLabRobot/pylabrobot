@@ -1,6 +1,7 @@
 import unittest
 from typing import Any, List, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import Pickup
 from pylabrobot.resources import (
@@ -15,6 +16,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.hamilton import VantageDeck
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 from .vantage_backend import (
   VantageBackend,
@@ -213,12 +215,19 @@ class VantageCommandCatcher(VantageBackend):
     super().__init__()
     self.commands = []
 
-  async def setup(self) -> None:  # type: ignore
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs) -> None:
     self.setup_finished = True
     self._num_channels = 8
     self.iswap_installed = True
     self._num_arms = 1
     self._head96_installed = True
+    self._setup_done = True
+
+    def cleanup():
+      self.stop_finished = True
+      self._setup_done = False
+
+    stack.callback(cleanup)
 
   async def send_command(
     self,
@@ -237,14 +246,11 @@ class VantageCommandCatcher(VantageBackend):
     )
     self.commands.append(cmd)
 
-  async def stop(self):
-    self.stop_finished = True
 
-
-class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
+class TestVantageLiquidHandlerCommands(AnyioTestBase):
   """Test Vantage backend for liquid handling."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.mockVantage = VantageCommandCatcher()
     self.deck = VantageDeck(size=1.3)
     self.lh = LiquidHandler(self.mockVantage, deck=self.deck)
@@ -261,12 +267,9 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     self.maxDiff = None
 
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
 
     set_tip_tracking(enabled=False)
-
-  async def asyncTearDown(self):
-    await self.lh.stop()
 
   def _assert_command_in_command_buffer(self, cmd: str, should_be: bool, fmt: dict):
     """Assert that the given command was sent to the backend. The ordering of the parameters is not
@@ -361,7 +364,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_tip_drop_01(self):
-    await self.test_tip_pickup_01()  # pick up tips first
+    await self.test_tip_pickup_01.original_func(self)  # type: ignore # pick up tips first
     await self.lh.drop_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
       "A1PMTRid013xp04329 04329 0&yp1458 1368 0&tm1 1 0&tp1414 1414&tz1314 1314&th2450 2450&"
@@ -377,7 +380,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_small_tip_drop(self):
-    await self.test_small_tip_pickup()  # pick up tips first
+    await self.test_small_tip_pickup.original_func(self)  # type: ignore # pick up tips first
     await self.lh.drop_tips(self.small_tip_rack["A1"])
     self._assert_command_sent_once(
       "A1PMTRid0012xp4329 0&yp2418 0&tp2024&tz1924&th2450&te2450&tm1 0&ts0td0&",
@@ -575,10 +578,10 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+class TestVantageTipPickupDropAllSizes(AnyioTestBase):
   """Test Vantage tip pickup and drop Z position calculations for all tip sizes."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.backend = VantageCommandCatcher()
     self.deck = VantageDeck(size=1.3)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
@@ -586,11 +589,8 @@ class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
     self.deck.assign_child_resource(self.tip_car, rails=18)
 
-    await self.lh.setup()
+    await stack.enter_async_context(self.lh)
     set_tip_tracking(enabled=False)
-
-  async def asyncTearDown(self):
-    await self.lh.stop()
 
   def _get_tp_tz_from_commands(self, cmd_prefix: str, fmt: dict):
     """Extract tp and tz values from commands matching the prefix."""

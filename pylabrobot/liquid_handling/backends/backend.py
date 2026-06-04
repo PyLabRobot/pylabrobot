@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional, Union
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling.channel_positioning import GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
 from pylabrobot.liquid_handling.standard import (
   Drop,
@@ -78,9 +79,9 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   def head96(self) -> Optional[Dict[int, TipTracker]]:
     return self._head96
 
-  async def setup(self):
-    """Set up the robot. This method should be called before any other method is called."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     assert self._deck is not None, "Deck not set"
+    await super()._enter_lifespan(stack)
 
   @property
   @abstractmethod

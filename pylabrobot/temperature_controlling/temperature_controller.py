@@ -1,7 +1,8 @@
-import asyncio
-import time
 from typing import Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -78,13 +79,15 @@ class TemperatureController(ResourceHolder, Machine):
     """
     if self.target_temperature is None:
       raise RuntimeError("Target temperature is not set.")
-    start = time.time()
-    while time.time() - start < timeout:
-      temperature = await self.get_temperature()
-      if abs(temperature - self.target_temperature) < tolerance:
-        return
-      await asyncio.sleep(1.0)
-    raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          temperature = await self.get_temperature()
+          if abs(temperature - self.target_temperature) < tolerance:
+            return
+          await anyio.sleep(1.0)
+    except TimeoutError:
+      raise TimeoutError(f"Temperature did not reach target within {timeout} seconds") from None
 
   async def deactivate(self):
     """Deactivate the temperature controller. This will stop the heating or cooling, and return
@@ -93,10 +96,13 @@ class TemperatureController(ResourceHolder, Machine):
     self.target_temperature = None
     return await self.backend.deactivate()
 
-  async def stop(self):
-    """Stop the temperature controller and close the backend connection."""
-    await self.deactivate()
-    await super().stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+
+    async def cleanup():
+      await self.deactivate()
+
+    stack.push_shielded_async_callback(cleanup)
 
   def serialize(self) -> dict:
     return {

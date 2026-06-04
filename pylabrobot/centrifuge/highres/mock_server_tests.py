@@ -10,8 +10,7 @@ physical MicroSpin.
 
 from __future__ import annotations
 
-import asyncio
-import unittest
+import anyio
 
 from pylabrobot.centrifuge.highres.microspin_backend import (
   MicroSpinAbortedError,
@@ -19,23 +18,27 @@ from pylabrobot.centrifuge.highres.microspin_backend import (
   MicroSpinError,
 )
 from pylabrobot.centrifuge.highres.mock_server import MicroSpinMockServer
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-class _MockServerTestBase(unittest.IsolatedAsyncioTestCase):
+class _MockServerTestBase(AnyioTestBase):
   """Shared setup: a fresh mock server + a connected backend per test."""
 
-  async def asyncSetUp(self):
+  def assertLess(self, a, b, msg=None):
+    assert a < b, msg or f"{a} is not less than {b}"
+
+  def assertGreaterEqual(self, a, b, msg=None):
+    assert a >= b, msg or f"{a} is not greater than or equal to {b}"
+
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.server = MicroSpinMockServer()
-    await self.server.start()
+    await stack.enter_async_context(self.server)
     self.backend = MicroSpinBackend(host=self.server.host, port=self.server.port, timeout=5.0)
-    await self.backend.setup()
-
-  async def asyncTearDown(self):
-    await self.backend.stop()
-    await self.server.stop()
+    await stack.enter_async_context(self.backend)
 
 
-class MockServerCommandMappingTests(_MockServerTestBase):
+class TestMockServerCommandMapping(_MockServerTestBase):
   """Verify each pylabrobot backend method produces the expected wire-level
   effect on the mock server. These tests *replace* the stub-based mapping
   tests that used to live in :mod:`microspin_tests` -- using a real TCP
@@ -114,7 +117,7 @@ class MockServerCommandMappingTests(_MockServerTestBase):
     self.assertIsNone(result)
 
 
-class MockServerIntegrationTests(_MockServerTestBase):
+class TestMockServerIntegration(_MockServerTestBase):
   # --- basic protocol round-trips ----------------------------------------
 
   async def test_version_round_trip(self):
@@ -178,20 +181,16 @@ class MockServerIntegrationTests(_MockServerTestBase):
 
     # Use a separate backend connection to send `status` while home is running.
     side = MicroSpinBackend(host=self.server.host, port=self.server.port, timeout=5.0)
-    await side.setup()
-    try:
-      home_task = asyncio.create_task(issue_home())
+    async with side, anyio.create_task_group() as tg:
+      tg.start_soon(issue_home)
       # Give the home command time to start
-      await asyncio.sleep(0.02)
+      await anyio.sleep(0.02)
       # Now ask for status -- this should block until home completes.
-      t0 = asyncio.get_event_loop().time()
+      t0 = anyio.current_time()
       await side.request_status()
-      elapsed = asyncio.get_event_loop().time() - t0
-      await home_task
+      elapsed = anyio.current_time() - t0
       # status should have waited at least ~0.1s (most of the remaining home dwell)
       self.assertGreater(elapsed, 0.05)
-    finally:
-      await side.stop()
 
   # --- reset() and abort flow --------------------------------------------
 
@@ -209,16 +208,17 @@ class MockServerIntegrationTests(_MockServerTestBase):
 
     # Now start another motion (open) and abort it mid-way.
     self.server.motion_dwell["open"] = 0.3
-    open_task = asyncio.create_task(self.backend.go_to_bucket1())
-    await asyncio.sleep(0.05)
-
     side = MicroSpinBackend(host=self.server.host, port=self.server.port, timeout=5.0)
-    await side.setup()
-    try:
+    async with side, anyio.create_task_group() as tg:
+
+      async def run_open_expect_error():
+        with self.assertRaises(MicroSpinError):
+          await self.backend.go_to_bucket1()
+
+      tg.start_soon(run_open_expect_error)
+      await anyio.sleep(0.05)
+
       await side.abort()
-      # The original open command should have raised because abort cancelled it
-      with self.assertRaises(MicroSpinError):
-        await open_task
       # The server is now in abort-latched state; further motion should fail
       with self.assertRaises(MicroSpinError):
         await side.go_to_bucket1()
@@ -227,34 +227,29 @@ class MockServerIntegrationTests(_MockServerTestBase):
       # Motion works again
       await side.go_to_bucket1()
       self.assertEqual(self.server.state.at_bucket, 1)
-    finally:
-      await side.stop()
 
 
-class MockServerLowGHangTests(unittest.IsolatedAsyncioTestCase):
+class TestMockServerLowGHang(AnyioTestBase):
   """The mock can simulate the firmware's low-G "stopped sensor never latches"
   bug. We use this to verify that callers can recover via a timeout."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.server = MicroSpinMockServer()
     self.server.state.simulate_low_g_hang = True
-    await self.server.start()
+    await stack.enter_async_context(self.server)
     # Very short timeout so the test doesn't take forever
     self.backend = MicroSpinBackend(host=self.server.host, port=self.server.port, timeout=0.5)
-    await self.backend.setup()
-
-  async def asyncTearDown(self):
-    await self.backend.stop()
-    await self.server.stop()
+    await stack.enter_async_context(self.backend)
 
   async def test_status_hangs_after_motion_with_low_g_simulation(self):
     await self.backend.send_command("home")  # populates state.current_motion
     # status would normally answer immediately; in low-G-hang mode it sits.
-    with self.assertRaises(asyncio.TimeoutError):
+    with self.assertRaises(TimeoutError):
       await self.backend.request_status()
 
 
-class MockServerCommandSurfaceTests(_MockServerTestBase):
+class TestMockServerCommandSurface(_MockServerTestBase):
   """The mock must implement exactly the public command set the real device
   exposes via ``list`` (manual §6.7's public tier) -- no maintenance
   commands, no invented helpers, and with response text that matches the
@@ -369,7 +364,7 @@ class MockServerCommandSurfaceTests(_MockServerTestBase):
     )
 
 
-class MockServerAbortedTerminatorTests(_MockServerTestBase):
+class TestMockServerAbortedTerminator(_MockServerTestBase):
   """`ABORTED!` is a real third terminator emitted by the device for
   commands cancelled by an abort, and for motion commands issued while the
   abort latch is set. The backend must raise :class:`MicroSpinAbortedError`
@@ -402,18 +397,18 @@ class MockServerAbortedTerminatorTests(_MockServerTestBase):
     await self.backend.home()
     # Make the next motion long so we can race against it.
     self.server.motion_dwell["open"] = 0.5
-    open_task = asyncio.create_task(self.backend.go_to_bucket1())
-    await asyncio.sleep(0.05)
-
     # Issue abort from a second connection.
     side = MicroSpinBackend(host=self.server.host, port=self.server.port, timeout=5.0)
-    await side.setup()
-    try:
+    async with side, anyio.create_task_group() as tg:
+
+      async def run_open_expect_abort():
+        with self.assertRaises(MicroSpinAbortedError):
+          await self.backend.go_to_bucket1()
+
+      tg.start_soon(run_open_expect_abort)
+      await anyio.sleep(0.05)
+
       await side.abort()
-      with self.assertRaises(MicroSpinAbortedError):
-        await open_task
-    finally:
-      await side.stop()
 
   async def test_aborted_error_is_a_microspin_error_subclass(self):
     """Callers that just want ``except MicroSpinError`` still catch aborts."""
@@ -423,38 +418,30 @@ class MockServerAbortedTerminatorTests(_MockServerTestBase):
       await self.backend.spin(g=100, duration=1)
 
 
-class MockServerCliSmokeTest(unittest.IsolatedAsyncioTestCase):
+class TestMockServerCliSmoke(AnyioTestBase):
   """A minimal sanity check that the server is usable with raw TCP, the same
   way a netcat session would use it."""
 
   async def test_raw_tcp_round_trip(self):
+    import anyio.streams.buffered
+
     async with MicroSpinMockServer() as srv:
-      reader, writer = await asyncio.open_connection(srv.host, srv.port)
-      try:
-        writer.write(b"version\r\n")
-        await writer.drain()
+      stream = await anyio.connect_tcp(srv.host, srv.port)
+      async with stream:
+        await stream.send(b"version\r\n")
         # ACK!
-        ack = await reader.readline()
+        buf_stream = anyio.streams.buffered.BufferedByteStream(stream)
+        ack = await buf_stream.receive_until(b"\n", max_bytes=1024)
         self.assertTrue(ack.startswith(b"ACK! version "), ack)
         # data lines + OK!
         lines = []
         while True:
-          line = await reader.readline()
+          line = await buf_stream.receive_until(b"\n", max_bytes=1024)
           if line.startswith(b"OK! version "):
             break
           if line.startswith(b"ERROR!"):
-            self.fail(f"unexpected ERROR: {line!r}")
+            raise AssertionError(f"unexpected ERROR: {line!r}")
           lines.append(line)
         joined = b"".join(lines).decode()
         self.assertIn("RandomServe", joined)
         self.assertIn("MS-1.3.3-mock", joined)
-      finally:
-        writer.close()
-        try:
-          await writer.wait_closed()
-        except Exception:
-          pass
-
-
-if __name__ == "__main__":
-  unittest.main()
