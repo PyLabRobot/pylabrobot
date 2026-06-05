@@ -24,6 +24,7 @@ class DataID(IntEnum):
   CONTROLLER_SERIAL = 110
   ROBOT_TYPE = 116
   POWER_STATE = 234
+  ROBOT_HOMED = 2800  # 1 = all axes homed; 0 = not homed (commanded motion blocked)
   NUM_AXES = 2000
   ROBOT_NAME = 2002
   AXIS_MASK = 2003

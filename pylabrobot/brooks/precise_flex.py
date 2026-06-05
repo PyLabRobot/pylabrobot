@@ -559,6 +559,14 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       ", ".join(config.modules),
     )
 
+  async def _is_robot_homed(self) -> bool:
+    """Whether all axes are homed (DataID 2800).
+
+    Homing is lost on every power cycle (incremental encoders), and until it is redone
+    the controller blocks commanded motion (-1021) and reports unreliable positions.
+    """
+    return _parse_scalar(await self.request_parameter(DataID.ROBOT_HOMED)) == 1.0
+
   async def _handle_out_of_range_axes(self) -> None:
     """Warn about every out-of-range axis, then correct what is recoverable, or raise.
 
@@ -567,7 +575,18 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     ``recover_out_of_range_at_setup`` on (the default), drives each recoverable offender back
     into range. If recovery is off or leaves any axis out, setup raises with explicit
     recovery steps rather than leaving a dead arm.
+
+    No-op until the robot is homed: an unhomed incremental axis reads a meaningless ~0
+    (so the check would false-positive), and the controller blocks the recovery move with
+    -1021 anyway. Homing is the prerequisite, so the check waits for it.
     """
+    if not await self._is_robot_homed():
+      logger.warning(
+        "[PreciseFlex %s] robot not homed; skipping the out-of-range check until it is "
+        "(home() first - unhomed positions are unreliable and commanded moves are blocked).",
+        self.driver.io._host,
+      )
+      return
 
     def fmt(axes: Dict[Axis, tuple]) -> str:
       return "; ".join(
