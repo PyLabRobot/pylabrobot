@@ -9,6 +9,13 @@ from typing import Dict, List, Literal, Optional
 
 from pylabrobot.brooks.error_codes import ERROR_CODES
 from pylabrobot.brooks.data_ids import DataID
+from pylabrobot.brooks.confirmed_firmware_versions import (
+  SUPPORTED_ROBOT_TYPES,
+  is_confirmed,
+  is_supported_model,
+  missing_required_modules,
+  suggest_entry,
+)
 from pylabrobot.brooks import kinematics
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -517,11 +524,47 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       self._kinematics_params = self._configuration.kinematics
       self._has_rail = self._configuration.has_rail
       self._is_dual_gripper = self._configuration.is_dual_gripper
+      self._assess_configuration(self._configuration)
     except Exception as exc:  # discovery is best-effort; fall back to the class defaults
       logger.warning(
         "[PreciseFlex %s] could not read configuration, using defaults: %s",
         self.driver.io._host,
         exc,
+      )
+
+  def _assess_configuration(self, config: "PreciseFlexConfiguration") -> None:
+    """Warn about an unsupported model, a missing TCS module, or an untested combo.
+
+    The kinematics is the PreciseFlex 400 geometry, so a different model would get
+    wrong joint targets; a missing module (e.g. PARobot) is the usual ``-2805``
+    cause; an unlisted full configuration is allowed but flagged for reporting.
+    """
+    host = self.driver.io._host
+    if not is_supported_model(config.robot_type):
+      logger.warning(
+        "[PreciseFlex %s] robot_type %s is not a model this driver's kinematics "
+        "supports (%s); move_to/working_volume may be wrong.",
+        host,
+        config.robot_type,
+        ", ".join(SUPPORTED_ROBOT_TYPES.values()),
+      )
+    for capability, module, project in missing_required_modules(config.modules):
+      logger.warning(
+        "[PreciseFlex %s] the '%s' module needed for %s is not loaded; install the "
+        "'%s' TCS project (obtain it from Brooks Automation) and restart it.",
+        host,
+        module,
+        capability,
+        project,
+      )
+    if not is_confirmed(config.robot_type, config.gpl_version, config.tcs_version, config.modules):
+      logger.info(
+        "[PreciseFlex %s] this software stack has not been tested with this driver. "
+        "If the arm works correctly, please add the following entry to "
+        "CONFIRMED_FIRMWARE_VERSIONS in pylabrobot/brooks/confirmed_firmware_versions.py "
+        "and open a pull request so other users benefit:\n%s",
+        host,
+        suggest_entry(config.robot_type, config.gpl_version, config.tcs_version, config.modules),
       )
 
   async def _request_state(
