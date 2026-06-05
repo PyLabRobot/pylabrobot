@@ -11,9 +11,8 @@ discovered stack here:
 - ``CONFIRMED_FIRMWARE_VERSIONS`` is the list of full (model, GPL, TCS, module-set)
   software stacks validated against this driver; an unlisted one logs a warning
   asking for a report so it can be added.
-- ``REQUIRED_MODULES`` maps a capability to the TCS module that provides it and
-  the project that ships it, so a missing module gives a clear "install it from
-  Brooks" message instead of a late ``-2805 *Unknown command*``.
+
+(Which modules the driver *requires* lives in ``tcs_modules.py``, a separate concern.)
 
 Version strings keep the name and version but drop the trailing build date, which
 varies by build without changing behaviour.
@@ -53,12 +52,6 @@ CONFIRMED_FIRMWARE_VERSIONS = [
   ),
 ]
 
-# capability -> (module-name substring that provides it, project that ships it).
-# A loaded-module set missing one of these fails the corresponding commands.
-REQUIRED_MODULES = {
-  "gripper / plate handling": ("PARobot", "Tcp_cmd_server_pa"),
-}
-
 # Trailing build date (e.g. "10-25-2024" or "Apr 25 2025") and anything after it.
 _DATE = re.compile(r",?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}).*$")
 
@@ -91,16 +84,6 @@ def is_confirmed(robot_type: int, gpl_version: str, tcs_version: str, modules: t
     == target
     for c in CONFIRMED_FIRMWARE_VERSIONS
   )
-
-
-def missing_required_modules(modules: tuple) -> list:
-  """Required modules absent from the loaded set, as (capability, module, project)."""
-  loaded = " ".join(modules)
-  return [
-    (capability, module, project)
-    for capability, (module, project) in REQUIRED_MODULES.items()
-    if module not in loaded
-  ]
 
 
 def suggest_entry(robot_type: int, gpl_version: str, tcs_version: str, modules: tuple) -> str:

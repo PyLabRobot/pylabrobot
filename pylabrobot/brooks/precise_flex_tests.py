@@ -2,7 +2,7 @@ import unittest
 from typing import Tuple
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.brooks.precise_flex import PreciseFlex400Backend
+from pylabrobot.brooks.precise_flex import Axis, PreciseFlex400Backend
 
 
 def _make_backend(
@@ -73,3 +73,47 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend._mm_to_firmware_units(60.0), 500.0)
     self.assertEqual(self.backend._mm_to_firmware_units(145.0), 585.0)
     self.assertEqual(self.backend._mm_to_firmware_units(100.0), 540.0)
+
+
+class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend, self.driver = _make_backend()
+    self.driver._wait_for_eom = AsyncMock()
+    self.backend._request_speed = AsyncMock(return_value=50.0)
+    # Minimal stub configuration: only the soft limits the recovery logic reads.
+    self.backend._configuration = MagicMock(
+      soft_limits={
+        Axis.SHOULDER: (-93.0, 93.0),
+        Axis.ELBOW: (12.0, 348.0),
+        Axis.WRIST: (-960.0, 960.0),
+      }
+    )
+
+  def _move_one_axis_cmds(self) -> list[str]:
+    return [
+      c.args[0]
+      for c in self.driver.send_command.call_args_list
+      if c.args[0].startswith("MoveOneAxis")
+    ]
+
+  async def test_recover_moves_offenders_toward_limit_in_order_and_skips_wrist(self):
+    """Each recoverable offender is driven 1 unit *inside* the violated limit (above-max down,
+    below-min up), shoulder before elbow per _RECOVERY_ORDER; the wrist is never auto-moved."""
+    self.backend.request_joint_position = AsyncMock(
+      return_value={Axis.SHOULDER: 93.5, Axis.ELBOW: 9.0, Axis.WRIST: 962.0}
+    )
+    recovered = await self.backend.recover_axes_within_limits()
+    self.assertEqual(recovered, {Axis.SHOULDER: 92.0, Axis.ELBOW: 13.0})  # wrist excluded
+    cmds = self._move_one_axis_cmds()
+    self.assertEqual(
+      cmds, ["MoveOneAxis 2 92.0 1", "MoveOneAxis 3 13.0 1"]
+    )  # shoulder (2) before elbow (3)
+
+  async def test_recover_skips_axis_too_far_out_of_range(self):
+    """An axis past its limit by more than max_distance is left in place (no unattended big sweep)."""
+    self.backend.request_joint_position = AsyncMock(
+      return_value={Axis.SHOULDER: 120.0}  # 27 deg past the 93 limit, beyond the 5 cap
+    )
+    recovered = await self.backend.recover_axes_within_limits()
+    self.assertEqual(recovered, {})
+    self.assertEqual(self._move_one_axis_cmds(), [])

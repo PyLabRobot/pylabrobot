@@ -13,9 +13,9 @@ from pylabrobot.brooks.confirmed_firmware_versions import (
   SUPPORTED_ROBOT_TYPES,
   is_confirmed,
   is_supported_model,
-  missing_required_modules,
   suggest_entry,
 )
+from pylabrobot.brooks.tcs_modules import missing_required_modules
 from pylabrobot.brooks import kinematics
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -138,7 +138,7 @@ class PreciseFlexConfiguration:
       shoulder = sh_lo + (sh_hi - sh_lo) * i / steps
       for j in range(steps + 1):
         elbow = el_lo + (el_hi - el_lo) * j / steps
-        joints = {
+        joints: JointPose = {
           Axis.BASE: 0.0,
           Axis.SHOULDER: shoulder,
           Axis.ELBOW: elbow,
@@ -465,6 +465,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     is_dual_gripper: bool = False,
     has_rail: bool = False,
     read_kinematics_from_device: bool = True,
+    recover_out_of_range_at_setup: bool = True,
   ) -> None:
     """
     Args:
@@ -479,6 +480,11 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
         the controller at setup and use them for kinematics; the constructor's
         ``gripper_length`` then acts only as a fallback. Set False to force the
         constructor values regardless of what the controller reports.
+      recover_out_of_range_at_setup: when True (the default), setup tries to drive a
+        small out-of-range excursion back inside the soft limits (slow single-axis move
+        toward in-range) via ``recover_axes_within_limits``. Set False to skip that.
+        Either way, setup raises if any axis is still out of range afterward, since the
+        controller would otherwise reject every commanded move (-1012).
       closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
         ``GripOpenPos``) at which the jaws are at :attr:`min_gripper_width`.
         Depends on the mounted gripper. The conversion mm → firmware units is
@@ -499,6 +505,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       gripper_length=gripper_length, gripper_z_offset=gripper_z_offset
     )
     self._read_kinematics_from_device = read_kinematics_from_device
+    self._recover_out_of_range_at_setup = recover_out_of_range_at_setup
     # Device configuration, resolved once at setup; None until then.
     self._configuration: Optional[PreciseFlexConfiguration] = None
     if is_dual_gripper:
@@ -509,27 +516,80 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await super()._on_setup(backend_params=backend_params)
     await self.stop_freedrive_mode()
-    # Resolve the device configuration once (identity, axes, limits, envelope) and
-    # cache it. The fixes below read from it instead of re-querying or hardcoding:
-    # the gripper width limits come from the gripper-axis soft limits, and the
-    # freedrive default axis set follows the installed axes (rail only when fitted).
+    # Resolve the device configuration once and adopt it as the source of truth;
+    # without it the class defaults stay in place.
     try:
       self._configuration = await self._request_configuration()
-      gmin, gmax = self._configuration.gripper_width_range
-      self._gripper_soft_min, self._gripper_soft_max = gmin, gmax
-      self.min_gripper_width, self.max_gripper_width = gmin, gmax
-      # Adopt the discovered geometry and topology as the source of truth: IK/FK
-      # use the device link lengths, and the rail / dual-gripper command paths
-      # follow what the controller actually reports.
-      self._kinematics_params = self._configuration.kinematics
-      self._has_rail = self._configuration.has_rail
-      self._is_dual_gripper = self._configuration.is_dual_gripper
-      self._assess_configuration(self._configuration)
-    except Exception as exc:  # discovery is best-effort; fall back to the class defaults
+    except Exception as exc:  # discovery is best-effort
       logger.warning(
         "[PreciseFlex %s] could not read configuration, using defaults: %s",
         self.driver.io._host,
         exc,
+      )
+      return
+    self._adopt_configuration(self._configuration)
+    self._log_configuration_summary(self._configuration)
+    self._assess_configuration(self._configuration)
+    await self._handle_out_of_range_axes()
+
+  def _adopt_configuration(self, config: "PreciseFlexConfiguration") -> None:
+    """Adopt the discovered configuration as the source of truth for later commands.
+
+    The gripper width limits come from the gripper-axis soft limits, IK/FK use the
+    device link lengths, and the rail / dual-gripper command paths follow the axes
+    the controller actually reports.
+    """
+    gmin, gmax = config.gripper_width_range
+    self._gripper_soft_min, self._gripper_soft_max = gmin, gmax
+    self.min_gripper_width, self.max_gripper_width = gmin, gmax
+    self._kinematics_params = config.kinematics
+    self._has_rail = config.has_rail
+    self._is_dual_gripper = config.is_dual_gripper
+
+  def _log_configuration_summary(self, config: "PreciseFlexConfiguration") -> None:
+    """Log a one-line summary of the discovered configuration."""
+    logger.info(
+      "[PreciseFlex %s] robot_type %s, %s axes%s; %s; %s; modules: %s",
+      self.driver.io._host,
+      config.robot_type,
+      config.num_axes,
+      " + rail" if config.has_rail else "",
+      config.gpl_version,
+      config.tcs_version,
+      ", ".join(config.modules),
+    )
+
+  async def _handle_out_of_range_axes(self) -> None:
+    """Warn about every out-of-range axis, then correct what is recoverable, or raise.
+
+    An axis parked outside its soft limit makes the arm unusable - the controller rejects
+    every commanded move with -1012. Setup logs the full set first (either way), then, with
+    ``recover_out_of_range_at_setup`` on (the default), drives each recoverable offender back
+    into range. If recovery is off or leaves any axis out, setup raises with explicit
+    recovery steps rather than leaving a dead arm.
+    """
+
+    def fmt(axes: Dict[Axis, tuple]) -> str:
+      return "; ".join(
+        f"{axis.name} at {value} (soft limit {limit})" for axis, (value, limit) in axes.items()
+      )
+
+    outside = self._axes_outside_soft_limits(await self.request_joint_position())
+    if not outside:
+      return
+    logger.warning(
+      "[PreciseFlex %s] axes out of soft limit at setup: %s", self.driver.io._host, fmt(outside)
+    )
+    if self._recover_out_of_range_at_setup:
+      await self.recover_axes_within_limits()
+      outside = self._axes_outside_soft_limits(await self.request_joint_position())
+    if outside:
+      raise PreciseFlexError(
+        -1012,
+        f"axis outside its soft limit after setup: {fmt(outside)}. The controller rejects all "
+        f"commanded moves in this state. Recover with recover_axes_within_limits(), or freedrive "
+        f"the axis back into range manually (required for the wrist, or when an axis is far past "
+        f"its limit).",
       )
 
   def _assess_configuration(self, config: "PreciseFlexConfiguration") -> None:
@@ -548,13 +608,13 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
         config.robot_type,
         ", ".join(SUPPORTED_ROBOT_TYPES.values()),
       )
-    for capability, module, project in missing_required_modules(config.modules):
+    for module, provides, project in missing_required_modules(config.modules):
       logger.warning(
-        "[PreciseFlex %s] the '%s' module needed for %s is not loaded; install the "
-        "'%s' TCS project (obtain it from Brooks Automation) and restart it.",
+        "[PreciseFlex %s] the '%s' module (%s) is not loaded; install the '%s' TCS "
+        "project (obtain it from Brooks Automation) and restart it.",
         host,
         module,
-        capability,
+        provides,
         project,
       )
     if not is_confirmed(config.robot_type, config.gpl_version, config.tcs_version, config.modules):
@@ -645,8 +705,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       force_sensing,
     )
     units = self._mm_to_firmware_units(width)
-    if self._gripper_soft_min is not None and not (
-      self._gripper_soft_min <= units <= self._gripper_soft_max
+    if (
+      self._gripper_soft_min is not None
+      and self._gripper_soft_max is not None
+      and not (self._gripper_soft_min <= units <= self._gripper_soft_max)
     ):
       raise ValueError(
         f"gripper width {width} mm maps to firmware units {units:.1f}, outside the gripper "
@@ -782,7 +844,46 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       await self._set_speed(backend_params.speed_pct)
     current = await self.request_joint_position()
     joint_coords = {**current, **position}
+    self._assert_within_soft_limits(current, joint_coords)
     await self._move_j(profile_index=self.profile_index, joint_coords=joint_coords)
+
+  def _axes_outside_soft_limits(self, joints: JointPose) -> Dict[Axis, tuple]:
+    """Axes whose value lies outside their soft limit, as ``axis -> (value, (lo, hi))``.
+
+    Iterates the soft-limit set (keyed by :class:`Axis`) and looks each axis up in
+    ``joints`` so the comparison stays Axis-typed. Empty until the configuration has
+    been discovered.
+    """
+    if self._configuration is None:
+      return {}
+    outside: Dict[Axis, tuple] = {}
+    for axis, (lo, hi) in self._configuration.soft_limits.items():
+      value = joints.get(axis)
+      if value is not None and not (lo <= value <= hi):
+        outside[axis] = (value, (lo, hi))
+    return outside
+
+  def _assert_within_soft_limits(self, current: JointPose, target: JointPose) -> None:
+    """Turn the controller's cryptic ``-1012`` into a clear client-side error.
+
+    Two cases block a commanded move: an axis already parked outside its soft limit
+    (the controller then rejects *every* commanded move until it is recovered), and
+    a target outside its soft limit (rejected outright). Freedrive can hand-move an
+    axis past a soft limit, so a taught pose can land outside the commandable
+    envelope. No-op until the configuration has been discovered.
+    """
+    for axis, (value, limit) in self._axes_outside_soft_limits(current).items():
+      raise ValueError(
+        f"{axis.name} is parked at {value}, outside its soft limit {limit}; the "
+        f"controller rejects commanded moves while an axis is out of range (-1012). "
+        f"Homing will not recover it (the rotary axes are absolute); call "
+        f"recover_axes_within_limits() to drive it back into range, then retry."
+      )
+    for axis, (value, limit) in self._axes_outside_soft_limits(target).items():
+      raise ValueError(
+        f"{axis.name} target {value} is outside its soft limit {limit}; the controller "
+        f"would reject the move (-1012). Re-teach this pose within the envelope."
+      )
 
   async def request_joint_position(
     self, backend_params: Optional[BackendParams] = None
@@ -1197,7 +1298,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     values = [float(v) for v in (await self.request_parameter(DataID.TOOL_OFFSET)).split(",")]
     return values[2]
 
-  async def request_kinematics(self) -> "kinematics.PF400Params":
+  async def request_kinematic_parameters(self) -> "kinematics.PF400Params":
     """Build PF400Params from the controller's stored geometry.
 
     Link lengths and tool length come from the device; gripper_z_offset is not on
@@ -1296,9 +1397,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     # Kinematics: read the link/tool geometry from the controller by default, so
     # the driver is correct for whichever 400 variant is plugged in; fall back to
     # the constructor params if the read fails or the override is set.
+    kinematics_source: Literal["device", "provided", "default"]
     if self._read_kinematics_from_device:
       try:
-        kinematic_params = await self.request_kinematics()
+        kinematic_params = await self.request_kinematic_parameters()
         kinematics_source = "device"
       except Exception as exc:
         logger.warning(
@@ -1312,7 +1414,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       kinematic_params = self._kinematics_params
       kinematics_source = "provided"
     # Classify by reach: the standard 400 has l1+l2 ~= 435 mm, the extended ~= 591.
-    reach_class = "extended" if (kinematic_params.l1 + kinematic_params.l2) >= 513 else "standard"
+    reach_class: Literal["standard", "extended"] = (
+      "extended" if (kinematic_params.l1 + kinematic_params.l2) >= 513 else "standard"
+    )
 
     return PreciseFlexConfiguration(
       manufacturer=await self.request_manufacturer(),
@@ -1921,6 +2025,84 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       )
     await self.driver.send_command(f"moveJ {profile_index} {angles_str}")
 
+  async def _move_one_axis(self, axis: Axis, position: float) -> None:
+    """Move a single axis to an absolute position (firmware ``MoveOneAxis``).
+
+    Used for recovery: the controller blocks a normal move while an axis is out of
+    range, but allows a single-axis move heading back into range. Does not wait for
+    the motion to complete.
+    """
+    await self.driver.send_command(f"MoveOneAxis {int(axis)} {position} {self.profile_index}")
+
+  # Axes auto-recovered when parked out of range, in a deliberately safe order: the
+  # gripper jaw first (no arm motion), then the Z column (vertical clearance), then
+  # the rotary links shoulder -> elbow (smallest swept volume last to first).
+  # The wrist is intentionally absent: rotating it back to +/-180 can self-collide, so
+  # it needs the other links first driven to minimal clearance from the origin - a
+  # maneuver not implemented here. The rail (gross lateral travel) is likewise left out.
+  # TODO: clearance-aware wrist recovery (and rail). An out-of-range wrist or rail is
+  # left for the setup post-condition to raise on.
+  _RECOVERY_ORDER = (Axis.GRIPPER, Axis.BASE, Axis.SHOULDER, Axis.ELBOW)
+
+  async def recover_axes_within_limits(
+    self, speed_pct: float = 20.0, max_distance: Optional[float] = 5.0
+  ) -> Dict[Axis, float]:
+    """Bring out-of-range axes back inside their soft limits, one axis at a time.
+
+    While an axis is outside its soft limit the controller rejects every commanded
+    coordinated move (-1012), and homing does not help on the absolute rotary axes.
+    A single-axis move is the documented exception: it may move an axis toward the
+    in-range region. Each recoverable offender is driven to just inside its nearest
+    soft limit, slowly, waiting for each to finish, in :attr:`_RECOVERY_ORDER`.
+
+    Args:
+      speed_pct: Profile speed for the recovery moves (default 20%, deliberately slow).
+      max_distance: only move an axis that is out of range by at most this much (deg
+        for the rotary axes, mm for base/gripper). An axis further out is left in place:
+        a large unattended single-axis sweep risks a collision, so it is left for the
+        caller to recover manually (e.g. by freedriving). Pass None to move regardless.
+
+    Returns:
+      The axes moved, as ``axis -> recovered target``. Empty when nothing recoverable
+      is out of range or the configuration was not discovered. The wrist and rail are
+      never auto-recovered (see :attr:`_RECOVERY_ORDER`).
+    """
+    outside = self._axes_outside_soft_limits(await self.request_joint_position())
+    if not outside:
+      return {}
+    prior_speed = await self._request_speed()
+    await self._set_speed(speed_pct)
+    recovered: Dict[Axis, float] = {}
+    try:
+      for axis in self._RECOVERY_ORDER:
+        if axis not in outside:
+          continue
+        value, (lo, hi) = outside[axis]
+        above = value > hi  # which limit is violated; both moves below hinge on this
+        overshoot = (value - hi) if above else (lo - value)
+        if max_distance is not None and overshoot > max_distance:
+          continue  # too far out to move unattended; left for the post-condition to raise
+        # Land just inside the violated limit, toward the in-range region. Clamp the
+        # 1-unit margin to half the range so the target stays within [lo, hi] even if
+        # the range is narrower than the margin (degenerate, but keeps direction sound).
+        margin = min(1.0, (hi - lo) / 2.0)
+        target = (hi - margin) if above else (lo + margin)
+        logger.warning(
+          "[PreciseFlex %s] recovering %s from %s into soft limit [%s, %s] -> %s",
+          self.driver.io._host,
+          axis.name,
+          value,
+          lo,
+          hi,
+          target,
+        )
+        await self._move_one_axis(axis, target)
+        await self.driver._wait_for_eom()
+        recovered[axis] = target
+    finally:
+      await self._set_speed(prior_speed)  # don't leave the profile at the slow recovery speed
+    return recovered
+
   async def release_brake(self, axis: int) -> None:
     """Release the axis brake.
 
@@ -2138,6 +2320,7 @@ class PreciseFlex400(Device):
     timeout: int = 20,
     gripper_length: float = 162.0,
     gripper_z_offset: float = 0.0,
+    recover_out_of_range_at_setup: bool = True,
   ) -> None:
     """
     Args:
@@ -2148,6 +2331,9 @@ class PreciseFlex400(Device):
         matches the stock single gripper on the PF400.
       gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
         Defaults to 0 mm.
+      recover_out_of_range_at_setup: when True (the default), setup tries to drive a
+        small out-of-range excursion back inside the soft limits; set False to skip
+        that. Either way setup raises if an axis is still out of range afterward.
     """
     driver = PreciseFlexDriver(host=host, port=port, timeout=timeout)
     super().__init__(driver=driver)
@@ -2158,6 +2344,7 @@ class PreciseFlex400(Device):
       gripper_length=gripper_length,
       gripper_z_offset=gripper_z_offset,
       closed_gripper_position=closed_gripper_position,
+      recover_out_of_range_at_setup=recover_out_of_range_at_setup,
     )
     self.reference = Resource(name="PreciseFlex400", size_x=200, size_y=200, size_z=200)
     self.arm = OrientableGripperArm(backend=backend, reference_resource=self.reference)
