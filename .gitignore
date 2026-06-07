@@ -14,3 +14,11 @@ myenv
 env/*
 .venv
 .env
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.tox/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
