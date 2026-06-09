@@ -882,7 +882,34 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       53: "Robotic channel task busy",
     }
   elif module_identifier == "I0":  # autoload
-    table = {36: "Hamilton will not run while the hood is open"}
+    table = {
+      0: "No error",
+      20: "No communication to EEPROM",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      35: "Voltages outside permitted range",
+      # generic firmware meaning of 36 is "Stop during execution of command"
+      36: "Hamilton will not run while the hood is open",
+      40: "No parallel processes permitted",
+      50: "Scanner X-drive: init position not found",
+      51: "Scanner X-drive: stepper motor not initialized",
+      52: "Scanner X-drive: movement error (step loss)",
+      55: "Scanner rotation drive: drive blocked",
+      60: "Carrier Y-drive: init position not found",
+      61: "Carrier Y-drive: stepper motor not initialized",
+      62: "Carrier Y-drive: movement error (step loss)",
+      65: "Carrier Z-drive: init position not found",
+      66: "Carrier Z-drive: stepper motor not initialized",
+      67: "Carrier Z-drive: movement error (step loss)",
+      70: "Barcode scanner: communication error",
+      75: "Loading indicator (LED): communication error",
+      80: "Identification barcode not readable",
+      81: "No carrier present",
+      82: "No carrier loaded",
+      83: "Loading tray is occupied",
+      84: "Data for free definable carrier not correct",
+    }
   elif module_identifier in [
     "PX",
     "P1",
