@@ -1394,6 +1394,9 @@ class Head96Information:
   HeadType = Literal["Low volume head", "High volume head", "96 head II", "96 head TADM", "unknown"]
 
   fw_version: datetime.date
+  x_offset: float
+  """Deck X distance from the X-arm carriage center to head channel A1 (mm), read from
+  master EEPROM at setup. Mirrors iSWAPInformation.rotation_drive_x_offset."""
   supports_clot_monitoring_clld: bool
   stop_disc_type: StopDiscType
   instrument_type: InstrumentType
@@ -2060,6 +2063,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
         self._head96_information = Head96Information(
           fw_version=fw_version,
+          x_offset=await self._head96_request_x_offset(),
           supports_clot_monitoring_clld=bool(int(configuration_96head[0])),
           stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
           instrument_type="legacy" if configuration_96head[2] == "0" else "FM-STAR",
@@ -5566,6 +5570,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="AF", x_offset=x_offset)
 
+  async def _head96_request_x_offset(self) -> float:
+    """Read the X-offset i.e. X-arm carriage center <-> CoRe 96 head channel A1, in mm.
+
+    Stored in the master EEPROM as parameter `kf` (set via the AF command), read with the
+    generic master-EEPROM read RA - mirroring the iSWAP rotation-drive x-offset (`kg`).
+    Required for deriving the head's X-arm carriage X from a target A1 X. Cached on the
+    backend as `head96_information.x_offset` during setup.
+
+    NOTE: `kf` is the working hypothesis (sibling of the iSWAP `kg`, matching the AF/AG
+    setter pair); verify against the master EEPROM before relying on it.
+    """
+    if not self.extended_conf.left_x_drive.core_96_head_installed:
+      raise RuntimeError("96-head is not installed")
+    resp = await self.send_command(module="C0", command="RA", ra="kf", fmt="kf###")
+    return cast(int, resp["kf"]) / 10.0
+
   async def set_x_offset_x_axis_core_nano_pipettor_head(self, x_offset: int):
     """Set X-offset X-axis <-> CoRe 96 head
 
@@ -7901,26 +7921,56 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="H0", command="MO")
 
   @_requires_head96
-  async def head96_move_x(self, x: float):
-    """Move the 96-head to a specified X-axis coordinate.
+  async def head96_move_x_OLD(self, x: float):
+    """Deprecated EM-based X move, kept only for A/B verification against head96_move_x.
 
-    Note: Unlike head96_move_y and head96_move_z, the X-axis movement does not have
-    dedicated speed/acceleration parameters - it uses the EM command which moves
-    all axes together.
+    Moves all axes together via the EM/coordinate command, after a position round-trip, so
+    it exposes no per-axis motion control. Slated for deletion once the direct-drive
+    head96_move_x is validated on hardware.
 
     Args:
       x: Target X coordinate in mm. Valid range: [-271.0, 974.0]
-
-    Returns:
-      Response from the hardware command.
-
-    Raises:
-      RuntimeError: If 96-head is not installed.
     """
     current_pos = await self.head96_request_position()
     return await self.head96_move_to_coordinate(
       Coordinate(x, current_pos.y, current_pos.z),
       minimum_height_at_beginning_of_a_command=current_pos.z - 10,
+    )
+
+  @_requires_head96
+  async def head96_move_x(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the 96-head to a target channel-A1 X coordinate via the direct X-arm drive.
+
+    Drives the X-arm carriage to ``x - head96_information.x_offset`` so channel A1 lands at
+    ``x``, mirroring how the iSWAP derives its rotation-drive X from the carriage center.
+    Unlike the EM-based ``head96_move_x_OLD`` (all axes together, no motion control), this is
+    the single-axis X-arm drive command and exposes acceleration and current control, like
+    ``head96_move_y`` / ``head96_move_z``.
+
+    Args:
+      x: Target A1 X coordinate in mm. Valid range [x_min, 974.0]; x_min is 0.0 with a left
+        side panel installed, else -271.0.
+      acceleration_level: X-arm acceleration index (1-5). Default 3.
+      current_protection_limiter: X-arm motor current limit (0-7). Default 7.
+
+    Raises:
+      RuntimeError: If the 96-head is not installed.
+      ValueError: If the target A1 X is outside the legal 96-head X range.
+    """
+    x_min = self.HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL if self.left_side_panel_installed else -271.0
+    if not (x_min <= x <= 974.0):
+      raise ValueError(f"96-head A1 x={x} out of range [{x_min}, 974.0]")
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    carriage_x = x - self._head96_information.x_offset
+    return await self.experimental_x_arm_move(
+      carriage_x,
+      acceleration_level=acceleration_level,
+      current_protection_limiter=current_protection_limiter,
     )
 
   @_requires_head96
@@ -10053,6 +10103,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
+    )
+
+  async def move_iswap_x_OLD(self, x_position: float):
+    """Deprecated pre-smooth-motion iSWAP X move (pre #1053), kept only for A/B verification
+    against move_iswap_x. Queries the position then steps X relative by the delta (with
+    splitting). Slated for deletion once the refactored move_iswap_x is validated on hardware.
+    """
+    loc = await self.request_iswap_position()
+    await self.move_iswap_x_relative(
+      step_size=x_position - loc.x,
+      allow_splitting=True,
     )
 
   async def move_iswap_x(

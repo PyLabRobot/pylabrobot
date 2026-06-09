@@ -160,6 +160,7 @@ class STARChatterboxBackend(STARBackend):
     if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
       self._head96_information = Head96Information(
         fw_version=datetime.date(2023, 1, 1),
+        x_offset=0.0,  # canned; real value read from EEPROM (kf) on hardware
         supports_clot_monitoring_clld=False,
         stop_disc_type="core_ii",
         instrument_type="FM-STAR",
