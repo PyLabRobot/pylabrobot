@@ -5577,9 +5577,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     generic master-EEPROM read RA - mirroring the iSWAP rotation-drive x-offset (`kg`).
     Required for deriving the head's X-arm carriage X from a target A1 X. Cached on the
     backend as `head96_information.x_offset` during setup.
-
-    NOTE: `kf` is the working hypothesis (sibling of the iSWAP `kg`, matching the AF/AG
-    setter pair); verify against the master EEPROM before relying on it.
     """
     if not self.extended_conf.left_x_drive.core_96_head_installed:
       raise RuntimeError("96-head is not installed")
@@ -7923,23 +7920,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="H0", command="MO")
 
   @_requires_head96
-  async def head96_move_x_OLD(self, x: float):
-    """Deprecated EM-based X move, kept only for A/B verification against head96_move_x.
-
-    Moves all axes together via the EM/coordinate command, after a position round-trip, so
-    it exposes no per-axis motion control. Slated for deletion once the direct-drive
-    head96_move_x is validated on hardware.
-
-    Args:
-      x: Target X coordinate in mm. Valid range: [-271.0, 974.0]
-    """
-    current_pos = await self.head96_request_position()
-    return await self.head96_move_to_coordinate(
-      Coordinate(x, current_pos.y, current_pos.z),
-      minimum_height_at_beginning_of_a_command=current_pos.z - 10,
-    )
-
-  @_requires_head96
   async def head96_move_x(
     self,
     x: float,
@@ -7952,8 +7932,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ``x``: A1 sits left of (below) the carriage center, so deck-A1 = carriage - offset and the
     carriage target is therefore ``x + offset`` (inverse of the iSWAP rotation-drive derivation,
     ``iswap_rotation_drive_request_x``).
-    Unlike the EM-based ``head96_move_x_OLD`` (all axes together, no motion control), this is
-    the single-axis X-arm drive command and exposes acceleration and current control, like
+    Unlike the legacy EM coordinate move (all axes together, no per-axis motion control), this
+    is the single-axis X-arm drive command and exposes acceleration and current control, like
     ``head96_move_y`` / ``head96_move_z``.
 
     Args:
@@ -10107,17 +10087,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
-    )
-
-  async def move_iswap_x_OLD(self, x_position: float):
-    """Deprecated pre-smooth-motion iSWAP X move (pre #1053), kept only for A/B verification
-    against move_iswap_x. Queries the position then steps X relative by the delta (with
-    splitting). Slated for deletion once the refactored move_iswap_x is validated on hardware.
-    """
-    loc = await self.request_iswap_position()
-    await self.move_iswap_x_relative(
-      step_size=x_position - loc.x,
-      allow_splitting=True,
     )
 
   async def move_iswap_x(
