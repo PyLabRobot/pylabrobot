@@ -1007,6 +1007,9 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       96: "Limit curve already stored",
     }
   elif module_identifier == "R0":  # iswap
+    # These messages are iSWAP-specific. The internal plate gripper (IPG) also
+    # reports as module R0 but numbers its drives differently, so for an IPG the
+    # codes from 55 up map to different drives than the ones listed here.
     table = {
       20: "No communication to EEPROM",
       30: "Unknown command",
