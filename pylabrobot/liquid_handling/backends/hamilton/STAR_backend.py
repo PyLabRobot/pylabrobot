@@ -5583,7 +5583,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
     if not self.extended_conf.left_x_drive.core_96_head_installed:
       raise RuntimeError("96-head is not installed")
-    resp = await self.send_command(module="C0", command="RA", ra="kf", fmt="kf###")
+    # 4-digit field: the head96 offset is ~10x the iSWAP's (~368 mm vs ~34 mm), so it exceeds
+    # 3 digits in 0.1 mm units - "kf###" silently truncates 3684 -> 368.
+    resp = await self.send_command(module="C0", command="RA", ra="kf", fmt="kf####")
     return cast(int, resp["kf"]) / 10.0
 
   async def set_x_offset_x_axis_core_nano_pipettor_head(self, x_offset: int):
@@ -7946,8 +7948,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Move the 96-head to a target channel-A1 X coordinate via the direct X-arm drive.
 
-    Drives the X-arm carriage to ``x - head96_information.x_offset`` so channel A1 lands at
-    ``x``, mirroring how the iSWAP derives its rotation-drive X from the carriage center.
+    Drives the X-arm carriage to ``x + head96_information.x_offset`` so channel A1 lands at
+    ``x``: A1 sits left of (below) the carriage center, so deck-A1 = carriage - offset and the
+    carriage target is therefore ``x + offset`` (inverse of the iSWAP rotation-drive derivation,
+    ``iswap_rotation_drive_request_x``).
     Unlike the EM-based ``head96_move_x_OLD`` (all axes together, no motion control), this is
     the single-axis X-arm drive command and exposes acceleration and current control, like
     ``head96_move_y`` / ``head96_move_z``.
@@ -7966,7 +7970,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not (x_min <= x <= 974.0):
       raise ValueError(f"96-head A1 x={x} out of range [{x_min}, 974.0]")
     assert self._head96_information is not None, "96-head information not loaded; run setup()"
-    carriage_x = x - self._head96_information.x_offset
+    carriage_x = x + self._head96_information.x_offset
     return await self.experimental_x_arm_move(
       carriage_x,
       acceleration_level=acceleration_level,
