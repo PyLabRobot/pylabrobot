@@ -1076,6 +1076,39 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       96: "Plate not available",
       97: "Unexpected object found",
     }
+  elif module_identifier == "X0":  # X-drives
+    table = {
+      0: "No error",
+      20: "Transmission error (I2C bus or EEPROM)",
+      25: "Flash EPROM data incorrect",
+      26: "Flash EPROM cannot be programmed",
+      27: "Flash EPROM cannot be erased",
+      28: "Flash EPROM checksum error",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      35: "Voltages outside permitted range",
+      # older firmware reports 36 as an emergency-stop / cover-open event
+      36: "Stop during execution of command",
+      40: "No parallel processes permitted (X drive 1)",
+      41: "No parallel processes permitted (X drive 2)",
+      42: "No parallel processes permitted (reserve drive)",
+      50: "X drive 1: initialization failed",
+      51: "X drive 1: drive not initialized",
+      52: "X drive 1: movement error (drive blocked or lag too high)",
+      53: "X drive 1: position error (drive displaced)",
+      54: "X drive 1: dispense-on-fly error",
+      55: "X drive 1: positioning-to-dispense-on-fly error",
+      70: "X drive 2: initialization failed",
+      71: "X drive 2: drive not initialized",
+      72: "X drive 2: movement error (drive blocked or lag too high)",
+      73: "X drive 2: position error (drive displaced)",
+      74: "X drive 2: dispense-on-fly error",
+      75: "X drive 2: positioning-to-dispense-on-fly error",
+      80: "Reserve drive: initialization failed",
+      81: "Reserve drive: drive not initialized",
+      82: "Reserve drive: movement error (drive blocked or lag too high)",
+    }
 
   if table is not None and trace_information in table:
     return table[trace_information]
