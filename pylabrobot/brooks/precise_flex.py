@@ -1248,6 +1248,35 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       else:
         await self.driver.send_command(f"pc {data_id} {value}")
 
+  async def set_axis_parameter(
+    self,
+    data_id: int,
+    axis: Axis,
+    value,
+    robot_number: int = 1,
+  ) -> None:
+    """Change one joint's element of a per-axis parameter array (``pc``).
+
+    Per-axis DataIDs (motor current limits, hard-stop homing envelope, joint limits)
+    hold one value per joint; this writes a single joint's element and leaves the rest
+    untouched. ``axis`` is the controller's 1-based array index (``Axis.GRIPPER`` -> 5),
+    cast to int at the wire boundary; reads of the same DataID come back in this order
+    (see ``_parse_per_axis``).
+
+    Args:
+      data_id: the per-axis DataID to change.
+      axis: which joint's element to write.
+      value: the new value for that element.
+      robot_number: unit number, the robot (1 - N_ROB).
+
+    Note:
+      Volatile until a save-to-flash (DataID 901); a power cycle otherwise restores the
+      flashed value.
+    """
+    await self.set_parameter(
+      data_id, value, unit_number=robot_number, sub_unit=0, array_index=int(axis)
+    )
+
   async def request_parameter(
     self,
     data_id: int,
