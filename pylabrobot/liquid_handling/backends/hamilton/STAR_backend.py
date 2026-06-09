@@ -1904,7 +1904,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._num_channels = len(tip_presences)
 
     async def set_up_pip():
-      if (not initialized or any(tip_presences)) and not skip_pip:
+      if skip_pip:
+        # Skip pip-channel I/O; the __init__ defaults stand in.
+        # TODO: does not yet gate request_tip_presence or instrument-init moves.
+        return
+      if not initialized or any(tip_presences):
         await self.initialize_pip()
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
