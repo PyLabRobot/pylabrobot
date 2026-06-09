@@ -958,7 +958,14 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
     }
   elif module_identifier == "H0":  # Core 96 head
     table = {
+      0: "No error",
       20: "No communication to EEPROM",
+      # 21 is the current-firmware transfer-check error; older firmware reports 20
+      21: "No communication to digital potentiometer",
+      25: "Flash EPROM data incorrect",
+      26: "Flash EPROM cannot be programmed",
+      27: "Flash EPROM cannot be erased",
+      28: "Flash EPROM checksum error",
       30: "Unknown command",
       31: "Unknown parameter",
       32: "Parameter out of range",
@@ -988,6 +995,16 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       75: "No tip picked up",
       76: "Tip already picked up",
       81: "Clot detected",
+      82: "TADM measurement out of lower limit curve",
+      83: "TADM measurement out of upper limit curve",
+      84: "Not enough memory for TADM measurement",
+      90: "Limit curve not resettable",
+      91: "Limit curve not programmable",
+      92: "Limit curve not found",
+      93: "Limit curve data incorrect",
+      94: "Not enough memory for limit curve",
+      95: "Invalid limit curve index",
+      96: "Limit curve already stored",
     }
   elif module_identifier == "R0":  # iswap
     table = {
