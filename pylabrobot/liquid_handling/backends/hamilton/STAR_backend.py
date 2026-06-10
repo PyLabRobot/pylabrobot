@@ -7759,14 +7759,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self, fw_version: datetime.date
   ) -> Tuple[float, float]:
     """Dispensing-drive speed window (uL/s); 2013 firmware widened the max from 52000 inc."""
+    min_inc = 5  # firmware dv minimum (00005 increments/second)
     max_inc = 55000 if fw_version.year >= 2010 else 52000
     return (
-      self._head96_dispensing_drive_increment_to_uL(5),
+      self._head96_dispensing_drive_increment_to_uL(min_inc),
       self._head96_dispensing_drive_increment_to_uL(max_inc),
     )
 
   def _head96_resolve_z_range(self, instrument_type: str) -> Tuple[float, float]:
-    """Z-drive position window (mm); FM-STAR has the extended range."""
+    """Z-drive position window (mm); FM-STAR extends it (za/zb/zh all share this range)."""
     min_inc, max_inc = (24200, 76200) if instrument_type == "FM-STAR" else (36100, 68500)
     return (
       self._head96_z_drive_increment_to_mm(min_inc),
