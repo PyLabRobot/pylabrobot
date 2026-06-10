@@ -1402,6 +1402,14 @@ class Head96Information:
   instrument_type: InstrumentType
   head_type: HeadType
 
+  # === Firmware/variant-derived limits, in standard units (resolved at setup) ===
+  aspiration_volume_range: Tuple[float, float]
+  """Aspirate/dispense piston volume window (uL)."""
+  dispensing_drive_speed_range: Tuple[float, float]
+  """Dispensing-drive speed window (uL/s)."""
+  z_range: Tuple[float, float]
+  """Z-drive position window (mm); FM-STAR extends it."""
+
 
 @dataclass(frozen=True, eq=False)
 class iSWAPInformation:
@@ -2061,13 +2069,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         configuration_96head = await self._head96_request_configuration()
         head96_type = await self.head96_request_type()
 
+        instrument_type: Head96Information.InstrumentType = (
+          "legacy" if configuration_96head[2] == "0" else "FM-STAR"
+        )
         self._head96_information = Head96Information(
           fw_version=fw_version,
           x_offset=await self._head96_request_x_offset(),
           supports_clot_monitoring_clld=bool(int(configuration_96head[0])),
           stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
-          instrument_type="legacy" if configuration_96head[2] == "0" else "FM-STAR",
+          instrument_type=instrument_type,
           head_type=head96_type,
+          aspiration_volume_range=self._head96_resolve_aspiration_volume_range(fw_version),
+          dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(
+            fw_version
+          ),
+          z_range=self._head96_resolve_z_range(instrument_type),
         )
 
     async def set_up_arm_modules():
@@ -7731,6 +7747,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
     resp = await self.send_command(module="H0", command="QG", fmt="qg#")
     return type_map.get(resp["qg"], "unknown")
+
+  def _head96_resolve_aspiration_volume_range(
+    self, fw_version: datetime.date
+  ) -> Tuple[float, float]:
+    """Aspirate/dispense piston volume window (uL); 2013 firmware widened the max from 62130 inc."""
+    max_inc = 64350 if fw_version.year >= 2010 else 62130
+    return (0.0, self._head96_dispensing_drive_increment_to_uL(max_inc))
+
+  def _head96_resolve_dispensing_drive_speed_range(
+    self, fw_version: datetime.date
+  ) -> Tuple[float, float]:
+    """Dispensing-drive speed window (uL/s); 2013 firmware widened the max from 52000 inc."""
+    max_inc = 55000 if fw_version.year >= 2010 else 52000
+    return (
+      self._head96_dispensing_drive_increment_to_uL(5),
+      self._head96_dispensing_drive_increment_to_uL(max_inc),
+    )
+
+  def _head96_resolve_z_range(self, instrument_type: str) -> Tuple[float, float]:
+    """Z-drive position window (mm); FM-STAR has the extended range."""
+    min_inc, max_inc = (24200, 76200) if instrument_type == "FM-STAR" else (36100, 68500)
+    return (
+      self._head96_z_drive_increment_to_mm(min_inc),
+      self._head96_z_drive_increment_to_mm(max_inc),
+    )
 
   # -------------- 3.10.1 Initialization --------------
 
