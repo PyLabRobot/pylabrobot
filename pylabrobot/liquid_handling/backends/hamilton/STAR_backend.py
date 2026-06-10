@@ -8322,6 +8322,59 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.head96_move_stop_disk_z(z + tip_overhang, speed=speed)
 
+  @_requires_head96
+  async def head96_set_y_speed(self, speed: float):
+    """Set the persistent 96-head Y-drive speed (mm/s) without moving, via H0 AA (save parameter yv).
+
+    Subsequent Y moves that don't pass their own speed - including the C0-level 96-head commands -
+    inherit this until it is changed or the drive re-initialises. Same standalone-set mechanism as
+    slow_iswap (which sets the iSWAP wv/tv velocities via R0 AA).
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    y_speed_min, y_speed_max = self._head96_information.y_speed_range
+    assert y_speed_min <= speed <= y_speed_max, (
+      f"speed must be between {y_speed_min} and {y_speed_max} mm/sec"
+    )
+    return await self.send_command(
+      module="H0", command="AA", yv=f"{self._head96_y_drive_mm_to_increment(speed):05}"
+    )
+
+  @_requires_head96
+  async def head96_set_y_acceleration(self, acceleration: float):
+    """Set the persistent 96-head Y-drive acceleration (mm/s^2) without moving, via H0 AA (save yr)."""
+    assert 78.125 <= acceleration <= 781.25, (
+      "acceleration must be between 78.125 and 781.25 mm/sec**2"
+    )
+    return await self.send_command(
+      module="H0", command="AA", yr=f"{self._head96_y_drive_mm_to_increment(acceleration):05}"
+    )
+
+  @_requires_head96
+  async def head96_set_z_speed(self, speed: float):
+    """Set the persistent 96-head Z-drive speed (mm/s) without moving, via H0 AA (save parameter zv)."""
+    assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
+    return await self.send_command(
+      module="H0", command="AA", zv=f"{self._head96_z_drive_mm_to_increment(speed):05}"
+    )
+
+  @_requires_head96
+  async def head96_set_z_acceleration(self, acceleration: float):
+    """Set the persistent 96-head Z-drive acceleration (mm/s^2) without moving, via H0 AA (save zr).
+
+    Applies the same firmware-version acceleration scaling as head96_move_stop_disk_z (pre-2010 x0.001).
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
+    acceleration_multiplier = 1 if self._head96_information.fw_version.year >= 2010 else 0.001
+    acceleration_increment = round(
+      self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
+    )
+    return await self.send_command(module="H0", command="AA", zr=f"{acceleration_increment:06}")
+
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
   @need_iswap_parked
@@ -9276,6 +9329,43 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
     await self.send_command(module="C0", command="EV", read_timeout=20)
     return await self.head96_request_stop_disk_z()
+
+  async def head96_request_y_speed(self) -> float:
+    """Request the persistent 96-head Y-drive speed (mm/s), via H0 RA (read parameter yv).
+
+    The read counterpart of head96_set_y_speed.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="yv", fmt="yv#####")
+    return self._head96_y_drive_increment_to_mm(resp["yv"])
+
+  async def head96_request_y_acceleration(self) -> float:
+    """Request the persistent 96-head Y-drive acceleration (mm/s^2), via H0 RA (read parameter yr).
+
+    The read counterpart of head96_set_y_acceleration.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="yr", fmt="yr#####")
+    return self._head96_y_drive_increment_to_mm(resp["yr"])
+
+  async def head96_request_z_speed(self) -> float:
+    """Request the persistent 96-head Z-drive speed (mm/s), via H0 RA (read parameter zv).
+
+    The read counterpart of head96_set_z_speed.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="zv", fmt="zv#####")
+    return self._head96_z_drive_increment_to_mm(resp["zv"])
+
+  async def head96_request_z_acceleration(self) -> float:
+    """Request the persistent 96-head Z-drive acceleration (mm/s^2), via H0 RA (read parameter zr).
+
+    The read counterpart of head96_set_z_acceleration; inverts the firmware-version acceleration
+    scaling that the setter (and head96_move_stop_disk_z) applies.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    resp = await self.send_command(module="H0", command="RA", ra="zr", fmt="zr######")
+    acceleration_multiplier = 1 if self._head96_information.fw_version.year >= 2010 else 0.001
+    return self._head96_z_drive_increment_to_mm(round(resp["zr"] / acceleration_multiplier))
 
   async def request_core_96_head_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
