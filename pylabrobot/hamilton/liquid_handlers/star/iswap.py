@@ -1,3 +1,10 @@
+"""iSWAPBackend: the STAR's iSWAP, the internal swivel-arm plate handler (firmware C0 and R0).
+
+Drives the arm - gripper open/close, relative/absolute X/Y/Z and rotation/wrist moves,
+plate pick/place, parking, and teaching - and holds its device facts and per-machine
+calibration in `iSWAPConfiguration`, exposed as `iSWAPBackend.configuration`.
+"""
+
 from __future__ import annotations
 
 import enum

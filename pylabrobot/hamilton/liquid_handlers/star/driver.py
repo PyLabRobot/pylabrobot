@@ -20,7 +20,7 @@ from .errors import (
 )
 from .fw_parsing import parse_star_firmware_version_date, parse_star_fw_string
 from .head96_backend import STARHead96Backend
-from .iswap import iSWAPBackend
+from .iswap import iSWAPBackend, iSWAPConfiguration
 from .pip_backend import STARPIPBackend
 from .wash_station import STARWashStation
 from .x_arm import STARXArm
@@ -109,6 +109,23 @@ class ExtendedConfiguration:
   right_arm_min_y_position: float = 6.0
 
 
+@dataclass
+class STARConfiguration:
+  """Per-capability configuration for a STAR, injected at construction.
+
+  One optional field per capability, named after the capability attribute
+  (``star.iswap`` -> ``iswap``); each value is that capability's own configuration
+  dataclass (e.g. ``iSWAPConfiguration``: encoder resolutions, drive ranges,
+  geometric constants, per-machine calibration). Passed to ``STAR``/``STARLet`` or
+  the driver and distributed to each backend as its ``.configuration``. An unset
+  field means that capability uses its own defaults - read from the device at setup
+  on real hardware, or factory defaults under the chatterbox (no device to read).
+  Grows one field per capability as each gains a configuration.
+  """
+
+  iswap: Optional[iSWAPConfiguration] = None
+
+
 # ---------------------------------------------------------------------------
 # STARDriver
 # ---------------------------------------------------------------------------
@@ -133,6 +150,7 @@ class STARDriver(HamiltonLiquidHandler):
     read_timeout: int = 30,
     write_timeout: int = 30,
     left_side_panel_installed: bool = False,
+    configuration: Optional[STARConfiguration] = None,
   ):
     super().__init__(
       id_product=0x8000,
@@ -144,6 +162,9 @@ class STARDriver(HamiltonLiquidHandler):
     )
     self.deck = deck
     self.left_side_panel_installed = left_side_panel_installed
+    # Injection-only bundle, consumed at setup to seed each capability's own
+    # `.configuration`. The runtime home is `star.iswap.configuration`, not here.
+    self._configuration = configuration if configuration is not None else STARConfiguration()
 
     # Populated during setup().
     self.machine_conf: Optional[MachineConfiguration] = None
@@ -305,7 +326,7 @@ class STARDriver(HamiltonLiquidHandler):
       self.head96 = None
 
     if self.extended_conf.left_x_drive.iswap_installed:
-      self.iswap = iSWAPBackend(driver=self)
+      self.iswap = iSWAPBackend(driver=self, configuration=self._configuration.iswap)
     else:
       self.iswap = None
 
@@ -542,9 +563,7 @@ class STARDriver(HamiltonLiquidHandler):
     try:
       reading_direction_int = {"vertical": 0, "horizontal": 1, "free": 2}[reading_direction]
     except KeyError as e:
-      raise ValueError(
-        "reading_direction must be 'vertical', 'horizontal', or 'free'"
-      ) from e
+      raise ValueError("reading_direction must be 'vertical', 'horizontal', or 'free'") from e
 
     resp = await self.send_command(
       module="C0",
