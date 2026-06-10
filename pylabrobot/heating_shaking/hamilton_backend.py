@@ -1,9 +1,12 @@
 import abc
-import time
+import contextlib
 import warnings
 from enum import Enum
 from typing import Dict, Literal, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.usb import USB
 
@@ -29,6 +32,9 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
   ):
+    """
+    If io fails to connect, ensure that libusb drivers were installed for the HHS as per docs.
+    """
     self.io = USB(
       human_readable_device_name="Hamilton Heater Shaker Box",
       id_vendor=id_vendor,
@@ -42,15 +48,6 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     """continuously generate unique ids 0 <= x < 10000."""
     self._id += 1
     return self._id % 10000
-
-  async def setup(self):
-    """
-    If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
-    """
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
 
   async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:
     args = "".join([f"{key}{value}" for key, value in kwargs.items()])
@@ -77,15 +74,10 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     super().__init__()
     self.interface = interface
 
-  async def setup(self):
-    """
-    If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
-    """
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     await self._initialize_lock()
     await self._initialize_shaker_drive()
-
-  async def stop(self):
-    pass
 
   def serialize(self) -> dict:
     warnings.warn("The interface is not serialized.")
@@ -119,13 +111,14 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
-    now = time.time()
-    while True:
-      await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
-      if await self.get_is_shaking():
-        break
-      if timeout is not None and time.time() - now > timeout:
-        raise TimeoutError("Failed to start shaking within timeout")
+    async with contextlib.AsyncExitStack() as stack:
+      if timeout is not None:
+        stack.enter_context(anyio.fail_after(timeout))
+      while True:
+        await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
+        if await self.get_is_shaking():
+          break
+        await anyio.sleep(0.1)
 
   async def shake(
     self,

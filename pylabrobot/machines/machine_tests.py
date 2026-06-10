@@ -7,13 +7,8 @@ from pylabrobot.machines.machine import Machine, MachineBackend
 class TestMachine(unittest.TestCase):
   class MockBackend(MachineBackend):
     def __init__(self, mock_param):
+      super().__init__()
       self.mock_param = mock_param
-
-    async def setup(self):
-      pass
-
-    async def stop(self):
-      pass
 
     def serialize(self):
       return {**super().serialize(), "mock_param": self.mock_param}

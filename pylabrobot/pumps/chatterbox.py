@@ -1,3 +1,4 @@
+import contextlib
 from typing import List
 
 from pylabrobot.pumps.backend import PumpArrayBackend, PumpBackend
@@ -6,11 +7,9 @@ from pylabrobot.pumps.backend import PumpArrayBackend, PumpBackend
 class PumpChatterboxBackend(PumpBackend):
   """Chatter box backend for device-free testing. Prints out all operations."""
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     print("Setting up the pump.")
-
-  async def stop(self):
-    print("Stopping the pump.")
+    stack.callback(lambda: print("Stopping the pump."))
 
   def run_revolutions(self, num_revolutions: float):
     print(f"Running {num_revolutions} revolutions.")
@@ -28,11 +27,9 @@ class PumpArrayChatterboxBackend(PumpArrayBackend):
   def __init__(self, num_channels: int = 8) -> None:
     self._num_channels = num_channels
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: contextlib.AsyncExitStack):
     print("Setting up the pump array.")
-
-  async def stop(self):
-    print("Stopping the pump array.")
+    stack.callback(lambda: print("Stopping the pump array."))
 
   @property
   def num_channels(self) -> int:

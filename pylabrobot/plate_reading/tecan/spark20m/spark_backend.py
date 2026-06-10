@@ -3,6 +3,9 @@ import statistics
 import time
 from typing import Dict, List, Optional, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.utils import _get_min_max_row_col_tuples
 from pylabrobot.resources.plate import Plate
@@ -53,9 +56,11 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     self.sensor_control = SensorControl(self.reader.send_command)
     self.data_control = DataControl(self.reader.send_command)
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Set up the plate reader."""
-    await self.reader.connect()
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.reader)
+
     await self.config_control.init_module()
     await self.data_control.turn_all_interval_messages_off()
 
@@ -76,10 +81,6 @@ class ExperimentalSparkBackend(PlateReaderBackend):
       return None
 
     return statistics.mean(temps) / 100.0
-
-  async def stop(self) -> None:
-    """Close connections."""
-    await self.reader.close()
 
   async def open(self) -> None:
     """Move the plate carrier out."""
@@ -126,19 +127,19 @@ class ExperimentalSparkBackend(PlateReaderBackend):
 
     This is the shared orchestration for all measurement types.
     """
-    bg_task, stop_event, results = await self.reader.start_background_read(device)
-
-    if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError(f"Failed to start background read for {device.name}")
-
+    results = None
     try:
-      await self.measurement_control.prepare_instrument(measure_reference=True)
-      await self.scan_plate_range(plate, wells, z)
+      async with self.reader.background_read(device) as results:
+        if results is None:
+          raise RuntimeError(f"Failed to start background read for {device.name}")
+
+        await self.measurement_control.prepare_instrument(measure_reference=True)
+        await self.scan_plate_range(plate, wells, z)
     finally:
-      stop_event.set()
-      await bg_task
-      await self.data_control.turn_all_interval_messages_off()
-      await self.measurement_control.end_measurement()
+      if results is not None:
+        with anyio.CancelScope(shield=True):
+          await self.data_control.turn_all_interval_messages_off()
+          await self.measurement_control.end_measurement()
 
     return results
 

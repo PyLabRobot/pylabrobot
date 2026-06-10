@@ -1,26 +1,37 @@
+import contextlib
 import inspect
 import weakref
-from abc import ABC, abstractmethod
+from typing import Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, AsyncResource, global_manager
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.object_parsing import find_subclass
 
 
-class MachineBackend(SerializableMixin, ABC):
+class MachineBackend(SerializableMixin, AsyncResource):
   """Abstract class for machine backends."""
 
   _instances: weakref.WeakSet["MachineBackend"] = weakref.WeakSet()
 
   def __init__(self):
     self._instances.add(self)
+    self._stack: Optional[contextlib.AsyncExitStack] = None
 
-  @abstractmethod
+  def __init_subclass__(cls, **kwargs):
+    super().__init_subclass__(**kwargs)
+    if "setup" in cls.__dict__:
+      raise TypeError(f"Subclass {cls.__name__} is not allowed to override 'setup'")
+    if "stop" in cls.__dict__:
+      raise TypeError(f"Subclass {cls.__name__} is not allowed to override 'stop'")
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    pass
+
   async def setup(self):
-    pass
+    await global_manager.manage_context(self)
 
-  @abstractmethod
   async def stop(self):
-    pass
+    await global_manager.release_context(self)
 
   def serialize(self) -> dict:
     return {"type": self.__class__.__name__}

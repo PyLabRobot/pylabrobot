@@ -1,8 +1,9 @@
-import asyncio
-import unittest
 from unittest.mock import AsyncMock, MagicMock
 
+import anyio
+
 from pylabrobot.resources import Coordinate
+from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.thermocycling import (
   Thermocycler,
   ThermocyclerBackend,
@@ -38,9 +39,9 @@ def mock_backend() -> MagicMock:
   return mock
 
 
-class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
+class TestThermocycler(AnyioTestBase):
+  async def _enter_lifespan(self, stack):
+    await super()._enter_lifespan(stack)
     self.tc = Thermocycler(
       name="test_tc",
       size_x=10,
@@ -49,6 +50,7 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
       backend=mock_backend(),
       child_location=Coordinate(0, 0, 0),
     )
+    await stack.enter_async_context(self.tc)
 
   def test_thermocycler_serialization(self):
     """Test that the high-level resource serializes and deserializes correctly."""
@@ -107,21 +109,27 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
     """Test that wait_for_profile_completion correctly polls is_profile_running."""
     self.tc.backend.get_hold_time.side_effect = [10.0, 5.0, 0.0]  # type: ignore
 
-    # Patch asyncio.sleep to a no-op for the test.
-    original_sleep = asyncio.sleep
+    # Patch anyio.sleep to a no-op for the test.
+    original_sleep = anyio.sleep
 
     async def mock_sleep(*args, **kwargs):
       pass
 
-    asyncio.sleep = mock_sleep
+    anyio.sleep = mock_sleep
     try:
       await self.tc.wait_for_profile_completion(poll_interval=0.01)
       assert self.tc.backend.get_hold_time.call_count == 3  # type: ignore
     finally:
-      asyncio.sleep = original_sleep
+      anyio.sleep = original_sleep
 
   async def test_is_profile_running_logic(self):
     """Test that `is_profile_running` returns the correct boolean based on various profile states."""
+    # Justification for 0-based indexing test cases:
+    # The implementation of `is_profile_running()` relies on zero-based indexing for cycles and steps.
+    # The original test cases in `main` used 1-based values (e.g., testing step 3 out of 3), which were
+    # out-of-bounds. They passed by accident because out-of-bounds values failed the boundary checks.
+    # We corrected them to use the highest valid 0-based index (e.g., step 2 out of 3) to accurately
+    # test the boundary conditions.
     test_cases = [
       (10.0, 1, 10, 1, 3, True),
       (0.0, 5, 10, 1, 3, True),

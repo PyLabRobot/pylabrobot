@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "PyLabRobot"
 description = "A hardware agnostic platform for lab automation"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets"]
+dependencies = ["typing_extensions", "websockets", "anyio", "sniffio"]
 
 [project.optional-dependencies]
 serial = ["pyserial"]
@@ -25,6 +25,7 @@ all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,si
 test = [
   "pytest",
   "pytest-timeout",
+  "trio",
 ]
 dev = [
   "PyLabRobot[all,test]",

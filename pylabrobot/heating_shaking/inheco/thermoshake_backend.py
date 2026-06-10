@@ -1,5 +1,6 @@
 import warnings
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.temperature_controlling.inheco.temperature_controller import (
   InhecoTemperatureControllerBackend,
@@ -12,9 +13,9 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, HeaterShakerB
   https://www.inheco.com/thermoshake-ac.html
   """
 
-  async def stop(self):
-    await self.stop_shaking()
-    await super().stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
+    stack.push_shielded_async_callback(self.stop_shaking)
 
   async def _start_shaking_command(self):
     """Send the device command that starts shaking with the configured settings."""

@@ -1,8 +1,8 @@
-import asyncio
 import dataclasses
 import enum
-import time
 from typing import Set
+
+import anyio
 
 try:
   import serial
@@ -12,6 +12,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.sealing.backend import SealerBackend
 
@@ -35,13 +36,16 @@ class A4SBackend(SealerBackend):
       human_readable_device_name="A4S Sealer",
     )
 
-  async def setup(self):
-    await self.io.setup()
-    await self.system_reset()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io)
 
-  async def stop(self):
-    await self.set_heater(on=False)
-    await self.io.stop()
+    async def cleanup():
+      await self.set_heater(on=False)
+
+    stack.push_shielded_async_callback(cleanup)
+
+    await self.system_reset()
 
   async def set_heater(self, on: bool):
     """Set the heater on or off."""
@@ -86,20 +90,21 @@ class A4SBackend(SealerBackend):
 
   async def _read_message(self) -> str:
     """read a message. we are not sure what format it is."""
-    start = time.time()
     r, x = b"", b""
     has_read_r = False
-    while x != b"" or (len(r) == 0 and x == b""):
-      x = await self.io.read()
-      if has_read_r:
-        r += x
-      if x == b"\r":
-        if not has_read_r:
-          has_read_r = True
-        else:
-          break
-      if time.time() - start > self.timeout:
-        raise TimeoutError("Timeout while waiting for response")
+    try:
+      with anyio.fail_after(self.timeout):
+        while x != b"" or (len(r) == 0 and x == b""):
+          x = await self.io.read()
+          if has_read_r:
+            r += x
+          if x == b"\r":
+            if not has_read_r:
+              has_read_r = True
+            else:
+              break
+    except TimeoutError:
+      raise TimeoutError(f"Timeout reading message after {self.timeout} seconds") from None
     return r.decode("utf-8")
 
   async def get_status(self) -> Status:
@@ -144,26 +149,28 @@ class A4SBackend(SealerBackend):
     )
 
   async def _wait_for_status(self, statuses: Set["A4SBackend.Status.SystemStatus"]) -> Status:
-    start = time.time()
-    while True:
-      status = await self.get_status()
+    try:
+      with anyio.fail_after(self.timeout):
+        while True:
+          status = await self.get_status()
 
-      if status.system_status == A4SBackend.Status.SystemStatus.error:
-        raise RuntimeError(f"An error occurred: {status.error_code}")
+          if status.system_status == A4SBackend.Status.SystemStatus.error:
+            raise RuntimeError(f"An error occurred: {status.error_code}")
 
-      if status.system_status in statuses:
-        return status
+          if status.system_status in statuses:
+            return status
 
-      if time.time() - start > self.timeout:
-        raise TimeoutError("Timeout while waiting for response")
-
-      await asyncio.sleep(0.01)
+          await anyio.sleep(0.01)
+    except TimeoutError:
+      raise TimeoutError(
+        f"Timeout waiting for status {statuses} after {self.timeout} seconds"
+      ) from None
 
   async def send_command(self, command: str):
     # command accepted: *Y01PL!
     # Command index: 01
     await self.io.write(command.encode())
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
 
   async def seal(self, temperature: int, duration: float):
     await self.set_temperature(temperature)
@@ -175,25 +182,30 @@ class A4SBackend(SealerBackend):
     )
 
   async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
-    start = time.time()
-    while True:
-      current_temperature = await self.get_temperature()
-      if abs(current_temperature - degrees) < tolerance:
-        break
-      if time.time() - start > timeout:
-        raise TimeoutError("Timeout while waiting for temperature")
-      await asyncio.sleep(0.1)
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          current_temperature = await self.get_temperature()
+          if abs(current_temperature - degrees) < tolerance:
+            break
+          await anyio.sleep(0.1)
+    except TimeoutError:
+      raise TimeoutError(f"Temperature did not reach target within {timeout} seconds") from None
 
   async def _wait_for_shuttle_open_sensor(
     self, shuttle_open: bool, timeout: float = 30.0
   ) -> Status:
-    start = time.time()
-    while True:
-      status = await self.get_status()
-      if status.sensor_status.shuttle_open_sensor == shuttle_open:
-        return status
-      if time.time() - start > timeout:
-        raise TimeoutError("Timeout while waiting for shuttle open sensor")
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          status = await self.get_status()
+          if status.sensor_status.shuttle_open_sensor == shuttle_open:
+            return status
+          await anyio.sleep(0.1)
+    except TimeoutError:
+      raise TimeoutError(
+        f"Timeout waiting for shuttle open sensor to be {shuttle_open} after {timeout} seconds"
+      ) from None
 
   async def set_temperature(self, temperature: float):
     if not (50 <= temperature <= 200):

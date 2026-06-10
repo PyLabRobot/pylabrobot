@@ -1,7 +1,8 @@
-import asyncio
 import warnings
 from abc import ABC
 from typing import Dict, List, Literal, Optional, Union
+
+import anyio
 
 from pylabrobot.arms.backend import (
   AccessPattern,
@@ -12,6 +13,7 @@ from pylabrobot.arms.backend import (
 from pylabrobot.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.arms.precise_flex.error_codes import ERROR_CODES
 from pylabrobot.arms.precise_flex.joints import PFAxis
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -54,6 +56,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     self.timeout = timeout
     self._has_rail = has_rail
     self._is_dual_gripper = is_dual_gripper
+
     if is_dual_gripper:
       warnings.warn(
         "Dual gripper support is experimental and may not work as expected.", UserWarning
@@ -90,21 +93,21 @@ class PreciseFlexBackend(SCARABackend, ABC):
     )
     return arr
 
-  async def setup(self, skip_home: bool = False):
-    """Initialize the PreciseFlex backend."""
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False):
+    await super()._enter_lifespan(stack)
+
+    await stack.enter_async_context(self.io)
+    stack.push_shielded_async_callback(self.exit)
+
     await self.set_response_mode("pc")
     await self.power_on_robot()
     await self.attach(1)
     if not skip_home:
       await self.home()
 
-  async def stop(self):
-    """Stop the PreciseFlex backend."""
-    await self.detach()
-    await self.power_off_robot()
-    await self.exit()
-    await self.io.stop()
+    # push_async_callback executes in reverse order!
+    stack.push_shielded_async_callback(self.power_off_robot)
+    stack.push_shielded_async_callback(self.detach)
 
   async def set_speed(self, speed_percent: float):
     """Set the speed percentage of the arm's movement (0-100)."""
@@ -1591,7 +1594,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     some other means. Does not reply until the robot has stopped.
     """
     await self.send_command("waitForEom")
-    await asyncio.sleep(0.2)  # Small delay to ensure command is fully processed
+    await anyio.sleep(0.2)  # Small delay to ensure command is fully processed
 
   async def zero_torque(self, enable: bool, axis_mask: int = 1) -> None:
     """Sets or clears zero torque mode for the selected robot.

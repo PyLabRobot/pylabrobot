@@ -1,12 +1,12 @@
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 class CentrifugeChatterboxBackend(CentrifugeBackend):
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     print("Setting up")
-
-  async def stop(self):
-    print("Stopping")
+    stack.callback(lambda: print("Stopping"))
 
   async def open_door(self):
     print("Opening door")
@@ -40,11 +40,10 @@ class CentrifugeChatterboxBackend(CentrifugeBackend):
 
 
 class LoaderChatterboxBackend(LoaderBackend):
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
+    await super()._enter_lifespan(stack)
     print("Setting up")
-
-  async def stop(self):
-    print("Stopping")
+    stack.callback(lambda: print("Stopping"))
 
   async def load(self):
     print("Loading")

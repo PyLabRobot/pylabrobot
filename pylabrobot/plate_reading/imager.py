@@ -1,7 +1,8 @@
 import logging
 import math
-import time
 from typing import Any, Awaitable, Callable, Coroutine, Dict, Literal, Optional, Tuple, Union, cast
+
+import anyio
 
 from pylabrobot.machines import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import ImagerBackend
@@ -55,19 +56,20 @@ async def _golden_ratio_search(
       cache[x] = await func(x)
     return cache[x]
 
-  t0 = time.time()
   iteration = 0
-  while abs(b - a) > tol:
-    if (await cached_func(c)) > (await cached_func(d)):
-      b = d
-    else:
-      a = c
-    c = b - (b - a) / phi
-    d = a + (b - a) / phi
-    if time.time() - t0 > timeout:
-      raise TimeoutError("Timeout while searching for optimal focus position")
-    iteration += 1
-    logger.debug("Golden ratio search (autofocus) iteration %d, a=%s, b=%s", iteration, a, b)
+  try:
+    with anyio.fail_after(timeout):
+      while abs(b - a) > tol:
+        if (await cached_func(c)) > (await cached_func(d)):
+          b = d
+        else:
+          a = c
+        c = b - (b - a) / phi
+        d = a + (b - a) / phi
+        iteration += 1
+        logger.debug("Golden ratio search (autofocus) iteration %d, a=%s, b=%s", iteration, a, b)
+  except TimeoutError:
+    raise TimeoutError(f"Autofocus did not converge within {timeout} seconds") from None
 
   return (b + a) / 2
 

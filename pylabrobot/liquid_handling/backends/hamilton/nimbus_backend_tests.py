@@ -45,6 +45,7 @@ from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestNimbusTipType(unittest.TestCase):
@@ -530,7 +531,7 @@ class TestAspirateDispenseCommands(unittest.TestCase):
     self.assertEqual(results[13][1], [1000, 0, 0, 0, 0, 0, 0, 0])
 
 
-class TestNimbusBackendUnit(unittest.IsolatedAsyncioTestCase):
+class TestNimbusBackendUnit(AnyioTestBase):
   """Unit tests for NimbusBackend class (no actual connection)."""
 
   async def test_backend_init(self):
@@ -620,10 +621,10 @@ def _setup_backend_with_deck(deck: NimbusDeck) -> NimbusBackend:
   return backend
 
 
-class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
+class TestNimbusBackendCommands(AnyioTestBase):
   """Tests for NimbusBackend command methods."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.backend = _setup_backend()
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
     self.backend.send_command = self.mock_send  # type: ignore[method-assign]
@@ -674,7 +675,7 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
       await self.backend.park()
 
 
-class TestNimbusBackendSerialization(unittest.IsolatedAsyncioTestCase):
+class TestNimbusBackendSerialization(AnyioTestBase):
   """Tests for NimbusBackend serialization."""
 
   async def test_serialize(self):
@@ -686,10 +687,10 @@ class TestNimbusBackendSerialization(unittest.IsolatedAsyncioTestCase):
     self.assertIn("instrument_addresses", serialized)
 
 
-class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
+class TestNimbusLiquidHandling(AnyioTestBase):
   """Tests for NimbusBackend liquid handling command generation."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.deck = NimbusDeck()
     self.backend = _setup_backend_with_deck(self.deck)
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
@@ -1058,14 +1059,14 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(x_with_offset - x_no_offset, 1000)
 
 
-class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+class TestNimbusTipPickupDropAllSizes(AnyioTestBase):
   """Tests for Nimbus tip pickup/drop Z positions across all tip sizes.
 
   These tests verify that the begin/end tip pickup and drop process values
   match the machine-validated values.
   """
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack):
     self.deck = NimbusDeck()
     self.backend = _setup_backend_with_deck(self.deck)
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
@@ -1183,7 +1184,3 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(drop_cmd.end_tip_deposit_process[0], -8350)
 
     tip_rack.unassign()
-
-
-if __name__ == "__main__":
-  unittest.main()
