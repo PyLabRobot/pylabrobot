@@ -2020,7 +2020,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # so if we skip pre_initialize, we need to raise the channels ourselves
       await self.move_all_channels_in_z_safety()
       if self.extended_conf.left_x_drive.core_96_head_installed:
-        await self.move_core_96_to_safe_position()
+        # raise the 96-head to Z-safety before the iSWAP (shared left X-drive) moves in set_up_iswap.
+        # head96_move_to_z_safety can't be used yet: Head96Information is built in set_up_core96_head.
+        await self._head96_probe_z_max()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
@@ -2112,7 +2114,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           head_type=head96_type,
           y_range=self._head96_resolve_y_range(fw_version),
           y_speed_range=self._head96_resolve_y_speed_range(fw_version),
-          z_range=self._head96_resolve_z_range(instrument_type),
+          # probing safe max z position also acts a safety retraction of the head96 on every setup call
+          z_range=(
+            self._head96_resolve_z_range(instrument_type)[0],
+            await self._head96_probe_z_max(),
+          ),
           dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
           dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(
             fw_version
@@ -7776,10 +7782,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         - index 2: instrument_type (codes: 0=legacy, 1=FM-STAR)
         - indices 3..9: reserve
 
-    Indices 1 and 2 are only populated from 2025 firmware onwards; earlier firmware
-    returns them as reserve (read back as 0), so on a pre-2025 instrument
-    stop_disc_type resolves to core_i and instrument_type to legacy regardless of the
-    actual hardware.
+    Index 1 (stop_disc_type) is populated on firmware at least back to 2021 (a 2021-10-22
+    build reports core_ii). Whether index 2 (instrument_type) is reliably populated on
+    every build, or on some falls back to reserve (read back as 0 -> legacy), is unverified;
+    confirm on an FM-STAR head before relying on it to unlock the FM-STAR z-range extension.
 
     Returns:
       Raw positional tokens extracted from the QU response (the portion after the last ``"au"`` marker).
@@ -8040,9 +8046,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.head96_move_to_z_safety()
 
   @_requires_head96
-  async def head96_move_to_z_safety(self):
-    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
-    return await self.send_command(module="C0", command="EV")
+  async def head96_move_to_z_safety(
+    self, speed: Optional[float] = None, acceleration: Optional[float] = None
+  ):
+    """Move the 96-head up to its Z-safety height: the top of the firmware/variant Z window
+    (the max of Head96Information.z_range), not a hardcoded value. speed and acceleration forward
+    to the underlying stop-disk move (None uses the head defaults)."""
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    z_max = self._head96_information.z_range[1]
+    return await self.head96_move_stop_disk_z(z_max, speed=speed, acceleration=acceleration)
 
   @_requires_head96
   async def head96_park(
@@ -8070,7 +8084,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ``iswap_rotation_drive_request_x``).
     Unlike the legacy EM coordinate move (all axes together, no per-axis motion control), this
     is the single-axis X-arm drive command and exposes acceleration and current control, like
-    ``head96_move_y`` / ``head96_move_z``.
+    ``head96_move_y`` / ``head96_move_stop_disk_z``.
 
     Args:
       x: Target A1 X coordinate in mm. Valid range [x_min, 974.0]; x_min is 0.0 with a left
@@ -8165,17 +8179,49 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_move_z(
     self,
     z: float,
-    speed: float = 80.0,
-    acceleration: float = 300.0,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
   ):
-    """Move the 96-head to a specified Z-axis coordinate.
+    """Move the 96-head Z drive (stop disk) to an absolute Z position in mm.
+
+    .. deprecated::
+      Use `head96_move_stop_disk_z` for moves without a tip attached (stop disk) or
+      `head96_move_tool_z` when a tip is attached (tip end).
+    """
+    warnings.warn(
+      "head96_move_z is deprecated and will be removed in v1. Use head96_move_stop_disk_z() for "
+      "moves without a tip attached or head96_move_tool_z() when a tip is attached.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_stop_disk_z(
+      z,
+      speed=speed,
+      acceleration=acceleration,
+      current_protection_limiter=current_protection_limiter,
+    )
+
+  @_requires_head96
+  async def head96_move_stop_disk_z(
+    self,
+    z: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    current_protection_limiter: int = 15,
+  ):
+    """Move the 96-head z-drive (stop disk) to an absolute Z position in mm.
+
+    Stop-disk reference, mirroring the single-channel `move_channel_stop_disk_z`: use this for moves
+    without a tip; for the tip end with a tip on, use `head96_move_tool_z`.
 
     Args:
-      z: Target Z coordinate in mm. Valid range: head96_information.z_range (180.5-342.5 mm;
-        FM-STAR extends it).
-      speed: Movement speed in mm/sec. Valid range: [0.25, 100.0]. Default: 80.0
-      acceleration: Movement acceleration in mm/sec^2. Valid range: [25.0, 500.0]. Default: 300.0
+      z: Target stop-disk Z in mm. Valid range: Head96Information.z_range (180.5-342.5 mm; FM-STAR
+        extends it).
+      speed: Movement speed in mm/sec, [0.25, 100.0]; None uses the head's z_drive_speed_default
+        (85 mm/s; constant for the Z drive, not version-resolved like the Y-drive default).
+      acceleration: Movement acceleration in mm/sec^2, [25.0, 500.0]; None uses the head's
+        z_drive_acceleration_default (400 mm/s^2; likewise constant for the Z drive).
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
 
     Returns:
@@ -8186,12 +8232,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       AssertionError: If firmware info missing or parameters out of range.
 
     Note:
-      Firmware versions from 2021+ use 1:1 acceleration scaling, while pre-2021 versions
-      use 100x scaling. Both maintain a 100,000 increment upper limit.
+      Firmware versions from 2021+ use 1:1 acceleration scaling, while pre-2021 versions use 100x
+      scaling. Both maintain a 100,000 increment upper limit.
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
     )
+    if speed is None:
+      speed = self._head96_information.z_drive_speed_default
+    if acceleration is None:
+      acceleration = self._head96_information.z_drive_acceleration_default
 
     fw_version = self._head96_information.fw_version
 
@@ -8228,6 +8278,49 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     return resp
+
+  @_requires_head96
+  async def head96_move_tool_z(self, z: float, speed: Optional[float] = None):
+    """Move the 96-head tip bottom to an absolute Z position in mm.
+
+    Requires tips. `head96_move_stop_disk_z` references the stop disk, so this reads the tip overhang
+    (stop disk minus tip bottom, measured move-free from `head96_request_stop_disk_z` vs
+    `head96_request_position`) and offsets the move so the tip end lands on `z`. Mirrors the
+    single-channel `move_channel_tool_z`: a tip-presence guard plus a tip-space range check.
+
+    Args:
+      z: Target tip-bottom Z in mm.
+      speed: Movement speed in mm/sec; None uses the head default.
+
+    Raises:
+      ValueError: if the 96-head holds no tips, or `z` is outside the reachable tip-bottom window.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+
+    if not await self.head96_request_tip_presence():
+      raise ValueError(
+        "96-head has no tips (firmware reports none); use head96_move_stop_disk_z for Z moves "
+        "without a tip attached."
+      )
+
+    tip_overhang = (
+      await self.head96_request_stop_disk_z() - (await self.head96_request_position()).z
+    )
+
+    # The move is in stop-disk space over z_range, so the reachable tip-bottom window is z_range
+    # shifted down by the overhang, floored at the deck surface. Validate in tip-bottom terms.
+    z_min, z_max = self._head96_information.z_range
+    deck = STARBackend.MINIMUM_CHANNEL_Z_POSITION
+    if not (max(z_min - tip_overhang, deck) <= z <= z_max - tip_overhang):
+      raise ValueError(
+        f"tip-bottom z={z} mm out of reach "
+        f"[{round(max(z_min - tip_overhang, deck), 1)}, {round(z_max - tip_overhang, 1)}] mm "
+        f"for overhang {round(tip_overhang, 1)} mm"
+      )
+
+    return await self.head96_move_stop_disk_z(z + tip_overhang, speed=speed)
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
@@ -9071,7 +9164,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       DeprecationWarning,
       stacklevel=2,
     )
-    return await self.head96_move_z(z_position)
+    return await self.head96_move_stop_disk_z(z_position)
 
   async def move_96head_to_coordinate(
     self,
@@ -9159,6 +9252,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     x_coordinate = x_coordinate if resp["xd"] == 0 else -x_coordinate
 
     return Coordinate(x=x_coordinate, y=y_coordinate, z=z_coordinate)
+
+  @_requires_head96
+  async def head96_request_stop_disk_z(self) -> float:
+    """Request the 96-head z-drive (stop-disk) position in mm.
+
+    Unlike `head96_request_position` (whose z is the tip bottom when a tip is mounted), this is the
+    raw z-drive position - the stop disk - regardless of tip state.
+
+    Returns:
+      Stop-disk Z position in mm.
+    """
+    resp = await self.send_command(module="H0", command="RZ", fmt="rz##### (n)")
+    return self._head96_z_drive_increment_to_mm(resp["rz"][1])  # [0] = FW counter, [1] = HW counter
+
+  async def _head96_probe_z_max(self) -> float:
+    """Probe the reachable Z top (mm) for this unit: drive to the firmware Z-safety height (C0 EV)
+    and read the stop disk there. The generic command-range max can exceed what this unit actually
+    reaches, so the top is read off the hardware.
+
+    Doubles as the firmware Z-safety retract (the EV), so it can stand in for an explicit safe-z
+    move. Needs no Head96Information, so it is usable before that record exists.
+    """
+    await self.send_command(module="C0", command="EV", read_timeout=20)
+    return await self.head96_request_stop_disk_z()
 
   async def request_core_96_head_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
