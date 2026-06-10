@@ -4,7 +4,7 @@ import enum
 import logging
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Optional, cast
+from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple, cast
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
 from pylabrobot.capabilities.arms.standard import CartesianPose, GripperDirection
@@ -31,6 +31,59 @@ def _direction_degrees_to_grip_direction(degrees: float) -> int:
   return mapping[normalized]
 
 
+@dataclass
+class iSWAPConfiguration:
+  """Device facts and per-machine calibration for the installed iSWAP (v1 equivalent of v0 ``iSWAPInformation``).
+
+  Two tiers. Firmware/hardware-version device facts (4th-generation iSWAP, the
+  only supported generation) are defaulted and identical across units. Per-machine
+  calibration carries Hamilton factory defaults so the configuration is valid
+  before setup; ``_on_setup`` refines these from the device EEPROM once the
+  corresponding read commands are wired.
+  """
+
+  # -- per-machine calibration (factory defaults; refined from EEPROM at setup) --
+  fw_version: Optional[str] = None
+  rotation_drive_x_offset: float = 34.0  # mm; master EEPROM `kg` (C0 RA ra=kg)
+  rotation_drive_y_max: float = 0.0  # mm; refined at setup (Y parking bound)
+  link_1_length: float = 138.0  # mm; EEPROM pw[9] (R0 RA ra=pw)
+  link_2_length: float = 138.0  # mm; EEPROM pt[9] (R0 RA ra=pt)
+  rotation_drive_predefined_increments: Optional[
+    Dict["iSWAPBackend.RotationDriveOrientation", int]
+  ] = None  # EEPROM pw[0..4]
+  wrist_drive_predefined_increments: Optional[Dict["iSWAPBackend.WristDriveOrientation", int]] = (
+    None  # EEPROM pt[1..4]
+  )
+
+  # -- Y --
+  y_increment_range: Tuple[int, int] = (0, 14_000)
+  y_mm_per_increment: float = 0.046302083
+  y_speed_increment_range: Tuple[int, int] = (50, 8_000)  # increments/sec
+
+  # -- Z --
+  z_increment_range: Tuple[int, int] = (-187, 26_661)
+  z_mm_per_increment: float = 0.01072765
+  z_speed_increment_range: Tuple[int, int] = (50, 15_000)  # increments/sec
+  z_acceleration_increment_range: Tuple[int, int] = (5, 999)  # 1000 increments/sec^2
+
+  # -- rotation drive (joint 1, W) --
+  rotation_increment_range: Tuple[int, int] = (-30_032, 30_032)
+  rotation_deg_per_increment: float = 0.00309619077
+
+  # -- wrist drive (joint 2, T) --
+  wrist_increment_range: Tuple[int, int] = (-30_000, 30_000)
+  wrist_deg_per_increment: float = 0.00507968798
+
+  # -- gripper (G) --
+  gripper_increment_range: Tuple[int, int] = (12_780, 24_120)  # jaw width
+  gripper_mm_per_increment: float = 0.00554337
+
+  # -- geometric constants --
+  rotation_drive_diameter: float = 30.5  # mm
+  rotation_drive_safety_radius: float = 90.0  # mm
+  rotation_drive_z_offset_above_finger: float = 13.0  # mm; R0 RZ finger plane -> drive bottom
+
+
 class iSWAPBackend(OrientableGripperArmBackend):
   class RotationDriveOrientation(enum.Enum):
     LEFT = 1
@@ -44,9 +97,15 @@ class iSWAPBackend(OrientableGripperArmBackend):
     LEFT = 3
     REVERSE = 4
 
-  def __init__(self, driver: STARDriver, traversal_height: float = 280.0):
+  def __init__(
+    self,
+    driver: STARDriver,
+    traversal_height: float = 280.0,
+    configuration: Optional[iSWAPConfiguration] = None,
+  ):
     self.driver = driver
     self.traversal_height = traversal_height
+    self.configuration = configuration if configuration is not None else iSWAPConfiguration()
     self._version: Optional[str] = None
     self._parked: Optional[bool] = None
 
