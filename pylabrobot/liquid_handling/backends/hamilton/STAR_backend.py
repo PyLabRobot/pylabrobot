@@ -1385,7 +1385,7 @@ class PipChannelInformation:
   pressure_adc: PressureADC
 
 
-@dataclass
+@dataclass(frozen=True, eq=False)
 class Head96Information:
   """Information about the installed 96-head."""
 
@@ -1403,12 +1403,24 @@ class Head96Information:
   head_type: HeadType
 
   # === Firmware/variant-derived limits, in standard units (resolved at setup) ===
-  aspiration_volume_range: Tuple[float, float]
-  """Aspirate/dispense piston volume window (uL)."""
-  dispensing_drive_speed_range: Tuple[float, float]
-  """Dispensing-drive speed window (uL/s)."""
+  y_range: Tuple[float, float]
+  """Y-drive position window (mm)."""
+  y_speed_range: Tuple[float, float]
+  """Y-drive speed window (mm/s)."""
   z_range: Tuple[float, float]
   """Z-drive position window (mm); FM-STAR extends it."""
+  dispensing_drive_range: Tuple[float, float]
+  """Dispensing-drive (piston) volume window (uL); applies to both aspirate and dispense."""
+  dispensing_drive_speed_range: Tuple[float, float]
+  """Dispensing-drive speed window (uL/s)."""
+
+  # === Encoder resolutions (defaulted device facts). Y/Z are unchanged across firmware; the
+  # dispensing/squeezer resolutions are the 2013+ generation values (2008-era heads differ). ===
+  z_drive_mm_per_increment: float = 0.005
+  y_drive_mm_per_increment: float = 0.015625
+  dispensing_drive_mm_per_increment: float = 0.001025641026
+  dispensing_drive_uL_per_increment: float = 0.019340933
+  squeezer_drive_mm_per_increment: float = 0.0002086672009
 
 
 @dataclass(frozen=True, eq=False)
@@ -2079,11 +2091,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
           instrument_type=instrument_type,
           head_type=head96_type,
-          aspiration_volume_range=self._head96_resolve_aspiration_volume_range(fw_version),
+          y_range=self._head96_resolve_y_range(fw_version),
+          y_speed_range=self._head96_resolve_y_speed_range(fw_version),
+          z_range=self._head96_resolve_z_range(instrument_type),
+          dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
           dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(
             fw_version
           ),
-          z_range=self._head96_resolve_z_range(instrument_type),
         )
 
     async def set_up_arm_modules():
@@ -7748,7 +7762,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="H0", command="QG", fmt="qg#")
     return type_map.get(resp["qg"], "unknown")
 
-  def _head96_resolve_aspiration_volume_range(
+  def _head96_resolve_y_range(self, fw_version: datetime.date) -> Tuple[float, float]:
+    """Y-drive position window (mm); 2013 firmware shifted it from the 2008 range."""
+    min_inc, max_inc = (6000, 36000) if fw_version.year >= 2010 else (7000, 36200)
+    return (
+      self._head96_y_drive_increment_to_mm(min_inc),
+      self._head96_y_drive_increment_to_mm(max_inc),
+    )
+
+  def _head96_resolve_y_speed_range(self, fw_version: datetime.date) -> Tuple[float, float]:
+    """Y-drive speed window (mm/s). The pre-2021 max (390.625 = the firmware default, 25000 inc) is
+    an empirical, deck-tested cap; per firmware version the maxima are 312.5 (2008) and 625 (2013+).
+    Verify on a pre-2021 head before raising it. Refactored verbatim from head96_move_y."""
+    return (0.78125, 390.625 if fw_version.year <= 2021 else 625.0)
+
+  def _head96_resolve_z_range(self, instrument_type: str) -> Tuple[float, float]:
+    """Z-drive position window (mm); FM-STAR extends it (za/zb/zh all share this range)."""
+    min_inc, max_inc = (24200, 76200) if instrument_type == "FM-STAR" else (36100, 68500)
+    return (
+      self._head96_z_drive_increment_to_mm(min_inc),
+      self._head96_z_drive_increment_to_mm(max_inc),
+    )
+
+  def _head96_resolve_dispensing_drive_range(
     self, fw_version: datetime.date
   ) -> Tuple[float, float]:
     """Aspirate/dispense piston volume window (uL); 2013 firmware widened the max from 62130 inc."""
@@ -7764,14 +7800,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return (
       self._head96_dispensing_drive_increment_to_uL(min_inc),
       self._head96_dispensing_drive_increment_to_uL(max_inc),
-    )
-
-  def _head96_resolve_z_range(self, instrument_type: str) -> Tuple[float, float]:
-    """Z-drive position window (mm); FM-STAR extends it (za/zb/zh all share this range)."""
-    min_inc, max_inc = (24200, 76200) if instrument_type == "FM-STAR" else (36100, 68500)
-    return (
-      self._head96_z_drive_increment_to_mm(min_inc),
-      self._head96_z_drive_increment_to_mm(max_inc),
     )
 
   # -------------- 3.10.1 Initialization --------------
@@ -7866,12 +7894,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.2 96-Head Movements --------------
 
-  # Conversion factors for 96-Head (mm per increment)
-  _head96_z_drive_mm_per_increment = 0.005
-  _head96_y_drive_mm_per_increment = 0.015625
-  _head96_dispensing_drive_mm_per_increment = 0.001025641026
-  _head96_dispensing_drive_uL_per_increment = 0.019340933
-  _head96_squeezer_drive_mm_per_increment = 0.0002086672009
+  # Conversion factors for 96-Head: owned by Head96Information now (encoder resolutions); aliased
+  # here for backwards compatibility.
+  _head96_z_drive_mm_per_increment = Head96Information.z_drive_mm_per_increment
+  _head96_y_drive_mm_per_increment = Head96Information.y_drive_mm_per_increment
+  _head96_dispensing_drive_mm_per_increment = Head96Information.dispensing_drive_mm_per_increment
+  _head96_dispensing_drive_uL_per_increment = Head96Information.dispensing_drive_uL_per_increment
+  _head96_squeezer_drive_mm_per_increment = Head96Information.squeezer_drive_mm_per_increment
 
   # Z-axis conversions
 
@@ -8033,17 +8062,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     fw_version = self._head96_information.fw_version
-
-    # Determine speed limit based on firmware version
-    # Pre-2021 firmware appears to have lower speed capability or safety limits
-    # TODO: Verify exact firmware version and investigate the reason for this change
-    y_speed_upper_limit = 390.625 if fw_version.year <= 2021 else 625.0  # mm/sec
+    y_min, y_max = self._head96_information.y_range
+    y_speed_min, y_speed_max = self._head96_information.y_speed_range
 
     # Validate parameters before hardware communication
-    assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
-    assert 0.78125 <= speed <= y_speed_upper_limit, (
-      f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware version {fw_version}. "
-      f"Your firmware version: {self._head96_information.fw_version}. "
+    assert y_min <= y <= y_max, f"y must be between {y_min} and {y_max} mm"
+    assert y_speed_min <= speed <= y_speed_max, (
+      f"speed must be between {y_speed_min} and {y_speed_max} mm/sec for firmware version {fw_version}. "
+      f"Your firmware version: {fw_version}. "
       "If this limit seems incorrect, please test cautiously with an empty deck and report "
       "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
     )
