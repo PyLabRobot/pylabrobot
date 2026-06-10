@@ -7736,14 +7736,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def _head96_request_configuration(self) -> List[str]:
     """Request the 96-head configuration (raw) using the QU command.
 
-    The instrument returns a sequence of positional tokens. This method returns
-    those tokens without decoding them, but the following indices are currently
-    understood:
+    The instrument returns ten blank-separated decimal values. This method returns
+    them as a list of strings, undecoded; the list indices currently understood are:
 
         - index 0: clot_monitoring_with_clld
         - index 1: stop_disc_type (codes: 0=core_i, 1=core_ii)
         - index 2: instrument_type (codes: 0=legacy, 1=FM-STAR)
-        - indices 3..9: reservable positions (positions 4..10)
+        - indices 3..9: reserve
+
+    Indices 1 and 2 are only populated from 2025 firmware onwards; earlier firmware
+    returns them as reserve (read back as 0), so on a pre-2025 instrument
+    stop_disc_type resolves to core_i and instrument_type to legacy regardless of the
+    actual hardware.
 
     Returns:
       Raw positional tokens extracted from the QU response (the portion after the last ``"au"`` marker).
