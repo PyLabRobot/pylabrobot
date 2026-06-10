@@ -588,20 +588,29 @@
 <h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_x<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-head96-move-x" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_x">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">head96_move_x</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_x" title="Link to this definition">#</a></dt>
-<dd><p>Move the 96-head to a specified X-axis coordinate.</p>
-<p>Note: Unlike head96_move_y and head96_move_z, the X-axis movement does not have
-dedicated speed/acceleration parameters - it uses the EM command which moves
-all axes together.</p>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">head96_move_x</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">acceleration_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_protection_limiter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">7</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_x" title="Link to this definition">#</a></dt>
+<dd><p>Move the 96-head to a target channel-A1 X coordinate via the direct X-arm drive.</p>
+<p>Drives the X-arm carriage to <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">+</span> <span class="pre">head96_information.x_offset</span></code> so channel A1 lands at
+<code class="docutils literal notranslate"><span class="pre">x</span></code>: A1 sits left of (below) the carriage center, so deck-A1 = carriage - offset and the
+carriage target is therefore <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">+</span> <span class="pre">offset</span></code> (inverse of the iSWAP rotation-drive derivation,
+<code class="docutils literal notranslate"><span class="pre">iswap_rotation_drive_request_x</span></code>).
+Unlike the legacy EM coordinate move (all axes together, no per-axis motion control), this
+is the single-axis X-arm drive command and exposes acceleration and current control, like
+<code class="docutils literal notranslate"><span class="pre">head96_move_y</span></code> / <code class="docutils literal notranslate"><span class="pre">head96_move_z</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>x</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target X coordinate in mm. Valid range: [-271.0, 974.0]</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target A1 X coordinate in mm. Valid range [x_min, 974.0]; x_min is 0.0 with a left
+side panel installed, else -271.0.</p></li>
+<li><p><strong>acceleration_level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – X-arm acceleration index (1-5). Default 3.</p></li>
+<li><p><strong>current_protection_limiter</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – X-arm motor current limit (0-7). Default 7.</p></li>
+</ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Response from the hardware command.</p>
-</dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If 96-head is not installed.</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If the 96-head is not installed.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the target A1 X is outside the legal 96-head X range.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
