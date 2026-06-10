@@ -8081,7 +8081,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move the 96-head to a specified Z-axis coordinate.
 
     Args:
-      z: Target Z coordinate in mm. Valid range: [180.5, 342.5]
+      z: Target Z coordinate in mm. Valid range: head96_information.z_range (180.5-342.5 mm;
+        FM-STAR extends it).
       speed: Movement speed in mm/sec. Valid range: [0.25, 100.0]. Default: 80.0
       acceleration: Movement acceleration in mm/sec^2. Valid range: [25.0, 500.0]. Default: 300.0
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
@@ -8103,8 +8104,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     fw_version = self._head96_information.fw_version
 
-    # Validate parameters before hardware communication
-    assert 180.5 <= z <= 342.5, "z must be between 180.5 and 342.5 mm"
+    # Validate parameters before hardware communication. The Z window is firmware/variant-adaptive
+    # (FM-STAR extends it), so read it from Head96Information rather than hardcoding the legacy range.
+    z_min, z_max = self._head96_information.z_range
+    assert z_min <= z <= z_max, f"z must be between {z_min} and {z_max} mm"
     assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
     assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
     assert isinstance(current_protection_limiter, int) and (
