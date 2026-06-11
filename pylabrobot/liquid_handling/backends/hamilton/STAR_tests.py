@@ -2,6 +2,7 @@
 
 import contextlib
 import copy
+import datetime
 import unittest
 import unittest.mock
 from typing import Literal, cast
@@ -445,6 +446,38 @@ class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(cb._iswap_information)
     with self.assertRaisesRegex(RuntimeError, "iSWAP information not loaded"):
       _ = cb.iswap_information
+
+
+class TestHead96DriveDefaults(unittest.IsolatedAsyncioTestCase):
+  """Head96Information carries the firmware default speed/acceleration for every drive, in standard
+  units: version-resolved where it changed across firmware, constant fields where it did not."""
+
+  async def test_setup_resolves_all_drive_defaults(self):
+    """setup() populates all eight per-drive defaults with the 2013+ firmware values."""
+    cb = STARChatterboxBackend()  # mocks a 2023 (2013+) head
+    cb.set_deck(STARLetDeck())
+    await cb.setup()
+    info = cb._head96_information
+    assert info is not None
+    self.assertAlmostEqual(info.y_drive_speed_default, 390.62, places=2)
+    self.assertAlmostEqual(info.y_drive_acceleration_default, 546.88, places=2)
+    self.assertEqual(info.z_drive_speed_default, 85.0)
+    self.assertEqual(info.z_drive_acceleration_default, 400.0)
+    self.assertEqual(info.dispensing_drive_speed_default, 261.1)
+    self.assertAlmostEqual(info.dispensing_drive_acceleration_default, 17406.84, places=2)
+    self.assertAlmostEqual(info.squeezer_drive_speed_default, 15.86, places=2)
+    self.assertAlmostEqual(info.squeezer_drive_acceleration_default, 62.6, places=2)
+
+  def test_version_resolved_default_falls_back_for_pre_2010_firmware(self):
+    """A version-resolved default switches to the 2008 firmware value for pre-2010 heads (Y, whose
+    encoder resolution is constant, so both branches are exact)."""
+    star = STARBackend(read_timeout=1)
+    self.assertAlmostEqual(
+      star._head96_resolve_y_drive_speed_default(datetime.date(2008, 11, 11)), 312.5, places=2
+    )
+    self.assertAlmostEqual(
+      star._head96_resolve_y_drive_speed_default(datetime.date(2013, 9, 2)), 390.62, places=2
+    )
 
 
 class TestiSWAPYMaxBootstrap(unittest.IsolatedAsyncioTestCase):

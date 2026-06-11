@@ -1413,6 +1413,25 @@ class Head96Information:
   """Dispensing-drive (piston) volume window (uL); applies to both aspirate and dispense."""
   dispensing_drive_speed_range: Tuple[float, float]
   """Dispensing-drive speed window (uL/s)."""
+  # Per-drive default speed / acceleration that vary by firmware version (resolved at setup).
+  y_drive_speed_default: float
+  """Y-drive default speed (mm/s)."""
+  y_drive_acceleration_default: float
+  """Y-drive default acceleration (mm/s2)."""
+  dispensing_drive_acceleration_default: float
+  """Dispensing-drive default acceleration (uL/s2)."""
+  squeezer_drive_speed_default: float
+  """Squeezer-drive default speed (mm/s)."""
+  squeezer_drive_acceleration_default: float
+  """Squeezer-drive default acceleration (mm/s2)."""
+
+  # === Per-drive default speed / acceleration that are constant across firmware (standard units). ===
+  z_drive_speed_default: float = 85.0
+  """Z-drive default speed (mm/s)."""
+  z_drive_acceleration_default: float = 400.0
+  """Z-drive default acceleration (mm/s2)."""
+  dispensing_drive_speed_default: float = 261.1
+  """Dispensing-drive default speed (uL/s)."""
 
   # === Encoder resolutions (defaulted device facts). Y/Z are unchanged across firmware; the
   # dispensing/squeezer resolutions are the 2013+ generation values (2008-era heads differ). ===
@@ -2096,6 +2115,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           z_range=self._head96_resolve_z_range(instrument_type),
           dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
           dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(
+            fw_version
+          ),
+          y_drive_speed_default=self._head96_resolve_y_drive_speed_default(fw_version),
+          y_drive_acceleration_default=self._head96_resolve_y_drive_acceleration_default(
+            fw_version
+          ),
+          dispensing_drive_acceleration_default=self._head96_resolve_dispensing_drive_acceleration_default(
+            fw_version
+          ),
+          squeezer_drive_speed_default=self._head96_resolve_squeezer_drive_speed_default(
+            fw_version
+          ),
+          squeezer_drive_acceleration_default=self._head96_resolve_squeezer_drive_acceleration_default(
             fw_version
           ),
         )
@@ -7804,6 +7836,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return (
       self._head96_dispensing_drive_increment_to_uL(min_inc),
       self._head96_dispensing_drive_increment_to_uL(max_inc),
+    )
+
+  # Per-drive default speed / acceleration that vary by firmware version (the constant ones are plain
+  # Head96Information fields). 2013 firmware raised them. The dispensing/squeezer values use the 2013+
+  # encoder resolutions, so for pre-2010 heads they are approximate (as the ranges above are).
+  def _head96_resolve_y_drive_speed_default(self, fw_version: datetime.date) -> float:
+    """Y-drive default speed (mm/s); 2013 firmware raised it."""
+    return self._head96_y_drive_increment_to_mm(25000 if fw_version.year >= 2010 else 20000)
+
+  def _head96_resolve_y_drive_acceleration_default(self, fw_version: datetime.date) -> float:
+    """Y-drive default acceleration (mm/s2); 2013 firmware raised it."""
+    return self._head96_y_drive_increment_to_mm(35000 if fw_version.year >= 2010 else 32000)
+
+  def _head96_resolve_dispensing_drive_acceleration_default(
+    self, fw_version: datetime.date
+  ) -> float:
+    """Dispensing-drive default acceleration (uL/s2); 2013 firmware raised it."""
+    return self._head96_dispensing_drive_increment_to_uL(
+      900000 if fw_version.year >= 2010 else 150000
+    )
+
+  def _head96_resolve_squeezer_drive_speed_default(self, fw_version: datetime.date) -> float:
+    """Squeezer-drive default speed (mm/s); 2013 firmware raised it."""
+    return self._head96_squeezer_drive_increment_to_mm(76000 if fw_version.year >= 2010 else 16000)
+
+  def _head96_resolve_squeezer_drive_acceleration_default(self, fw_version: datetime.date) -> float:
+    """Squeezer-drive default acceleration (mm/s2); 2013 firmware raised it."""
+    return self._head96_squeezer_drive_increment_to_mm(
+      300000 if fw_version.year >= 2010 else 100000
     )
 
   # -------------- 3.10.1 Initialization --------------
