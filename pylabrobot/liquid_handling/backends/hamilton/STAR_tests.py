@@ -38,6 +38,7 @@ from .STAR_backend import (
   CommandSyntaxError,
   HamiltonNoTipError,
   HardwareError,
+  Head96Information,
   PipChannelInformation,
   STARBackend,
   STARFirmwareError,
@@ -151,6 +152,33 @@ def _any_write_and_read_command_call(cmd):
     write_timeout=unittest.mock.ANY,
     read_timeout=unittest.mock.ANY,
     wait=unittest.mock.ANY,
+  )
+
+
+def _make_head96_information(star):
+  """A representative installed-96-head record (2021 legacy) for command tests."""
+  fw = datetime.date(2021, 10, 22)
+  return Head96Information(
+    fw_version=fw,
+    x_offset=368.2,
+    supports_clot_monitoring_clld=False,
+    stop_disc_type="core_ii",
+    instrument_type="legacy",
+    head_type="96 head II",
+    y_range=star._head96_resolve_y_range(fw),
+    y_speed_range=star._head96_resolve_y_speed_range(fw),
+    z_range=star._head96_resolve_z_range("legacy"),
+    dispensing_drive_range=star._head96_resolve_dispensing_drive_range(fw),
+    dispensing_drive_speed_range=star._head96_resolve_dispensing_drive_speed_range(fw),
+    y_drive_speed_default=star._head96_resolve_y_drive_speed_default(fw),
+    y_drive_acceleration_default=star._head96_resolve_y_drive_acceleration_default(fw),
+    dispensing_drive_acceleration_default=star._head96_resolve_dispensing_drive_acceleration_default(
+      fw
+    ),
+    squeezer_drive_speed_default=star._head96_resolve_squeezer_drive_speed_default(fw),
+    squeezer_drive_acceleration_default=star._head96_resolve_squeezer_drive_acceleration_default(
+      fw
+    ),
   )
 
 
@@ -1103,6 +1131,51 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         ),
       ]
     )
+
+  async def test_head96_basic_aspirate(self):
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._write_and_read_command.reset_mock()
+    await self.STAR.head96_basic_aspirate(
+      volume=100,
+      minimum_height=230,
+      surface_following_distance=2,
+      flow_rate=50,
+      enforce_requires_tip=False,  # isolate the wire string from the tip-presence round-trip
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PAid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdj1da05170dv02585dc00000zd0400zh46000to000"
+        )
+      ]
+    )
+
+  async def test_head96_basic_dispense(self):
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._write_and_read_command.reset_mock()
+    await self.STAR.head96_basic_dispense(
+      volume=100,
+      minimum_height=230,
+      stop_back_volume=5,
+      surface_following_distance=2,
+      flow_rate=50,
+      stop_flow_rate=20,
+      enforce_requires_tip=False,  # isolate the wire string from the tip-presence round-trip
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PBid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdb05170dv02585dd0259ze0400zh46000du01034"
+        )
+      ]
+    )
+
+  async def test_head96_basic_aspirate_requires_tip(self):
+    """enforce_requires_tip raises when the head reports no tips."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    with self.assertRaises(RuntimeError):
+      await self.STAR.head96_basic_aspirate(volume=100, minimum_height=230)
 
   async def test_core_96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.

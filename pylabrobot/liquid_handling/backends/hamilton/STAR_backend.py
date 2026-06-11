@@ -8428,6 +8428,160 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
 
+  @_requires_head96
+  async def head96_basic_aspirate(
+    self,
+    volume: float,
+    *,
+    flow_rate: Optional[float] = None,
+    minimum_height: float,
+    surface_following_distance: float = 0.0,
+    enforce_minimum_height: bool = True,
+    enforce_requires_tip: bool = True,
+  ):
+    """Aspirate on the 96-head with surface following (the firmware drives Z and the dispensing drive
+    in parallel).
+
+    The direct, full-control counterpart to `aspirate96`: it takes the height / surface-following /
+    flow directly rather than a resource and liquid class, and computes no positions. Acts on the whole
+    head (rigid - no per-channel selection) and assumes the head already holds tips. Values are given
+    in human units and converted to firmware increments. This is a basic, thin command: it does not
+    settle after aspirating (settling is a separate basic command).
+
+    Args:
+      volume: The volume to aspirate through each channel, uL.
+      flow_rate: The dispensing-drive speed, uL/s; None leaves the firmware default.
+      minimum_height: The lowest Z (mm) the head descends to, the end of the aspiration stroke.
+      surface_following_distance: The Z travel during aspiration, mm; 0 keeps the head in place so it
+        cannot drive into the container bottom.
+      enforce_minimum_height: If True, clamp any deeper target to minimum_height; if False, surface
+        following may carry the head past it.
+      enforce_requires_tip: If True, raise if the head holds no tips; if False, allow aspirating air.
+
+    Raises:
+      RuntimeError: If 96-head is not installed, or enforce_requires_tip and the head holds no tips.
+      AssertionError: If firmware info missing or a parameter is out of range.
+    """
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    info = self._head96_information
+    volume_max = info.dispensing_drive_range[1]
+    flow_max = info.dispensing_drive_speed_range[1]
+    z_min, z_max = info.z_range
+    surface_following_max = self._head96_z_drive_increment_to_mm(9999)
+
+    assert 0 <= volume <= volume_max, f"volume must be between 0 and {volume_max} uL"
+    if flow_rate is not None:
+      assert 0 <= flow_rate <= flow_max, f"flow_rate must be between 0 and {flow_max} uL/s"
+    assert 0 <= surface_following_distance <= surface_following_max, (
+      f"surface_following_distance must be between 0 and {surface_following_max} mm"
+    )
+    assert z_min <= minimum_height <= z_max, (
+      f"minimum_height must be between {z_min} and {z_max} mm"
+    )
+
+    if enforce_requires_tip:
+      has_tips = await self.head96_request_tip_presence()
+      if not has_tips:
+        raise RuntimeError(
+          "96-head has no tips (firmware reports none); pick up tips before aspirating"
+        )
+
+    to_z = self._head96_z_drive_mm_to_increment
+    to_vol = self._head96_dispensing_drive_uL_to_increment
+    params = {
+      "pm": "F" * 24,  # all 96 channels; the rigid head has no per-channel selection
+      "dj": "1" if enforce_minimum_height else "0",
+      "da": f"{to_vol(volume):05}",
+    }
+    if flow_rate is not None:
+      params["dv"] = f"{to_vol(flow_rate):05}"
+    params["dc"] = "00000"  # pre-wetting off; its interaction with surface following is unverified
+    params["zd"] = f"{to_z(surface_following_distance):04}"
+    params["zh"] = f"{to_z(minimum_height):05}"
+    params["to"] = (
+      "000"  # settling_time not exposed here (firmware allows it); it is its own basic command
+    )
+    return await self.send_command(module="H0", command="PA", **params)  # type: ignore[arg-type]
+
+  @_requires_head96
+  async def head96_basic_dispense(
+    self,
+    volume: float,
+    *,
+    flow_rate: Optional[float] = None,
+    minimum_height: float,
+    stop_back_volume: float = 0.0,
+    surface_following_distance: float = 0.0,
+    stop_flow_rate: Optional[float] = None,
+    enforce_requires_tip: bool = True,
+  ):
+    """Dispense on the 96-head with surface following (the firmware drives Z and the dispensing drive
+    in parallel).
+
+    The direct, full-control counterpart to `dispense96`. Acts on the whole head (rigid) and assumes
+    the head already holds tips. This is a basic, thin command: it does not settle after dispensing
+    (settling is a separate basic command).
+
+    Args:
+      volume: The volume to dispense through each channel, uL.
+      flow_rate: The dispensing-drive speed, uL/s; None leaves the firmware default.
+      minimum_height: The lowest Z (mm) the head descends to, the end of the dispense stroke.
+      stop_back_volume: The volume drawn back at the end to stop dripping, uL.
+      surface_following_distance: The Z travel during dispense, mm.
+      stop_flow_rate: The dispensing-drive stop speed, uL/s; None leaves the firmware default.
+      enforce_requires_tip: If True, raise if the head holds no tips; if False, allow dispensing air.
+
+    Raises:
+      RuntimeError: If 96-head is not installed, or enforce_requires_tip and the head holds no tips.
+      AssertionError: If firmware info missing or a parameter is out of range.
+    """
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    info = self._head96_information
+    volume_max = info.dispensing_drive_range[1]
+    flow_max = info.dispensing_drive_speed_range[1]
+    z_min, z_max = info.z_range
+    surface_following_max = self._head96_z_drive_increment_to_mm(9999)
+    stop_back_max = self._head96_dispensing_drive_increment_to_uL(9999)
+
+    assert 0 <= volume <= volume_max, f"volume must be between 0 and {volume_max} uL"
+    if flow_rate is not None:
+      assert 0 <= flow_rate <= flow_max, f"flow_rate must be between 0 and {flow_max} uL/s"
+    assert 0 <= stop_back_volume <= stop_back_max, (
+      f"stop_back_volume must be between 0 and {stop_back_max} uL"
+    )
+    assert 0 <= surface_following_distance <= surface_following_max, (
+      f"surface_following_distance must be between 0 and {surface_following_max} mm"
+    )
+    assert z_min <= minimum_height <= z_max, (
+      f"minimum_height must be between {z_min} and {z_max} mm"
+    )
+    if stop_flow_rate is not None:
+      assert 0 <= stop_flow_rate <= flow_max, (
+        f"stop_flow_rate must be between 0 and {flow_max} uL/s"
+      )
+
+    if enforce_requires_tip:
+      has_tips = await self.head96_request_tip_presence()
+      if not has_tips:
+        raise RuntimeError(
+          "96-head has no tips (firmware reports none); pick up tips before dispensing"
+        )
+
+    to_z = self._head96_z_drive_mm_to_increment
+    to_vol = self._head96_dispensing_drive_uL_to_increment
+    params = {
+      "pm": "F" * 24,  # all 96 channels; the rigid head has no per-channel selection
+      "db": f"{to_vol(volume):05}",
+    }
+    if flow_rate is not None:
+      params["dv"] = f"{to_vol(flow_rate):05}"
+    params["dd"] = f"{to_vol(stop_back_volume):04}"
+    params["ze"] = f"{to_z(surface_following_distance):04}"
+    params["zh"] = f"{to_z(minimum_height):05}"
+    if stop_flow_rate is not None:
+      params["du"] = f"{to_vol(stop_flow_rate):05}"
+    return await self.send_command(module="H0", command="PB", **params)  # type: ignore[arg-type]
+
   # # # Granular commands # # #
 
   async def head96_dispensing_drive_move_to_home_volume(
