@@ -1177,6 +1177,21 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(RuntimeError):
       await self.STAR.head96_basic_aspirate(volume=100, minimum_height=230)
 
+  async def test_head96_basic_aspirate_default_flow_rate(self):
+    """Omitting flow_rate emits the head's default dispensing-drive speed (dv13500)."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._write_and_read_command.reset_mock()
+    await self.STAR.head96_basic_aspirate(
+      volume=100, minimum_height=230, surface_following_distance=2, enforce_requires_tip=False
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PAid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdj1da05170dv13500dc00000zd0400zh46000to000"
+        )
+      ]
+    )
+
   async def test_core_96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.
 
