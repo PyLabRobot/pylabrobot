@@ -158,13 +158,20 @@ class STARChatterboxBackend(STARBackend):
 
     # Mock firmware information for 96-head if installed
     if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
+      fw_version = datetime.date(2023, 1, 1)
+      instrument_type: Head96Information.InstrumentType = "FM-STAR"
       self._head96_information = Head96Information(
-        fw_version=datetime.date(2023, 1, 1),
+        fw_version=fw_version,
         x_offset=365.0,  # factory default; hardware reads the per-machine value from EEPROM (kf)
         supports_clot_monitoring_clld=False,
         stop_disc_type="core_ii",
-        instrument_type="FM-STAR",
+        instrument_type=instrument_type,
         head_type="96 head II",
+        y_range=self._head96_resolve_y_range(fw_version),
+        y_speed_range=self._head96_resolve_y_speed_range(fw_version),
+        z_range=self._head96_resolve_z_range(instrument_type),
+        dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
+        dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(fw_version),
       )
     else:
       self._head96_information = None

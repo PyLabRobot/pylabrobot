@@ -1385,7 +1385,7 @@ class PipChannelInformation:
   pressure_adc: PressureADC
 
 
-@dataclass
+@dataclass(frozen=True, eq=False)
 class Head96Information:
   """Information about the installed 96-head."""
 
@@ -1401,6 +1401,26 @@ class Head96Information:
   stop_disc_type: StopDiscType
   instrument_type: InstrumentType
   head_type: HeadType
+
+  # === Firmware/variant-derived limits, in standard units (resolved at setup) ===
+  y_range: Tuple[float, float]
+  """Y-drive position window (mm)."""
+  y_speed_range: Tuple[float, float]
+  """Y-drive speed window (mm/s)."""
+  z_range: Tuple[float, float]
+  """Z-drive position window (mm); FM-STAR extends it."""
+  dispensing_drive_range: Tuple[float, float]
+  """Dispensing-drive (piston) volume window (uL); applies to both aspirate and dispense."""
+  dispensing_drive_speed_range: Tuple[float, float]
+  """Dispensing-drive speed window (uL/s)."""
+
+  # === Encoder resolutions (defaulted device facts). Y/Z are unchanged across firmware; the
+  # dispensing/squeezer resolutions are the 2013+ generation values (2008-era heads differ). ===
+  z_drive_mm_per_increment: float = 0.005
+  y_drive_mm_per_increment: float = 0.015625
+  dispensing_drive_mm_per_increment: float = 0.001025641026
+  dispensing_drive_uL_per_increment: float = 0.019340933
+  squeezer_drive_mm_per_increment: float = 0.0002086672009
 
 
 @dataclass(frozen=True, eq=False)
@@ -2061,13 +2081,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         configuration_96head = await self._head96_request_configuration()
         head96_type = await self.head96_request_type()
 
+        instrument_type: Head96Information.InstrumentType = (
+          "legacy" if configuration_96head[2] == "0" else "FM-STAR"
+        )
         self._head96_information = Head96Information(
           fw_version=fw_version,
           x_offset=await self._head96_request_x_offset(),
           supports_clot_monitoring_clld=bool(int(configuration_96head[0])),
           stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
-          instrument_type="legacy" if configuration_96head[2] == "0" else "FM-STAR",
+          instrument_type=instrument_type,
           head_type=head96_type,
+          y_range=self._head96_resolve_y_range(fw_version),
+          y_speed_range=self._head96_resolve_y_speed_range(fw_version),
+          z_range=self._head96_resolve_z_range(instrument_type),
+          dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
+          dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(
+            fw_version
+          ),
         )
 
     async def set_up_arm_modules():
@@ -7706,14 +7736,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def _head96_request_configuration(self) -> List[str]:
     """Request the 96-head configuration (raw) using the QU command.
 
-    The instrument returns a sequence of positional tokens. This method returns
-    those tokens without decoding them, but the following indices are currently
-    understood:
+    The instrument returns ten blank-separated decimal values. This method returns
+    them as a list of strings, undecoded; the list indices currently understood are:
 
         - index 0: clot_monitoring_with_clld
         - index 1: stop_disc_type (codes: 0=core_i, 1=core_ii)
         - index 2: instrument_type (codes: 0=legacy, 1=FM-STAR)
-        - indices 3..9: reservable positions (positions 4..10)
+        - indices 3..9: reserve
+
+    Indices 1 and 2 are only populated from 2025 firmware onwards; earlier firmware
+    returns them as reserve (read back as 0), so on a pre-2025 instrument
+    stop_disc_type resolves to core_i and instrument_type to legacy regardless of the
+    actual hardware.
 
     Returns:
       Raw positional tokens extracted from the QU response (the portion after the last ``"au"`` marker).
@@ -7731,6 +7765,46 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
     resp = await self.send_command(module="H0", command="QG", fmt="qg#")
     return type_map.get(resp["qg"], "unknown")
+
+  def _head96_resolve_y_range(self, fw_version: datetime.date) -> Tuple[float, float]:
+    """Y-drive position window (mm); 2013 firmware shifted it from the 2008 range."""
+    min_inc, max_inc = (6000, 36000) if fw_version.year >= 2010 else (7000, 36200)
+    return (
+      self._head96_y_drive_increment_to_mm(min_inc),
+      self._head96_y_drive_increment_to_mm(max_inc),
+    )
+
+  def _head96_resolve_y_speed_range(self, fw_version: datetime.date) -> Tuple[float, float]:
+    """Y-drive speed window (mm/s). The pre-2021 max (390.625 = the firmware default, 25000 inc) is
+    an empirical, deck-tested cap; per firmware version the maxima are 312.5 (2008) and 625 (2013+).
+    Verify on a pre-2021 head before raising it. Refactored verbatim from head96_move_y."""
+    return (0.78125, 390.625 if fw_version.year <= 2021 else 625.0)
+
+  def _head96_resolve_z_range(self, instrument_type: str) -> Tuple[float, float]:
+    """Z-drive position window (mm); FM-STAR extends it (za/zb/zh all share this range)."""
+    min_inc, max_inc = (24200, 76200) if instrument_type == "FM-STAR" else (36100, 68500)
+    return (
+      self._head96_z_drive_increment_to_mm(min_inc),
+      self._head96_z_drive_increment_to_mm(max_inc),
+    )
+
+  def _head96_resolve_dispensing_drive_range(
+    self, fw_version: datetime.date
+  ) -> Tuple[float, float]:
+    """Aspirate/dispense piston volume window (uL); 2013 firmware widened the max from 62130 inc."""
+    max_inc = 64350 if fw_version.year >= 2010 else 62130
+    return (0.0, self._head96_dispensing_drive_increment_to_uL(max_inc))
+
+  def _head96_resolve_dispensing_drive_speed_range(
+    self, fw_version: datetime.date
+  ) -> Tuple[float, float]:
+    """Dispensing-drive speed window (uL/s); 2013 firmware widened the max from 52000 inc."""
+    min_inc = 5  # firmware dv minimum (00005 increments/second)
+    max_inc = 55000 if fw_version.year >= 2010 else 52000
+    return (
+      self._head96_dispensing_drive_increment_to_uL(min_inc),
+      self._head96_dispensing_drive_increment_to_uL(max_inc),
+    )
 
   # -------------- 3.10.1 Initialization --------------
 
@@ -7824,12 +7898,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.2 96-Head Movements --------------
 
-  # Conversion factors for 96-Head (mm per increment)
-  _head96_z_drive_mm_per_increment = 0.005
-  _head96_y_drive_mm_per_increment = 0.015625
-  _head96_dispensing_drive_mm_per_increment = 0.001025641026
-  _head96_dispensing_drive_uL_per_increment = 0.019340933
-  _head96_squeezer_drive_mm_per_increment = 0.0002086672009
+  # Conversion factors for 96-Head: owned by Head96Information now (encoder resolutions); aliased
+  # here for backwards compatibility.
+  _head96_z_drive_mm_per_increment = Head96Information.z_drive_mm_per_increment
+  _head96_y_drive_mm_per_increment = Head96Information.y_drive_mm_per_increment
+  _head96_dispensing_drive_mm_per_increment = Head96Information.dispensing_drive_mm_per_increment
+  _head96_dispensing_drive_uL_per_increment = Head96Information.dispensing_drive_uL_per_increment
+  _head96_squeezer_drive_mm_per_increment = Head96Information.squeezer_drive_mm_per_increment
 
   # Z-axis conversions
 
@@ -7991,17 +8066,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     fw_version = self._head96_information.fw_version
-
-    # Determine speed limit based on firmware version
-    # Pre-2021 firmware appears to have lower speed capability or safety limits
-    # TODO: Verify exact firmware version and investigate the reason for this change
-    y_speed_upper_limit = 390.625 if fw_version.year <= 2021 else 625.0  # mm/sec
+    y_min, y_max = self._head96_information.y_range
+    y_speed_min, y_speed_max = self._head96_information.y_speed_range
 
     # Validate parameters before hardware communication
-    assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
-    assert 0.78125 <= speed <= y_speed_upper_limit, (
-      f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware version {fw_version}. "
-      f"Your firmware version: {self._head96_information.fw_version}. "
+    assert y_min <= y <= y_max, f"y must be between {y_min} and {y_max} mm"
+    assert y_speed_min <= speed <= y_speed_max, (
+      f"speed must be between {y_speed_min} and {y_speed_max} mm/sec for firmware version {fw_version}. "
+      f"Your firmware version: {fw_version}. "
       "If this limit seems incorrect, please test cautiously with an empty deck and report "
       "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
     )
@@ -8039,7 +8111,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move the 96-head to a specified Z-axis coordinate.
 
     Args:
-      z: Target Z coordinate in mm. Valid range: [180.5, 342.5]
+      z: Target Z coordinate in mm. Valid range: head96_information.z_range (180.5-342.5 mm;
+        FM-STAR extends it).
       speed: Movement speed in mm/sec. Valid range: [0.25, 100.0]. Default: 80.0
       acceleration: Movement acceleration in mm/sec^2. Valid range: [25.0, 500.0]. Default: 300.0
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
@@ -8061,8 +8134,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     fw_version = self._head96_information.fw_version
 
-    # Validate parameters before hardware communication
-    assert 180.5 <= z <= 342.5, "z must be between 180.5 and 342.5 mm"
+    # Validate parameters before hardware communication. The Z window is firmware/variant-adaptive
+    # (FM-STAR extends it), so read it from Head96Information rather than hardcoding the legacy range.
+    z_min, z_max = self._head96_information.z_range
+    assert z_min <= z <= z_max, f"z must be between {z_min} and {z_max} mm"
     assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
     assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
     assert isinstance(current_protection_limiter, int) and (
