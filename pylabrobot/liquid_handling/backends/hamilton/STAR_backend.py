@@ -1432,6 +1432,12 @@ class Head96Information:
   """Z-drive default acceleration (mm/s2)."""
   dispensing_drive_speed_default: float = 261.1
   """Dispensing-drive default speed (uL/s)."""
+  z_speed_range: Tuple[float, float] = (0.25, 100.0)
+  """Z-drive speed window (mm/s); unchanged across the 2008/2013/2025 firmware, unlike the
+  version-resolved y_speed_range."""
+  z_acceleration_range: Tuple[float, float] = (25.0, 500.0)
+  """Z-drive acceleration window (mm/s2); unchanged across the 2008/2013/2025 firmware (the
+  pre-2010 encoding differs, the physical range does not)."""
 
   # === Encoder resolutions (defaulted device facts). Y/Z are unchanged across firmware; the
   # dispensing/squeezer resolutions are the 2013+ generation values (2008-era heads differ). ===
@@ -8286,9 +8292,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate parameters before hardware communication. The Z window is firmware/variant-adaptive
     # (FM-STAR extends it), so read it from Head96Information rather than hardcoding the legacy range.
     z_min, z_max = self._head96_information.z_range
+    z_speed_min, z_speed_max = self._head96_information.z_speed_range
+    z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
     assert z_min <= z <= z_max, f"z must be between {z_min} and {z_max} mm"
-    assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
-    assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
+    assert z_speed_min <= speed <= z_speed_max, (
+      f"speed must be between {z_speed_min} and {z_speed_max} mm/sec"
+    )
+    assert z_accel_min <= acceleration <= z_accel_max, (
+      f"acceleration must be between {z_accel_min} and {z_accel_max} mm/sec**2"
+    )
     assert isinstance(current_protection_limiter, int) and (
       0 <= current_protection_limiter <= 15
     ), "current_protection_limiter must be an integer between 0 and 15"
@@ -8321,7 +8333,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # this method with retract_on_crash=False, so the retract cannot recurse into recovery.
       if retract_on_crash:
         try:
-          await self.head96_move_to_z_safety()
+          # retract slowly (quarter of max speed) - the head may be in liquid after a crash
+          await self.head96_move_to_z_safety(speed=self._head96_information.z_speed_range[1] * 0.25)
         except STARFirmwareError:
           pass  # retract failed too; surface the original error below
       raise
@@ -8406,7 +8419,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @_requires_head96
   async def head96_set_z_speed(self, speed: float):
     """Set the persistent 96-head Z-drive speed (mm/s) without moving, via H0 AA (save parameter zv)."""
-    assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    z_speed_min, z_speed_max = self._head96_information.z_speed_range
+    assert z_speed_min <= speed <= z_speed_max, (
+      f"speed must be between {z_speed_min} and {z_speed_max} mm/sec"
+    )
     return await self.send_command(
       module="H0", command="AA", zv=f"{self._head96_z_drive_mm_to_increment(speed):05}"
     )
@@ -8420,7 +8439,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
     )
-    assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
+    z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
+    assert z_accel_min <= acceleration <= z_accel_max, (
+      f"acceleration must be between {z_accel_min} and {z_accel_max} mm/sec**2"
+    )
     acceleration_multiplier = 1 if self._head96_information.fw_version.year >= 2010 else 0.001
     acceleration_increment = round(
       self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
