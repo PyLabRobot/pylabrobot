@@ -8056,7 +8056,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "requires 96-head firmware version information for safe operation"
     )
     z_max = self._head96_information.z_range[1]
-    return await self.head96_move_stop_disk_z(z_max, speed=speed, acceleration=acceleration)
+    return await self.head96_move_stop_disk_z(
+      z_max, speed=speed, acceleration=acceleration, retract_on_crash=False
+    )
 
   @_requires_head96
   async def head96_park(
@@ -8111,17 +8113,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_move_y(
     self,
     y: float,
-    speed: float = 300.0,
-    acceleration: float = 300.0,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
+    reset_y_parameters: bool = True,
   ):
     """Move the 96-head to a specified Y-axis coordinate.
 
+    An overridden speed/acceleration persists in the drive's volatile register and is inherited by
+    later moves, so it is reset to the head's default afterwards unless `reset_y_parameters` is False.
+
     Args:
       y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
-      speed: Movement speed in mm/sec. Valid range: [0.78125, 390.625 or 625.0]. Default: 300.0
-      acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 781.25]. Default: 300.0
+      speed: Movement speed in mm/sec. Valid range: [0.78125, 390.625 or 625.0]; None uses the head's
+        y_drive_speed_default.
+      acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 781.25]; None uses the
+        head's y_drive_acceleration_default.
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
+      reset_y_parameters: If True (default), reset an overridden speed/acceleration to the head's
+        defaults after the move so it does not persist; set False to deliberately keep it.
 
     Returns:
       Response from the hardware command.
@@ -8139,6 +8149,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
     )
+
+    # Reset only what the caller overrode: None means "use the default", which already leaves the
+    # register at the default, so there is nothing to clean up (no churn on default moves).
+    restore_speed = reset_y_parameters and speed is not None
+    restore_acceleration = reset_y_parameters and acceleration is not None
+    if speed is None:
+      speed = self._head96_information.y_drive_speed_default
+    if acceleration is None:
+      acceleration = self._head96_information.y_drive_acceleration_default
 
     fw_version = self._head96_information.fw_version
     y_min, y_max = self._head96_information.y_range
@@ -8164,16 +8183,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed_increment = self._head96_y_drive_mm_to_increment(speed)
     acceleration_increment = self._head96_y_drive_mm_to_increment(acceleration)
 
-    resp = await self.send_command(
-      module="H0",
-      command="YA",
-      ya=f"{y_increment:05}",
-      yv=f"{speed_increment:05}",
-      yr=f"{acceleration_increment:05}",
-      yw=f"{current_protection_limiter:02}",
-    )
-
-    return resp
+    try:
+      return await self.send_command(
+        module="H0",
+        command="YA",
+        ya=f"{y_increment:05}",
+        yv=f"{speed_increment:05}",
+        yr=f"{acceleration_increment:05}",
+        yw=f"{current_protection_limiter:02}",
+      )
+    finally:
+      if restore_speed:
+        await self.head96_set_y_speed(self._head96_information.y_drive_speed_default)
+      if restore_acceleration:
+        await self.head96_set_y_acceleration(self._head96_information.y_drive_acceleration_default)
 
   @_requires_head96
   async def head96_move_z(
@@ -8209,11 +8232,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed: Optional[float] = None,
     acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
+    reset_z_parameters: bool = True,
+    retract_on_crash: bool = True,
   ):
     """Move the 96-head z-drive (stop disk) to an absolute Z position in mm.
 
     Stop-disk reference, mirroring the single-channel `move_channel_stop_disk_z`: use this for moves
     without a tip; for the tip end with a tip on, use `head96_move_tool_z`.
+
+    An overridden speed/acceleration persists in the drive's volatile register and would be inherited
+    by later moves (and C0-level commands), so it is reset to the head's default afterwards unless
+    `reset_z_parameters` is False. On any firmware error during the move (e.g. the head crashing into
+    something) the head retracts to Z-safety before the error is re-raised.
 
     Args:
       z: Target stop-disk Z in mm. Valid range: Head96Information.z_range (180.5-342.5 mm; FM-STAR
@@ -8223,6 +8253,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       acceleration: Movement acceleration in mm/sec^2, [25.0, 500.0]; None uses the head's
         z_drive_acceleration_default (400 mm/s^2; likewise constant for the Z drive).
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
+      reset_z_parameters: If True (default), reset an overridden speed/acceleration to the head's
+        defaults after the move so it does not persist; set False to deliberately keep it.
+      retract_on_crash: If True (default), retract to Z-safety on any firmware error (e.g. a crash)
+        before re-raising. head96_move_to_z_safety passes False so its own retract cannot recurse.
 
     Returns:
       Response from the hardware command.
@@ -8238,6 +8272,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
     )
+    # Reset only what the caller actually overrode: a None means "use the default", which already
+    # leaves the register at the default, so there is nothing to clean up (no churn on default moves).
+    restore_speed = reset_z_parameters and speed is not None
+    restore_acceleration = reset_z_parameters and acceleration is not None
     if speed is None:
       speed = self._head96_information.z_drive_speed_default
     if acceleration is None:
@@ -8268,16 +8306,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
     )
 
-    resp = await self.send_command(
-      module="H0",
-      command="ZA",
-      za=f"{z_increment:05}",
-      zv=f"{speed_increment:05}",
-      zr=f"{acceleration_increment:06}",
-      zw=f"{current_protection_limiter:02}",
-    )
-
-    return resp
+    try:
+      return await self.send_command(
+        module="H0",
+        command="ZA",
+        za=f"{z_increment:05}",
+        zv=f"{speed_increment:05}",
+        zr=f"{acceleration_increment:06}",
+        zw=f"{current_protection_limiter:02}",
+      )
+    except STARFirmwareError:
+      # Any firmware error here (most importantly a Z-drive crash) can leave the head against an
+      # obstacle, so retract to Z-safety before re-raising. head96_move_to_z_safety calls back into
+      # this method with retract_on_crash=False, so the retract cannot recurse into recovery.
+      if retract_on_crash:
+        try:
+          await self.head96_move_to_z_safety()
+        except STARFirmwareError:
+          pass  # retract failed too; surface the original error below
+      raise
+    finally:
+      if restore_speed:
+        await self.head96_set_z_speed(self._head96_information.z_drive_speed_default)
+      if restore_acceleration:
+        await self.head96_set_z_acceleration(self._head96_information.z_drive_acceleration_default)
 
   @_requires_head96
   async def head96_move_tool_z(self, z: float, speed: Optional[float] = None):
