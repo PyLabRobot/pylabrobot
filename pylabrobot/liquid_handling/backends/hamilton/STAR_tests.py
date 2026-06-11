@@ -480,6 +480,75 @@ class TestHead96DriveDefaults(unittest.IsolatedAsyncioTestCase):
     )
 
 
+class TestHead96CrashRecovery(unittest.IsolatedAsyncioTestCase):
+  """head96_move_stop_disk_z retracts the head to Z-safety on a firmware error then re-raises, and
+  the retract - which routes back through the same primitive - cannot recurse."""
+
+  async def asyncSetUp(self):
+    self.cb = STARChatterboxBackend()
+    self.cb.set_deck(STARLetDeck())
+    await self.cb.setup()
+    assert self.cb._head96_information is not None
+    z_min, z_max = self.cb._head96_information.z_range
+    self.z_target = round((z_min + z_max) / 2, 1)
+    self.z_safety_za = f"{self.cb._head96_z_drive_mm_to_increment(z_max):05}"
+
+  def _crash(self, message):
+    return STARFirmwareError(
+      errors={
+        "CoRe 96 Head": UnknownHamiltonError(
+          message=message, trace_information=62, raw_response=message, raw_module="H0"
+        )
+      },
+      raw_response=message,
+    )
+
+  async def test_crash_retracts_to_z_safety_then_reraises(self):
+    """A ZA firmware error retracts the head to z_range[1] (a second ZA) before the original error
+    propagates."""
+    original = self._crash("z drive movement error")
+    za_targets = []
+
+    async def fake_send(module, command, **kwargs):
+      if command == "ZA":
+        za_targets.append(kwargs["za"])
+        if len(za_targets) == 1:
+          raise original  # the move crashes
+        return {}  # the safety retract succeeds
+      return {}  # AA restore etc.
+
+    self.cb.send_command = unittest.mock.AsyncMock(side_effect=fake_send)
+    with self.assertRaises(STARFirmwareError) as ctx:
+      await self.cb.head96_move_stop_disk_z(self.z_target)
+
+    self.assertIs(ctx.exception, original)
+    move_za = f"{self.cb._head96_z_drive_mm_to_increment(self.z_target):05}"
+    self.assertEqual(za_targets, [move_za, self.z_safety_za])
+
+  async def test_retract_that_also_crashes_does_not_recurse(self):
+    """If the safety retract itself errors, exactly two ZA moves are sent (no recursion) and the
+    ORIGINAL error re-raises, not the retract's."""
+    original = self._crash("original crash")
+    retract_err = self._crash("retract crash")
+    za_count = 0
+
+    async def fake_send(module, command, **kwargs):
+      nonlocal za_count
+      if command == "ZA":
+        za_count += 1
+        if za_count == 1:
+          raise original
+        raise retract_err
+      return {}
+
+    self.cb.send_command = unittest.mock.AsyncMock(side_effect=fake_send)
+    with self.assertRaises(STARFirmwareError) as ctx:
+      await self.cb.head96_move_stop_disk_z(self.z_target)
+
+    self.assertIs(ctx.exception, original)
+    self.assertEqual(za_count, 2)
+
+
 class TestiSWAPYMaxBootstrap(unittest.IsolatedAsyncioTestCase):
   """`_iswap_rotation_drive_request_y_max` runs during setup, before
   `iswap_information` exists, so it must not read it (regression: it used to,
