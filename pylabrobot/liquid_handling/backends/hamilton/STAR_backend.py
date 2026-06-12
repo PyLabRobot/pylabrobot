@@ -8279,10 +8279,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp
 
-  async def _head96_tip_overhang(self) -> float:
-    """The tip overhang (stop disk minus tip bottom) in mm, measured move-free; lets a tip-bottom Z
-    be expressed against the firmware stop-disk reference. Near 0 with no tip on."""
-    return await self.head96_request_stop_disk_z() - (await self.head96_request_position()).z
+  async def head96_request_tip_length(self) -> float:
+    """Measures the length of the tips on the 96-head; the head's counterpart of
+    `request_tip_len_on_channel`. Raises if no tips are present.
+
+    Returns:
+      The measured tip length in millimeters.
+
+    Raises:
+      RuntimeError: If the 96-head holds no tips.
+    """
+    if not await self.head96_request_tip_presence():
+      raise RuntimeError("96-head has no tips (firmware reports none)")
+    stop_disk = await self.head96_request_stop_disk_z()
+    tip_bottom = (await self.head96_request_position()).z
+    return round(stop_disk - (tip_bottom - STARBackend.DEFAULT_TIP_FITTING_DEPTH), 1)
 
   @_requires_head96
   async def head96_move_tool_z(self, z: float, speed: Optional[float] = None):
@@ -8310,7 +8321,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "without a tip attached."
       )
 
-    tip_overhang = await self._head96_tip_overhang()
+    tip_overhang = await self.head96_request_tip_length() - STARBackend.DEFAULT_TIP_FITTING_DEPTH
 
     # The move is in stop-disk space over z_range, so the reachable tip-bottom window is z_range
     # shifted down by the overhang, floored at the deck surface. Validate in tip-bottom terms.
@@ -8494,7 +8505,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # overhang, so minimum_height is the stop-disk position directly and is guarded against z_min.
     overhang = 0.0
     if has_tips:
-      overhang = await self._head96_tip_overhang()
+      overhang = await self.head96_request_tip_length() - STARBackend.DEFAULT_TIP_FITTING_DEPTH
     height_min = max(z_min - overhang, STARBackend.MINIMUM_CHANNEL_Z_POSITION)
     height_max = z_max - overhang
     if minimum_height is None:
@@ -8587,7 +8598,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # overhang, so minimum_height is the stop-disk position directly and is guarded against z_min.
     overhang = 0.0
     if has_tips:
-      overhang = await self._head96_tip_overhang()
+      overhang = await self.head96_request_tip_length() - STARBackend.DEFAULT_TIP_FITTING_DEPTH
     height_min = max(z_min - overhang, STARBackend.MINIMUM_CHANNEL_Z_POSITION)
     height_max = z_max - overhang
     if minimum_height is None:
