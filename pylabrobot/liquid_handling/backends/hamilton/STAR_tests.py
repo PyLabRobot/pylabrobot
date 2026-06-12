@@ -1134,6 +1134,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_head96_basic_aspirate(self):
     self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
     await self.STAR.head96_basic_aspirate(
       volume=100,
@@ -1152,6 +1153,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_head96_basic_dispense(self):
     self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
     await self.STAR.head96_basic_dispense(
       volume=100,
@@ -1180,6 +1182,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_head96_basic_aspirate_default_flow_rate(self):
     """Omitting flow_rate emits the head's default dispensing-drive speed (dv13500)."""
     self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
     await self.STAR.head96_basic_aspirate(
       volume=100, minimum_height=230, surface_following_distance=2, enforce_requires_tip=False
@@ -1196,6 +1199,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     """Omitting flow_rate and stop_flow_rate emits the head default speed (dv13500) and a zero stop
     speed (du00000), with the stop-back and surface-following defaults (dd0000 / ze0000)."""
     self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
     await self.STAR.head96_basic_dispense(
       volume=100, minimum_height=230, enforce_requires_tip=False
@@ -1215,6 +1219,42 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.STAR.head96_basic_aspirate(
         volume=100000, minimum_height=230, enforce_requires_tip=False
       )
+
+  async def test_head96_basic_aspirate_tip_bottom_overhang(self):
+    """With a tip on, minimum_height is tip-bottom: zh = minimum_height + overhang."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
+    self.STAR.head96_request_stop_disk_z = unittest.mock.AsyncMock(return_value=332.0)
+    self.STAR.head96_request_position = unittest.mock.AsyncMock(
+      return_value=Coordinate(0, 0, 245.0)
+    )
+    self.STAR._write_and_read_command.reset_mock()
+    # overhang = 332 - 245 = 87; zh = (200 + 87) / 0.005 = 57400
+    await self.STAR.head96_basic_aspirate(
+      volume=100, minimum_height=200, surface_following_distance=2
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PAid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdj1da05170dv13500dc00000zd0400zh57400to000"
+        )
+      ]
+    )
+
+  async def test_head96_basic_aspirate_minimum_height_defaults_to_floor(self):
+    """Omitting minimum_height with no tip defaults to the firmware Z floor (z_range[0])."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    self.STAR._write_and_read_command.reset_mock()
+    # no tip -> overhang 0 -> minimum_height defaults to z_range[0] = 180.5 mm -> zh 36100
+    await self.STAR.head96_basic_aspirate(volume=100, enforce_requires_tip=False)
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PAid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdj1da05170dv13500dc00000zd0000zh36100to000"
+        )
+      ]
+    )
 
   async def test_core_96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.

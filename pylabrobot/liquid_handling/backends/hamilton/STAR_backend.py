@@ -8279,6 +8279,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp
 
+  async def _head96_tip_overhang(self) -> float:
+    """The tip overhang (stop disk minus tip bottom) in mm, measured move-free; lets a tip-bottom Z
+    be expressed against the firmware stop-disk reference. Near 0 with no tip on."""
+    return await self.head96_request_stop_disk_z() - (await self.head96_request_position()).z
+
   @_requires_head96
   async def head96_move_tool_z(self, z: float, speed: Optional[float] = None):
     """Move the 96-head tip bottom to an absolute Z position in mm.
@@ -8305,9 +8310,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "without a tip attached."
       )
 
-    tip_overhang = (
-      await self.head96_request_stop_disk_z() - (await self.head96_request_position()).z
-    )
+    tip_overhang = await self._head96_tip_overhang()
 
     # The move is in stop-disk space over z_range, so the reachable tip-bottom window is z_range
     # shifted down by the overhang, floored at the deck surface. Validate in tip-bottom terms.
@@ -8432,9 +8435,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_basic_aspirate(
     self,
     volume: float,
-    *,
     flow_rate: Optional[float] = None,
-    minimum_height: float,
+    minimum_height: Optional[float] = None,
     surface_following_distance: float = 0.0,
     enforce_minimum_height: bool = True,
     enforce_requires_tip: bool = True,
@@ -8444,14 +8446,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     The direct, full-control counterpart to `aspirate96`: it takes the height / surface-following /
     flow directly rather than a resource and liquid class, and computes no positions. Acts on the whole
-    head (rigid - no per-channel selection) and assumes the head already holds tips. Values are given
-    in human units and converted to firmware increments. This is a basic, thin command: it does not
-    settle after aspirating (settling is a separate basic command).
+    head (rigid - no per-channel selection). Values are given in human units and converted to firmware
+    increments. This is a basic, thin command: it does not settle after aspirating (settling is a
+    separate basic command).
 
     Args:
-      volume: The volume to aspirate through each channel, uL.
+      volume: The piston (dispensing-drive) volume to aspirate per channel, uL; raw, not liquid-class
+        corrected.
       flow_rate: The dispensing-drive speed, uL/s; None uses the head's default speed.
-      minimum_height: The lowest Z (mm) the head descends to, the end of the aspiration stroke.
+      minimum_height: The lowest the tip end (tip-bottom) descends to, mm - the end of the stroke.
+        None defaults to the deck floor. With no tip on, this is the stop-disk position directly.
       surface_following_distance: The Z travel during aspiration, mm; 0 keeps the head in place so it
         cannot drive into the container bottom.
       enforce_minimum_height: If True, clamp any deeper target to minimum_height; if False, surface
@@ -8478,21 +8482,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= surface_following_distance <= surface_following_max, (
       f"surface_following_distance must be between 0 and {surface_following_max} mm"
     )
-    assert z_min <= minimum_height <= z_max, (
-      f"minimum_height must be between {z_min} and {z_max} mm"
-    )
 
-    if enforce_requires_tip:
-      has_tips = await self.head96_request_tip_presence()
-      if not has_tips:
-        raise RuntimeError(
-          "96-head has no tips (firmware reports none); pick up tips before aspirating"
-        )
+    has_tips = bool(await self.head96_request_tip_presence())
+    if enforce_requires_tip and not has_tips:
+      raise RuntimeError(
+        "96-head has no tips (firmware reports none); pick up tips before aspirating"
+      )
+
+    # minimum_height is a tip-bottom height: the tip overhang (stop disk - tip bottom) converts it to
+    # the firmware stop-disk zh, and the deck floor caps how deep it may go. With no tip there is no
+    # overhang, so minimum_height is the stop-disk position directly and is guarded against z_min.
+    overhang = 0.0
+    if has_tips:
+      overhang = await self._head96_tip_overhang()
+    height_min = max(z_min - overhang, STARBackend.MINIMUM_CHANNEL_Z_POSITION)
+    height_max = z_max - overhang
+    if minimum_height is None:
+      minimum_height = height_min
+    assert height_min <= minimum_height <= height_max, (
+      f"minimum_height must be between {height_min} and {height_max} mm"
+    )
 
     volume_increment = self._head96_dispensing_drive_uL_to_increment(volume)
     flow_rate_increment = self._head96_dispensing_drive_uL_to_increment(flow_rate)
     surface_following_increment = self._head96_z_drive_mm_to_increment(surface_following_distance)
-    minimum_height_increment = self._head96_z_drive_mm_to_increment(minimum_height)
+    zh_increment = self._head96_z_drive_mm_to_increment(minimum_height + overhang)
     return await self.send_command(
       module="H0",
       command="PA",
@@ -8502,7 +8516,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dv=f"{flow_rate_increment:05}",
       dc="00000",  # pre-wetting off; its interaction with surface following is unverified
       zd=f"{surface_following_increment:04}",
-      zh=f"{minimum_height_increment:05}",
+      zh=f"{zh_increment:05}",
       to="000",  # settling_time not exposed here (firmware allows it); it is its own basic command
     )
 
@@ -8510,9 +8524,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_basic_dispense(
     self,
     volume: float,
-    *,
     flow_rate: Optional[float] = None,
-    minimum_height: float,
+    minimum_height: Optional[float] = None,
     stop_back_volume: float = 0.0,
     surface_following_distance: float = 0.0,
     stop_flow_rate: Optional[float] = None,
@@ -8521,14 +8534,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Dispense on the 96-head with surface following (the firmware drives Z and the dispensing drive
     in parallel).
 
-    The direct, full-control counterpart to `dispense96`. Acts on the whole head (rigid) and assumes
-    the head already holds tips. This is a basic, thin command: it does not settle after dispensing
-    (settling is a separate basic command).
+    The direct, full-control counterpart to `dispense96`. Acts on the whole head (rigid). This is a
+    basic, thin command: it does not settle after dispensing (settling is a separate basic command).
 
     Args:
-      volume: The volume to dispense through each channel, uL.
+      volume: The piston (dispensing-drive) volume to dispense per channel, uL; raw, not liquid-class
+        corrected.
       flow_rate: The dispensing-drive speed, uL/s; None uses the head's default speed.
-      minimum_height: The lowest Z (mm) the head descends to, the end of the dispense stroke.
+      minimum_height: The lowest the tip end (tip-bottom) descends to, mm - the end of the stroke.
+        None defaults to the deck floor. With no tip on, this is the stop-disk position directly.
       stop_back_volume: The volume drawn back at the end to stop dripping, uL.
       surface_following_distance: The Z travel during dispense, mm.
       stop_flow_rate: The dispensing-drive stop speed, uL/s; None uses the firmware default (0).
@@ -8560,23 +8574,33 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= surface_following_distance <= surface_following_max, (
       f"surface_following_distance must be between 0 and {surface_following_max} mm"
     )
-    assert z_min <= minimum_height <= z_max, (
-      f"minimum_height must be between {z_min} and {z_max} mm"
-    )
     assert 0 <= stop_flow_rate <= flow_max, f"stop_flow_rate must be between 0 and {flow_max} uL/s"
 
-    if enforce_requires_tip:
-      has_tips = await self.head96_request_tip_presence()
-      if not has_tips:
-        raise RuntimeError(
-          "96-head has no tips (firmware reports none); pick up tips before dispensing"
-        )
+    has_tips = bool(await self.head96_request_tip_presence())
+    if enforce_requires_tip and not has_tips:
+      raise RuntimeError(
+        "96-head has no tips (firmware reports none); pick up tips before dispensing"
+      )
+
+    # minimum_height is a tip-bottom height: the tip overhang (stop disk - tip bottom) converts it to
+    # the firmware stop-disk zh, and the deck floor caps how deep it may go. With no tip there is no
+    # overhang, so minimum_height is the stop-disk position directly and is guarded against z_min.
+    overhang = 0.0
+    if has_tips:
+      overhang = await self._head96_tip_overhang()
+    height_min = max(z_min - overhang, STARBackend.MINIMUM_CHANNEL_Z_POSITION)
+    height_max = z_max - overhang
+    if minimum_height is None:
+      minimum_height = height_min
+    assert height_min <= minimum_height <= height_max, (
+      f"minimum_height must be between {height_min} and {height_max} mm"
+    )
 
     volume_increment = self._head96_dispensing_drive_uL_to_increment(volume)
     flow_rate_increment = self._head96_dispensing_drive_uL_to_increment(flow_rate)
     stop_back_increment = self._head96_dispensing_drive_uL_to_increment(stop_back_volume)
     surface_following_increment = self._head96_z_drive_mm_to_increment(surface_following_distance)
-    minimum_height_increment = self._head96_z_drive_mm_to_increment(minimum_height)
+    zh_increment = self._head96_z_drive_mm_to_increment(minimum_height + overhang)
     stop_flow_rate_increment = self._head96_dispensing_drive_uL_to_increment(stop_flow_rate)
     return await self.send_command(
       module="H0",
@@ -8586,7 +8610,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dv=f"{flow_rate_increment:05}",
       dd=f"{stop_back_increment:04}",
       ze=f"{surface_following_increment:04}",
-      zh=f"{minimum_height_increment:05}",
+      zh=f"{zh_increment:05}",
       du=f"{stop_flow_rate_increment:05}",
     )
 
