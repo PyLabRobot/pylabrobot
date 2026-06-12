@@ -33,6 +33,7 @@ azenta/index
 big_bear/index
 brooks/index
 byonoy/index
+celigo/index
 cole_parmer/index
 curiox/index
 hamilton/index
