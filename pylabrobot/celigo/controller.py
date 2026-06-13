@@ -150,13 +150,11 @@ class CeligoController:
     wait_for_ready: bool = False,
     timeout_ms: int = 0,
   ) -> bool:
-    """Move a galvo axis. Payload = uint16 galvo, int32 dac, uint16 wait, uint16 timeout.
+    """Move a galvo axis to a voltage (0 V = mirror-centered DAC = 0x8000).
 
-    .. warning::
-       The ``MOVE_GALVO`` payload layout is UNVERIFIED. There are two candidate layouts:
-       (A) ``[galvo:u16][dac:i32][wait:u16][timeout:u16]`` (10 bytes, current implementation)
-       and (B) ``[chan:u16][dac:u16][rate:u32]`` (8 bytes). Verify the correct layout before
-       relying on galvo positioning.
+    Payload = ``[galvo:u16][dac:i32][wait:u16][timeout:u16]`` (10 bytes), big-endian.
+    Hardware-verified: this layout is accepted and steers the imaging field; the shorter
+    8-byte form is rejected with ``NACK_CMD_READ_FAILED``.
     """
     dac = volts_to_dac_units(voltage)
     payload = struct.pack(">HiHH", int(galvo), dac, 1 if wait_for_ready else 0, timeout_ms)
