@@ -1409,7 +1409,7 @@ class Head96Information:
   """Y-drive speed window (mm/s)."""
   y_acceleration_range: Tuple[float, float]
   """Y-drive acceleration window (mm/s2); the max changed across firmware (500.0 on 2008, 781.25 on
-  2013+), so it is version-resolved like y_speed_range, not a constant."""
+  2013+), so it is version-resolved like `y_speed_range`, not a constant."""
   z_range: Tuple[float, float]
   """Z-drive position window (mm); FM-STAR extends it."""
   dispensing_drive_range: Tuple[float, float]
@@ -1437,7 +1437,7 @@ class Head96Information:
   """Dispensing-drive default speed (uL/s)."""
   z_speed_range: Tuple[float, float] = (0.25, 100.0)
   """Z-drive speed window (mm/s); unchanged across the 2008/2013/2025 firmware, unlike the
-  version-resolved y_speed_range."""
+  version-resolved `y_speed_range`."""
   z_acceleration_range: Tuple[float, float] = (25.0, 500.0)
   """Z-drive acceleration window (mm/s2); unchanged across the 2008/2013/2025 firmware (the
   pre-2010 encoding differs, the physical range does not)."""
@@ -8077,8 +8077,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def head96_y_drive_speed_default(self) -> float:
     """User-overridable 96-head Y-drive speed default (mm/s) a move restores the drive register to.
 
-    Seeded from Head96Information.y_drive_speed_default at setup; assign your own default and it is
-    validated against y_speed_range before taking effect.
+    Seeded from `Head96Information.y_drive_speed_default` at setup; assign your own default and it is
+    validated against `y_speed_range` before taking effect.
     """
     assert self._head96_y_drive_speed_default is not None, (
       "96-head information not loaded; run setup()"
@@ -8097,8 +8097,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def head96_y_drive_acceleration_default(self) -> float:
     """User-overridable 96-head Y-drive acceleration default (mm/s2) a move restores the register to.
 
-    Seeded from Head96Information.y_drive_acceleration_default at setup; assign your own default and
-    it is validated against y_acceleration_range before taking effect.
+    Seeded from `Head96Information.y_drive_acceleration_default` at setup; assign your own default and
+    it is validated against `y_acceleration_range` before taking effect.
     """
     assert self._head96_y_drive_acceleration_default is not None, (
       "96-head information not loaded; run setup()"
@@ -8117,8 +8117,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def head96_z_drive_speed_default(self) -> float:
     """User-overridable 96-head Z-drive speed default (mm/s) a move restores the drive register to.
 
-    Seeded from Head96Information.z_drive_speed_default at setup; assign your own default and it is
-    validated against z_speed_range before taking effect.
+    Seeded from `Head96Information.z_drive_speed_default` at setup; assign your own default and it is
+    validated against `z_speed_range` before taking effect.
     """
     assert self._head96_z_drive_speed_default is not None, (
       "96-head information not loaded; run setup()"
@@ -8137,8 +8137,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def head96_z_drive_acceleration_default(self) -> float:
     """User-overridable 96-head Z-drive acceleration default (mm/s2) a move restores the register to.
 
-    Seeded from Head96Information.z_drive_acceleration_default at setup; assign your own default and
-    it is validated against z_acceleration_range before taking effect.
+    Seeded from `Head96Information.z_drive_acceleration_default` at setup; assign your own default and
+    it is validated against `z_acceleration_range` before taking effect.
     """
     assert self._head96_z_drive_acceleration_default is not None, (
       "96-head information not loaded; run setup()"
@@ -8156,7 +8156,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_request_y_speed(self) -> float:
     """Request the persistent 96-head Y-drive speed (mm/s), via H0 RA (read parameter yv).
 
-    The read counterpart of _head96_set_y_speed.
+    The read counterpart of `_head96_set_y_speed`.
     """
     resp = await self.send_command(module="H0", command="RA", ra="yv", fmt="yv#####")
     return self._head96_y_drive_increment_to_mm(resp["yv"])
@@ -8164,7 +8164,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_request_y_acceleration(self) -> float:
     """Request the persistent 96-head Y-drive acceleration (mm/s^2), via H0 RA (read parameter yr).
 
-    The read counterpart of _head96_set_y_acceleration.
+    The read counterpart of `_head96_set_y_acceleration`.
     """
     resp = await self.send_command(module="H0", command="RA", ra="yr", fmt="yr#####")
     return self._head96_y_drive_increment_to_mm(resp["yr"])
@@ -8172,7 +8172,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_request_z_speed(self) -> float:
     """Request the persistent 96-head Z-drive speed (mm/s), via H0 RA (read parameter zv).
 
-    The read counterpart of _head96_set_z_speed.
+    The read counterpart of `_head96_set_z_speed`.
     """
     resp = await self.send_command(module="H0", command="RA", ra="zv", fmt="zv#####")
     return self._head96_z_drive_increment_to_mm(resp["zv"])
@@ -8180,8 +8180,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_request_z_acceleration(self) -> float:
     """Request the persistent 96-head Z-drive acceleration (mm/s^2), via H0 RA (read parameter zr).
 
-    The read counterpart of _head96_set_z_acceleration; undoes the firmware-version acceleration
-    scaling that the setter (and head96_move_stop_disk_z) applies.
+    The read counterpart of `_head96_set_z_acceleration`; undoes the firmware-version acceleration
+    scaling that the setter (and `head96_move_stop_disk_z`) applies.
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
@@ -8195,7 +8195,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Set the persistent 96-head Y-drive speed (mm/s) on the device without moving.
 
     On-device write for troubleshooting or specialized use, not day-to-day - set
-    head96_y_drive_speed_default for routine control. Subsequent Y moves that don't pass their own
+    `head96_y_drive_speed_default` for routine control. Subsequent Y moves that don't pass their own
     speed - including the C0-level 96-head commands - inherit this until it is changed or the drive
     re-initialises.
     """
@@ -8215,7 +8215,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Set the persistent 96-head Y-drive acceleration (mm/s^2) on the device without moving.
 
     On-device write for troubleshooting or specialized use, not day-to-day - set
-    head96_y_drive_acceleration_default for routine control.
+    `head96_y_drive_acceleration_default` for routine control.
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
@@ -8233,7 +8233,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Set the persistent 96-head Z-drive speed (mm/s) on the device without moving.
 
     On-device write for troubleshooting or specialized use, not day-to-day - set
-    head96_z_drive_speed_default for routine control.
+    `head96_z_drive_speed_default` for routine control.
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
@@ -8251,8 +8251,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Set the persistent 96-head Z-drive acceleration (mm/s^2) on the device without moving.
 
     On-device write for troubleshooting or specialized use, not day-to-day - set
-    head96_z_drive_acceleration_default for routine control. Applies the same firmware-version
-    acceleration scaling as head96_move_stop_disk_z (pre-2010 x0.001).
+    `head96_z_drive_acceleration_default` for routine control. Applies the same firmware-version
+    acceleration scaling as `head96_move_stop_disk_z` (pre-2010 x0.001).
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
@@ -8360,9 +8360,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
       speed: Movement speed in mm/sec. Valid range: [0.78125, 390.625 or 625.0]; None uses
-        head96_y_drive_speed_default.
+        `head96_y_drive_speed_default`.
       acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 500.0 or 781.25]; None
-        uses head96_y_drive_acceleration_default.
+        uses `head96_y_drive_acceleration_default`.
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
       reset_y_parameters: If True (default), reset an overridden speed/acceleration to the head's
         defaults after the move so it does not persist; set False to deliberately keep it.
@@ -8483,10 +8483,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       z: Target stop-disk Z in mm. Valid range: Head96Information.z_range (180.5-342.5 mm; FM-STAR
         extends it).
-      speed: Movement speed in mm/sec, [0.25, 100.0]; None uses head96_z_drive_speed_default
+      speed: Movement speed in mm/sec, [0.25, 100.0]; None uses `head96_z_drive_speed_default`
         (seeded to 85 mm/s; constant for the Z drive, not version-resolved like the Y-drive default).
       acceleration: Movement acceleration in mm/sec^2, [25.0, 500.0]; None uses
-        head96_z_drive_acceleration_default (seeded to 400 mm/s^2; likewise constant for the Z drive).
+        `head96_z_drive_acceleration_default` (seeded to 400 mm/s^2; likewise constant for the Z drive).
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
       reset_z_parameters: If True (default), reset an overridden speed/acceleration to the head's
         defaults after the move so it does not persist; set False to deliberately keep it.
