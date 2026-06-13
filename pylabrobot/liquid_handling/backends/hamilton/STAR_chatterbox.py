@@ -169,6 +169,7 @@ class STARChatterboxBackend(STARBackend):
         head_type="96 head II",
         y_range=self._head96_resolve_y_range(fw_version),
         y_speed_range=self._head96_resolve_y_speed_range(fw_version),
+        y_acceleration_range=self._head96_resolve_y_acceleration_range(fw_version),
         z_range=self._head96_resolve_z_range(instrument_type),
         dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
         dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(fw_version),
@@ -181,6 +182,15 @@ class STARChatterboxBackend(STARBackend):
         squeezer_drive_acceleration_default=self._head96_resolve_squeezer_drive_acceleration_default(
           fw_version
         ),
+      )
+      # Seed the user-overridable drive defaults from the frozen factory facts (mirrors STARBackend).
+      self._head96_y_drive_speed_default = self._head96_information.y_drive_speed_default
+      self._head96_y_drive_acceleration_default = (
+        self._head96_information.y_drive_acceleration_default
+      )
+      self._head96_z_drive_speed_default = self._head96_information.z_drive_speed_default
+      self._head96_z_drive_acceleration_default = (
+        self._head96_information.z_drive_acceleration_default
       )
     else:
       self._head96_information = None
