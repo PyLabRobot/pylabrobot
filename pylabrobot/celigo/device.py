@@ -29,7 +29,7 @@ from pylabrobot.celigo.config import (
   load_calibration,
   load_hardware_defaults,
 )
-from pylabrobot.celigo.controller import CeligoController, ControllerStatus
+from pylabrobot.celigo.controller import CeligoController, ControllerStatus, GalvoType
 from pylabrobot.celigo.coordinates import CoordinateSystems
 from pylabrobot.celigo.ezstepper import EZCommand
 from pylabrobot.celigo.navigation import (
@@ -59,11 +59,12 @@ class AxisMotion:
   hold_current: Optional[int] = None
 
 
-# Default motion parameters; override per-axis via Celigo(motion=...).
+# Default motion parameters; override per-axis via Celigo(motion=...). Move currents are set
+# high enough not to stall (a stall lets the stepper count drift from the encoder = desync).
 DEFAULT_MOTION = {
   X_AXIS: AxisMotion(velocity=3543, acceleration=3543, move_current=65),
-  Y_AXIS: AxisMotion(velocity=3543, acceleration=3543, move_current=55),
-  Z_AXIS: AxisMotion(velocity=5000, acceleration=5000, hold_current=25),
+  Y_AXIS: AxisMotion(velocity=3543, acceleration=3543, move_current=75),
+  Z_AXIS: AxisMotion(velocity=5000, acceleration=5000, move_current=50, hold_current=25),
   FILTER_AXIS: AxisMotion(velocity=3543, acceleration=3543),
 }
 
@@ -84,6 +85,8 @@ class Celigo:
     plate: PlateGeometry = CORNING_3603_96,
     motion: Optional[dict] = None,
     move_timeout_s: float = 30.0,
+    arrival_tol: int = 80,
+    stall_limit: int = 12,
   ):
     self._owns_transport = transport is None
     self.transport = transport if transport is not None else SerialTransport(port, baudrate)
@@ -97,6 +100,8 @@ class Celigo:
     self.coords: Optional[CoordinateSystems] = None
     self.motion = {**DEFAULT_MOTION, **(motion or {})}
     self.move_timeout_s = move_timeout_s
+    self.arrival_tol = arrival_tol
+    self.stall_limit = stall_limit
     self.motors: List = []
 
   # -- lifecycle -------------------------------------------------------------
@@ -162,15 +167,95 @@ class Celigo:
       time.sleep(0.1)
     raise TimeoutError(f"axis {axis} not ready within timeout")
 
+  def wait_arrival(
+    self, axis: int, target: int, tolerance: Optional[int] = None, timeout: Optional[float] = None
+  ) -> int:
+    """Poll the encoder until the axis reaches ``target`` (within tolerance) or stalls.
+
+    The EZStepper "ready" flag goes true even when an axis stalls short of its target, which
+    silently desyncs the stepper count from the encoder. Verifying the encoder actually
+    arrived turns that failure into a raised :class:`RuntimeError` instead of a wrong position.
+    """
+    c = self._ctrl()
+    tol = tolerance if tolerance is not None else self.arrival_tol
+    deadline = time.time() + (timeout if timeout is not None else self.move_timeout_s)
+    last: Optional[int] = None
+    stable = 0
+    while time.time() < deadline:
+      pos = c.get_encoder_position(axis)
+      if abs(pos - target) <= tol:
+        return pos
+      if pos == last:
+        stable += 1
+        if stable >= self.stall_limit:
+          raise RuntimeError(
+            f"axis {axis} stalled at {pos}, target {target} (raise its move current)"
+          )
+      else:
+        stable = 0
+      last = pos
+      time.sleep(0.15)
+    raise TimeoutError(f"axis {axis} did not reach {target} (at {c.get_encoder_position(axis)})")
+
   # -- motion ----------------------------------------------------------------
 
-  def move_axis_to(self, axis: int, ticks: int, wait: bool = True) -> Optional[int]:
-    """Absolute move of an axis to an encoder-tick target (with V/L from motion params)."""
+  def move_axis_to(
+    self, axis: int, ticks: int, wait: bool = True, tolerance: Optional[int] = None
+  ) -> Optional[int]:
+    """Absolute move of an axis to an encoder-tick target (with V/L/current from motion params).
+
+    When ``wait`` is set, completion is verified against the encoder (not just the ready flag).
+    """
     tokens = self._move_tokens(axis, EZCommand.MOVE_ABSOLUTE, ticks)
     resp = self._ctrl().send_ezstepper(ezstepper.multi_command(tokens, axis))
     if not resp.ok:
       raise RuntimeError(f"axis {axis} move error: {resp.error.name}")
-    return self.wait_ready(axis) if wait else None
+    return self.wait_arrival(axis, ticks, tolerance) if wait else None
+
+  def home_axis(
+    self,
+    axis: int,
+    velocity: int = 3000,
+    settle_polls: int = 6,
+    timeout: Optional[float] = None,
+  ) -> int:
+    """Re-home an axis to re-sync the stepper count with its encoder (recovery after a stall).
+
+    Uses the axis's configured move/hold currents. The caller must ensure the path is clear
+    (e.g. retract Z before homing X/Y). Returns the settled encoder position.
+    """
+    c = self._ctrl()
+    m = self.motion[axis]
+    if m.move_current is not None:
+      c.send_ezstepper(ezstepper.single_command(EZCommand.SET_MOVE_CURRENT, m.move_current, axis))
+    if m.hold_current is not None:
+      c.send_ezstepper(ezstepper.single_command(EZCommand.SET_HOLD_CURRENT, m.hold_current, axis))
+    resp = c.send_ezstepper(
+      ezstepper.multi_command(
+        [
+          (EZCommand.SET_VELOCITY, velocity),
+          (EZCommand.SET_ACCELERATION, velocity),
+          (EZCommand.HOME, 0),
+        ],
+        axis,
+      )
+    )
+    if not resp.ok:
+      raise RuntimeError(f"axis {axis} home error: {resp.error.name}")
+    deadline = time.time() + (timeout if timeout is not None else self.move_timeout_s)
+    last: Optional[int] = None
+    stable = 0
+    while time.time() < deadline:
+      pos = c.get_encoder_position(axis)
+      if pos == last:
+        stable += 1
+        if stable >= settle_polls:
+          return pos
+      else:
+        stable = 0
+      last = pos
+      time.sleep(0.15)
+    return c.get_encoder_position(axis)
 
   def move_z(self, ticks: int, wait: bool = True) -> Optional[int]:
     """Move the Z/focus axis to an absolute encoder target."""
@@ -194,10 +279,12 @@ class Celigo:
   # -- door / plate load-unload (the stage eject/load choreography) -----------
 
   def open_door(self, eject_steps: int = 25000) -> None:
-    """Drive the stage out to the eject station (limit-protected relative moves)."""
+    """Drive the stage out to the eject station (limit-protected relative moves).
+
+    These are moves *to a hard limit*, so completion uses the ready flag rather than an
+    encoder target. Move currents are included in the move tokens.
+    """
     c = self._ctrl()
-    self._set_move_current(X_AXIS)
-    self._set_move_current(Y_AXIS)
     c.send_ezstepper(
       ezstepper.multi_command(
         self._move_tokens(X_AXIS, EZCommand.MOVE_NEGATIVE, eject_steps), X_AXIS
@@ -229,24 +316,25 @@ class Celigo:
     c.write_dac_raw(BRIGHTFIELD_CHANNEL, value if on else 0)
     return c.read_dac_raw(BRIGHTFIELD_CHANNEL)
 
+  # -- galvo -----------------------------------------------------------------
+
+  def move_galvo(self, galvo: GalvoType, voltage: float, **kwargs) -> bool:
+    """Steer a galvo axis to a voltage (0 V = field-centered). Forwarded to the controller."""
+    return self._ctrl().move_galvo(galvo, voltage, **kwargs)
+
   # -- internals -------------------------------------------------------------
 
   def _move_tokens(self, axis: int, move_cmd: EZCommand, arg: int):
     m = self.motion[axis]
     tokens = []
+    if m.move_current is not None:
+      tokens.append((EZCommand.SET_MOVE_CURRENT, m.move_current))
     if m.hold_current is not None:
       tokens.append((EZCommand.SET_HOLD_CURRENT, m.hold_current))
     tokens.append((EZCommand.SET_VELOCITY, m.velocity))
     tokens.append((EZCommand.SET_ACCELERATION, m.acceleration))
     tokens.append((move_cmd, arg))
     return tokens
-
-  def _set_move_current(self, axis: int) -> None:
-    m = self.motion[axis]
-    if m.move_current is not None:
-      self._ctrl().send_ezstepper(
-        ezstepper.single_command(EZCommand.SET_MOVE_CURRENT, m.move_current, axis)
-      )
 
   def _ctrl(self) -> CeligoController:
     if self.controller is None:

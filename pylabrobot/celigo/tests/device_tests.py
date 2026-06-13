@@ -9,7 +9,7 @@ from pylabrobot.celigo.config import (
   HardwareDefaultConfig,
 )
 from pylabrobot.celigo.demo import MockBoard
-from pylabrobot.celigo.device import Celigo
+from pylabrobot.celigo.device import Celigo, Y_AXIS
 from pylabrobot.celigo.navigation import CORNING_3603_96, well_to_encoder_ticks
 
 
@@ -79,6 +79,42 @@ class TestFacade(unittest.TestCase):
     cel.move_z(10337)  # mock returns ready; should not raise
     enc = cel.read_encoders()
     self.assertEqual(set(enc), {"x", "y", "z", "filter"})
+
+  def test_move_z_verifies_encoder_arrival(self):
+    cel = _celigo()
+    cel.setup()
+    self.assertEqual(cel.move_z(10337), 10337)  # returns the arrived encoder position
+    self.assertEqual(cel.read_encoders()["z"], 10337)
+
+  def test_move_to_well_updates_encoders(self):
+    cel = _celigo()
+    cel.setup()
+    xt, yt = cel.move_to_well("A1")
+    enc = cel.read_encoders()
+    self.assertEqual((enc["x"], enc["y"]), (xt, yt))
+
+  def test_move_includes_move_current(self):
+    cel = _celigo()
+    cel.setup()
+    cel.move_z(10337)
+    issued = [ez for _name, ez in cel.transport.log if ez]
+    self.assertTrue(any("m50" in c and "A10337" in c for c in issued))  # Z move current set
+
+  def test_stall_raises(self):
+    class _StallBoard(MockBoard):
+      def _motor_reply(self, ez):  # never advance position -> looks like a stall
+        data = f"0`{self.enc.get(int(ez[1]) if ez[1:2].isdigit() else 3, 0)}" if "?8" in ez else "0`"
+        return ("\x02" + data + "\x03q").encode("latin-1")
+
+    cel = Celigo(transport=_StallBoard(), stall_limit=2)
+    cel.setup()
+    with self.assertRaises(RuntimeError):
+      cel.move_z(10337)
+
+  def test_home_axis_resyncs(self):
+    cel = _celigo()
+    cel.setup()
+    self.assertEqual(cel.home_axis(Y_AXIS, settle_polls=2), 0)
 
   def test_open_close_door_runs(self):
     cel = _celigo()

@@ -17,6 +17,7 @@ Run with::
 
 from __future__ import annotations
 
+import re
 import struct
 
 from pylabrobot.celigo import ezstepper
@@ -44,6 +45,7 @@ class MockBoard:
     self._out = b""
     self.log = []  # (cmd, ez_string_or_None)
     self.dac = {}  # channel -> last written raw value
+    self.enc = {1: 0, 2: 4491, 3: 0, 4: 0}  # axis -> encoder pos (tracks commanded moves)
 
   # -- transport interface ---------------------------------------------------
   def write(self, data: bytes) -> int:
@@ -105,10 +107,21 @@ class MockBoard:
         return text
     return payload.rstrip(b"\x00").decode("latin-1")
 
-  @staticmethod
-  def _motor_reply(ez: str) -> bytes:
-    # encoder query "?8" -> a position; everything else -> ready/no-error.
-    data = "0`4491" if "?8" in ez else "0`"
+  def _motor_reply(self, ez: str) -> bytes:
+    # Track commanded position so an encoder query ("?8") reflects where the axis went:
+    # absolute move "A<n>" -> n; home "Z" -> 0. Everything else -> ready/no-error.
+    axis = int(ez[1]) if len(ez) > 1 and ez[1].isdigit() else None
+    if axis is not None:
+      mv = re.search(r"A(-?\d+)", ez)
+      if mv:
+        self.enc[axis] = int(mv.group(1))
+      elif "Z" in ez[2:]:
+        self.enc[axis] = 0
+    if "?8" in ez:
+      pos = self.enc.get(axis, 4491) if axis is not None else 4491
+      data = f"0`{pos}"
+    else:
+      data = "0`"
     return ("\x02" + data + "\x03q").encode("latin-1")
 
 
