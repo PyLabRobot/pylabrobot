@@ -8378,6 +8378,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Note:
       The maxima rose across firmware generations, and the speed and acceleration cutoffs differ:
+
       - Speed: 390.625 mm/sec pre-2021 (25,000 increments), 625.0 mm/sec on 2021+ (40,000
         increments). The exact firmware version introducing this change is undocumented.
       - Acceleration: 500.0 mm/sec**2 pre-2010 (32,000 increments), 781.25 mm/sec**2 on 2013+
