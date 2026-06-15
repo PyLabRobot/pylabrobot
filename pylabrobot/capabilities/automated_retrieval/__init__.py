@@ -1,2 +1,2 @@
 from .automated_retrieval import AutomatedRetrieval
-from .backend import AutomatedRetrievalBackend
+from .backend import AutomatedRetrievalBackend, ensure_single_tray

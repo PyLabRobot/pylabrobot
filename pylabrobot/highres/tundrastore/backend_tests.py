@@ -154,6 +154,18 @@ class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.backend.pick(3, 12, 1)
     self.assertEqual(self.socket.written, ["pick 3 12 1"])
 
+  def test_tray_maps_to_nest(self):
+    # 0-based capability tray -> 1-based device nest; None uses the default.
+    self.assertEqual(self.backend._nest_for_tray(None), 1)
+    self.assertEqual(self.backend._nest_for_tray(0), 1)
+    self.assertEqual(self.backend._nest_for_tray(1), 2)
+    with self.assertRaises(ValueError):
+      self.backend._nest_for_tray(2)
+
+  def test_default_tray_follows_loading_tray_nest(self):
+    backend = TundraStoreBackend(host="10.253.253.253", loading_tray_nest=2)
+    self.assertEqual(backend._nest_for_tray(None), 2)
+
   async def test_set_humidity_unsupported(self):
     with self.assertRaises(NotImplementedError):
       await self.backend.set_humidity(0.5)

@@ -12,7 +12,10 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
+from pylabrobot.capabilities.automated_retrieval.backend import (
+  AutomatedRetrievalBackend,
+  ensure_single_tray,
+)
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
 from pylabrobot.capabilities.shaking.backend import HasContinuousShaking, ShakerBackend
@@ -122,7 +125,8 @@ class CytomatBackend(
 
   # -- AutomatedRetrievalBackend --
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, tray: Optional[int] = None):
+    ensure_single_tray(tray)
     logger.info(
       "[Cytomat %s %s] fetch plate to loading tray: plate='%s'",
       self.model.value,
@@ -133,7 +137,8 @@ class CytomatBackend(
     assert isinstance(site, PlateHolder)
     await self.action_storage_to_transfer(site)
 
-  async def store_plate(self, plate: Plate, site: PlateHolder):
+  async def store_plate(self, plate: Plate, site: PlateHolder, tray: Optional[int] = None):
+    ensure_single_tray(tray)
     logger.info(
       "[Cytomat %s %s] store plate: plate='%s', site='%s'",
       self.model.value,

@@ -53,11 +53,11 @@ class TundraStoreBackend(
   and a (stacker, slot). The low-level :meth:`pick` / :meth:`place` take those
   three indices directly.
 
-  Note: the TundraStore has two nests. Mapping PyLabRobot's single
-  loading-tray-centric :class:`AutomatedRetrieval` capability onto two nests is
-  an open design question; for now the capability methods use
-  :attr:`loading_tray_nest` (default 1). Use :meth:`pick` / :meth:`place`
-  directly to address a specific nest.
+  The TundraStore has two nests. They are exposed through the multi-tray
+  :class:`AutomatedRetrieval` capability: its ``tray`` argument is a 0-based nest
+  index (tray ``i`` -> device nest ``i + 1``), and ``tray=None`` selects
+  :attr:`loading_tray_nest`. :meth:`pick` / :meth:`place` address a nest by its
+  1-based device number directly.
   """
 
   @dataclass
@@ -97,6 +97,7 @@ class TundraStoreBackend(
     self._read_timeout = read_timeout
     self._motion_timeout = motion_timeout
     self.loading_tray_nest = loading_tray_nest
+    self.num_nests = 2
     self._command_lock = asyncio.Lock()
     # stacker/slot lookup for the AutomatedRetrieval capability, built from racks.
     self._site_locations: Dict[str, Tuple[int, int]] = {}
@@ -345,16 +346,26 @@ class TundraStoreBackend(
       raise ValueError(f"Site '{site.name}' is not a known stacker slot; call set_racks() first.")
     return self._site_locations[site.name]
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  def _nest_for_tray(self, tray: Optional[int]) -> int:
+    """Map a 0-based capability tray index to a 1-based device nest number.
+
+    ``None`` selects :attr:`loading_tray_nest` (the configured default nest)."""
+    if tray is None:
+      return self.loading_tray_nest
+    if not 0 <= tray < self.num_nests:
+      raise ValueError(f"TundraStore has trays 0..{self.num_nests - 1}; got tray={tray}.")
+    return tray + 1
+
+  async def fetch_plate_to_loading_tray(self, plate: Plate, tray: Optional[int] = None):
     site = plate.parent
     if not isinstance(site, PlateHolder):
       raise ValueError(f"Plate '{plate.name}' is not in a stacker slot.")
     stacker, slot = self._locate(site)
-    await self.pick(stacker, slot, self.loading_tray_nest)
+    await self.pick(stacker, slot, self._nest_for_tray(tray))
 
-  async def store_plate(self, plate: Plate, site: PlateHolder):
+  async def store_plate(self, plate: Plate, site: PlateHolder, tray: Optional[int] = None):
     stacker, slot = self._locate(site)
-    await self.place(stacker, slot, self.loading_tray_nest)
+    await self.place(stacker, slot, self._nest_for_tray(tray))
 
   # --- TemperatureController capability -------------------------------------
 
