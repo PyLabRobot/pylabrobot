@@ -8359,10 +8359,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
-      speed: Movement speed in mm/sec. Valid range: [0.78125, 390.625 or 625.0]; None uses
-        `head96_y_drive_speed_default`.
-      acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 500.0 or 781.25]; None
-        uses `head96_y_drive_acceleration_default`.
+      speed: Movement speed in mm/sec; None uses `head96_y_drive_speed_default`. The valid range is
+        firmware-dependent (resolved into `Head96Information.y_speed_range`): [0.78125, 390.625]
+        pre-2021, [0.78125, 625.0] on 2021+ firmware.
+      acceleration: Movement acceleration in mm/sec**2; None uses
+        `head96_y_drive_acceleration_default`. The valid range is firmware-dependent (resolved into
+        `Head96Information.y_acceleration_range`): [78.125, 500.0] pre-2010, [78.125, 781.25] on
+        2013+ firmware.
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
       reset_y_parameters: If True (default), reset an overridden speed/acceleration to the head's
         defaults after the move so it does not persist; set False to deliberately keep it.
@@ -8375,10 +8378,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       AssertionError: If firmware info missing or parameters out of range.
 
     Note:
-      Maximum speed varies by firmware version:
-      - Pre-2021: 390.625 mm/sec (25,000 increments)
-      - 2021+: 625.0 mm/sec (40,000 increments)
-      The exact firmware version introducing this change is undocumented.
+      The maxima rose across firmware generations, and the speed and acceleration cutoffs differ:
+      - Speed: 390.625 mm/sec pre-2021 (25,000 increments), 625.0 mm/sec on 2021+ (40,000
+        increments). The exact firmware version introducing this change is undocumented.
+      - Acceleration: 500.0 mm/sec**2 pre-2010 (32,000 increments), 781.25 mm/sec**2 on 2013+
+        (50,000 increments).
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
