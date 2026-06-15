@@ -492,6 +492,10 @@ class TestHead96CrashRecovery(unittest.IsolatedAsyncioTestCase):
     z_min, z_max = self.cb._head96_information.z_range
     self.z_target = round((z_min + z_max) / 2, 1)
     self.z_safety_za = f"{self.cb._head96_z_drive_mm_to_increment(z_max):05}"
+    # head96_move_stop_disk_z snapshots the current Z speed/accel (to restore after the move); these
+    # tests only exercise the ZA crash-retract path, so stub the reads with in-range values.
+    self.cb.head96_request_z_speed = unittest.mock.AsyncMock(return_value=85.0)
+    self.cb.head96_request_z_acceleration = unittest.mock.AsyncMock(return_value=400.0)
 
   def _crash(self, message):
     return STARFirmwareError(
