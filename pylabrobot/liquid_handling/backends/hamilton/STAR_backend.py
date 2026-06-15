@@ -8350,12 +8350,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed: Optional[float] = None,
     acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
-    reset_y_parameters: bool = True,
   ):
     """Move the 96-head to a specified Y-axis coordinate.
 
-    An overridden speed/acceleration persists in the drive's volatile register and is inherited by
-    later moves, so it is reset to the head's default afterwards unless `reset_y_parameters` is False.
+    A YA move writes its speed/acceleration into the drive's volatile register, where later moves
+    would inherit them. This command snapshots whatever speed/acceleration are on the robot before
+    it runs and restores them afterwards, so it leaves the persistent machine state untouched (the
+    restore is skipped when the move's value already matches what was there).
 
     Args:
       y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
@@ -8367,8 +8368,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         `Head96Information.y_acceleration_range`): [78.125, 500.0] pre-2010, [78.125, 781.25] on
         2013+ firmware.
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
-      reset_y_parameters: If True (default), reset an overridden speed/acceleration to the head's
-        defaults after the move so it does not persist; set False to deliberately keep it.
 
     Returns:
       Response from the hardware command.
@@ -8388,10 +8387,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "requires 96-head firmware version information for safe operation"
     )
 
-    # Reset only what the caller overrode: None means "use the default", which already leaves the
-    # register at the default, so there is nothing to clean up (no churn on default moves).
-    restore_speed = reset_y_parameters and speed is not None
-    restore_acceleration = reset_y_parameters and acceleration is not None
     if speed is None:
       speed = self.head96_y_drive_speed_default
     if acceleration is None:
@@ -8422,6 +8417,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed_increment = self._head96_y_drive_mm_to_increment(speed)
     acceleration_increment = self._head96_y_drive_mm_to_increment(acceleration)
 
+    # Snapshot what is on the robot now (read from the device, not a tracked default, so an external
+    # AA edit is preserved) so the move can restore it afterwards and leave the register untouched.
+    prev_speed = await self.head96_request_y_speed()
+    prev_acceleration = await self.head96_request_y_acceleration()
+    prev_speed_increment = self._head96_y_drive_mm_to_increment(prev_speed)
+    prev_acceleration_increment = self._head96_y_drive_mm_to_increment(prev_acceleration)
+
     try:
       return await self.send_command(
         module="H0",
@@ -8432,10 +8434,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         yw=f"{current_protection_limiter:02}",
       )
     finally:
-      if restore_speed:
-        await self._head96_set_y_speed(self.head96_y_drive_speed_default)
-      if restore_acceleration:
-        await self._head96_set_y_acceleration(self.head96_y_drive_acceleration_default)
+      # Restore the pre-command register values, skipping the AA write where the move's value
+      # already matched what was there (compared in increments, the unit actually stored).
+      if speed_increment != prev_speed_increment:
+        await self._head96_set_y_speed(prev_speed)
+      if acceleration_increment != prev_acceleration_increment:
+        await self._head96_set_y_acceleration(prev_acceleration)
 
   @_requires_head96
   async def head96_move_z(
@@ -8471,7 +8475,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed: Optional[float] = None,
     acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
-    reset_z_parameters: bool = True,
     retract_on_crash: bool = True,
   ):
     """Move the 96-head z-drive (stop disk) to an absolute Z position in mm.
@@ -8479,10 +8482,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Stop-disk reference, mirroring the single-channel `move_channel_stop_disk_z`: use this for moves
     without a tip; for the tip end with a tip on, use `head96_move_tool_z`.
 
-    An overridden speed/acceleration persists in the drive's volatile register and would be inherited
-    by later moves (and C0-level commands), so it is reset to the head's default afterwards unless
-    `reset_z_parameters` is False. On any firmware error during the move (e.g. the head crashing into
-    something) the head retracts to Z-safety before the error is re-raised.
+    A ZA move writes its speed/acceleration into the drive's volatile register, where later
+    moves (and C0-level commands) would inherit them. This command snapshots whatever
+    speed/acceleration are on the robot before it runs and restores them afterwards, so it
+    leaves the persistent machine state untouched (the restore is skipped when the move's value
+    already matches what was there). On any firmware error during the move (e.g. the head crashing
+    into something) the head retracts to Z-safety before the error is re-raised.
 
     Args:
       z: Target stop-disk Z in mm. Valid range: Head96Information.z_range (180.5-342.5 mm; FM-STAR
@@ -8492,8 +8497,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       acceleration: Movement acceleration in mm/sec^2, [25.0, 500.0]; None uses
         `head96_z_drive_acceleration_default` (seeded to 400 mm/s^2; likewise constant for the Z drive).
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
-      reset_z_parameters: If True (default), reset an overridden speed/acceleration to the head's
-        defaults after the move so it does not persist; set False to deliberately keep it.
       retract_on_crash: If True (default), retract to Z-safety on any firmware error (e.g. a crash)
         before re-raising. head96_move_to_z_safety passes False so its own retract cannot recurse.
 
@@ -8511,10 +8514,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
     )
-    # Reset only what the caller actually overrode: a None means "use the default", which already
-    # leaves the register at the default, so there is nothing to clean up (no churn on default moves).
-    restore_speed = reset_z_parameters and speed is not None
-    restore_acceleration = reset_z_parameters and acceleration is not None
     if speed is None:
       speed = self.head96_z_drive_speed_default
     if acceleration is None:
@@ -8551,6 +8550,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
     )
 
+    # Snapshot what is on the robot now (read from the device, not a tracked default, so an external
+    # AA edit is preserved) so the move can restore it afterwards and leave the register untouched.
+    prev_speed = await self.head96_request_z_speed()
+    prev_acceleration = await self.head96_request_z_acceleration()
+    prev_speed_increment = self._head96_z_drive_mm_to_increment(prev_speed)
+    prev_acceleration_increment = round(
+      self._head96_z_drive_mm_to_increment(prev_acceleration) * acceleration_multiplier
+    )
+
     try:
       return await self.send_command(
         module="H0",
@@ -8572,10 +8580,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           pass  # retract failed too; surface the original error below
       raise
     finally:
-      if restore_speed:
-        await self._head96_set_z_speed(self.head96_z_drive_speed_default)
-      if restore_acceleration:
-        await self._head96_set_z_acceleration(self.head96_z_drive_acceleration_default)
+      # Restore the pre-command register values, skipping the AA write where the move's value
+      # already matched what was there (compared in increments, the unit actually stored).
+      if speed_increment != prev_speed_increment:
+        await self._head96_set_z_speed(prev_speed)
+      if acceleration_increment != prev_acceleration_increment:
+        await self._head96_set_z_acceleration(prev_acceleration)
 
   @_requires_head96
   async def head96_move_tool_z(self, z: float, speed: Optional[float] = None):
