@@ -1,7 +1,13 @@
 from .backend import TundraStoreBackend
 from .chatterbox import TundraStoreChatterboxBackend
 from .constants import DoorState, NestState
-from .errors import TundraStoreAbortedError, TundraStoreError
+from .errors import (
+  PlateNotFoundError,
+  TundraStoreAbortedError,
+  TundraStoreError,
+  TundraStoreFault,
+)
+from .settings import TundraStoreSettings
 from .standard import (
   DoorStatus,
   EnvironmentParameter,

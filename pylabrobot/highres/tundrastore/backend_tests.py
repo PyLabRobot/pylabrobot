@@ -3,7 +3,11 @@ from typing import Dict, List
 
 from pylabrobot.highres.tundrastore.backend import TundraStoreBackend
 from pylabrobot.highres.tundrastore.constants import DoorState, NestState
-from pylabrobot.highres.tundrastore.errors import TundraStoreError
+from pylabrobot.highres.tundrastore.errors import (
+  PlateNotFoundError,
+  TundraStoreError,
+  TundraStoreFault,
+)
 
 # Real responses captured from a TundraStore (firmware 3.0.0.119, serial
 # HRB-2209-35148) over the port-1000 remote-control server.
@@ -169,6 +173,117 @@ class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_set_humidity_unsupported(self):
     with self.assertRaises(NotImplementedError):
       await self.backend.set_humidity(0.5)
+
+
+def _ok(command: str, cid: int) -> List[str]:
+  return [f"ACK! {command} {cid}", f"OK! {command} {cid}"]
+
+
+class ScriptedSocket:
+  """Replays an ordered (expected_command, response_lines) script, asserting the
+  exact command sequence — used to verify multi-step recovery flows."""
+
+  def __init__(self, script):
+    self.script = list(script)
+    self.i = 0
+    self.commands: List[str] = []
+    self._queue: List[str] = []
+
+  async def setup(self):
+    pass
+
+  async def stop(self):
+    pass
+
+  async def write(self, data: bytes, timeout=None):
+    command = data.decode("ascii").rstrip("\r\n")
+    self.commands.append(command)
+    expected, lines = self.script[self.i]
+    self.i += 1
+    assert command == expected, f"expected {expected!r}, got {command!r}"
+    self._queue = list(lines)
+
+  async def readuntil(self, separator: bytes = b"\n", timeout=None) -> bytes:
+    return self._queue.pop(0).encode("ascii") + b"\r\n"
+
+
+class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend = TundraStoreBackend(host="10.253.253.253")
+
+  async def test_empty_slot_pick_raises_plate_not_found_and_stays_homed(self):
+    # The store reports "No plate detected" and stays homed (graceful empty).
+    empty = [
+      "ACK! pick 5 12 1 50",
+      "Error 1: (00:00:01) 50: No plate detected",
+      "ERROR! pick 5 12 1 50",
+    ]
+    sock = ScriptedSocket(
+      [
+        ("pick 5 12 1", empty),
+        ("homedstatus", ["ACK! homedstatus 51", "homed", "OK! homedstatus 51"]),
+      ]
+    )
+    self.backend.io = sock  # type: ignore[assignment]
+    with self.assertRaises(PlateNotFoundError):
+      await self.backend.pick(5, 12, 1)
+    # classified by state, no recovery motion issued
+    self.assertEqual(sock.commands, ["pick 5 12 1", "homedstatus"])
+
+  async def test_top_slot_stuck_raises_fault_despite_homed_lie(self):
+    # Empty TOP slot: "No plate detected" but the spatula is left extended and
+    # the firmware reports "unsafe for rotation" while homedstatus still says
+    # homed. The "unsafe" signal must win -> TundraStoreFault (no homedstatus
+    # query needed, the signature short-circuits).
+    stuck = [
+      "ACK! pick 5 24 1 60",
+      "Error 1: 60: No plate detected",
+      "Error 2: 60: Z height is unsafe for rotation, check machine",
+      "ERROR! pick 5 24 1 60",
+    ]
+    sock = ScriptedSocket([("pick 5 24 1", stuck)])
+    self.backend.io = sock  # type: ignore[assignment]
+    with self.assertRaises(TundraStoreFault):
+      await self.backend.pick(5, 24, 1)
+    self.assertEqual(sock.commands, ["pick 5 24 1"])
+
+  async def test_dehomed_pick_raises_fault(self):
+    # An error with no "unsafe" signature but the machine reports unhomed.
+    fault = [
+      "ACK! pick 5 24 1 70",
+      "Error 1: 70: motor fault",
+      "ERROR! pick 5 24 1 70",
+    ]
+    sock = ScriptedSocket(
+      [
+        ("pick 5 24 1", fault),
+        ("homedstatus", ["ACK! homedstatus 71", "not homed", "OK! homedstatus 71"]),
+      ]
+    )
+    self.backend.io = sock  # type: ignore[assignment]
+    with self.assertRaises(TundraStoreFault):
+      await self.backend.pick(5, 24, 1)
+    self.assertEqual(sock.commands, ["pick 5 24 1", "homedstatus"])
+
+  async def test_recover_retracts_and_rehomes_when_unhomed(self):
+    sock = ScriptedSocket(
+      [
+        ("homedstatus", ["ACK! homedstatus 1", "not homed", "OK! homedstatus 1"]),
+        ("enable", _ok("enable", 2)),
+        ("spatulaout", _ok("spatulaout", 3)),
+        ("home", _ok("home", 4)),
+        ("homedstatus", ["ACK! homedstatus 5", "homed", "OK! homedstatus 5"]),
+      ]
+    )
+    self.backend.io = sock  # type: ignore[assignment]
+    self.assertTrue(await self.backend.recover())
+    self.assertEqual(sock.commands, ["homedstatus", "enable", "spatulaout", "home", "homedstatus"])
+
+  async def test_recover_returns_true_when_homed(self):
+    sock = ScriptedSocket([("homedstatus", ["ACK! homedstatus 1", "homed", "OK! homedstatus 1"])])
+    self.backend.io = sock  # type: ignore[assignment]
+    self.assertTrue(await self.backend.recover())
+    self.assertEqual(sock.commands, ["homedstatus"])
 
 
 if __name__ == "__main__":

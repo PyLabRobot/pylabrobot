@@ -20,7 +20,14 @@ from .constants import (
   DoorState,
   NestState,
 )
-from .errors import TundraStoreAbortedError, TundraStoreError
+from .errors import (
+  PlateNotFoundError,
+  TundraStoreAbortedError,
+  TundraStoreError,
+  TundraStoreFault,
+  left_unsafe,
+)
+from .settings import TundraStoreSettings
 from .standard import (
   DoorStatus,
   EnvironmentParameter,
@@ -288,6 +295,16 @@ class TundraStoreBackend(
         continue
     return dims
 
+  async def request_settings(self, search: str = "") -> TundraStoreSettings:
+    """Read the device's settings file (``NAME = value`` pairs) into a
+    :class:`TundraStoreSettings`. Pass ``search`` to filter by substring."""
+    command = "settings" + (f" {search}" if search else "")
+    lines = await self.send_command(command, timeout=self._read_timeout)
+    version = await self.request_version()
+    return TundraStoreSettings.from_lines(
+      lines, serial=version.serial_number, firmware=version.firmware_version
+    )
+
   async def scan_stacker_barcodes(self, stacker, slot: Optional[int] = None) -> List[str]:
     """Scan a stacker (or a single slot) for barcodes.
 
@@ -309,9 +326,52 @@ class TundraStoreBackend(
     :class:`TundraStoreError` ("Unable to close all doors")."""
     await self.send_command("home", timeout=self._motion_timeout)
 
+  async def recover(self) -> bool:
+    """Bring the machine back to a homed state after a motion fault.
+
+    A faulted command (e.g. an empty-slot ``pick`` at a tight top slot) can
+    leave the spatula extended and the machine unhomed. This retracts the
+    spatula (``spatulaout``) and re-homes, retrying a few times. Returns
+    ``True`` if the machine ends up homed.
+    """
+    for _ in range(3):
+      if await self.is_homed():
+        return True
+      for command in ("enable", "spatulaout"):
+        try:
+          await self.send_command(command, timeout=self._motion_timeout)
+        except TundraStoreError:
+          pass
+      try:
+        await self.send_command("home", timeout=self._motion_timeout)
+      except TundraStoreError:
+        pass
+    return await self.is_homed()
+
   async def pick(self, stacker: int, slot: int, nest: int):
-    """Retrieve a plate from ``(stacker, slot)`` to ``nest``."""
-    await self.send_command(f"pick {stacker} {slot} {nest}", timeout=self._motion_timeout)
+    """Retrieve a plate from ``(stacker, slot)`` to ``nest``.
+
+    On failure the error is classified; no automatic motion is performed:
+
+    - :class:`PlateNotFoundError` — the slot was empty ("No plate detected")
+      and the store retracted cleanly; the machine is safe to keep using.
+    - :class:`TundraStoreFault` — the machine was left unsafe (spatula extended
+      / unhomed), e.g. an empty *top* slot where the firmware can't complete its
+      safe-travel retract. Call :meth:`recover` before any further motion.
+
+    Note: ``homedstatus`` reports homed even when the spatula is stuck extended
+    at a top slot, so the firmware's own "unsafe for rotation" signal is used
+    (not just :meth:`is_homed`) to detect that case.
+    """
+    command = f"pick {stacker} {slot} {nest}"
+    try:
+      await self.send_command(command, timeout=self._motion_timeout)
+    except TundraStoreError as exc:
+      if left_unsafe(exc.error_lines) or not await self.is_homed():
+        raise TundraStoreFault(command, exc.error_lines) from exc
+      if any("no plate detected" in line.lower() for line in exc.error_lines):
+        raise PlateNotFoundError(command, exc.error_lines) from exc
+      raise
 
   async def place(self, stacker: int, slot: int, nest: int):
     """Place the plate at ``nest`` into ``(stacker, slot)``."""
