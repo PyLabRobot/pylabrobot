@@ -105,6 +105,9 @@ class TundraStoreBackend(
     self._motion_timeout = motion_timeout
     self.loading_tray_nest = loading_tray_nest
     self.num_nests = 2
+    # Slide (Y) below this is "retracted"; a spatula stuck in a stacker sits at
+    # the ~256mm slide-in depth, home is 0. Used by is_parked()/recover().
+    self._retracted_y_max = 50.0
     self._command_lock = asyncio.Lock()
     # stacker/slot lookup for the AutomatedRetrieval capability, built from racks.
     self._site_locations: Dict[str, Tuple[int, int]] = {}
@@ -351,17 +354,30 @@ class TundraStoreBackend(
     :class:`TundraStoreError` ("Unable to close all doors")."""
     await self.send_command("home", timeout=self._motion_timeout)
 
-  async def recover(self) -> bool:
-    """Bring the machine back to a homed state after a motion fault.
+  async def is_parked(self) -> bool:
+    """Whether the machine is genuinely safe to move: homed AND the spatula
+    retracted out of the carousel.
 
-    A faulted command (e.g. an empty-slot ``pick`` at a tight top slot) can
-    leave the spatula extended and the machine unhomed. This retracts the
-    spatula (``spatulaout``) and re-homes, retrying a few times. Returns
-    ``True`` if the machine ends up homed.
+    Prefer this over :meth:`is_homed`. ``homedstatus`` reports homed even while
+    the spatula is stuck extended in a stacker after a faulted top-slot pick, so
+    it alone is not a safe-state check; this also verifies the slide (Y) axis is
+    near its home position (a stuck spatula sits at the ~256mm slide-in depth).
+    """
+    if not await self.is_homed():
+      return False
+    y = (await self.request_axis_positions()).get("Y axis")
+    return y is not None and abs(y) < self._retracted_y_max
+
+  async def recover(self) -> bool:
+    """Retract the spatula and re-home after a motion fault.
+
+    A faulted command (e.g. an empty-slot ``pick`` in the top few slots) can
+    leave the spatula extended. This ALWAYS issues the retract (``spatulaout``)
+    + ``home`` — it does not trust ``homedstatus`` to decide whether recovery is
+    needed, because that reports homed even while the spatula is stuck extended.
+    Retries a few times. Returns ``True`` once :meth:`is_parked`.
     """
     for _ in range(3):
-      if await self.is_homed():
-        return True
       for command in ("enable", "spatulaout"):
         try:
           await self.send_command(command, timeout=self._motion_timeout)
@@ -371,7 +387,9 @@ class TundraStoreBackend(
         await self.send_command("home", timeout=self._motion_timeout)
       except TundraStoreError:
         pass
-    return await self.is_homed()
+      if await self.is_parked():
+        return True
+    return False
 
   async def pick(self, stacker: int, slot: int, nest: int):
     """Retrieve a plate from ``(stacker, slot)`` to ``nest``.

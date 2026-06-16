@@ -265,25 +265,58 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
       await self.backend.pick(5, 24, 1)
     self.assertEqual(sock.commands, ["pick 5 24 1", "homedstatus"])
 
-  async def test_recover_retracts_and_rehomes_when_unhomed(self):
+  def _homed(self, cid: int) -> List[str]:
+    return [f"ACK! homedstatus {cid}", "homed", f"OK! homedstatus {cid}"]
+
+  def _status(self, cid: int, y: float) -> List[str]:
+    return [
+      f"ACK! status {cid}",
+      "Carousel: 0.0",
+      f"Y axis: {y}",
+      "Z axis: 0.0",
+      f"OK! status {cid}",
+    ]
+
+  async def test_is_parked_catches_the_homed_lie(self):
+    # homedstatus says homed, but the spatula is stuck extended (Y=256) -> NOT parked.
+    sock = ScriptedSocket([("homedstatus", self._homed(1)), ("status", self._status(2, 255.9999))])
+    self.backend.io = sock  # type: ignore[assignment]
+    self.assertFalse(await self.backend.is_parked())
+
+  async def test_recover_always_retracts_and_rehomes(self):
+    # recover() must issue retract+home even when homedstatus already says homed
+    # (the lie), then confirm parked via the slide position.
     sock = ScriptedSocket(
       [
-        ("homedstatus", ["ACK! homedstatus 1", "not homed", "OK! homedstatus 1"]),
-        ("enable", _ok("enable", 2)),
-        ("spatulaout", _ok("spatulaout", 3)),
-        ("home", _ok("home", 4)),
-        ("homedstatus", ["ACK! homedstatus 5", "homed", "OK! homedstatus 5"]),
+        ("enable", _ok("enable", 1)),
+        ("spatulaout", _ok("spatulaout", 2)),
+        ("home", _ok("home", 3)),
+        ("homedstatus", self._homed(4)),
+        ("status", self._status(5, 0.0)),
       ]
     )
     self.backend.io = sock  # type: ignore[assignment]
     self.assertTrue(await self.backend.recover())
-    self.assertEqual(sock.commands, ["homedstatus", "enable", "spatulaout", "home", "homedstatus"])
+    self.assertEqual(sock.commands, ["enable", "spatulaout", "home", "homedstatus", "status"])
 
-  async def test_recover_returns_true_when_homed(self):
-    sock = ScriptedSocket([("homedstatus", ["ACK! homedstatus 1", "homed", "OK! homedstatus 1"])])
+  async def test_recover_retries_until_parked(self):
+    # First round still reads extended (homed-lie); recover retries and succeeds.
+    sock = ScriptedSocket(
+      [
+        ("enable", _ok("enable", 1)),
+        ("spatulaout", _ok("spatulaout", 2)),
+        ("home", _ok("home", 3)),
+        ("homedstatus", self._homed(4)),
+        ("status", self._status(5, 255.9999)),  # still extended -> retry
+        ("enable", _ok("enable", 6)),
+        ("spatulaout", _ok("spatulaout", 7)),
+        ("home", _ok("home", 8)),
+        ("homedstatus", self._homed(9)),
+        ("status", self._status(10, 0.0)),  # now retracted
+      ]
+    )
     self.backend.io = sock  # type: ignore[assignment]
     self.assertTrue(await self.backend.recover())
-    self.assertEqual(sock.commands, ["homedstatus"])
 
 
 if __name__ == "__main__":
