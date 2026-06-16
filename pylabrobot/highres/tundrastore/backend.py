@@ -241,10 +241,35 @@ class TundraStoreBackend(
         nests[nest] = NestState.UNKNOWN
     return NestStatus(nests=nests)
 
-  async def request_plate_on_spatula(self) -> bool:
+  async def spatula_request_is_holding(self) -> bool:
     """Whether a plate is currently held on the spatula (``platestatus``)."""
     lines = await self.send_command("platestatus")
     return not any("NO_PLATE" in line for line in lines)
+
+  async def nest_request_is_holding(self, nest: int) -> bool:
+    """Whether a plate is present on ``nest`` (per its plate sensor).
+
+    Note: this unit reports an occupied nest as ``UNKNOWN`` rather than
+    ``OCCUPIED``; anything other than ``CLEAR`` counts as holding.
+    """
+    state = (await self.request_nest_status()).nests.get(nest)
+    return state is not None and state is not NestState.CLEAR
+
+  async def probe_presence(self, stacker: int, slot: int, to_nest: int = 1) -> bool:
+    """Probe whether a plate is present in ``(stacker, slot)`` by attempting a
+    pick. Returns ``True`` if a plate was there, ``False`` if the slot is empty.
+
+    SIDE EFFECT: a plate that is found is moved to ``to_nest`` (the only way to
+    sense a stacker slot is to pick it). Only safe for non-top slots, where an
+    empty pick is graceful; the top slot (24) faults when empty — see
+    :meth:`pick`. For nests, use :meth:`nest_request_is_holding` instead (a
+    non-destructive sensor read).
+    """
+    try:
+      await self.pick(stacker, slot, to_nest)
+      return True
+    except PlateNotFoundError:
+      return False
 
   async def request_environment(self) -> Dict[str, EnvironmentParameter]:
     """Parse ``environmentstatus`` into ``{name: EnvironmentParameter}``.

@@ -118,7 +118,7 @@ class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(status.nests, {1: NestState.CLEAR, 2: NestState.CLEAR})
 
   async def test_plate_on_spatula(self):
-    self.assertFalse(await self.backend.request_plate_on_spatula())
+    self.assertFalse(await self.backend.spatula_request_is_holding())
 
   async def test_environment_parsing(self):
     env = await self.backend.request_environment()
