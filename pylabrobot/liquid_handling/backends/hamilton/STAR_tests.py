@@ -38,6 +38,7 @@ from .STAR_backend import (
   CommandSyntaxError,
   HamiltonNoTipError,
   HardwareError,
+  Head96Information,
   PipChannelInformation,
   STARBackend,
   STARFirmwareError,
@@ -471,13 +472,26 @@ class TestHead96DriveDefaults(unittest.IsolatedAsyncioTestCase):
   def test_version_resolved_default_falls_back_for_pre_2010_firmware(self):
     """A version-resolved default switches to the 2008 firmware value for pre-2010 heads (Y, whose
     encoder resolution is constant, so both branches are exact)."""
-    star = STARBackend(read_timeout=1)
-    self.assertAlmostEqual(
-      star._head96_resolve_y_drive_speed_default(datetime.date(2008, 11, 11)), 312.5, places=2
-    )
-    self.assertAlmostEqual(
-      star._head96_resolve_y_drive_speed_default(datetime.date(2013, 9, 2)), 390.62, places=2
-    )
+
+    def info(fw_version: datetime.date) -> Head96Information:
+      # Only fw_version drives the computed default; the rest are placeholder facts.
+      return Head96Information(
+        fw_version=fw_version,
+        x_offset=0.0,
+        supports_clot_monitoring_clld=False,
+        stop_disc_type="core_ii",
+        instrument_type="FM-STAR",
+        head_type="96 head II",
+        y_range=(0.0, 0.0),
+        y_speed_range=(0.0, 0.0),
+        y_acceleration_range=(0.0, 0.0),
+        z_range=(0.0, 0.0),
+        dispensing_drive_range=(0.0, 0.0),
+        dispensing_drive_speed_range=(0.0, 0.0),
+      )
+
+    self.assertAlmostEqual(info(datetime.date(2008, 11, 11)).y_drive_speed_default, 312.5, places=2)
+    self.assertAlmostEqual(info(datetime.date(2013, 9, 2)).y_drive_speed_default, 390.62, places=2)
 
 
 class TestHead96CrashRecovery(unittest.IsolatedAsyncioTestCase):

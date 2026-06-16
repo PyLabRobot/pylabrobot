@@ -173,15 +173,6 @@ class STARChatterboxBackend(STARBackend):
         z_range=self._head96_resolve_z_range(instrument_type),
         dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
         dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(fw_version),
-        y_drive_speed_default=self._head96_resolve_y_drive_speed_default(fw_version),
-        y_drive_acceleration_default=self._head96_resolve_y_drive_acceleration_default(fw_version),
-        dispensing_drive_acceleration_default=self._head96_resolve_dispensing_drive_acceleration_default(
-          fw_version
-        ),
-        squeezer_drive_speed_default=self._head96_resolve_squeezer_drive_speed_default(fw_version),
-        squeezer_drive_acceleration_default=self._head96_resolve_squeezer_drive_acceleration_default(
-          fw_version
-        ),
       )
       # Seed the user-overridable drive defaults from the frozen factory facts (mirrors STARBackend).
       self._head96_y_drive_speed_default = self._head96_information.y_drive_speed_default
