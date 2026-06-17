@@ -318,6 +318,34 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
     self.backend.io = sock  # type: ignore[assignment]
     self.assertTrue(await self.backend.recover())
 
+  async def test_place_default_leaves_doors_sealed(self):
+    sock = ScriptedSocket([("place 2 5 1", _ok("place 2 5 1", 1))])
+    self.backend.io = sock  # type: ignore[assignment]
+    await self.backend.place(2, 5, 1)  # close_door=True default
+    self.assertEqual(sock.commands, ["place 2 5 1"])
+
+  async def test_place_close_door_false_reopens(self):
+    sock = ScriptedSocket(
+      [
+        ("place 2 5 1", _ok("place 2 5 1", 1)),
+        ("openalldoors", _ok("openalldoors", 2)),
+      ]
+    )
+    self.backend.io = sock  # type: ignore[assignment]
+    await self.backend.place(2, 5, 1, close_door=False)
+    self.assertEqual(sock.commands, ["place 2 5 1", "openalldoors"])
+
+  async def test_pick_close_door_false_reopens(self):
+    sock = ScriptedSocket(
+      [
+        ("pick 2 5 1", _ok("pick 2 5 1", 1)),
+        ("openalldoors", _ok("openalldoors", 2)),
+      ]
+    )
+    self.backend.io = sock  # type: ignore[assignment]
+    await self.backend.pick(2, 5, 1, close_door=False)
+    self.assertEqual(sock.commands, ["pick 2 5 1", "openalldoors"])
+
 
 if __name__ == "__main__":
   unittest.main()

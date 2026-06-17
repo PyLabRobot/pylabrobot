@@ -391,8 +391,10 @@ class TundraStoreBackend(
         return True
     return False
 
-  async def pick(self, stacker: int, slot: int, nest: int):
+  async def pick(self, stacker: int, slot: int, nest: int, close_door: bool = True):
     """Retrieve a plate from ``(stacker, slot)`` to ``nest``.
+
+    ``close_door=False`` re-opens the doors after the transfer (see :meth:`place`).
 
     On failure the error is classified; no automatic motion is performed:
 
@@ -415,10 +417,21 @@ class TundraStoreBackend(
       if any("no plate detected" in line.lower() for line in exc.error_lines):
         raise PlateNotFoundError(command, exc.error_lines) from exc
       raise
+    if not close_door:
+      await self.open_all_doors()
 
-  async def place(self, stacker: int, slot: int, nest: int):
-    """Place the plate at ``nest`` into ``(stacker, slot)``."""
+  async def place(self, stacker: int, slot: int, nest: int, close_door: bool = True):
+    """Place the plate at ``nest`` into ``(stacker, slot)``.
+
+    The store re-seals its doors as part of every transfer, so ``close_door``
+    controls only the *end* state: with ``close_door=False`` the doors are
+    re-opened after the place, leaving the carousel accessible for a following
+    operation (handy when the cold environment doesn't matter). The default
+    leaves it sealed.
+    """
     await self.send_command(f"place {stacker} {slot} {nest}", timeout=self._motion_timeout)
+    if not close_door:
+      await self.open_all_doors()
 
   async def open_all_doors(self):
     await self.send_command("openalldoors", timeout=self._motion_timeout)
