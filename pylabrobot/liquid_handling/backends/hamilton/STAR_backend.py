@@ -8443,7 +8443,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
 
   @_requires_head96
-  async def head96_basic_aspirate(
+  async def head96_experimental_aspirate(
     self,
     volume: float,
     flow_rate: Optional[float] = None,
@@ -8532,7 +8532,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   @_requires_head96
-  async def head96_basic_dispense(
+  async def head96_experimental_dispense(
     self,
     volume: float,
     flow_rate: Optional[float] = None,

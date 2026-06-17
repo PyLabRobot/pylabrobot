@@ -1132,11 +1132,11 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_head96_basic_aspirate(self):
+  async def test_head96_experimental_aspirate(self):
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
-    await self.STAR.head96_basic_aspirate(
+    await self.STAR.head96_experimental_aspirate(
       volume=100,
       minimum_height=230,
       surface_following_distance=2,
@@ -1151,11 +1151,11 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_head96_basic_dispense(self):
+  async def test_head96_experimental_dispense(self):
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
-    await self.STAR.head96_basic_dispense(
+    await self.STAR.head96_experimental_dispense(
       volume=100,
       minimum_height=230,
       stop_back_volume=5,
@@ -1172,19 +1172,19 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_head96_basic_aspirate_requires_tip(self):
+  async def test_head96_experimental_aspirate_requires_tip(self):
     """enforce_requires_tip raises when the head reports no tips."""
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     with self.assertRaises(RuntimeError):
-      await self.STAR.head96_basic_aspirate(volume=100, minimum_height=230)
+      await self.STAR.head96_experimental_aspirate(volume=100, minimum_height=230)
 
-  async def test_head96_basic_aspirate_default_flow_rate(self):
+  async def test_head96_experimental_aspirate_default_flow_rate(self):
     """Omitting flow_rate emits the head's default dispensing-drive speed (dv13500)."""
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
-    await self.STAR.head96_basic_aspirate(
+    await self.STAR.head96_experimental_aspirate(
       volume=100, minimum_height=230, surface_following_distance=2, enforce_requires_tip=False
     )
     self.STAR._write_and_read_command.assert_has_calls(
@@ -1195,13 +1195,13 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_head96_basic_dispense_default_flow_rates(self):
+  async def test_head96_experimental_dispense_default_flow_rates(self):
     """Omitting flow_rate and stop_flow_rate emits the head default speed (dv13500) and a zero stop
     speed (du00000), with the stop-back and surface-following defaults (dd0000 / ze0000)."""
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
-    await self.STAR.head96_basic_dispense(
+    await self.STAR.head96_experimental_dispense(
       volume=100, minimum_height=230, enforce_requires_tip=False
     )
     self.STAR._write_and_read_command.assert_has_calls(
@@ -1212,15 +1212,15 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_head96_basic_aspirate_volume_out_of_range_raises(self):
+  async def test_head96_experimental_aspirate_volume_out_of_range_raises(self):
     """A volume beyond the dispensing-drive range raises before any command is sent."""
     self.STAR._head96_information = _make_head96_information(self.STAR)
     with self.assertRaises(AssertionError):
-      await self.STAR.head96_basic_aspirate(
+      await self.STAR.head96_experimental_aspirate(
         volume=100000, minimum_height=230, enforce_requires_tip=False
       )
 
-  async def test_head96_basic_aspirate_tip_bottom_overhang(self):
+  async def test_head96_experimental_aspirate_tip_bottom_overhang(self):
     """With a tip on, minimum_height is tip-bottom: zh = minimum_height + overhang."""
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
@@ -1230,7 +1230,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
     self.STAR._write_and_read_command.reset_mock()
     # overhang = 332 - 245 = 87; zh = (200 + 87) / 0.005 = 57400
-    await self.STAR.head96_basic_aspirate(
+    await self.STAR.head96_experimental_aspirate(
       volume=100, minimum_height=200, surface_following_distance=2
     )
     self.STAR._write_and_read_command.assert_has_calls(
@@ -1241,13 +1241,13 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_head96_basic_aspirate_minimum_height_defaults_to_floor(self):
+  async def test_head96_experimental_aspirate_minimum_height_defaults_to_floor(self):
     """Omitting minimum_height with no tip defaults to the firmware Z floor (z_range[0])."""
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
     # no tip -> overhang 0 -> minimum_height defaults to z_range[0] = 180.5 mm -> zh 36100
-    await self.STAR.head96_basic_aspirate(volume=100, enforce_requires_tip=False)
+    await self.STAR.head96_experimental_aspirate(volume=100, enforce_requires_tip=False)
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
