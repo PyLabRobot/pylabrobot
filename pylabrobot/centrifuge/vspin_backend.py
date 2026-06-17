@@ -94,8 +94,15 @@ class Access2Backend(LoaderBackend):
     logger.debug("[loader] open")
     await self.send_command(bytes.fromhex("1105000a0042070001000080bf0200b73e"))
 
-  async def load(self):
-    """only tested for 1cm plate, 3mm pickup height"""
+  async def load(self, grip_steps: int = 1):
+    """Load a plate into the centrifuge.
+
+    Args:
+      grip_steps: Number of steps taken to tighten the grip.
+        Higher values may improve grip for certain plate types.
+    """
+    if not 1 <= grip_steps <= 4:
+      raise ValueError("grip_steps must be between 1 and 4")
     logger.debug("[loader] load")
 
     await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
@@ -107,6 +114,8 @@ class Access2Backend(LoaderBackend):
       raise LoaderNoPlateError("no plate found on stage")
 
     await self.send_command(bytes.fromhex("1105000a00460700018fc2b540020023dc"))
+    for _ in range(grip_steps):
+      await self.send_command(bytes.fromhex("1105000a00420700010000803f02008c64"))
     await self.send_command(bytes.fromhex("1105000e00440b000200004040000020410300ee00"))
     await self.send_command(bytes.fromhex("1105000a004607000100000000020015fd"))
     await self.send_command(bytes.fromhex("1105000e00440b0000000040400000204102007d82"))
@@ -123,6 +132,8 @@ class Access2Backend(LoaderBackend):
     if r == bytes.fromhex("1105000800510500000300000079f1"):
       raise LoaderNoPlateError("no plate found in centrifuge")
 
+    for _ in range(grip_steps):
+      await self.send_command(bytes.fromhex("1105000a00420700010000803f02008c64"))
     await self.send_command(bytes.fromhex("1105000a00460700017b14b6400200d57a"))
     await self.send_command(bytes.fromhex("1105000e00440b00010000404000002041030096fa"))
     await self.send_command(bytes.fromhex("1105000a004607000100000000020015fd"))
