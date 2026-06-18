@@ -8449,7 +8449,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     flow_rate: Optional[float] = None,
     minimum_height: Optional[float] = None,
     surface_following_distance: float = 0.0,
-    enforce_minimum_height: bool = True,
     requires_tip: bool = True,
   ):
     """Aspirate on the 96-head with surface following (the firmware drives Z and the dispensing drive
@@ -8466,11 +8465,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         corrected.
       flow_rate: The dispensing-drive speed, uL/s; None uses the head's default speed.
       minimum_height: The lowest the tip end (tip-bottom) descends to, mm - the end of the stroke.
-        None defaults to the deck floor. With no tip on, this is the stop-disk position directly.
+        None defaults to the deepest safe target: the deck floor with a tip on, or the firmware Z
+        floor with none on (no tip overhang, so this is the stop-disk position directly).
       surface_following_distance: The Z travel during aspiration, mm; 0 keeps the head in place so it
         cannot drive into the container bottom.
-      enforce_minimum_height: If True, clamp any deeper target to minimum_height; if False, surface
-        following may carry the head past it.
       requires_tip: If True, raise if the head holds no tips; if False, allow aspirating air.
 
     Raises:
@@ -8522,7 +8520,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="H0",
       command="PA",
       pm="F" * 24,  # all 96 channels; the rigid head has no per-channel selection
-      dj="1" if enforce_minimum_height else "0",
+      dj="1",  # minimum_height enforcement always on; the resolved minimum_height is the floor
       da=f"{volume_increment:05}",
       dv=f"{flow_rate_increment:05}",
       dc="00000",  # pre-wetting off; its interaction with surface following is unverified
@@ -8553,7 +8551,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         corrected.
       flow_rate: The dispensing-drive speed, uL/s; None uses the head's default speed.
       minimum_height: The lowest the tip end (tip-bottom) descends to, mm - the end of the stroke.
-        None defaults to the deck floor. With no tip on, this is the stop-disk position directly.
+        None defaults to the deepest safe target: the deck floor with a tip on, or the firmware Z
+        floor with none on (no tip overhang, so this is the stop-disk position directly).
       stop_back_volume: The volume drawn back at the end to stop dripping, uL.
       surface_following_distance: The Z travel during dispense, mm.
       stop_flow_rate: The dispensing-drive stop speed, uL/s; None uses the firmware default (0).
