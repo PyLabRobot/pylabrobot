@@ -8449,6 +8449,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     flow_rate: Optional[float] = None,
     minimum_height: Optional[float] = None,
     surface_following_distance: float = 0.0,
+    enforce_minimum_height: bool = True,
     requires_tip: bool = True,
   ):
     """Aspirate on the 96-head with surface following (the firmware drives Z and the dispensing drive
@@ -8470,10 +8471,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         cannot drive into the container bottom.
       enforce_minimum_height: If True, clamp any deeper target to minimum_height; if False, surface
         following may carry the head past it.
-      enforce_requires_tip: If True, raise if the head holds no tips; if False, allow aspirating air.
+      requires_tip: If True, raise if the head holds no tips; if False, allow aspirating air.
 
     Raises:
-      RuntimeError: If 96-head is not installed, or enforce_requires_tip and the head holds no tips.
+      RuntimeError: If 96-head is not installed, or requires_tip and the head holds no tips.
       AssertionError: If firmware info missing or a parameter is out of range.
     """
     assert self._head96_information is not None, "96-head information not loaded; run setup()"
@@ -8494,7 +8495,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     has_tips = bool(await self.head96_request_tip_presence())
-    if enforce_requires_tip and not has_tips:
+    if requires_tip and not has_tips:
       raise RuntimeError(
         "96-head has no tips (firmware reports none); pick up tips before aspirating"
       )
@@ -8539,7 +8540,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     stop_back_volume: float = 0.0,
     surface_following_distance: float = 0.0,
     stop_flow_rate: Optional[float] = None,
-    enforce_requires_tip: bool = True,
+    requires_tip: bool = True,
   ):
     """Dispense on the 96-head with surface following (the firmware drives Z and the dispensing drive
     in parallel).
@@ -8556,10 +8557,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       stop_back_volume: The volume drawn back at the end to stop dripping, uL.
       surface_following_distance: The Z travel during dispense, mm.
       stop_flow_rate: The dispensing-drive stop speed, uL/s; None uses the firmware default (0).
-      enforce_requires_tip: If True, raise if the head holds no tips; if False, allow dispensing air.
+      requires_tip: If True, raise if the head holds no tips; if False, allow dispensing air.
 
     Raises:
-      RuntimeError: If 96-head is not installed, or enforce_requires_tip and the head holds no tips.
+      RuntimeError: If 96-head is not installed, or requires_tip and the head holds no tips.
       AssertionError: If firmware info missing or a parameter is out of range.
     """
     assert self._head96_information is not None, "96-head information not loaded; run setup()"
@@ -8587,7 +8588,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= stop_flow_rate <= flow_max, f"stop_flow_rate must be between 0 and {flow_max} uL/s"
 
     has_tips = bool(await self.head96_request_tip_presence())
-    if enforce_requires_tip and not has_tips:
+    if requires_tip and not has_tips:
       raise RuntimeError(
         "96-head has no tips (firmware reports none); pick up tips before dispensing"
       )

@@ -331,7 +331,7 @@ class STARChatterboxBackend(STARBackend):
     if not does_tip_tracking() or self.head96 is None:
       raise RuntimeError(
         "cannot report 96-head tip presence with tip tracking disabled in simulation; "
-        "enable it with set_tip_tracking(True) or call with enforce_requires_tip=False"
+        "enable it with set_tip_tracking(True) or call with requires_tip=False"
       )
     return int(any(tracker.has_tip for tracker in self.head96.values()))
 
