@@ -8449,8 +8449,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     flow_rate: Optional[float] = None,
     minimum_height: Optional[float] = None,
     surface_following_distance: float = 0.0,
-    enforce_minimum_height: bool = True,
-    enforce_requires_tip: bool = True,
+    requires_tip: bool = True,
   ):
     """Aspirate on the 96-head with surface following (the firmware drives Z and the dispensing drive
     in parallel).
