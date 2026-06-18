@@ -7985,16 +7985,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   _head96_dispensing_drive_uL_per_increment = Head96Information.dispensing_drive_uL_per_increment
   _head96_squeezer_drive_mm_per_increment = Head96Information.squeezer_drive_mm_per_increment
 
-  # Z-axis conversions
-
-  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
-    """Convert mm to Z-axis hardware increments for 96-head."""
-    return round(value_mm / self._head96_z_drive_mm_per_increment)
-
-  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
-    """Convert Z-axis hardware increments to mm for 96-head."""
-    return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
-
   # Y-axis conversions
 
   def _head96_y_drive_mm_to_increment(self, value_mm: float) -> int:
@@ -8004,6 +7994,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _head96_y_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert Y-axis hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_y_drive_mm_per_increment, 2)
+
+  # Z-axis conversions
+
+  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to Z-axis hardware increments for 96-head."""
+    return round(value_mm / self._head96_z_drive_mm_per_increment)
+
+  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert Z-axis hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
 
   # Dispensing drive conversions (mm and uL)
 
