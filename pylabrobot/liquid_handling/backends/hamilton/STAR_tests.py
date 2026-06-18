@@ -1201,9 +1201,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
     self.STAR._write_and_read_command.reset_mock()
-    await self.STAR.head96_experimental_dispense(
-      volume=100, minimum_height=230, requires_tip=False
-    )
+    await self.STAR.head96_experimental_dispense(volume=100, minimum_height=230, requires_tip=False)
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
