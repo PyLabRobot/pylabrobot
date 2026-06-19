@@ -1469,29 +1469,9 @@ class Head96Information:
       round(max_inc * self.dispensing_drive_uL_per_increment, 2),
     )
 
-  # === Per-drive factory default speed / acceleration (standard units). ===
-  @property
-  def y_drive_speed_default(self) -> float:
-    """Y-drive default speed (mm/s); 2013 firmware raised it."""
-    increments = 25000 if self.fw_version.year >= 2010 else 20000
-    return round(increments * self.y_drive_mm_per_increment, 2)
-
-  @property
-  def y_drive_acceleration_default(self) -> float:
-    """Y-drive default acceleration (mm/s2); 2013 firmware raised it."""
-    increments = 35000 if self.fw_version.year >= 2010 else 32000
-    return round(increments * self.y_drive_mm_per_increment, 2)
-
-  @property
-  def z_drive_speed_default(self) -> float:
-    """Z-drive default speed (mm/s); constant across firmware."""
-    return 85.0
-
-  @property
-  def z_drive_acceleration_default(self) -> float:
-    """Z-drive default acceleration (mm/s2); constant across firmware."""
-    return 400.0
-
+  # === Per-drive factory default speed / acceleration (standard units). The Y/Z-drive defaults are
+  # deliberately not kept here: STARBackend reads them from the machine at setup into mutable
+  # attributes (head96_{y,z}_drive_{speed,acceleration}_default) so a run can override them. ===
   @property
   def dispensing_drive_speed_default(self) -> float:
     """Dispensing-drive default speed (uL/s); constant across firmware."""
@@ -1694,9 +1674,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # `set_up_iswap` from firmware/EEPROM. See `iswap_information` property
     # for guarded access. None pre-setup; immutable post-setup.
     self._iswap_information: Optional[iSWAPInformation] = None
-    # Optional user overrides for the 96-head Y/Z drive speed/acceleration defaults, exposed via
-    # @property with a range check in the setter. None means "use the firmware-resolved factory
-    # default from Head96Information"; a move falls back to that default when no value is passed.
+    # Mutable 96-head Y/Z drive speed/acceleration defaults, seeded from the machine's registers at
+    # setup and overridable via the @property setters (range-checked). None until setup() loads them;
+    # a move uses the current default when no explicit value is passed.
     self._head96_y_drive_speed_default: Optional[float] = None
     self._head96_y_drive_acceleration_default: Optional[float] = None
     self._head96_z_drive_speed_default: Optional[float] = None
@@ -2199,6 +2179,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             await self._head96_probe_z_max(),
           ),
         )
+        # Seed the mutable Y/Z drive speed/acceleration defaults from the machine's current
+        # registers; a run can override them via the head96_*_drive_*_default setters afterwards.
+        self._head96_y_drive_speed_default = await self.head96_request_y_speed()
+        self._head96_y_drive_acceleration_default = await self.head96_request_y_acceleration()
+        self._head96_z_drive_speed_default = await self.head96_request_z_speed()
+        self._head96_z_drive_acceleration_default = await self.head96_request_z_acceleration()
 
     async def set_up_arm_modules():
       await set_up_pip()
@@ -8043,14 +8029,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def head96_y_drive_speed_default(self) -> float:
     """Default 96-head Y-drive speed (mm/s) used when a Y move is called without an explicit speed.
 
-    Falls back to the firmware-resolved `Head96Information.y_drive_speed_default`; assign your own and
-    it is validated against `y_speed_range` before taking effect. A move does not persist this to the
-    drive: it snapshots the live register and restores it afterwards.
+    Seeded from the machine at setup; assign your own and it is validated against `y_speed_range`
+    before taking effect. A move does not persist this to the drive: it snapshots the live register
+    and restores it afterwards.
     """
-    assert self._head96_information is not None, "96-head information not loaded; run setup()"
-    if self._head96_y_drive_speed_default is not None:
-      return self._head96_y_drive_speed_default
-    return self._head96_information.y_drive_speed_default
+    assert self._head96_y_drive_speed_default is not None, "96-head defaults not loaded; run setup()"
+    return self._head96_y_drive_speed_default
 
   @head96_y_drive_speed_default.setter
   def head96_y_drive_speed_default(self, value: float):
@@ -8064,14 +8048,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def head96_y_drive_acceleration_default(self) -> float:
     """Default 96-head Y-drive acceleration (mm/s2) used when a Y move is called without one.
 
-    Falls back to the firmware-resolved `Head96Information.y_drive_acceleration_default`; assign your
-    own and it is validated against `y_acceleration_range` before taking effect. A move does not
-    persist this to the drive: it snapshots the live register and restores it afterwards.
+    Seeded from the machine at setup; assign your own and it is validated against
+    `y_acceleration_range` before taking effect. A move does not persist this to the drive: it
+    snapshots the live register and restores it afterwards.
     """
-    assert self._head96_information is not None, "96-head information not loaded; run setup()"
-    if self._head96_y_drive_acceleration_default is not None:
-      return self._head96_y_drive_acceleration_default
-    return self._head96_information.y_drive_acceleration_default
+    assert (
+      self._head96_y_drive_acceleration_default is not None
+    ), "96-head defaults not loaded; run setup()"
+    return self._head96_y_drive_acceleration_default
 
   @head96_y_drive_acceleration_default.setter
   def head96_y_drive_acceleration_default(self, value: float):
@@ -8085,14 +8069,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def head96_z_drive_speed_default(self) -> float:
     """Default 96-head Z-drive speed (mm/s) used when a Z move is called without an explicit speed.
 
-    Falls back to the firmware-resolved `Head96Information.z_drive_speed_default`; assign your own and
-    it is validated against `z_speed_range` before taking effect. A move does not persist this to the
-    drive: it snapshots the live register and restores it afterwards.
+    Seeded from the machine at setup; assign your own and it is validated against `z_speed_range`
+    before taking effect. A move does not persist this to the drive: it snapshots the live register
+    and restores it afterwards.
     """
-    assert self._head96_information is not None, "96-head information not loaded; run setup()"
-    if self._head96_z_drive_speed_default is not None:
-      return self._head96_z_drive_speed_default
-    return self._head96_information.z_drive_speed_default
+    assert self._head96_z_drive_speed_default is not None, "96-head defaults not loaded; run setup()"
+    return self._head96_z_drive_speed_default
 
   @head96_z_drive_speed_default.setter
   def head96_z_drive_speed_default(self, value: float):
@@ -8106,14 +8088,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def head96_z_drive_acceleration_default(self) -> float:
     """Default 96-head Z-drive acceleration (mm/s2) used when a Z move is called without one.
 
-    Falls back to the firmware-resolved `Head96Information.z_drive_acceleration_default`; assign your
-    own and it is validated against `z_acceleration_range` before taking effect. A move does not
-    persist this to the drive: it snapshots the live register and restores it afterwards.
+    Seeded from the machine at setup; assign your own and it is validated against
+    `z_acceleration_range` before taking effect. A move does not persist this to the drive: it
+    snapshots the live register and restores it afterwards.
     """
-    assert self._head96_information is not None, "96-head information not loaded; run setup()"
-    if self._head96_z_drive_acceleration_default is not None:
-      return self._head96_z_drive_acceleration_default
-    return self._head96_information.z_drive_acceleration_default
+    assert (
+      self._head96_z_drive_acceleration_default is not None
+    ), "96-head defaults not loaded; run setup()"
+    return self._head96_z_drive_acceleration_default
 
   @head96_z_drive_acceleration_default.setter
   def head96_z_drive_acceleration_default(self, value: float):

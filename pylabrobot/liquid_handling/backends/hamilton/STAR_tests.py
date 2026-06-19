@@ -2,7 +2,6 @@
 
 import contextlib
 import copy
-import datetime
 import unittest
 import unittest.mock
 from typing import Literal, cast
@@ -38,7 +37,6 @@ from .STAR_backend import (
   CommandSyntaxError,
   HamiltonNoTipError,
   HardwareError,
-  Head96Information,
   PipChannelInformation,
   STARBackend,
   STARFirmwareError,
@@ -450,43 +448,40 @@ class TestChatterboxiSWAPSetup(unittest.IsolatedAsyncioTestCase):
 
 
 class TestHead96DriveDefaults(unittest.IsolatedAsyncioTestCase):
-  """Head96Information carries the firmware default speed/acceleration for every drive, in standard
-  units: version-resolved where it changed across firmware, constant fields where it did not."""
+  """The Y/Z drive speed/acceleration defaults are read from the machine into mutable STARBackend
+  attributes at setup (and are user-overridable); the dispensing/squeezer factory facts stay on the
+  frozen Head96Information record."""
 
-  async def test_setup_resolves_all_drive_defaults(self):
-    """setup() populates all eight per-drive defaults with the 2013+ firmware values."""
+  async def _setup_cb(self) -> STARChatterboxBackend:
     cb = STARChatterboxBackend()  # mocks a 2023 (2013+) head
     cb.set_deck(STARLetDeck())
     await cb.setup()
+    return cb
+
+  async def test_setup_seeds_yz_defaults_from_machine(self):
+    """setup() seeds the mutable Y/Z defaults from the machine registers; dispensing/squeezer stay
+    on the frozen record with their 2013+ firmware values."""
+    cb = await self._setup_cb()
     info = cb._head96_information
     assert info is not None
-    self.assertAlmostEqual(info.y_drive_speed_default, 390.62, places=2)
-    self.assertAlmostEqual(info.y_drive_acceleration_default, 546.88, places=2)
-    self.assertEqual(info.z_drive_speed_default, 85.0)
-    self.assertEqual(info.z_drive_acceleration_default, 400.0)
+    # Y/Z defaults: read from the machine into mutable backend attributes.
+    self.assertAlmostEqual(cb.head96_y_drive_speed_default, 390.62, places=2)
+    self.assertAlmostEqual(cb.head96_y_drive_acceleration_default, 546.88, places=2)
+    self.assertEqual(cb.head96_z_drive_speed_default, 85.0)
+    self.assertEqual(cb.head96_z_drive_acceleration_default, 400.0)
+    # Dispensing/squeezer factory defaults still live on the frozen record.
     self.assertEqual(info.dispensing_drive_speed_default, 261.1)
     self.assertAlmostEqual(info.dispensing_drive_acceleration_default, 17406.84, places=2)
     self.assertAlmostEqual(info.squeezer_drive_speed_default, 15.86, places=2)
     self.assertAlmostEqual(info.squeezer_drive_acceleration_default, 62.6, places=2)
 
-  def test_version_resolved_default_falls_back_for_pre_2010_firmware(self):
-    """A version-resolved default switches to the 2008 firmware value for pre-2010 heads (Y, whose
-    encoder resolution is constant, so both branches are exact)."""
-
-    def info(fw_version: datetime.date) -> Head96Information:
-      # Only fw_version drives the computed default; the rest are placeholder facts.
-      return Head96Information(
-        fw_version=fw_version,
-        x_offset=0.0,
-        supports_clot_monitoring_clld=False,
-        stop_disc_type="core_ii",
-        instrument_type="FM-STAR",
-        head_type="96 head II",
-        z_range=(0.0, 0.0),
-      )
-
-    self.assertAlmostEqual(info(datetime.date(2008, 11, 11)).y_drive_speed_default, 312.5, places=2)
-    self.assertAlmostEqual(info(datetime.date(2013, 9, 2)).y_drive_speed_default, 390.62, places=2)
+  async def test_yz_default_is_user_overridable_and_range_checked(self):
+    """A machine-seeded Y/Z default can be reassigned; an out-of-range value is rejected."""
+    cb = await self._setup_cb()
+    cb.head96_y_drive_speed_default = 100.0
+    self.assertEqual(cb.head96_y_drive_speed_default, 100.0)
+    with self.assertRaises(ValueError):
+      cb.head96_y_drive_speed_default = 10_000.0  # outside y_speed_range
 
 
 class TestHead96CrashRecovery(unittest.IsolatedAsyncioTestCase):
@@ -500,11 +495,16 @@ class TestHead96CrashRecovery(unittest.IsolatedAsyncioTestCase):
     assert self.cb._head96_information is not None
     z_min, z_max = self.cb._head96_information.z_range
     self.z_target = round((z_min + z_max) / 2, 1)
+    self.move_za = f"{self.cb._head96_z_drive_mm_to_increment(self.z_target):05}"
     self.z_safety_za = f"{self.cb._head96_z_drive_mm_to_increment(z_max):05}"
     # head96_move_stop_disk_z snapshots the current Z speed/accel (to restore after the move); these
-    # tests only exercise the ZA crash-retract path, so stub the reads with in-range values.
+    # tests only exercise the ZA crash-retract path, so stub the reads with in-range values and the
+    # restore writes (AA) so that send_command receives only the ZA moves under test.
     self.cb.head96_request_z_speed = unittest.mock.AsyncMock(return_value=85.0)
     self.cb.head96_request_z_acceleration = unittest.mock.AsyncMock(return_value=400.0)
+    self.cb._head96_set_z_speed = unittest.mock.AsyncMock()
+    self.cb._head96_set_z_acceleration = unittest.mock.AsyncMock()
+    self.cb.send_command = unittest.mock.AsyncMock()
 
   def _crash(self, message):
     return STARFirmwareError(
@@ -520,46 +520,29 @@ class TestHead96CrashRecovery(unittest.IsolatedAsyncioTestCase):
     """A ZA firmware error retracts the head to z_range[1] (a second ZA) before the original error
     propagates."""
     original = self._crash("z drive movement error")
-    za_targets = []
+    # ZA #1 is the move (crashes); ZA #2 is the safety retract (succeeds).
+    self.cb.send_command.side_effect = [original, {}]
 
-    async def fake_send(module, command, **kwargs):
-      if command == "ZA":
-        za_targets.append(kwargs["za"])
-        if len(za_targets) == 1:
-          raise original  # the move crashes
-        return {}  # the safety retract succeeds
-      return {}  # AA restore etc.
-
-    self.cb.send_command = unittest.mock.AsyncMock(side_effect=fake_send)
     with self.assertRaises(STARFirmwareError) as ctx:
       await self.cb.head96_move_stop_disk_z(self.z_target)
 
     self.assertIs(ctx.exception, original)
-    move_za = f"{self.cb._head96_z_drive_mm_to_increment(self.z_target):05}"
-    self.assertEqual(za_targets, [move_za, self.z_safety_za])
+    za_targets = [call.kwargs["za"] for call in self.cb.send_command.await_args_list]
+    self.assertEqual(za_targets, [self.move_za, self.z_safety_za])
 
   async def test_retract_that_also_crashes_does_not_recurse(self):
     """If the safety retract itself errors, exactly two ZA moves are sent (no recursion) and the
     ORIGINAL error re-raises, not the retract's."""
     original = self._crash("original crash")
     retract_err = self._crash("retract crash")
-    za_count = 0
+    # ZA #1 (move) and ZA #2 (retract) both crash; the retract must not recurse into a third ZA.
+    self.cb.send_command.side_effect = [original, retract_err]
 
-    async def fake_send(module, command, **kwargs):
-      nonlocal za_count
-      if command == "ZA":
-        za_count += 1
-        if za_count == 1:
-          raise original
-        raise retract_err
-      return {}
-
-    self.cb.send_command = unittest.mock.AsyncMock(side_effect=fake_send)
     with self.assertRaises(STARFirmwareError) as ctx:
       await self.cb.head96_move_stop_disk_z(self.z_target)
 
     self.assertIs(ctx.exception, original)
-    self.assertEqual(za_count, 2)
+    self.assertEqual(self.cb.send_command.await_count, 2)
 
 
 class TestiSWAPYMaxBootstrap(unittest.IsolatedAsyncioTestCase):

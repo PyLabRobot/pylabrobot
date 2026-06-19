@@ -169,15 +169,12 @@ class STARChatterboxBackend(STARBackend):
         head_type="96 head II",
         z_range=self._head96_resolve_z_range(instrument_type),
       )
-      # Seed the user-overridable drive defaults from the frozen factory facts (mirrors STARBackend).
-      self._head96_y_drive_speed_default = self._head96_information.y_drive_speed_default
-      self._head96_y_drive_acceleration_default = (
-        self._head96_information.y_drive_acceleration_default
-      )
-      self._head96_z_drive_speed_default = self._head96_information.z_drive_speed_default
-      self._head96_z_drive_acceleration_default = (
-        self._head96_information.z_drive_acceleration_default
-      )
+      # Seed the mutable drive defaults from the machine (mirrors STARBackend); the head96_request_*
+      # overrides below return the canned 2013+ factory registers.
+      self._head96_y_drive_speed_default = await self.head96_request_y_speed()
+      self._head96_y_drive_acceleration_default = await self.head96_request_y_acceleration()
+      self._head96_z_drive_speed_default = await self.head96_request_z_speed()
+      self._head96_z_drive_acceleration_default = await self.head96_request_z_acceleration()
     else:
       self._head96_information = None
 
@@ -317,6 +314,20 @@ class STARChatterboxBackend(STARBackend):
   async def head96_request_firmware_version(self) -> datetime.date:
     """Return mock 96-head firmware version."""
     return datetime.date(2023, 1, 1)
+
+  # The Y/Z drive speed/acceleration registers a 2013+ (2023 mock) head reports at setup, returned
+  # through the real unit conversions so the seeded defaults match a live machine's factory values.
+  async def head96_request_y_speed(self) -> float:
+    return self._head96_y_drive_increment_to_mm(25000)
+
+  async def head96_request_y_acceleration(self) -> float:
+    return self._head96_y_drive_increment_to_mm(35000)
+
+  async def head96_request_z_speed(self) -> float:
+    return 85.0
+
+  async def head96_request_z_acceleration(self) -> float:
+    return 400.0
 
   # # # # # # # # Extension: iSWAP # # # # # # # #
 
