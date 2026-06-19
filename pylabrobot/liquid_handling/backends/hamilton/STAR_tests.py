@@ -1317,7 +1317,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR._head96_z_drive_speed_default = 85.0
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
-    self.STAR.head96_request_stop_disk_z = unittest.mock.AsyncMock(return_value=200.0)
+    self.STAR.head96_request_height_last_lld = unittest.mock.AsyncMock(return_value=200.0)
     self.STAR._write_and_read_command.reset_mock()
     detected = await self.STAR.head96_probe_z_using_clld(
       tip_len=50.0,  # overhang = 50 - 8 = 42 mm
@@ -1339,7 +1339,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         )
       ]
     )
-    self.assertEqual(detected, 158.0)  # 200.0 stop disk - 42 overhang
+    self.assertEqual(detected, 158.0)  # 200.0 detected surface - 42 overhang
 
   async def test_head96_probe_z_using_clld_requires_tip(self):
     """cLLD raises if the head holds no tip, whether tip_len is measured or supplied."""

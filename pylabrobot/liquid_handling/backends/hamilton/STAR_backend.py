@@ -8606,18 +8606,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @_requires_head96
   async def head96_probe_z_using_clld(
     self,
+    start_pos_search: Optional[float] = None,
     tip_len: Optional[float] = None,
     lowest_immers_pos: Optional[float] = None,
-    start_pos_search: Optional[float] = None,
+    approach_speed: Optional[float] = None,
     speed: float = 10.0,
     acceleration: float = 300.0,
-    approach_speed: Optional[float] = None,
-    current_protection_limiter: int = 15,
-    lld_sensor: Literal["G11 or H12", "A1 or B2", "any", "all"] = "any",
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
     detection_edge: int = 10,
     detection_drop: int = 2,
     post_detection_dist: float = 2.0,
-    move_head_to_z_safety_after: bool = False,
+    current_protection_limiter: int = 15,
+    move_to_z_safety_after: bool = False,
   ) -> float:
     """Probe the liquid-surface Z-height with the 96-head's capacitive LLD (cLLD).
 
@@ -8651,7 +8651,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       detection_drop: offset applied after cLLD edge detection (0-1023).
       post_detection_dist: signed distance to move after detection in mm; positive moves up / out of
         liquid, negative moves down / deeper.
-      move_head_to_z_safety_after: if True, retract the head to Z-safety after reading the height.
+      move_to_z_safety_after: if True, retract the head to Z-safety after reading the height.
 
     Returns:
       The detected liquid-surface Z-height as a tip-bottom position in mm.
@@ -8674,13 +8674,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if approach_speed is None:
       approach_speed = self.head96_z_drive_speed_default
-
-    if not z_speed_min <= speed <= z_speed_max:
-      raise ValueError(f"speed must be between {z_speed_min} - {z_speed_max} mm/sec, is {speed}")
     if not z_speed_min <= approach_speed <= z_speed_max:
       raise ValueError(
         f"approach_speed must be between {z_speed_min} - {z_speed_max} mm/sec, is {approach_speed}"
       )
+    if not z_speed_min <= speed <= z_speed_max:
+      raise ValueError(f"speed must be between {z_speed_min} - {z_speed_max} mm/sec, is {speed}")
     if not z_accel_min <= acceleration <= z_accel_max:
       raise ValueError(
         f"acceleration must be between {z_accel_min} - {z_accel_max} mm/sec**2, is {acceleration}"
@@ -8760,8 +8759,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     start_pos_search_increments = self._head96_z_drive_mm_to_increment(
       start_pos_search + tip_overhang
     )
-    speed_increments = self._head96_z_drive_mm_to_increment(speed)
     approach_speed_increments = self._head96_z_drive_mm_to_increment(approach_speed)
+    speed_increments = self._head96_z_drive_mm_to_increment(speed)
     acceleration_increments = self._head96_z_drive_mm_to_increment(acceleration)
 
     # Signed post-detection move -> direction (zj) and magnitude (zi).
@@ -8773,8 +8772,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"{self._head96_z_drive_increment_to_mm(9999)} mm, is {abs(post_detection_dist)}"
       )
 
-    # Build the ZL params in the firmware's documented field order. lm (2013+ only), the zr scaling,
-    # and the zw width differ by firmware; dj is left at its default (dj0, normal min-height control).
     lm_field = {"lm": str(lld_sensor_map[lld_sensor])} if uses_2013_structure else {}
     if uses_2013_structure:
       zr_field = f"{acceleration_increments:06}"  # raw [increment/second**2]
@@ -8798,14 +8795,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     try:
       await self.send_command(module="H0", command="ZL", **zl_params)
     except STARFirmwareError:
-      # The head may be in liquid / against a surface; retreat before re-raising.
       await self.head96_move_to_z_safety()
       raise
 
-    # Stopped stop-disk Z -> tip-bottom = detected surface. Read before any retract; a non-zero
-    # post_detection_dist makes this the post-detection position, not the bare surface.
-    detected_tip_bottom = round(await self.head96_request_stop_disk_z() - tip_overhang, 2)
-    if move_head_to_z_safety_after:
+    # RH returns the latched detected surface (stop-disk frame), unaffected by the post-detection
+    # move; map it to tip-bottom. TODO(hardware): confirm the RH response format against a capture.
+    detected_tip_bottom = round(await self.head96_request_height_last_lld() - tip_overhang, 2)
+    if move_to_z_safety_after:
       await self.head96_move_to_z_safety()
     return detected_tip_bottom
 
@@ -9934,6 +9930,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
     resp = await self.send_command(module="H0", command="RZ", fmt="rz##### (n)")
     return self._head96_z_drive_increment_to_mm(resp["rz"][1])  # [0] = FW counter, [1] = HW counter
+
+  async def head96_request_height_last_lld(self) -> float:
+    """Request the liquid-surface position the last 96-head cLLD search found, in mm (H0 RH).
+
+    Unlike `head96_request_stop_disk_z` (the head's current position), this is the latched surface
+    the last `ZL` search detected, so it is unaffected by any post-detection move - the head
+    counterpart of the channel `request_pip_height_last_lld`.
+
+    Returns:
+      Detected liquid-surface Z position (stop-disk frame) in mm.
+    """
+    resp = await self.send_command(module="H0", command="RH", fmt="rh#####")
+    return self._head96_z_drive_increment_to_mm(resp["rh"])
 
   async def _head96_probe_z_max(self) -> float:
     """Probe the reachable Z top (mm) for this unit: drive to the firmware Z-safety height (C0 EV)
