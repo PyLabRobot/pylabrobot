@@ -1402,36 +1402,19 @@ class Head96Information:
   instrument_type: InstrumentType
   head_type: HeadType
 
-  # === Firmware/variant-derived limits, in standard units (resolved at setup) ===
-  y_range: Tuple[float, float]
-  """Y-drive position window (mm)."""
-  y_speed_range: Tuple[float, float]
-  """Y-drive speed window (mm/s)."""
+  # === Firmware/variant-derived limits. z_range is set at setup because its max is a hardware
+  # probe; the Y and dispensing-drive windows are pure functions of fw_version (and the encoder
+  # resolutions below), so they are exposed as properties rather than stored. ===
   z_range: Tuple[float, float]
-  """Z-drive position window (mm); FM-STAR extends it."""
-  dispensing_drive_range: Tuple[float, float]
-  """Dispensing-drive (piston) volume window (uL); applies to both aspirate and dispense."""
-  dispensing_drive_speed_range: Tuple[float, float]
-  """Dispensing-drive speed window (uL/s)."""
-  # Per-drive default speed / acceleration that vary by firmware version (resolved at setup).
-  y_drive_speed_default: float
-  """Y-drive default speed (mm/s)."""
-  y_drive_acceleration_default: float
-  """Y-drive default acceleration (mm/s2)."""
-  dispensing_drive_acceleration_default: float
-  """Dispensing-drive default acceleration (uL/s2)."""
-  squeezer_drive_speed_default: float
-  """Squeezer-drive default speed (mm/s)."""
-  squeezer_drive_acceleration_default: float
-  """Squeezer-drive default acceleration (mm/s2)."""
+  """Z-drive position window (mm); FM-STAR extends it. Set at setup: the min is variant-derived,
+  the max is read from a hardware probe."""
 
-  # === Per-drive default speed / acceleration that are constant across firmware (standard units). ===
-  z_drive_speed_default: float = 85.0
-  """Z-drive default speed (mm/s)."""
-  z_drive_acceleration_default: float = 400.0
-  """Z-drive default acceleration (mm/s2)."""
-  dispensing_drive_speed_default: float = 261.1
-  """Dispensing-drive default speed (uL/s)."""
+  z_speed_range: Tuple[float, float] = (0.25, 100.0)
+  """Z-drive speed window (mm/s); unchanged across the 2008/2013/2025 firmware, unlike the
+  version-resolved `y_speed_range`."""
+  z_acceleration_range: Tuple[float, float] = (25.0, 500.0)
+  """Z-drive acceleration window (mm/s2); unchanged across the 2008/2013/2025 firmware (the
+  pre-2010 encoding differs, the physical range does not)."""
 
   # === Encoder resolutions (defaulted device facts). Y/Z are unchanged across firmware; the
   # dispensing/squeezer resolutions are the 2013+ generation values (2008-era heads differ). ===
@@ -1440,6 +1423,77 @@ class Head96Information:
   dispensing_drive_mm_per_increment: float = 0.001025641026
   dispensing_drive_uL_per_increment: float = 0.019340933
   squeezer_drive_mm_per_increment: float = 0.0002086672009
+
+  # === Firmware/variant-derived area-of-operation windows (standard units). Pure functions of
+  # fw_version and the encoder resolutions above, so they are computed on access. ===
+  @property
+  def y_range(self) -> Tuple[float, float]:
+    """Y-drive position window (mm); 2013 firmware shifted it from the 2008 range."""
+    min_inc, max_inc = (6000, 36000) if self.fw_version.year >= 2010 else (7000, 36200)
+    return (
+      round(min_inc * self.y_drive_mm_per_increment, 2),
+      round(max_inc * self.y_drive_mm_per_increment, 2),
+    )
+
+  @property
+  def y_speed_range(self) -> Tuple[float, float]:
+    """Y-drive speed window (mm/s). The pre-2021 max (390.625 = the firmware default, 25000 inc) is
+    an empirical, deck-tested cap; per firmware version the maxima are 312.5 (2008) and 625 (2013+).
+    Verify on a pre-2021 head before raising it."""
+    return (0.78125, 390.625 if self.fw_version.year <= 2021 else 625.0)
+
+  @property
+  def y_acceleration_range(self) -> Tuple[float, float]:
+    """Y-drive acceleration window (mm/s2). The min (5000 inc) is constant; the max rose from 32000
+    inc (2008) to 50000 inc (2013+), so it tracks firmware like the Y range / speed."""
+    max_inc = 50000 if self.fw_version.year >= 2010 else 32000
+    return (
+      round(5000 * self.y_drive_mm_per_increment, 2),
+      round(max_inc * self.y_drive_mm_per_increment, 2),
+    )
+
+  @property
+  def dispensing_drive_range(self) -> Tuple[float, float]:
+    """Aspirate/dispense piston volume window (uL); applies to both aspirate and dispense. 2013
+    firmware widened the max from 62130 inc."""
+    max_inc = 64350 if self.fw_version.year >= 2010 else 62130
+    return (0.0, round(max_inc * self.dispensing_drive_uL_per_increment, 2))
+
+  @property
+  def dispensing_drive_speed_range(self) -> Tuple[float, float]:
+    """Dispensing-drive speed window (uL/s); 2013 firmware widened the max from 52000 inc."""
+    min_inc = 5  # firmware dv minimum (00005 increments/second)
+    max_inc = 55000 if self.fw_version.year >= 2010 else 52000
+    return (
+      round(min_inc * self.dispensing_drive_uL_per_increment, 2),
+      round(max_inc * self.dispensing_drive_uL_per_increment, 2),
+    )
+
+  # === Per-drive factory default speed / acceleration (standard units). The Y/Z-drive defaults are
+  # deliberately not kept here: STARBackend reads them from the machine at setup into mutable
+  # attributes (head96_{y,z}_drive_{speed,acceleration}_default) so a run can override them. ===
+  @property
+  def dispensing_drive_speed_default(self) -> float:
+    """Dispensing-drive default speed (uL/s); constant across firmware."""
+    return 261.1
+
+  @property
+  def dispensing_drive_acceleration_default(self) -> float:
+    """Dispensing-drive default acceleration (uL/s2); 2013 firmware raised it."""
+    increments = 900000 if self.fw_version.year >= 2010 else 150000
+    return round(increments * self.dispensing_drive_uL_per_increment, 2)
+
+  @property
+  def squeezer_drive_speed_default(self) -> float:
+    """Squeezer-drive default speed (mm/s); 2013 firmware raised it."""
+    increments = 76000 if self.fw_version.year >= 2010 else 16000
+    return round(increments * self.squeezer_drive_mm_per_increment, 2)
+
+  @property
+  def squeezer_drive_acceleration_default(self) -> float:
+    """Squeezer-drive default acceleration (mm/s2); 2013 firmware raised it."""
+    increments = 300000 if self.fw_version.year >= 2010 else 100000
+    return round(increments * self.squeezer_drive_mm_per_increment, 2)
 
 
 @dataclass(frozen=True, eq=False)
@@ -1620,6 +1674,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # `set_up_iswap` from firmware/EEPROM. See `iswap_information` property
     # for guarded access. None pre-setup; immutable post-setup.
     self._iswap_information: Optional[iSWAPInformation] = None
+    # Mutable 96-head Y/Z drive speed/acceleration defaults, seeded from the machine's registers at
+    # setup and overridable via the @property setters (range-checked). None until setup() loads them;
+    # a move uses the current default when no explicit value is passed.
+    self._head96_y_drive_speed_default: Optional[float] = None
+    self._head96_y_drive_acceleration_default: Optional[float] = None
+    self._head96_z_drive_speed_default: Optional[float] = None
+    self._head96_z_drive_acceleration_default: Optional[float] = None
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -2112,31 +2173,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
           instrument_type=instrument_type,
           head_type=head96_type,
-          y_range=self._head96_resolve_y_range(fw_version),
-          y_speed_range=self._head96_resolve_y_speed_range(fw_version),
           # probing safe max z position also acts a safety retraction of the head96 on every setup call
           z_range=(
             self._head96_resolve_z_range(instrument_type)[0],
             await self._head96_probe_z_max(),
           ),
-          dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
-          dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(
-            fw_version
-          ),
-          y_drive_speed_default=self._head96_resolve_y_drive_speed_default(fw_version),
-          y_drive_acceleration_default=self._head96_resolve_y_drive_acceleration_default(
-            fw_version
-          ),
-          dispensing_drive_acceleration_default=self._head96_resolve_dispensing_drive_acceleration_default(
-            fw_version
-          ),
-          squeezer_drive_speed_default=self._head96_resolve_squeezer_drive_speed_default(
-            fw_version
-          ),
-          squeezer_drive_acceleration_default=self._head96_resolve_squeezer_drive_acceleration_default(
-            fw_version
-          ),
         )
+        # Seed the mutable Y/Z drive speed/acceleration defaults from the machine's current
+        # registers; a run can override them via the head96_*_drive_*_default setters afterwards.
+        self._head96_y_drive_speed_default = await self.head96_request_y_speed()
+        self._head96_y_drive_acceleration_default = await self.head96_request_y_acceleration()
+        self._head96_z_drive_speed_default = await self.head96_request_z_speed()
+        self._head96_z_drive_acceleration_default = await self.head96_request_z_acceleration()
 
     async def set_up_arm_modules():
       await set_up_pip()
@@ -7804,73 +7852,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="H0", command="QG", fmt="qg#")
     return type_map.get(resp["qg"], "unknown")
 
-  def _head96_resolve_y_range(self, fw_version: datetime.date) -> Tuple[float, float]:
-    """Y-drive position window (mm); 2013 firmware shifted it from the 2008 range."""
-    min_inc, max_inc = (6000, 36000) if fw_version.year >= 2010 else (7000, 36200)
-    return (
-      self._head96_y_drive_increment_to_mm(min_inc),
-      self._head96_y_drive_increment_to_mm(max_inc),
-    )
-
-  def _head96_resolve_y_speed_range(self, fw_version: datetime.date) -> Tuple[float, float]:
-    """Y-drive speed window (mm/s). The pre-2021 max (390.625 = the firmware default, 25000 inc) is
-    an empirical, deck-tested cap; per firmware version the maxima are 312.5 (2008) and 625 (2013+).
-    Verify on a pre-2021 head before raising it. Refactored verbatim from head96_move_y."""
-    return (0.78125, 390.625 if fw_version.year <= 2021 else 625.0)
-
   def _head96_resolve_z_range(self, instrument_type: str) -> Tuple[float, float]:
     """Z-drive position window (mm); FM-STAR extends it (za/zb/zh all share this range)."""
     min_inc, max_inc = (24200, 76200) if instrument_type == "FM-STAR" else (36100, 68500)
     return (
       self._head96_z_drive_increment_to_mm(min_inc),
       self._head96_z_drive_increment_to_mm(max_inc),
-    )
-
-  def _head96_resolve_dispensing_drive_range(
-    self, fw_version: datetime.date
-  ) -> Tuple[float, float]:
-    """Aspirate/dispense piston volume window (uL); 2013 firmware widened the max from 62130 inc."""
-    max_inc = 64350 if fw_version.year >= 2010 else 62130
-    return (0.0, self._head96_dispensing_drive_increment_to_uL(max_inc))
-
-  def _head96_resolve_dispensing_drive_speed_range(
-    self, fw_version: datetime.date
-  ) -> Tuple[float, float]:
-    """Dispensing-drive speed window (uL/s); 2013 firmware widened the max from 52000 inc."""
-    min_inc = 5  # firmware dv minimum (00005 increments/second)
-    max_inc = 55000 if fw_version.year >= 2010 else 52000
-    return (
-      self._head96_dispensing_drive_increment_to_uL(min_inc),
-      self._head96_dispensing_drive_increment_to_uL(max_inc),
-    )
-
-  # Per-drive default speed / acceleration that vary by firmware version (the constant ones are plain
-  # Head96Information fields). 2013 firmware raised them. The dispensing/squeezer values use the 2013+
-  # encoder resolutions, so for pre-2010 heads they are approximate (as the ranges above are).
-  def _head96_resolve_y_drive_speed_default(self, fw_version: datetime.date) -> float:
-    """Y-drive default speed (mm/s); 2013 firmware raised it."""
-    return self._head96_y_drive_increment_to_mm(25000 if fw_version.year >= 2010 else 20000)
-
-  def _head96_resolve_y_drive_acceleration_default(self, fw_version: datetime.date) -> float:
-    """Y-drive default acceleration (mm/s2); 2013 firmware raised it."""
-    return self._head96_y_drive_increment_to_mm(35000 if fw_version.year >= 2010 else 32000)
-
-  def _head96_resolve_dispensing_drive_acceleration_default(
-    self, fw_version: datetime.date
-  ) -> float:
-    """Dispensing-drive default acceleration (uL/s2); 2013 firmware raised it."""
-    return self._head96_dispensing_drive_increment_to_uL(
-      900000 if fw_version.year >= 2010 else 150000
-    )
-
-  def _head96_resolve_squeezer_drive_speed_default(self, fw_version: datetime.date) -> float:
-    """Squeezer-drive default speed (mm/s); 2013 firmware raised it."""
-    return self._head96_squeezer_drive_increment_to_mm(76000 if fw_version.year >= 2010 else 16000)
-
-  def _head96_resolve_squeezer_drive_acceleration_default(self, fw_version: datetime.date) -> float:
-    """Squeezer-drive default acceleration (mm/s2); 2013 firmware raised it."""
-    return self._head96_squeezer_drive_increment_to_mm(
-      300000 if fw_version.year >= 2010 else 100000
     )
 
   # -------------- 3.10.1 Initialization --------------
@@ -7973,16 +7960,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   _head96_dispensing_drive_uL_per_increment = Head96Information.dispensing_drive_uL_per_increment
   _head96_squeezer_drive_mm_per_increment = Head96Information.squeezer_drive_mm_per_increment
 
-  # Z-axis conversions
-
-  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
-    """Convert mm to Z-axis hardware increments for 96-head."""
-    return round(value_mm / self._head96_z_drive_mm_per_increment)
-
-  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
-    """Convert Z-axis hardware increments to mm for 96-head."""
-    return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
-
   # Y-axis conversions
 
   def _head96_y_drive_mm_to_increment(self, value_mm: float) -> int:
@@ -7992,6 +7969,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _head96_y_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert Y-axis hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_y_drive_mm_per_increment, 2)
+
+  # Z-axis conversions
+
+  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to Z-axis hardware increments for 96-head."""
+    return round(value_mm / self._head96_z_drive_mm_per_increment)
+
+  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert Z-axis hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
 
   # Dispensing drive conversions (mm and uL)
 
@@ -8033,6 +8020,209 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Convert squeezer drive hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_squeezer_drive_mm_per_increment, 2)
 
+  # Default drive speed/acceleration a move uses when the caller passes none. Each getter returns the
+  # user override if one was set, otherwise the firmware-resolved Head96Information factory default;
+  # the setter range-checks against Head96Information so a user can set their own default safely. A
+  # move does not persist these to the drive - it snapshots the live register and restores it after.
+
+  @property
+  def head96_y_drive_speed_default(self) -> float:
+    """Default 96-head Y-drive speed (mm/s) used when a Y move is called without an explicit speed.
+
+    Seeded from the machine at setup; assign your own and it is validated against `y_speed_range`
+    before taking effect. A move does not persist this to the drive: it snapshots the live register
+    and restores it afterwards.
+    """
+    assert self._head96_y_drive_speed_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
+    return self._head96_y_drive_speed_default
+
+  @head96_y_drive_speed_default.setter
+  def head96_y_drive_speed_default(self, value: float):
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    lo, hi = self._head96_information.y_speed_range
+    if not lo <= value <= hi:
+      raise ValueError(f"speed must be between {lo} and {hi} mm/sec")
+    self._head96_y_drive_speed_default = value
+
+  @property
+  def head96_y_drive_acceleration_default(self) -> float:
+    """Default 96-head Y-drive acceleration (mm/s2) used when a Y move is called without one.
+
+    Seeded from the machine at setup; assign your own and it is validated against
+    `y_acceleration_range` before taking effect. A move does not persist this to the drive: it
+    snapshots the live register and restores it afterwards.
+    """
+    assert self._head96_y_drive_acceleration_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
+    return self._head96_y_drive_acceleration_default
+
+  @head96_y_drive_acceleration_default.setter
+  def head96_y_drive_acceleration_default(self, value: float):
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    lo, hi = self._head96_information.y_acceleration_range
+    if not lo <= value <= hi:
+      raise ValueError(f"acceleration must be between {lo} and {hi} mm/sec**2")
+    self._head96_y_drive_acceleration_default = value
+
+  @property
+  def head96_z_drive_speed_default(self) -> float:
+    """Default 96-head Z-drive speed (mm/s) used when a Z move is called without an explicit speed.
+
+    Seeded from the machine at setup; assign your own and it is validated against `z_speed_range`
+    before taking effect. A move does not persist this to the drive: it snapshots the live register
+    and restores it afterwards.
+    """
+    assert self._head96_z_drive_speed_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
+    return self._head96_z_drive_speed_default
+
+  @head96_z_drive_speed_default.setter
+  def head96_z_drive_speed_default(self, value: float):
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    lo, hi = self._head96_information.z_speed_range
+    if not lo <= value <= hi:
+      raise ValueError(f"speed must be between {lo} and {hi} mm/sec")
+    self._head96_z_drive_speed_default = value
+
+  @property
+  def head96_z_drive_acceleration_default(self) -> float:
+    """Default 96-head Z-drive acceleration (mm/s2) used when a Z move is called without one.
+
+    Seeded from the machine at setup; assign your own and it is validated against
+    `z_acceleration_range` before taking effect. A move does not persist this to the drive: it
+    snapshots the live register and restores it afterwards.
+    """
+    assert self._head96_z_drive_acceleration_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
+    return self._head96_z_drive_acceleration_default
+
+  @head96_z_drive_acceleration_default.setter
+  def head96_z_drive_acceleration_default(self, value: float):
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    lo, hi = self._head96_information.z_acceleration_range
+    if not lo <= value <= hi:
+      raise ValueError(f"acceleration must be between {lo} and {hi} mm/sec**2")
+    self._head96_z_drive_acceleration_default = value
+
+  async def head96_request_y_speed(self) -> float:
+    """Request the persistent 96-head Y-drive speed (mm/s), via H0 RA (read parameter yv).
+
+    The read counterpart of `_head96_set_y_speed`.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="yv", fmt="yv#####")
+    return self._head96_y_drive_increment_to_mm(resp["yv"])
+
+  async def head96_request_y_acceleration(self) -> float:
+    """Request the persistent 96-head Y-drive acceleration (mm/s^2), via H0 RA (read parameter yr).
+
+    The read counterpart of `_head96_set_y_acceleration`.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="yr", fmt="yr#####")
+    return self._head96_y_drive_increment_to_mm(resp["yr"])
+
+  async def head96_request_z_speed(self) -> float:
+    """Request the persistent 96-head Z-drive speed (mm/s), via H0 RA (read parameter zv).
+
+    The read counterpart of `_head96_set_z_speed`.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="zv", fmt="zv#####")
+    return self._head96_z_drive_increment_to_mm(resp["zv"])
+
+  async def head96_request_z_acceleration(self) -> float:
+    """Request the persistent 96-head Z-drive acceleration (mm/s^2), via H0 RA (read parameter zr).
+
+    The read counterpart of `_head96_set_z_acceleration`; undoes the firmware-version acceleration
+    scaling that the setter (and `head96_move_stop_disk_z`) applies.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    resp = await self.send_command(module="H0", command="RA", ra="zr", fmt="zr######")
+    acceleration_multiplier = 1 if self._head96_information.fw_version.year >= 2010 else 0.001
+    return self._head96_z_drive_increment_to_mm(round(resp["zr"] / acceleration_multiplier))
+
+  @_requires_head96
+  async def _head96_set_y_speed(self, speed: float):
+    """Set the persistent 96-head Y-drive speed (mm/s) on the device without moving.
+
+    On-device write for troubleshooting or specialized use, not day-to-day - set
+    `head96_y_drive_speed_default` for routine control. Subsequent Y moves that don't pass their own
+    speed - including the C0-level 96-head commands - inherit this until it is changed or the drive
+    re-initialises.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    y_speed_min, y_speed_max = self._head96_information.y_speed_range
+    assert y_speed_min <= speed <= y_speed_max, (
+      f"speed must be between {y_speed_min} and {y_speed_max} mm/sec"
+    )
+    return await self.send_command(
+      module="H0", command="AA", yv=f"{self._head96_y_drive_mm_to_increment(speed):05}"
+    )
+
+  @_requires_head96
+  async def _head96_set_y_acceleration(self, acceleration: float):
+    """Set the persistent 96-head Y-drive acceleration (mm/s^2) on the device without moving.
+
+    On-device write for troubleshooting or specialized use, not day-to-day - set
+    `head96_y_drive_acceleration_default` for routine control.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    y_accel_min, y_accel_max = self._head96_information.y_acceleration_range
+    assert y_accel_min <= acceleration <= y_accel_max, (
+      f"acceleration must be between {y_accel_min} and {y_accel_max} mm/sec**2"
+    )
+    return await self.send_command(
+      module="H0", command="AA", yr=f"{self._head96_y_drive_mm_to_increment(acceleration):05}"
+    )
+
+  @_requires_head96
+  async def _head96_set_z_speed(self, speed: float):
+    """Set the persistent 96-head Z-drive speed (mm/s) on the device without moving.
+
+    On-device write for troubleshooting or specialized use, not day-to-day - set
+    `head96_z_drive_speed_default` for routine control.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    z_speed_min, z_speed_max = self._head96_information.z_speed_range
+    assert z_speed_min <= speed <= z_speed_max, (
+      f"speed must be between {z_speed_min} and {z_speed_max} mm/sec"
+    )
+    return await self.send_command(
+      module="H0", command="AA", zv=f"{self._head96_z_drive_mm_to_increment(speed):05}"
+    )
+
+  @_requires_head96
+  async def _head96_set_z_acceleration(self, acceleration: float):
+    """Set the persistent 96-head Z-drive acceleration (mm/s^2) on the device without moving.
+
+    On-device write for troubleshooting or specialized use, not day-to-day - set
+    `head96_z_drive_acceleration_default` for routine control. Applies the same firmware-version
+    acceleration scaling as `head96_move_stop_disk_z` (pre-2010 x0.001).
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
+    assert z_accel_min <= acceleration <= z_accel_max, (
+      f"acceleration must be between {z_accel_min} and {z_accel_max} mm/sec**2"
+    )
+    acceleration_multiplier = 1 if self._head96_information.fw_version.year >= 2010 else 0.001
+    acceleration_increment = round(
+      self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
+    )
+    return await self.send_command(module="H0", command="AA", zr=f"{acceleration_increment:06}")
+
   # Movement commands
 
   async def move_core_96_to_safe_position(self):
@@ -8056,7 +8246,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "requires 96-head firmware version information for safe operation"
     )
     z_max = self._head96_information.z_range[1]
-    return await self.head96_move_stop_disk_z(z_max, speed=speed, acceleration=acceleration)
+    return await self.head96_move_stop_disk_z(
+      z_max, speed=speed, acceleration=acceleration, retract_on_crash=False
+    )
 
   @_requires_head96
   async def head96_park(
@@ -8111,16 +8303,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def head96_move_y(
     self,
     y: float,
-    speed: float = 300.0,
-    acceleration: float = 300.0,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
   ):
     """Move the 96-head to a specified Y-axis coordinate.
 
+    A YA move writes its speed/acceleration into the drive's volatile register, where later moves
+    would inherit them. This command snapshots whatever speed/acceleration are on the robot before
+    it runs and restores them afterwards, so it leaves the persistent machine state untouched (the
+    restore is skipped when the move's value already matches what was there).
+
     Args:
       y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
-      speed: Movement speed in mm/sec. Valid range: [0.78125, 390.625 or 625.0]. Default: 300.0
-      acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 781.25]. Default: 300.0
+      speed: Movement speed in mm/sec; None uses `head96_y_drive_speed_default`. The valid range is
+        firmware-dependent (resolved into `Head96Information.y_speed_range`): [0.78125, 390.625]
+        pre-2021, [0.78125, 625.0] on 2021+ firmware.
+      acceleration: Movement acceleration in mm/sec**2; None uses
+        `head96_y_drive_acceleration_default`. The valid range is firmware-dependent (resolved into
+        `Head96Information.y_acceleration_range`): [78.125, 500.0] pre-2010, [78.125, 781.25] on
+        2013+ firmware.
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
 
     Returns:
@@ -8131,18 +8333,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       AssertionError: If firmware info missing or parameters out of range.
 
     Note:
-      Maximum speed varies by firmware version:
-      - Pre-2021: 390.625 mm/sec (25,000 increments)
-      - 2021+: 625.0 mm/sec (40,000 increments)
-      The exact firmware version introducing this change is undocumented.
+      The maxima rose across firmware generations, and the speed and acceleration cutoffs differ:
+
+      - Speed: 390.625 mm/sec pre-2021 (25,000 increments), 625.0 mm/sec on 2021+ (40,000
+        increments). The exact firmware version introducing this change is undocumented.
+      - Acceleration: 500.0 mm/sec**2 pre-2010 (32,000 increments), 781.25 mm/sec**2 on 2013+
+        (50,000 increments).
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
     )
 
+    if speed is None:
+      speed = self.head96_y_drive_speed_default
+    if acceleration is None:
+      acceleration = self.head96_y_drive_acceleration_default
+
     fw_version = self._head96_information.fw_version
     y_min, y_max = self._head96_information.y_range
     y_speed_min, y_speed_max = self._head96_information.y_speed_range
+    y_accel_min, y_accel_max = self._head96_information.y_acceleration_range
 
     # Validate parameters before hardware communication
     assert y_min <= y <= y_max, f"y must be between {y_min} and {y_max} mm"
@@ -8152,8 +8362,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "If this limit seems incorrect, please test cautiously with an empty deck and report "
       "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
     )
-    assert 78.125 <= acceleration <= 781.25, (
-      "acceleration must be between 78.125 and 781.25 mm/sec**2"
+    assert y_accel_min <= acceleration <= y_accel_max, (
+      f"acceleration must be between {y_accel_min} and {y_accel_max} mm/sec**2"
     )
     assert isinstance(current_protection_limiter, int) and (
       0 <= current_protection_limiter <= 15
@@ -8164,16 +8374,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed_increment = self._head96_y_drive_mm_to_increment(speed)
     acceleration_increment = self._head96_y_drive_mm_to_increment(acceleration)
 
-    resp = await self.send_command(
-      module="H0",
-      command="YA",
-      ya=f"{y_increment:05}",
-      yv=f"{speed_increment:05}",
-      yr=f"{acceleration_increment:05}",
-      yw=f"{current_protection_limiter:02}",
-    )
+    # Snapshot what is on the robot now (read from the device, not a tracked default, so an external
+    # AA edit is preserved) so the move can restore it afterwards and leave the register untouched.
+    prev_speed = await self.head96_request_y_speed()
+    prev_acceleration = await self.head96_request_y_acceleration()
+    prev_speed_increment = self._head96_y_drive_mm_to_increment(prev_speed)
+    prev_acceleration_increment = self._head96_y_drive_mm_to_increment(prev_acceleration)
 
-    return resp
+    try:
+      return await self.send_command(
+        module="H0",
+        command="YA",
+        ya=f"{y_increment:05}",
+        yv=f"{speed_increment:05}",
+        yr=f"{acceleration_increment:05}",
+        yw=f"{current_protection_limiter:02}",
+      )
+    finally:
+      # Restore the pre-command register values, skipping the AA write where the move's value
+      # already matched what was there (compared in increments, the unit actually stored).
+      if speed_increment != prev_speed_increment:
+        await self._head96_set_y_speed(prev_speed)
+      if acceleration_increment != prev_acceleration_increment:
+        await self._head96_set_y_acceleration(prev_acceleration)
 
   @_requires_head96
   async def head96_move_z(
@@ -8209,20 +8432,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed: Optional[float] = None,
     acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
+    retract_on_crash: bool = True,
   ):
     """Move the 96-head z-drive (stop disk) to an absolute Z position in mm.
 
     Stop-disk reference, mirroring the single-channel `move_channel_stop_disk_z`: use this for moves
     without a tip; for the tip end with a tip on, use `head96_move_tool_z`.
 
+    A ZA move writes its speed/acceleration into the drive's volatile register, where later
+    moves (and C0-level commands) would inherit them. This command snapshots whatever
+    speed/acceleration are on the robot before it runs and restores them afterwards, so it
+    leaves the persistent machine state untouched (the restore is skipped when the move's value
+    already matches what was there). On any firmware error during the move (e.g. the head crashing
+    into something) the head retracts to Z-safety before the error is re-raised.
+
     Args:
       z: Target stop-disk Z in mm. Valid range: Head96Information.z_range (180.5-342.5 mm; FM-STAR
         extends it).
-      speed: Movement speed in mm/sec, [0.25, 100.0]; None uses the head's z_drive_speed_default
-        (85 mm/s; constant for the Z drive, not version-resolved like the Y-drive default).
-      acceleration: Movement acceleration in mm/sec^2, [25.0, 500.0]; None uses the head's
-        z_drive_acceleration_default (400 mm/s^2; likewise constant for the Z drive).
+      speed: Movement speed in mm/sec, [0.25, 100.0]; None uses `head96_z_drive_speed_default`
+        (seeded to 85 mm/s; constant for the Z drive, not version-resolved like the Y-drive default).
+      acceleration: Movement acceleration in mm/sec^2, [25.0, 500.0]; None uses
+        `head96_z_drive_acceleration_default` (seeded to 400 mm/s^2; likewise constant for the Z drive).
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
+      retract_on_crash: If True (default), retract to Z-safety on any firmware error (e.g. a crash)
+        before re-raising. head96_move_to_z_safety passes False so its own retract cannot recurse.
 
     Returns:
       Response from the hardware command.
@@ -8239,18 +8472,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "requires 96-head firmware version information for safe operation"
     )
     if speed is None:
-      speed = self._head96_information.z_drive_speed_default
+      speed = self.head96_z_drive_speed_default
     if acceleration is None:
-      acceleration = self._head96_information.z_drive_acceleration_default
+      acceleration = self.head96_z_drive_acceleration_default
 
     fw_version = self._head96_information.fw_version
 
     # Validate parameters before hardware communication. The Z window is firmware/variant-adaptive
     # (FM-STAR extends it), so read it from Head96Information rather than hardcoding the legacy range.
     z_min, z_max = self._head96_information.z_range
+    z_speed_min, z_speed_max = self._head96_information.z_speed_range
+    z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
     assert z_min <= z <= z_max, f"z must be between {z_min} and {z_max} mm"
-    assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
-    assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
+    assert z_speed_min <= speed <= z_speed_max, (
+      f"speed must be between {z_speed_min} and {z_speed_max} mm/sec"
+    )
+    assert z_accel_min <= acceleration <= z_accel_max, (
+      f"acceleration must be between {z_accel_min} and {z_accel_max} mm/sec**2"
+    )
     assert isinstance(current_protection_limiter, int) and (
       0 <= current_protection_limiter <= 15
     ), "current_protection_limiter must be an integer between 0 and 15"
@@ -8268,16 +8507,42 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
     )
 
-    resp = await self.send_command(
-      module="H0",
-      command="ZA",
-      za=f"{z_increment:05}",
-      zv=f"{speed_increment:05}",
-      zr=f"{acceleration_increment:06}",
-      zw=f"{current_protection_limiter:02}",
+    # Snapshot what is on the robot now (read from the device, not a tracked default, so an external
+    # AA edit is preserved) so the move can restore it afterwards and leave the register untouched.
+    prev_speed = await self.head96_request_z_speed()
+    prev_acceleration = await self.head96_request_z_acceleration()
+    prev_speed_increment = self._head96_z_drive_mm_to_increment(prev_speed)
+    prev_acceleration_increment = round(
+      self._head96_z_drive_mm_to_increment(prev_acceleration) * acceleration_multiplier
     )
 
-    return resp
+    try:
+      return await self.send_command(
+        module="H0",
+        command="ZA",
+        za=f"{z_increment:05}",
+        zv=f"{speed_increment:05}",
+        zr=f"{acceleration_increment:06}",
+        zw=f"{current_protection_limiter:02}",
+      )
+    except STARFirmwareError:
+      # Any firmware error here (most importantly a Z-drive crash) can leave the head against an
+      # obstacle, so retract to Z-safety before re-raising. head96_move_to_z_safety calls back into
+      # this method with retract_on_crash=False, so the retract cannot recurse into recovery.
+      if retract_on_crash:
+        try:
+          # retract slowly (quarter of max speed) - the head may be in liquid after a crash
+          await self.head96_move_to_z_safety(speed=self._head96_information.z_speed_range[1] * 0.25)
+        except STARFirmwareError:
+          pass  # retract failed too; surface the original error below
+      raise
+    finally:
+      # Restore the pre-command register values, skipping the AA write where the move's value
+      # already matched what was there (compared in increments, the unit actually stored).
+      if speed_increment != prev_speed_increment:
+        await self._head96_set_z_speed(prev_speed)
+      if acceleration_increment != prev_acceleration_increment:
+        await self._head96_set_z_acceleration(prev_acceleration)
 
   async def head96_request_tip_length(self) -> float:
     """Measures the length of the tips on the 96-head; the head's counterpart of
