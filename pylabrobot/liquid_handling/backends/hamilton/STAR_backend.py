@@ -8602,6 +8602,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.head96_move_stop_disk_z(z + tip_overhang, speed=speed)
 
+  @need_iswap_parked
   @_requires_head96
   async def head96_probe_z_using_clld(
     self,
@@ -8725,7 +8726,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"[{round(height_min, 1)}, {round(height_max, 1)}] mm (tip-bottom)"
       )
 
-    # lm, the 6-digit zc, and the raw 6-digit zr arrived with the 2013 firmware; pre-2013 has no lm.
+    # lm and the raw 6-digit zr arrived with the 2013 firmware; pre-2013 has no lm and scales zr.
     uses_2013_structure = self._head96_information.fw_version >= datetime.date(2013, 1, 1)
     if not uses_2013_structure and lld_sensor != "any":
       raise ValueError(
@@ -8752,9 +8753,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"{self._head96_z_drive_increment_to_mm(9999)} mm, is {abs(post_detection_dist)}"
       )
 
-    # Shared fields below; lm (2013+ only), the zc width, and the zr scaling differ by firmware.
+    # Shared fields; lm (2013+ only) and the zr scaling differ by firmware.
     zl_params: Dict[str, Any] = {
       "zh": f"{lowest_immers_pos_increments:05}",  # lowest immersion position [increment]
+      "zc": f"{start_pos_search_increments:05}",  # start position of LLD search [increment]
       "zl": f"{speed_increments:05}",  # cLLD search speed
       "gt": f"{detection_edge:04}",  # edge steepness at cLLD detection
       "gl": f"{detection_drop:04}",  # offset after cLLD edge detection
@@ -8763,10 +8765,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
     if uses_2013_structure:
       zl_params["lm"] = str(lld_sensor_map[lld_sensor])  # which cLLD sensor(s) trigger detection
-      zl_params["zc"] = f"{start_pos_search_increments:06}"  # start position of LLD search
       zl_params["zr"] = f"{acceleration_increments:06}"  # acceleration [increment/second**2]
     else:
-      zl_params["zc"] = f"{start_pos_search_increments:05}"  # start position of LLD search
       zl_params["zr"] = f"{acceleration_increments // 1000:03}"  # accel [1000 increment/second**2]
 
     try:
