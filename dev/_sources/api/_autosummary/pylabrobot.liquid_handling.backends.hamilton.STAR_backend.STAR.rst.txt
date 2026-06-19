@@ -153,6 +153,8 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.head96_dispensing_drive_move_to_position
       ~STAR.head96_dispensing_drive_request_position_mm
       ~STAR.head96_dispensing_drive_request_position_uL
+      ~STAR.head96_experimental_aspirate
+      ~STAR.head96_experimental_dispense
       ~STAR.head96_move_stop_disk_z
       ~STAR.head96_move_to_coordinate
       ~STAR.head96_move_to_z_safety
@@ -164,6 +166,7 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.head96_request_firmware_version
       ~STAR.head96_request_position
       ~STAR.head96_request_stop_disk_z
+      ~STAR.head96_request_tip_length
       ~STAR.head96_request_tip_presence
       ~STAR.head96_request_type
       ~STAR.initialize_auto_load

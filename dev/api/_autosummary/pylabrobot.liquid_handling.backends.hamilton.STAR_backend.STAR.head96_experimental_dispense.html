@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.19.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -56,12 +56,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_tip_length" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_tip_length.html" />
-    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_position" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_position.html" />
+    <link rel="next" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_stop_disk_z" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_stop_disk_z.html" />
+    <link rel="prev" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_aspirate" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_aspirate.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -567,7 +567,7 @@
     
     <li class="breadcrumb-item"><a href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.html" class="nav-link">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense</span></li>
   </ul>
 </nav>
 </div>
@@ -584,20 +584,35 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star-head96-request-stop-disk-z">
-<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-head96-request-stop-disk-z" title="Link to this heading">#</a></h1>
+  <section id="pylabrobot-liquid-handling-backends-hamilton-star-backend-star-head96-experimental-dispense">
+<h1>pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense<a class="headerlink" href="#pylabrobot-liquid-handling-backends-hamilton-star-backend-star-head96-experimental-dispense" title="Link to this heading">#</a></h1>
 <dl class="py method">
-<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">head96_request_stop_disk_z</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z" title="Link to this definition">#</a></dt>
-<dd><p>Request the 96-head z-drive (stop-disk) position in mm.</p>
-<p>Unlike <code class="code docutils literal notranslate"><span class="pre">head96_request_position</span></code> (whose z is the tip bottom when a tip is mounted), this is the
-raw z-drive position - the stop disk - regardless of tip state.</p>
+<dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">head96_experimental_dispense</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minimum_height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_back_volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">surface_following_distance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_flow_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">requires_tip</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense" title="Link to this definition">#</a></dt>
+<dd><p>Dispense on the 96-head with surface following (the firmware drives Z and the dispensing drive
+in parallel).</p>
+<p>The direct, full-control counterpart to <code class="code docutils literal notranslate"><span class="pre">dispense96</span></code>. Acts on the whole head (rigid). This is a
+basic, thin command: it does not settle after dispensing (settling is a separate basic command).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Stop-disk Z position in mm.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>volume</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – The piston (dispensing-drive) volume to dispense per channel, uL; raw, not liquid-class
+corrected.</p></li>
+<li><p><strong>flow_rate</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>) – The dispensing-drive speed, uL/s; None uses the head’s default speed.</p></li>
+<li><p><strong>minimum_height</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>) – The lowest the tip end (tip-bottom) descends to, mm - the end of the stroke.
+None defaults to the deepest safe target: the deck floor with a tip on, or the firmware Z
+floor with none on (no tip overhang, so this is the stop-disk position directly).</p></li>
+<li><p><strong>stop_back_volume</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – The volume drawn back at the end to stop dripping, uL.</p></li>
+<li><p><strong>surface_following_distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – The Z travel during dispense, mm.</p></li>
+<li><p><strong>stop_flow_rate</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>) – The dispensing-drive stop speed, uL/s; None uses the firmware default (0).</p></li>
+<li><p><strong>requires_tip</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, raise if the head holds no tips; if False, allow dispensing air.</p></li>
+</ul>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a></p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If 96-head is not installed, or requires_tip and the head holds no tips.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#AssertionError" title="(in Python v3.14)"><strong>AssertionError</strong></a> – If firmware info missing or a parameter is out of range.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -615,20 +630,20 @@ raw z-drive position - the stop disk - regardless of tip state.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_position.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_aspirate.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_position</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_aspirate</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_tip_length.html"
+       href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_stop_disk_z.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_tip_length</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_move_stop_disk_z</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -651,7 +666,7 @@ raw z-drive position - the stop disk - regardless of tip state.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z"><code class="docutils literal notranslate"><span class="pre">STAR.head96_request_stop_disk_z()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense"><code class="docutils literal notranslate"><span class="pre">STAR.head96_experimental_dispense()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -659,7 +674,7 @@ raw z-drive position - the stop disk - regardless of tip state.</p>
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -674,7 +689,7 @@ raw z-drive position - the stop disk - regardless of tip state.</p>
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_stop_disk_z.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_experimental_dispense.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
