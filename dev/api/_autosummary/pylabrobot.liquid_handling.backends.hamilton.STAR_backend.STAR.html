@@ -653,6 +653,18 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_installed.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_installed" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_installed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_installed</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_y_drive_acceleration_default.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_y_drive_acceleration_default" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_y_drive_acceleration_default"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_y_drive_acceleration_default</span></code></a></p></td>
+<td><p>Default 96-head Y-drive acceleration (mm/s2) used when a Y move is called without one.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_y_drive_speed_default.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_y_drive_speed_default" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_y_drive_speed_default"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_y_drive_speed_default</span></code></a></p></td>
+<td><p>Default 96-head Y-drive speed (mm/s) used when a Y move is called without an explicit speed.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_z_drive_acceleration_default.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_z_drive_acceleration_default" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_z_drive_acceleration_default"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_z_drive_acceleration_default</span></code></a></p></td>
+<td><p>Default 96-head Z-drive acceleration (mm/s2) used when a Z move is called without one.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_z_drive_speed_default.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_z_drive_speed_default" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_z_drive_speed_default"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_z_drive_speed_default</span></code></a></p></td>
+<td><p>Default 96-head Z-drive speed (mm/s) used when a Z move is called without an explicit speed.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_gripper_drive_max_increment.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_gripper_drive_max_increment" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.iswap_gripper_drive_max_increment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iswap_gripper_drive_max_increment</span></code></a></p></td>
 <td><p></p></td>
 </tr>
@@ -1030,6 +1042,18 @@
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_type.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_type" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_type</span></code></a>()</p></td>
 <td><p>Send QG and return the 96-head type as a human-readable string.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_y_acceleration.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_y_acceleration" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_y_acceleration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_y_acceleration</span></code></a>()</p></td>
+<td><p>Request the persistent 96-head Y-drive acceleration (mm/s^2), via H0 RA (read parameter yr).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_y_speed.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_y_speed" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_y_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_y_speed</span></code></a>()</p></td>
+<td><p>Request the persistent 96-head Y-drive speed (mm/s), via H0 RA (read parameter yv).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_z_acceleration.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_z_acceleration" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_z_acceleration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_z_acceleration</span></code></a>()</p></td>
+<td><p>Request the persistent 96-head Z-drive acceleration (mm/s^2), via H0 RA (read parameter zr).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_z_speed.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_z_speed" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.head96_request_z_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head96_request_z_speed</span></code></a>()</p></td>
+<td><p>Request the persistent 96-head Z-drive speed (mm/s), via H0 RA (read parameter zv).</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_auto_load.html#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_auto_load" title="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.initialize_auto_load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize_auto_load</span></code></a>()</p></td>
 <td><p>Deprecated - use <code class="code docutils literal notranslate"><span class="pre">initialize_autoload</span></code> instead.</p></td>

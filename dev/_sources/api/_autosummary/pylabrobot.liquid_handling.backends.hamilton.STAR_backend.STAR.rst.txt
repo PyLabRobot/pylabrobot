@@ -35,6 +35,10 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.head
       ~STAR.head96
       ~STAR.head96_installed
+      ~STAR.head96_y_drive_acceleration_default
+      ~STAR.head96_y_drive_speed_default
+      ~STAR.head96_z_drive_acceleration_default
+      ~STAR.head96_z_drive_speed_default
       ~STAR.iswap_gripper_drive_max_increment
       ~STAR.iswap_gripper_drive_min_increment
       ~STAR.iswap_gripper_drive_mm_per_increment
@@ -169,6 +173,10 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.head96_request_tip_length
       ~STAR.head96_request_tip_presence
       ~STAR.head96_request_type
+      ~STAR.head96_request_y_acceleration
+      ~STAR.head96_request_y_speed
+      ~STAR.head96_request_z_acceleration
+      ~STAR.head96_request_z_speed
       ~STAR.initialize_auto_load
       ~STAR.initialize_autoload
       ~STAR.initialize_core_96_head
