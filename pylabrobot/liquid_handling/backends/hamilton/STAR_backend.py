@@ -8611,6 +8611,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     start_pos_search: Optional[float] = None,
     speed: float = 10.0,
     acceleration: float = 300.0,
+    approach_speed: Optional[float] = None,
+    current_protection_limiter: int = 15,
     lld_sensor: Literal["G11 or H12", "A1 or B2", "any", "all"] = "any",
     detection_edge: int = 10,
     detection_drop: int = 2,
@@ -8641,6 +8643,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       start_pos_search: tip-bottom position the search starts from in mm; None is the highest safe.
       speed: cLLD search speed in mm/sec.
       acceleration: search acceleration in mm/sec**2.
+      approach_speed: fast descent speed in mm/sec for the upper section, before the slow search.
+        None uses `head96_z_drive_speed_default`.
+      current_protection_limiter: motor current limit (hardware units; 0-15 on 2013+, 0-7 on 2008).
       lld_sensor: which head cLLD sensor(s) trigger detection.
       detection_edge: edge steepness threshold for cLLD detection (0-1023).
       detection_drop: offset applied after cLLD edge detection (0-1023).
@@ -8667,8 +8672,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_speed_min, z_speed_max = self._head96_information.z_speed_range
     z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
 
+    if approach_speed is None:
+      approach_speed = self.head96_z_drive_speed_default
+
     if not z_speed_min <= speed <= z_speed_max:
       raise ValueError(f"speed must be between {z_speed_min} - {z_speed_max} mm/sec, is {speed}")
+    if not z_speed_min <= approach_speed <= z_speed_max:
+      raise ValueError(
+        f"approach_speed must be between {z_speed_min} - {z_speed_max} mm/sec, is {approach_speed}"
+      )
     if not z_accel_min <= acceleration <= z_accel_max:
       raise ValueError(
         f"acceleration must be between {z_accel_min} - {z_accel_max} mm/sec**2, is {acceleration}"
@@ -8734,6 +8746,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "sensor-selection field"
       )
 
+    # zw (current protection limiter) range narrows on pre-2013 firmware.
+    zw_max = 15 if uses_2013_structure else 7
+    if not 0 <= current_protection_limiter <= zw_max:
+      raise ValueError(
+        f"current_protection_limiter must be between 0 - {zw_max}, is {current_protection_limiter}"
+      )
+
     # Back to stop-disk space (zh / zc) via the overhang.
     lowest_immers_pos_increments = self._head96_z_drive_mm_to_increment(
       lowest_immers_pos + tip_overhang
@@ -8742,6 +8761,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       start_pos_search + tip_overhang
     )
     speed_increments = self._head96_z_drive_mm_to_increment(speed)
+    approach_speed_increments = self._head96_z_drive_mm_to_increment(approach_speed)
     acceleration_increments = self._head96_z_drive_mm_to_increment(acceleration)
 
     # Signed post-detection move -> direction (zj) and magnitude (zi).
@@ -8753,10 +8773,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"{self._head96_z_drive_increment_to_mm(9999)} mm, is {abs(post_detection_dist)}"
       )
 
-    # Shared fields; lm (2013+ only) and the zr scaling differ by firmware.
+    # Shared fields; lm (2013+ only), the zr scaling, and the zw width differ by firmware.
     zl_params: Dict[str, Any] = {
       "zh": f"{lowest_immers_pos_increments:05}",  # lowest immersion position [increment]
       "zc": f"{start_pos_search_increments:05}",  # start position of LLD search [increment]
+      "zv": f"{approach_speed_increments:05}",  # upper-section (fast approach) speed
       "zl": f"{speed_increments:05}",  # cLLD search speed
       "gt": f"{detection_edge:04}",  # edge steepness at cLLD detection
       "gl": f"{detection_drop:04}",  # offset after cLLD edge detection
@@ -8766,8 +8787,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if uses_2013_structure:
       zl_params["lm"] = str(lld_sensor_map[lld_sensor])  # which cLLD sensor(s) trigger detection
       zl_params["zr"] = f"{acceleration_increments:06}"  # acceleration [increment/second**2]
+      zl_params["zw"] = f"{current_protection_limiter:02}"  # current protection limiter
     else:
       zl_params["zr"] = f"{acceleration_increments // 1000:03}"  # accel [1000 increment/second**2]
+      zl_params["zw"] = f"{current_protection_limiter:01}"  # current protection limiter
 
     try:
       await self.send_command(module="H0", command="ZL", **zl_params)
