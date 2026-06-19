@@ -1402,20 +1402,12 @@ class Head96Information:
   instrument_type: InstrumentType
   head_type: HeadType
 
-  # === Firmware/variant-derived limits, in standard units (resolved at setup) ===
-  y_range: Tuple[float, float]
-  """Y-drive position window (mm)."""
-  y_speed_range: Tuple[float, float]
-  """Y-drive speed window (mm/s)."""
-  y_acceleration_range: Tuple[float, float]
-  """Y-drive acceleration window (mm/s2); the max changed across firmware (500.0 on 2008, 781.25 on
-  2013+), so it is version-resolved like `y_speed_range`, not a constant."""
+  # === Firmware/variant-derived limits. z_range is set at setup because its max is a hardware
+  # probe; the Y and dispensing-drive windows are pure functions of fw_version (and the encoder
+  # resolutions below), so they are exposed as properties rather than stored. ===
   z_range: Tuple[float, float]
-  """Z-drive position window (mm); FM-STAR extends it."""
-  dispensing_drive_range: Tuple[float, float]
-  """Dispensing-drive (piston) volume window (uL); applies to both aspirate and dispense."""
-  dispensing_drive_speed_range: Tuple[float, float]
-  """Dispensing-drive speed window (uL/s)."""
+  """Z-drive position window (mm); FM-STAR extends it. Set at setup: the min is variant-derived,
+  the max is read from a hardware probe."""
 
   z_speed_range: Tuple[float, float] = (0.25, 100.0)
   """Z-drive speed window (mm/s); unchanged across the 2008/2013/2025 firmware, unlike the
@@ -1431,6 +1423,51 @@ class Head96Information:
   dispensing_drive_mm_per_increment: float = 0.001025641026
   dispensing_drive_uL_per_increment: float = 0.019340933
   squeezer_drive_mm_per_increment: float = 0.0002086672009
+
+  # === Firmware/variant-derived area-of-operation windows (standard units). Pure functions of
+  # fw_version and the encoder resolutions above, so they are computed on access. ===
+  @property
+  def y_range(self) -> Tuple[float, float]:
+    """Y-drive position window (mm); 2013 firmware shifted it from the 2008 range."""
+    min_inc, max_inc = (6000, 36000) if self.fw_version.year >= 2010 else (7000, 36200)
+    return (
+      round(min_inc * self.y_drive_mm_per_increment, 2),
+      round(max_inc * self.y_drive_mm_per_increment, 2),
+    )
+
+  @property
+  def y_speed_range(self) -> Tuple[float, float]:
+    """Y-drive speed window (mm/s). The pre-2021 max (390.625 = the firmware default, 25000 inc) is
+    an empirical, deck-tested cap; per firmware version the maxima are 312.5 (2008) and 625 (2013+).
+    Verify on a pre-2021 head before raising it."""
+    return (0.78125, 390.625 if self.fw_version.year <= 2021 else 625.0)
+
+  @property
+  def y_acceleration_range(self) -> Tuple[float, float]:
+    """Y-drive acceleration window (mm/s2). The min (5000 inc) is constant; the max rose from 32000
+    inc (2008) to 50000 inc (2013+), so it tracks firmware like the Y range / speed."""
+    max_inc = 50000 if self.fw_version.year >= 2010 else 32000
+    return (
+      round(5000 * self.y_drive_mm_per_increment, 2),
+      round(max_inc * self.y_drive_mm_per_increment, 2),
+    )
+
+  @property
+  def dispensing_drive_range(self) -> Tuple[float, float]:
+    """Aspirate/dispense piston volume window (uL); applies to both aspirate and dispense. 2013
+    firmware widened the max from 62130 inc."""
+    max_inc = 64350 if self.fw_version.year >= 2010 else 62130
+    return (0.0, round(max_inc * self.dispensing_drive_uL_per_increment, 2))
+
+  @property
+  def dispensing_drive_speed_range(self) -> Tuple[float, float]:
+    """Dispensing-drive speed window (uL/s); 2013 firmware widened the max from 52000 inc."""
+    min_inc = 5  # firmware dv minimum (00005 increments/second)
+    max_inc = 55000 if self.fw_version.year >= 2010 else 52000
+    return (
+      round(min_inc * self.dispensing_drive_uL_per_increment, 2),
+      round(max_inc * self.dispensing_drive_uL_per_increment, 2),
+    )
 
   # === Per-drive factory default speed / acceleration (standard units). ===
   @property
@@ -2156,17 +2193,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
           instrument_type=instrument_type,
           head_type=head96_type,
-          y_range=self._head96_resolve_y_range(fw_version),
-          y_speed_range=self._head96_resolve_y_speed_range(fw_version),
-          y_acceleration_range=self._head96_resolve_y_acceleration_range(fw_version),
           # probing safe max z position also acts a safety retraction of the head96 on every setup call
           z_range=(
             self._head96_resolve_z_range(instrument_type)[0],
             await self._head96_probe_z_max(),
-          ),
-          dispensing_drive_range=self._head96_resolve_dispensing_drive_range(fw_version),
-          dispensing_drive_speed_range=self._head96_resolve_dispensing_drive_speed_range(
-            fw_version
           ),
         )
 
@@ -7836,53 +7866,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="H0", command="QG", fmt="qg#")
     return type_map.get(resp["qg"], "unknown")
 
-  def _head96_resolve_y_range(self, fw_version: datetime.date) -> Tuple[float, float]:
-    """Y-drive position window (mm); 2013 firmware shifted it from the 2008 range."""
-    min_inc, max_inc = (6000, 36000) if fw_version.year >= 2010 else (7000, 36200)
-    return (
-      self._head96_y_drive_increment_to_mm(min_inc),
-      self._head96_y_drive_increment_to_mm(max_inc),
-    )
-
-  def _head96_resolve_y_speed_range(self, fw_version: datetime.date) -> Tuple[float, float]:
-    """Y-drive speed window (mm/s). The pre-2021 max (390.625 = the firmware default, 25000 inc) is
-    an empirical, deck-tested cap; per firmware version the maxima are 312.5 (2008) and 625 (2013+).
-    Verify on a pre-2021 head before raising it. Refactored verbatim from head96_move_y."""
-    return (0.78125, 390.625 if fw_version.year <= 2021 else 625.0)
-
-  def _head96_resolve_y_acceleration_range(self, fw_version: datetime.date) -> Tuple[float, float]:
-    """Y-drive acceleration window (mm/s2). The min (5000 inc) is constant; the max rose from 32000
-    inc (2008) to 50000 inc (2013+), so it is resolved per firmware like the Y range / speed."""
-    max_inc = 50000 if fw_version.year >= 2010 else 32000
-    return (
-      self._head96_y_drive_increment_to_mm(5000),
-      self._head96_y_drive_increment_to_mm(max_inc),
-    )
-
   def _head96_resolve_z_range(self, instrument_type: str) -> Tuple[float, float]:
     """Z-drive position window (mm); FM-STAR extends it (za/zb/zh all share this range)."""
     min_inc, max_inc = (24200, 76200) if instrument_type == "FM-STAR" else (36100, 68500)
     return (
       self._head96_z_drive_increment_to_mm(min_inc),
       self._head96_z_drive_increment_to_mm(max_inc),
-    )
-
-  def _head96_resolve_dispensing_drive_range(
-    self, fw_version: datetime.date
-  ) -> Tuple[float, float]:
-    """Aspirate/dispense piston volume window (uL); 2013 firmware widened the max from 62130 inc."""
-    max_inc = 64350 if fw_version.year >= 2010 else 62130
-    return (0.0, self._head96_dispensing_drive_increment_to_uL(max_inc))
-
-  def _head96_resolve_dispensing_drive_speed_range(
-    self, fw_version: datetime.date
-  ) -> Tuple[float, float]:
-    """Dispensing-drive speed window (uL/s); 2013 firmware widened the max from 52000 inc."""
-    min_inc = 5  # firmware dv minimum (00005 increments/second)
-    max_inc = 55000 if fw_version.year >= 2010 else 52000
-    return (
-      self._head96_dispensing_drive_increment_to_uL(min_inc),
-      self._head96_dispensing_drive_increment_to_uL(max_inc),
     )
 
   # -------------- 3.10.1 Initialization --------------

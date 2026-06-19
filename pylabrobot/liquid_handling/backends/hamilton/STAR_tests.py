@@ -482,12 +482,7 @@ class TestHead96DriveDefaults(unittest.IsolatedAsyncioTestCase):
         stop_disc_type="core_ii",
         instrument_type="FM-STAR",
         head_type="96 head II",
-        y_range=(0.0, 0.0),
-        y_speed_range=(0.0, 0.0),
-        y_acceleration_range=(0.0, 0.0),
         z_range=(0.0, 0.0),
-        dispensing_drive_range=(0.0, 0.0),
-        dispensing_drive_speed_range=(0.0, 0.0),
       )
 
     self.assertAlmostEqual(info(datetime.date(2008, 11, 11)).y_drive_speed_default, 312.5, places=2)
