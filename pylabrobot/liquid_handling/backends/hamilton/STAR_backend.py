@@ -102,6 +102,7 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
+from pylabrobot.resources.tip_tracker import does_tip_tracking
 from pylabrobot.resources.trash import Trash
 
 T = TypeVar("T")
@@ -8600,6 +8601,187 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     return await self.head96_move_stop_disk_z(z + tip_overhang, speed=speed)
+
+  @_requires_head96
+  async def head96_probe_z_using_clld(
+    self,
+    tip_len: Optional[float] = None,
+    lowest_immers_pos: Optional[float] = None,
+    start_pos_search: Optional[float] = None,
+    speed: float = 10.0,
+    acceleration: float = 300.0,
+    lld_sensor: Literal["G11 or H12", "A1 or B1", "any", "all"] = "any",
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    post_detection_dist: float = 2.0,
+    move_head_to_z_safety_after: bool = False,
+  ) -> float:
+    """Probe the liquid-surface Z-height with the 96-head's capacitive LLD (cLLD).
+
+    Runs a downward cLLD search on the 96-head stop-disk Z drive (H0 ZL), stopping at the detected
+    surface, and returns the tip-bottom (= liquid-surface) Z-height. The 96-head counterpart of the
+    single-channel cLLD probe; `lld_sensor` is head-specific (the head has two cLLD sensors, a
+    channel has one).
+
+    Positions are tip-bottom referenced like `head96_move_tool_z`: the tip overhang (stop disk minus
+    tip bottom, a rigid constant for the mounted tip) maps them to the firmware's stop-disk zh / zc,
+    and the deck floor caps the deepest immersion. The head should be at Z-safety before calling -
+    `start_pos_search` defaults to the top and the firmware brings the head there before searching.
+    cLLD needs a conductive path, so tips must be loaded.
+
+    The ZL wire format changed between the 2008 and 2013 firmware command sets, so the parameters are
+    formatted per the head's reported firmware date. `lld_sensor` other than "any" requires 2013+
+    firmware, since the 2008 ZL has no sensor-selection field.
+
+    Args:
+      tip_len: mounted tip length in mm, used to map tip-bottom positions to the stop disk. None
+        (default) measures it via `head96_request_tip_length`.
+      lowest_immers_pos: lowest tip-bottom the search may reach in mm; None is the deepest safe value.
+      start_pos_search: tip-bottom position the search starts from in mm; None is the highest safe.
+      speed: cLLD search speed in mm/sec.
+      acceleration: search acceleration in mm/sec**2.
+      lld_sensor: which head cLLD sensor(s) trigger detection.
+      detection_edge: edge steepness threshold for cLLD detection (0-1023).
+      detection_drop: offset applied after cLLD edge detection (0-1023).
+      post_detection_dist: signed distance to move after detection in mm; positive moves up / out of
+        liquid, negative moves down / deeper.
+      move_head_to_z_safety_after: if True, retract the head to Z-safety after reading the height.
+
+    Returns:
+      The detected liquid-surface Z-height as a tip-bottom position in mm.
+
+    Raises:
+      ValueError: if the head holds no tips, the chosen sensor's corner channel(s) hold no tip (when
+        tip tracking is on), a parameter is out of range, or `lld_sensor` other than "any" is
+        requested on pre-2013 firmware.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+
+    lld_sensor_map = {"G11 or H12": 0, "A1 or B1": 1, "any": 2, "all": 3}
+    if lld_sensor not in lld_sensor_map:
+      raise ValueError(f"lld_sensor must be one of {list(lld_sensor_map)}, is {lld_sensor!r}")
+
+    z_speed_min, z_speed_max = self._head96_information.z_speed_range
+    z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
+
+    if not z_speed_min <= speed <= z_speed_max:
+      raise ValueError(f"speed must be between {z_speed_min} - {z_speed_max} mm/sec, is {speed}")
+    if not z_accel_min <= acceleration <= z_accel_max:
+      raise ValueError(
+        f"acceleration must be between {z_accel_min} - {z_accel_max} mm/sec**2, is {acceleration}"
+      )
+    if not 0 <= detection_edge <= 1023:
+      raise ValueError(f"detection_edge must be between 0 - 1023, is {detection_edge}")
+    if not 0 <= detection_drop <= 1023:
+      raise ValueError(f"detection_drop must be between 0 - 1023, is {detection_drop}")
+
+    # First guard (firmware, always verifiable): some channel must hold a tip for the conductive path.
+    if not await self.head96_request_tip_presence():
+      raise ValueError("96-head cLLD requires tips loaded (conductive path); none detected")
+
+    # When tip tracking is on, also require a tip on the corner channel(s) that feed the chosen
+    # sensor - the firmware guard above only confirms *some* channel does. cLLD sensor 0 reads
+    # G11(86)/H12(95), sensor 1 reads A1(0)/B1(1) (column-major head96 indices).
+    if does_tip_tracking() and self.head96 is not None:
+      sensor_0 = self.head96[86].has_tip or self.head96[95].has_tip
+      sensor_1 = self.head96[0].has_tip or self.head96[1].has_tip
+      sensor_ready = {
+        "G11 or H12": sensor_0,
+        "A1 or B1": sensor_1,
+        "any": sensor_0 or sensor_1,
+        "all": sensor_0 and sensor_1,
+      }[lld_sensor]
+      if not sensor_ready:
+        raise ValueError(
+          f"lld_sensor={lld_sensor!r}: the tip tracker reports no tip on the corner channel(s) "
+          "that feed it"
+        )
+
+    # Tip length: measure unless the caller supplied it.
+    if tip_len is None:
+      tip_len = await self.head96_request_tip_length()
+    tip_overhang = tip_len - STARBackend.DEFAULT_TIP_FITTING_DEPTH
+
+    # Reachable tip-bottom window: z_range shifted down by the overhang, floored at the deck.
+    z_min, z_max = self._head96_information.z_range
+    deck = STARBackend.MINIMUM_CHANNEL_Z_POSITION
+    height_min = max(z_min - tip_overhang, deck)
+    height_max = z_max - tip_overhang
+
+    if lowest_immers_pos is None:
+      lowest_immers_pos = height_min
+    if start_pos_search is None:
+      start_pos_search = height_max
+    if not (height_min <= lowest_immers_pos <= height_max):
+      raise ValueError(
+        f"lowest_immers_pos={lowest_immers_pos} mm out of reach "
+        f"[{round(height_min, 1)}, {round(height_max, 1)}] mm (tip-bottom)"
+      )
+    if not (height_min <= start_pos_search <= height_max):
+      raise ValueError(
+        f"start_pos_search={start_pos_search} mm out of reach "
+        f"[{round(height_min, 1)}, {round(height_max, 1)}] mm (tip-bottom)"
+      )
+
+    # lm, the 6-digit zc, and the raw 6-digit zr arrived with the 2013 firmware; pre-2013 has no lm.
+    uses_2013_structure = self._head96_information.fw_version >= datetime.date(2013, 1, 1)
+    if not uses_2013_structure and lld_sensor != "any":
+      raise ValueError(
+        f"lld_sensor={lld_sensor!r} requires 2013+ firmware; the 2008 command set has no "
+        "sensor-selection field"
+      )
+
+    # Back to stop-disk space (zh / zc) via the overhang.
+    lowest_immers_pos_increments = self._head96_z_drive_mm_to_increment(
+      lowest_immers_pos + tip_overhang
+    )
+    start_pos_search_increments = self._head96_z_drive_mm_to_increment(
+      start_pos_search + tip_overhang
+    )
+    speed_increments = self._head96_z_drive_mm_to_increment(speed)
+    acceleration_increments = self._head96_z_drive_mm_to_increment(acceleration)
+
+    # Signed post-detection move -> direction (zj) and magnitude (zi).
+    post_detection_direction = 1 if post_detection_dist >= 0 else 0
+    post_detection_dist_increments = self._head96_z_drive_mm_to_increment(abs(post_detection_dist))
+    if not 0 <= post_detection_dist_increments <= 9999:
+      raise ValueError(
+        f"abs(post_detection_dist) must be <= "
+        f"{self._head96_z_drive_increment_to_mm(9999)} mm, is {abs(post_detection_dist)}"
+      )
+
+    # Shared fields below; lm (2013+ only), the zc width, and the zr scaling differ by firmware.
+    zl_params: Dict[str, Any] = {
+      "zh": f"{lowest_immers_pos_increments:05}",  # lowest immersion position [increment]
+      "zl": f"{speed_increments:05}",  # cLLD search speed
+      "gt": f"{detection_edge:04}",  # edge steepness at cLLD detection
+      "gl": f"{detection_drop:04}",  # offset after cLLD edge detection
+      "zi": f"{post_detection_dist_increments:04}",  # immersion depth after LLD [increment]
+      "zj": f"{post_detection_direction}",  # direction of immersion depth (0 down, 1 up)
+    }
+    if uses_2013_structure:
+      zl_params["lm"] = str(lld_sensor_map[lld_sensor])  # which cLLD sensor(s) trigger detection
+      zl_params["zc"] = f"{start_pos_search_increments:06}"  # start position of LLD search
+      zl_params["zr"] = f"{acceleration_increments:06}"  # acceleration [increment/second**2]
+    else:
+      zl_params["zc"] = f"{start_pos_search_increments:05}"  # start position of LLD search
+      zl_params["zr"] = f"{acceleration_increments // 1000:03}"  # accel [1000 increment/second**2]
+
+    try:
+      await self.send_command(module="H0", command="ZL", **zl_params)
+    except STARFirmwareError:
+      # The head may be in liquid / against a surface; retreat before re-raising.
+      await self.head96_move_to_z_safety()
+      raise
+
+    # Stopped stop-disk Z -> tip-bottom = detected surface. Read before any retract; a non-zero
+    # post_detection_dist makes this the post-detection position, not the bare surface.
+    detected_tip_bottom = round(await self.head96_request_stop_disk_z() - tip_overhang, 2)
+    if move_head_to_z_safety_after:
+      await self.head96_move_to_z_safety()
+    return detected_tip_bottom
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
