@@ -8800,7 +8800,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # RH returns the latched detected surface (stop-disk frame), unaffected by the post-detection
     # move; map it to tip-bottom. TODO(hardware): confirm the RH response format against a capture.
-    detected_tip_bottom = round(await self.head96_request_height_last_lld() - tip_overhang, 2)
+    detected_tip_bottom = round(await self.head96_request_last_lld_height() - tip_overhang, 2)
     if move_to_z_safety_after:
       await self.head96_move_to_z_safety()
     return detected_tip_bottom
@@ -9931,7 +9931,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="H0", command="RZ", fmt="rz##### (n)")
     return self._head96_z_drive_increment_to_mm(resp["rz"][1])  # [0] = FW counter, [1] = HW counter
 
-  async def head96_request_height_last_lld(self) -> float:
+  async def head96_request_last_lld_height(self) -> float:
     """Request the liquid-surface position the last 96-head cLLD search found, in mm (H0 RH).
 
     Unlike `head96_request_stop_disk_z` (the head's current position), this is the latched surface

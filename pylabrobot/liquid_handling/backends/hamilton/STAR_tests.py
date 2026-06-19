@@ -1317,7 +1317,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._head96_information = _make_head96_information(self.STAR)
     self.STAR._head96_z_drive_speed_default = 85.0
     self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
-    self.STAR.head96_request_height_last_lld = unittest.mock.AsyncMock(return_value=200.0)
+    self.STAR.head96_request_last_lld_height = unittest.mock.AsyncMock(return_value=200.0)
     self.STAR._write_and_read_command.reset_mock()
     detected = await self.STAR.head96_probe_z_using_clld(
       tip_len=50.0,  # overhang = 50 - 8 = 42 mm
