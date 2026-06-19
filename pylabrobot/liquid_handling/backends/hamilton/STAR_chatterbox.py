@@ -14,6 +14,7 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   iSWAPInformation,
 )
 from pylabrobot.resources.container import Container
+from pylabrobot.resources.tip_tracker import does_tip_tracking
 from pylabrobot.resources.well import Well
 
 _DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
@@ -328,6 +329,18 @@ class STARChatterboxBackend(STARBackend):
 
   async def head96_request_z_acceleration(self) -> float:
     return 400.0
+
+  async def head96_request_tip_presence(self) -> int:
+    """Mock 96-head tip presence from the tip tracker: 1 if any channel holds a tip, else 0.
+
+    Raises if tip tracking is disabled, since the tracker is then not updated and has no state to report.
+    """
+    if not does_tip_tracking() or self.head96 is None:
+      raise RuntimeError(
+        "cannot report 96-head tip presence with tip tracking disabled in simulation; "
+        "enable it with set_tip_tracking(True) or call with requires_tip=False"
+      )
+    return int(any(tracker.has_tip for tracker in self.head96.values()))
 
   # # # # # # # # Extension: iSWAP # # # # # # # #
 
