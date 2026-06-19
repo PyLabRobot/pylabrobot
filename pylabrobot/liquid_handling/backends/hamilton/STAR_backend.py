@@ -8611,7 +8611,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     start_pos_search: Optional[float] = None,
     speed: float = 10.0,
     acceleration: float = 300.0,
-    lld_sensor: Literal["G11 or H12", "A1 or B1", "any", "all"] = "any",
+    lld_sensor: Literal["G11 or H12", "A1 or B2", "any", "all"] = "any",
     detection_edge: int = 10,
     detection_drop: int = 2,
     post_detection_dist: float = 2.0,
@@ -8660,7 +8660,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "requires 96-head firmware version information for safe operation"
     )
 
-    lld_sensor_map = {"G11 or H12": 0, "A1 or B1": 1, "any": 2, "all": 3}
+    lld_sensor_map = {"G11 or H12": 0, "A1 or B2": 1, "any": 2, "all": 3}
     if lld_sensor not in lld_sensor_map:
       raise ValueError(f"lld_sensor must be one of {list(lld_sensor_map)}, is {lld_sensor!r}")
 
@@ -8684,13 +8684,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # When tip tracking is on, also require a tip on the corner channel(s) that feed the chosen
     # sensor - the firmware guard above only confirms *some* channel does. cLLD sensor 0 reads
-    # G11(86)/H12(95), sensor 1 reads A1(0)/B1(1) (column-major head96 indices).
+    # G11(86)/H12(95), sensor 1 reads A1(0)/B2(9) (column-major head96 indices).
     if does_tip_tracking() and self.head96 is not None:
       sensor_0 = self.head96[86].has_tip or self.head96[95].has_tip
-      sensor_1 = self.head96[0].has_tip or self.head96[1].has_tip
+      sensor_1 = self.head96[0].has_tip or self.head96[9].has_tip
       sensor_ready = {
         "G11 or H12": sensor_0,
-        "A1 or B1": sensor_1,
+        "A1 or B2": sensor_1,
         "any": sensor_0 or sensor_1,
         "all": sensor_0 and sensor_1,
       }[lld_sensor]
