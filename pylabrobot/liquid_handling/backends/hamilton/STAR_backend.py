@@ -8033,7 +8033,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     before taking effect. A move does not persist this to the drive: it snapshots the live register
     and restores it afterwards.
     """
-    assert self._head96_y_drive_speed_default is not None, "96-head defaults not loaded; run setup()"
+    assert self._head96_y_drive_speed_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
     return self._head96_y_drive_speed_default
 
   @head96_y_drive_speed_default.setter
@@ -8052,9 +8054,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     `y_acceleration_range` before taking effect. A move does not persist this to the drive: it
     snapshots the live register and restores it afterwards.
     """
-    assert (
-      self._head96_y_drive_acceleration_default is not None
-    ), "96-head defaults not loaded; run setup()"
+    assert self._head96_y_drive_acceleration_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
     return self._head96_y_drive_acceleration_default
 
   @head96_y_drive_acceleration_default.setter
@@ -8073,7 +8075,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     before taking effect. A move does not persist this to the drive: it snapshots the live register
     and restores it afterwards.
     """
-    assert self._head96_z_drive_speed_default is not None, "96-head defaults not loaded; run setup()"
+    assert self._head96_z_drive_speed_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
     return self._head96_z_drive_speed_default
 
   @head96_z_drive_speed_default.setter
@@ -8092,9 +8096,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     `z_acceleration_range` before taking effect. A move does not persist this to the drive: it
     snapshots the live register and restores it afterwards.
     """
-    assert (
-      self._head96_z_drive_acceleration_default is not None
-    ), "96-head defaults not loaded; run setup()"
+    assert self._head96_z_drive_acceleration_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
     return self._head96_z_drive_acceleration_default
 
   @head96_z_drive_acceleration_default.setter
