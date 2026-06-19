@@ -8773,25 +8773,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"{self._head96_z_drive_increment_to_mm(9999)} mm, is {abs(post_detection_dist)}"
       )
 
-    # Shared fields; lm (2013+ only), the zr scaling, and the zw width differ by firmware.
+    # Build the ZL params in the firmware's documented field order. lm (2013+ only), the zr scaling,
+    # and the zw width differ by firmware; dj is left at its default (dj0, normal min-height control).
+    lm_field = {"lm": str(lld_sensor_map[lld_sensor])} if uses_2013_structure else {}
+    if uses_2013_structure:
+      zr_field = f"{acceleration_increments:06}"  # raw [increment/second**2]
+      zw_field = f"{current_protection_limiter:02}"
+    else:
+      zr_field = f"{acceleration_increments // 1000:03}"  # [1000 increment/second**2]
+      zw_field = f"{current_protection_limiter:01}"
     zl_params: Dict[str, Any] = {
       "zh": f"{lowest_immers_pos_increments:05}",  # lowest immersion position [increment]
       "zc": f"{start_pos_search_increments:05}",  # start position of LLD search [increment]
-      "zv": f"{approach_speed_increments:05}",  # upper-section (fast approach) speed
-      "zl": f"{speed_increments:05}",  # cLLD search speed
-      "gt": f"{detection_edge:04}",  # edge steepness at cLLD detection
-      "gl": f"{detection_drop:04}",  # offset after cLLD edge detection
       "zi": f"{post_detection_dist_increments:04}",  # immersion depth after LLD [increment]
       "zj": f"{post_detection_direction}",  # direction of immersion depth (0 down, 1 up)
+      **lm_field,  # which cLLD sensor(s) trigger detection (2013+ only)
+      "gt": f"{detection_edge:04}",  # edge steepness at cLLD detection
+      "gl": f"{detection_drop:04}",  # offset after cLLD edge detection
+      "zv": f"{approach_speed_increments:05}",  # upper-section (fast approach) speed
+      "zl": f"{speed_increments:05}",  # cLLD search speed
+      "zr": zr_field,  # acceleration
+      "zw": zw_field,  # current protection limiter
     }
-    if uses_2013_structure:
-      zl_params["lm"] = str(lld_sensor_map[lld_sensor])  # which cLLD sensor(s) trigger detection
-      zl_params["zr"] = f"{acceleration_increments:06}"  # acceleration [increment/second**2]
-      zl_params["zw"] = f"{current_protection_limiter:02}"  # current protection limiter
-    else:
-      zl_params["zr"] = f"{acceleration_increments // 1000:03}"  # accel [1000 increment/second**2]
-      zl_params["zw"] = f"{current_protection_limiter:01}"  # current protection limiter
-
     try:
       await self.send_command(module="H0", command="ZL", **zl_params)
     except STARFirmwareError:
