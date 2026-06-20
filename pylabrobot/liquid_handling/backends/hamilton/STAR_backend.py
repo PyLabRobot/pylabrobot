@@ -9099,14 +9099,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def mix96(
     self,
     mix: Mix,
-    a1_coordinate: Optional[Coordinate] = None,
     resource: Optional[Union[Plate, Container, List[Well]]] = None,
+    a1_coordinate: Optional[Coordinate] = None,
+    minimum_traverse_height_start: Optional[float] = None,
     offset: Coordinate = Coordinate.zero(),
     lld_mode: Optional[LLDMode] = None,
     descent_speed: float = 80.0,
     swap_speed: float = 5.0,
     settling_time: float = 0.0,
-    minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
   ):
     """Position the 96-head over a target and mix in place.
@@ -9124,15 +9124,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       mix: volume, repetitions, flow_rate and optional surface_following_distance.
-      a1_coordinate: explicit channel-A1 deck target; mutually exclusive with ``resource``.
       resource: aspirate96-style target (Plate / Container / list[Well]); mutually exclusive
         with ``a1_coordinate``.
+      a1_coordinate: explicit channel-A1 deck target; mutually exclusive with ``resource``.
+      minimum_traverse_height_start: absolute Z before the X/Y move; None uses full Z safety.
       offset: added to the resolved target position.
       lld_mode: liquid-level-detection mode; only ``LLDMode.OFF`` is supported (the default).
       descent_speed: speed for the fast descent down to just above the well.
       swap_speed: speed from there into the well to the target Z.
       settling_time: seconds to wait after the last cycle, before retracting out of the well.
-      minimum_traverse_height_start: absolute Z before the X/Y move; None uses full Z safety.
       minimum_traverse_height_end: absolute Z after mixing; None uses full Z safety.
 
     Raises:
@@ -9145,7 +9145,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     lld_mode = lld_mode if lld_mode is not None else self.LLDMode.OFF
     if lld_mode is not self.LLDMode.OFF:
-      raise ValueError("mix96 v1 supports only LLDMode.OFF")
+      raise ValueError("mix96 currently supports only LLDMode.OFF")
 
     if settling_time < 0:
       raise ValueError("settling_time must be >= 0")
