@@ -9111,16 +9111,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ):
     """Position the 96-head over a target and mix in place.
 
-    Moves X/Y over the target, descends into the well, then runs ``mix.repetitions`` symmetric
-    aspirate / dispense cycles: each aspirate follows the surface down by
-    ``surface_following_distance`` and each dispense follows it back up, so the tip oscillates
-    without drifting. Returns to a traverse height when done.
+    Raises the single channels to safe Z, then moves X/Y over the target and descends into the
+    well, then runs ``mix.repetitions`` symmetric aspirate / dispense cycles: each aspirate
+    follows the surface down by ``surface_following_distance`` and each dispense follows it
+    back up, so the tip oscillates without drifting. Returns to a traverse height when done.
 
     Z targets are in tip-bottom space (the target Z is where the tip end goes, not the stop
     disk). Declare the target in exactly one of two ways:
-      - ``a1_coordinate``: an explicit deck Coordinate for the channel-A1 position.
-      - ``resource`` (+ ``offset``): like ``aspirate96`` - a Plate (head A1 over well A1), a
-        Container, or a list of Wells.
+
+    - ``a1_coordinate``: an explicit deck Coordinate for the channel-A1 position.
+    - ``resource`` (+ ``offset``): like ``aspirate96`` - a Plate (head A1 over well A1), a
+      Container, or a list of Wells.
 
     Args:
       mix: volume, repetitions, flow_rate and optional surface_following_distance.
@@ -9152,6 +9153,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if await self.head96_request_tip_presence() == 0:
       raise RuntimeError("96-head has no tips (firmware reports none); pick up tips first")
+
+    # H0 direct-drive moves don't raise the single channels (the C0 core-96 commands do so at
+    # firmware level), so do it explicitly before the X/Y traverse.
+    await self.move_all_channels_in_z_safety()
 
     # resolve the channel-A1 deck target (and the container top, when a resource gives us one)
     if a1_coordinate is not None:

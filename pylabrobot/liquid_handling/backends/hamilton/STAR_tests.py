@@ -175,6 +175,7 @@ def _stub_mix96_motion(star):
   star._head96_information = _make_head96_information(star)
   star.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
   for method in (
+    "move_all_channels_in_z_safety",
     "head96_move_to_z_safety",
     "head96_move_z",
     "head96_move_x",
