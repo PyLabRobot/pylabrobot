@@ -59,6 +59,7 @@ from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
   GripDirection,
+  Mix,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
   MultiHeadDispenseContainer,
@@ -9092,6 +9093,138 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{zh_increment:05}",
       du=f"{stop_flow_rate_increment:05}",
     )
+
+  @_requires_head96
+  @need_iswap_parked
+  async def mix96(
+    self,
+    mix: Mix,
+    a1_coordinate: Optional[Coordinate] = None,
+    resource: Optional[Union[Plate, Container, List[Well]]] = None,
+    offset: Coordinate = Coordinate.zero(),
+    lld_mode: Optional[LLDMode] = None,
+    descent_speed: float = 80.0,
+    swap_speed: float = 5.0,
+    settling_time: float = 0.0,
+    minimum_traverse_height_start: Optional[float] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+  ):
+    """Position the 96-head over a target and mix in place.
+
+    Moves X/Y over the target, descends into the well, then runs ``mix.repetitions`` symmetric
+    aspirate / dispense cycles: each aspirate follows the surface down by
+    ``surface_following_distance`` and each dispense follows it back up, so the tip oscillates
+    without drifting. Returns to a traverse height when done.
+
+    Z targets are in tip-bottom space (the target Z is where the tip end goes, not the stop
+    disk). Declare the target in exactly one of two ways:
+      - ``a1_coordinate``: an explicit deck Coordinate for the channel-A1 position.
+      - ``resource`` (+ ``offset``): like ``aspirate96`` - a Plate (head A1 over well A1), a
+        Container, or a list of Wells.
+
+    Args:
+      mix: volume, repetitions, flow_rate and optional surface_following_distance.
+      a1_coordinate: explicit channel-A1 deck target; mutually exclusive with ``resource``.
+      resource: aspirate96-style target (Plate / Container / list[Well]); mutually exclusive
+        with ``a1_coordinate``.
+      offset: added to the resolved target position.
+      lld_mode: liquid-level-detection mode; only ``LLDMode.OFF`` is supported (the default).
+      descent_speed: speed for the fast descent down to just above the well.
+      swap_speed: speed from there into the well to the target Z.
+      settling_time: seconds to wait after the last cycle, before retracting out of the well.
+      minimum_traverse_height_start: absolute Z before the X/Y move; None uses full Z safety.
+      minimum_traverse_height_end: absolute Z after mixing; None uses full Z safety.
+
+    Raises:
+      ValueError: if neither or both of ``a1_coordinate`` / ``resource`` are given,
+        ``lld_mode`` is not ``LLDMode.OFF``, or ``settling_time`` < 0.
+      RuntimeError: if the 96-head holds no tips.
+    """
+    if (a1_coordinate is None) == (resource is None):
+      raise ValueError("provide exactly one of a1_coordinate or resource")
+
+    lld_mode = lld_mode if lld_mode is not None else self.LLDMode.OFF
+    if lld_mode is not self.LLDMode.OFF:
+      raise ValueError("mix96 v1 supports only LLDMode.OFF")
+
+    if settling_time < 0:
+      raise ValueError("settling_time must be >= 0")
+
+    if await self.head96_request_tip_presence() == 0:
+      raise RuntimeError("96-head has no tips (firmware reports none); pick up tips first")
+
+    # resolve the channel-A1 deck target (and the container top, when a resource gives us one)
+    if a1_coordinate is not None:
+      a1 = a1_coordinate + offset
+      z_top: Optional[float] = None
+    else:
+      anchor: Container
+      if isinstance(resource, Plate):
+        anchor = resource.get_item(0)  # head A1 over well A1 (as aspirate96 resolves it)
+      elif isinstance(resource, list):
+        anchor = resource[0]
+      else:
+        assert resource is not None
+        anchor = resource
+      a1 = anchor.get_absolute_location(x="c", y="c", z="cavity_bottom") + offset
+      z_top = anchor.get_absolute_location(x="c", y="c", z="top").z
+
+    # traverse to start height (None uses safe Z)
+    if minimum_traverse_height_start is None:
+      await self.head96_move_to_z_safety()
+    else:
+      await self.head96_move_z(minimum_traverse_height_start, speed=descent_speed)
+
+    # move X, Y; X acceleration_level=1 below y=200 mm, the low-Y zone where the head is
+    # cantilevered forward off the X-drive and wobbles most
+    await self.head96_move_x(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3)
+    await self.head96_move_y(a1.y)
+
+    # the tip oscillates between the floor (a1.z) and mix_start (floor + sf), starting at
+    # mix_start so the first aspirate can follow the surface down without hitting the bottom.
+    sf = 0.0 if mix.surface_following_distance is None else mix.surface_following_distance
+    mix_floor = a1.z
+    mix_start = a1.z + sf
+
+    # 2-stage Z descent in tip-bottom space: descent_speed to the swap-start height just above
+    # the well, then swap_speed down to mix_start; move_tool_z lands the tip end each move.
+    z_clearance = 5.0
+    swap_start_z = (z_top if z_top is not None else mix_start) + z_clearance
+    await self.head96_move_tool_z(swap_start_z, speed=descent_speed)
+    await self.head96_move_tool_z(mix_start, speed=swap_speed)
+
+    # symmetric mix cycles (no per-cycle drift): each aspirate follows the surface down by sf
+    # to the floor, each dispense back up to mix_start. minimum_height is the tip-bottom floor;
+    # the experimental commands convert it to the stop-disk reference.
+    for _ in range(mix.repetitions):
+      await self.head96_experimental_aspirate(
+        mix.volume,
+        flow_rate=mix.flow_rate,
+        minimum_height=mix_floor,
+        surface_following_distance=sf,
+        requires_tip=False,
+      )
+      await self.head96_experimental_dispense(
+        mix.volume,
+        flow_rate=mix.flow_rate,
+        minimum_height=mix_floor,
+        surface_following_distance=sf,
+        requires_tip=False,
+      )
+
+    # settle in place (tip still in the liquid) after the last cycle
+    if settling_time:
+      await asyncio.sleep(settling_time)
+
+    # careful exit at swap_speed back up to the swap-start height (mirrors the descent), before
+    # the fast traverse out
+    await self.head96_move_tool_z(swap_start_z, speed=swap_speed)
+
+    # traverse to end height (None uses safe Z)
+    if minimum_traverse_height_end is None:
+      await self.head96_move_to_z_safety()
+    else:
+      await self.head96_move_z(minimum_traverse_height_end, speed=descent_speed)
 
   # # # Granular commands # # #
 
