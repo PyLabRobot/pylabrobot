@@ -7,16 +7,16 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Dict, List, Literal, Optional
 
-from pylabrobot.brooks.error_codes import ERROR_CODES
-from pylabrobot.brooks.data_ids import DataID
+from pylabrobot.brooks import kinematics
 from pylabrobot.brooks.confirmed_firmware_versions import (
   SUPPORTED_ROBOT_TYPES,
   is_confirmed,
   is_supported_model,
   suggest_entry,
 )
+from pylabrobot.brooks.data_ids import DataID
+from pylabrobot.brooks.error_codes import ERROR_CODES
 from pylabrobot.brooks.tcs_modules import missing_required_modules
-from pylabrobot.brooks import kinematics
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
   HasJoints,
@@ -76,7 +76,8 @@ class PreciseFlexConfiguration:
   via ``request_parameter`` and the ``version`` command). The kinematics/flags
   tier is supplied at construction or derived: link lengths are not on the arm,
   ``has_rail`` comes from the joint set, ``is_dual_gripper`` from the axis_mask
-  ``&H80`` bit, and ``is_vision_gripper``/``reach_class`` from the model name.
+  ``&H80`` bit, ``is_vision_gripper`` from the model name, and ``reach_class`` from the
+  controller-read link lengths.
   """
 
   # --- identity / version (DataIDs 100-110, 2002, 116; version command) ---
@@ -108,7 +109,9 @@ class PreciseFlexConfiguration:
   has_rail: bool = False
   is_dual_gripper: bool = False
   is_vision_gripper: bool = False
-  reach_class: Literal["standard", "extended"] = "standard"
+  # "unknown" if the controller-read link lengths match neither known arm; defaults to "extended"
+  # to match the default PF400Params (the extended/XR link lengths)
+  reach_class: Literal["standard", "extended", "unknown"] = "extended"
 
   @property
   def gripper_width_range(self) -> tuple:
@@ -1461,10 +1464,17 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     else:
       kinematic_params = self._kinematics_params
       kinematics_source = "provided"
-    # Classify by reach: the standard 400 has l1+l2 ~= 435 mm, the extended ~= 591.
-    reach_class: Literal["standard", "extended"] = (
-      "extended" if (kinematic_params.l1 + kinematic_params.l2) >= 513 else "standard"
-    )
+    reach_class = kinematics._classify_pf400_reach((kinematic_params.l1, kinematic_params.l2))
+    if reach_class == "unknown":
+      logger.warning(
+        "[PreciseFlex %s] link lengths l1=%.1f l2=%.1f match neither the standard %s nor "
+        "extended %s PF400 arm; the arm's device-stored link lengths may have been changed",
+        self.driver.io._host,
+        kinematic_params.l1,
+        kinematic_params.l2,
+        kinematics.ARM_LINKS_STANDARD,
+        kinematics.ARM_LINKS_EXTENDED,
+      )
 
     return PreciseFlexConfiguration(
       manufacturer=await self.request_manufacturer(),

@@ -16,8 +16,8 @@ Sign conventions follow right-hand rule about +Z (CCW positive looking down).
 """
 
 from dataclasses import dataclass
-from math import atan2, cos, hypot, pi, radians, degrees, sin
-from typing import TYPE_CHECKING
+from math import atan2, cos, degrees, hypot, pi, radians, sin
+from typing import TYPE_CHECKING, Literal, Tuple
 
 from pylabrobot.capabilities.arms.standard import JointPose
 
@@ -25,15 +25,42 @@ if TYPE_CHECKING:
   from pylabrobot.brooks.precise_flex import PreciseFlexCartesianPose
 
 
+# Known PF400 link-length configs (l1 = shoulder->elbow, l2 = elbow->wrist), in mm, per the 615287
+# System Dimensions - the single source of truth for the standard vs extended arm.
+ARM_LINKS_STANDARD = (225.0, 210.0)
+ARM_LINKS_EXTENDED = (302.0, 289.0)
+_LINK_MATCH_TOLERANCE = 5.0  # mm; per-link calibration spread allowed when matching a read
+
+
 @dataclass
 class PF400Params:
   """Calibrated link lengths; sub-mm FK residual on a held-out probe set."""
 
-  l1: float = 302.0  # shoulder -> elbow [mm]
-  l2: float = 289.0  # elbow -> wrist [mm]
+  l1: float = ARM_LINKS_EXTENDED[0]  # shoulder -> elbow [mm]
+  l2: float = ARM_LINKS_EXTENDED[1]  # elbow -> wrist [mm]
   gripper_length: float = 162.0  # wrist -> TCP [mm]
   gripper_z_offset: float = 0.0
   eps: float = 1e-6
+
+
+def _classify_pf400_reach(links: Tuple[float, float]) -> Literal["standard", "extended", "unknown"]:
+  """Classify (l1, l2) link lengths as the standard or extended PF400 arm, or "unknown".
+
+  "unknown" means the lengths match neither known config - a sign the arm's device-stored link
+  lengths may have been changed.
+
+  Args:
+    links: (l1, l2) link lengths in mm (inner shoulder -> elbow, outer elbow -> wrist).
+  Returns:
+    "standard", "extended", or "unknown".
+  """
+  l1, l2 = links
+  tol = _LINK_MATCH_TOLERANCE
+  if abs(l1 - ARM_LINKS_STANDARD[0]) <= tol and abs(l2 - ARM_LINKS_STANDARD[1]) <= tol:
+    return "standard"
+  if abs(l1 - ARM_LINKS_EXTENDED[0]) <= tol and abs(l2 - ARM_LINKS_EXTENDED[1]) <= tol:
+    return "extended"
+  return "unknown"
 
 
 class IKError(ValueError):
