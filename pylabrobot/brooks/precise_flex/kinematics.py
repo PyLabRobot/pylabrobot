@@ -22,6 +22,12 @@ from typing import Literal, Optional, Tuple
 from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
 from pylabrobot.resources import Coordinate, Rotation
 
+
+# ---------------------------------------------------------------------------
+# Value types
+# ---------------------------------------------------------------------------
+
+
 ElbowOrientation = Literal["right", "left"]
 Wrist = Literal["cw", "ccw"]
 
@@ -41,6 +47,11 @@ class WorkingVolume:
   outer: float
   zmin: float
   zmax: float
+
+
+# ---------------------------------------------------------------------------
+# Kinematic parameters
+# ---------------------------------------------------------------------------
 
 
 # Known PF400 link-length configs (l1 = shoulder->elbow, l2 = elbow->wrist), in mm, per the 615287
@@ -79,6 +90,11 @@ def _classify_pf400_reach(links: Tuple[float, float]) -> Literal["standard", "ex
   if abs(l1 - ARM_LINKS_EXTENDED[0]) <= tol and abs(l2 - ARM_LINKS_EXTENDED[1]) <= tol:
     return "extended"
   return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Forward / inverse kinematics
+# ---------------------------------------------------------------------------
 
 
 class IKError(ValueError):
