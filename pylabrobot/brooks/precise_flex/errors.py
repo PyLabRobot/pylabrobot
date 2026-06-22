@@ -1,3 +1,5 @@
+"""PreciseFlex controller reply codes (the error-code table) and the driver's exception type."""
+
 ERROR_CODES = {
   0: {"text": "Success", "description": "Operation completed successfully without an error."},
   1: {
