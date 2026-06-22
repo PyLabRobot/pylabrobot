@@ -171,15 +171,36 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     self._is_dual_gripper = config.is_dual_gripper
 
   def _log_configuration_summary(self, config: "PreciseFlexConfiguration") -> None:
-    """Log a one-line summary of the discovered configuration."""
+    """Log a single structured summary of the discovered device: name, connection,
+    firmware, this unit's configuration, and the resulting capabilities."""
+    io = self.driver.io
+    axes = f"{config.num_axes} axes" + (" + rail" if config.has_rail else "")
+    grippers = [
+      label
+      for present, label in (
+        (config.is_dual_gripper, "dual gripper"),
+        (config.is_vision_gripper, "vision gripper"),
+      )
+      if present
+    ]
+    gripper_note = (", " + ", ".join(grippers)) if grippers else ""
     logger.info(
-      "[PreciseFlex %s] robot_type %s, %s axes%s; %s; %s; modules: %s",
-      self.driver.io._host,
-      config.robot_type,
-      config.num_axes,
-      " + rail" if config.has_rail else "",
+      "[%s] Connected on %s:%s\n"
+      "  Firmware: GPL %s, TCS %s\n"
+      "  Configuration: %s, robot_type %s, %s%s\n"
+      "  Capabilities: %s reach (l1=%.1f, l2=%.1f mm), modules: %s",
+      config.robot_name or config.controller_model or "PreciseFlex",
+      io._host,
+      io._port,
       config.gpl_version,
       config.tcs_version,
+      config.controller_model,
+      config.robot_type,
+      axes,
+      gripper_note,
+      config.reach_class,
+      config.kinematics.l1,
+      config.kinematics.l2,
       ", ".join(config.modules),
     )
 

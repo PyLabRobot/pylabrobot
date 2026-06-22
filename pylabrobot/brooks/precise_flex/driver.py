@@ -88,7 +88,7 @@ class PreciseFlexDriver(Driver):
     await self.attach(1)
     if not backend_params.skip_home:
       await self.home()
-    logger.info("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
+    logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
   async def stop(self):
     """Stop the PreciseFlex driver."""
