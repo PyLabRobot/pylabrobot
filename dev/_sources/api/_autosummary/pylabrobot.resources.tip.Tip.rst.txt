@@ -15,6 +15,7 @@ pylabrobot.resources.tip.Tip
       :toctree: .
    
       ~Tip.name
+      ~Tip.nominal_volume
       ~Tip.has_filter
       ~Tip.total_tip_length
       ~Tip.maximal_volume

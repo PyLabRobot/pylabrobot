@@ -1,0 +1,6 @@
+pylabrobot.resources.tip.Tip.nominal\_volume
+============================================
+
+.. currentmodule:: pylabrobot.resources.tip
+
+.. autoattribute:: Tip.nominal_volume
