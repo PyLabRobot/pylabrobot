@@ -12,7 +12,7 @@ from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.hamilton import HamiltonDeck, STARDeck, STARLetDeck
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers, HamiltonSTARDeck
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 
 from .chatterbox import STARChatterboxDriver
 from .core import CoreGripper
