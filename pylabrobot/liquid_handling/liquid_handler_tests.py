@@ -46,6 +46,7 @@ from pylabrobot.resources.hamilton import (
 from pylabrobot.resources.revvity.plates import Revvity_384_wellplate_28ul_Ub
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
+  no_volume_tracking,
   set_volume_tracking,
 )
 from pylabrobot.resources.well import Well
@@ -532,6 +533,15 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.backend.drop_tips96.assert_called_once()
     call_kwargs = self.backend.drop_tips96.call_args.kwargs
     self.assertEqual(call_kwargs["drop"].offset, Coordinate(1, 3, 3))
+
+  async def test_aspirate96_tip_tracker_respects_volume_tracking_off(self):
+    """With volume tracking off, aspirate96 leaves the 96-head tip trackers untouched, matching
+    single-channel aspirate (the global flag governs the tip side, not just the source)."""
+    await self.lh.pick_up_tips96(self.tip_rack)
+    tip = self.lh.head96[0].get_tip()
+    with no_volume_tracking():
+      await self.lh.aspirate96(self.plate, volume=10)
+    self.assertEqual(tip.tracker.get_used_volume(), 0)
 
   async def test_default_offset_head96_initializer(self):
     backend = _create_mock_backend(num_channels=8)

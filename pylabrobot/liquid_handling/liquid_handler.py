@@ -1754,9 +1754,10 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        if not container.tracker.is_disabled and does_volume_tracking():
-          container.tracker.remove_liquid(volume=volume)
-        tip.tracker.add_liquid(volume=volume)
+        if does_volume_tracking():
+          if not container.tracker.is_disabled:
+            container.tracker.remove_liquid(volume=volume)
+          tip.tracker.add_liquid(volume=volume)
 
       aspiration = MultiHeadAspirationContainer(
         container=container,
@@ -1782,9 +1783,10 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        if not well.tracker.is_disabled and does_volume_tracking():
-          well.tracker.remove_liquid(volume=volume)
-        tip.tracker.add_liquid(volume=volume)
+        if does_volume_tracking():
+          if not well.tracker.is_disabled:
+            well.tracker.remove_liquid(volume=volume)
+          tip.tracker.add_liquid(volume=volume)
 
       aspiration = MultiHeadAspirationPlate(
         wells=cast(List[Well], containers),
