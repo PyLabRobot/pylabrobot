@@ -7,16 +7,6 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Dict, List, Literal, Optional
 
-from pylabrobot.brooks import kinematics
-from pylabrobot.brooks.confirmed_firmware_versions import (
-  SUPPORTED_ROBOT_TYPES,
-  is_confirmed,
-  is_supported_model,
-  suggest_entry,
-)
-from pylabrobot.brooks.data_ids import DataID
-from pylabrobot.brooks.error_codes import ERROR_CODES
-from pylabrobot.brooks.tcs_modules import missing_required_modules
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
   HasJoints,
@@ -29,6 +19,18 @@ from pylabrobot.device import Device, Driver
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
 from pylabrobot.resources.resource import Resource
+
+# PreciseFlex-specific siblings - relative imports.
+from . import kinematics
+from .confirmed_firmware_versions import (
+  SUPPORTED_ROBOT_TYPES,
+  is_confirmed,
+  is_supported_model,
+  suggest_entry,
+)
+from .data_ids import DataID
+from .errors import PreciseFlexError
+from .tcs_modules import missing_required_modules
 
 logger = logging.getLogger(__name__)
 
@@ -155,23 +157,6 @@ class PreciseFlexConfiguration:
         inner = min(inner, abs(radius - tool))
     zmin, zmax = self.z_range
     return WorkingVolume(inner=inner, outer=outer, zmin=zmin, zmax=zmax)
-
-
-# ---------------------------------------------------------------------------
-# Exceptions
-# ---------------------------------------------------------------------------
-
-
-class PreciseFlexError(Exception):
-  def __init__(self, replycode: int, message: str):
-    self.replycode = replycode
-    self.message = message
-    if replycode in ERROR_CODES:
-      text = ERROR_CODES[replycode]["text"]
-      description = ERROR_CODES[replycode]["description"]
-      super().__init__(f"PreciseFlexError {replycode}: {text}. {description} - {message}")
-    else:
-      super().__init__(f"PreciseFlexError {replycode}: {message}")
 
 
 # ---------------------------------------------------------------------------
