@@ -13,7 +13,7 @@ from typing import Dict, Literal
 from pylabrobot.capabilities.arms.standard import JointPose
 
 from . import kinematics
-from .kinematics import WorkingVolume
+from .kinematics import WorkEnvelope
 
 
 class Axis(IntEnum):
@@ -84,7 +84,7 @@ class PreciseFlexConfiguration:
     return self.soft_limits[Axis.BASE]
 
   @property
-  def working_volume(self) -> WorkingVolume:
+  def work_envelope(self) -> WorkEnvelope:
     """Reachable tool-tip annulus, swept from the shoulder/elbow soft limits.
 
     Sweeps the two planar joints across their soft-limit range (Z held constant -
@@ -116,4 +116,4 @@ class PreciseFlexConfiguration:
         outer = max(outer, radius + tool)
         inner = min(inner, abs(radius - tool))
     zmin, zmax = self.z_range
-    return WorkingVolume(inner=inner, outer=outer, zmin=zmin, zmax=zmax)
+    return WorkEnvelope(inner=inner, outer=outer, zmin=zmin, zmax=zmax)

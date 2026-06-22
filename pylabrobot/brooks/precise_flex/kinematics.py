@@ -22,7 +22,6 @@ from typing import Literal, Optional, Tuple
 from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
 from pylabrobot.resources import Coordinate, Rotation
 
-
 # ---------------------------------------------------------------------------
 # Value types
 # ---------------------------------------------------------------------------
@@ -40,7 +39,7 @@ class PreciseFlexCartesianPose(CartesianPose):
 
 
 @dataclass(frozen=True)
-class WorkingVolume:
+class WorkEnvelope:
   """Reachable tool-tip envelope: an annulus about the shoulder, over a Z range (mm)."""
 
   inner: float

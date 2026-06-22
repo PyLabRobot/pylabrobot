@@ -37,7 +37,7 @@ from pylabrobot.brooks.precise_flex.driver import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.errors import PreciseFlexError
 from pylabrobot.brooks.precise_flex.kinematics import (
   PreciseFlexCartesianPose,
-  WorkingVolume,
+  WorkEnvelope,
 )
 from pylabrobot.brooks.precise_flex.precise_flex import (
   PreciseFlex400,
@@ -55,5 +55,5 @@ __all__ = [
   "PreciseFlexConfiguration",
   "PreciseFlexDriver",
   "PreciseFlexError",
-  "WorkingVolume",
+  "WorkEnvelope",
 ]

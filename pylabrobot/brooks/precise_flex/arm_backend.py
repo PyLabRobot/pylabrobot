@@ -267,7 +267,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     if not is_supported_model(config.robot_type):
       logger.warning(
         "[PreciseFlex %s] robot_type %s is not a model this driver's kinematics "
-        "supports (%s); move_to/working_volume may be wrong.",
+        "supports (%s); move_to/work_envelope may be wrong.",
         host,
         config.robot_type,
         ", ".join(SUPPORTED_ROBOT_TYPES.values()),
