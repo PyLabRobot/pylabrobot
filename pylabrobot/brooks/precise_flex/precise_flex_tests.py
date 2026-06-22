@@ -2,8 +2,7 @@ import unittest
 from typing import Tuple
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.brooks import kinematics
-from pylabrobot.brooks.precise_flex import Axis, PreciseFlex400Backend
+from pylabrobot.brooks.precise_flex import Axis, PreciseFlex400Backend, kinematics
 
 
 def _make_backend(
