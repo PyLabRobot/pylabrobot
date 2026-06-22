@@ -28,17 +28,21 @@ Re-exports the public classes so ``from pylabrobot.brooks.precise_flex import Pr
 working.
 """
 
-from pylabrobot.brooks.precise_flex.precise_flex import (
+from pylabrobot.brooks.precise_flex.arm_backend import PreciseFlexArmBackend
+from pylabrobot.brooks.precise_flex.config import (
   Axis,
+  PreciseFlexConfiguration,
+)
+from pylabrobot.brooks.precise_flex.driver import PreciseFlexDriver
+from pylabrobot.brooks.precise_flex.errors import PreciseFlexError
+from pylabrobot.brooks.precise_flex.kinematics import (
+  PreciseFlexCartesianPose,
+  WorkingVolume,
+)
+from pylabrobot.brooks.precise_flex.precise_flex import (
   PreciseFlex400,
   PreciseFlex400Backend,
   PreciseFlex3400Backend,
-  PreciseFlexArmBackend,
-  PreciseFlexCartesianPose,
-  PreciseFlexConfiguration,
-  PreciseFlexDriver,
-  PreciseFlexError,
-  WorkingVolume,
 )
 
 __all__ = [

@@ -17,12 +17,30 @@ Sign conventions follow right-hand rule about +Z (CCW positive looking down).
 
 from dataclasses import dataclass
 from math import atan2, cos, degrees, hypot, pi, radians, sin
-from typing import TYPE_CHECKING, Literal, Tuple
+from typing import Literal, Optional, Tuple
 
-from pylabrobot.capabilities.arms.standard import JointPose
+from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
+from pylabrobot.resources import Coordinate, Rotation
 
-if TYPE_CHECKING:
-  from pylabrobot.brooks.precise_flex.precise_flex import PreciseFlexCartesianPose
+ElbowOrientation = Literal["right", "left"]
+Wrist = Literal["cw", "ccw"]
+
+
+@dataclass
+class PreciseFlexCartesianPose(CartesianPose):
+  rail_position: Optional[float] = None
+  orientation: Optional[ElbowOrientation] = None
+  wrist: Optional[Wrist] = None
+
+
+@dataclass(frozen=True)
+class WorkingVolume:
+  """Reachable tool-tip envelope: an annulus about the shoulder, over a Z range (mm)."""
+
+  inner: float
+  outer: float
+  zmin: float
+  zmax: float
 
 
 # Known PF400 link-length configs (l1 = shoulder->elbow, l2 = elbow->wrist), in mm, per the 615287
@@ -67,7 +85,7 @@ class IKError(ValueError):
   """Target pose is unreachable."""
 
 
-def fk(joints: JointPose, p: PF400Params) -> "PreciseFlexCartesianPose":
+def fk(joints: JointPose, p: PF400Params) -> PreciseFlexCartesianPose:
   """Forward kinematics.
 
   Args:
@@ -78,9 +96,6 @@ def fk(joints: JointPose, p: PF400Params) -> "PreciseFlexCartesianPose":
     orientation/wrist derived from the joint configuration (J3 sign and
     wrapped J4 sign, respectively).
   """
-  from pylabrobot.brooks.precise_flex.precise_flex import PreciseFlexCartesianPose
-  from pylabrobot.resources import Coordinate, Rotation
-
   j1 = joints[1]
   j2 = radians(joints[2])
   j3 = radians(joints[3])
@@ -102,7 +117,7 @@ def fk(joints: JointPose, p: PF400Params) -> "PreciseFlexCartesianPose":
   )
 
 
-def ik(pose: "PreciseFlexCartesianPose", p: PF400Params) -> JointPose:
+def ik(pose: PreciseFlexCartesianPose, p: PF400Params) -> JointPose:
   """Inverse kinematics.
 
   Args:
