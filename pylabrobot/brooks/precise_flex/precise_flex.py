@@ -29,7 +29,7 @@ from .confirmed_firmware_versions import (
   suggest_entry,
 )
 from .data_ids import DataID
-from .error_codes import ERROR_CODES
+from .errors import PreciseFlexError
 from .tcs_modules import missing_required_modules
 
 logger = logging.getLogger(__name__)
@@ -157,23 +157,6 @@ class PreciseFlexConfiguration:
         inner = min(inner, abs(radius - tool))
     zmin, zmax = self.z_range
     return WorkingVolume(inner=inner, outer=outer, zmin=zmin, zmax=zmax)
-
-
-# ---------------------------------------------------------------------------
-# Exceptions
-# ---------------------------------------------------------------------------
-
-
-class PreciseFlexError(Exception):
-  def __init__(self, replycode: int, message: str):
-    self.replycode = replycode
-    self.message = message
-    if replycode in ERROR_CODES:
-      text = ERROR_CODES[replycode]["text"]
-      description = ERROR_CODES[replycode]["description"]
-      super().__init__(f"PreciseFlexError {replycode}: {text}. {description} - {message}")
-    else:
-      super().__init__(f"PreciseFlexError {replycode}: {message}")
 
 
 # ---------------------------------------------------------------------------

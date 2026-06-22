@@ -1919,3 +1919,15 @@ Older GPL systems may display the license number shown above in ( ) rather than 
     "description": "A remote request to load a new vision project has failed because the current project has not been saved. Save the current project before attempting to load a new one.",
   },
 }
+
+
+class PreciseFlexError(Exception):
+  def __init__(self, replycode: int, message: str):
+    self.replycode = replycode
+    self.message = message
+    if replycode in ERROR_CODES:
+      text = ERROR_CODES[replycode]["text"]
+      description = ERROR_CODES[replycode]["description"]
+      super().__init__(f"PreciseFlexError {replycode}: {text}. {description} - {message}")
+    else:
+      super().__init__(f"PreciseFlexError {replycode}: {message}")
