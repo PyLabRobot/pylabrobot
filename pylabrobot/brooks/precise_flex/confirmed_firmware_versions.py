@@ -21,6 +21,8 @@ varies by build without changing behaviour.
 import re
 from dataclasses import dataclass
 
+# -- supported models & confirmed stacks -----------------------------------
+
 # robot_type (DataID 116) -> model name, for the models whose kinematics this driver implements.
 SUPPORTED_ROBOT_TYPES = {
   12: "PreciseFlex 400",
@@ -53,6 +55,8 @@ CONFIRMED_FIRMWARE_VERSIONS = frozenset(
     ),
   ]
 )
+
+# -- checks & formatting ---------------------------------------------------
 
 # Trailing build date (e.g. "10-25-2024" or "Apr 25 2025") and anything after it.
 _DATE = re.compile(r",?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}).*$")

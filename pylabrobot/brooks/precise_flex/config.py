@@ -15,6 +15,8 @@ from pylabrobot.capabilities.arms.standard import JointPose
 from . import kinematics
 from .kinematics import WorkEnvelope
 
+# -- axis addressing -------------------------------------------------------
+
 
 class Axis(IntEnum):
   BASE = 1
@@ -28,6 +30,9 @@ class Axis(IntEnum):
 # ---------------------------------------------------------------------------
 # Configuration - resolved once at setup
 # ---------------------------------------------------------------------------
+
+
+# -- device configuration --------------------------------------------------
 
 
 @dataclass(frozen=True)
