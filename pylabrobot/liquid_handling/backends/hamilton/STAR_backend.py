@@ -9103,6 +9103,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     a1_coordinate: Optional[Coordinate] = None,
     minimum_traverse_height_start: Optional[float] = None,
     offset: Coordinate = Coordinate.zero(),
+    blowout_air_volume: float = 5.0,
     lld_mode: Optional[LLDMode] = None,
     descent_speed: float = 80.0,
     swap_speed: float = 5.0,
@@ -9182,8 +9183,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # move X, Y; X acceleration_level=1 below y=200 mm, the low-Y zone where the head is
     # cantilevered forward off the X-drive and wobbles most
-    await self.head96_move_x(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3)
-    await self.head96_move_y(a1.y)
+    await asyncio.gather(
+      self.head96_move_x(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
+      self.head96_move_y(a1.y),
+    )
 
     # the tip oscillates between the floor (a1.z) and mix_start (floor + sf), starting at
     # mix_start so the first aspirate can follow the surface down without hitting the bottom.
@@ -9192,10 +9195,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_start = a1.z + sf
 
     # 2-stage Z descent in tip-bottom space: descent_speed to the swap-start height just above
-    # the well, then swap_speed down to mix_start; move_tool_z lands the tip end each move.
+    # the well, aspirate blowout_air_volume, then swap_speed down to mix_start; move_tool_z lands
+    # the tip end each move.
     z_clearance = 5.0
     swap_start_z = (z_top if z_top is not None else mix_start) + z_clearance
     await self.head96_move_tool_z(swap_start_z, speed=descent_speed)
+    await self.head96_experimental_aspirate(
+      blowout_air_volume,
+      flow_rate=mix.flow_rate,
+      minimum_height=mix_floor,
+      surface_following_distance=0,
+      requires_tip=False,
+    )
     await self.head96_move_tool_z(mix_start, speed=swap_speed)
 
     # symmetric mix cycles (no per-cycle drift): each aspirate follows the surface down by sf
@@ -9224,6 +9235,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # careful exit at swap_speed back up to the swap-start height (mirrors the descent), before
     # the fast traverse out
     await self.head96_move_tool_z(swap_start_z, speed=swap_speed)
+
+    await self.head96_experimental_dispense(
+      blowout_air_volume,
+      flow_rate=mix.flow_rate,
+      requires_tip=False,
+    )
 
     # traverse to end height (None uses safe Z)
     if minimum_traverse_height_end is None:
