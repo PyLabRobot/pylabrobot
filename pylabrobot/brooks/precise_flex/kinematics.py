@@ -31,6 +31,9 @@ ElbowOrientation = Literal["right", "left"]
 Wrist = Literal["cw", "ccw"]
 
 
+# -- value types, device params & errors -----------------------------------
+
+
 @dataclass
 class PreciseFlexCartesianPose(CartesianPose):
   rail_position: Optional[float] = None
@@ -95,9 +98,7 @@ def _classify_pf400_reach(links: Tuple[float, float]) -> Literal["standard", "ex
 # Forward / inverse kinematics
 # ---------------------------------------------------------------------------
 
-
-class IKError(ValueError):
-  """Target pose is unreachable."""
+# -- forward kinematics ----------------------------------------------------
 
 
 def fk(joints: JointPose, p: PF400Params) -> PreciseFlexCartesianPose:
@@ -121,8 +122,8 @@ def fk(joints: JointPose, p: PF400Params) -> PreciseFlexCartesianPose:
   y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.gripper_length * sin(yaw)
   z = j1 + p.gripper_z_offset
   j3_wrapped = (joints[3] + 180) % 360 - 180
-  orientation = "right" if j3_wrapped >= 0 else "left"
-  wrist = "ccw" if joints[4] >= 0 else "cw"
+  orientation: ElbowOrientation = "right" if j3_wrapped >= 0 else "left"
+  wrist: Wrist = "ccw" if joints[4] >= 0 else "cw"
   return PreciseFlexCartesianPose(
     location=Coordinate(x, y, z),
     rotation=Rotation(-180, 90, z=degrees(yaw)),
@@ -130,6 +131,13 @@ def fk(joints: JointPose, p: PF400Params) -> PreciseFlexCartesianPose:
     wrist=wrist,
     rail_position=rail_position,
   )
+
+
+# -- inverse kinematics ----------------------------------------------------
+
+
+class IKError(ValueError):
+  """Target pose is unreachable."""
 
 
 def ik(pose: PreciseFlexCartesianPose, p: PF400Params) -> JointPose:
