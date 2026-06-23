@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.centrifuge.highres.microspin.MicroSpin &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.centrifuge.highres.microspin.MicroSpin';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.19.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -56,12 +56,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.centrifuge.highres.microspin.MicroSpin.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.centrifuge.highres.mock_server.MicroSpinMockServer" href="pylabrobot.centrifuge.highres.mock_server.MicroSpinMockServer.html" />
-    <link rel="prev" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinAbortedError" href="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinAbortedError.html" />
+    <link rel="next" title="pylabrobot.centrifuge.vspin_backend.VSpinBackend" href="pylabrobot.centrifuge.vspin_backend.VSpinBackend.html" />
+    <link rel="prev" title="pylabrobot.centrifuge.access2.Access2" href="pylabrobot.centrifuge.access2.Access2.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.1" />
@@ -561,7 +561,7 @@
     
     <li class="breadcrumb-item"><a href="../pylabrobot.centrifuge.html" class="nav-link">pylabrobot.centrifuge package</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.centrifuge.highres.microspin.MicroSpin</span></li>
   </ul>
 </nav>
 </div>
@@ -578,13 +578,39 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-centrifuge-highres-microspin-backend-microspinprotocolerror">
-<h1>pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError<a class="headerlink" href="#pylabrobot-centrifuge-highres-microspin-backend-microspinprotocolerror" title="Link to this heading">#</a></h1>
-<dl class="py exception">
-<dt class="sig sig-object py" id="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError">
-<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.centrifuge.highres.microspin_backend.</span></span><span class="sig-name descname"><span class="pre">MicroSpinProtocolError</span></span><a class="headerlink" href="#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">RuntimeError</span></code></a></p>
-<p>Raised when the MicroSpin emits a response we cannot parse.</p>
+  <section id="pylabrobot-centrifuge-highres-microspin-microspin">
+<h1>pylabrobot.centrifuge.highres.microspin.MicroSpin<a class="headerlink" href="#pylabrobot-centrifuge-highres-microspin-microspin" title="Link to this heading">#</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pylabrobot.centrifuge.highres.microspin.MicroSpin">
+<span class="sig-prename descclassname"><span class="pre">pylabrobot.centrifuge.highres.microspin.</span></span><span class="sig-name descname"><span class="pre">MicroSpin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend"><span class="pre">MicroSpinBackend</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="pylabrobot.centrifuge.centrifuge.Centrifuge.html#pylabrobot.centrifuge.centrifuge.Centrifuge" title="pylabrobot.centrifuge.centrifuge.Centrifuge"><span class="pre">Centrifuge</span></a></span></span><a class="headerlink" href="#pylabrobot.centrifuge.highres.microspin.MicroSpin" title="Link to this definition">#</a></dt>
+<dd><p>Construct a HighRes Biosolutions MicroSpin centrifuge.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – A descriptive name for this centrifuge instance.</p></li>
+<li><p><strong>host</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – IP address or DNS name of the MicroSpin’s Ethernet port. The
+factory default is <code class="docutils literal notranslate"><span class="pre">192.168.127.60</span></code> but the IP is configurable on
+the device’s <code class="docutils literal notranslate"><span class="pre">/network.html</span></code> web page.</p></li>
+<li><p><strong>port</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – TCP port for the remote-control server. Defaults to
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">MicroSpinBackend.DEFAULT_PORT</span></code> (1000, the factory default).
+Pass a different value if the device’s <code class="docutils literal notranslate"><span class="pre">SERVER_PORT</span></code> setting has
+been changed via <code class="docutils literal notranslate"><span class="pre">/network.html</span></code>.</p></li>
+<li><p><strong>timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Default per-command timeout in seconds. The backend extends
+this automatically for long-running operations (spin, home).</p></li>
+<li><p><strong>backend</strong> (<a class="reference internal" href="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinBackend"><em>MicroSpinBackend</em></a><em> | </em><em>None</em>) – Optionally supply a pre-constructed
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MicroSpinBackend</span></code>. Useful for tests or for sharing a backend
+between front-end objects. If omitted, a new backend is built from
+<code class="docutils literal notranslate"><span class="pre">host</span></code>/<code class="docutils literal notranslate"><span class="pre">port</span></code>/<code class="docutils literal notranslate"><span class="pre">timeout</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">Centrifuge</span></code> wired to a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MicroSpinBackend</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="pylabrobot.centrifuge.centrifuge.Centrifuge.html#pylabrobot.centrifuge.centrifuge.Centrifuge" title="pylabrobot.centrifuge.centrifuge.Centrifuge"><em>Centrifuge</em></a></p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
@@ -600,20 +626,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinAbortedError.html"
+       href="pylabrobot.centrifuge.access2.Access2.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.centrifuge.highres.microspin_backend.MicroSpinAbortedError</p>
+        <p class="prev-next-title">pylabrobot.centrifuge.access2.Access2</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.centrifuge.highres.mock_server.MicroSpinMockServer.html"
+       href="pylabrobot.centrifuge.vspin_backend.VSpinBackend.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.centrifuge.highres.mock_server.MicroSpinMockServer</p>
+        <p class="prev-next-title">pylabrobot.centrifuge.vspin_backend.VSpinBackend</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -636,7 +662,7 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError"><code class="docutils literal notranslate"><span class="pre">MicroSpinProtocolError</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.centrifuge.highres.microspin.MicroSpin"><code class="docutils literal notranslate"><span class="pre">MicroSpin()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -644,7 +670,7 @@
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.centrifuge.highres.microspin.MicroSpin.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -659,7 +685,7 @@
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.centrifuge.highres.microspin.MicroSpin.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>

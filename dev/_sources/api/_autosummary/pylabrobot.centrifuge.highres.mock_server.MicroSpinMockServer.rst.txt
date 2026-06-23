@@ -1,0 +1,25 @@
+﻿:orphan:
+
+pylabrobot.centrifuge.highres.mock\_server.MicroSpinMockServer
+==============================================================
+
+.. currentmodule:: pylabrobot.centrifuge.highres.mock_server
+
+.. autoclass:: MicroSpinMockServer
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MicroSpinMockServer.__init__
+      ~MicroSpinMockServer.start
+      ~MicroSpinMockServer.stop
+   
+   

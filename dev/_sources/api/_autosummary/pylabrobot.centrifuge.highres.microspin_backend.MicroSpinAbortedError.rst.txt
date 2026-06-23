@@ -1,0 +1,6 @@
+﻿pylabrobot.centrifuge.highres.microspin\_backend.MicroSpinAbortedError
+======================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.highres.microspin_backend
+
+.. autoexception:: MicroSpinAbortedError

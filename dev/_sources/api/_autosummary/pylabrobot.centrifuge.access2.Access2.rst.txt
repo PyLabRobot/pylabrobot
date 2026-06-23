@@ -1,0 +1,6 @@
+﻿pylabrobot.centrifuge.access2.Access2
+=====================================
+
+.. currentmodule:: pylabrobot.centrifuge.access2
+
+.. autofunction:: Access2

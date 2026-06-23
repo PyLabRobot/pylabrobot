@@ -589,6 +589,20 @@
 </tbody>
 </table>
 </div>
+<section id="factory-functions">
+<h2>Factory functions<a class="headerlink" href="#factory-functions" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.access2.Access2.html#pylabrobot.centrifuge.access2.Access2" title="pylabrobot.centrifuge.access2.Access2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">access2.Access2</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.microspin.MicroSpin.html#pylabrobot.centrifuge.highres.microspin.MicroSpin" title="pylabrobot.centrifuge.highres.microspin.MicroSpin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.microspin.MicroSpin</span></code></a></p></td>
+<td><p>Construct a HighRes Biosolutions MicroSpin centrifuge.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="backends">
 <h2>Backends<a class="headerlink" href="#backends" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -625,8 +639,22 @@
 <tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinError.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinError" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.microspin_backend.MicroSpinError</span></code></a></p></td>
 <td><p>Raised when the MicroSpin responds with <code class="docutils literal notranslate"><span class="pre">ERROR!</span></code> to a command.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.microspin_backend.MicroSpinProtocolError</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinAbortedError.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinAbortedError" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinAbortedError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.microspin_backend.MicroSpinAbortedError</span></code></a></p></td>
+<td><p>Raised when the MicroSpin terminates a command with <code class="docutils literal notranslate"><span class="pre">ABORTED!</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError.html#pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError" title="pylabrobot.centrifuge.highres.microspin_backend.MicroSpinProtocolError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.microspin_backend.MicroSpinProtocolError</span></code></a></p></td>
 <td><p>Raised when the MicroSpin emits a response we cannot parse.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="testing-utilities">
+<h2>Testing utilities<a class="headerlink" href="#testing-utilities" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.centrifuge.highres.mock_server.MicroSpinMockServer.html#pylabrobot.centrifuge.highres.mock_server.MicroSpinMockServer" title="pylabrobot.centrifuge.highres.mock_server.MicroSpinMockServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">highres.mock_server.MicroSpinMockServer</span></code></a></p></td>
+<td><p>A localhost TCP server that speaks the MicroSpin remote-control protocol.</p></td>
 </tr>
 </tbody>
 </table>
@@ -681,8 +709,10 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#factory-functions">Factory functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#backends">Backends</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#errors">Errors</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#testing-utilities">Testing utilities</a></li>
 </ul>
   </nav></div>
 

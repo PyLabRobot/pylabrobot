@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.highres.mock\_server.MicroSpinMockServer.\_\_init\_\_
+===========================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.highres.mock_server
+
+.. automethod:: MicroSpinMockServer.__init__
