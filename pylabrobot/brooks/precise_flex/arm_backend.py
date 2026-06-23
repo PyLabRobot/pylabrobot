@@ -3,9 +3,8 @@
 import dataclasses
 import logging
 import warnings
-from abc import ABC
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional
+from typing import ClassVar, Dict, List, Literal, Optional
 
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -55,7 +54,7 @@ def _zip_axis_ranges(
   return {axis: (low[axis], high[axis]) for axis in low.keys() & high.keys()}
 
 
-def _snap_to_current(ik_joints: JointPose, current: JointPose, wrist: Wrist) -> JointPose:
+def _snap_to_current(ik_joints: JointPose, current: JointPose, wrist: Optional[Wrist]) -> JointPose:
   """Shift each rotary joint by 360° multiples toward `current`, then re-enforce
   the wrist-sign half on J4 so the result still matches `wrist`. Avoids
   gratuitous full-turn moves when multiple IK solutions are equivalent.
@@ -70,7 +69,7 @@ def _snap_to_current(ik_joints: JointPose, current: JointPose, wrist: Wrist) -> 
   return out
 
 
-class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive, ABC):
+class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   """Backend for the PreciseFlex robotic arm.
 
   Default to using Cartesian coordinates; some methods in Brook's TCS
@@ -79,6 +78,27 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   Documentation and error codes available at
   https://www2.brooksautomation.com/#Root/Welcome.htm
   """
+
+  # Validated parked orientations: planar folds differing only in which way the arm faces, named for
+  # the direction the gripper points (BACK / RIGHT / FRONT). The Z column (Axis.BASE) is omitted on
+  # purpose - ``park()`` fills it from the discovered travel (3/4 of it) so one orientation works on
+  # any reach; set Axis.BASE yourself to override. The gripper and rail are left untouched so parking
+  # never drops a held plate or assumes a rail. Assign one to ``parking_position`` to change the park.
+  PARKING_POSITION_BACK: ClassVar[JointPose] = {
+    Axis.SHOULDER: 90.0,
+    Axis.ELBOW: 180.0,
+    Axis.WRIST: 90.0,
+  }
+  PARKING_POSITION_RIGHT: ClassVar[JointPose] = {
+    Axis.SHOULDER: 0.0,
+    Axis.ELBOW: 180.0,
+    Axis.WRIST: 180.0,
+  }
+  PARKING_POSITION_FRONT: ClassVar[JointPose] = {
+    Axis.SHOULDER: -90.0,
+    Axis.ELBOW: 180.0,
+    Axis.WRIST: 270.0,
+  }
 
   def __init__(
     self,
@@ -90,6 +110,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     has_rail: bool = False,
     read_kinematics_from_device: bool = True,
     recover_out_of_range_at_setup: bool = True,
+    parking_position: Optional[JointPose] = None,
   ) -> None:
     """
     Args:
@@ -114,6 +135,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
         Depends on the mounted gripper. The conversion mm → firmware units is
         linear with slope 1: ``units = closed_gripper_position + (width_mm -
         min_gripper_width)``.
+      parking_position: initial value for the public, runtime-settable ``parking_position`` that
+        ``park()`` moves to. Leave None (the default) and setup fills the generic default RIGHT pose
+        (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
+        elsewhere. While unset (no configuration), ``park()`` falls back to ``movetosafe``.
     """
     super().__init__()
     self.driver = driver
@@ -130,8 +155,12 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     )
     self._read_kinematics_from_device = read_kinematics_from_device
     self._recover_out_of_range_at_setup = recover_out_of_range_at_setup
-    # Device configuration, resolved once at setup; None until then.
+    # Device configuration, resolved once at setup; None until then. Set before parking_position so its
+    # validating setter can check assignments against the soft limits once they are known.
     self._configuration: Optional[PreciseFlexConfiguration] = None
+    # Public and runtime-settable (validated on assignment); setup fills the default RIGHT pose when
+    # this is left None.
+    self.parking_position = parking_position
     if is_dual_gripper:
       warnings.warn(
         "Dual gripper support is experimental and may not work as expected.", UserWarning
@@ -152,6 +181,8 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       )
       return
     self._adopt_configuration(self._configuration)
+    if self.parking_position is None:
+      self.parking_position = self.PARKING_POSITION_RIGHT
     self._log_configuration_summary(self._configuration)
     self._assess_configuration(self._configuration)
     await self._handle_out_of_range_axes()
@@ -321,7 +352,8 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     joints[Axis.SHOULDER] = ik_joints[2]
     joints[Axis.ELBOW] = ik_joints[3]
     joints[Axis.WRIST] = ik_joints[4]
-    joints[Axis.RAIL] = cart.rail_position
+    if cart.rail_position is not None:
+      joints[Axis.RAIL] = cart.rail_position
     return joints
 
   # -- high-level motion API -------------------------------------------------
@@ -390,12 +422,57 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Stops the current robot immediately but leaves power on."""
     await self.driver.send_command("halt")
 
-  async def park(self, backend_params: Optional[BackendParams] = None) -> None:
-    """Move the robot to its parking position.
+  @property
+  def parking_position(self) -> Optional[JointPose]:
+    """The pose ``park()`` moves to. Assign one of the ``PARKING_POSITION_BACK/RIGHT/FRONT`` class
+    constants or any JointPose; the assignment is validated (keys must be ``Axis`` members, values must
+    be within the soft limits once the configuration is known). None until setup, where it defaults to
+    ``PARKING_POSITION_RIGHT``. A pose that omits ``Axis.BASE`` has its Z filled at park time."""
+    return self._parking_position
 
-    Does not include checks for collision with 3rd party obstacles inside the work volume of the robot.
+  @parking_position.setter
+  def parking_position(self, position: Optional[JointPose]) -> None:
+    if position is not None:
+      self._validate_parking_position(position)
+    self._parking_position: Optional[JointPose] = dict(position) if position is not None else None
+
+  async def park(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Move to ``self.parking_position``; defaults at setup, reassignable at runtime.
+
+    ``parking_position`` is filled at setup with ``PARKING_POSITION_RIGHT`` (a planar fold facing
+    right, Z column at 3/4 of its discovered travel); assign one of the ``PARKING_POSITION_*`` class
+    constants or any JointPose to park elsewhere. Falls back to the firmware ``movetosafe`` while it is
+    unset. No collision checks against 3rd-party obstacles.
     """
-    await self.driver.send_command("movetosafe")
+    if self.parking_position is not None:
+      await self.move_to_joint_position(
+        position=self._parking_pose_with_default_z(self.parking_position)
+      )
+    else:
+      await self.driver.send_command("movetosafe")
+
+  def _validate_parking_position(self, position: JointPose) -> None:
+    """Reject anything that is not a JointPose of in-range axes (limits checked once known)."""
+    if not isinstance(position, dict) or not position:
+      raise ValueError(f"parking_position must be a non-empty JointPose, got {position!r}")
+    for axis, value in position.items():
+      if not isinstance(axis, Axis):
+        raise ValueError(f"parking_position keys must be Axis members, got {axis!r}")
+      if not isinstance(value, (int, float)):
+        raise ValueError(f"parking_position[{axis.name}] must be a number, got {value!r}")
+      if self._configuration is not None:
+        lo, hi = self._configuration.soft_limits[axis]
+        if not lo <= value <= hi:
+          raise ValueError(
+            f"parking_position[{axis.name}]={value} is outside the soft limits [{lo}, {hi}]"
+          )
+
+  def _parking_pose_with_default_z(self, position: JointPose) -> JointPose:
+    """Fill the Z column (``Axis.BASE``) at 3/4 of the discovered travel when the pose omits it."""
+    if Axis.BASE in position or self._configuration is None:
+      return position
+    _, z_max = self._configuration.z_range
+    return {Axis.BASE: 0.75 * z_max, **position}
 
   async def move_rail(self, rail_position: float) -> None:
     """Move the rail to the specified position.
@@ -977,7 +1054,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Per-axis rated speed at 100%; J1/J5 in mm/s, J2-J4 in deg/s."""
     return _parse_per_axis(await self.request_parameter(DataID.REFERENCE_SPEED))
 
-  async def request_reference_accel(self) -> Dict[Axis, float]:
+  async def request_reference_acceleration(self) -> Dict[Axis, float]:
     """Per-axis rated acceleration at 100%."""
     return _parse_per_axis(await self.request_parameter(DataID.REFERENCE_ACCEL))
 
@@ -1009,7 +1086,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Rated Cartesian (translational) speed at 100%, in mm/s."""
     return _parse_scalar(await self.request_parameter(DataID.REFERENCE_CARTESIAN_SPEED))
 
-  async def request_reference_cartesian_accel(self) -> float:
+  async def request_reference_cartesian_acceleration(self) -> float:
     """Rated Cartesian (translational) acceleration at 100%, in mm/s^2."""
     return _parse_scalar(await self.request_parameter(DataID.REFERENCE_CARTESIAN_ACCEL))
 
@@ -1017,11 +1094,11 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Global cap on the speed percentage (one value, applies to all joints)."""
     return _parse_scalar(await self.request_parameter(DataID.MAX_SPEED_PERCENT))
 
-  async def request_max_accel_percent(self) -> float:
+  async def request_max_acceleration_percent(self) -> float:
     """Global cap on the acceleration percentage (one value, applies to all joints)."""
     return _parse_scalar(await self.request_parameter(DataID.MAX_ACCEL_PERCENT))
 
-  async def request_max_decel_percent(self) -> float:
+  async def request_max_deceleration_percent(self) -> float:
     """Global cap on the deceleration percentage (one value, applies to all joints)."""
     return _parse_scalar(await self.request_parameter(DataID.MAX_DECEL_PERCENT))
 
@@ -1082,10 +1159,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     # Combine the per-axis 100% references with the global percent caps into the
     # effective per-joint maxima, so consumers get usable limits, not raw factors.
     reference_speed = await self.request_reference_speed()
-    reference_accel = await self.request_reference_accel()
+    reference_acceleration = await self.request_reference_acceleration()
     speed_pct = await self.request_max_speed_percent()
-    accel_pct = await self.request_max_accel_percent()
-    decel_pct = await self.request_max_decel_percent()
+    acceleration_pct = await self.request_max_acceleration_percent()
+    deceleration_pct = await self.request_max_deceleration_percent()
 
     # Kinematics: read the link/tool geometry from the controller by default, so
     # the driver is correct for whichever 400 variant is plugged in; fall back to
@@ -1134,10 +1211,16 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       soft_limits=soft_limits,
       hard_limits=await self.request_joint_limits(hard=True),
       max_joint_speed={a: v * speed_pct / 100 for a, v in reference_speed.items()},
-      max_joint_accel={a: v * accel_pct / 100 for a, v in reference_accel.items()},
-      max_joint_decel={a: v * decel_pct / 100 for a, v in reference_accel.items()},
+      max_joint_acceleration={
+        a: v * acceleration_pct / 100 for a, v in reference_acceleration.items()
+      },
+      max_joint_deceleration={
+        a: v * deceleration_pct / 100 for a, v in reference_acceleration.items()
+      },
       max_cartesian_speed=(await self.request_reference_cartesian_speed()) * speed_pct / 100,
-      max_cartesian_accel=(await self.request_reference_cartesian_accel()) * accel_pct / 100,
+      max_cartesian_acceleration=(await self.request_reference_cartesian_acceleration())
+      * acceleration_pct
+      / 100,
       power_state=await self.request_power_state(),
       kinematics=kinematic_params,
       kinematics_source=kinematics_source,
@@ -1205,15 +1288,6 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       value: The signal value to set. 0 = off, non-zero = on.
     """
     await self.driver.send_command(f"sig {signal_number} {value}")
-
-  async def request_system_state(self) -> int:
-    """Get the global system state code.
-
-    Returns:
-      The global system state code. Please see documentation for DataID 234.
-    """
-    response = await self.driver.send_command("sysState")
-    return int(response)
 
   async def request_tool_transformation_values(
     self,
@@ -1409,7 +1483,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise ValueError(f"speed2_pct must be between 0 and 100, got {speed2_pct}")
     await self.driver.send_command(f"Speed2 {profile_index} {speed2_pct}")
 
-  async def request_profile_accel(self, profile_index: int) -> float:
+  async def request_profile_acceleration(self, profile_index: int) -> float:
     """Get the acceleration property of the specified profile.
 
     Args:
@@ -1419,10 +1493,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       float: The current acceleration as a percentage. 100 = maximum acceleration.
     """
     response = await self.driver.send_command(f"Accel {profile_index}")
-    profile, accel = response.split()
-    return float(accel)
+    profile, acceleration = response.split()
+    return float(acceleration)
 
-  async def set_profile_accel(self, profile_index: int, acceleration_pct: float) -> None:
+  async def set_profile_acceleration(self, profile_index: int, acceleration_pct: float) -> None:
     """Set the acceleration property of the specified profile.
 
     Args:
@@ -1436,7 +1510,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise ValueError(f"acceleration_pct must be between 0 and 100, got {acceleration_pct}")
     await self.driver.send_command(f"Accel {profile_index} {acceleration_pct}")
 
-  async def request_profile_accel_ramp(self, profile_index: int) -> float:
+  async def request_profile_acceleration_ramp(self, profile_index: int) -> float:
     """Get the acceleration ramp property of the specified profile.
 
     Args:
@@ -1446,19 +1520,21 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       float: The current acceleration ramp time in seconds.
     """
     response = await self.driver.send_command(f"AccRamp {profile_index}")
-    profile, accel_ramp = response.split()
-    return float(accel_ramp)
+    profile, acceleration_ramp = response.split()
+    return float(acceleration_ramp)
 
-  async def set_profile_accel_ramp(self, profile_index: int, accel_ramp_seconds: float) -> None:
+  async def set_profile_acceleration_ramp(
+    self, profile_index: int, acceleration_ramp_seconds: float
+  ) -> None:
     """Set the acceleration ramp property of the specified profile.
 
     Args:
       profile_index: The profile index to modify.
-      accel_ramp_seconds: The new acceleration ramp time in seconds.
+      acceleration_ramp_seconds: The new acceleration ramp time in seconds.
     """
-    await self.driver.send_command(f"AccRamp {profile_index} {accel_ramp_seconds}")
+    await self.driver.send_command(f"AccRamp {profile_index} {acceleration_ramp_seconds}")
 
-  async def request_profile_decel(self, profile_index: int) -> float:
+  async def request_profile_deceleration(self, profile_index: int) -> float:
     """Get the deceleration property of the specified profile.
 
     Args:
@@ -1468,10 +1544,10 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       float: The current deceleration as a percentage. 100 = maximum deceleration.
     """
     response = await self.driver.send_command(f"Decel {profile_index}")
-    profile, decel = response.split()
-    return float(decel)
+    profile, deceleration = response.split()
+    return float(deceleration)
 
-  async def set_profile_decel(self, profile_index: int, deceleration_pct: float) -> None:
+  async def set_profile_deceleration(self, profile_index: int, deceleration_pct: float) -> None:
     """Set the deceleration property of the specified profile.
 
     Args:
@@ -1485,7 +1561,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       raise ValueError(f"deceleration_pct must be between 0 and 100, got {deceleration_pct}")
     await self.driver.send_command(f"Decel {profile_index} {deceleration_pct}")
 
-  async def request_profile_decel_ramp(self, profile_index: int) -> float:
+  async def request_profile_deceleration_ramp(self, profile_index: int) -> float:
     """Get the deceleration ramp property of the specified profile.
 
     Args:
@@ -1495,17 +1571,19 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       float: The current deceleration ramp time in seconds.
     """
     response = await self.driver.send_command(f"DecRamp {profile_index}")
-    profile, decel_ramp = response.split()
-    return float(decel_ramp)
+    profile, deceleration_ramp = response.split()
+    return float(deceleration_ramp)
 
-  async def set_profile_decel_ramp(self, profile_index: int, decel_ramp_seconds: float) -> None:
+  async def set_profile_deceleration_ramp(
+    self, profile_index: int, deceleration_ramp_seconds: float
+  ) -> None:
     """Set the deceleration ramp property of the specified profile.
 
     Args:
       profile_index: The profile index to modify.
-      decel_ramp_seconds: The new deceleration ramp time in seconds.
+      deceleration_ramp_seconds: The new deceleration ramp time in seconds.
     """
-    await self.driver.send_command(f"DecRamp {profile_index} {decel_ramp_seconds}")
+    await self.driver.send_command(f"DecRamp {profile_index} {deceleration_ramp_seconds}")
 
   async def request_profile_in_range(self, profile_index: int) -> float:
     """Get the InRange property of the specified profile.
@@ -1589,8 +1667,8 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       profile: Profile index to set values for.
       speed_pct: Percentage of maximum speed (0-100). 100 = full speed.
       speed2_pct: Secondary speed setting (0-100), typically for Cartesian moves. Normally 0.
-      acceleration_pct: Percentage of maximum acceleration (0-100). 100 = full accel.
-      deceleration_pct: Percentage of maximum deceleration (0-100). 100 = full decel.
+      acceleration_pct: Percentage of maximum acceleration (0-100). 100 = full acceleration.
+      deceleration_pct: Percentage of maximum deceleration (0-100). 100 = full deceleration.
       acceleration_ramp: Acceleration ramp time in seconds.
       deceleration_ramp: Deceleration ramp time in seconds.
       in_range: InRange value, from -1 to 100. -1 = allow blending, 0 = stop without checking, >0 = enforce position accuracy.

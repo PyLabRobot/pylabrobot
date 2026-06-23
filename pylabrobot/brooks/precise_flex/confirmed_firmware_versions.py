@@ -8,7 +8,7 @@ discovered stack here:
 - ``SUPPORTED_ROBOT_TYPES`` gates the client-side kinematics. This driver's FK/IK
   is the PreciseFlex 400 two-link SCARA geometry, so other models would get
   silently-wrong joint targets and are flagged.
-- ``CONFIRMED_FIRMWARE_VERSIONS`` is the list of full (model, GPL, TCS, module-set)
+- ``CONFIRMED_FIRMWARE_VERSIONS`` is the set of full (model, GPL, TCS, module-set)
   software stacks validated against this driver; an unlisted one logs a warning
   asking for a report so it can be added.
 
@@ -37,20 +37,22 @@ class ConfirmedFirmware:
   modules: tuple  # one "name version" per loaded TCS module
 
 
-CONFIRMED_FIRMWARE_VERSIONS = [
-  ConfirmedFirmware(
-    robot_type=12,
-    gpl_version="GPL 5.1D4",
-    tcs_version="TCP Command Server 3.0D4",
-    modules=(
-      "IntelliGuide 1.0",
-      "Load-Save Module 3.0B2",
-      "PARobot Auto Center Module 3.0D3",
-      "PARobot Module 3.0D4",
-      "SSGrip Module 3.0D4",
+CONFIRMED_FIRMWARE_VERSIONS = frozenset(
+  [
+    ConfirmedFirmware(
+      robot_type=12,
+      gpl_version="GPL 5.1D4",
+      tcs_version="TCP Command Server 3.0D4",
+      modules=(
+        "IntelliGuide 1.0",
+        "Load-Save Module 3.0B2",
+        "PARobot Auto Center Module 3.0D3",
+        "PARobot Module 3.0D4",
+        "SSGrip Module 3.0D4",
+      ),
     ),
-  ),
-]
+  ]
+)
 
 # Trailing build date (e.g. "10-25-2024" or "Apr 25 2025") and anything after it.
 _DATE = re.compile(r",?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}).*$")

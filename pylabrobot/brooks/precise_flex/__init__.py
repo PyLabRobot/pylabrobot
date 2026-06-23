@@ -41,15 +41,13 @@ from pylabrobot.brooks.precise_flex.kinematics import (
 )
 from pylabrobot.brooks.precise_flex.precise_flex import (
   PreciseFlex400,
-  PreciseFlex400Backend,
-  PreciseFlex3400Backend,
+  PreciseFlex3400,
 )
 
 __all__ = [
   "Axis",
   "PreciseFlex400",
-  "PreciseFlex400Backend",
-  "PreciseFlex3400Backend",
+  "PreciseFlex3400",
   "PreciseFlexArmBackend",
   "PreciseFlexCartesianPose",
   "PreciseFlexConfiguration",

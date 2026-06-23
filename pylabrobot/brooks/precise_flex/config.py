@@ -60,10 +60,10 @@ class PreciseFlexConfiguration:
   hard_limits: Dict[Axis, tuple]
   # Effective per-joint maxima (reference x the global percent cap, already applied).
   max_joint_speed: Dict[Axis, float]
-  max_joint_accel: Dict[Axis, float]
-  max_joint_decel: Dict[Axis, float]
+  max_joint_acceleration: Dict[Axis, float]
+  max_joint_deceleration: Dict[Axis, float]
   max_cartesian_speed: float
-  max_cartesian_accel: float
+  max_cartesian_acceleration: float
   power_state: int
   # --- supplied / derived ---
   kinematics: "kinematics.PF400Params" = dataclasses.field(default_factory=kinematics.PF400Params)

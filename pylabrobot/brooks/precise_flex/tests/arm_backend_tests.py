@@ -2,16 +2,16 @@ import unittest
 from typing import Tuple
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.brooks.precise_flex import Axis, PreciseFlex400Backend
+from pylabrobot.brooks.precise_flex import Axis, PreciseFlexArmBackend
 
 
 def _make_backend(
   closed_gripper_position: float = 500.0,
-) -> Tuple[PreciseFlex400Backend, MagicMock]:
+) -> Tuple[PreciseFlexArmBackend, MagicMock]:
   driver = MagicMock()
   driver.send_command = AsyncMock(return_value="")
   driver.io._host = "localhost"
-  backend = PreciseFlex400Backend(
+  backend = PreciseFlexArmBackend(
     driver=driver,
     gripper_length=162.0,
     gripper_z_offset=0.0,
@@ -79,7 +79,6 @@ class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.backend, self.driver = _make_backend()
     self.driver._wait_for_eom = AsyncMock()
-    self.backend._request_speed = AsyncMock(return_value=50.0)
     # Minimal stub configuration: only the soft limits the recovery logic reads.
     self.backend._configuration = MagicMock(
       soft_limits={
@@ -88,6 +87,22 @@ class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
         Axis.WRIST: (-960.0, 960.0),
       }
     )
+
+  def _stub_transport(self, wherej: str) -> None:
+    """Stub the driver: ``wherej`` returns ``wherej``, ``Speed`` a 50% profile, other writes no-op.
+
+    The recovery logic reads the live pose and profile speed over the transport, so we feed those
+    rather than reassigning backend methods (mirrors the STAR tests' driver-boundary mocking).
+    """
+
+    async def respond(command: str) -> str:
+      if command == "wherej":
+        return wherej
+      if command.startswith("Speed "):
+        return f"{self.backend.profile_index} 50.0"
+      return ""
+
+    self.driver.send_command = AsyncMock(side_effect=respond)
 
   def _move_one_axis_cmds(self) -> list[str]:
     return [
@@ -99,21 +114,99 @@ class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
   async def test_recover_moves_offenders_toward_limit_in_order_and_skips_wrist(self):
     """Each recoverable offender is driven 1 unit *inside* the violated limit (above-max down,
     below-min up), shoulder before elbow per _RECOVERY_ORDER; the wrist is never auto-moved."""
-    self.backend.request_joint_position = AsyncMock(
-      return_value={Axis.SHOULDER: 93.5, Axis.ELBOW: 9.0, Axis.WRIST: 962.0}
-    )
+    # wherej (no rail): base shoulder elbow wrist gripper - shoulder/elbow/wrist out of range.
+    self._stub_transport("0 93.5 9.0 962.0 0")
     recovered = await self.backend.recover_axes_within_limits()
     self.assertEqual(recovered, {Axis.SHOULDER: 92.0, Axis.ELBOW: 13.0})  # wrist excluded
-    cmds = self._move_one_axis_cmds()
     self.assertEqual(
-      cmds, ["MoveOneAxis 2 92.0 1", "MoveOneAxis 3 13.0 1"]
+      self._move_one_axis_cmds(), ["MoveOneAxis 2 92.0 1", "MoveOneAxis 3 13.0 1"]
     )  # shoulder (2) before elbow (3)
 
   async def test_recover_skips_axis_too_far_out_of_range(self):
     """An axis past its limit by more than max_distance is left in place (no unattended big sweep)."""
-    self.backend.request_joint_position = AsyncMock(
-      return_value={Axis.SHOULDER: 120.0}  # 27 deg past the 93 limit, beyond the 5 cap
-    )
+    # shoulder 120 deg is 27 past the 93 limit, beyond the 5 cap; elbow/wrist in range.
+    self._stub_transport("0 120.0 30.0 0.0 0")
     recovered = await self.backend.recover_axes_within_limits()
     self.assertEqual(recovered, {})
     self.assertEqual(self._move_one_axis_cmds(), [])
+
+
+class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend, self.driver = _make_backend()
+    self.driver._wait_for_eom = AsyncMock()
+
+  def _full_soft_limits(self) -> MagicMock:
+    return MagicMock(
+      z_range=(0.0, 400.0),
+      soft_limits={
+        Axis.BASE: (0.0, 400.0),
+        Axis.SHOULDER: (-93.0, 93.0),
+        Axis.ELBOW: (12.0, 348.0),
+        Axis.WRIST: (-960.0, 960.0),
+      },
+    )
+
+  def _movej_cmds(self) -> list[str]:
+    return [
+      c.args[0] for c in self.driver.send_command.call_args_list if c.args[0].startswith("moveJ")
+    ]
+
+  def test_named_constants_are_orientation_only_planar_folds(self):
+    """The three parking orientations are planar folds (ELBOW 180) that never pin Z (Axis.BASE), so
+    one orientation works on any reach; they differ only in which way the gripper faces."""
+    for pose in (
+      PreciseFlexArmBackend.PARKING_POSITION_BACK,
+      PreciseFlexArmBackend.PARKING_POSITION_RIGHT,
+      PreciseFlexArmBackend.PARKING_POSITION_FRONT,
+    ):
+      self.assertNotIn(Axis.BASE, pose)
+      self.assertEqual(pose[Axis.ELBOW], 180.0)
+    self.assertEqual(PreciseFlexArmBackend.PARKING_POSITION_BACK[Axis.SHOULDER], 90.0)
+    self.assertEqual(PreciseFlexArmBackend.PARKING_POSITION_FRONT[Axis.SHOULDER], -90.0)
+
+  def test_assignment_rejects_non_axis_keys(self):
+    """The validating setter refuses a pose keyed by anything but Axis members."""
+    bad_pose: dict = {"base": 100.0}
+    with self.assertRaises(ValueError):
+      self.backend.parking_position = bad_pose
+
+  def test_assignment_rejects_out_of_limit_value_once_configured(self):
+    """Once the soft limits are known, a value outside them is rejected at assignment."""
+    self.backend._configuration = MagicMock(soft_limits={Axis.SHOULDER: (-93.0, 93.0)})
+    with self.assertRaises(ValueError):
+      self.backend.parking_position = {Axis.SHOULDER: 200.0}
+
+  def test_assignment_accepts_named_constant(self):
+    """A named constant assigns cleanly and round-trips through the getter."""
+    self.backend.parking_position = PreciseFlexArmBackend.PARKING_POSITION_FRONT
+    pose = self.backend.parking_position
+    assert pose is not None
+    self.assertEqual(pose[Axis.SHOULDER], -90.0)
+
+  async def test_park_fills_z_at_three_quarters_travel_and_keeps_orientation(self):
+    """park() fills the omitted Z column at 3/4 of the discovered travel and keeps the orientation."""
+    self.backend._configuration = self._full_soft_limits()
+    # Current pose deliberately differs from the target (base 50 not 300; orientation 10/200/90 not
+    # 0/180/180) so the assertion proves park() supplied the fill and orientation, not the live pose.
+    self.driver.send_command = AsyncMock(return_value="50 10 200 90 0")
+    self.backend.parking_position = PreciseFlexArmBackend.PARKING_POSITION_RIGHT
+    await self.backend.park()
+    # Z filled at 3/4 of 400 = 300; orientation = RIGHT (0/180/180); gripper carried from current.
+    self.assertEqual(self._movej_cmds(), ["moveJ 1 300.0 0.0 180.0 180.0 0.0"])
+
+  async def test_park_respects_an_explicit_base(self):
+    """A pose that already sets Axis.BASE is parked as-is (no Z fill)."""
+    self.backend._configuration = self._full_soft_limits()
+    # base 50 in the current pose so the explicit 123 (neither the 300 fill nor the live 50) proves
+    # the supplied base is honored and not Z-filled; elbow/wrist carry from current.
+    self.driver.send_command = AsyncMock(return_value="50 10 200 90 0")
+    self.backend.parking_position = {Axis.BASE: 123.0, Axis.SHOULDER: 0.0}
+    await self.backend.park()
+    self.assertEqual(self._movej_cmds(), ["moveJ 1 123.0 0.0 200.0 90.0 0.0"])
+
+  async def test_park_without_position_falls_back_to_movetosafe(self):
+    """While parking_position is unset (no configuration), park() uses the firmware movetosafe."""
+    await self.backend.park()
+    self.driver.send_command.assert_awaited_once_with("movetosafe")
+    self.assertEqual(self._movej_cmds(), [])
