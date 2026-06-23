@@ -159,6 +159,7 @@ class CytomatBackend(IncubatorBackend):
     self, command_type: str, command: str, params: str, timeout: Optional[int] = 60
   ) -> OverviewRegisterState:
     """Calls send_command, but has a timeout handler and returns the overview register state.
+
     Args:
       timeout: The maximum time to wait for the command to complete. If None, the command will not
         wait for completion.

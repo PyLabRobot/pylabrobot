@@ -7,6 +7,7 @@ A storage machine is defined as a **machine whose primary feature is**
 
 Examples of this simplest form of a storage machine include:
 
+- `Agilent BenchCel Microplate Handler <https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/benchcel-microplate-handler>`_ - open sequential stacker storage with robotic plate handling
 - `Agilent Labware MiniHub <https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/labware-minihub>`_ - open storage of labware with rotation feature
 - `Lab Services PlateCarousel <https://www.lab-services.nl/en/products/platebutler/platecarousel>`_ - open storage of labware with rotation feature
 
@@ -83,6 +84,7 @@ Retrieval Pattern: Stacking (Sequential) vs. Random Access
      - More flexible but mechanically complex.
    * - **Examples:**
 
+       - Agilent BenchCel 4R
        - Agilent Labware MiniHub
        - Lab Services PlateCarousel
      - **Examples:**
@@ -108,6 +110,7 @@ Accessibility: Open vs. Closed Storage
    * - No protection from contamination or temperature drift.
      - Ideal for incubators, cold storage, and sterile handling.
    * - **Examples:**
+       - Agilent BenchCel 4R
        - Agilent Labware MiniHub
        - Manual stackers
      - **Examples:**
@@ -124,7 +127,8 @@ Combined Retrieval & Access Summary
      - **Open Storage**
      - **Closed Storage**
    * - **Stacking Access (Sequential)**
-     - Agilent Labware MiniHub
+     - Agilent BenchCel 4R
+       Agilent Labware MiniHub
        Lab Services PlateCarousel
      - STX incubators with drawer-based shelves
    * - **Random Access**
@@ -195,6 +199,7 @@ backend useful for trying the API out without hardware:
    :maxdepth: 1
    :hidden:
 
+   agilent_benchcel
    cytomat
    inheco/incubator_shaker
    inheco/scila

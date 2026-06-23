@@ -1,3 +1,9 @@
+from .agilent import (
+  BenchCel4R,
+  BenchCel4RBackend,
+  BenchCelBackend,
+  BenchCelLabwareSettings,
+)
 from .backend import IncubatorBackend
 from .chatterbox import IncubatorChatterboxBackend
 from .cytomat import CytomatBackend
