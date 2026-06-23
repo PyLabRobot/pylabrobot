@@ -1933,3 +1933,33 @@ class PreciseFlexError(Exception):
       super().__init__(f"PreciseFlexError {replycode}: {text}. {description} - {message}")
     else:
       super().__init__(f"PreciseFlexError {replycode}: {message}")
+
+
+class OperationInterrupted(Exception):
+  """Raised when a user interrupt (Jupyter stop / Ctrl+C) halts an in-flight device operation.
+
+  The device has been sent a stop and the connection has been resynced and left open, so the session
+  can continue. Raised in place of a bare ``KeyboardInterrupt``; an ``asyncio.CancelledError`` is
+  re-raised as-is rather than converted, so cancellation semantics are preserved.
+  """
+
+
+# -- collision detection ---------------------------------------------------
+
+# Collision / over-drive errors: the servo trips one of these when an axis is blocked - it hit an
+# obstacle (or is otherwise over-driven) - and the controller stops the arm itself. Two mechanisms:
+# position-tracking (envelope) and torque saturation. Each surfaces as a ``PreciseFlexError`` on the
+# next command:
+#   -3100  hard envelope error  (position tracking; severe, turns power off)
+#   -3122  soft envelope error  (position tracking; leaves power on)
+#   -3101  PID output saturated too long  (torque saturated - over-driven / collided)
+#   -3105  motor stalled  (torque saturated at the peak rating)
+COLLISION_ERROR_CODES = frozenset({-3100, -3101, -3105, -3122})
+
+
+def is_collision(exc: object) -> bool:
+  """Whether ``exc`` is a ``PreciseFlexError`` from a collision / over-drive (the arm hit something) -
+  an envelope (``-3100`` / ``-3122``) or torque-saturation (``-3101`` / ``-3105``) error - as opposed
+  to an ordinary command error. Lets protocol code branch on "did I crash?".
+  """
+  return isinstance(exc, PreciseFlexError) and exc.replycode in COLLISION_ERROR_CODES
