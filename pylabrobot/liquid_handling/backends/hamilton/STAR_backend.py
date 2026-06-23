@@ -9129,13 +9129,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       resource: aspirate96-style target (Plate / Container / list[Well]); mutually exclusive
         with ``a1_coordinate``.
       a1_coordinate: explicit channel-A1 deck target; mutually exclusive with ``resource``.
-      minimum_traverse_height_start: absolute Z before the X/Y move; None uses full Z safety.
+      minimum_traverse_height_start: absolute tip-bottom Z before the X/Y move; None uses full Z
+        safety.
       offset: added to the resolved target position.
       lld_mode: liquid-level-detection mode; only ``LLDMode.OFF`` is supported (the default).
       descent_speed: speed for the fast descent down to just above the well.
       swap_speed: speed from there into the well to the target Z.
       settling_time: seconds to wait after the last cycle, before retracting out of the well.
-      minimum_traverse_height_end: absolute Z after mixing; None uses full Z safety.
+      minimum_traverse_height_end: absolute tip-bottom Z after mixing; None uses full Z safety.
 
     Raises:
       ValueError: if neither or both of ``a1_coordinate`` / ``resource`` are given,
@@ -9175,11 +9176,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       a1 = anchor.get_absolute_location(x="c", y="c", z="cavity_bottom") + offset
       z_top = anchor.get_absolute_location(x="c", y="c", z="top").z
 
-    # traverse to start height (None uses safe Z)
+    # traverse to start height; None retracts to full (stop-disk) Z safety, a value is the
+    # tip-bottom height the rest of the method works in
     if minimum_traverse_height_start is None:
       await self.head96_move_to_z_safety()
     else:
-      await self.head96_move_z(minimum_traverse_height_start, speed=descent_speed)
+      await self.head96_move_tool_z(minimum_traverse_height_start, speed=descent_speed)
 
     # move X, Y; X acceleration_level=1 below y=200 mm, the low-Y zone where the head is
     # cantilevered forward off the X-drive and wobbles most
@@ -9242,11 +9244,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       requires_tip=False,
     )
 
-    # traverse to end height (None uses safe Z)
+    # traverse to end height; None retracts to full (stop-disk) Z safety, a value is the
+    # tip-bottom height the rest of the method works in
     if minimum_traverse_height_end is None:
       await self.head96_move_to_z_safety()
     else:
-      await self.head96_move_z(minimum_traverse_height_end, speed=descent_speed)
+      await self.head96_move_tool_z(minimum_traverse_height_end, speed=descent_speed)
 
   # # # Granular commands # # #
 

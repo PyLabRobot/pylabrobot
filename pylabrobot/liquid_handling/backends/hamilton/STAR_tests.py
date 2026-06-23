@@ -1416,6 +1416,23 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.STAR.head96_experimental_aspirate.call_args.kwargs["surface_following_distance"], sf
     )
 
+  async def test_mix96_specified_traverse_heights_are_tip_bottom_moves(self):
+    """A specified minimum_traverse_height_start/end is a tip-bottom Z (head96_move_tool_z), like
+    the rest of the method; only the None default retracts to stop-disk Z safety. Guards against a
+    geometric (tip-bottom) traverse height being driven as a stop-disk position."""
+    _stub_mix96_motion(self.STAR)
+    start_z, end_z = 250.0, 240.0
+    await self.STAR.mix96(
+      Mix(volume=50, repetitions=1, flow_rate=100),
+      a1_coordinate=Coordinate(500, 300, 100.0),
+      minimum_traverse_height_start=start_z,
+      minimum_traverse_height_end=end_z,
+    )
+    self.STAR.head96_move_to_z_safety.assert_not_called()
+    tool_z_targets = [call.args[0] for call in self.STAR.head96_move_tool_z.call_args_list]
+    self.assertEqual(tool_z_targets[0], start_z)  # first tool move is the start traverse
+    self.assertEqual(tool_z_targets[-1], end_z)  # last tool move is the end traverse
+
   async def test_core_96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.
 
