@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import Dict, Literal, Optional
 
@@ -9,7 +10,9 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 from pylabrobot.io.socket import Socket
 
+from .data_ids import PowerState
 from .errors import PreciseFlexError
+from .interrupt import halt_and_resync, halt_on_interrupt
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +140,15 @@ class PreciseFlexDriver(Driver):
     mapping = {"pc": 0, "verbose": 1}
     await self.send_command(f"mode {mapping[mode]}")
 
+  async def request_system_state(self) -> int:
+    """Controller power/system-state word (the ``sysState`` command, == DataID 234).
+
+    See :class:`~pylabrobot.brooks.precise_flex.data_ids.PowerState` for the values;
+    ``PowerState.OFF_HARD_ESTOP`` (15) means a hard E-stop is engaged, ``PowerState.ON_ATTACHED``
+    (21) is the normal running state. Read-only, so it detects an E-stop without provoking an error.
+    """
+    return int(await self.send_command("sysState"))
+
   async def power_on_robot(self):
     """Power on the robot."""
     error: Optional[PreciseFlexError] = None
@@ -152,6 +164,31 @@ class PreciseFlexDriver(Driver):
     if error:
       raise error
     raise RuntimeError("Failed to power on robot after 3 attempts for unknown reasons.")
+
+  async def recover_from_fault(self) -> None:
+    """Recover after a collision / fault that stopped the arm and dropped power, leaving it usable.
+
+    A collision trips an envelope error (``-3100`` hard / ``-3122`` soft, see
+    :func:`~pylabrobot.brooks.precise_flex.errors.is_collision`); the servo stops the arm itself and
+    high power drops. This re-enables power, re-attaches, and re-homes (which only cycles the gripper
+    when the other axes are already homed - absolute encoders retain them - so it does not sweep the
+    arm), leaving it ready to move. It does **not** drive the arm to any pose; confirm the obstacle is
+    removed before calling.
+
+    The envelope error auto-clears, so no explicit clear is needed; a latched fatal that blocks
+    power-on is surfaced by ``power_on_robot`` for the operator to reset (DataID 247) or reboot.
+
+    Raises:
+      PreciseFlexError: if a hard E-stop is engaged (release the button first) or power cannot be
+        re-enabled.
+    """
+    if await self.request_system_state() == PowerState.OFF_HARD_ESTOP:
+      raise PreciseFlexError(
+        -1028, "hard E-Stop engaged - release the E-stop button before recovering"
+      )
+    await self.power_on_robot()
+    await self.attach(1)
+    await self.home()
 
   async def power_off_robot(self):
     """Power off the robot."""
@@ -226,14 +263,45 @@ class PreciseFlexDriver(Driver):
     """
     await self.send_command("homeAll")
 
-  async def _wait_for_eom(self) -> None:
-    """Wait for the robot to reach the end of the current motion.
+  async def _wait_for_eom(
+    self, poll_interval: float = 0.05, settle: float = 0.02, timeout: float = 60.0
+  ) -> None:
+    """Wait (non-blocking) until the arm has stopped moving, keeping the connection responsive.
 
-    Waits for the robot to reach the end of the current motion or until it is stopped by
-    some other means. Does not reply until the robot has stopped.
+    Polls the live joint position (``wherej``) and returns once it stops changing between samples
+    (every axis moving less than ``settle``) - i.e. end of motion. It returns promptly when the arm
+    is already stationary, including when it was stopped short of its last commanded target (after a
+    halt/interrupt or a hand-move), so it never hangs waiting to reach a target that will not be
+    reached.
+
+    This deliberately avoids the firmware ``waitForEom``: that command parks the controller's single
+    command interpreter and makes it ignore everything else on the connection - including ``halt`` -
+    until the move ends (hardware-verified). Polling instead leaves the connection free between
+    samples, so a user interrupt can stop the move mid-flight via ``halt`` and other controller
+    commands (status, vision, barcode) can run during motion.
+
+    Raises:
+      TimeoutError: if the arm never settles within ``timeout`` seconds.
+      OperationInterrupted: on a user interrupt (the arm is halted and the connection kept).
     """
-    await self.send_command("waitForEom")
-    await asyncio.sleep(0.2)
+
+    def _floats(reply: str) -> list[float]:
+      return [float(x) for x in reply.split()]
+
+    # On interrupt, `halt` stops the move on the now-free connection and we resync; the connection is
+    # kept open. Hardware-verified: a clean halt keeps power, attach, and the link (only a collision
+    # trips -3122 and drops power, which needs explicit recovery).
+    async with halt_on_interrupt(lambda: halt_and_resync(self.io, b"halt")):
+      previous = _floats(await self.send_command("wherej"))
+      deadline = time.monotonic() + timeout
+      while True:
+        await asyncio.sleep(poll_interval)
+        current = _floats(await self.send_command("wherej"))
+        if all(abs(c - p) < settle for c, p in zip(current, previous)):
+          return  # stopped moving
+        if time.monotonic() > deadline:
+          raise TimeoutError(f"motion did not settle within {timeout:.0f}s (current={current})")
+        previous = current
 
   async def state(self) -> str:
     """Return state of motion.
