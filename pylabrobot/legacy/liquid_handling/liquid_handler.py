@@ -22,8 +22,8 @@ from typing import (
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
 from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
-from pylabrobot.capabilities.arms.standard import GripperDirection as _NewGripperDirection
 from pylabrobot.capabilities.arms.standard import CartesianPose
+from pylabrobot.capabilities.arms.standard import GripperDirection as _NewGripperDirection
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.head96_backend import (
   Head96Backend as _NewHead96Backend,
