@@ -9132,6 +9132,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_start: absolute tip-bottom Z before the X/Y move; None uses full Z
         safety.
       offset: added to the resolved target position.
+      blowout_air_volume: air gap taken above the well before descent and expelled above it on
+        exit, to clear the tips of residual on the way out; 0 skips both.
       lld_mode: liquid-level-detection mode; only ``LLDMode.OFF`` is supported (the default).
       descent_speed: speed for the fast descent down to just above the well.
       swap_speed: speed from there into the well to the target Z.
@@ -9202,13 +9204,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_clearance = 5.0
     swap_start_z = (z_top if z_top is not None else mix_start) + z_clearance
     await self.head96_move_tool_z(swap_start_z, speed=descent_speed)
-    await self.head96_experimental_aspirate(
-      blowout_air_volume,
-      flow_rate=mix.flow_rate,
-      minimum_height=mix_floor,
-      surface_following_distance=0,
-      requires_tip=False,
-    )
+    if blowout_air_volume:
+      await self.head96_experimental_aspirate(
+        blowout_air_volume,
+        flow_rate=mix.flow_rate,
+        minimum_height=mix_floor,
+        surface_following_distance=0,
+        requires_tip=False,
+      )
     await self.head96_move_tool_z(mix_start, speed=swap_speed)
 
     # symmetric mix cycles (no per-cycle drift): each aspirate follows the surface down by sf
@@ -9238,11 +9241,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # the fast traverse out
     await self.head96_move_tool_z(swap_start_z, speed=swap_speed)
 
-    await self.head96_experimental_dispense(
-      blowout_air_volume,
-      flow_rate=mix.flow_rate,
-      requires_tip=False,
-    )
+    if blowout_air_volume:
+      await self.head96_experimental_dispense(
+        blowout_air_volume,
+        flow_rate=mix.flow_rate,
+        requires_tip=False,
+      )
 
     # traverse to end height; None retracts to full (stop-disk) Z safety, a value is the
     # tip-bottom height the rest of the method works in

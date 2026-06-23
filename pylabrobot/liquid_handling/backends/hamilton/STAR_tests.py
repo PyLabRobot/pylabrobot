@@ -1433,6 +1433,20 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(tool_z_targets[0], start_z)  # first tool move is the start traverse
     self.assertEqual(tool_z_targets[-1], end_z)  # last tool move is the end traverse
 
+  async def test_mix96_zero_blowout_skips_air_gap_calls(self):
+    """blowout_air_volume=0 issues no firmware aspirate/dispense for the air gap: every
+    experimental aspirate/dispense is a mix-cycle stroke (mix.volume), none a zero-volume blow-out."""
+    _stub_mix96_motion(self.STAR)
+    await self.STAR.mix96(
+      Mix(volume=50, repetitions=1, flow_rate=100),
+      a1_coordinate=Coordinate(500, 300, 100.0),
+      blowout_air_volume=0.0,
+    )
+    asp_vols = [call.args[0] for call in self.STAR.head96_experimental_aspirate.call_args_list]
+    disp_vols = [call.args[0] for call in self.STAR.head96_experimental_dispense.call_args_list]
+    self.assertEqual(asp_vols, [50])  # one cycle aspirate, no blow-out aspirate
+    self.assertEqual(disp_vols, [50])  # one cycle dispense, no blow-out dispense
+
   async def test_core_96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.
 
