@@ -573,6 +573,7 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     await self._send_command(f"WR DM25 {pos_num}")  # plate
     await self._send_command(f"WR DM5 {n}")  # plate position in carousel
     await self._send_command("ST 1910")  # move shovel to barcode reading position
+    await self._wait_ready()  # block until the lift reaches the read position
 
     barcode = await self.barcode_scanner.scan()
     logger.info(f"Scanned barcode: {barcode.data}")
