@@ -73,20 +73,37 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
       )
 
   async def send_command(self, command: str) -> str:
-    """Send a command to the barcode scanner and return the response.
-    Keyence uses carriage return \r as the line ending by default."""
+    """Send a command and return its reply, accumulated byte-by-byte up to the \r terminator.
+
+    Replies are bare \r-terminated and silence is a valid empty reply (e.g. no barcode), so
+    stop at \r or the first byte-less read rather than reading a fixed byte count."""
 
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
-    response = await self.io.read()
-    return response.decode(self.serial_messaging_encoding).strip()
+    buf = bytearray()
+    while True:
+      chunk = await self.io.read()
+      if not chunk:
+        break  # port timeout elapsed with no byte: reply done, or none coming
+      buf.extend(chunk)
+      if chunk == b"\r":
+        break
+    return buf.decode(self.serial_messaging_encoding).strip()
 
   async def stop(self):
     await self.io.stop()
 
   async def scan_barcode(self) -> Barcode:
-    data = await self.send_command("LON")
-    if data.startswith("NG"):
-      raise BarcodeScannerError("Barcode reader is off: cannot read barcode")
-    if data.startswith("ERR99"):
-      raise BarcodeScannerError(f"Error response from barcode reader: {data}")
-    return Barcode(data=data, symbology="unknown", position_on_resource="front")
+    try:
+      data = await self.send_command("LON")
+      if data.startswith("NG"):
+        raise BarcodeScannerError("Barcode reader is off: cannot read barcode")
+      if data.startswith("ERR99"):
+        raise BarcodeScannerError(f"Error response from barcode reader: {data}")
+      return Barcode(data=data, symbology="unknown", position_on_resource="front")
+    finally:
+      # LON latches the read beam on; release it whether the read succeeded or raised.
+      # try/except so a LOFF failure can't mask the scan's result.
+      try:
+        await self.send_command("LOFF")
+      except Exception:
+        logger.warning("Failed to turn off barcode reader beam (LOFF)", exc_info=True)
