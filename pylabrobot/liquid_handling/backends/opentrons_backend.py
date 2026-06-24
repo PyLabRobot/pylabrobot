@@ -3,6 +3,8 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
+import anyio
+
 from pylabrobot import utils
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io import LOG_LEVEL_IO
@@ -361,13 +363,15 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     offset_z += op.tip.total_tip_length
 
-    self._ot.lh.pick_up_tip(
-      labware_id=self.get_ot_name(tip_rack.name),
-      well_name=self.get_ot_name(op.resource.name),
-      pipette_id=pipette_id,
-      offset_x=offset_x,
-      offset_y=offset_y,
-      offset_z=offset_z,
+    await anyio.to_thread.run_sync(
+      lambda: self._ot.lh.pick_up_tip(
+        labware_id=self.get_ot_name(tip_rack.name),
+        well_name=self.get_ot_name(op.resource.name),
+        pipette_id=pipette_id,
+        offset_x=offset_x,
+        offset_y=offset_y,
+        offset_z=offset_z,
+      )
     )
 
     self._set_tip_state(pipette_id, True)
@@ -399,23 +403,26 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     # ad-hoc offset adjustment that makes it smoother.
     offset_z += 10
-
     if use_fixed_trash:
-      self._ot.lh.move_to_addressable_area_for_drop_tip(
-        pipette_id=pipette_id,
-        offset_x=offset_x,
-        offset_y=offset_y,
-        offset_z=offset_z,
+      await anyio.to_thread.run_sync(
+        lambda: self._ot.lh.move_to_addressable_area_for_drop_tip(
+          pipette_id=pipette_id,
+          offset_x=offset_x,
+          offset_y=offset_y,
+          offset_z=offset_z,
+        )
       )
-      self._ot.lh.drop_tip_in_place(pipette_id=pipette_id)
+      await anyio.to_thread.run_sync(lambda: self._ot.lh.drop_tip_in_place(pipette_id=pipette_id))
     else:
-      self._ot.lh.drop_tip(
-        labware_id,
-        well_name=self.get_ot_name(op.resource.name),
-        pipette_id=pipette_id,
-        offset_x=offset_x,
-        offset_y=offset_y,
-        offset_z=offset_z,
+      await anyio.to_thread.run_sync(
+        lambda: self._ot.lh.drop_tip(
+          labware_id,
+          well_name=self.get_ot_name(op.resource.name),
+          pipette_id=pipette_id,
+          offset_x=offset_x,
+          offset_y=offset_y,
+          offset_z=offset_z,
+        )
       )
 
     self._set_tip_state(pipette_id, False)
@@ -509,22 +516,30 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     )
 
     if op.mix is not None:
+      mix_volume = op.mix.volume
+      mix_flow_rate = op.mix.flow_rate
       for _ in range(op.mix.repetitions):
-        self._ot.lh.aspirate_in_place(
-          volume=op.mix.volume,
-          flow_rate=op.mix.flow_rate,
-          pipette_id=pipette_id,
+        await anyio.to_thread.run_sync(
+          lambda: self._ot.lh.aspirate_in_place(
+            volume=mix_volume,
+            flow_rate=mix_flow_rate,
+            pipette_id=pipette_id,
+          )
         )
-        self._ot.lh.dispense_in_place(
-          volume=op.mix.volume,
-          flow_rate=op.mix.flow_rate,
-          pipette_id=pipette_id,
+        await anyio.to_thread.run_sync(
+          lambda: self._ot.lh.dispense_in_place(
+            volume=mix_volume,
+            flow_rate=mix_flow_rate,
+            pipette_id=pipette_id,
+          )
         )
 
-    self._ot.lh.aspirate_in_place(
-      volume=volume,
-      flow_rate=flow_rate,
-      pipette_id=pipette_id,
+    await anyio.to_thread.run_sync(
+      lambda: self._ot.lh.aspirate_in_place(
+        volume=volume,
+        flow_rate=flow_rate,
+        pipette_id=pipette_id,
+      )
     )
 
     traversal_location = self._deck_to_robot_frame(
@@ -582,23 +597,31 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       pipette_id=pipette_id,
     )
 
-    self._ot.lh.dispense_in_place(
-      volume=volume,
-      flow_rate=flow_rate,
-      pipette_id=pipette_id,
+    await anyio.to_thread.run_sync(
+      lambda: self._ot.lh.dispense_in_place(
+        volume=volume,
+        flow_rate=flow_rate,
+        pipette_id=pipette_id,
+      )
     )
 
     if op.mix is not None:
+      mix_volume = op.mix.volume
+      mix_flow_rate = op.mix.flow_rate
       for _ in range(op.mix.repetitions):
-        self._ot.lh.aspirate_in_place(
-          volume=op.mix.volume,
-          flow_rate=op.mix.flow_rate,
-          pipette_id=pipette_id,
+        await anyio.to_thread.run_sync(
+          lambda: self._ot.lh.aspirate_in_place(
+            volume=mix_volume,
+            flow_rate=mix_flow_rate,
+            pipette_id=pipette_id,
+          )
         )
-        self._ot.lh.dispense_in_place(
-          volume=op.mix.volume,
-          flow_rate=op.mix.flow_rate,
-          pipette_id=pipette_id,
+        await anyio.to_thread.run_sync(
+          lambda: self._ot.lh.dispense_in_place(
+            volume=mix_volume,
+            flow_rate=mix_flow_rate,
+            pipette_id=pipette_id,
+          )
         )
 
     traversal_location = self._deck_to_robot_frame(
@@ -612,7 +635,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     )
 
   async def home(self):
-    self._ot.health.home()
+    await anyio.to_thread.run_sync(self._ot.health.home)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
@@ -725,14 +748,16 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if pipette_id is None:
       raise ValueError("No pipette id given or left/right pipette not available.")
 
-    self._ot.lh.move_arm(
-      pipette_id=pipette_id,
-      location_x=location.x,
-      location_y=location.y,
-      location_z=location.z,
-      minimum_z_height=minimum_z_height,
-      speed=speed,
-      force_direct=force_direct,
+    await anyio.to_thread.run_sync(
+      lambda: self._ot.lh.move_arm(
+        pipette_id=pipette_id,
+        location_x=location.x,
+        location_y=location.y,
+        location_z=location.z,
+        minimum_z_height=minimum_z_height,
+        speed=speed,
+        force_direct=force_direct,
+      )
     )
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:

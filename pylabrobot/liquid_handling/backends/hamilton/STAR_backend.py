@@ -9282,9 +9282,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # parallelisation of the Y drive: the second read is trapped behind the in-flight X move on
     # the single connection, so the Y move only starts once X has finished.
     async with anyio.create_task_group() as tg:
-      tg.start_soon(
-        self.head96_move_x, a1.x, 1 if a1.y <= 200.0 else 3
-      )
+      tg.start_soon(self.head96_move_x, a1.x, 1 if a1.y <= 200.0 else 3)
       tg.start_soon(self.head96_move_y, a1.y)
 
     # the tip oscillates between the floor (a1.z) and mix_start (floor + sf), starting at
