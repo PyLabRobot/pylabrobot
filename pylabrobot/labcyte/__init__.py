@@ -37,3 +37,8 @@ from .echo import (
   build_echo_transfer_plan,
   create_plate_from_echo_info,
 )
+from .echo525 import (
+  ECHO_525_TRANSFER_VOLUME_INCREMENT_NL,
+  Echo525,
+  Echo525Driver,
+)

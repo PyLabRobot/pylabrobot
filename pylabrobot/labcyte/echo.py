@@ -55,6 +55,11 @@ DEFAULT_TRANSFER_TIMEOUT = 300.0
 DEFAULT_ECHO_CONFIGURATION_QUERY = (
   '<?xml version="1.0" encoding="utf-8"?><Configuration internal="true"></Configuration>'
 )
+# Default droplet/transfer volume granularity for the Echo 650 (nL). The Echo 525 dispenses
+# in coarser 25 nL increments instead; rather than fork this module, the 525 backend in
+# ``echo525.py`` reuses ``EchoDriver``/``Echo`` and overrides this via the
+# ``transfer_volume_increment_nl`` constructor argument (threaded through
+# ``build_echo_transfer_plan`` -> ``_validate_transfer_volume_nl``). See ``Echo525``.
 ECHO_TRANSFER_VOLUME_INCREMENT_NL = 2.5
 
 OperatorPause = Callable[[str], Union[None, Awaitable[None]]]
@@ -744,15 +749,17 @@ def _normalize_volume_nl(volume: float, volume_unit: str) -> float:
   raise ValueError("volume_unit must be 'nL' or 'uL'.")
 
 
-def _validate_transfer_volume_nl(volume_nl: float, context: str = "") -> None:
+def _validate_transfer_volume_nl(
+  volume_nl: float,
+  context: str = "",
+  increment_nl: float = ECHO_TRANSFER_VOLUME_INCREMENT_NL,
+) -> None:
   prefix = f"{context}: " if context else ""
   if volume_nl <= 0:
     raise ValueError(f"{prefix}volume must be positive, got {volume_nl} nL.")
-  units = volume_nl / ECHO_TRANSFER_VOLUME_INCREMENT_NL
+  units = volume_nl / increment_nl
   if abs(units - round(units)) > 1e-9:
-    raise ValueError(
-      f"{prefix}volume {volume_nl} nL is not a multiple of {ECHO_TRANSFER_VOLUME_INCREMENT_NL} nL."
-    )
+    raise ValueError(f"{prefix}volume {volume_nl} nL is not a multiple of {increment_nl} nL.")
 
 
 def _format_transfer_volume_nl(volume_nl: float) -> str:
@@ -1125,8 +1132,13 @@ def build_echo_transfer_plan(
   destination_plate_type: Optional[str] = None,
   protocol_name: str = "transfer",
   volume_unit: str = "nL",
+  volume_increment_nl: float = ECHO_TRANSFER_VOLUME_INCREMENT_NL,
 ) -> EchoTransferPlan:
-  """Build Echo protocol XML and source plate map from PLR plates and wells."""
+  """Build Echo protocol XML and source plate map from PLR plates and wells.
+
+  ``volume_increment_nl`` is the device's droplet granularity used to validate every
+  requested volume (2.5 nL for the Echo 650, 25 nL for the Echo 525).
+  """
 
   planned_transfers: list[EchoPlannedTransfer] = []
   protocol_transfers: list[tuple[str, str, float]] = []
@@ -1153,6 +1165,7 @@ def build_echo_transfer_plan(
     _validate_transfer_volume_nl(
       planned.volume_nl,
       f"{source_identifier}->{destination_identifier}",
+      increment_nl=volume_increment_nl,
     )
     planned_transfers.append(planned)
     protocol_transfers.append((source_identifier, destination_identifier, planned.volume_nl))
@@ -1763,6 +1776,7 @@ class EchoDriver(Driver):
     token_slot_b: int = DEFAULT_SLOT_B,
     client_version: str = "3.1.0",
     protocol_version: str = "3.1",
+    transfer_volume_increment_nl: float = ECHO_TRANSFER_VOLUME_INCREMENT_NL,
   ):
     super().__init__()
     self.host = host
@@ -1776,6 +1790,7 @@ class EchoDriver(Driver):
     self.token_slot_b = token_slot_b
     self.client_version = client_version
     self.protocol_version = protocol_version
+    self.transfer_volume_increment_nl = transfer_volume_increment_nl
     self._rpc_lock = asyncio.Lock()
     self._lock_held = False
 
@@ -1850,6 +1865,7 @@ class EchoDriver(Driver):
       "token_slot_b": self.token_slot_b,
       "client_version": self.client_version,
       "protocol_version": self.protocol_version,
+      "transfer_volume_increment_nl": self.transfer_volume_increment_nl,
     }
 
   async def read_events(
@@ -2791,6 +2807,7 @@ class EchoDriver(Driver):
       destination_plate_type=destination_plate_type,
       protocol_name=protocol_name,
       volume_unit=volume_unit,
+      volume_increment_nl=self.transfer_volume_increment_nl,
     )
 
   async def transfer_wells(
@@ -3484,6 +3501,13 @@ class EchoPlatePosition(ResourceHolder):
 class Echo(Device):
   """Labcyte Echo access-control device frontend."""
 
+  #: Driver class used to talk to the instrument. Subclasses (e.g. the Echo 525) override
+  #: this to supply model-specific defaults such as the transfer volume increment.
+  driver_class: type[EchoDriver] = EchoDriver
+
+  #: Human-readable model name used for the deck resource.
+  model_name: str = "Labcyte Echo"
+
   def __init__(
     self,
     host: str,
@@ -3493,8 +3517,9 @@ class Echo(Device):
     app_name: str = "PyLabRobot Echo",
     owner: Optional[str] = None,
     token: Optional[str] = None,
+    **driver_kwargs: Any,
   ):
-    driver = EchoDriver(
+    driver = self.driver_class(
       host=host,
       rpc_port=rpc_port,
       event_port=event_port,
@@ -3502,6 +3527,7 @@ class Echo(Device):
       app_name=app_name,
       owner=owner,
       token=token,
+      **driver_kwargs,
     )
     super().__init__(driver=driver)
     self.driver: EchoDriver = driver
@@ -3513,7 +3539,7 @@ class Echo(Device):
       size_y=300.0,
       size_z=260.0,
       category="labcyte_echo",
-      model="Labcyte Echo",
+      model=self.model_name,
     )
     self.source_position = EchoPlatePosition(name="echo_source_position", role="source")
     self.destination_position = EchoPlatePosition(
