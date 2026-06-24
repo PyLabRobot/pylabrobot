@@ -11,7 +11,7 @@ from pylabrobot.resources.tube_rack import TubeRack
 
 
 def _download_file(url: str, local_path: str) -> bytes:
-  with urllib.request.urlopen(url) as response, open(local_path, "wb") as out_file:
+  with urllib.request.urlopen(url, timeout=10) as response, open(local_path, "wb") as out_file:
     data = response.read()
     out_file.write(data)
     return data  # type: ignore

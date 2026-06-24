@@ -12,7 +12,7 @@ The PLR Resource Management System consists of two key components, each serving 
 1. **Resource Ontology System**
     - The ***'blueprint'*** of PLR's physical definition framework, responsible for defining physical resources, modeling their distinct behaviors, and dynamically managing their relationships (i.e. tracking their *state*).
 2. **Resource Library**
-    - The ***'catalog'*** of premade resource definitions.
+    - The ***'library'*** of premade resource definitions.
     This provides reusable, standardized definitions that enhance consistency and interoperability across automation workflows.
     This ensures smooth integration, scalability, and efficient resource utilization.
 
@@ -136,10 +136,12 @@ resource-stack/resource-stack
 
 ## Resource Library
 
-The PyLabRobot Resource Library (PLR-RL) is PyLabRobot's open-source, crowd-sourced collection of pre-made resource definitions.
+The PyLabRobot Resource Library is PyLabRobot's open-source, crowd-sourced collection of pre-made resource definitions.
 Laboratories across the world use an almost infinite number of different resources (e.g. plates, tubes, liquid handlers, microscopes, arms, ...).
 We believe the way to most efficiently capture the largest portion of this resource superset is via crowd-sourcing and iteratively peer-reviewing definitions.
 If you cannot find something, please contribute what you are looking for!
+
+Open the {doc}`library page <library>` to search the resource library across manufacturers and inspect generated 3D previews for labware definitions.
 
 <hr>
 
@@ -167,28 +169,5 @@ If you cannot find something, please contribute what you are looking for!
 ```{toctree}
 :caption: Resource Library
 
-library/agenbio
-library/agilent
-library/alpaqua
-library/azenta
-library/bioer
-library/biorad
-library/boekel
-library/celltreat
-library/cellvis
-library/corning
-library/eppendorf
-library/falcon
-library/greiner
-library/hamilton
-library/imcs
-library/nest
-library/opentrons
-library/perkin_elmer
-library/porvair
-library/revvity
-library/sergi
-library/thermo_fisher
-library/vwr
-library/diy/index
+library
 ```

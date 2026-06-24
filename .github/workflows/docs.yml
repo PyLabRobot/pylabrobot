@@ -35,7 +35,7 @@ jobs:
 
       - name: Check documentation
         run: |
-          rm -rf docs/build docs/_autosummary
+          make clean-docs
           make docs-check
 
   deploy_docs:
@@ -71,7 +71,7 @@ jobs:
         env:
           DOCS_VERSION: ${{ steps.version.outputs.slug }}
         run: |
-          rm -rf docs/build docs/_autosummary
+          make clean-docs
           make docs
 
       - name: Clean build artifacts

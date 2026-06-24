@@ -8,6 +8,7 @@ pyhamilton/LAY-BACKUP
 .ipynb_checkpoints
 *.egg-info
 *.log
+test_logs/
 build/lib
 
 myenv

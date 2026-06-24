@@ -1,0 +1,391 @@
+(function () {
+  "use strict";
+
+  const state = {
+    index: null,
+    query: "",
+    manufacturer: "All",
+    section: "All",
+    selectedDefinition: null,
+    viewer: null,
+  };
+
+  function getUrlRoot() {
+    if (window.DOCUMENTATION_OPTIONS && window.DOCUMENTATION_OPTIONS.URL_ROOT) {
+      return window.DOCUMENTATION_OPTIONS.URL_ROOT;
+    }
+    if (document.documentElement && document.documentElement.dataset.content_root) {
+      return document.documentElement.dataset.content_root;
+    }
+    return "";
+  }
+
+  function staticUrl(path) {
+    return `${getUrlRoot()}${path}`;
+  }
+
+  function libraryIndexUrl() {
+    const currentScript =
+      document.currentScript ||
+      document.querySelector('script[src*="plr_labware_library.js"]');
+    if (currentScript && currentScript.src) {
+      return new URL("labware_library_index.json", currentScript.src).toString();
+    }
+    return staticUrl("_static/labware_library_index.json");
+  }
+
+  function element(tagName, className, text) {
+    const node = document.createElement(tagName);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+  }
+
+  function unique(values) {
+    return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
+      left.localeCompare(right),
+    );
+  }
+
+  function itemMatchesFilters(item) {
+    const haystack = [
+      item.definition,
+      item.manufacturer,
+      item.section,
+      item.description_html,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    if (state.query && haystack.indexOf(state.query.toLowerCase()) === -1) {
+      return false;
+    }
+    if (state.manufacturer !== "All" && item.manufacturer !== state.manufacturer) {
+      return false;
+    }
+    if (state.section !== "All" && item.section !== state.section) {
+      return false;
+    }
+    return true;
+  }
+
+  function setSelectOptions(select, values, selectedValue) {
+    select.innerHTML = "";
+    ["All"].concat(values).forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      option.selected = value === selectedValue;
+      select.appendChild(option);
+    });
+  }
+
+  function createModal() {
+    const overlay = document.createElement("div");
+    overlay.className = "plr-library-modal";
+    overlay.setAttribute("hidden", "hidden");
+    overlay.innerHTML = `
+      <div class="plr-library-modal__backdrop"></div>
+      <div class="plr-library-modal__dialog" role="dialog" aria-modal="true" aria-label="Labware 3D viewer">
+        <div class="plr-library-modal__header">
+          <div>
+            <p class="plr-library-modal__eyebrow">3D geometry preview</p>
+            <h3 class="plr-library-modal__title"></h3>
+          </div>
+          <button type="button" class="plr-library-modal__close" aria-label="Close 3D viewer">Close</button>
+        </div>
+        <div class="plr-library-modal__stage"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  function ensureModal() {
+    if (state.modal) {
+      return state.modal;
+    }
+
+    const viewerApi = window.PLRGeometryViewer;
+    if (!viewerApi || !viewerApi.CanvasCatalogViewer) {
+      return null;
+    }
+
+    const modal = createModal();
+    const stage = modal.querySelector(".plr-library-modal__stage");
+    state.viewer = new viewerApi.CanvasCatalogViewer(stage);
+    state.modal = modal;
+
+    function closeModal() {
+      modal.setAttribute("hidden", "hidden");
+      document.body.classList.remove("plr-library-modal-open");
+    }
+
+    modal.querySelector(".plr-library-modal__close").addEventListener("click", closeModal);
+    modal.querySelector(".plr-library-modal__backdrop").addEventListener("click", closeModal);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeModal();
+    });
+
+    return modal;
+  }
+
+  function openModel(definitionName) {
+    const modal = ensureModal();
+    const library = state.index.resources[definitionName];
+    if (!modal || !library || !state.viewer) {
+      return;
+    }
+
+    const modalTitle = modal.querySelector(".plr-library-modal__title");
+    modalTitle.textContent = "";
+    const modalCode = document.createElement("code");
+    modalCode.textContent = definitionName;
+    modalTitle.appendChild(modalCode);
+    modal.removeAttribute("hidden");
+    document.body.classList.add("plr-library-modal-open");
+    state.viewer.setCatalog(library);
+    window.requestAnimationFrame(() => state.viewer.resize());
+  }
+
+  function createCard(item) {
+    const card = element("article", "plr-library-card");
+
+    const media = element("button", "plr-library-card__media");
+    media.type = "button";
+    media.setAttribute("aria-label", `Open 3D preview for ${item.definition}`);
+    if (item.image) {
+      const image = document.createElement("img");
+      image.src = item.image.startsWith("http") || item.image.startsWith("/")
+        ? item.image
+        : staticUrl(item.image);
+      image.alt = item.definition;
+      image.loading = "lazy";
+      media.appendChild(image);
+    } else {
+      media.appendChild(element("div", "plr-library-card__placeholder", "No image"));
+    }
+    media.addEventListener("click", () => openModel(item.definition));
+
+    const body = element("div", "plr-library-card__body");
+    const manufacturer = element("div", "plr-library-card__manufacturer", item.manufacturer);
+    const title = element("h3", "plr-library-card__title");
+    const titleCode = document.createElement("code");
+    titleCode.textContent = item.definition;
+    title.appendChild(titleCode);
+    const section = element("div", "plr-library-card__section", item.section || "Resource");
+    const description = element("div", "plr-library-card__description");
+    description.innerHTML = item.description_html || "";
+
+    const footer = element("div", "plr-library-card__footer");
+    const modelButton = element("button", "plr-library-card__action", "View 3D");
+    modelButton.type = "button";
+    modelButton.disabled = !item.has_geometry;
+    modelButton.addEventListener("click", () => openModel(item.definition));
+
+    footer.appendChild(modelButton);
+    body.appendChild(manufacturer);
+    body.appendChild(title);
+    body.appendChild(section);
+    if (item.description_html) body.appendChild(description);
+    body.appendChild(footer);
+    card.appendChild(media);
+    card.appendChild(body);
+    return card;
+  }
+
+  function buildSectionTree(items) {
+    const tree = { children: new Map(), count: 0 };
+    items.forEach((item) => {
+      const path =
+        Array.isArray(item.section_path) && item.section_path.length
+          ? item.section_path
+          : [item.section || "Other"];
+      let node = tree;
+      tree.count += 1;
+      path.forEach((seg) => {
+        if (!node.children.has(seg)) {
+          node.children.set(seg, { children: new Map(), count: 0 });
+        }
+        node = node.children.get(seg);
+        node.count += 1;
+      });
+    });
+    return tree;
+  }
+
+  function createManufacturerPanel(name, items) {
+    const meta = (state.index.manufacturers || {})[name] || {};
+    const details = document.createElement("details");
+    details.className = "plr-library-manufacturer";
+    details.open = false;
+
+    const breakdown = Array.from(buildSectionTree(items).children.entries())
+      .map(([title, node]) => `${title} (${node.count})`)
+      .join(" · ");
+    const summary = document.createElement("summary");
+    summary.appendChild(element("span", "plr-library-manufacturer__name", name));
+    summary.appendChild(
+      element("span", "plr-library-manufacturer__meta", breakdown),
+    );
+    details.appendChild(summary);
+
+    if (meta.company_url) {
+      const link = document.createElement("a");
+      link.className = "plr-library-manufacturer__company";
+      link.href = meta.company_url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = /wikipedia\.org/i.test(meta.company_url)
+        ? "Wikipedia ↗"
+        : "Website ↗";
+      details.appendChild(link);
+    }
+
+    if (meta.blurb) {
+      details.appendChild(
+        element("p", "plr-library-manufacturer__blurb", meta.blurb),
+      );
+    }
+
+    if (meta.brand_tree) {
+      details.appendChild(
+        element("div", "plr-library-manufacturer__subhead", "Brand structure"),
+      );
+      const pre = element("pre", "plr-library-manufacturer__tree", meta.brand_tree);
+      details.appendChild(pre);
+    }
+
+    return details;
+  }
+
+  function renderLibrary(root) {
+    const items = (state.index.items || []).filter(itemMatchesFilters);
+    const results = root.querySelector(".plr-library-results");
+    const count = root.querySelector(".plr-library-count");
+    results.innerHTML = "";
+    count.textContent = `${items.length} resources`;
+
+    if (items.length === 0) {
+      results.appendChild(element("div", "plr-library-empty", "No labware matches these filters."));
+      return;
+    }
+
+    if (state.manufacturer !== "All") {
+      results.appendChild(createManufacturerPanel(state.manufacturer, items));
+    }
+
+    if (state.section !== "All") {
+      const grid = element("div", "plr-library-grid");
+      items.forEach((item) => grid.appendChild(createCard(item)));
+      results.appendChild(grid);
+      return;
+    }
+
+    const groups = new Map();
+    items.forEach((item) => {
+      const key = item.section || "Other";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+
+    groups.forEach((groupItems, sectionName) => {
+      const group = element("section", "plr-library-group");
+      group.appendChild(element("h2", "plr-library-group__title", sectionName));
+      const grid = element("div", "plr-library-grid");
+      groupItems.forEach((item) => grid.appendChild(createCard(item)));
+      group.appendChild(grid);
+      results.appendChild(group);
+    });
+  }
+
+  function renderLibraryShell(root) {
+    root.innerHTML = `
+      <div class="plr-library-toolbar">
+        <div class="plr-library-search">
+          <label for="plr-library-search-input">Search</label>
+          <input id="plr-library-search-input" type="search" placeholder="Plate, tiprack, Hamilton, 96..." />
+        </div>
+        <div class="plr-library-filter">
+          <label for="plr-library-manufacturer">Manufacturer</label>
+          <select id="plr-library-manufacturer"></select>
+        </div>
+        <div class="plr-library-filter">
+          <label for="plr-library-section">Type</label>
+          <select id="plr-library-section"></select>
+        </div>
+        <div class="plr-library-count"></div>
+      </div>
+      <div class="plr-library-results"></div>
+    `;
+
+    const search = root.querySelector("#plr-library-search-input");
+    const manufacturer = root.querySelector("#plr-library-manufacturer");
+    const section = root.querySelector("#plr-library-section");
+    setSelectOptions(manufacturer, unique(state.index.items.map((item) => item.manufacturer)), state.manufacturer);
+    setSelectOptions(section, unique(state.index.items.map((item) => item.section)), state.section);
+    search.value = state.query;
+
+    search.addEventListener("input", () => {
+      state.query = search.value;
+      writeUrlState();
+      renderLibrary(root);
+    });
+    manufacturer.addEventListener("change", () => {
+      state.manufacturer = manufacturer.value;
+      writeUrlState();
+      renderLibrary(root);
+    });
+    section.addEventListener("change", () => {
+      state.section = section.value;
+      writeUrlState();
+      renderLibrary(root);
+    });
+
+    renderLibrary(root);
+  }
+
+  function readUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    state.query = params.get("q") || "";
+    state.manufacturer = params.get("manufacturer") || "All";
+    state.section = params.get("section") || "All";
+  }
+
+  function writeUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    if (state.query) params.set("q", state.query);
+    else params.delete("q");
+    if (state.manufacturer && state.manufacturer !== "All") params.set("manufacturer", state.manufacturer);
+    else params.delete("manufacturer");
+    if (state.section && state.section !== "All") params.set("section", state.section);
+    else params.delete("section");
+    const queryString = params.toString();
+    const newUrl = `${window.location.pathname}${queryString ? "?" + queryString : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", newUrl);
+  }
+
+  function initializeLibraryPage() {
+    const root = document.getElementById("plr-labware-library");
+    if (!root) {
+      return;
+    }
+
+    readUrlState();
+    root.innerHTML = `<div class="plr-library-loading">Loading library...</div>`;
+    fetch(libraryIndexUrl())
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((index) => {
+        state.index = index;
+        renderLibraryShell(root);
+      })
+      .catch((error) => {
+        root.innerHTML = `<div class="plr-library-empty">Could not load the generated library index: ${error.message}</div>`;
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", initializeLibraryPage);
+})();
