@@ -16,6 +16,7 @@ from pylabrobot.labcyte.echo525 import (
   Echo525,
   Echo525Driver,
 )
+from pylabrobot.labcyte.echo_mock import EchoMockServer
 from pylabrobot.labcyte.echo_tests import (
   _FakeReader,
   _FakeWriter,
@@ -162,6 +163,54 @@ class TestEcho650RegressionGuard(unittest.IsolatedAsyncioTestCase):
     # No volume_increment_nl override -> 650 default of 2.5 nL.
     plan = build_echo_transfer_plan(source, destination, [("A1", "B1", 2.5)])
     self.assertIn('<wp n="A1" dn="B1" v="2.5" />', plan.protocol_xml)
+
+
+class TestEcho525AgainstMockServer(unittest.IsolatedAsyncioTestCase):
+  """End-to-end runs against EchoMockServer, which replays real captured 525 responses."""
+
+  async def test_get_instrument_info_returns_captured_525_identity(self):
+    async with EchoMockServer() as srv:
+      echo = Echo525(host=srv.host, rpc_port=srv.port, timeout=5.0)
+      await echo.setup()
+      info = await echo.get_instrument_info()
+    self.assertEqual(info.model, "Echo 525")
+    self.assertEqual(info.serial_number, "E5XX-00000")
+    self.assertEqual(info.software_version, "2.7.3")
+
+  async def test_device_reports_25nl_increment_over_the_wire(self):
+    async with EchoMockServer() as srv:
+      echo = Echo525(host=srv.host, rpc_port=srv.port, timeout=5.0)
+      await echo.setup()
+      increment = await echo.driver.get_transfer_volume_increment_nl("6RES_AQ_BP2")
+    self.assertEqual(increment, 25)
+
+  async def test_full_lock_transfer_unlock_flow(self):
+    async with EchoMockServer() as srv:
+      echo = Echo525(host=srv.host, rpc_port=srv.port, timeout=5.0)
+      await echo.setup()
+      await echo.driver.lock()
+      xml = (
+        '<?xml version="1.0"?><Protocol Name="hifi_pcr"><Name/>'
+        '<Layout><wp n="A2" dn="A1" v="150"/></Layout></Protocol>'
+      )
+      result = await echo.driver.do_well_transfer(xml)
+      await echo.driver.unlock()
+    self.assertTrue(result.succeeded)
+    self.assertEqual(result.status, "OK")
+    self.assertGreater(len(result.transfers), 0)  # replayed (trimmed) print-map report
+    self.assertEqual(
+      [m for m, _ in srv.received],
+      ["LockInstrument", "DoWellTransfer", "UnlockInstrument"],
+    )
+
+  async def test_mock_gates_motion_commands_on_the_lock(self):
+    # A real Echo rejects motion/transfer unless the caller holds the lock; the mock models it.
+    async with EchoMockServer() as srv:
+      before = srv.response_for("DoWellTransfer")
+      srv._locked = True
+      after = srv.response_for("DoWellTransfer")
+    self.assertIn("does not own the lock", before)
+    self.assertNotIn("does not own the lock", after)
 
 
 if __name__ == "__main__":

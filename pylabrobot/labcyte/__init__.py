@@ -42,3 +42,4 @@ from .echo525 import (
   Echo525,
   Echo525Driver,
 )
+from .echo_mock import EchoMockServer
