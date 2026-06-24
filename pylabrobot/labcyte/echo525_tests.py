@@ -10,7 +10,12 @@ import gzip
 import unittest
 from unittest.mock import patch
 
-from pylabrobot.labcyte.echo import build_echo_transfer_plan
+from pylabrobot.labcyte.echo import (
+  EchoDryPlateMode,
+  EchoPlateMap,
+  EchoSurveyParams,
+  build_echo_transfer_plan,
+)
 from pylabrobot.labcyte.echo525 import (
   ECHO_525_TRANSFER_VOLUME_INCREMENT_NL,
   Echo525,
@@ -201,6 +206,39 @@ class TestEcho525AgainstMockServer(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       [m for m, _ in srv.received],
       ["LockInstrument", "DoWellTransfer", "UnlockInstrument"],
+    )
+
+  async def test_expanded_survey_dry_and_transfer_path(self):
+    # Exercises the full "expanded survey/transfer path" against responses captured from a real
+    # 525: SetPlateMap -> PlateSurvey -> GetSurveyData -> DryPlate -> DoWellTransfer. This is the
+    # hardware-free validation of that path (the device's PlateSurvey only acks; survey results
+    # come back via GetSurveyData, exactly as the mock replays).
+    async with EchoMockServer() as srv:
+      echo = Echo525(host=srv.host, rpc_port=srv.port, timeout=5.0)
+      await echo.setup()
+      await echo.driver.lock()
+      run = await echo.driver.survey_source_plate(
+        EchoPlateMap(plate_type="6RES_AQ_BP2", well_identifiers=("A2",)),
+        EchoSurveyParams(
+          plate_type="6RES_AQ_BP2", start_row=0, start_col=0, num_rows=1, num_cols=1, save=True
+        ),
+        dry_after=True,
+      )
+      result = await echo.driver.do_well_transfer(
+        '<?xml version="1.0"?><Protocol Name="hifi_pcr"><Name/>'
+        '<Layout><wp n="A2" dn="A1" v="150"/></Layout></Protocol>'
+      )
+      await echo.driver.unlock()
+    self.assertIsNotNone(run.saved_data)
+    self.assertGreater(len(run.saved_data.wells), 0)  # real survey well from the capture
+    self.assertEqual(run.dry_mode, EchoDryPlateMode.TWO_PASS)
+    self.assertTrue(result.succeeded)
+    self.assertEqual(
+      [m for m, _ in srv.received],
+      [
+        "LockInstrument", "SetPlateMap", "PlateSurvey", "GetSurveyData", "DryPlate",
+        "DoWellTransfer", "UnlockInstrument",
+      ],
     )
 
   async def test_mock_gates_motion_commands_on_the_lock(self):
