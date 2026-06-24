@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, call
 
 from pylabrobot.barcode_scanners.backend import BarcodeScannerError
 from pylabrobot.barcode_scanners.keyence.keyence_backend import (
@@ -15,30 +15,29 @@ class TestKeyenceSendCommand(unittest.IsolatedAsyncioTestCase):
 
   def setUp(self):
     self.backend = KeyenceBarcodeScannerBackend(port="COM1")
-    self.backend.io = MagicMock()
-    self.backend.io.write = AsyncMock()
-    self.backend.io.read = AsyncMock()
+    self.backend.io.write = AsyncMock()  # type: ignore
+    self.backend.io.read = AsyncMock()  # type: ignore
 
   async def test_writes_carriage_return_terminated_command(self):
-    self.backend.io.read.side_effect = [b"\r"]
+    self.backend.io.read.side_effect = [b"\r"]  # type: ignore
     await self.backend.send_command("RMOTOR")
-    self.backend.io.write.assert_awaited_once_with(b"RMOTOR\r")
+    self.backend.io.write.assert_awaited_once_with(b"RMOTOR\r")  # type: ignore
 
   async def test_accumulates_reply_until_carriage_return(self):
     # The bug: a single io.read() returned one byte and truncated the reply.
-    self.backend.io.read.side_effect = [b"M", b"O", b"T", b"O", b"R", b"O", b"N", b"\r"]
+    self.backend.io.read.side_effect = [b"M", b"O", b"T", b"O", b"R", b"O", b"N", b"\r"]  # type: ignore
     response = await self.backend.send_command("RMOTOR")
     self.assertEqual(response, "MOTORON")
 
   async def test_stops_reading_at_terminator(self):
     # Once \r lands the reply is complete; reading again would block on the next command.
-    self.backend.io.read.side_effect = [b"O", b"K", b"\r"]
+    self.backend.io.read.side_effect = [b"O", b"K", b"\r"]  # type: ignore
     await self.backend.send_command("LOFF")
-    self.assertEqual(self.backend.io.read.await_count, 3)
+    self.assertEqual(self.backend.io.read.await_count, 3)  # type: ignore
 
   async def test_byteless_read_is_an_empty_reply(self):
     # A byte-less read means the port timeout elapsed with no reply (e.g. no barcode).
-    self.backend.io.read.side_effect = [b""]
+    self.backend.io.read.side_effect = [b""]  # type: ignore
     response = await self.backend.send_command("LON")
     self.assertEqual(response, "")
 
@@ -49,34 +48,34 @@ class TestKeyenceScanBarcode(unittest.IsolatedAsyncioTestCase):
 
   def setUp(self):
     self.backend = KeyenceBarcodeScannerBackend(port="COM1")
-    self.replies = {}
-    self.raise_on = set()
+    self.replies: dict[str, str] = {}
+    self.raise_on: set[str] = set()
 
     def _send(command: str) -> str:
       if command in self.raise_on:
         raise RuntimeError(f"simulated failure on {command}")
       return self.replies.get(command, "")
 
-    self.backend.send_command = AsyncMock(side_effect=_send)
+    self.backend.send_command = AsyncMock(side_effect=_send)  # type: ignore[method-assign]
 
   async def test_success_returns_barcode_then_releases_beam(self):
     self.replies = {"LON": "ABC123", "LOFF": ""}
     barcode = await self.backend.scan_barcode()
     self.assertIsInstance(barcode, Barcode)
     self.assertEqual(barcode.data, "ABC123")
-    self.backend.send_command.assert_has_calls([call("LON"), call("LOFF")])
+    self.backend.send_command.assert_has_calls([call("LON"), call("LOFF")])  # type: ignore
 
   async def test_releases_beam_when_reader_off(self):
     self.replies = {"LON": "NG", "LOFF": ""}
     with self.assertRaises(BarcodeScannerError):
       await self.backend.scan_barcode()
-    self.backend.send_command.assert_has_calls([call("LON"), call("LOFF")])
+    self.backend.send_command.assert_has_calls([call("LON"), call("LOFF")])  # type: ignore
 
   async def test_releases_beam_on_error_response(self):
     self.replies = {"LON": "ERR99", "LOFF": ""}
     with self.assertRaises(BarcodeScannerError):
       await self.backend.scan_barcode()
-    self.backend.send_command.assert_has_calls([call("LON"), call("LOFF")])
+    self.backend.send_command.assert_has_calls([call("LON"), call("LOFF")])  # type: ignore
 
   async def test_loff_failure_does_not_mask_successful_scan(self):
     # A failing LOFF is logged, never propagated, so the scan result survives.
