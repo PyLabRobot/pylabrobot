@@ -21,7 +21,7 @@ import dataclasses
 import logging
 import warnings
 from dataclasses import dataclass
-from typing import ClassVar, Dict, List, Literal, Optional
+from typing import Callable, ClassVar, Dict, List, Literal, Optional
 
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -42,7 +42,7 @@ from .confirmed_firmware_versions import (
 )
 from .data_ids import DataID
 from .driver import PreciseFlexDriver
-from .errors import PreciseFlexError
+from .errors import OutOfRangeOfMotionError, PreciseFlexError
 from .kinematics import ElbowOrientation, PreciseFlexCartesianPose, Wrist
 from .tcs_modules import missing_required_modules
 
@@ -130,7 +130,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     is_dual_gripper: bool = False,
     has_rail: bool = False,
     read_kinematics_from_device: bool = True,
-    recover_out_of_range_at_setup: bool = True,
+    recover_out_of_range: bool = True,
     parking_position: Optional[JointPose] = None,
   ) -> None:
     """
@@ -146,11 +146,13 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
         the controller at setup and use them for kinematics; the constructor's
         ``gripper_length`` then acts only as a fallback. Set False to force the
         constructor values regardless of what the controller reports.
-      recover_out_of_range_at_setup: when True (the default), setup tries to drive a
-        small out-of-range excursion back inside the soft limits (slow single-axis move
-        toward in-range) via ``recover_axes_within_limits``. Set False to skip that.
-        Either way, setup raises if any axis is still out of range afterward, since the
-        controller would otherwise reject every commanded move (-1012).
+      recover_out_of_range: when True (the default), an out-of-range axis (its current position
+        outside its soft limit - a state the controller rejects every commanded move for, -1012) is
+        driven back into range once via ``recover_axes_within_limits``, the same way at both moments
+        it matters: at setup, and before a commanded move (which then retries). If it is still out of
+        range after that, ``OutOfRangeOfMotionError`` propagates (no loop). Set False to forbid this
+        autonomous motion - an out-of-range axis then raises instead, carrying recovery instructions.
+        Every recovery is logged.
       closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
         ``GripOpenPos``) at which the jaws are at :attr:`min_gripper_width`.
         Depends on the mounted gripper. The conversion mm → firmware units is
@@ -175,7 +177,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       gripper_length=gripper_length, gripper_z_offset=gripper_z_offset
     )
     self._read_kinematics_from_device = read_kinematics_from_device
-    self._recover_out_of_range_at_setup = recover_out_of_range_at_setup
+    self._recover_out_of_range = recover_out_of_range
     # Device configuration, resolved once at setup; None until then. Set before parking_position so its
     # validating setter can check assignments against the soft limits once they are known.
     self._configuration: Optional[PreciseFlexConfiguration] = None
@@ -402,7 +404,8 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
 
   # [int]
   async def _move_j(self, profile_index: int, joint_coords: JointPose) -> None:
-    """Move the robot using joint coordinates, handling rail configuration."""
+    """Move the robot using joint coordinates, handling rail configuration. Raw moveJ - the
+    out-of-range guard lives in the caller (``_guarded_move_j``), not in this primitive."""
     if self._has_rail:
       angles_str = (
         f"{joint_coords[Axis.BASE]} "
@@ -492,9 +495,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     """Convert a Cartesian location into a full joint dict using our IK.
 
     Any of cart.orientation, cart.wrist, and cart.rail_position left as None
-    default to the current pose — picks the configuration closest to where the
+    default to the current pose - picks the configuration closest to where the
     arm is now. Fetches current joint state for the gripper and rail axes so
-    callers can use the result directly with `_move_j` or `_set_joint_angles`.
+    callers get a complete joint dict, ready for `_guarded_move_j`.
     """
     joints, current = await self._request_state()
     cart = dataclasses.replace(
@@ -1313,13 +1316,16 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts)
     return (x, y, z, yaw, pitch, roll)
 
-  # [cmd]
-  async def set_tool_transformation_values(
+  # [int]
+  async def _set_tool_transformation_values(
     self, x: float, y: float, z: float, yaw: float, pitch: float, roll: float
   ) -> None:
-    """Set the robot tool transformation.
+    """Set the robot tool transformation (private).
 
-    The robot must be attached to set the tool. Setting the tool pauses any robot motion in progress.
+    Private because the client kinematics read the tool once at setup into the frozen configuration;
+    changing it live desyncs `request_gripper_pose` from the controller's `wherec` until the
+    configuration is rebuilt. The robot must be attached to set the tool, and setting it pauses any
+    robot motion in progress.
 
     Args:
       x: Tool X coordinate.
@@ -1573,7 +1579,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   # -- homing & range recovery --------------------------------------------------------------
 
   # [cmd]
-  # Axes auto-recovered when parked out of range, in a deliberately safe order: the
+  # Axes auto-recovered when out of range, in a deliberately safe order: the
   # gripper jaw first (no arm motion), then the Z column (vertical clearance), then
   # the rotary links shoulder -> elbow (smallest swept volume last to first).
   # The wrist is intentionally absent: rotating it back to +/-180 can self-collide, so
@@ -1655,11 +1661,11 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
   async def _handle_out_of_range_axes(self) -> None:
     """Warn about every out-of-range axis, then correct what is recoverable, or raise.
 
-    An axis parked outside its soft limit makes the arm unusable - the controller rejects
-    every commanded move with -1012. Setup logs the full set first (either way), then, with
-    ``recover_out_of_range_at_setup`` on (the default), drives each recoverable offender back
-    into range. If recovery is off or leaves any axis out, setup raises with explicit
-    recovery steps rather than leaving a dead arm.
+    An axis out of range (its current position outside its soft limit) makes the arm unusable - the
+    controller rejects every commanded move with -1012. Setup logs the full set first (either way),
+    then, with ``recover_out_of_range`` on (the default), drives each recoverable offender back into
+    range. If recovery is off or leaves any axis out, setup raises with explicit recovery steps
+    rather than leaving a dead arm.
 
     No-op until the robot is homed: an unhomed incremental axis reads a meaningless ~0
     (so the check would false-positive), and the controller blocks the recovery move with
@@ -1673,27 +1679,24 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       )
       return
 
-    def fmt(axes: Dict[Axis, tuple]) -> str:
-      return "; ".join(
-        f"{axis.name} at {value} (soft limit {limit})" for axis, (value, limit) in axes.items()
-      )
-
     outside = self._axes_outside_soft_limits(await self.request_joint_position())
     if not outside:
       return
     logger.warning(
-      "[PreciseFlex %s] axes out of soft limit at setup: %s", self.driver.io._host, fmt(outside)
+      "[PreciseFlex %s] axes out of soft limit at setup: %s",
+      self.driver.io._host,
+      self._fmt_axes(outside),
     )
-    if self._recover_out_of_range_at_setup:
+    if self._recover_out_of_range:
       await self.recover_axes_within_limits()
       outside = self._axes_outside_soft_limits(await self.request_joint_position())
     if outside:
-      raise PreciseFlexError(
-        -1012,
-        f"axis outside its soft limit after setup: {fmt(outside)}. The controller rejects all "
+      raise OutOfRangeOfMotionError(
+        f"axis outside its soft limit after setup: {self._fmt_axes(outside)}. The controller rejects all "
         f"commanded moves in this state. Recover with recover_axes_within_limits(), or freedrive "
         f"the axis back into range manually (required for the wrist, or when an axis is far past "
         f"its limit).",
+        axes=outside,
       )
 
   # [int]
@@ -1714,27 +1717,90 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     return outside
 
   # [int]
-  def _assert_within_soft_limits(self, current: JointPose, target: JointPose) -> None:
-    """Turn the controller's cryptic ``-1012`` into a clear client-side error.
+  @staticmethod
+  def _fmt_axes(axes: Dict[Axis, tuple]) -> str:
+    """Format ``{axis: (value, (lo, hi))}`` for logs/errors, e.g.
+    ``BASE at 0.959 (soft limit (1.5, 401.5))``."""
+    return "; ".join(
+      f"{axis.name} at {value} (soft limit {limit})" for axis, (value, limit) in axes.items()
+    )
 
-    Two cases block a commanded move: an axis already parked outside its soft limit
-    (the controller then rejects *every* commanded move until it is recovered), and
-    a target outside its soft limit (rejected outright). Freedrive can hand-move an
-    axis past a soft limit, so a taught pose can land outside the commandable
-    envelope. No-op until the configuration has been discovered.
+  # [int]
+  def _assert_within_soft_limits(self, current: JointPose, target: JointPose) -> None:
+    """Guard a commanded move. The controller rejects every move with -1012 while an axis is out of
+    range - whether that is the *current* pose or the commanded *target*. They are distinct failures
+    with distinct types:
+
+    - an axis whose *current* position is out of range is a recoverable arm *state* (e.g. it lost
+      power and drifted past its limit) -> ``OutOfRangeOfMotionError``, which the caller can recover
+      and retry. Homing will not fix it (the rotary axes are absolute); call
+      ``recover_axes_within_limits()`` to drive it back into range.
+    - an axis whose *target* is out of range is a bad request (freedrive can hand-move an axis past a
+      soft limit, so a taught pose can land outside the commandable envelope) -> ``ValueError``;
+      re-teach the pose.
+
+    No-op until the configuration is discovered.
     """
-    for axis, (value, limit) in self._axes_outside_soft_limits(current).items():
-      raise ValueError(
-        f"{axis.name} is parked at {value}, outside its soft limit {limit}; the "
-        f"controller rejects commanded moves while an axis is out of range (-1012). "
-        f"Homing will not recover it (the rotary axes are absolute); call "
-        f"recover_axes_within_limits() to drive it back into range, then retry."
+    out_of_range = self._axes_outside_soft_limits(current)
+    if out_of_range:
+      raise OutOfRangeOfMotionError(
+        f"axis out of range: {self._fmt_axes(out_of_range)}. The controller rejects every commanded "
+        f"move while an axis is out of range. Homing will not recover it (the rotary axes are "
+        f"absolute); call recover_axes_within_limits() to drive it back into range.",
+        axes=out_of_range,
       )
     for axis, (value, limit) in self._axes_outside_soft_limits(target).items():
       raise ValueError(
         f"{axis.name} target {value} is outside its soft limit {limit}; the controller "
         f"would reject the move (-1012). Re-teach this pose within the envelope."
       )
+
+  # [int]
+  async def _guarded_move_j(self, build_target: Callable[[JointPose], JointPose]) -> None:
+    """The single guarded path to the raw ``_move_j`` primitive: read the live pose, check it and
+    the target against the soft limits, send the move, and on out-of-range recover once and retry.
+    Both ``move_to_joint_position`` (a partial spec merged over the live pose) and
+    ``move_to_location`` (a full pose from IK) funnel through here, so no commanded move reaches
+    ``_move_j`` unchecked.
+
+    ``build_target`` maps the freshly-read pose to the full target joints - the only part that
+    differs between the two callers. It re-runs each attempt, so a recovery move that shifts an
+    unspecified axis is reflected in the next merge.
+
+    When an axis is out of range the controller blocks the move (-1012). With ``recover_out_of_range``
+    set, this drives the offending axes back into range once (``recover_axes_within_limits``) and
+    retries; otherwise the ``OutOfRangeOfMotionError`` propagates. Recovery uses ``_move_one_axis``, a
+    different primitive, so it cannot recurse here.
+    """
+
+    async def attempt() -> None:
+      current = await self.request_joint_position()
+      target = build_target(current)
+      self._assert_within_soft_limits(current, target)
+      await self._move_j(profile_index=self.profile_index, joint_coords=target)
+
+    try:
+      await attempt()
+    except OutOfRangeOfMotionError as exc:
+      if not self._recover_out_of_range:
+        raise
+      host = self.driver.io._host
+      logger.warning(
+        "[PreciseFlex %s] commanded move blocked - %s; auto-recovery on -> recovering and retrying",
+        host,
+        self._fmt_axes(exc.axes),
+      )
+      await self.recover_axes_within_limits()
+      try:
+        await attempt()  # re-reads the live pose - recovery just moved an axis
+      except OutOfRangeOfMotionError as exc2:
+        logger.error(
+          "[PreciseFlex %s] auto-recovery did not clear %s - freedrive/manual recovery needed",
+          host,
+          self._fmt_axes(exc2.axes),
+        )
+        raise
+      logger.info("[PreciseFlex %s] out-of-range axes recovered; move retried successfully", host)
 
   # ========================================================================================
   # L3 - high-level capability API
@@ -1774,15 +1840,13 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     position: JointPose,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
-    """Move the arm to the specified joint position."""
+    """Move the arm to the specified joint position. A partial spec is merged over the live pose;
+    the move is guarded against out-of-range axes (see ``_guarded_move_j``)."""
     if not isinstance(backend_params, self.MoveToJointPositionParams):
       backend_params = PreciseFlexArmBackend.MoveToJointPositionParams()
     if backend_params.speed_pct is not None:
       await self._set_speed(backend_params.speed_pct)
-    current = await self.request_joint_position()
-    joint_coords = {**current, **position}
-    self._assert_within_soft_limits(current, joint_coords)
-    await self._move_j(profile_index=self.profile_index, joint_coords=joint_coords)
+    await self._guarded_move_j(lambda current: {**current, **position})
 
   # [PLR]
   async def request_gripper_pose(
@@ -1817,7 +1881,8 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     direction: float,
     backend_params: Optional[BackendParams] = None,
   ) -> None:
-    """Move the arm to the specified Cartesian location."""
+    """Move the arm to the specified Cartesian location. The IK target is guarded against
+    out-of-range axes (see ``_guarded_move_j``)."""
     if not isinstance(backend_params, self.MoveToLocationParams):
       backend_params = PreciseFlexArmBackend.MoveToLocationParams()
     if backend_params.speed_pct is not None:
@@ -1837,7 +1902,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       wrist=backend_params.wrist,
     )
     joints = await self._cart_to_joints(coords)
-    await self._move_j(profile_index=self.profile_index, joint_coords=joints)
+    await self._guarded_move_j(lambda _current: joints)
 
   # [cmd]
   async def dest_c(self, arg1: int = 0) -> tuple[float, float, float, float, float, float, int]:

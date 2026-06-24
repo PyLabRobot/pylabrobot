@@ -1,8 +1,13 @@
 import unittest
 from typing import Tuple
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.brooks.precise_flex import Axis, PreciseFlexArmBackend
+from pylabrobot.brooks.precise_flex import (
+  Axis,
+  OutOfRangeOfMotionError,
+  PreciseFlexArmBackend,
+)
+from pylabrobot.resources import Coordinate
 
 
 def _make_backend(
@@ -210,3 +215,100 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     await self.backend.park()
     self.driver.send_command.assert_awaited_once_with("movetosafe")
     self.assertEqual(self._movej_cmds(), [])
+
+
+_LOGGER = "pylabrobot.brooks.precise_flex.arm_backend"
+
+
+class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
+  """A commanded move that finds an axis out of range: default recovers; opt-out raises."""
+
+  def setUp(self):
+    self.backend, self.driver = _make_backend()
+    self.driver._wait_for_eom = AsyncMock()
+    self.backend._configuration = MagicMock(
+      soft_limits={
+        Axis.SHOULDER: (-93.0, 93.0),
+        Axis.ELBOW: (12.0, 348.0),
+        Axis.WRIST: (-960.0, 960.0),
+      }
+    )
+
+  def _stub(self, out_of_range: str, recovered: str = "") -> None:
+    """wherej returns ``out_of_range`` until a MoveOneAxis fires, then ``recovered`` (if given)."""
+    state = {"recovered": False}
+
+    async def respond(command: str) -> str:
+      if command == "wherej":
+        return recovered if (state["recovered"] and recovered) else out_of_range
+      if command.startswith("Speed "):
+        return f"{self.backend.profile_index} 50.0"
+      if command.startswith("MoveOneAxis"):
+        state["recovered"] = True
+      return ""
+
+    self.driver.send_command = AsyncMock(side_effect=respond)
+
+  def _cmds(self, prefix: str) -> list[str]:
+    return [
+      c.args[0] for c in self.driver.send_command.call_args_list if c.args[0].startswith(prefix)
+    ]
+
+  async def test_opted_out_raises_and_does_not_move_or_recover(self):
+    """Opted out: an out-of-range axis raises OutOfRangeOfMotionError; no recovery, no moveJ."""
+    self.backend._recover_out_of_range = False
+    self._stub("0 93.5 90.0 0.0 0")  # base shoulder elbow wrist gripper; shoulder 93.5 > 93
+    with self.assertRaises(OutOfRangeOfMotionError) as ctx:
+      await self.backend.move_to_joint_position({Axis.SHOULDER: 0.0})
+    self.assertIn(Axis.SHOULDER, ctx.exception.axes)
+    self.assertEqual(self._cmds("MoveOneAxis"), [])
+    self.assertEqual(self._cmds("moveJ"), [])
+
+  async def test_on_recovers_offender_then_retries_move(self):
+    """Opt-in on: the offending axis is nudged in range (MoveOneAxis), then the moveJ is retried."""
+    self.backend._recover_out_of_range = True
+    self._stub("0 93.5 90.0 0.0 0", recovered="0 92.0 90.0 0.0 0")
+    with self.assertLogs(_LOGGER, level="INFO") as cm:
+      await self.backend.move_to_joint_position({Axis.SHOULDER: 0.0})
+    self.assertEqual(self._cmds("MoveOneAxis"), ["MoveOneAxis 2 92.0 1"])  # shoulder back in range
+    self.assertEqual(len(self._cmds("moveJ")), 1)  # move retried and sent
+    log = "\n".join(cm.output)
+    self.assertIn("commanded move blocked", log)  # WARNING on entry
+    self.assertIn("retried successfully", log)  # INFO on success
+
+  async def test_on_but_unrecoverable_reraises_once_without_moving(self):
+    """Opt-in on but the axis is too far out (recovery skips it): re-raise after one try, no loop."""
+    self.backend._recover_out_of_range = True
+    self._stub("0 120.0 90.0 0.0 0")  # shoulder 27 past the limit, beyond the recovery cap
+    with self.assertLogs(_LOGGER, level="ERROR") as cm:
+      with self.assertRaises(OutOfRangeOfMotionError):
+        await self.backend.move_to_joint_position({Axis.SHOULDER: 0.0})
+    self.assertEqual(self._cmds("moveJ"), [])  # never moved
+    self.assertIn("auto-recovery did not clear", "\n".join(cm.output))  # ERROR before re-raise
+
+  async def test_in_range_move_reads_position_once(self):
+    """Happy path: the out-of-range check reuses the merge read, so a move issues a single wherej
+    before moveJ (no redundant position read)."""
+    self._stub("0 0.0 90.0 0.0 0")  # all axes in range
+    await self.backend.move_to_joint_position({Axis.SHOULDER: 10.0})
+    self.assertEqual(self._cmds("wherej"), ["wherej"])  # exactly one position read
+    self.assertEqual(len(self._cmds("moveJ")), 1)
+
+  async def test_move_to_location_is_also_guarded(self):
+    """The Cartesian path funnels through the same guard: an out-of-range axis raises and sends no
+    moveJ, like the joint path. The IK target is stubbed - it is the guard wiring, not IK, pinned
+    here."""
+    self.backend._recover_out_of_range = False
+    self._stub("0 93.5 90.0 0.0 0")  # current shoulder 93.5 > 93, out of range
+    in_range = {
+      Axis.BASE: 0.0,
+      Axis.SHOULDER: 0.0,
+      Axis.ELBOW: 90.0,
+      Axis.WRIST: 0.0,
+      Axis.GRIPPER: 0.0,
+    }
+    with patch.object(self.backend, "_cart_to_joints", AsyncMock(return_value=in_range)):
+      with self.assertRaises(OutOfRangeOfMotionError) as ctx:
+        await self.backend.move_to_location(Coordinate(400.0, 0.0, 200.0), 0.0)
+    self.assertIn(Axis.SHOULDER, ctx.exception.axes)
+    self.assertEqual(self._cmds("moveJ"), [])
