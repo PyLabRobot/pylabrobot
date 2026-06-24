@@ -4099,6 +4099,67 @@ class Echo(Device):
     await self.driver.dry_plate(params)
 
   @need_setup_finished
+  async def run_picklist(
+    self,
+    picklist: Union[str, Sequence["Transfer"]],
+    *,
+    generator: Optional["EchoProtocolGenerator"] = None,
+    survey: bool = True,
+    close_door: bool = True,
+    dry_after: bool = False,
+    acquire_lock: bool = True,
+    timeout: Optional[float] = None,
+  ) -> list[EchoTransferResult]:
+    """Execute a picklist on the Echo with no GUI: parse -> generate -> survey -> transfer.
+
+    ``picklist`` is a path to an Echo cherry-pick CSV (or a list of :class:`Transfer`). The
+    ``generator`` turns it into ``DoWellTransfer`` payloads; it defaults to the SDK-free
+    :class:`~pylabrobot.labcyte.picklist.NaiveEchoProtocolGenerator`. Owners of the vendor SDK
+    can pass a generator that reproduces the Echo Cherry Pick optimisation exactly.
+
+    Plate loading/ejection and door/gripper access are left to the caller (e.g. a robotic arm via
+    the :class:`~pylabrobot.capabilities.plate_access.PlateAccess` capability); this method assumes
+    the source and destination plates are already in place.
+    """
+    from pylabrobot.labcyte.picklist import NaiveEchoProtocolGenerator, read_picklist
+
+    transfers = read_picklist(picklist) if isinstance(picklist, str) else list(picklist)
+    if not transfers:
+      raise ValueError("Picklist contained no transfers.")
+    plan = (generator or NaiveEchoProtocolGenerator()).generate(transfers)
+
+    results: list[EchoTransferResult] = []
+    if acquire_lock:
+      await self.driver.lock()
+    try:
+      if close_door:
+        await self.driver.close_door()
+      for group in plan:
+        if survey:
+          source_wells = tuple(dict.fromkeys(t.source_well for t in group.transfers))
+          await self.driver.set_plate_map(
+            EchoPlateMap(plate_type=group.source_plate_type, well_identifiers=source_wells)
+          )
+          info = await self.driver.get_echo_plate_info(group.source_plate_type)
+          await self.driver.survey_plate(
+            EchoSurveyParams(
+              plate_type=group.source_plate_type,
+              start_row=0,
+              start_col=0,
+              num_rows=info.rows,
+              num_cols=info.columns,
+              save=True,
+            )
+          )
+        results.append(await self.driver.do_well_transfer(group.protocol_xml, timeout=timeout))
+        if dry_after:
+          await self.driver.dry_plate()
+    finally:
+      if acquire_lock:
+        await self.driver.unlock()
+    return results
+
+  @need_setup_finished
   async def survey_source_plate(
     self,
     plate_map: EchoPlateMap,
