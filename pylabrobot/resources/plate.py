@@ -80,6 +80,7 @@ class Plate(ItemizedResource["Well"]):
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
     plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
+    stacking_z_height: Optional[float] = None,
   ):
     """Initialize a Plate resource.
 
@@ -89,6 +90,10 @@ class Plate(ItemizedResource["Well"]):
       lid: Immediately assign a lid to the plate.
       plate_type: Type of the plate. One of "skirted", "semi-skirted", or "non-skirted". A
         more complete description is still pending.
+      stacking_z_height: The vertical pitch in mm between two identical plates stacked directly on
+        top of each other (i.e. the height a plate adds to a stack, equal to ``size_z`` minus the
+        overlap with the plate below). Required by some stacker devices (e.g. the Agilent BenchCel)
+        and left as ``None`` when unknown.
     """
 
     super().__init__(
@@ -103,6 +108,7 @@ class Plate(ItemizedResource["Well"]):
     )
     self._lid: Optional[Lid] = None
     self.plate_type = plate_type
+    self.stacking_z_height = stacking_z_height
 
     if lid is not None:
       self.assign_child_resource(lid)
@@ -144,10 +150,31 @@ class Plate(ItemizedResource["Well"]):
       self._lid = None
     return super().unassign_child_resource(resource)
 
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "plate_type": self.plate_type,
+      "stacking_z_height": self.stacking_z_height,
+    }
+
+  def __eq__(self, other) -> bool:
+    # `stacking_z_height` is a physical dimension (the pitch a plate adds to a stack), so plates
+    # that differ in it are different labware and must not compare equal.
+    return (
+      super().__eq__(other)
+      and isinstance(other, Plate)
+      and self.stacking_z_height == other.stacking_z_height
+    )
+
+  # Defining `__eq__` sets `__hash__` to None; restore the `Resource` (repr-based) hash. Equal
+  # plates share the same repr, so the hash/eq invariant holds.
+  __hash__ = Resource.__hash__
+
   def __repr__(self) -> str:
     return (
       f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
-      f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
+      f"size_y={self._size_y}, size_z={self._size_z}, "
+      f"stacking_z_height={self.stacking_z_height}, location={self.location})"
     )
 
   def get_well(self, identifier: Union[str, int, Tuple[int, int]]) -> "Well":
