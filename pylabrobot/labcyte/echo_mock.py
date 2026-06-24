@@ -140,10 +140,12 @@ class EchoMockServer:
 
   @property
   def host(self) -> str:
+    """The host the mock is listening on; pass to ``Echo``/``Echo525`` as ``host``."""
     return self._host
 
   @property
   def port(self) -> int:
+    """The (possibly OS-assigned) port the mock is listening on; pass as ``rpc_port``."""
     if self._server is None:
       raise RuntimeError("EchoMockServer is not running; use 'async with EchoMockServer()'.")
     return self._server.sockets[0].getsockname()[1]
@@ -157,9 +159,11 @@ class EchoMockServer:
     await self.stop()
 
   async def start(self) -> None:
+    """Begin listening for Medman connections (called automatically by ``async with``)."""
     self._server = await asyncio.start_server(self._handle, self._host, self._requested_port)
 
   async def stop(self) -> None:
+    """Stop the server and close the listening socket."""
     if self._server is not None:
       self._server.close()
       await self._server.wait_closed()
