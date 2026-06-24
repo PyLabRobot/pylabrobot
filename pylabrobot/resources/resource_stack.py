@@ -16,6 +16,13 @@ class ResourceStack(Resource):
   back. Stacks growing in the z direction are from bottom to top, and function as the
   `stack data type <https://en.wikipedia.org/wiki/Stack_(abstract_data_type)>`.
 
+  When stacking in the z direction, bare plates nest into one another: if a plate defines a
+  ``stacking_z_height`` (the vertical pitch it adds to a stack) and is placed directly on top of
+  another bare plate, it sinks in by ``size_z - stacking_z_height`` instead of resting at the
+  lower plate's full height. A stack of ``N`` identical such plates is therefore
+  ``size_z + (N - 1) * stacking_z_height`` tall. Plates without a ``stacking_z_height``, and plates
+  wearing a lid, do not nest.
+
   Attributes:
     name: The name of the resource group.
     location: The location of the resource group. This will be the location of the first resource in
@@ -84,22 +91,45 @@ class ResourceStack(Resource):
       return sum(child.get_size_y() for child in self.children)
     return max(resource.get_size_y() for resource in self.children)
 
+  @staticmethod
+  def _actual_resource_height(resource: Resource) -> float:
+    """The height a resource occupies on its own, accounting for the lid nesting height if the
+    resource is a plate with a lid."""
+    if isinstance(resource, Plate) and resource.lid is not None:
+      return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
+    return resource.get_size_z()
+
+  def _nesting_overlap(self, upper: Resource, lower: Optional[Resource]) -> float:
+    """How far ``upper`` sinks into ``lower`` when stacked in the z direction (``0`` if they do not
+    nest). Only a bare plate stacked on a bare plate with a known ``stacking_z_height`` nests; the
+    overlap is then ``size_z - stacking_z_height`` (i.e. the plate adds only its stacking pitch to
+    the stack instead of its full height)."""
+    if (
+      self.direction == "z"
+      and isinstance(upper, Plate)
+      and upper.stacking_z_height is not None
+      and isinstance(lower, Plate)
+      and lower.lid is None
+    ):
+      return upper.get_size_z() - upper.stacking_z_height
+    return 0.0
+
   def get_size_z(self) -> float:
     """Get local size in the z direction."""
-
-    def get_actual_resource_height(resource: Resource) -> float:
-      """Helper function to get the actual height of a resource, accounting for the lid nesting
-      height if the resource is a plate with a lid."""
-      if isinstance(resource, Plate) and resource.lid is not None:
-        return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
-      return resource.get_size_z()
 
     if len(self.children) == 0:
       return 0
 
     if self.direction != "z":
-      return max(get_actual_resource_height(child) for child in self.children)
-    return sum(get_actual_resource_height(child) for child in self.children)
+      return max(self._actual_resource_height(child) for child in self.children)
+
+    # Sum bottom -> top, letting bare plates nest into one another by their stacking pitch.
+    total = 0.0
+    prev: Optional[Resource] = None
+    for child in self.children:
+      total += self._actual_resource_height(child) - self._nesting_overlap(child, prev)
+      prev = child
+    return total
 
   def get_resource_stack_edge(self) -> Coordinate:
     if self.direction == "x":
@@ -115,7 +145,9 @@ class ResourceStack(Resource):
 
   def get_new_child_location(self, resource: Resource) -> Coordinate:
     """Get the location where a new child resource should be placed in the stack."""
-    return get_child_location(resource) + self.get_resource_stack_edge()
+    lower = self.children[-1] if len(self.children) > 0 else None
+    overlap = Coordinate(0, 0, self._nesting_overlap(resource, lower))
+    return get_child_location(resource) + self.get_resource_stack_edge() - overlap
 
   def assign_child_resource(
     self, resource: Resource, location: Optional[Coordinate] = None, reassign: bool = True
