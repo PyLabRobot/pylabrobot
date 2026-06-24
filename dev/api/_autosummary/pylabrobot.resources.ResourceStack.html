@@ -589,6 +589,12 @@ unit. Stacks can grow be configured to be able to grow in x, y, or z direction. 
 in the x direction are from left to right. Stacks growing in the y direction are from front to
 back. Stacks growing in the z direction are from bottom to top, and function as the
 <code class="code docutils literal notranslate"><span class="pre">stack</span> <span class="pre">data</span> <span class="pre">type</span> <span class="pre">&lt;https://en.wikipedia.org/wiki/Stack_(abstract_data_type)&gt;</span></code>.</p>
+<p>When stacking in the z direction, bare plates nest into one another: if a plate defines a
+<code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code> (the vertical pitch it adds to a stack) and is placed directly on top of
+another bare plate, it sinks in by <code class="docutils literal notranslate"><span class="pre">size_z</span> <span class="pre">-</span> <span class="pre">stacking_z_height</span></code> instead of resting at the
+lower plate’s full height. A stack of <code class="docutils literal notranslate"><span class="pre">N</span></code> identical such plates is therefore
+<code class="docutils literal notranslate"><span class="pre">size_z</span> <span class="pre">+</span> <span class="pre">(N</span> <span class="pre">-</span> <span class="pre">1)</span> <span class="pre">*</span> <span class="pre">stacking_z_height</span></code> tall. Plates without a <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code>, and plates
+wearing a lid, do not nest.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Variables<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

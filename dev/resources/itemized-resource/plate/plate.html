@@ -683,6 +683,19 @@
 <p>The <code class="docutils literal notranslate"><span class="pre">nesting_z_height</span></code> is the overlap between the lid and the plate when the lid is placed on the plate. This property can be measured using a caliper.</p>
 <img alt="nesting_z_height measurement" src="../../../_images/lid_nesting_z_height.jpeg" />
 </section>
+<hr class="docutils" />
+<section id="stacking-z-height">
+<h2><code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code><a class="headerlink" href="#stacking-z-height" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.resources.Plate.html#pylabrobot.resources.Plate" title="pylabrobot.resources.plate.Plate"><code class="xref py py-class docutils literal notranslate"><span class="pre">Plate</span></code></a> accepts an optional <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code> argument: the vertical pitch (in mm) that one plate adds to a stack when an identical plate is placed directly on top of it. Equivalently, it is <code class="docutils literal notranslate"><span class="pre">size_z</span></code> minus the amount two identical plates nest into one another.</p>
+<p>It defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (unknown) and is only required by devices that physically stack plates, such as the Agilent BenchCel microplate handler. It mirrors the <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code> of a nested tip rack (<code class="xref py py-class docutils literal notranslate"><span class="pre">NestedTipRack</span></code>).</p>
+<p>To measure it, stack two identical plates and measure the total height with a caliper; then:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">stacking_z_height</span> <span class="o">=</span> <span class="n">height_of_two_stacked_plates</span> <span class="o">-</span> <span class="n">size_z</span>
+</pre></div>
+</div>
+<p>More generally, a stack of <code class="docutils literal notranslate"><span class="pre">N</span></code> identical plates is <code class="docutils literal notranslate"><span class="pre">size_z</span> <span class="pre">+</span> <span class="pre">(N</span> <span class="pre">-</span> <span class="pre">1)</span> <span class="pre">*</span> <span class="pre">stacking_z_height</span></code> tall.</p>
+<p>When set, <a class="reference internal" href="../../../api/_autosummary/pylabrobot.resources.ResourceStack.html#pylabrobot.resources.ResourceStack" title="pylabrobot.resources.resource_stack.ResourceStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">ResourceStack</span></code></a> uses this value so that bare plates stacked in the z direction nest into one another (a plate placed on another bare plate sinks in by <code class="docutils literal notranslate"><span class="pre">size_z</span> <span class="pre">-</span> <span class="pre">stacking_z_height</span></code>). Plates without a <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code>, and plates wearing a lid, do not nest.</p>
+<p>Because <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code> is a physical dimension, two plates that differ in it are treated as different labware and do not compare equal.</p>
+</section>
 </section>
 
 
@@ -739,6 +752,7 @@
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#plate">Plate</a><ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lids">Lids</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#measuring-nesting-z-height">Measuring <code class="docutils literal notranslate"><span class="pre">nesting_z_height</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stacking-z-height"><code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code></a></li>
 </ul>
 </li>
 </ul>

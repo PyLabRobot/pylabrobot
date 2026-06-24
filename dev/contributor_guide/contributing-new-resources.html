@@ -649,6 +649,10 @@ If you measured a value yourself append <code class="docutils literal notranslat
     <span class="n">size_x</span><span class="o">=</span><span class="mf">127.76</span><span class="p">,</span>  <span class="c1"># from spec</span>
     <span class="n">size_y</span><span class="o">=</span><span class="mf">85.48</span><span class="p">,</span>  <span class="c1"># from spec</span>
     <span class="n">size_z</span><span class="o">=</span><span class="mf">42.5</span><span class="p">,</span>   <span class="c1"># from spec</span>
+    <span class="c1"># Optional: the vertical pitch one plate adds to a stack of identical plates</span>
+    <span class="c1"># (size_z minus how far two identical plates nest). Only needed by plate</span>
+    <span class="c1"># stackers (e.g. the Agilent BenchCel); leave unset (None) otherwise.</span>
+    <span class="n">stacking_z_height</span><span class="o">=</span><span class="mf">39.0</span><span class="p">,</span>  <span class="c1"># measured</span>
     <span class="o">...</span>
   <span class="p">)</span>
 </pre></div>

@@ -782,12 +782,34 @@ plate on the stack you can retrieve it again using <code class="docutils literal
 </div>
 </div>
 </div>
+<section id="nesting-plates-by-stacking-z-height">
+<h3>Nesting plates by <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code><a class="headerlink" href="#nesting-plates-by-stacking-z-height" title="Link to this heading">#</a></h3>
+<p>Bare plates that define a <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code> nest into one another when stacked in the
+z direction: a plate placed on another bare plate sinks in by <code class="docutils literal notranslate"><span class="pre">size_z</span> <span class="pre">-</span> <span class="pre">stacking_z_height</span></code>,
+so a stack of <code class="docutils literal notranslate"><span class="pre">N</span></code> identical plates is <code class="docutils literal notranslate"><span class="pre">size_z</span> <span class="pre">+</span> <span class="pre">(N</span> <span class="pre">-</span> <span class="pre">1)</span> <span class="pre">*</span> <span class="pre">stacking_z_height</span></code> tall instead of
+<code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">*</span> <span class="pre">size_z</span></code>. Plates without a <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code>, and plates wearing a lid, do not nest.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">nesting_stack</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">&quot;nesting_stack&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">)</span>
+<span class="n">nesting_stack</span><span class="o">.</span><span class="n">location</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+    <span class="n">nesting_stack</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span>
+        <span class="n">Plate</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;plate_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">127</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">86</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">ordered_items</span><span class="o">=</span><span class="p">{},</span> <span class="n">stacking_z_height</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+    <span class="p">)</span>
+
+<span class="c1"># 14 + (3 - 1) * 4 = 22, not 3 * 14 = 42</span>
+<span class="n">nesting_stack</span><span class="o">.</span><span class="n">get_size_z</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
 <p>When using a :class:<code class="docutils literal notranslate"><span class="pre">~pylabrobot.liquid_handling.liquid_handler.LiquidHandler</span></code> the
 stack behaves just like any other resource:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">move_plate</span><span class="p">(</span><span class="n">stacking_area</span><span class="o">.</span><span class="n">get_top_item</span><span class="p">(),</span> <span class="n">plate_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 </pre></div>
 </div>
 <p>This allows temporary storage of plates or lids during automated workflows.</p>
+</section>
 </section>
 </section>
 
@@ -841,7 +863,10 @@ stack behaves just like any other resource:</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-an-empty-stack">Creating an empty stack</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stacking-resources-at-construction-time">Stacking resources at construction time</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-and-removing-items">Adding and removing items</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#using-a-resourcestack-as-a-stacking-area">Using a ResourceStack as a stacking area</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#using-a-resourcestack-as-a-stacking-area">Using a ResourceStack as a stacking area</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nesting-plates-by-stacking-z-height">Nesting plates by <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code></a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 
