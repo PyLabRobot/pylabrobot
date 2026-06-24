@@ -848,7 +848,7 @@ class LiquidHandler(Resource, Machine):
   @need_setup_finished
   async def aspirate(
     self,
-    resources: Sequence[Container],
+    resources: Union[Container, Sequence[Container]],
     vols: List[float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[List[Optional[float]]] = None,
@@ -913,6 +913,9 @@ class LiquidHandler(Resource, Machine):
       ValueError: If all channels are `None`.
     """
 
+    if isinstance(resources, Container):
+      resources = [resources]
+
     self._log_command(
       "aspirate",
       resources=resources,
@@ -958,6 +961,8 @@ class LiquidHandler(Resource, Machine):
       ("liquid_height", liquid_height),
       ("blow_out_air_volume", blow_out_air_volume),
     ]:
+      if n == "resources" and len(p) == 1:
+        continue
       if len(p) != len(use_channels):
         raise ValueError(
           f"Length of {n} must match length of use_channels: {len(p)} != {len(use_channels)}"
@@ -1041,7 +1046,7 @@ class LiquidHandler(Resource, Machine):
   @need_setup_finished
   async def dispense(
     self,
-    resources: Sequence[Container],
+    resources: Union[Container, Sequence[Container]],
     vols: List[float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[List[Optional[float]]] = None,
@@ -1103,6 +1108,9 @@ class LiquidHandler(Resource, Machine):
 
       ValueError: If all channels are `None`.
     """
+
+    if isinstance(resources, Container):
+      resources = [resources]
 
     self._log_command(
       "dispense",
@@ -1171,6 +1179,8 @@ class LiquidHandler(Resource, Machine):
       ("liquid_height", liquid_height),
       ("blow_out_air_volume", blow_out_air_volume),
     ]:
+      if n == "resources" and len(p) == 1:
+        continue
       if len(p) != len(use_channels):
         raise ValueError(
           f"Length of {n} must match length of use_channels: {len(p)} != {len(use_channels)}"
