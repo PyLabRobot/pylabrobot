@@ -1,4 +1,7 @@
 from .echo import (
+  DEFAULT_ECHO_MODEL,
+  ECHO_MODELS,
+  EchoModel,
   Echo,
   EchoCommandError,
   EchoDriver,

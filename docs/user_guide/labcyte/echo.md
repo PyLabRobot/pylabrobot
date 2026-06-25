@@ -7,7 +7,7 @@ planning, and raw Echo protocol execution through `DoWellTransfer`.
 ```{note}
 Using an **Echo 525**? It speaks the same Medman protocol as the 650 and reuses everything on this
 page. The only behavioural difference is its coarser 25 nL transfer increment. See
-[Echo 525](echo-525) for the `Echo525` frontend and the hardware-free mock server.
+[Echo 525](echo-525) for the `model="Echo 525"` selector and the hardware-free mock server.
 ```
 
 Supported operations:

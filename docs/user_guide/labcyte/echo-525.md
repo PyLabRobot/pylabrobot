@@ -2,7 +2,7 @@
 
 The Labcyte **Echo 525** speaks the exact same Medman protocol as the [Echo 650](echo): the same
 `POST /Medman` transport, gzip-compressed SOAP bodies, RPC method set, lock/session model, plate
-survey, and `DoWellTransfer` `<wp>` layout. The `Echo525` frontend therefore reuses the entire
+survey, and `DoWellTransfer` `<wp>` layout. Selecting `model="Echo 525"` therefore reuses the entire
 Echo 650 implementation and overrides only the handful of defaults that differ on the 525.
 
 Everything on the [Echo](echo) page — access cycles, surveys, transfers, loading/ejecting,
@@ -16,9 +16,9 @@ The one behavioural difference is **transfer volume granularity**: the Echo 525 
 whole multiple of 25 nL; anything else is rejected during transfer planning:
 
 ```python
-from pylabrobot.labcyte import Echo525
+from pylabrobot.labcyte import Echo
 
-echo = Echo525(host="192.168.0.25")
+echo = Echo("192.168.0.25", model="Echo 525")
 # 150 nL is fine (6 x 25 nL); 10 nL would raise ValueError on a 525.
 ```
 
@@ -37,15 +37,15 @@ All of these remain constructor-overridable for newer firmware.
 
 ## Running a transfer
 
-`Echo525` is a drop-in replacement for `Echo`; the transfer API is identical:
+`Echo(model="Echo 525")` is a drop-in replacement for the 650; the transfer API is identical:
 
 ```python
 import asyncio
 
-from pylabrobot.labcyte import Echo525
+from pylabrobot.labcyte import Echo
 
 async def main(source_plate, destination_plate):
-  async with Echo525(host="192.168.0.25") as echo:
+  async with Echo("192.168.0.25", model="Echo 525") as echo:
     await echo.lock()
     try:
       result = await echo.transfer(
@@ -62,17 +62,17 @@ async def main(source_plate, destination_plate):
 
 `EchoMockServer` is an in-process `asyncio` server that emulates the Echo Medman protocol and
 replays real responses captured from a physical Echo 525. It lets you exercise the full
-`Echo`/`Echo525` stack — setup, lock, survey, `DoWellTransfer`, unlock — with no instrument
+`Echo` stack — setup, lock, survey, `DoWellTransfer`, unlock — with no instrument
 attached:
 
 ```python
 import asyncio
 
-from pylabrobot.labcyte import Echo525, EchoMockServer
+from pylabrobot.labcyte import Echo, EchoMockServer
 
 async def main():
   async with EchoMockServer() as srv:
-    echo = Echo525(host=srv.host, rpc_port=srv.port)
+    echo = Echo(srv.host, model="Echo 525", rpc_port=srv.port)
     await echo.setup()
 
     info = await echo.get_instrument_info()

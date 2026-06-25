@@ -3,7 +3,7 @@
 
 import unittest
 
-from pylabrobot.labcyte.echo525 import Echo525
+from pylabrobot.labcyte.echo import Echo
 from pylabrobot.labcyte.echo_mock import EchoMockServer
 from pylabrobot.labcyte.picklist import (
   NaiveEchoProtocolGenerator,
@@ -75,7 +75,7 @@ class TestRunPicklistAgainstMock(unittest.IsolatedAsyncioTestCase):
       Transfer("B1", "A1", 800, "6RES_AQ_GPSB2"),
     ]
     async with EchoMockServer() as srv:
-      echo = Echo525(host=srv.host, rpc_port=srv.port, timeout=5.0)
+      echo = Echo(host=srv.host, model="Echo 525", rpc_port=srv.port, timeout=5.0)
       await echo.setup()
       results = await echo.run_picklist(transfers, survey=False)
     self.assertEqual(len(results), 2)

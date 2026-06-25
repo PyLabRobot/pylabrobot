@@ -59,12 +59,39 @@ DEFAULT_TRANSFER_TIMEOUT = 300.0
 DEFAULT_ECHO_CONFIGURATION_QUERY = (
   '<?xml version="1.0" encoding="utf-8"?><Configuration internal="true"></Configuration>'
 )
-# Default droplet/transfer volume granularity for the Echo 650 (nL). The Echo 525 dispenses
-# in coarser 25 nL increments instead; rather than fork this module, the 525 backend in
-# ``echo525.py`` reuses ``EchoDriver``/``Echo`` and overrides this via the
-# ``transfer_volume_increment_nl`` constructor argument (threaded through
-# ``build_echo_transfer_plan`` -> ``_validate_transfer_volume_nl``). See ``Echo525``.
+# Default droplet/transfer volume granularity for the Echo 650 (nL). Used as the fallback when a
+# model is not specified; per-model values live in ``ECHO_MODELS`` below.
 ECHO_TRANSFER_VOLUME_INCREMENT_NL = 2.5
+
+
+@dataclass(frozen=True)
+class EchoModel:
+  """Per-model defaults that distinguish Echo variants on an otherwise identical protocol.
+
+  The Echo 525 and 650 speak the same Medman protocol; they differ only in droplet granularity
+  (25 nL vs 2.5 nL) and the protocol/client version strings their firmware advertises.
+  """
+
+  name: str
+  transfer_volume_increment_nl: float
+  client_version: str
+  protocol_version: str
+
+
+ECHO_MODELS: Dict[str, EchoModel] = {
+  "Echo 650": EchoModel("Echo 650", 2.5, "3.1.0", "3.1"),
+  "Echo 525": EchoModel("Echo 525", 25.0, "2.7.3", "2.6"),
+}
+DEFAULT_ECHO_MODEL = "Echo 650"
+
+
+def _resolve_echo_model(model: str) -> EchoModel:
+  try:
+    return ECHO_MODELS[model]
+  except KeyError:
+    known = ", ".join(sorted(ECHO_MODELS))
+    raise ValueError(f"Unknown Echo model {model!r}. Known models: {known}.") from None
+
 
 OperatorPause = Callable[[str], Union[None, Awaitable[None]]]
 
@@ -1778,11 +1805,13 @@ class EchoDriver(Driver):
     token: Optional[str] = None,
     token_slot_a: int = DEFAULT_SLOT_A,
     token_slot_b: int = DEFAULT_SLOT_B,
-    client_version: str = "3.1.0",
-    protocol_version: str = "3.1",
-    transfer_volume_increment_nl: float = ECHO_TRANSFER_VOLUME_INCREMENT_NL,
+    model: str = DEFAULT_ECHO_MODEL,
+    client_version: Optional[str] = None,
+    protocol_version: Optional[str] = None,
+    transfer_volume_increment_nl: Optional[float] = None,
   ):
     super().__init__()
+    spec = _resolve_echo_model(model)
     self.host = host
     self.rpc_port = rpc_port
     self.event_port = event_port
@@ -1792,9 +1821,16 @@ class EchoDriver(Driver):
     self._token = token
     self.token_slot_a = token_slot_a
     self.token_slot_b = token_slot_b
-    self.client_version = client_version
-    self.protocol_version = protocol_version
-    self.transfer_volume_increment_nl = transfer_volume_increment_nl
+    self.model = model
+    # ``client_version`` / ``protocol_version`` / ``transfer_volume_increment_nl`` default to the
+    # model's values but remain overridable for newer firmware.
+    self.client_version = spec.client_version if client_version is None else client_version
+    self.protocol_version = spec.protocol_version if protocol_version is None else protocol_version
+    self.transfer_volume_increment_nl = (
+      spec.transfer_volume_increment_nl
+      if transfer_volume_increment_nl is None
+      else transfer_volume_increment_nl
+    )
     self._rpc_lock = asyncio.Lock()
     self._lock_held = False
 
@@ -1867,6 +1903,7 @@ class EchoDriver(Driver):
       "token": self._token,
       "token_slot_a": self.token_slot_a,
       "token_slot_b": self.token_slot_b,
+      "model": self.model,
       "client_version": self.client_version,
       "protocol_version": self.protocol_version,
       "transfer_volume_increment_nl": self.transfer_volume_increment_nl,
@@ -3501,18 +3538,20 @@ class EchoPlatePosition(ResourceHolder):
 
 
 class Echo(Device):
-  """Labcyte Echo access-control device frontend."""
+  """Labcyte Echo access-control device frontend.
 
-  #: Driver class used to talk to the instrument. Subclasses (e.g. the Echo 525) override
-  #: this to supply model-specific defaults such as the transfer volume increment.
-  driver_class: type[EchoDriver] = EchoDriver
-
-  #: Human-readable model name used for the deck resource.
-  model_name: str = "Labcyte Echo"
+  A single frontend serves every Echo variant. Select the model with ``model=`` (which picks the
+  matching :class:`EchoDriver` defaults, e.g. ``"Echo 525"`` for the 25 nL increment), or inject a
+  fully-configured driver with ``driver=`` (e.g. a chatterbox or vendor-SDK-backed driver). Exactly
+  one of ``host`` or ``driver`` is required.
+  """
 
   def __init__(
     self,
-    host: str,
+    host: Optional[str] = None,
+    *,
+    model: str = DEFAULT_ECHO_MODEL,
+    driver: Optional[EchoDriver] = None,
     rpc_port: int = DEFAULT_RPC_PORT,
     event_port: int = DEFAULT_EVENT_PORT,
     timeout: float = DEFAULT_TIMEOUT,
@@ -3521,16 +3560,20 @@ class Echo(Device):
     token: Optional[str] = None,
     **driver_kwargs: Any,
   ):
-    driver = self.driver_class(
-      host=host,
-      rpc_port=rpc_port,
-      event_port=event_port,
-      timeout=timeout,
-      app_name=app_name,
-      owner=owner,
-      token=token,
-      **driver_kwargs,
-    )
+    if driver is None:
+      if host is None:
+        raise ValueError("Echo requires either host= (to build a driver) or driver=.")
+      driver = EchoDriver(
+        host=host,
+        model=model,
+        rpc_port=rpc_port,
+        event_port=event_port,
+        timeout=timeout,
+        app_name=app_name,
+        owner=owner,
+        token=token,
+        **driver_kwargs,
+      )
     super().__init__(driver=driver)
     self.driver: EchoDriver = driver
     self.plate_access = PlateAccess(backend=EchoPlateAccessBackend(driver))
@@ -3541,7 +3584,7 @@ class Echo(Device):
       size_y=300.0,
       size_z=260.0,
       category="labcyte_echo",
-      model=self.model_name,
+      model=getattr(driver, "model", model),
     )
     self.source_position = EchoPlatePosition(name="echo_source_position", role="source")
     self.destination_position = EchoPlatePosition(
