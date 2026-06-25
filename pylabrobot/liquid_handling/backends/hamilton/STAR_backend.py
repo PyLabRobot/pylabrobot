@@ -9187,6 +9187,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # move X, Y; X acceleration_level=1 below y=200 mm, the low-Y zone where the head is
     # cantilevered forward off the X-drive and wobbles most
+    # TODO: replace head96_move_y with a primitive Y move to enable parallelised addressing of
+    # the X and Y drives. Its speed/acceleration request+set round-trip currently blocks
+    # parallelisation of the Y drive: the second read is trapped behind the in-flight X move on
+    # the single connection, so the Y move only starts once X has finished.
     await asyncio.gather(
       self.head96_move_x(a1.x, acceleration_level=1 if a1.y <= 200.0 else 3),
       self.head96_move_y(a1.y),
