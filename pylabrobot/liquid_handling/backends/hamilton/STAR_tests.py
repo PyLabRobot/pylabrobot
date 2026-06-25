@@ -1307,6 +1307,63 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_head96_probe_z_using_clld_wire_string(self):
+    """The 2013+ ZL command assembles in the documented field order with the tip-overhang offset.
+
+    Guards the zc 5-digit width (6 caused firmware er32), the tip-bottom -> stop-disk mapping, the
+    zv/zw fields, and approach_speed=None -> head96_z_drive_speed_default. Returns the detected
+    surface as a tip-bottom position (stop disk minus overhang).
+    """
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._head96_z_drive_speed_default = 85.0
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
+    self.STAR.head96_request_last_lld_height = unittest.mock.AsyncMock(return_value=200.0)
+    self.STAR._write_and_read_command.reset_mock()
+    detected = await self.STAR.head96_probe_z_using_clld(
+      tip_len=50.0,  # overhang = 50 - 8 = 42 mm
+      lowest_immers_pos=140.0,
+      start_pos_search=250.0,
+      speed=10.0,
+      acceleration=300.0,
+      approach_speed=None,  # -> head96_z_drive_speed_default = 85.0
+      current_protection_limiter=15,
+      lld_sensor="any",
+      detection_edge=10,
+      detection_drop=2,
+      post_detection_dist=2.0,
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0ZLid0001zh36400zc58400zi0400zj1lm2gt0010gl0002zv17000zl02000zr060000zw15"
+        )
+      ]
+    )
+    self.assertEqual(detected, 158.0)  # 200.0 detected surface - 42 overhang
+
+  async def test_head96_probe_z_using_clld_requires_tip(self):
+    """cLLD raises if the head holds no tip, whether tip_len is measured or supplied."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._head96_z_drive_speed_default = 85.0
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    with self.assertRaises(ValueError):
+      await self.STAR.head96_probe_z_using_clld()
+    with self.assertRaises(ValueError):
+      await self.STAR.head96_probe_z_using_clld(tip_len=50.0)
+
+  async def test_head96_probe_z_using_clld_retracts_on_firmware_error(self):
+    """A firmware error during the search retracts the head to Z-safety before re-raising."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._head96_z_drive_speed_default = 85.0
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
+    self.STAR.head96_move_to_z_safety = unittest.mock.AsyncMock()
+    self.STAR._write_and_read_command = unittest.mock.AsyncMock(
+      side_effect=STARFirmwareError(errors={}, raw_response="H0ZLid0001er32")
+    )
+    with self.assertRaises(STARFirmwareError):
+      await self.STAR.head96_probe_z_using_clld(tip_len=50.0)
+    self.STAR.head96_move_to_z_safety.assert_awaited_once()
+
   async def test_core_96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.
 
