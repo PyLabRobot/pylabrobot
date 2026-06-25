@@ -1,8 +1,9 @@
 import unittest
 from typing import Tuple
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.brooks.precise_flex import Axis, PreciseFlexArmBackend
+from pylabrobot.brooks.precise_flex import Axis, PreciseFlexArmBackend, PreciseFlexCartesianPose
+from pylabrobot.resources import Coordinate, Rotation
 
 
 def _make_backend(
@@ -210,3 +211,142 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     await self.backend.park()
     self.driver.send_command.assert_awaited_once_with("movetosafe")
     self.assertEqual(self._movej_cmds(), [])
+
+
+class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend, self.driver = _make_backend()
+    self.driver._wait_for_eom = AsyncMock()
+    self.current_joints = {
+      Axis.BASE: 100.0,
+      Axis.SHOULDER: 0.0,
+      Axis.ELBOW: 180.0,
+      Axis.WRIST: 180.0,
+      Axis.GRIPPER: 70.0,
+    }
+    self.current_pose = PreciseFlexCartesianPose(
+      location=Coordinate(10.0, 20.0, 100.0),
+      rotation=Rotation(x=-180.0, y=90.0, z=0.0),
+      rail_position=123.0,
+      orientation="right",
+      wrist="ccw",
+    )
+    self.backend._request_state = AsyncMock(return_value=(self.current_joints, self.current_pose))
+
+  def _stub_profile_transport(self, profile: str = "1 50 0 100 100 0 0 25 0") -> None:
+    async def respond(command: str) -> str:
+      if command == "Profile 1":
+        return profile
+      return ""
+
+    self.driver.send_command = AsyncMock(side_effect=respond)
+
+  def _movej_cmds(self) -> list[str]:
+    return [
+      c.args[0] for c in self.driver.send_command.call_args_list if c.args[0].startswith("moveJ")
+    ]
+
+  def _profile_cmds(self) -> list[str]:
+    return [
+      c.args[0]
+      for c in self.driver.send_command.call_args_list
+      if c.args[0].startswith("Profile")
+    ]
+
+  async def test_move_through_cartesian_poses_plans_from_one_state_snapshot(self):
+    """A smooth route snapshots state once, fills omitted pose fields from the planned pose,
+    queues all joint moves, then waits once at the end."""
+    self._stub_profile_transport()
+    poses = [
+      PreciseFlexCartesianPose(
+        location=Coordinate(200.0, 20.0, 110.0),
+        rotation=Rotation(x=-180.0, y=90.0, z=10.0),
+      ),
+      PreciseFlexCartesianPose(
+        location=Coordinate(210.0, 20.0, 120.0),
+        rotation=Rotation(x=-180.0, y=90.0, z=20.0),
+      ),
+    ]
+
+    with patch(
+      "pylabrobot.brooks.precise_flex.arm_backend.kinematics.ik",
+      side_effect=[
+        {1: 110.0, 2: 10.0, 3: 20.0, 4: 30.0, 6: 123.0},
+        {1: 120.0, 2: 11.0, 3: 21.0, 4: 31.0, 6: 123.0},
+      ],
+    ) as ik:
+      await self.backend.move_through_cartesian_poses(poses)
+
+    self.backend._request_state.assert_awaited_once()
+    self.driver._wait_for_eom.assert_awaited_once()
+    self.assertEqual(
+      self._movej_cmds(),
+      [
+        "moveJ 1 110.0 10.0 20.0 30.0 70.0",
+        "moveJ 1 120.0 11.0 21.0 31.0 70.0",
+      ],
+    )
+    planned_pose_args = [call.args[0] for call in ik.call_args_list]
+    self.assertEqual([pose.orientation for pose in planned_pose_args], ["right", "right"])
+    self.assertEqual([pose.wrist for pose in planned_pose_args], ["ccw", "ccw"])
+    # Rail-less PF400 still needs the shoulder/reference rail position for IK.
+    self.assertEqual([pose.rail_position for pose in planned_pose_args], [123.0, 123.0])
+
+  async def test_move_through_cartesian_poses_temporarily_enables_blending(self):
+    self._stub_profile_transport()
+    pose = PreciseFlexCartesianPose(
+      location=Coordinate(200.0, 20.0, 110.0),
+      rotation=Rotation(x=-180.0, y=90.0, z=10.0),
+    )
+
+    with patch(
+      "pylabrobot.brooks.precise_flex.arm_backend.kinematics.ik",
+      return_value={1: 110.0, 2: 10.0, 3: 20.0, 4: 30.0, 6: 123.0},
+    ):
+      await self.backend.move_through_cartesian_poses([pose])
+
+    self.assertEqual(
+      self._profile_cmds(),
+      [
+        "Profile 1",
+        "Profile 1 50.0 0.0 100.0 100.0 0.0 0.0 -1 0",
+        "Profile 1 50.0 0.0 100.0 100.0 0.0 0.0 25.0 0",
+      ],
+    )
+
+  async def test_move_through_cartesian_poses_can_skip_profile_blending(self):
+    pose = PreciseFlexCartesianPose(
+      location=Coordinate(200.0, 20.0, 110.0),
+      rotation=Rotation(x=-180.0, y=90.0, z=10.0),
+    )
+
+    with patch(
+      "pylabrobot.brooks.precise_flex.arm_backend.kinematics.ik",
+      return_value={1: 110.0, 2: 10.0, 3: 20.0, 4: 30.0, 6: 123.0},
+    ):
+      await self.backend.move_through_cartesian_poses(
+        [pose],
+        backend_params=PreciseFlexArmBackend.MoveThroughCartesianPosesParams(blend=False),
+      )
+
+    self.assertEqual(self._profile_cmds(), [])
+    self.assertEqual(self._movej_cmds(), ["moveJ 1 110.0 10.0 20.0 30.0 70.0"])
+    self.driver._wait_for_eom.assert_awaited_once()
+
+  async def test_move_through_cartesian_poses_blocks_before_motion_on_limit_failure(self):
+    pose = PreciseFlexCartesianPose(
+      location=Coordinate(200.0, 20.0, 110.0),
+      rotation=Rotation(x=-180.0, y=90.0, z=10.0),
+    )
+    self.backend._assert_within_soft_limits = MagicMock(side_effect=ValueError("bad target"))
+
+    with patch(
+      "pylabrobot.brooks.precise_flex.arm_backend.kinematics.ik",
+      return_value={1: 110.0, 2: 10.0, 3: 20.0, 4: 30.0, 6: 123.0},
+    ):
+      with self.assertRaisesRegex(ValueError, "bad target"):
+        await self.backend.move_through_cartesian_poses([pose])
+
+    self.assertEqual(self._movej_cmds(), [])
+    self.assertEqual(self._profile_cmds(), [])
+    self.driver._wait_for_eom.assert_not_awaited()

@@ -21,7 +21,7 @@ import dataclasses
 import logging
 import warnings
 from dataclasses import dataclass
-from typing import ClassVar, Dict, List, Literal, Optional
+from typing import ClassVar, Dict, List, Literal, Optional, Sequence
 
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -511,6 +511,51 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     if cart.rail_position is not None:
       joints[Axis.RAIL] = cart.rail_position
     return joints
+
+  # [int]
+  def _plan_cartesian_pose_route(
+    self,
+    poses: Sequence[PreciseFlexCartesianPose],
+    planned_joints: JointPose,
+    planned_pose: PreciseFlexCartesianPose,
+  ) -> List[JointPose]:
+    """Plan a Cartesian pose route into joint targets from an initial state snapshot.
+
+    Unlike :meth:`_cart_to_joints`, this helper does not query the controller for every
+    waypoint. Omitted pose fields inherit from the *planned* previous pose so IK branch
+    selection remains continuous across the route.
+    """
+    planned_joints = dict(planned_joints)
+    targets: List[JointPose] = []
+    for pose in poses:
+      cart = dataclasses.replace(
+        pose,
+        orientation=planned_pose.orientation if pose.orientation is None else pose.orientation,
+        wrist=planned_pose.wrist if pose.wrist is None else pose.wrist,
+        # PF400 IK expects a shoulder/reference rail position even on rail-less arms.
+        # Mirror _cart_to_joints(): omitted pose fields inherit from the previous pose.
+        rail_position=planned_pose.rail_position
+        if pose.rail_position is None
+        else pose.rail_position,
+      )
+      ik_joints = _snap_to_current(
+        kinematics.ik(cart, p=self._kinematics_params),
+        planned_joints,
+        cart.wrist,
+      )
+      target = dict(planned_joints)
+      target[Axis.BASE] = ik_joints[1]
+      target[Axis.SHOULDER] = ik_joints[2]
+      target[Axis.ELBOW] = ik_joints[3]
+      target[Axis.WRIST] = ik_joints[4]
+      if self._has_rail and cart.rail_position is not None:
+        target[Axis.RAIL] = cart.rail_position
+
+      self._assert_within_soft_limits(planned_joints, target)
+      targets.append(target)
+      planned_joints = target
+      planned_pose = cart
+    return targets
 
   # -- speed & motion profiles --------------------------------------------------------------
 
@@ -1811,6 +1856,22 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     wrist: Optional[Wrist] = None
     rail_position: Optional[float] = None
 
+  # [cmd]
+  @dataclass
+  class MoveThroughCartesianPosesParams(BackendParams):
+    """PreciseFlex arm parameters for blended Cartesian pose routes.
+
+    Args:
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+      blend: When True, temporarily set the active motion profile's ``InRange`` value to
+        ``-1`` so the controller may blend through intermediate waypoints instead of stopping
+        at each one. The original profile is restored after the final waypoint is reached.
+    """
+
+    speed_pct: Optional[float] = None
+    blend: bool = True
+
   async def move_to_location(
     self,
     location: Coordinate,
@@ -1838,6 +1899,66 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     )
     joints = await self._cart_to_joints(coords)
     await self._move_j(profile_index=self.profile_index, joint_coords=joints)
+
+  # [cmd]
+  async def move_through_cartesian_poses(
+    self,
+    poses: Sequence[PreciseFlexCartesianPose],
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Move through a sequence of Cartesian poses using one planned IK route.
+
+    The standard Cartesian move path snapshots the current state for each waypoint,
+    which waits for end-of-motion between moves. For taught air-transit routes, this
+    method snapshots state once, plans each subsequent IK target from the previous
+    planned target, queues the joint moves, and waits only after the final waypoint.
+
+    This is a PreciseFlex-specific primitive: intermediate waypoints may be blended
+    by the controller and should not be used for operations that require an exact
+    stop, gripper action, or physical contact at every pose.
+    """
+    if not isinstance(backend_params, self.MoveThroughCartesianPosesParams):
+      backend_params = PreciseFlexArmBackend.MoveThroughCartesianPosesParams()
+    if not poses:
+      return
+    if backend_params.speed_pct is not None:
+      await self._set_speed(backend_params.speed_pct)
+
+    planned_joints, planned_pose = await self._request_state()
+    targets = self._plan_cartesian_pose_route(poses, planned_joints, planned_pose)
+
+    profile_index = self.profile_index
+    original_profile = None
+    should_restore_profile = False
+    if backend_params.blend:
+      original_profile = await self.request_motion_profile_values(profile_index)
+      should_restore_profile = original_profile[7] != -1
+      if should_restore_profile:
+        await self.set_motion_profile_values(
+          original_profile[0],
+          original_profile[1],
+          original_profile[2],
+          original_profile[3],
+          original_profile[4],
+          original_profile[5],
+          original_profile[6],
+          -1,
+          original_profile[8],
+        )
+
+    moves_sent = 0
+    waited_for_eom = False
+    try:
+      for target in targets:
+        await self._move_j(profile_index=profile_index, joint_coords=target)
+        moves_sent += 1
+      await self.driver._wait_for_eom()
+      waited_for_eom = True
+    finally:
+      if should_restore_profile and original_profile is not None:
+        if moves_sent > 0 and not waited_for_eom:
+          await self.driver._wait_for_eom()
+        await self.set_motion_profile_values(*original_profile)
 
   # [cmd]
   async def dest_c(self, arg1: int = 0) -> tuple[float, float, float, float, float, float, int]:
