@@ -167,7 +167,9 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.head96_move_y
       ~STAR.head96_move_z
       ~STAR.head96_park
+      ~STAR.head96_probe_z_using_clld
       ~STAR.head96_request_firmware_version
+      ~STAR.head96_request_last_lld_height
       ~STAR.head96_request_position
       ~STAR.head96_request_stop_disk_z
       ~STAR.head96_request_tip_length
