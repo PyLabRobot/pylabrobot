@@ -22,7 +22,7 @@ class PreciseFlex400(Device):
     timeout: int = 20,
     gripper_length: float = 162.0,
     gripper_z_offset: float = 0.0,
-    recover_out_of_range_at_setup: bool = True,
+    recover_out_of_range: bool = True,
   ) -> None:
     """
     Args:
@@ -33,9 +33,9 @@ class PreciseFlex400(Device):
         matches the stock single gripper on the PF400.
       gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
         Defaults to 0 mm.
-      recover_out_of_range_at_setup: when True (the default), setup tries to drive a
-        small out-of-range excursion back inside the soft limits; set False to skip
-        that. Either way setup raises if an axis is still out of range afterward.
+      recover_out_of_range: when True (the default), an out-of-range axis is driven back into range
+        once - at setup and before a commanded move (which then retries). Set False to forbid this
+        autonomous motion; an out-of-range axis then raises instead, carrying recovery instructions.
     """
     driver = PreciseFlexDriver(host=host, port=port, timeout=timeout)
     super().__init__(driver=driver)
@@ -46,7 +46,7 @@ class PreciseFlex400(Device):
       gripper_length=gripper_length,
       gripper_z_offset=gripper_z_offset,
       closed_gripper_position=closed_gripper_position,
-      recover_out_of_range_at_setup=recover_out_of_range_at_setup,
+      recover_out_of_range=recover_out_of_range,
     )
     self.reference = Resource(name="PreciseFlex400", size_x=200, size_y=200, size_z=200)
     self.arm = OrientableGripperArm(backend=backend, reference_resource=self.reference)
@@ -72,6 +72,7 @@ class PreciseFlex3400(Device):
     has_rail: bool = False,
     timeout: int = 20,
     gripper_z_offset: float = 0.0,
+    recover_out_of_range: bool = True,
   ) -> None:
     """
     Args:
@@ -82,6 +83,9 @@ class PreciseFlex3400(Device):
         no stock default, because the 3400 ships with an IntelliGuide gripper whose length
         differs; set it for the gripper actually mounted.
       gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
+      recover_out_of_range: when True (the default), an out-of-range axis is driven back into range
+        once - at setup and before a commanded move (which then retries). Set False to forbid this
+        autonomous motion; an out-of-range axis then raises instead, carrying recovery instructions.
     """
     driver = PreciseFlexDriver(host=host, port=port, timeout=timeout)
     super().__init__(driver=driver)
@@ -92,6 +96,7 @@ class PreciseFlex3400(Device):
       gripper_length=gripper_length,
       gripper_z_offset=gripper_z_offset,
       closed_gripper_position=closed_gripper_position,
+      recover_out_of_range=recover_out_of_range,
     )
     self.reference = Resource(name="PreciseFlex3400", size_x=200, size_y=200, size_z=200)
     self.arm = OrientableGripperArm(backend=backend, reference_resource=self.reference)
