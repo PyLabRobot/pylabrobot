@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import gzip
+from abc import ABC, abstractmethod
 import html
 import inspect
 import logging
@@ -1791,8 +1792,14 @@ class EchoEventStream:
     await self._writer.wait_closed()
 
 
-class EchoDriver(Driver):
-  """Driver for Labcyte Echo Medman access-control RPCs."""
+class EchoDriver(Driver, ABC):
+  """Abstract base for Echo drivers.
+
+  Holds all of the Echo Medman protocol logic (RPC serialization, survey/transfer parsing, lock
+  and session handling). Concrete subclasses implement only the transport: :class:`MedmanEchoDriver`
+  speaks SOAP-over-HTTP to a real instrument; :class:`EchoChatterboxDriver` logs and returns
+  ``SUCCEEDED`` without any I/O. This is the type to depend on and to inject into :class:`Echo`.
+  """
 
   def __init__(
     self,
@@ -1876,20 +1883,10 @@ class EchoDriver(Driver):
       except Exception as exc:  # pragma: no cover - best-effort cleanup
         logger.warning("Failed to unlock Echo during stop: %s", exc)
 
+  @abstractmethod
   async def open_event_stream(self, timeout: Optional[float] = None) -> EchoEventStream:
-    request_timeout = _resolve_timeout(timeout, self.timeout)
-    reader, writer = await asyncio.wait_for(
-      asyncio.open_connection(self.host, self.event_port),
-      timeout=request_timeout,
-    )
-    try:
-      writer.write(self._make_event_registration_request())
-      await asyncio.wait_for(writer.drain(), timeout=request_timeout)
-    except Exception:
-      writer.close()
-      await writer.wait_closed()
-      raise
-    return EchoEventStream(self, reader, writer)
+    """Open the instrument event stream. Implemented by transport-specific subclasses."""
+    raise NotImplementedError
 
   def serialize(self) -> dict:
     return {
@@ -3162,6 +3159,7 @@ class EchoDriver(Driver):
     )
     return self._parse_rpc_result(method, message)
 
+  @abstractmethod
   async def _send_request(
     self,
     port: int,
@@ -3169,44 +3167,8 @@ class EchoDriver(Driver):
     body_text: str,
     timeout: Optional[float] = None,
   ) -> _HttpMessage:
-    request_timeout = _resolve_timeout(timeout, self.timeout)
-    body_bytes = gzip.compress(body_text.encode("utf-8"))
-    request = (
-      "POST /Medman HTTP/1.1\n"
-      f"Host: {host_header}\n"
-      f"Client: {self.client_version}\n"
-      f"Protocol: {self.protocol_version}\n"
-      'Content-Type: text/xml; charset="utf-8"\n'
-      f"Content-Length: {len(body_bytes)}\n"
-      'SOAPAction: "Some-URI"\r\n'
-      "\r\n"
-    ).encode("ascii") + body_bytes
-
-    async with self._rpc_lock:
-      reader, writer = await asyncio.wait_for(
-        asyncio.open_connection(self.host, port),
-        timeout=request_timeout,
-      )
-      try:
-        writer.write(request)
-        await asyncio.wait_for(writer.drain(), timeout=request_timeout)
-        return await self._read_http_message(reader, timeout=request_timeout)
-      finally:
-        writer.close()
-        await writer.wait_closed()
-
-  def _make_event_registration_request(self) -> bytes:
-    body_bytes = gzip.compress(f"add{self.token}".encode("utf-8"))
-    return (
-      "POST /Medman HTTP/1.1\n"
-      f"Host: {self.token}\n"
-      f"Client: {self.client_version}\n"
-      f"Protocol: {self.protocol_version}\n"
-      'Content-Type: text/xml; charset="utf-8"\n'
-      f"Content-Length: {len(body_bytes)}\n"
-      'SOAPAction: "Some-URI"\r\n'
-      "\r\n"
-    ).encode("ascii") + body_bytes
+    """Send one Medman request and return the parsed HTTP response. Transport-specific."""
+    raise NotImplementedError
 
   async def _read_http_message(
     self,
@@ -3420,6 +3382,113 @@ class EchoDriver(Driver):
     )
 
 
+class MedmanEchoDriver(EchoDriver):
+  """Concrete Echo driver speaking the Medman SOAP-over-HTTP protocol to a real instrument."""
+
+  async def open_event_stream(self, timeout: Optional[float] = None) -> EchoEventStream:
+    request_timeout = _resolve_timeout(timeout, self.timeout)
+    reader, writer = await asyncio.wait_for(
+      asyncio.open_connection(self.host, self.event_port),
+      timeout=request_timeout,
+    )
+    try:
+      writer.write(self._make_event_registration_request())
+      await asyncio.wait_for(writer.drain(), timeout=request_timeout)
+    except Exception:
+      writer.close()
+      await writer.wait_closed()
+      raise
+    return EchoEventStream(self, reader, writer)
+
+  def _make_event_registration_request(self) -> bytes:
+    body_bytes = gzip.compress(f"add{self.token}".encode("utf-8"))
+    return (
+      "POST /Medman HTTP/1.1\n"
+      f"Host: {self.token}\n"
+      f"Client: {self.client_version}\n"
+      f"Protocol: {self.protocol_version}\n"
+      'Content-Type: text/xml; charset="utf-8"\n'
+      f"Content-Length: {len(body_bytes)}\n"
+      'SOAPAction: "Some-URI"\r\n'
+      "\r\n"
+    ).encode("ascii") + body_bytes
+
+  async def _send_request(
+    self,
+    port: int,
+    host_header: str,
+    body_text: str,
+    timeout: Optional[float] = None,
+  ) -> _HttpMessage:
+    request_timeout = _resolve_timeout(timeout, self.timeout)
+    body_bytes = gzip.compress(body_text.encode("utf-8"))
+    request = (
+      "POST /Medman HTTP/1.1\n"
+      f"Host: {host_header}\n"
+      f"Client: {self.client_version}\n"
+      f"Protocol: {self.protocol_version}\n"
+      'Content-Type: text/xml; charset="utf-8"\n'
+      f"Content-Length: {len(body_bytes)}\n"
+      'SOAPAction: "Some-URI"\r\n'
+      "\r\n"
+    ).encode("ascii") + body_bytes
+
+    async with self._rpc_lock:
+      reader, writer = await asyncio.wait_for(
+        asyncio.open_connection(self.host, port),
+        timeout=request_timeout,
+      )
+      try:
+        writer.write(request)
+        await asyncio.wait_for(writer.drain(), timeout=request_timeout)
+        return await self._read_http_message(reader, timeout=request_timeout)
+      finally:
+        writer.close()
+        await writer.wait_closed()
+
+
+class EchoChatterboxDriver(EchoDriver):
+  """Hardware-free Echo driver: logs each RPC and replies ``SUCCEEDED``/``OK`` with no I/O.
+
+  Useful for dry-running command sequences (e.g. verifying a picklist's ``DoWellTransfer`` order)
+  without an instrument. RPCs that return data (instrument info, survey values) come back empty, so
+  this is for exercising control flow, not for realistic readings — use ``EchoMockServer`` for that.
+  """
+
+  def __init__(self, host: str = "chatterbox", **kwargs: Any):
+    super().__init__(host=host, **kwargs)
+    if self._token is None:
+      self._token = self.build_token(self.host, slot_a=self.token_slot_a, slot_b=self.token_slot_b,
+                                     epoch=0, pid=0)
+
+  async def open_event_stream(self, timeout: Optional[float] = None) -> EchoEventStream:
+    raise NotImplementedError("EchoChatterboxDriver does not support event streams.")
+
+  async def _send_request(
+    self,
+    port: int,
+    host_header: str,
+    body_text: str,
+    timeout: Optional[float] = None,
+  ) -> _HttpMessage:
+    match = re.search(r"<SOAP-ENV:Body[^>]*><([A-Za-z][A-Za-z0-9_]*)", body_text)
+    method = match.group(1) if match else "Unknown"
+    logger.info("EchoChatterboxDriver: %s", method)
+    envelope = (
+      '<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
+      '<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">'
+      f"<SOAP-ENV:Body><{method}Response><{method}>"
+      '<SUCCEEDED type="xsd:boolean">True</SUCCEEDED>'
+      '<Status type="xsd:string">OK</Status>'
+      f"</{method}></{method}Response></SOAP-ENV:Body></SOAP-ENV:Envelope>"
+    )
+    return _HttpMessage(
+      start_line="HTTP/1.1 200 OK",
+      headers={"content-type": 'text/xml; charset="utf-8"'},
+      body=gzip.compress(envelope.encode("utf-8")),
+    )
+
+
 class EchoPlateAccessBackend(PlateAccessBackend):
   """Plate-access backend backed by the Echo Medman protocol."""
 
@@ -3563,7 +3632,7 @@ class Echo(Device):
     if driver is None:
       if host is None:
         raise ValueError("Echo requires either host= (to build a driver) or driver=.")
-      driver = EchoDriver(
+      driver = MedmanEchoDriver(
         host=host,
         model=model,
         rpc_port=rpc_port,

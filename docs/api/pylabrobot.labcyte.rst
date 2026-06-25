@@ -15,6 +15,8 @@ Echo
 
     Echo
     EchoDriver
+    MedmanEchoDriver
+    EchoChatterboxDriver
     EchoPlateMap
     EchoInstrumentInfo
     EchoSurveyParams

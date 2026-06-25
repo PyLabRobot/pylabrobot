@@ -90,8 +90,11 @@ The integration follows the PLR device/driver/capability split:
 
 - `Echo` is the user-facing device frontend. It exposes Echo operations, owns the source and
   destination PLR plate holders, and delegates instrument I/O to its driver.
-- `EchoDriver` owns the Medman protocol details: SOAP envelope construction, gzip framing,
-  lock tokens, polling, event streams, survey parsing, and transfer report parsing.
+- `EchoDriver` is the abstract base holding the Medman protocol logic (SOAP envelope construction,
+  gzip framing, lock tokens, polling, survey/transfer parsing). Concrete subclasses implement only
+  the transport: `MedmanEchoDriver` (real SOAP-over-HTTP instrument) and `EchoChatterboxDriver`
+  (logs each RPC, no I/O — for dry runs). Select a model with `Echo(host, model="Echo 525")` or
+  inject any driver with `Echo(driver=...)`.
 - `EchoPlateAccessBackend` adapts the Echo driver to the generic `PlateAccess` capability.
 - Application code, web services, and workcell controllers should call the `Echo` frontend or the
   `PlateAccess` capability instead of duplicating Medman transport logic.

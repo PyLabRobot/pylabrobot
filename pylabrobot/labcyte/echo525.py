@@ -15,7 +15,7 @@ from __future__ import annotations
 import warnings
 from typing import Any, Optional
 
-from pylabrobot.labcyte.echo import ECHO_MODELS, Echo, EchoDriver
+from pylabrobot.labcyte.echo import ECHO_MODELS, Echo, MedmanEchoDriver
 
 _ECHO_525 = ECHO_MODELS["Echo 525"]
 
@@ -26,12 +26,12 @@ ECHO_525_PROTOCOL_VERSION = _ECHO_525.protocol_version
 ECHO_525_MODEL_NAME = _ECHO_525.name
 
 
-class Echo525Driver(EchoDriver):
-  """Deprecated. Use ``EchoDriver(host, model="Echo 525")``."""
+class Echo525Driver(MedmanEchoDriver):
+  """Deprecated. Use ``MedmanEchoDriver(host, model="Echo 525")``."""
 
   def __init__(self, host: str, **kwargs: Any):
     warnings.warn(
-      'Echo525Driver is deprecated; use EchoDriver(host, model="Echo 525").',
+      'Echo525Driver is deprecated; use MedmanEchoDriver(host, model="Echo 525").',
       DeprecationWarning,
       stacklevel=2,
     )

@@ -14,6 +14,7 @@ from pylabrobot.labcyte.echo import (
   Echo,
   EchoCommandError,
   EchoDriver,
+  MedmanEchoDriver,
   EchoDryPlateMode,
   EchoDryPlateParams,
   EchoEvent,
@@ -190,7 +191,7 @@ def _make_echo_plate_info(name: str, *, rows: int = 2, columns: int = 3) -> Echo
 
 class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.driver = EchoDriver(host="echo.local", timeout=1.0)
+    self.driver = MedmanEchoDriver(host="echo.local", timeout=1.0)
 
   def tearDown(self):
     set_volume_tracking(False)
@@ -2166,7 +2167,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
 
 class TestEchoPlateAccessBackend(unittest.IsolatedAsyncioTestCase):
   async def test_close_door_rejects_when_access_is_open(self):
-    driver = EchoDriver(host="192.168.0.25")
+    driver = MedmanEchoDriver(host="192.168.0.25")
     backend = EchoPlateAccessBackend(driver)
     driver.get_access_state = AsyncMock(
       return_value=PlateAccessState(source_access_open=True, source_access_closed=False)
@@ -2179,7 +2180,7 @@ class TestEchoPlateAccessBackend(unittest.IsolatedAsyncioTestCase):
     driver.close_door.assert_not_awaited()
 
   async def test_close_door_rejects_when_access_state_is_unknown(self):
-    driver = EchoDriver(host="192.168.0.25")
+    driver = MedmanEchoDriver(host="192.168.0.25")
     backend = EchoPlateAccessBackend(driver)
     driver.get_access_state = AsyncMock(
       return_value=PlateAccessState(
@@ -2195,7 +2196,7 @@ class TestEchoPlateAccessBackend(unittest.IsolatedAsyncioTestCase):
     driver.close_door.assert_not_awaited()
 
   async def test_close_door_sends_rpc_when_access_paths_are_known_closed(self):
-    driver = EchoDriver(host="192.168.0.25")
+    driver = MedmanEchoDriver(host="192.168.0.25")
     backend = EchoPlateAccessBackend(driver)
     driver.get_access_state = AsyncMock(
       return_value=PlateAccessState(
