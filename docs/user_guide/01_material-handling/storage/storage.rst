@@ -135,6 +135,62 @@ Combined Retrieval & Access Summary
 
 ------------------------------------------
 
+In PyLabRobot, these two retrieval patterns map to two capabilities:
+
+* **Random access** -> the ``Incubator`` frontend, which holds addressable
+  ``PlateHolder`` sites in ``PlateCarrier`` racks (any plate is directly
+  reachable).
+* **Stacking access (sequential)** -> the ``Stacker`` capability
+  (``pylabrobot.storage.Stacker``), described below.
+
+The ``Stacker`` capability
+--------------------------------------------------
+
+A ``Stacker`` models one or more single-ended LIFO stacks -- each a
+``ResourceStack`` with ``direction="z"`` -- plus a single transfer position, the
+*loading tray* (the same term incubators use). Only the **accessible** (top)
+plate of a stack can be moved without first moving the plates above it, and
+plates nest by their ``stacking_z_height`` so the stack height is computed
+correctly.
+
+Two primitives move plates between a stack and the loading tray:
+
+* ``downstack(stack)`` -- move the accessible plate of ``stack`` onto the loading
+  tray (and return it).
+* ``upstack(stack, plate=None)`` -- move a plate from the loading tray onto
+  ``stack`` (defaults to whatever is currently on the tray).
+
+``Stacker`` is a *capability*, not a device-specific frontend: a machine that is
+a stacker (e.g. the Agilent BenchCel or HighRes MicroServe) composes it and
+provides a ``StackerBackend`` that implements the device-specific
+``downstack``/``upstack`` transfers. ``StackerChatterboxBackend`` is a no-op
+backend useful for trying the API out without hardware:
+
+.. code-block:: python
+
+   from pylabrobot.resources import Coordinate
+   from pylabrobot.resources.resource_stack import ResourceStack
+   from pylabrobot.storage import Stacker, StackerChatterboxBackend
+
+   stacker = Stacker(
+     backend=StackerChatterboxBackend(),
+     name="stacker",
+     size_x=200,
+     size_y=200,
+     size_z=300,
+     stacks=[ResourceStack(f"stack_{i}", "z") for i in range(4)],
+     loading_tray_location=Coordinate(0, 0, 0),
+   )
+   await stacker.setup()
+
+   # Move the accessible plate of stack 0 onto the loading tray:
+   plate = await stacker.downstack(0)
+   # ... hand it to a robot arm / reader, then return a plate from the tray:
+   await stacker.upstack(1)
+
+
+------------------------------------------
+
 .. toctree::
    :maxdepth: 1
    :hidden:
