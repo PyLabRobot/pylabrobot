@@ -473,7 +473,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         tip_type_table_index=ttti,
         has_filter=tip.has_filter,
         tip_length=round((tip.total_tip_length - tip.fitting_depth) * 10),  # in 0.1mm
-        maximum_tip_volume=round(tip.maximal_volume * 10),  # in 0.1ul
+        # in 0.1 uL; floor to 10 (1.0 uL) so zero-capacity teaching/probe needles register
+        # the same way the firmware's non-pipetting CoRe grip tools do (they use 1.0 uL to
+        # satisfy the tv >= 1 requirement). tv does not affect pickup (that is tl/tg).
+        maximum_tip_volume=max(round(tip.maximal_volume * 10), 10),
         tip_size=tip.tip_size,
         pickup_method=tip.pickup_method,
       )

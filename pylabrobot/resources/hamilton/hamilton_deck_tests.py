@@ -1,6 +1,7 @@
 import textwrap
 import unittest
 
+from pylabrobot.resources import TipRack
 from pylabrobot.resources.corning import (
   Cor_96_wellplate_360ul_Fb,
 )
@@ -70,6 +71,28 @@ class HamiltonDeckTests(unittest.TestCase):
     """[1:]
       ),
     )
+
+  def test_teaching_rack_excluded_by_nominal_volume_search(self):
+    """The built-in teaching rack holds teaching needles (nominal_volume 0), so searching
+    the deck's tipracks by tip nominal_volume excludes it: the five added 300 uL racks
+    match, the teaching rack does not."""
+    deck = STARLetDeck()
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
+    for i in range(5):
+      tip_car[i] = hamilton_96_tiprack_300uL_filter(name=f"tip_rack_0{i}")
+    deck.assign_child_resource(tip_car, rails=1)
+
+    tip_racks = [r for r in deck.get_all_children() if isinstance(r, TipRack)]
+    matches = [
+      tr
+      for tr in tip_racks
+      if (tip := next((ts.get_tip() for ts in tr.get_all_items() if ts.has_tip()), None))
+      and tip.nominal_volume == 300
+    ]
+
+    self.assertEqual(len(tip_racks), 6)  # 5 added 300 uL racks + the built-in teaching rack
+    self.assertEqual(len(matches), 5)
+    self.assertNotIn("teaching_tip_rack", {tr.name for tr in matches})
 
   def test_assign_gigantic_resource(self):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
