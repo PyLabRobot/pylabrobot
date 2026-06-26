@@ -9,7 +9,7 @@ from typing import Literal, cast
 
 from pylabrobot.arms.standard import CartesianCoords
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.standard import GripDirection, Pickup
+from pylabrobot.liquid_handling.standard import GripDirection, Mix, Pickup
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.chatterbox import PlateReaderChatterboxBackend
 from pylabrobot.resources import (
@@ -167,6 +167,24 @@ def _make_head96_information(star):
     head_type="96 head II",
     z_range=star._head96_resolve_z_range("legacy"),
   )
+
+
+def _stub_mix96_motion(star):
+  """Stub the 96-head primitives mix96 orchestrates so tests can assert the arguments it passes
+  without touching firmware. Tips present; iSWAP already parked via setUp."""
+  star._head96_information = _make_head96_information(star)
+  star.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
+  for method in (
+    "move_all_channels_in_z_safety",
+    "head96_move_to_z_safety",
+    "head96_move_z",
+    "head96_move_x",
+    "head96_move_y",
+    "head96_move_tool_z",
+    "head96_experimental_aspirate",
+    "head96_experimental_dispense",
+  ):
+    setattr(star, method, unittest.mock.AsyncMock())
 
 
 class TestPipChannelInformationParsing(unittest.TestCase):
@@ -1363,6 +1381,71 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(STARFirmwareError):
       await self.STAR.head96_probe_z_using_clld(tip_len=50.0)
     self.STAR.head96_move_to_z_safety.assert_awaited_once()
+
+  async def test_mix96_floor_maps_to_minimum_height_with_offset(self):
+    """mix96 sends the resolved tip-bottom floor (well cavity_bottom + offset.z) as the
+    experimental command's minimum_height - guards offset.z reaching the floor."""
+    _stub_mix96_motion(self.STAR)
+    offset_z = 2.0
+    await self.STAR.mix96(
+      Mix(volume=50, repetitions=1, flow_rate=100),
+      resource=self.plate,
+      offset=Coordinate(0, 0, offset_z),
+    )
+    well = self.plate.get_item(0)
+    expected_floor = well.get_absolute_location(x="c", y="c", z="cavity_bottom").z + offset_z
+    self.assertEqual(
+      self.STAR.head96_experimental_aspirate.call_args.kwargs["minimum_height"], expected_floor
+    )
+
+  async def test_mix96_stroke_starts_surface_following_above_floor(self):
+    """The careful (swap_speed) descent lands at floor + surface_following_distance and that
+    distance reaches the aspirate, so the stroke spans [floor, floor+sf], never below floor."""
+    _stub_mix96_motion(self.STAR)
+    floor_z, sf = 100.0, 8.0
+    await self.STAR.mix96_at_coordinate(
+      Mix(volume=50, repetitions=1, flow_rate=100, surface_following_distance=sf),
+      a1_coordinate=Coordinate(500, 300, floor_z),
+      swap_speed=5.0,
+    )
+    # move_tool_z calls: [0] fast to swap-start, [1] careful to mix_start, [2] exit retract
+    careful_descent = self.STAR.head96_move_tool_z.call_args_list[1]
+    self.assertEqual(careful_descent.args[0], floor_z + sf)
+    self.assertEqual(careful_descent.kwargs["speed"], 5.0)
+    self.assertEqual(
+      self.STAR.head96_experimental_aspirate.call_args.kwargs["surface_following_distance"], sf
+    )
+
+  async def test_mix96_specified_traverse_heights_are_tip_bottom_moves(self):
+    """A specified minimum_traverse_height_start/end is a tip-bottom Z (head96_move_tool_z), like
+    the rest of the method; only the None default retracts to stop-disk Z safety. Guards against a
+    geometric (tip-bottom) traverse height being driven as a stop-disk position."""
+    _stub_mix96_motion(self.STAR)
+    start_z, end_z = 250.0, 240.0
+    await self.STAR.mix96_at_coordinate(
+      Mix(volume=50, repetitions=1, flow_rate=100),
+      a1_coordinate=Coordinate(500, 300, 100.0),
+      minimum_traverse_height_start=start_z,
+      minimum_traverse_height_end=end_z,
+    )
+    self.STAR.head96_move_to_z_safety.assert_not_called()
+    tool_z_targets = [call.args[0] for call in self.STAR.head96_move_tool_z.call_args_list]
+    self.assertEqual(tool_z_targets[0], start_z)  # first tool move is the start traverse
+    self.assertEqual(tool_z_targets[-1], end_z)  # last tool move is the end traverse
+
+  async def test_mix96_zero_blowout_skips_air_gap_calls(self):
+    """blowout_air_volume=0 issues no firmware aspirate/dispense for the air gap: every
+    experimental aspirate/dispense is a mix-cycle stroke (mix.volume), none a zero-volume blow-out."""
+    _stub_mix96_motion(self.STAR)
+    await self.STAR.mix96_at_coordinate(
+      Mix(volume=50, repetitions=1, flow_rate=100),
+      a1_coordinate=Coordinate(500, 300, 100.0),
+      blowout_air_volume=0.0,
+    )
+    asp_vols = [call.args[0] for call in self.STAR.head96_experimental_aspirate.call_args_list]
+    disp_vols = [call.args[0] for call in self.STAR.head96_experimental_dispense.call_args_list]
+    self.assertEqual(asp_vols, [50])  # one cycle aspirate, no blow-out aspirate
+    self.assertEqual(disp_vols, [50])  # one cycle dispense, no blow-out dispense
 
   async def test_core_96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.
