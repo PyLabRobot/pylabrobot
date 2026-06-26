@@ -90,6 +90,15 @@ Sometimes called "reagent carriers" in Hamilton jargon.
 | Hamilton 24 tip rack 4000uL filter.<br>Hamilton name: `FourmlTF`<br>Part number: 184021 (non-sterile), 184023 (sterile)<br>[Hamilton website](https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/4000-μl-5000-μl-co-re-tips)| ![](img/hamilton/tip_racks/hamilton_24_tiprack_4000uL_filter.jpg.avif) | `hamilton_24_tiprack_4000uL_filter` |
 | Hamilton 24 tip rack 5000uL.<br>Hamilton name: `FivemlT`<br>Part number: 184020 (non-sterile), 184022 (sterile)<br>[Hamilton website](https://www.hamiltoncompany.com/consumables-labware-accessories/co-re-and-co-re-ii-tips/4000-μl-5000-μl-co-re-tips)| ![](img/hamilton/tip_racks/hamilton_24_tiprack_5000uL.jpg.avif) | `hamilton_24_tiprack_5000uL` |
 
+### Teaching needles
+
+Closed-tip steel probes for labware teaching, not liquid handling. They are modelled as zero-capacity tools (`nominal_volume=0`, `maximal_volume=0`) so any attempted aspirate raises. The integrated `teaching_tip_rack` on every STAR and STARlet deck is built from `hamilton_teaching_needle_300uL`.
+
+| Description | Image | PLR definition |
+| - | - | - |
+| Hamilton teaching needle, standard-volume (300 uL) class.<br>Part no.: 182176 (set of 8: 182136)<br>Steel teach-in needle; geometry matches the 300 uL tip. | ![](img/hamilton/hamilton_teaching_needle_300uL.png) | `hamilton_teaching_needle_300uL` |
+| Hamilton teaching needle, XL (5000 uL) class.<br>Part no.: 184184<br>Steel teach-in needle; geometry matches the 5000 uL tip. | ![](img/hamilton/hamilton_teaching_needle_5000uL.png) | `hamilton_teaching_needle_5000uL` |
+
 ### Troughs
 
 | Description | Image | PLR definition |
