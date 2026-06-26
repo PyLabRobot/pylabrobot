@@ -86,7 +86,7 @@ class HamiltonDeckTests(unittest.TestCase):
     matches = [
       tr
       for tr in tip_racks
-      if (tip := next((ts.get_tip() for ts in tr.children if ts.has_tip()), None))
+      if (tip := next((ts.get_tip() for ts in tr.get_all_items() if ts.has_tip()), None))
       and tip.nominal_volume == 300
     ]
 
