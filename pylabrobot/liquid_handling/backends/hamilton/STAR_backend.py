@@ -9099,10 +9099,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def mix96(
     self,
     mix: Mix,
-    resource: Optional[Union[Plate, Container, List[Well]]] = None,
-    a1_coordinate: Optional[Coordinate] = None,
-    minimum_traverse_height_start: Optional[float] = None,
+    resource: Union[Plate, Container, List[Well]],
     offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_start: Optional[float] = None,
     blowout_air_volume: float = 5.0,
     lld_mode: Optional[LLDMode] = None,
     descent_speed: float = 80.0,
@@ -9110,7 +9109,65 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     settling_time: float = 0.0,
     minimum_traverse_height_end: Optional[float] = None,
   ):
-    """Position the 96-head over a target and mix in place.
+    """Mix in place with the 96-head over a resource (aspirate96-style target).
+
+    Thin convenience wrapper over :meth:`mix96_at_coordinate`: resolves the channel-A1 deck
+    target (and the container top, used for the swap-start clearance) from ``resource`` like
+    ``aspirate96`` does, applies ``offset``, and delegates. See that method for the mixing
+    behaviour and the meaning of the remaining arguments.
+
+    Args:
+      mix: volume, repetitions, flow_rate and optional surface_following_distance.
+      resource: aspirate96-style target - a Plate (head A1 over well A1), a Container, or a list
+        of Wells.
+      offset: added to the resolved channel-A1 target position.
+      minimum_traverse_height_start: absolute tip-bottom Z before the X/Y move; None uses full Z
+        safety.
+      blowout_air_volume: air gap taken above the well before descent and expelled above it on
+        exit, to clear the tips of residual on the way out; 0 skips both.
+      lld_mode: liquid-level-detection mode; only ``LLDMode.OFF`` is supported (the default).
+      descent_speed: speed for the fast descent down to just above the well.
+      swap_speed: speed from there into the well to the target Z.
+      settling_time: seconds to wait after the last cycle, before retracting out of the well.
+      minimum_traverse_height_end: absolute tip-bottom Z after mixing; None uses full Z safety.
+    """
+    anchor: Container
+    if isinstance(resource, Plate):
+      anchor = resource.get_item(0)  # head A1 over well A1 (as aspirate96 resolves it)
+    elif isinstance(resource, list):
+      anchor = resource[0]
+    else:
+      anchor = resource
+    a1 = anchor.get_absolute_location(x="c", y="c", z="cavity_bottom") + offset
+    z_top = anchor.get_absolute_location(x="c", y="c", z="top").z
+
+    return await self.mix96_at_coordinate(
+      mix,
+      a1_coordinate=a1,
+      z_top=z_top,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      blowout_air_volume=blowout_air_volume,
+      lld_mode=lld_mode,
+      descent_speed=descent_speed,
+      swap_speed=swap_speed,
+      settling_time=settling_time,
+      minimum_traverse_height_end=minimum_traverse_height_end,
+    )
+
+  async def mix96_at_coordinate(
+    self,
+    mix: Mix,
+    a1_coordinate: Coordinate,
+    z_top: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+    blowout_air_volume: float = 5.0,
+    lld_mode: Optional[LLDMode] = None,
+    descent_speed: float = 80.0,
+    swap_speed: float = 5.0,
+    settling_time: float = 0.0,
+    minimum_traverse_height_end: Optional[float] = None,
+  ):
+    """Position the 96-head over an explicit channel-A1 deck coordinate and mix in place.
 
     Raises the single channels to safe Z, then moves X/Y over the target and descends into the
     well, then runs ``mix.repetitions`` symmetric aspirate / dispense cycles: each aspirate
@@ -9118,20 +9175,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     back up, so the tip oscillates without drifting. Returns to a traverse height when done.
 
     Z targets are in tip-bottom space (the target Z is where the tip end goes, not the stop
-    disk). Declare the target in exactly one of two ways:
-
-    - ``a1_coordinate``: an explicit deck Coordinate for the channel-A1 position.
-    - ``resource`` (+ ``offset``): like ``aspirate96`` - a Plate (head A1 over well A1), a
-      Container, or a list of Wells.
+    disk). For a resource-relative target, use :meth:`mix96`.
 
     Args:
       mix: volume, repetitions, flow_rate and optional surface_following_distance.
-      resource: aspirate96-style target (Plate / Container / list[Well]); mutually exclusive
-        with ``a1_coordinate``.
-      a1_coordinate: explicit channel-A1 deck target; mutually exclusive with ``resource``.
+      a1_coordinate: explicit channel-A1 deck target (tip-bottom space).
+      z_top: container top Z used for the swap-start clearance above the well; None descends
+        straight to just above the mix start.
       minimum_traverse_height_start: absolute tip-bottom Z before the X/Y move; None uses full Z
         safety.
-      offset: added to the resolved target position.
       blowout_air_volume: air gap taken above the well before descent and expelled above it on
         exit, to clear the tips of residual on the way out; 0 skips both.
       lld_mode: liquid-level-detection mode; only ``LLDMode.OFF`` is supported (the default).
@@ -9141,13 +9193,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_end: absolute tip-bottom Z after mixing; None uses full Z safety.
 
     Raises:
-      ValueError: if neither or both of ``a1_coordinate`` / ``resource`` are given,
-        ``lld_mode`` is not ``LLDMode.OFF``, or ``settling_time`` < 0.
+      ValueError: if ``lld_mode`` is not ``LLDMode.OFF`` or ``settling_time`` < 0.
       RuntimeError: if the 96-head holds no tips.
     """
-    if (a1_coordinate is None) == (resource is None):
-      raise ValueError("provide exactly one of a1_coordinate or resource")
-
     lld_mode = lld_mode if lld_mode is not None else self.LLDMode.OFF
     if lld_mode is not self.LLDMode.OFF:
       raise ValueError("mix96 currently supports only LLDMode.OFF")
@@ -9162,21 +9210,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # firmware level), so do it explicitly before the X/Y traverse.
     await self.move_all_channels_in_z_safety()
 
-    # resolve the channel-A1 deck target (and the container top, when a resource gives us one)
-    if a1_coordinate is not None:
-      a1 = a1_coordinate + offset
-      z_top: Optional[float] = None
-    else:
-      anchor: Container
-      if isinstance(resource, Plate):
-        anchor = resource.get_item(0)  # head A1 over well A1 (as aspirate96 resolves it)
-      elif isinstance(resource, list):
-        anchor = resource[0]
-      else:
-        assert resource is not None
-        anchor = resource
-      a1 = anchor.get_absolute_location(x="c", y="c", z="cavity_bottom") + offset
-      z_top = anchor.get_absolute_location(x="c", y="c", z="top").z
+    a1 = a1_coordinate
 
     # traverse to start height; None retracts to full (stop-disk) Z safety, a value is the
     # tip-bottom height the rest of the method works in

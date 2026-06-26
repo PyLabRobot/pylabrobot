@@ -1403,7 +1403,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     distance reaches the aspirate, so the stroke spans [floor, floor+sf], never below floor."""
     _stub_mix96_motion(self.STAR)
     floor_z, sf = 100.0, 8.0
-    await self.STAR.mix96(
+    await self.STAR.mix96_at_coordinate(
       Mix(volume=50, repetitions=1, flow_rate=100, surface_following_distance=sf),
       a1_coordinate=Coordinate(500, 300, floor_z),
       swap_speed=5.0,
@@ -1422,7 +1422,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     geometric (tip-bottom) traverse height being driven as a stop-disk position."""
     _stub_mix96_motion(self.STAR)
     start_z, end_z = 250.0, 240.0
-    await self.STAR.mix96(
+    await self.STAR.mix96_at_coordinate(
       Mix(volume=50, repetitions=1, flow_rate=100),
       a1_coordinate=Coordinate(500, 300, 100.0),
       minimum_traverse_height_start=start_z,
@@ -1437,7 +1437,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     """blowout_air_volume=0 issues no firmware aspirate/dispense for the air gap: every
     experimental aspirate/dispense is a mix-cycle stroke (mix.volume), none a zero-volume blow-out."""
     _stub_mix96_motion(self.STAR)
-    await self.STAR.mix96(
+    await self.STAR.mix96_at_coordinate(
       Mix(volume=50, repetitions=1, flow_rate=100),
       a1_coordinate=Coordinate(500, 300, 100.0),
       blowout_air_volume=0.0,
