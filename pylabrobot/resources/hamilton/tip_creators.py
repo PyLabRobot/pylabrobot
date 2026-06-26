@@ -553,3 +553,11 @@ def hamilton_teaching_needle_5000uL(name: Optional[str] = None) -> HamiltonTip:
     tip_size=TipSize.XL,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
   )
+
+
+# TODO: model the CoRe grip tools (cat. 186100, and the XL-channel gripper 171840) as
+# HamiltonTip tool definitions the same way as the teaching needles above
+# (maximal_volume=0; the define_tip_needle floor sends the 1.0 uL the firmware uses for
+# its grip tools). Routing pick_up_core_gripper_tools through get_or_assign_tip_type_index
+# would then drop the hardcoded tt="14" and remove the collision risk where a dynamically
+# assigned tip type can land on index 14 and overwrite the grip-tool definition.
