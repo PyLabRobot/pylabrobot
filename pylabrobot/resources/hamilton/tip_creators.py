@@ -413,7 +413,7 @@ def hamilton_tip_1000uL(name: Optional[str] = None) -> HamiltonTip:
 
   Variants:
     - Hamilton cat. no.: 235939 - black/conductive, framed tiprack, sterile
-    - Hamilton cat. no.: 235822 - transparent, framed tiprack, sterile
+    - Hamilton cat. no.: 235822 - transparent, framed tiprack, non-sterile
     - Hamilton cat. no.: 235930 - steel (single tip)
   """
   return HamiltonTip(
