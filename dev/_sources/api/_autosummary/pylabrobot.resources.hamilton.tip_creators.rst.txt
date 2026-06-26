@@ -23,6 +23,8 @@ pylabrobot.resources.hamilton.tip\_creators
       five_ml_tip
       five_ml_tip_with_filter
       four_ml_tip_with_filter
+      hamilton_teaching_needle_300uL
+      hamilton_teaching_needle_5000uL
       hamilton_tip_1000uL
       hamilton_tip_1000uL_filter
       hamilton_tip_1000uL_filter_ultrawide
