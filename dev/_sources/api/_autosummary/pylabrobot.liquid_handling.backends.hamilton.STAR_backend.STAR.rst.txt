@@ -225,6 +225,8 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.load_carrier_from_tray_and_scan_carrier_barcode
       ~STAR.lock_cover
       ~STAR.measure_iswap_gripper_force
+      ~STAR.mix96
+      ~STAR.mix96_at_coordinate
       ~STAR.mm_to_y_drive_increment
       ~STAR.mm_to_z_drive_increment
       ~STAR.move_96head_to_coordinate
