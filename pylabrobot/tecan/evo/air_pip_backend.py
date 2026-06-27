@@ -2,8 +2,6 @@
 
 Overrides conversion factors and adds ZaapMotion boot exit, motor
 configuration, and force mode wrapping around plunger operations.
-
-See keyser-testing/AirLiHa_Investigation.md for reverse-engineering details.
 """
 
 from __future__ import annotations

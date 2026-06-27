@@ -41,8 +41,4 @@ AER = "AER"
 [files]
 extend-exclude = [
     "*.ipynb",
-    "keyser-testing/Tecan Manuals/",
-    "keyser-testing/evoware-usb-capture-aspirate-dispense/",
-    "keyser-testing/evoware-usb-capture-multidispense/",
-    "keyser-testing/evoware-pktmon-capture-20260327/",
 ]
