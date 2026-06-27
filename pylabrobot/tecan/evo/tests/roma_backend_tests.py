@@ -7,7 +7,6 @@ from pylabrobot.resources import EVO150Deck
 from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
 from pylabrobot.resources.tecan.plates import Microplate_96_Well
 from pylabrobot.tecan.evo.driver import TecanEVODriver
-from pylabrobot.tecan.evo.firmware import RoMa
 from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
 from pylabrobot.tecan.evo.roma_backend import EVORoMaBackend
 
@@ -39,7 +38,6 @@ class RoMaTestBase(unittest.IsolatedAsyncioTestCase):
 
     self.deck = EVO150Deck()
     self.backend = EVORoMaBackend(driver=self.driver, deck=self.deck)
-    self.backend.roma = RoMa(self.driver, "C1")
 
     self.plate_carrier = MP_3Pos(name="carrier")
     self.plate_carrier[0] = self.plate = Microplate_96_Well(name="plate")

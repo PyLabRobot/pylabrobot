@@ -10,7 +10,7 @@ from pylabrobot.resources.tecan.plates import Microplate_96_Well
 from pylabrobot.resources.tecan.tip_carriers import DiTi_3Pos
 from pylabrobot.resources.tecan.tip_racks import DiTi_100ul_Te_MO
 from pylabrobot.tecan.evo.driver import TecanEVODriver
-from pylabrobot.tecan.evo.firmware import LiHa
+from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
 from pylabrobot.tecan.evo.pip_backend import EVOPIPBackend
 
 
@@ -36,6 +36,9 @@ class PIPBackendTestBase(unittest.IsolatedAsyncioTestCase):
 
     self.driver.send_command.side_effect = mock_send
 
+    # Isolate the cross-arm collision cache (class-level, shared across tests).
+    EVOArm._pos_cache.clear()
+
     self.deck = EVO150Deck()
     self.backend = EVOPIPBackend(driver=self.driver, deck=self.deck, diti_count=8)
 
@@ -44,7 +47,6 @@ class PIPBackendTestBase(unittest.IsolatedAsyncioTestCase):
     self.backend._x_range = 9866
     self.backend._y_range = 2833
     self.backend._z_range = 2100
-    self.backend.liha = LiHa(self.driver, "C5")
 
     # Deck layout
     self.tip_carrier = DiTi_3Pos(name="tip_carrier")

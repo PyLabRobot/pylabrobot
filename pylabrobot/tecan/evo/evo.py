@@ -124,16 +124,12 @@ class TecanEVO(Resource, Device):
       roma_backend = self.arm.backend
       roma_needs_init = await self._roma_needs_init(roma_backend)
 
-      if (
-        roma_needs_init
-        and self._pip_backend.liha is not None
-        and self._pip_backend._z_range is not None
-      ):
+      if roma_needs_init and self._pip_backend._z_range is not None:
         logger.info("RoMa needs PIA — homing LiHa to clear path.")
         z_range = self._pip_backend._z_range
         num_ch = self._pip_backend.num_channels
-        await self._pip_backend.liha.set_z_travel_height([z_range] * num_ch)
-        await self._pip_backend.liha.position_absolute_all_axis(45, 1031, 90, [z_range] * num_ch)
+        await self._pip_backend.set_z_travel_height([z_range] * num_ch)
+        await self._pip_backend.position_absolute_all_axis(45, 1031, 90, [z_range] * num_ch)
 
       await self.arm._on_setup()
 
@@ -141,11 +137,8 @@ class TecanEVO(Resource, Device):
 
   async def _roma_needs_init(self, roma_backend: EVORoMaBackend) -> bool:
     """Check if RoMa needs PIA (not already initialized)."""
-    from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
-
-    arm = EVOArm(self._driver, "C1")
     try:
-      roma_err = await arm.read_error_register()
+      roma_err = await roma_backend.read_error_register()
     except TecanError as e:
       if e.error_code == 5:
         return False  # RoMa not present

@@ -12,8 +12,7 @@ from pylabrobot.resources.tecan.tip_racks import DiTi_50ul_SBS_LiHa
 from pylabrobot.tecan.evo.air_pip_backend import AirEVOPIPBackend, ZAAPMOTION_CONFIG
 from pylabrobot.tecan.evo.driver import TecanEVODriver
 from pylabrobot.tecan.evo.errors import TecanError
-from pylabrobot.tecan.evo.firmware import LiHa
-from pylabrobot.tecan.evo.firmware.zaapmotion import ZaapMotion
+from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
 
 
 class AirPIPTestBase(unittest.IsolatedAsyncioTestCase):
@@ -44,6 +43,9 @@ class AirPIPTestBase(unittest.IsolatedAsyncioTestCase):
 
     self.driver.send_command.side_effect = mock_send
 
+    # Isolate the cross-arm collision cache (class-level, shared across tests).
+    EVOArm._pos_cache.clear()
+
     self.deck = EVO150Deck()
     self.backend = AirEVOPIPBackend(driver=self.driver, deck=self.deck, diti_count=8)
 
@@ -51,8 +53,6 @@ class AirPIPTestBase(unittest.IsolatedAsyncioTestCase):
     self.backend._x_range = 9866
     self.backend._y_range = 2833
     self.backend._z_range = 2100
-    self.backend.liha = LiHa(self.driver, "C5")
-    self.backend.zaap = ZaapMotion(self.driver)
 
     self.tip_carrier = DiTi_3Pos(name="tip_carrier")
     self.tip_carrier[0] = self.tip_rack = DiTi_50ul_SBS_LiHa(name="tips")
