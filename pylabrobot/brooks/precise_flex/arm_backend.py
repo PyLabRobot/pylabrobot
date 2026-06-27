@@ -86,6 +86,21 @@ def _snap_to_current(ik_joints: JointPose, current: JointPose, wrist: Optional[W
   return out
 
 
+# The arm axes IK solves for. Gripper and rail are not part of the Cartesian solution: the gripper
+# opening is independent, and the rail is set explicitly by the caller (`ik` echoes a rail value but
+# rail-less arms must not gain a RAIL axis), so a merge must touch only these four.
+_IK_ARM_AXES = (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST)
+
+
+def _apply_ik_arm_axes(base: JointPose, ik_joints: JointPose) -> JointPose:
+  """Return a copy of `base` with the four IK-solved arm axes overwritten from `ik_joints`.
+
+  `base` carries the full pose (including gripper and rail); only BASE/SHOULDER/ELBOW/WRIST come
+  from IK, so the result stays a complete joint dict usable directly by the joint-move commands.
+  """
+  return {**base, **{axis: ik_joints[axis] for axis in _IK_ARM_AXES}}
+
+
 class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive):
   """Backend for the PreciseFlex robotic arm.
 
@@ -504,10 +519,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       rail_position=current.rail_position if cart.rail_position is None else cart.rail_position,
     )
     ik_joints = _snap_to_current(kinematics.ik(cart, p=self._kinematics_params), joints, cart.wrist)
-    joints[Axis.BASE] = ik_joints[1]
-    joints[Axis.SHOULDER] = ik_joints[2]
-    joints[Axis.ELBOW] = ik_joints[3]
-    joints[Axis.WRIST] = ik_joints[4]
+    joints = _apply_ik_arm_axes(joints, ik_joints)
     if cart.rail_position is not None:
       joints[Axis.RAIL] = cart.rail_position
     return joints
@@ -543,11 +555,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
         planned_joints,
         cart.wrist,
       )
-      target = dict(planned_joints)
-      target[Axis.BASE] = ik_joints[1]
-      target[Axis.SHOULDER] = ik_joints[2]
-      target[Axis.ELBOW] = ik_joints[3]
-      target[Axis.WRIST] = ik_joints[4]
+      target = _apply_ik_arm_axes(planned_joints, ik_joints)
       if self._has_rail and cart.rail_position is not None:
         target[Axis.RAIL] = cart.rail_position
 
