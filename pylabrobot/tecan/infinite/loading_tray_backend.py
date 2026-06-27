@@ -1,9 +1,12 @@
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.loading_tray.backend import LoadingTrayBackend
 
 from .driver import TecanInfiniteDriver
+
+if TYPE_CHECKING:
+  from pylabrobot.resources.resource import Resource
 
 
 class TecanInfiniteLoadingTrayBackend(LoadingTrayBackend):
@@ -16,6 +19,10 @@ class TecanInfiniteLoadingTrayBackend(LoadingTrayBackend):
     await self._driver.send_command("ABSOLUTE MTP,OUT")
     await self._driver.send_command("BY#T5000")
 
-  async def close(self, backend_params: Optional[BackendParams] = None):
+  async def close(
+    self,
+    backend_params: Optional[BackendParams] = None,
+    plate: Optional["Resource"] = None,
+  ):
     await self._driver.send_command("ABSOLUTE MTP,IN")
     await self._driver.send_command("BY#T5000")

@@ -395,3 +395,32 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
           self.assertTrue(v is not None and math.isnan(v), f"Expected NaN at ({r},{c}), got {v}")
         else:
           self.assertEqual(v, e, f"Mismatch at ({r},{c})")
+
+
+class TestBioTekLoadingTrayBackend(unittest.IsolatedAsyncioTestCase):
+  """The tray must send the plate geometry to the firmware before closing (tall-plate clearance)."""
+
+  async def asyncSetUp(self):
+    from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
+
+    self.manager = unittest.mock.Mock()
+    self.driver = unittest.mock.MagicMock()
+    self.driver._set_slow_mode = unittest.mock.AsyncMock()
+    self.driver.set_plate = unittest.mock.AsyncMock()
+    self.driver.send_command = unittest.mock.AsyncMock()
+    self.manager.attach_mock(self.driver.set_plate, "set_plate")
+    self.manager.attach_mock(self.driver.send_command, "send_command")
+    self.backend = BioTekLoadingTrayBackend(driver=self.driver)
+    self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
+
+  async def test_close_sends_plate_geometry_then_closes(self):
+    await self.backend.close(plate=self.plate)
+    self.driver.set_plate.assert_awaited_once_with(self.plate)
+    self.driver.send_command.assert_awaited_once_with("A")
+    # set_plate must run before the close ("A") command.
+    self.assertEqual([call[0] for call in self.manager.mock_calls], ["set_plate", "send_command"])
+
+  async def test_close_without_plate_skips_set_plate(self):
+    await self.backend.close(plate=None)
+    self.driver.set_plate.assert_not_awaited()
+    self.driver.send_command.assert_awaited_once_with("A")
