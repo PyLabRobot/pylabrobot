@@ -87,7 +87,7 @@ class EVOPIPBackend(PIPBackend):
     # Setup arm (PIA + BMX)
     await self._setup_arm(LIHA)
 
-    self.liha = LiHa(self._driver, LIHA)  # type: ignore[arg-type]
+    self.liha = LiHa(self._driver, LIHA)
     await self.liha.position_initialization_x()
 
     self._num_channels = await self.liha.report_number_tips()
@@ -109,7 +109,7 @@ class EVOPIPBackend(PIPBackend):
 
   async def _setup_arm(self, module: str) -> bool:
     """Send PIA + BMX to initialize an arm module."""
-    arm = EVOArm(self._driver, module)  # type: ignore[arg-type]
+    arm = EVOArm(self._driver, module)
     try:
       if module == MCA:
         await arm.position_init_bus()

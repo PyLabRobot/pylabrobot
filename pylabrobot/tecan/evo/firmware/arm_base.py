@@ -6,24 +6,9 @@ same worktable (e.g. LiHa and RoMa X-axes).
 
 from __future__ import annotations
 
-from typing import Dict, List, Protocol, runtime_checkable
+from typing import Dict, List
 
-
-@runtime_checkable
-class CommandInterface(Protocol):
-  """Duck-typed interface for anything that can send Tecan firmware commands.
-
-  This allows firmware wrappers to work with either the legacy EVOBackend
-  or the new TecanEVODriver without importing either.
-  """
-
-  async def send_command(
-    self,
-    module: str,
-    command: str,
-    params: list | None = ...,
-    **kwargs: object,
-  ) -> dict: ...
+from pylabrobot.tecan.evo.driver import TecanEVODriver
 
 
 class EVOArm:
@@ -31,13 +16,13 @@ class EVOArm:
 
   _pos_cache: Dict[str, int] = {}
 
-  def __init__(self, interface: CommandInterface, module: str):
-    self.interface = interface
+  def __init__(self, driver: TecanEVODriver, module: str):
+    self.driver = driver
     self.module = module
 
   async def position_initialization_x(self) -> None:
     """Reinitializes X-axis of the arm."""
-    await self.interface.send_command(module=self.module, command="PIX")
+    await self.driver.send_command(module=self.module, command="PIX")
 
   async def report_x_param(self, param: int) -> int:
     """Report current parameter for x-axis.
@@ -46,7 +31,7 @@ class EVOArm:
       param: 0 - current position, 5 - actual machine range
     """
     resp: List[int] = (
-      await self.interface.send_command(module=self.module, command="RPX", params=[param])
+      await self.driver.send_command(module=self.module, command="RPX", params=[param])
     )["data"]
     return resp[0]
 
@@ -57,7 +42,7 @@ class EVOArm:
       param: 0 - current position, 5 - actual machine range
     """
     resp: List[int] = (
-      await self.interface.send_command(module=self.module, command="RPY", params=[param])
+      await self.driver.send_command(module=self.module, command="RPY", params=[param])
     )["data"]
     return resp
 
@@ -71,7 +56,7 @@ class EVOArm:
       Error string where each character represents one axis status.
       ``'@'`` = no error, ``'A'`` = init failed, ``'G'`` = not initialized.
     """
-    resp = await self.interface.send_command(module=self.module, command="REE", params=[param])
+    resp = await self.driver.send_command(module=self.module, command="REE", params=[param])
     data = resp.get("data")
     if data and isinstance(data, list) and len(data) > 0:
       return str(data[0])
@@ -79,11 +64,11 @@ class EVOArm:
 
   async def position_init_all(self) -> None:
     """Initialize all axes (PIA)."""
-    await self.interface.send_command(module=self.module, command="PIA")
+    await self.driver.send_command(module=self.module, command="PIA")
 
   async def position_init_bus(self) -> None:
     """Initialize bus (PIB). Used for MCA modules."""
-    await self.interface.send_command(module=self.module, command="PIB")
+    await self.driver.send_command(module=self.module, command="PIB")
 
   async def set_bus_mode(self, mode: int) -> None:
     """Set bus mode (BMX).
@@ -91,7 +76,7 @@ class EVOArm:
     Args:
       mode: 2 = normal operation
     """
-    await self.interface.send_command(module=self.module, command="BMX", params=[mode])
+    await self.driver.send_command(module=self.module, command="BMX", params=[mode])
 
   async def bus_module_action(self, p1: int, p2: int, p3: int) -> None:
     """Bus module action (BMA). Use ``(0, 0, 0)`` to halt all axes.
@@ -101,4 +86,4 @@ class EVOArm:
       p2: action parameter 2
       p3: action parameter 3
     """
-    await self.interface.send_command(module=self.module, command="BMA", params=[p1, p2, p3])
+    await self.driver.send_command(module=self.module, command="BMA", params=[p1, p2, p3])

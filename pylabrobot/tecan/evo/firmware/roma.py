@@ -22,7 +22,7 @@ class RoMa(EVOArm):
       param: 0=current position, 5=actual machine range
     """
     resp: List[int] = (
-      await self.interface.send_command(module=self.module, command="RPZ", params=[param])
+      await self.driver.send_command(module=self.module, command="RPZ", params=[param])
     )["data"]
     return resp[0]
 
@@ -33,7 +33,7 @@ class RoMa(EVOArm):
       param: 0=current position, 5=actual machine range
     """
     resp: List[int] = (
-      await self.interface.send_command(module=self.module, command="RPR", params=[param])
+      await self.driver.send_command(module=self.module, command="RPR", params=[param])
     )["data"]
     return resp[0]
 
@@ -44,7 +44,7 @@ class RoMa(EVOArm):
       param: 0=current position, 5=actual machine range
     """
     resp: List[int] = (
-      await self.interface.send_command(module=self.module, command="RPG", params=[param])
+      await self.driver.send_command(module=self.module, command="RPG", params=[param])
     )["data"]
     return resp[0]
 
@@ -54,7 +54,7 @@ class RoMa(EVOArm):
     Args:
       mode: 0=active (recalculate accel/speed by distance), 1=use SFX parameters directly
     """
-    await self.interface.send_command(module=self.module, command="SSM", params=[mode])
+    await self.driver.send_command(module=self.module, command="SSM", params=[mode])
 
   async def set_fast_speed_x(self, speed: Optional[int], accel: Optional[int] = None) -> None:
     """Set fast speed and acceleration for X-axis.
@@ -63,7 +63,7 @@ class RoMa(EVOArm):
       speed: 1/10 mm/s
       accel: 1/10 mm/s^2
     """
-    await self.interface.send_command(module=self.module, command="SFX", params=[speed, accel])
+    await self.driver.send_command(module=self.module, command="SFX", params=[speed, accel])
 
   async def set_fast_speed_y(self, speed: Optional[int], accel: Optional[int] = None) -> None:
     """Set fast speed and acceleration for Y-axis.
@@ -72,7 +72,7 @@ class RoMa(EVOArm):
       speed: 1/10 mm/s
       accel: 1/10 mm/s^2
     """
-    await self.interface.send_command(module=self.module, command="SFY", params=[speed, accel])
+    await self.driver.send_command(module=self.module, command="SFY", params=[speed, accel])
 
   async def set_fast_speed_z(self, speed: Optional[int], accel: Optional[int] = None) -> None:
     """Set fast speed and acceleration for Z-axis.
@@ -81,7 +81,7 @@ class RoMa(EVOArm):
       speed: 1/10 mm/s
       accel: 1/10 mm/s^2
     """
-    await self.interface.send_command(module=self.module, command="SFZ", params=[speed, accel])
+    await self.driver.send_command(module=self.module, command="SFZ", params=[speed, accel])
 
   async def set_fast_speed_r(self, speed: Optional[int], accel: Optional[int] = None) -> None:
     """Set fast speed and acceleration for R-axis (rotation).
@@ -90,7 +90,7 @@ class RoMa(EVOArm):
       speed: 1/10 deg/s
       accel: 1/10 deg/s^2
     """
-    await self.interface.send_command(module=self.module, command="SFR", params=[speed, accel])
+    await self.driver.send_command(module=self.module, command="SFR", params=[speed, accel])
 
   async def set_vector_coordinate_position(
     self,
@@ -129,7 +129,7 @@ class RoMa(EVOArm):
       if abs(pos - x) < 1500:
         raise TecanError("Invalid command (collision)", self.module, 2)
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module=self.module,
       command="SAA",
       params=[v, x, y, z, r, g, speed, 0, tw],
@@ -137,7 +137,7 @@ class RoMa(EVOArm):
 
   async def action_move_vector_coordinate_position(self) -> None:
     """Start coordinate movement built by the vector table."""
-    await self.interface.send_command(module=self.module, command="AAC")
+    await self.driver.send_command(module=self.module, command="AAC")
     EVOArm._pos_cache[self.module] = await self.report_x_param(0)
 
   async def position_absolute_g(self, g: int) -> None:
@@ -146,7 +146,7 @@ class RoMa(EVOArm):
     Args:
       g: absolute position in 1/10 mm
     """
-    await self.interface.send_command(module=self.module, command="PAG", params=[g])
+    await self.driver.send_command(module=self.module, command="PAG", params=[g])
 
   async def set_gripper_params(self, speed: int, pwm: int, cur: Optional[int] = None) -> None:
     """Set gripper parameters.
@@ -156,7 +156,7 @@ class RoMa(EVOArm):
       pwm: pulse width modification limit
       cur: max current (optional)
     """
-    await self.interface.send_command(module=self.module, command="SGG", params=[speed, pwm, cur])
+    await self.driver.send_command(module=self.module, command="SGG", params=[speed, pwm, cur])
 
   async def grip_plate(self, pos: int) -> None:
     """Grip plate at current X/Y/Z/R position.
@@ -164,7 +164,7 @@ class RoMa(EVOArm):
     Args:
       pos: target position — plate must be found between current and target
     """
-    await self.interface.send_command(module=self.module, command="AGR", params=[pos])
+    await self.driver.send_command(module=self.module, command="AGR", params=[pos])
 
   async def set_target_window_class(self, wc: int, x: int, y: int, z: int, r: int, g: int) -> None:
     """Set drive parameters for AAC command.
@@ -177,4 +177,4 @@ class RoMa(EVOArm):
       r: target window for r-axis in 1/10 deg
       g: target window for g-axis in 1/10 mm
     """
-    await self.interface.send_command(module=self.module, command="STW", params=[wc, x, y, z, r, g])
+    await self.driver.send_command(module=self.module, command="STW", params=[wc, x, y, z, r, g])

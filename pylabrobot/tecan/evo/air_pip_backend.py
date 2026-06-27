@@ -140,7 +140,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
   async def _is_initialized(self) -> bool:
     """Check if LiHa axes are already initialized."""
     try:
-      arm = EVOArm(self._driver, "C5")  # type: ignore[arg-type]
+      arm = EVOArm(self._driver, "C5")
       err = await arm.read_error_register(0)
       err = str(err)  # may be int if all digits
       # A = init failed (1), G = not initialized (7)
@@ -154,8 +154,8 @@ class AirEVOPIPBackend(EVOPIPBackend):
     """Fast setup when axes are already initialized."""
     from pylabrobot.tecan.evo.firmware import LiHa
 
-    self.liha = LiHa(self._driver, "C5")  # type: ignore[arg-type]
-    self.zaap = ZaapMotion(self._driver)  # type: ignore[arg-type]
+    self.liha = LiHa(self._driver, "C5")
+    self.zaap = ZaapMotion(self._driver)
     self._num_channels = await self.liha.report_number_tips()
     self._x_range = await self.liha.report_x_param(5)
     self._y_range = (await self.liha.report_y_param(5))[0]
@@ -164,7 +164,7 @@ class AirEVOPIPBackend(EVOPIPBackend):
 
   async def _configure_zaapmotion(self) -> None:
     """Exit boot mode and configure all 8 ZaapMotion motor controllers."""
-    zaap = ZaapMotion(self._driver)  # type: ignore[arg-type]
+    zaap = ZaapMotion(self._driver)
     all_failed_tips = []
     for tip in range(8):
       # Check current mode

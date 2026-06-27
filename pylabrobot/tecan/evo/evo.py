@@ -143,7 +143,7 @@ class TecanEVO(Resource, Device):
     """Check if RoMa needs PIA (not already initialized)."""
     from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
 
-    arm = EVOArm(self._driver, "C1")  # type: ignore[arg-type]
+    arm = EVOArm(self._driver, "C1")
     try:
       roma_err = await arm.read_error_register()
     except TecanError as e:

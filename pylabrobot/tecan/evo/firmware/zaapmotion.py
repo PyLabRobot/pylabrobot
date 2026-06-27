@@ -6,7 +6,7 @@ addressed via the transparent pipeline prefix ``T2{tip_index}``.
 
 from __future__ import annotations
 
-from pylabrobot.tecan.evo.firmware.arm_base import CommandInterface
+from pylabrobot.tecan.evo.driver import TecanEVODriver
 
 
 class ZaapMotion:
@@ -16,8 +16,8 @@ class ZaapMotion:
   addressed via the transparent pipeline prefix ``T2{tip_index}``.
   """
 
-  def __init__(self, interface: CommandInterface, module: str = "C5"):
-    self.interface = interface
+  def __init__(self, driver: TecanEVODriver, module: str = "C5"):
+    self.driver = driver
     self.module = module
 
   def _prefix(self, tip: int) -> str:
@@ -25,7 +25,7 @@ class ZaapMotion:
 
   async def exit_boot_mode(self, tip: int) -> None:
     """Exit bootloader mode (T2{tip}X)."""
-    await self.interface.send_command(module=self.module, command=f"{self._prefix(tip)}X")
+    await self.driver.send_command(module=self.module, command=f"{self._prefix(tip)}X")
 
   async def read_firmware_version(self, tip: int) -> str:
     """Read firmware version (T2{tip}RFV).
@@ -33,7 +33,7 @@ class ZaapMotion:
     Returns:
       Firmware version string. Contains ``'BOOT'`` if in bootloader mode.
     """
-    resp = await self.interface.send_command(module=self.module, command=f"{self._prefix(tip)}RFV")
+    resp = await self.driver.send_command(module=self.module, command=f"{self._prefix(tip)}RFV")
     return str(resp["data"][0]) if resp and resp.get("data") else ""
 
   async def read_config_status(self, tip: int) -> None:
@@ -42,7 +42,7 @@ class ZaapMotion:
     Raises:
       TecanError: if the controller is not yet configured.
     """
-    await self.interface.send_command(module=self.module, command=f"{self._prefix(tip)}RCS")
+    await self.driver.send_command(module=self.module, command=f"{self._prefix(tip)}RCS")
 
   async def set_force_ramp(self, tip: int, value: int) -> None:
     """Set force ramp value (T2{tip}SFR{value}).
@@ -50,11 +50,11 @@ class ZaapMotion:
     Args:
       value: Force ramp. 133120 for active, 3752 for idle.
     """
-    await self.interface.send_command(module=self.module, command=f"{self._prefix(tip)}SFR{value}")
+    await self.driver.send_command(module=self.module, command=f"{self._prefix(tip)}SFR{value}")
 
   async def set_force_mode(self, tip: int) -> None:
     """Enable force position mode (T2{tip}SFP1)."""
-    await self.interface.send_command(module=self.module, command=f"{self._prefix(tip)}SFP1")
+    await self.driver.send_command(module=self.module, command=f"{self._prefix(tip)}SFP1")
 
   async def set_default_position(self, tip: int, value: int) -> None:
     """Set default position (T2{tip}SDP{value}).
@@ -62,7 +62,7 @@ class ZaapMotion:
     Args:
       value: Default position value. 1400 is standard idle.
     """
-    await self.interface.send_command(module=self.module, command=f"{self._prefix(tip)}SDP{value}")
+    await self.driver.send_command(module=self.module, command=f"{self._prefix(tip)}SDP{value}")
 
   async def configure_motor(self, tip: int, command: str) -> None:
     """Send a motor configuration command (T2{tip}{command}).
@@ -70,7 +70,7 @@ class ZaapMotion:
     Args:
       command: One of the ZAAPMOTION_CONFIG commands (e.g. ``'CFE 255,500'``).
     """
-    await self.interface.send_command(module=self.module, command=f"{self._prefix(tip)}{command}")
+    await self.driver.send_command(module=self.module, command=f"{self._prefix(tip)}{command}")
 
   async def set_sdo(self, param: str) -> None:
     """Set SDO parameter (T23SDO{param}).
@@ -78,4 +78,4 @@ class ZaapMotion:
     Args:
       param: SDO parameter string (e.g. ``'11,1'``).
     """
-    await self.interface.send_command(module=self.module, command=f"T23SDO{param}")
+    await self.driver.send_command(module=self.module, command=f"T23SDO{param}")
