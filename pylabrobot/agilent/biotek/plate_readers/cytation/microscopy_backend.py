@@ -43,6 +43,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Color brightfield is not a fixed imaging mode. Instead of a single illuminated acquisition, the
+# instrument illuminates the sample sequentially with three separate LED colors and the host
+# combines the resulting mono frames into one RGB image. These are the firmware LED codes for the
+# three colors, in the order they are cycled (red, green, blue), discovered by reverse-engineering
+# a Gen5 color-brightfield capture: per color the firmware sends `i L0{code}10` (LED on) followed
+# by `i l{code}` (strobe) before each camera trigger. White brightfield (code 5) is used only for
+# setup/focus, never in the cycle.
+COLOR_BRIGHTFIELD_LED_CODES = (6, 7, 8)
+
 
 @dataclass
 class CytationImagingConfig:
@@ -340,6 +349,34 @@ class CytationMicroscopyBackend(MicroscopyBackend):
           raise
     raise TimeoutError("max_image_read_attempts reached")
 
+  async def _set_color_brightfield_led(self, led_code: int, intensity: int) -> None:
+    """Switch color-brightfield illumination to a single LED color and strobe it.
+
+    Unlike other modes, color brightfield has no static LED state: the instrument turns on one of
+    the three LED colors (``i L0{led_code}{intensity}``), strobes it (``i l{led_code}``), then the
+    camera is triggered, repeating once per color. See ``COLOR_BRIGHTFIELD_LED_CODES``.
+    """
+    if not 1 <= intensity <= 10:
+      raise ValueError("intensity must be between 1 and 10")
+    intensity_str = str(intensity).zfill(2)
+    await self.driver.send_command("i", f"L0{led_code}{intensity_str}")
+    await self.driver.send_command("i", f"l{led_code}")
+
+  async def _acquire_color_brightfield_image(self, led_intensity: int) -> Image:
+    """Acquire one color-brightfield image.
+
+    Captures a mono frame under each of the three brightfield LED colors and stacks them into an
+    ``(H, W, 3)`` RGB image. A single exposure/gain (set by the caller) is used for all three
+    channels; Gen5's per-color auto-exposure is not replicated.
+    """
+    import numpy as np
+
+    channels: List[Image] = []
+    for led_code in COLOR_BRIGHTFIELD_LED_CODES:
+      await self._set_color_brightfield_led(led_code, intensity=led_intensity)
+      channels.append(await self.acquire_image())
+    return np.stack(channels, axis=-1)
+
   async def get_exposure(self) -> float:
     """Get current exposure time in ms."""
     return await self.camera.get_exposure()
@@ -348,7 +385,13 @@ class CytationMicroscopyBackend(MicroscopyBackend):
 
   def _imaging_mode_code(self, mode: ImagingMode) -> int:
     """Get filter wheel position index for an imaging mode."""
-    if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.PHASE_CONTRAST:
+    if mode in (
+      ImagingMode.BRIGHTFIELD,
+      ImagingMode.PHASE_CONTRAST,
+      ImagingMode.COLOR_BRIGHTFIELD,
+    ):
+      # Color brightfield uses the brightfield light path (filter cube 5); its three colors are
+      # selected via LED codes 6/7/8 during acquisition, not here.
       return 5
     for i, f in enumerate(self.filters):
       if f == mode:
@@ -365,11 +408,11 @@ class CytationMicroscopyBackend(MicroscopyBackend):
   async def set_imaging_mode(self, mode: ImagingMode, led_intensity: int = 10) -> None:
     """Set filter wheel position and LED."""
     if mode == self._imaging_mode:
-      await self.led_on(intensity=led_intensity)
+      # Color brightfield has no single LED state to (re)enable; its colors are cycled per frame
+      # during acquisition (see _acquire_color_brightfield_image).
+      if mode != ImagingMode.COLOR_BRIGHTFIELD:
+        await self.led_on(intensity=led_intensity)
       return
-
-    if mode == ImagingMode.COLOR_BRIGHTFIELD:
-      raise NotImplementedError("Color brightfield not implemented")
 
     await self.led_off()
     filter_index = self._imaging_mode_code(mode)
@@ -377,6 +420,8 @@ class CytationMicroscopyBackend(MicroscopyBackend):
     if self.driver.version.startswith("1"):
       if mode == ImagingMode.PHASE_CONTRAST:
         raise NotImplementedError("Phase contrast not implemented on Cytation 1")
+      elif mode == ImagingMode.COLOR_BRIGHTFIELD:
+        raise NotImplementedError("Color brightfield not implemented on Cytation 1")
       elif mode == ImagingMode.BRIGHTFIELD:
         await self.driver.send_command("Y", "P0c05")
         await self.driver.send_command("Y", "P0f02")
@@ -388,7 +433,9 @@ class CytationMicroscopyBackend(MicroscopyBackend):
         await self.driver.send_command("Y", "P1120")
         await self.driver.send_command("Y", "P0d05")
         await self.driver.send_command("Y", "P1002")
-      elif mode == ImagingMode.BRIGHTFIELD:
+      elif mode in (ImagingMode.BRIGHTFIELD, ImagingMode.COLOR_BRIGHTFIELD):
+        # Color brightfield uses the same light path as brightfield; the three colors are
+        # selected via LED codes during acquisition.
         await self.driver.send_command("Y", "P1101")
         await self.driver.send_command("Y", "P0d05")
         await self.driver.send_command("Y", "P1002")
@@ -397,8 +444,11 @@ class CytationMicroscopyBackend(MicroscopyBackend):
         await self.driver.send_command("Y", f"P0d{filter_index:02}")
         await self.driver.send_command("Y", "P1001")
 
+    # Color brightfield has no single LED state; its colors are cycled per frame during
+    # acquisition (see _acquire_color_brightfield_image).
     self._imaging_mode = mode
-    await self.led_on(intensity=led_intensity)
+    if mode != ImagingMode.COLOR_BRIGHTFIELD:
+      await self.led_on(intensity=led_intensity)
 
   async def set_objective(self, objective: Objective) -> None:
     """Rotate objective turret to the specified objective."""
@@ -594,7 +644,10 @@ class CytationMicroscopyBackend(MicroscopyBackend):
       for x_pos, y_pos in positions:
         await self.set_position(x=x_pos, y=y_pos)
         t0 = time.time()
-        images.append(await self.acquire_image())
+        if mode == ImagingMode.COLOR_BRIGHTFIELD:
+          images.append(await self._acquire_color_brightfield_image(led_intensity=led_intensity))
+        else:
+          images.append(await self.acquire_image())
         t1 = time.time()
         logger.debug("[cytation] acquired image in %.2f seconds", t1 - t0)
     finally:
