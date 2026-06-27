@@ -1,10 +1,14 @@
 from .biotek import (
+  EL406,
   BioTekBackend,
+  BioTekLoadingTrayBackend,
   Cytation1,
   Cytation5,
-  Cytation5ImagingConfig,
-  CytationBackend,
   CytationImagingConfig,
+  CytationMicroscopyBackend,
+  EL406Driver,
+  EL406PlateWasher96Backend,
+  EL406ShakingBackend,
   SynergyH1,
   SynergyH1Backend,
 )

@@ -39,11 +39,11 @@ class MolecularDevicesBackend(PlateReaderBackend):
   """
 
   def __init__(self, port: str) -> None:
-    self._driver = self._make_driver(port)
-    self._absorbance = MolecularDevicesAbsorbanceBackend(self._driver)
-    self._temperature = MolecularDevicesTemperatureBackend(self._driver)
-    self._fluorescence = SpectraMaxM5FluorescenceBackend(self._driver)
-    self._luminescence = SpectraMaxM5LuminescenceBackend(self._driver)
+    self.driver = self._make_driver(port)
+    self._absorbance = MolecularDevicesAbsorbanceBackend(self.driver)
+    self._temperature = MolecularDevicesTemperatureBackend(self.driver)
+    self._fluorescence = SpectraMaxM5FluorescenceBackend(self.driver)
+    self._luminescence = SpectraMaxM5LuminescenceBackend(self.driver)
 
   def _make_driver(self, port: str):
     return MolecularDevicesDriver(port=port)
@@ -51,22 +51,22 @@ class MolecularDevicesBackend(PlateReaderBackend):
   # -- PlateReaderBackend / MachineBackend interface -----------------------
 
   async def setup(self) -> None:
-    await self._driver.setup()
+    await self.driver.setup()
 
   async def stop(self) -> None:
-    await self._driver.stop()
+    await self.driver.stop()
 
   async def open(self) -> None:
-    await self._driver.open()
+    await self.driver.open()
 
   async def close(self, plate=None) -> None:
-    await self._driver.close()
+    await self.driver.close()
 
   async def send_command(self, *args, **kwargs):
-    return await self._driver.send_command(*args, **kwargs)
+    return await self.driver.send_command(*args, **kwargs)
 
   def serialize(self) -> dict:
-    return dict(self._driver.serialize())
+    return dict(self.driver.serialize())
 
   # -- Bridged internals (must be explicit for class-level @patch) ---------
 
@@ -74,7 +74,7 @@ class MolecularDevicesBackend(PlateReaderBackend):
     return await self._absorbance._read_now()
 
   async def _wait_for_idle(self, **kwargs):
-    return await self._driver.wait_for_idle(**kwargs)
+    return await self.driver.wait_for_idle(**kwargs)
 
   async def _transfer_data(self, *args, **kwargs):
     return await self._absorbance._transfer_data(*args, **kwargs)

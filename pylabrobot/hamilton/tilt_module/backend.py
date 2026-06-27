@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Optional
 
@@ -9,9 +10,12 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.tilting.backend import TilterBackend, TiltModuleError
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
+
+logger = logging.getLogger(__name__)
 
 
 class HamiltonTiltModuleDriver(Driver):
@@ -45,11 +49,13 @@ class HamiltonTiltModuleDriver(Driver):
       human_readable_device_name="Hamilton Tilt Module",
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
+    logger.info("[Tilt %s] connected", self.com_port)
 
   async def stop(self):
     await self.io.stop()
+    logger.info("[Tilt %s] disconnected", self.com_port)
 
   async def send_command(self, command: str, parameter: Optional[str] = None) -> str:
     """Send a command to the tilt module."""
@@ -67,17 +73,18 @@ class HamiltonTiltModuleDriver(Driver):
     if error_matches is not None:
       err_code = int(error_matches.group(0)[2:])
       if 1 <= err_code <= 7:
-        raise TiltModuleError(
-          {
-            1: "Init Position not found",
-            2: "**Step** loss",
-            3: "Not initialized",
-            5: "Stepper Motor end stage defective",
-            6: "Parameter out **of** Range",
-            7: "Undefined Command",
-          }[err_code]
-        )
+        error_msg = {
+          1: "Init Position not found",
+          2: "**Step** loss",
+          3: "Not initialized",
+          5: "Stepper Motor end stage defective",
+          6: "Parameter out **of** Range",
+          7: "Undefined Command",
+        }[err_code]
+        logger.error("[Tilt %s] error %d: %s", self.com_port, err_code, error_msg)
+        raise TiltModuleError(error_msg)
       if err_code != 0:
+        logger.error("[Tilt %s] unexpected error code: %d", self.com_port, err_code)
         raise RuntimeError(f"Unexpected error code: {err_code}")
 
     return resp
@@ -91,23 +98,25 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
   """
 
   def __init__(self, driver: HamiltonTiltModuleDriver):
-    self._driver = driver
+    self.driver = driver
 
-  async def _on_setup(self):
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     await self.tilt_initial_offset(0)
     await self.tilt_initialize()
 
   async def set_angle(self, angle: float):
     """Set the tilt module to rotate by a given angle."""
 
-    assert 0 <= angle <= 10, "Angle must be between 0 and 10 degrees."
+    if not (0 <= angle <= 10):
+      raise ValueError("Angle must be between 0 and 10 degrees.")
 
+    logger.info("[Tilt %s] set angle: angle=%.1f deg", self.driver.com_port, angle)
     await self.tilt_go_to_position(round(angle))
 
   async def tilt_initialize(self):
     """Initialize a daisy chained tilt module."""
 
-    return await self._driver.send_command("SI")
+    return await self.driver.send_command("SI")
 
   async def tilt_move_to_absolute_step_position(self, position: float):
     """Move the tilt module to an absolute position.
@@ -116,9 +125,10 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       position: absolute position (-10...120)
     """
 
-    assert -10 <= position <= 120, "Position must be between -10 and 120."
+    if not (-10 <= position <= 120):
+      raise ValueError("Position must be between -10 and 120.")
 
-    return await self._driver.send_command(
+    return await self.driver.send_command(
       command="SA",
       parameter=str(position),
     )
@@ -132,9 +142,10 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       steps: the number of steps (+-10000)
     """
 
-    assert -10000 <= steps <= 10000, "Steps must be between -10000 and 10000."
+    if not (-10000 <= steps <= 10000):
+      raise ValueError("Steps must be between -10000 and 10000.")
 
-    return await self._driver.send_command(command="SR", parameter=str(steps))
+    return await self.driver.send_command(command="SR", parameter=str(steps))
 
   async def tilt_go_to_position(self, position: int):
     """Go to position (0...10).
@@ -143,9 +154,10 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       position: 0 = horizontal, 10 = degrees
     """
 
-    assert 0 <= position <= 10, "Position must be between 0 and 10."
+    if not (0 <= position <= 10):
+      raise ValueError("Position must be between 0 and 10.")
 
-    return await self._driver.send_command(command="GP", parameter=str(position))
+    return await self.driver.send_command(command="GP", parameter=str(position))
 
   async def tilt_set_speed(self, speed: int):
     """Set the speed on the tilt module.
@@ -154,14 +166,15 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       speed: 1 is slow, 9 = fast. Default speed is 1.
     """
 
-    assert 1 <= speed <= 9, "Speed must be between 1 and 9."
+    if not (1 <= speed <= 9):
+      raise ValueError("Speed must be between 1 and 9.")
 
-    return await self._driver.send_command(command="SV", parameter=str(speed))
+    return await self.driver.send_command(command="SV", parameter=str(speed))
 
   async def tilt_power_off(self):
     """Power off the tilt module."""
 
-    return await self._driver.send_command(command="PO")
+    return await self.driver.send_command(command="PO")
 
   async def tilt_request_error(self) -> Optional[str]:
     """Request the error of the tilt module.
@@ -170,7 +183,7 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
     """
 
     # send_command will automatically raise an error, if one exists
-    return await self._driver.send_command("RE")
+    return await self.driver.send_command("RE")
 
   async def tilt_request_sensor(self) -> Optional[str]:
     """Request sensor status.
@@ -180,7 +193,7 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
     6 = NPN Input 1, 7 = NPN Input 2
     """
 
-    resp = await self._driver.send_command(command="RX")
+    resp = await self.driver.send_command(command="RX")
     resp = resp[:-2].split(" ")[1]
     code = int(resp)
 
@@ -202,7 +215,7 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
   async def tilt_request_offset_between_light_barrier_and_init_position(self) -> int:
     """Request Offset between Light Barrier and Init Position"""
 
-    resp = await self._driver.send_command(command="RO")
+    resp = await self.driver.send_command(command="RO")
     resp = resp[:-2].split(" ")[1]
     return int(resp)
 
@@ -213,9 +226,10 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       open_collector: 1...8
     """
 
-    assert 1 <= open_collector <= 8, "open_collector must be between 1 and 8"
+    if not (1 <= open_collector <= 8):
+      raise ValueError("open_collector must be between 1 and 8")
 
-    return await self._driver.send_command(command="PS", parameter=str(open_collector))
+    return await self.driver.send_command(command="PS", parameter=str(open_collector))
 
   async def tilt_port_clear_open_collector(self, open_collector: int):
     """Tilt port clear open collector.
@@ -224,9 +238,10 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       open_collector: 1...8
     """
 
-    assert 1 <= open_collector <= 8, "open_collector must be between 1 and 8"
+    if not (1 <= open_collector <= 8):
+      raise ValueError("open_collector must be between 1 and 8")
 
-    return await self._driver.send_command(command="PC", parameter=str(open_collector))
+    return await self.driver.send_command(command="PC", parameter=str(open_collector))
 
   async def tilt_set_temperature(self, temperature: float):
     """Set the temperature (10-50 degrees C).
@@ -235,14 +250,16 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       temperature: temperature in Celsius, between 10 and 50
     """
 
-    assert 10 <= temperature <= 50, "Temperature must be between 10 and 50."
+    if not (10 <= temperature <= 50):
+      raise ValueError("Temperature must be between 10 and 50.")
 
-    return await self._driver.send_command(command="ST", parameter=str(int(temperature * 10)))
+    logger.info("[Tilt %s] set temperature: target=%.1f C", self.driver.com_port, temperature)
+    return await self.driver.send_command(command="ST", parameter=str(int(temperature * 10)))
 
   async def tilt_switch_off_temperature_controller(self):
     """Switch off the temperature controller on the tilt module."""
 
-    return await self._driver.send_command(command="TO")
+    return await self.driver.send_command(command="TO")
 
   async def tilt_set_drain_time(self, drain_time: float):
     """Set the drain time on the tilt module.
@@ -251,19 +268,20 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       drain_time: drain time in seconds, between 5 and 250
     """
 
-    assert 5 <= drain_time <= 250, "Drain time must be between 5 and 250."
+    if not (5 <= drain_time <= 250):
+      raise ValueError("Drain time must be between 5 and 250.")
 
-    return await self._driver.send_command(command="DT", parameter=str(int(drain_time * 10)))
+    return await self.driver.send_command(command="DT", parameter=str(int(drain_time * 10)))
 
   async def tilt_set_waste_pump_on(self):
     """Turn the waste pump on."""
 
-    return await self._driver.send_command(command="WP")
+    return await self.driver.send_command(command="WP")
 
   async def tilt_set_waste_pump_off(self):
     """Turn the waste pump off."""
 
-    return await self._driver.send_command(command="WO")
+    return await self.driver.send_command(command="WO")
 
   async def tilt_set_name(self, name: str):
     """Set the tilt module name.
@@ -272,9 +290,10 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       name: the desired name, must be 2 characters long
     """
 
-    assert len(name) == 2, "name must be 2 characters long"
+    if len(name) != 2:
+      raise ValueError("name must be 2 characters long")
 
-    return await self._driver.send_command(command="MN", parameter=name)
+    return await self.driver.send_command(command="MN", parameter=name)
 
   async def tilt_switch_encoder(self, on: bool):
     """Switch the encoder on or off.
@@ -283,7 +302,7 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       on: if True, the encoder will be turned on, else off.
     """
 
-    return await self._driver.send_command(command="EN", parameter=str(int(on)))
+    return await self.driver.send_command(command="EN", parameter=str(int(on)))
 
   async def tilt_initial_offset(self, offset: int):
     """Set the initial offset on the tilt module.
@@ -292,9 +311,10 @@ class HamiltonTiltModuleTilterBackend(TilterBackend):
       offset: the initial offset steps, between -100 and 100
     """
 
-    assert -100 <= offset <= 100, "Offset must be between -100 and 100."
+    if not (-100 <= offset <= 100):
+      raise ValueError("Offset must be between -100 and 100.")
 
-    return await self._driver.send_command(command="SO", parameter=str(offset))
+    return await self.driver.send_command(command="SO", parameter=str(offset))
 
 
 class HamiltonTiltModuleChatterboxTilterBackend(TilterBackend):

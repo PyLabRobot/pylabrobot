@@ -1,2 +1,2 @@
-from .automated_retrieval import AutomatedRetrievalCapability
+from .automated_retrieval import AutomatedRetrieval
 from .backend import AutomatedRetrievalBackend

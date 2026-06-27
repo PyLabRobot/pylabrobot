@@ -1,9 +1,9 @@
-"""Tests for AbsorbanceCapability."""
+"""Tests for Absorbance."""
 
 import unittest
 from typing import List, Optional, Tuple
 
-from pylabrobot.capabilities.plate_reading.absorbance.absorbance import AbsorbanceCapability
+from pylabrobot.capabilities.plate_reading.absorbance.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.absorbance.backend import AbsorbanceBackend
 from pylabrobot.capabilities.plate_reading.absorbance.chatterbox import (
   AbsorbanceChatterboxBackend,
@@ -63,10 +63,10 @@ class RecordingAbsorbanceBackend(AbsorbanceBackend):
     return [AbsorbanceResult(data=data, wavelength=wavelength, temperature=None, timestamp=0.0)]
 
 
-class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
+class TestAbsorbance(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingAbsorbanceBackend()
-    self.cap = AbsorbanceCapability(backend=self.backend)
+    self.cap = Absorbance(backend=self.backend)
     await self.cap._on_setup()
     self.plate = _test_plate()
 
@@ -89,7 +89,7 @@ class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_requires_setup(self):
     backend = RecordingAbsorbanceBackend()
-    cap = AbsorbanceCapability(backend=backend)
+    cap = Absorbance(backend=backend)
     with self.assertRaises(RuntimeError):
       await cap.read(plate=self.plate, wavelength=450)
 
@@ -97,7 +97,7 @@ class TestAbsorbanceCapability(unittest.IsolatedAsyncioTestCase):
 class TestAbsorbanceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = AbsorbanceChatterboxBackend()
-    cap = AbsorbanceCapability(backend=backend)
+    cap = Absorbance(backend=backend)
     await cap._on_setup()
 
     plate = _test_plate()

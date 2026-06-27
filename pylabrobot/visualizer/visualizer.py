@@ -25,7 +25,7 @@ except ImportError as e:
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import Resource
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 @functools.lru_cache(maxsize=None)

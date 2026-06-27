@@ -8,8 +8,11 @@ from .backend import PumpBackend
 from .calibration import PumpCalibration
 
 
-class PumpingCapability(Capability):
-  """Single-pump capability."""
+class Pump(Capability):
+  """Single-pump capability.
+
+  See :doc:`/user_guide/capabilities/pumping` for a walkthrough.
+  """
 
   def __init__(
     self,
@@ -21,6 +24,12 @@ class PumpingCapability(Capability):
     if calibration is not None and len(calibration) != 1:
       raise ValueError("Calibration may only have a single item for this pump")
     self.calibration = calibration
+
+  def serialize(self) -> dict:
+    base: dict = {"type": self.__class__.__name__}
+    if self.calibration is not None:
+      base["calibration"] = self.calibration.serialize()
+    return base
 
   @need_capability_ready
   async def run_revolutions(self, num_revolutions: float):

@@ -1,8 +1,8 @@
 from typing import Optional
 
-from pylabrobot.capabilities.plate_reading.absorbance import AbsorbanceCapability
-from pylabrobot.capabilities.plate_reading.fluorescence import FluorescenceCapability
-from pylabrobot.capabilities.plate_reading.luminescence import LuminescenceCapability
+from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
+from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
+from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 
@@ -33,10 +33,10 @@ class CLARIOstar(Resource, Device):
       model="BMG CLARIOstar",
     )
     Device.__init__(self, driver=driver)
-    self._driver: CLARIOstarDriver = driver
-    self.absorbance = AbsorbanceCapability(backend=CLARIOstarAbsorbanceBackend(driver))
-    self.luminescence = LuminescenceCapability(backend=CLARIOstarLuminescenceBackend(driver))
-    self.fluorescence = FluorescenceCapability(backend=CLARIOstarFluorescenceBackend(driver))
+    self.driver: CLARIOstarDriver = driver
+    self.absorbance = Absorbance(backend=CLARIOstarAbsorbanceBackend(driver))
+    self.luminescence = Luminescence(backend=CLARIOstarLuminescenceBackend(driver))
+    self.fluorescence = Fluorescence(backend=CLARIOstarFluorescenceBackend(driver))
     self._capabilities = [self.absorbance, self.luminescence, self.fluorescence]
 
     self.plate_holder = PlateHolder(
@@ -54,8 +54,8 @@ class CLARIOstar(Resource, Device):
 
   async def open(self) -> None:
     """Open the plate tray."""
-    await self._driver.open()
+    await self.driver.open()
 
   async def close(self) -> None:
     """Close the plate tray."""
-    await self._driver.close()
+    await self.driver.close()

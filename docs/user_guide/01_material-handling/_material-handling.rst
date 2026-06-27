@@ -11,10 +11,6 @@ This includes machines for temperature and motion control (as neither machines p
 .. toctree::
    :maxdepth: 1
 
-   arms/_arm
-   centrifuge/_centrifuge
-   heating_shaking/heating_shaking
-   fans/fans
    sealers/sealers
    temperature-controllers/temperature-controllers
    storage/storage

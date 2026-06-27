@@ -1,6 +1,9 @@
 import math
 
-from pylabrobot.serializer import deserialize, serialize
+from pylabrobot.serializer import (
+  deserialize,
+  serialize,
+)
 
 
 def test_serialize_deserialize_closure():

@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import enum
+import logging
 import time
 from typing import Optional, Set
 
@@ -12,15 +13,18 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.sealing import SealerBackend, SealingCapability
+from pylabrobot.capabilities.capability import BackendParams
+from pylabrobot.capabilities.sealing import Sealer, SealerBackend
 from pylabrobot.capabilities.temperature_controlling import (
-  TemperatureControlCapability,
+  TemperatureController,
   TemperatureControllerBackend,
 )
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -85,15 +89,17 @@ class A4SDriver(Driver):
       stopbits=serial.STOPBITS_ONE,
     )
 
-  async def setup(self):
-    await super().setup()  # type: ignore[safe-super]
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await super().setup(backend_params=backend_params)  # type: ignore[safe-super]
     await self.io.setup()
     await self.system_reset()
+    logger.info("[A4S %s] connected and reset", self.port)
 
   async def stop(self):
     await self.set_heater(on=False)
     await super().stop()  # type: ignore[safe-super]
     await self.io.stop()
+    logger.info("[A4S %s] disconnected", self.port)
 
   # -- serial protocol --
 
@@ -120,7 +126,7 @@ class A4SDriver(Driver):
 
   # -- status --
 
-  async def get_status(self) -> A4SStatus:
+  async def request_status(self) -> A4SStatus:
     while True:
       message = await self.read_message()
       if message[1] == "T":
@@ -131,6 +137,7 @@ class A4SDriver(Driver):
 
     error_code = int(str(parameters[3]))
     if error_code != 0:
+      logger.error("[A4S %s] error code %d in status response: %s", self.port, error_code, message)
       raise RuntimeError(f"An error occurred: response {message}")
 
     sensor_status = int(str(parameters[5]))
@@ -156,9 +163,10 @@ class A4SDriver(Driver):
   async def wait_for_status(self, statuses: Set[A4SStatus.SystemStatus]) -> A4SStatus:
     start = time.time()
     while True:
-      status = await self.get_status()
+      status = await self.request_status()
 
       if status.system_status == A4SStatus.SystemStatus.error:
+        logger.error("[A4S %s] device error: %d", self.port, status.error_code)
         raise RuntimeError(f"An error occurred: {status.error_code}")
 
       if status.system_status in statuses:
@@ -174,7 +182,7 @@ class A4SDriver(Driver):
   ) -> A4SStatus:
     start = time.time()
     while True:
-      status = await self.get_status()
+      status = await self.request_status()
       if status.sensor_status.shuttle_open_sensor == shuttle_open:
         return status
       if time.time() - start > timeout:
@@ -196,8 +204,8 @@ class A4SDriver(Driver):
     command = f"*00DT={deciseconds:04d}zz!"
     return await self.send_command(command)
 
-  async def get_remaining_time(self) -> int:
-    status = await self.get_status()
+  async def request_remaining_time(self) -> int:
+    status = await self.request_status()
     return status.remaining_time
 
   def serialize(self) -> dict:
@@ -208,30 +216,33 @@ class A4SSealerBackend(SealerBackend):
   """Translates SealerBackend operations into A4S driver commands."""
 
   def __init__(self, driver: A4SDriver):
-    self._driver = driver
+    self.driver = driver
 
   async def seal(self, temperature: int, duration: float):
-    await self._driver.send_command(f"*00DH={round(temperature):04d}zz!")
+    logger.info("[A4S %s] sealing at %d C for %.1fs", self.driver.port, temperature, duration)
+    await self.driver.send_command(f"*00DH={round(temperature):04d}zz!")
     await self._wait_for_temperature(temperature, timeout=300)
-    await self._driver.set_time(duration)
-    await self._driver.send_command("*00GS=zz!")
-    await self._driver.wait_for_status({A4SStatus.SystemStatus.single_cycle})
-    return await self._driver.wait_for_status(
+    await self.driver.set_time(duration)
+    await self.driver.send_command("*00GS=zz!")
+    await self.driver.wait_for_status({A4SStatus.SystemStatus.single_cycle})
+    return await self.driver.wait_for_status(
       {A4SStatus.SystemStatus.idle, A4SStatus.SystemStatus.finish}
     )
 
   async def open(self):
-    await self._driver.send_command("*00MO=zz!")
-    return await self._driver.wait_for_shuttle_open_sensor(True)
+    logger.info("[A4S %s] open shuttle", self.driver.port)
+    await self.driver.send_command("*00MO=zz!")
+    return await self.driver.wait_for_shuttle_open_sensor(True)
 
   async def close(self):
-    await self._driver.send_command("*00MC=zz!")
-    return await self._driver.wait_for_shuttle_open_sensor(False)
+    logger.info("[A4S %s] close shuttle", self.driver.port)
+    await self.driver.send_command("*00MC=zz!")
+    return await self.driver.wait_for_shuttle_open_sensor(False)
 
   async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
     start = time.time()
     while True:
-      status = await self._driver.get_status()
+      status = await self.driver.request_status()
       if abs(status.current_temperature - degrees) < tolerance:
         break
       if time.time() - start > timeout:
@@ -243,7 +254,7 @@ class A4STemperatureBackend(TemperatureControllerBackend):
   """Translates TemperatureControllerBackend operations into A4S driver commands."""
 
   def __init__(self, driver: A4SDriver):
-    self._driver = driver
+    self.driver = driver
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -252,26 +263,30 @@ class A4STemperatureBackend(TemperatureControllerBackend):
   async def set_temperature(self, temperature: float):
     if not (50 <= temperature <= 200):
       raise ValueError("Temperature out of range. Please enter a value between 50 and 200.")
+    logger.info("[A4S %s] setting temperature to %.1f C", self.driver.port, temperature)
     command = f"*00DH={round(temperature):04d}zz!"
-    await self._driver.send_command(command)
+    await self.driver.send_command(command)
     await self._wait_for_temperature(temperature, timeout=300)
 
   async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
     start = time.time()
     while True:
-      current_temperature = await self.get_current_temperature()
+      current_temperature = await self.request_current_temperature()
       if abs(current_temperature - degrees) < tolerance:
         break
       if time.time() - start > timeout:
         raise TimeoutError("Timeout while waiting for temperature")
       await asyncio.sleep(0.1)
 
-  async def get_current_temperature(self) -> float:
-    status = await self._driver.get_status()
-    return status.current_temperature
+  async def request_current_temperature(self) -> float:
+    status = await self.driver.request_status()
+    temp = status.current_temperature
+    logger.info("[A4S %s] read temperature: actual=%.1f C", self.driver.port, temp)
+    return temp
 
   async def deactivate(self):
-    await self._driver.set_heater(on=False)
+    logger.info("[A4S %s] deactivate heater", self.driver.port)
+    await self.driver.set_heater(on=False)
 
 
 class A4S(PlateHolder, Device):
@@ -307,9 +322,9 @@ class A4S(PlateHolder, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: A4SDriver = driver
-    self.sealer = SealingCapability(backend=A4SSealerBackend(driver))
-    self.tc = TemperatureControlCapability(backend=A4STemperatureBackend(driver))
+    self.driver: A4SDriver = driver
+    self.sealer = Sealer(backend=A4SSealerBackend(driver))
+    self.tc = TemperatureController(backend=A4STemperatureBackend(driver))
     self._capabilities = [self.tc, self.sealer]
 
   def serialize(self) -> dict:

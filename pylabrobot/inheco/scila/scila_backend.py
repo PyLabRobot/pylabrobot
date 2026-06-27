@@ -1,10 +1,14 @@
+import logging
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 
 from .inheco_sila_interface import InhecoSiLAInterface
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_scalar(text: Optional[str], tag: str) -> object:
@@ -43,16 +47,24 @@ class SCILADriver(Driver):
   plus device-level operations (drawers, status, CO2/valves).
   """
 
-  def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
+  def __init__(
+    self,
+    scila_ip: str,
+    client_ip: Optional[str] = None,
+    gas_mixer_connected: bool = True,
+  ) -> None:
     super().__init__()
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
+    self.gas_mixer_connected = gas_mixer_connected
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self._sila_interface.setup()
     await self._reset_and_initialize()
+    logger.info("[SCILA %s] connected", self._sila_interface.machine_ip)
 
   async def stop(self) -> None:
     await self._sila_interface.close()
+    logger.info("[SCILA %s] connection closed", self._sila_interface.machine_ip)
 
   async def send_command(self, command: str, **kwargs) -> Any:
     """Send a SiLA command and return the parsed response."""
@@ -76,18 +88,6 @@ class SCILADriver(Driver):
     return _get_param(root, "LiquidLevel")  # type: ignore
 
   # -- drawers --
-
-  async def open(self, drawer_id: int) -> None:
-    if drawer_id not in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    await self.send_command("PrepareForInput", position=drawer_id)
-    await self.send_command("OpenDoor")
-
-  async def close(self, drawer_id: int) -> None:
-    if drawer_id not in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    await self.send_command("PrepareForOutput", position=drawer_id)
-    await self.send_command("CloseDoor")
 
   async def request_drawer_statuses(self) -> Dict[int, DrawerStatus]:
     root = await self.send_command("GetDoorStatus")
@@ -117,37 +117,44 @@ class SCILADriver(Driver):
       **super().serialize(),
       "scila_ip": self._sila_interface.machine_ip,
       "client_ip": self._sila_interface.client_ip,
+      "gas_mixer_connected": self.gas_mixer_connected,
     }
-
-  @classmethod
-  def deserialize(cls, data: dict[str, Any]) -> "SCILADriver":
-    return cls(scila_ip=data["scila_ip"], client_ip=data.get("client_ip"))
 
 
 class SCILATemperatureBackend(TemperatureControllerBackend):
   """Translates TemperatureControllerBackend interface into SCILA SiLA commands."""
 
   def __init__(self, driver: SCILADriver) -> None:
-    self._driver = driver
+    self.driver = driver
 
   @property
   def supports_active_cooling(self) -> bool:
     return False
 
   async def request_temperature_information(self) -> dict[str, Any]:
-    root = await self._driver.send_command("GetTemperature")
+    root = await self.driver.send_command("GetTemperature")
     return _get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
 
   async def set_temperature(self, temperature: float) -> None:
-    await self._driver.send_command(
+    logger.info(
+      "[SCILA %s] set temperature: target=%.1f C",
+      self.driver._sila_interface.machine_ip,
+      temperature,
+    )
+    await self.driver.send_command(
       "SetTemperature", targetTemperature=temperature, temperatureControl=True
     )
 
-  async def get_current_temperature(self) -> float:
-    return (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore
+  async def request_current_temperature(self) -> float:
+    temp: float = (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore[index]
+    logger.info(
+      "[SCILA %s] read temperature: actual=%.1f C", self.driver._sila_interface.machine_ip, temp
+    )
+    return temp
 
   async def deactivate(self) -> None:
-    await self._driver.send_command("SetTemperature", temperatureControl=False)
+    logger.info("[SCILA %s] deactivate temperature control", self.driver._sila_interface.machine_ip)
+    await self.driver.send_command("SetTemperature", temperatureControl=False)
 
   async def request_target_temperature(self) -> float:
     return (await self.request_temperature_information())["TargetTemperature"]  # type: ignore

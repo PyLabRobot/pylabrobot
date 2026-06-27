@@ -14,8 +14,11 @@ from .backend import LuminescenceBackend
 logger = logging.getLogger(__name__)
 
 
-class LuminescenceCapability(Capability):
-  """Luminescence plate reading capability."""
+class Luminescence(Capability):
+  """Luminescence plate reading capability.
+
+  See :doc:`/user_guide/capabilities/luminescence` for a walkthrough.
+  """
 
   def __init__(self, backend: LuminescenceBackend):
     super().__init__(backend=backend)

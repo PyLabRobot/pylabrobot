@@ -45,7 +45,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
     return await self._new.set_temperature(temperature)
 
   async def get_temperature(self) -> float:
-    return await self._new.get_current_temperature()
+    return await self._new.request_current_temperature()
 
   async def start_shaking(self, frequency: float = 1.0):
     await self._new.start_shaking(speed=frequency)

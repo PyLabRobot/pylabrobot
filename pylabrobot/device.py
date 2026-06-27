@@ -5,8 +5,9 @@ import inspect
 import sys
 import weakref
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, List, TypeVar
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, List, Optional, TypeVar
 
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.object_parsing import find_subclass
 
@@ -31,7 +32,7 @@ class Driver(SerializableMixin, ABC):
     self._instances.add(self)
 
   @abstractmethod
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     pass
 
   @abstractmethod
@@ -49,7 +50,8 @@ class Driver(SerializableMixin, ABC):
       raise ValueError(f'Could not find subclass with name "{class_name}"')
     if inspect.isabstract(subclass):
       raise ValueError(f'Subclass with name "{class_name}" is abstract')
-    assert issubclass(subclass, cls)
+    if not issubclass(subclass, cls):
+      raise RuntimeError(f'Subclass "{class_name}" is not a subclass of {cls.__name__}')
     return subclass(**data)
 
   @classmethod
@@ -68,7 +70,8 @@ def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
 
   @functools.wraps(func)
   async def wrapper(*args, **kwargs):
-    assert isinstance(args[0], Device), "The first argument must be a Device."
+    if not isinstance(args[0], Device):
+      raise RuntimeError("The first argument must be a Device.")
     self = args[0]
 
     if not self.setup_finished:
@@ -82,7 +85,7 @@ class Device(SerializableMixin, ABC):
   """Abstract base class for device frontends."""
 
   def __init__(self, driver: Driver):
-    self._driver = driver
+    self.driver = driver
     self._setup_finished = False
     self._capabilities: List[Capability] = []
 
@@ -91,7 +94,7 @@ class Device(SerializableMixin, ABC):
     return self._setup_finished
 
   def serialize(self) -> dict:
-    return {"driver": self._driver.serialize()}
+    return {"driver": self.driver.serialize()}
 
   @classmethod
   def deserialize(cls, data: dict):
@@ -101,17 +104,18 @@ class Device(SerializableMixin, ABC):
     data_copy["driver"] = driver
     return cls(**data_copy)
 
-  async def setup(self):
-    await self._driver.setup()
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await self.driver.setup(backend_params=backend_params)
     for cap in self._capabilities:
       await cap._on_setup()
     self._setup_finished = True
 
-  @need_setup_finished
   async def stop(self):
+    if not self._setup_finished:
+      return
     for cap in reversed(self._capabilities):
       await cap._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
     self._setup_finished = False
 
   async def __aenter__(self):

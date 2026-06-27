@@ -1,3 +1,3 @@
 from .backend import FluorescenceBackend
-from .fluorescence import FluorescenceCapability
+from .fluorescence import Fluorescence
 from .standard import FluorescenceResult

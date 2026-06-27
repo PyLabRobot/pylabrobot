@@ -39,7 +39,7 @@ class InhecoThermoshakeBackend(HeaterShakerBackend):
     await self._new.set_temperature(temperature)
 
   async def get_current_temperature(self) -> float:
-    return await self._new.get_current_temperature()
+    return await self._new.request_current_temperature()
 
   async def deactivate(self):
     await self._new.deactivate()
@@ -54,7 +54,7 @@ class InhecoThermoshakeBackend(HeaterShakerBackend):
     return await self._new.stop_temperature_control()
 
   async def get_device_info(self, info_type: int):
-    return await self._new.get_device_info(info_type)
+    return await self._new.request_device_info(info_type)
 
   async def start_shaking(self, speed: float, shape: int = 0):
     await self._new.start_shaking(speed=speed, shape=shape)
@@ -69,7 +69,7 @@ class InhecoThermoshakeBackend(HeaterShakerBackend):
     return await self._new.set_shaker_shape(shape)
 
   async def shake(self, speed: float, shape: int = 0):
-    await self._new.shake(speed=speed, shape=shape)
+    await self._new.start_shaking(speed=speed, shape=shape)
 
   async def lock_plate(self):
     await self._new.lock_plate()

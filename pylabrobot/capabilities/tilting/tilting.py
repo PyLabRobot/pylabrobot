@@ -1,10 +1,13 @@
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 
 from .backend import TilterBackend
 
 
-class TiltingCapability(Capability):
-  """Tilting capability."""
+class Tilter(Capability):
+  """Tilting capability.
+
+  See :doc:`/user_guide/capabilities/tilting` for a walkthrough.
+  """
 
   def __init__(self, backend: TilterBackend):
     super().__init__(backend=backend)
@@ -15,6 +18,7 @@ class TiltingCapability(Capability):
   def absolute_angle(self) -> float:
     return self._absolute_angle
 
+  @need_capability_ready
   async def set_angle(self, absolute_angle: float):
     """Set the tilt angle.
 
@@ -24,6 +28,7 @@ class TiltingCapability(Capability):
     await self.backend.set_angle(angle=absolute_angle)
     self._absolute_angle = absolute_angle
 
+  @need_capability_ready
   async def tilt(self, relative_angle: float):
     """Tilt by a relative angle from the current position.
 

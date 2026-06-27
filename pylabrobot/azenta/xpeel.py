@@ -12,7 +12,7 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.peeling import PeelerBackend, PeelingCapability
+from pylabrobot.capabilities.peeling import Peeler, PeelerBackend
 from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.serializer import SerializableMixin
@@ -74,7 +74,7 @@ class XPeelDriver(Driver):
       rtscts=False,
     )
 
-  async def setup(self):
+  async def setup(self, backend_params: Optional[BackendParams] = None):
     await self.io.setup()
 
   async def stop(self):
@@ -146,12 +146,12 @@ class XPeelDriver(Driver):
 
     return responses
 
-  async def get_status(self) -> Tuple[int, int, int]:
+  async def request_status(self) -> Tuple[int, int, int]:
     """Request instrument status; returns three error codes."""
     resp = await self.send_command("*stat")
     return tuple([int(x) for x in resp[-1].split(":")[1].split(",")])  # type: ignore
 
-  async def get_version(self):
+  async def request_version(self):
     """Request firmware version."""
     return await self.send_command("*version")
 
@@ -177,7 +177,7 @@ class XPeelDriver(Driver):
       f"Unexpected seal check code: {code}, interpreted as: {self.describe_error(code)}"
     )
 
-  async def get_tape_remaining(self):
+  async def request_tape_remaining(self):
     """Query remaining tape. Returns (supply_remaining, takeup_remaining) in number of deseals."""
     resp = await self.send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
     tape_line = resp[-1]
@@ -191,7 +191,7 @@ class XPeelDriver(Driver):
     flag = "y" if enabled else "n"
     return await self.send_command(f"*platecheck:{flag}", expect_ack=True, wait_for_ready=True)
 
-  async def get_seal_sensor_status(self):
+  async def request_seal_sensor_status(self):
     """Get seal sensor threshold value (0-999)."""
     return await self.send_command("*sealstat", expect_ack=True, wait_for_ready=True)
 
@@ -236,12 +236,22 @@ class XPeelPeelerBackend(PeelerBackend):
 
   @dataclass
   class PeelParams(BackendParams):
+    """XPeel-specific parameters for the peel (de-seal) operation.
+
+    Args:
+      begin_location: Starting roller position offset in mm. Must be one of -2, 0, 2,
+        or 4. Default 0.
+      fast: If True, uses faster peel speed. Default False.
+      adhere_time: Time in seconds for the roller to press on the seal before peeling.
+        Must be one of 2.5, 5.0, 7.5, or 10.0. Default 2.5.
+    """
+
     begin_location: Literal[-2, 0, 2, 4] = 0
     fast: bool = False
     adhere_time: float = 2.5
 
   def __init__(self, driver: XPeelDriver):
-    self._driver = driver
+    self.driver = driver
 
   async def peel(
     self,
@@ -272,11 +282,11 @@ class XPeelPeelerBackend(PeelerBackend):
     }.get((begin_location, fast), 9)
 
     cmd = f"*xpeel:{parameter_set}{adhere_time}"
-    return await self._driver.send_command(cmd, expect_ack=True, wait_for_ready=True)
+    return await self.driver.send_command(cmd, expect_ack=True, wait_for_ready=True)
 
   async def restart(self, backend_params: Optional[SerializableMixin] = None):
     """Request restart with full homing sequence."""
-    return await self._driver.send_command("*restart", expect_ack=True, wait_for_ready=True)
+    return await self.driver.send_command("*restart", expect_ack=True, wait_for_ready=True)
 
 
 class XPeel(Device):
@@ -285,6 +295,6 @@ class XPeel(Device):
   def __init__(self, name: str, port: str, timeout: Optional[float] = None):
     driver = XPeelDriver(port=port, timeout=timeout)
     super().__init__(driver=driver)
-    self._driver: XPeelDriver = driver
-    self.peeler = PeelingCapability(backend=XPeelPeelerBackend(driver))
+    self.driver: XPeelDriver = driver
+    self.peeler = Peeler(backend=XPeelPeelerBackend(driver))
     self._capabilities = [self.peeler]

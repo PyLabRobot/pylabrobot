@@ -27,6 +27,7 @@ class IncubatorChatterboxBackend(IncubatorBackend):
 
   async def set_temperature(self, temperature: float):
     print(f"Setting temperature to {temperature}")
+    self._dummy_temperature = temperature
 
   async def get_temperature(self) -> float:
     print("Getting temperature")

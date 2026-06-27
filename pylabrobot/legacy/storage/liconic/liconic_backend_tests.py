@@ -154,7 +154,7 @@ class TestValueConversions(unittest.IsolatedAsyncioTestCase):
   """Test the PLC register value conversions without actual serial IO."""
 
   def setUp(self):
-    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_DC2, port="/dev/null")
     self.backend._send_command = AsyncMock(return_value="OK")
     self.backend._wait_ready = AsyncMock()
 
@@ -305,7 +305,7 @@ class TestSensors(unittest.IsolatedAsyncioTestCase):
 
 class TestClimateGetters(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_DC2, port="/dev/null")
     self.backend._wait_ready = AsyncMock()
 
   async def test_get_target_temperature(self):

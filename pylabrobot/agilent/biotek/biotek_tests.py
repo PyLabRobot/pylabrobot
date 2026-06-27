@@ -10,8 +10,7 @@ import pytest
 
 pytest.importorskip("pylibftdi")
 
-from pylabrobot.agilent.biotek.biotek import BioTekBackend
-from pylabrobot.agilent.biotek.cytation import CytationBackend
+from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 
@@ -24,7 +23,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   """Tests for the Cytation5Backend."""
 
   async def asyncSetUp(self):
-    self.backend = CytationBackend(timeout=0.1)
+    self.backend = BioTekBackend(timeout=0.1)
     self.backend.io = unittest.mock.MagicMock()
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()
@@ -59,9 +58,9 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     await self.backend.stop()
     assert self.backend.io.stop.called
 
-  async def test_get_serial_number(self):
+  async def test_request_serial_number(self):
     self.backend.io.read.side_effect = _byte_iter("\x0600000000        0000\x03")
-    assert await self.backend.get_serial_number() == "00000000"
+    assert await self.backend.request_serial_number() == "00000000"
 
   async def test_open(self):
     self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x03"]
@@ -74,9 +73,9 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     await self.backend.close(plate=plate)
     self.backend.io.write.assert_called_with(b"A")
 
-  async def test_get_current_temperature(self):
+  async def test_request_current_temperature(self):
     self.backend.io.read.side_effect = _byte_iter("\x062360000\x03")
-    assert await self.backend.get_current_temperature() == 23.6
+    assert await self.backend.request_current_temperature() == 23.6
 
   async def test_read_absorbance(self):
     self.backend.io.read.side_effect = _byte_iter(

@@ -81,7 +81,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_step_type(self):
     """Peristaltic dispense command should have step type prefix 0x04."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -91,7 +91,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_volume_encoding(self):
     """Peristaltic dispense should encode volume as little-endian 2 bytes."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -103,7 +103,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_volume_1000ul(self):
     """Peristaltic dispense with 1000 uL."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=1000.0,
       flow_rate=5,
@@ -115,7 +115,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_flow_rate_at_byte3(self):
     """Peristaltic dispense flow rate should be at byte 3."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -125,7 +125,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_cassette_at_byte4(self):
     """Peristaltic dispense cassette type should be at byte 4."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -137,7 +137,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_offset_z(self):
     """Peristaltic dispense should encode Z offset as little-endian 2 bytes."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -150,7 +150,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_offset_x_positive(self):
     """Peristaltic dispense should encode positive X offset at byte 5."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -161,7 +161,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_offset_x_negative(self):
     """Peristaltic dispense should encode negative X offset as two's complement at byte 5."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -173,7 +173,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_offset_y_negative(self):
     """Peristaltic dispense should encode negative Y offset as two's complement at byte 6."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -185,7 +185,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_pre_dispense_volume(self):
     """Peristaltic dispense should encode prime volume as little-endian 2 bytes."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -198,7 +198,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_num_pre_dispenses_default(self):
     """Peristaltic dispense should encode default num_pre_dispenses (2) at byte 11."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=7,
@@ -209,7 +209,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_num_pre_dispenses_1(self):
     """Peristaltic dispense should encode num_pre_dispenses=1 at byte 11."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=1,
@@ -220,7 +220,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_num_pre_dispenses_5(self):
     """Peristaltic dispense should encode num_pre_dispenses=5 at byte 11."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=9,
@@ -231,7 +231,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
 
   def test_peristaltic_dispense_full_command(self):
     """Test complete peristaltic dispense command with all parameters."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=500.0,
       flow_rate=7,
@@ -352,7 +352,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
 
   def test_peristaltic_dispense_command_with_column_mask_length(self):
     """Command with well mask should be 24 bytes."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -362,7 +362,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
 
   def test_peristaltic_dispense_command_column_mask_encoding(self):
     """Command should correctly encode well mask at bytes 12-17."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -375,7 +375,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
 
   def test_peristaltic_dispense_command_pump_at_byte19(self):
     """Pump should be at byte 19 (1=Primary, 2=Secondary)."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -385,7 +385,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
 
   def test_peristaltic_dispense_command_none_column_mask_all_wells(self):
     """Command with None column_mask should encode all wells (0xFF * 6)."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -395,7 +395,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
 
   def test_peristaltic_dispense_command_default_row_mask(self):
     """Default rows=None should encode 0x00 (all selected, inverted)."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -404,7 +404,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
 
   def test_peristaltic_dispense_command_default_pump(self):
     """Default pump should be 1 (Primary)."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -413,7 +413,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
 
   def test_peristaltic_dispense_command_empty_column_mask(self):
     """Command with empty column_mask should encode no wells (0x00 * 6)."""
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -425,7 +425,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
     """Row mask uses inverted encoding: 0=selected, 1=deselected."""
     # Use 1536-well plate type which supports 4 row groups
     # Select rows 1 and 2 -> bits 0,1 cleared, bits 2,3 set -> 0x0C
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT1536,
       volume=300.0,
       flow_rate=5,
@@ -436,7 +436,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
   def test_peristaltic_dispense_command_complex_column_mask(self):
     """Command with complex well mask spanning multiple bytes."""
     # Wells 0, 8, 16, 24, 32, 40 = bit 0 of each of the 6 bytes
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT96,
       volume=300.0,
       flow_rate=5,
@@ -453,7 +453,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
   def test_peristaltic_dispense_command_both_masks(self):
     """Command with column_mask and rows."""
     # Use 1536-well plate type which supports 4 row groups
-    cmd = self.backend._build_peristaltic_dispense_command(
+    cmd = self.backend._peristaltic._build_peristaltic_dispense_command(
       PT1536,
       volume=500.0,
       flow_rate=7,

@@ -41,7 +41,7 @@ class TestHelperFunctions(unittest.TestCase):
 
   def test_encode_volume_little_endian(self):
     """Volume should be encoded as little-endian 2 bytes."""
-    cmd = self.backend._build_dispense_command(
+    cmd = self.backend._plate_washing._build_dispense_command(
       plate=PT96,
       volume=1000.0,
       buffer="A",
@@ -55,7 +55,7 @@ class TestHelperFunctions(unittest.TestCase):
 
   def test_encode_signed_byte_positive(self):
     """Positive offset should encode correctly."""
-    cmd = self.backend._build_aspirate_command(
+    cmd = self.backend._plate_washing._build_aspirate_command(
       plate=PT96,
       time_value=1000,
       travel_rate_byte=3,
@@ -68,7 +68,7 @@ class TestHelperFunctions(unittest.TestCase):
 
   def test_encode_signed_byte_negative(self):
     """Negative offset should encode as two's complement."""
-    cmd = self.backend._build_aspirate_command(
+    cmd = self.backend._plate_washing._build_aspirate_command(
       plate=PT96,
       time_value=1000,
       travel_rate_byte=3,

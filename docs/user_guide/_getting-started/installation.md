@@ -175,8 +175,9 @@ If you are still having trouble, please reach out on [discuss.pylabrobot.org](ht
 
 In order to use imaging on the Cytation, you need to:
 
-1. Install python 3.10
-2. Download Spinnaker SDK and install (including Python) [https://www.teledynevisionsolutions.com/products/spinnaker-sdk/](https://www.teledynevisionsolutions.com/products/spinnaker-sdk/)
-3. Install the cytation-microscopy dependencies: `pip install "pylabrobot[cytation-microscopy]"`
+1. Install the Aravis system library:
+   - macOS: `brew install aravis`
+   - Linux: `sudo apt-get install libaravis-dev gobject-introspection`
+2. Install the cytation-microscopy dependencies: `pip install "pylabrobot[cytation-microscopy]"` (this pulls in PyGObject, numpy, and opencv-python)
 
 If you just want to do plate reading, heating, shaking, etc. you don't need to follow these specific steps.

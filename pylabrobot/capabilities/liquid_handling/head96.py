@@ -7,6 +7,7 @@ from pylabrobot.capabilities.capability import BackendParams, Capability, need_c
 from pylabrobot.resources import (
   Container,
   Coordinate,
+  Deck,
   Plate,
   Tip,
   TipRack,
@@ -28,25 +29,33 @@ from .standard import (
   PickupTipRack,
 )
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
-class Head96Capability(Capability):
+class Head96(Capability):
   """96-head liquid handling: pick up tips, aspirate, dispense, drop tips.
 
   Faithfully ports the 96-head logic from the legacy LiquidHandler, including
   tip tracking with commit/rollback, volume tracking, partial tip pickup,
   single-container (trough) support, and convenience methods.
+
+  See :doc:`/user_guide/capabilities/head96` for a walkthrough.
   """
 
-  def __init__(self, backend: Head96Backend, default_offset: Coordinate = Coordinate.zero()):
+  def __init__(
+    self,
+    backend: Head96Backend,
+    deck: Deck,
+    default_offset: Coordinate = Coordinate.zero(),
+  ):
     super().__init__(backend=backend)
     self.backend: Head96Backend = backend
     self.head: Dict[int, TipTracker] = {}
     self.default_offset: Coordinate = default_offset
+    self.deck = deck
 
-  async def _on_setup(self):
-    await super()._on_setup()
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
+    await super()._on_setup(backend_params=backend_params)
     self.head = {c: TipTracker(thing=f"96Head Channel {c}") for c in range(96)}
 
   def get_mounted_tips(self) -> List[Optional[Tip]]:
@@ -263,17 +272,21 @@ class Head96Capability(Capability):
   @need_capability_ready
   async def discard_tips(
     self,
-    trash: Trash,
+    trash: Optional[Trash] = None,
     allow_nonzero_volume: bool = True,
     drop_backend_params: Optional[BackendParams] = None,
   ):
     """Permanently discard tips from the 96-head into the trash.
 
     Args:
-      trash: The trash resource.
+      trash: The trash resource. If None, automatically finds the 96-head trash on the deck.
       allow_nonzero_volume: If True, discard even if tips have liquid.
       drop_backend_params: Vendor-specific parameters for the drop.
     """
+    if trash is None:
+      if self.deck is None:
+        raise ValueError("No trash provided and no deck set on Head96. Pass trash explicitly.")
+      trash = self.deck.get_trash_area96()
     await self.drop_tips(
       trash, allow_nonzero_volume=allow_nonzero_volume, backend_params=drop_backend_params
     )
@@ -463,7 +476,7 @@ class Head96Capability(Capability):
         continue
       if does_volume_tracking():
         tip.tracker.remove_liquid(volume=volume)
-      elif tip.tracker.get_used_volume() < volume:
+      elif tip.tracker.get_used_volume() <= volume:
         tip.tracker.remove_liquid(volume=min(tip.tracker.get_used_volume(), volume))
 
     dispense_op: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]

@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
 jobs:
   check_docs:
     name: Check documentation

@@ -1,4 +1,4 @@
-"""Tests for LuminescenceCapability."""
+"""Tests for Luminescence."""
 
 import unittest
 from typing import List, Optional
@@ -7,7 +7,7 @@ from pylabrobot.capabilities.plate_reading.luminescence.backend import Luminesce
 from pylabrobot.capabilities.plate_reading.luminescence.chatterbox import (
   LuminescenceChatterboxBackend,
 )
-from pylabrobot.capabilities.plate_reading.luminescence.luminescence import LuminescenceCapability
+from pylabrobot.capabilities.plate_reading.luminescence.luminescence import Luminescence
 from pylabrobot.capabilities.plate_reading.luminescence.standard import LuminescenceResult
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -60,10 +60,10 @@ class RecordingLuminescenceBackend(LuminescenceBackend):
     return [LuminescenceResult(data=data, temperature=25.0, timestamp=0.0)]
 
 
-class TestLuminescenceCapability(unittest.IsolatedAsyncioTestCase):
+class TestLuminescence(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = RecordingLuminescenceBackend()
-    self.cap = LuminescenceCapability(backend=self.backend)
+    self.cap = Luminescence(backend=self.backend)
     await self.cap._on_setup()
     self.plate = _test_plate()
 
@@ -84,7 +84,7 @@ class TestLuminescenceCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_read_requires_setup(self):
     backend = RecordingLuminescenceBackend()
-    cap = LuminescenceCapability(backend=backend)
+    cap = Luminescence(backend=backend)
     with self.assertRaises(RuntimeError):
       await cap.read(plate=self.plate, focal_height=13.0)
 
@@ -92,7 +92,7 @@ class TestLuminescenceCapability(unittest.IsolatedAsyncioTestCase):
 class TestLuminescenceChatterbox(unittest.IsolatedAsyncioTestCase):
   async def test_chatterbox_read(self):
     backend = LuminescenceChatterboxBackend()
-    cap = LuminescenceCapability(backend=backend)
+    cap = Luminescence(backend=backend)
     await cap._on_setup()
     plate = _test_plate()
 

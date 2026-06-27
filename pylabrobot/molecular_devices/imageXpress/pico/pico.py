@@ -1,6 +1,6 @@
 from typing import Dict, Optional
 
-from pylabrobot.capabilities.microscopy import ImagingMode, MicroscopyCapability, Objective
+from pylabrobot.capabilities.microscopy import ImagingMode, Microscopy, Objective
 from pylabrobot.device import Device
 from pylabrobot.resources import Resource, Rotation
 
@@ -53,13 +53,13 @@ class Pico(Resource, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self._driver: PicoDriver = driver
+    self.driver: PicoDriver = driver
 
-    self.microscopy = MicroscopyCapability(
+    self.microscope = Microscopy(
       backend=PicoMicroscopyBackend(
         driver=driver,
         objectives=objectives,
         filter_cubes=filter_cubes,
       )
     )
-    self._capabilities = [self.microscopy]
+    self._capabilities = [self.microscope]

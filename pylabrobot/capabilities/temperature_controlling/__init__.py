@@ -1,2 +1,2 @@
 from .backend import TemperatureControllerBackend
-from .temperature_controller import TemperatureControlCapability
+from .temperature_controller import TemperatureController

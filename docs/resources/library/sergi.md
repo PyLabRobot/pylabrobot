@@ -2,7 +2,7 @@
 
 Company page: [Sergi Lab Supplies](https://sergilabsupplies.com/?srsltid=AfmBOoqk2e3QkpWxvWEtSXS4ySJVoly7hvdiji_ehH5-s6tM3gi67SMu)
 
-## Plate Adaptors
+## Plate Adapterrs
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|

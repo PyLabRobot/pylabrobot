@@ -2,19 +2,23 @@ import asyncio
 import time
 from typing import Optional
 
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 
 from .backend import TemperatureControllerBackend
 
 
-class TemperatureControlCapability(Capability):
-  """Temperature control capability, for heating or cooling."""
+class TemperatureController(Capability):
+  """Temperature control capability, for heating or cooling.
+
+  See :doc:`/user_guide/capabilities/temperature-control` for a walkthrough.
+  """
 
   def __init__(self, backend: TemperatureControllerBackend):
     super().__init__(backend=backend)
     self.backend: TemperatureControllerBackend = backend  # fix type
     self.target_temperature: Optional[float] = None
 
+  @need_capability_ready
   async def set_temperature(self, temperature: float, passive: bool = False):
     """Set the temperature of the temperature controller.
 
@@ -25,7 +29,7 @@ class TemperatureControlCapability(Capability):
         This can be used for backends that do not support active cooling or to
         explicitly disable active cooling when it is available.
     """
-    current = await self.backend.get_current_temperature()
+    current = await self.backend.request_current_temperature()
 
     self.target_temperature = temperature
 
@@ -43,10 +47,12 @@ class TemperatureControlCapability(Capability):
 
     return await self.backend.set_temperature(temperature)
 
-  async def get_temperature(self) -> float:
+  @need_capability_ready
+  async def request_temperature(self) -> float:
     """Get the current temperature of the temperature controller in Celsius."""
-    return await self.backend.get_current_temperature()
+    return await self.backend.request_current_temperature()
 
+  @need_capability_ready
   async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5) -> None:
     """Wait for the temperature to reach the target temperature. The target temperature must be
     set by `set_temperature()`.
@@ -59,12 +65,13 @@ class TemperatureControlCapability(Capability):
       raise RuntimeError("Target temperature is not set.")
     start = time.time()
     while time.time() - start < timeout:
-      temperature = await self.get_temperature()
+      temperature = await self.request_temperature()
       if abs(temperature - self.target_temperature) < tolerance:
         return
       await asyncio.sleep(1.0)
     raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
 
+  @need_capability_ready
   async def deactivate(self):
     """Deactivate the temperature controller. This will stop the heating or cooling, and return
     the temperature to ambient temperature. The target temperature will be reset to `None`.

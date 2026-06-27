@@ -14,8 +14,11 @@ from .backend import FluorescenceBackend
 logger = logging.getLogger(__name__)
 
 
-class FluorescenceCapability(Capability):
-  """Fluorescence plate reading capability."""
+class Fluorescence(Capability):
+  """Fluorescence plate reading capability.
+
+  See :doc:`/user_guide/capabilities/fluorescence` for a walkthrough.
+  """
 
   def __init__(self, backend: FluorescenceBackend):
     super().__init__(backend=backend)

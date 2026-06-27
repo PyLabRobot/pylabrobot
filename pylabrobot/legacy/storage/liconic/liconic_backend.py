@@ -194,7 +194,7 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     await self._new.set_temperature(temperature)
 
   async def get_temperature(self) -> float:
-    return await self._new.get_current_temperature()
+    return await self._new.request_current_temperature()
 
   async def start_shaking(self, frequency):
     await self._new.start_shaking(speed=frequency)
@@ -203,40 +203,40 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     await self._new.stop_shaking()
 
   async def get_shaker_speed(self) -> float:
-    return await self._new.get_shaker_speed()
+    return await self._new.request_shaker_speed()
 
   async def shaker_status(self) -> int:
     raise NotImplementedError("shaker_status command not yet implemented")
 
   async def get_target_temperature(self) -> float:
-    return await self._new.get_target_temperature()
+    return await self._new.request_target_temperature()
 
   async def set_humidity(self, humidity: float):
     await self._new.set_humidity(humidity)
 
   async def get_humidity(self) -> float:
-    return await self._new.get_current_humidity()
+    return await self._new.request_current_humidity()
 
   async def get_target_humidity(self) -> float:
-    return await self._new.get_target_humidity()
+    return await self._new.request_target_humidity()
 
   async def set_co2_level(self, co2_level: float):
     await self._new.set_co2_level(co2_level)
 
   async def get_co2_level(self) -> float:
-    return await self._new.get_co2_level()
+    return await self._new.request_co2_level()
 
   async def get_target_co2_level(self) -> float:
-    return await self._new.get_target_co2_level()
+    return await self._new.request_target_co2_level()
 
   async def set_n2_level(self, n2_level: float):
     await self._new.set_n2_level(n2_level)
 
   async def get_n2_level(self) -> float:
-    return await self._new.get_n2_level()
+    return await self._new.request_n2_level()
 
   async def get_target_n2_level(self) -> float:
-    return await self._new.get_target_n2_level()
+    return await self._new.request_target_n2_level()
 
   async def turn_swap_station(self, home: bool):
     await self._new.turn_swap_station(home)

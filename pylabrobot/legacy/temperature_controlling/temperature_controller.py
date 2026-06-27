@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
+from pylabrobot.capabilities.temperature_controlling import TemperatureController as _NewTC
 from pylabrobot.capabilities.temperature_controlling import (
   TemperatureControllerBackend as _NewTCBackend,
 )
@@ -27,7 +27,7 @@ class _TemperatureControlAdapter(_NewTCBackend):
   async def set_temperature(self, temperature: float):
     await self._legacy.set_temperature(temperature)
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     return await self._legacy.get_current_temperature()
 
   async def deactivate(self):
@@ -60,7 +60,7 @@ class TemperatureController(ResourceHolder, Machine):
     )
     Machine.__init__(self, backend=backend)
     self.backend: TemperatureControllerBackend = backend
-    self._tc_cap = TemperatureControlCapability(backend=_TemperatureControlAdapter(backend))
+    self._tc_cap = _NewTC(backend=_TemperatureControlAdapter(backend))
 
   @property
   def target_temperature(self) -> Optional[float]:
@@ -78,7 +78,7 @@ class TemperatureController(ResourceHolder, Machine):
     return await self._tc_cap.set_temperature(temperature, passive=passive)
 
   async def get_temperature(self) -> float:
-    return await self._tc_cap.get_temperature()
+    return await self._tc_cap.request_temperature()
 
   async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5) -> None:
     return await self._tc_cap.wait_for_temperature(timeout=timeout, tolerance=tolerance)

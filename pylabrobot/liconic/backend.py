@@ -15,8 +15,9 @@ except ImportError as e:
 
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
 from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
-from pylabrobot.capabilities.shaking.backend import ShakerBackend
+from pylabrobot.capabilities.shaking.backend import HasContinuousShaking, ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.device import Driver
 from pylabrobot.io.serial import Serial
@@ -51,6 +52,7 @@ class LiconicBackend(
   TemperatureControllerBackend,
   HumidityControllerBackend,
   ShakerBackend,
+  HasContinuousShaking,
   Driver,
 ):
   """Backend for Liconic incubators."""
@@ -97,8 +99,8 @@ class LiconicBackend(
     self.co2_installed: Optional[bool] = None
     self.n2_installed: Optional[bool] = None
 
-  async def setup(self):
-    await Driver.setup(self)
+  async def setup(self, backend_params: Optional[BackendParams] = None):
+    await Driver.setup(self, backend_params=backend_params)
     try:
       await self.io.setup()
     except serial.SerialException as e:
@@ -130,6 +132,7 @@ class LiconicBackend(
       await self.io.write(b"RD 1915\r")
       flag = await self.io.readline()
       if flag.strip() == b"1":
+        logger.info("[Liconic %s] connected", self.io.port)
         return
       await asyncio.sleep(self.poll_interval)
 
@@ -161,6 +164,13 @@ class LiconicBackend(
     await self._send_command("ST 1905")
     await self._wait_ready()
     await self._send_command("ST 1903")
+    logger.info(
+      "[Liconic %s] fetch_plate_to_loading_tray: plate=%s slot=(%d,%d)",
+      self.io.port,
+      plate.name,
+      m,
+      n,
+    )
 
   async def store_plate(self, plate: Plate, site: PlateHolder):
     m, n = self._site_to_m_n(site)
@@ -173,6 +183,13 @@ class LiconicBackend(
     await self._send_command("ST 1904")
     await self._wait_ready()
     await self._send_command("ST 1903")
+    logger.info(
+      "[Liconic %s] store_plate: plate=%s slot=(%d,%d)",
+      self.io.port,
+      plate.name,
+      m,
+      n,
+    )
 
   # -- TemperatureControllerBackend --
 
@@ -187,15 +204,20 @@ class LiconicBackend(
     temp_str = str(temp_value).zfill(5)
     await self._send_command(f"WR DM890 {temp_str}")
     await self._wait_ready()
+    logger.info("[Liconic %s] set_temperature: target=%.1f°C", self.io.port, temperature)
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM982")
     try:
-      return int(resp) / 10.0
+      temperature = int(resp) / 10.0
     except ValueError:
       raise RuntimeError(f"Invalid temperature value received from incubator: {resp!r}")
+    logger.info(
+      "[Liconic %s] request_current_temperature: measured=%.1f°C", self.io.port, temperature
+    )
+    return temperature
 
   async def deactivate(self):
     pass  # no-op
@@ -207,20 +229,23 @@ class LiconicBackend(
     return self.model.has_humidity_control
 
   async def set_humidity(self, humidity: float):
-    if not self.model.has_temperature_control:
+    if not self.model.has_humidity_control:
       raise NotImplementedError("Climate control is not supported on this model")
     humidity_val = int(humidity * 1000)
     await self._send_command(f"WR DM893 {str(humidity_val).zfill(5)}")
     await self._wait_ready()
+    logger.info("[Liconic %s] set_humidity: target=%.1f%%", self.io.port, humidity)
 
-  async def get_current_humidity(self) -> float:
-    if not self.model.has_temperature_control:
+  async def request_current_humidity(self) -> float:
+    if not self.model.has_humidity_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM983")
     try:
-      return int(resp) / 1000.0
+      humidity = int(resp) / 1000.0
     except ValueError:
       raise RuntimeError(f"Invalid humidity value received from incubator: {resp!r}")
+    logger.info("[Liconic %s] request_current_humidity: measured=%.1f%%", self.io.port, humidity)
+    return humidity
 
   # -- ShakerBackend --
 
@@ -234,6 +259,13 @@ class LiconicBackend(
   async def unlock_plate(self):
     raise NotImplementedError("Liconic does not support plate locking")
 
+  async def shake(self, speed: float, duration: float, backend_params=None):
+    await self.start_shaking(speed=speed)
+    try:
+      await asyncio.sleep(duration)
+    finally:
+      await self.stop_shaking()
+
   async def start_shaking(self, speed: float):
     if speed < 1.0 or speed > 50.0:
       raise ValueError("Shaking frequency must be between 1.0 and 50.0 Hz")
@@ -241,10 +273,12 @@ class LiconicBackend(
     await self._send_command(f"WR DM39 {str(frequency_value).zfill(5)}")
     await self._send_command("ST 1913")
     await self._wait_ready()
+    logger.info("[Liconic %s] start_shaking: speed=%.1fHz", self.io.port, speed)
 
   async def stop_shaking(self):
     await self._send_command("RS 1913")
     await self._wait_ready()
+    logger.info("[Liconic %s] stop_shaking", self.io.port)
 
   # -- Device-specific methods --
 
@@ -364,7 +398,7 @@ class LiconicBackend(
 
   async def read_barcode_inline(
     self, cassette: int, plt_position: int, barcode_scanner: BarcodeScannerBackend
-  ) -> Barcode:
+  ) -> Optional[Barcode]:
     await self._send_command("ST 1910")
     await self._wait_ready()
     barcode = await barcode_scanner.scan_barcode()
@@ -372,7 +406,7 @@ class LiconicBackend(
       "Read barcode from plate at cassette %d, position %d: %s",
       cassette,
       plt_position,
-      barcode.data,
+      barcode,
     )
     reset = await self._send_command("RS 1910")
     if reset != "OK":
@@ -382,7 +416,7 @@ class LiconicBackend(
 
   async def scan_barcode(
     self, site: PlateHolder, barcode_scanner: BarcodeScannerBackend
-  ) -> Barcode:
+  ) -> Optional[Barcode]:
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
     await self._send_command(f"WR DM0 {m}")
@@ -391,10 +425,10 @@ class LiconicBackend(
     await self._send_command(f"WR DM5 {n}")
     await self._send_command("ST 1910")
     barcode = await barcode_scanner.scan_barcode()
-    logger.info("Scanned barcode: %s", barcode.data)
+    logger.info("Scanned barcode: %s", barcode)
     return barcode
 
-  async def get_target_temperature(self) -> float:
+  async def request_target_temperature(self) -> float:
     if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM890")
@@ -403,8 +437,8 @@ class LiconicBackend(
     except ValueError:
       raise RuntimeError(f"Invalid set temperature value received from incubator: {resp!r}")
 
-  async def get_target_humidity(self) -> float:
-    if not self.model.has_temperature_control:
+  async def request_target_humidity(self) -> float:
+    if not self.model.has_humidity_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM893")
     try:
@@ -412,7 +446,7 @@ class LiconicBackend(
     except ValueError:
       raise RuntimeError(f"Invalid set humidity value received from incubator: {resp!r}")
 
-  async def get_shaker_speed(self) -> float:
+  async def request_shaker_speed(self) -> float:
     speed_val = await self._send_command("RD DM39")
     speed = int(speed_val) / 10.0
     await self._wait_ready()
@@ -423,14 +457,14 @@ class LiconicBackend(
     await self._send_command(f"WR DM894 {str(co2_val).zfill(5)}")
     await self._wait_ready()
 
-  async def get_co2_level(self) -> float:
+  async def request_co2_level(self) -> float:
     resp = await self._send_command("RD DM984")
     try:
       return int(resp) / 10000.0
     except ValueError:
       raise RuntimeError(f"Invalid co2 value received from incubator: {resp!r}")
 
-  async def get_target_co2_level(self) -> float:
+  async def request_target_co2_level(self) -> float:
     resp = await self._send_command("RD DM894")
     try:
       return int(resp) / 10000.0
@@ -442,14 +476,14 @@ class LiconicBackend(
     await self._send_command(f"WR DM895 {str(n2_val).zfill(5)}")
     await self._wait_ready()
 
-  async def get_n2_level(self) -> float:
+  async def request_n2_level(self) -> float:
     resp = await self._send_command("RD DM985")
     try:
       return int(resp) / 10000.0
     except ValueError:
       raise RuntimeError(f"Invalid N2 value received from incubator: {resp!r}")
 
-  async def get_target_n2_level(self) -> float:
+  async def request_target_n2_level(self) -> float:
     resp = await self._send_command("RD DM895")
     try:
       return int(resp) / 10000.0

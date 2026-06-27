@@ -1,10 +1,13 @@
+import asyncio
+import logging
 import time
 from typing import List, Optional, Tuple
 
-from pylabrobot.byonoy.backend import ByonoyBase, ByonoyDevice
+from pylabrobot.byonoy.driver import ABS96_ERROR_NAMES, ByonoyDevice, ByonoyDriver
+from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_reading.absorbance import (
+  Absorbance,
   AbsorbanceBackend,
-  AbsorbanceCapability,
   AbsorbanceResult,
 )
 from pylabrobot.device import Device
@@ -17,24 +20,33 @@ from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Backend
 # ---------------------------------------------------------------------------
 
 
-class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
+class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
   """Backend for the Byonoy Absorbance 96 Automate plate reader."""
 
+  _ERROR_NAMES = ABS96_ERROR_NAMES
+
   def __init__(self) -> None:
-    super().__init__(pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96)
+    super().__init__(pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96")
     self.available_wavelengths: List[float] = []
 
-  async def setup(self, **backend_kwargs) -> None:
-    await super().setup(**backend_kwargs)
+  async def setup(self, backend_params: Optional["BackendParams"] = None) -> None:
+    await super().setup(backend_params=backend_params)
     await self.initialize_measurements()
-    self.available_wavelengths = await self.get_available_absorbance_wavelengths()
+    self.available_wavelengths = await self.request_available_absorbance_wavelengths()
+    logger.info(
+      "[%s] ready, available wavelengths: %s nm",
+      self.name,
+      self.available_wavelengths,
+    )
 
-  async def get_available_absorbance_wavelengths(self) -> List[float]:
+  async def request_available_absorbance_wavelengths(self) -> List[float]:
     response = await self.send_command(
       report_id=0x0330,
       payload=b"\x00" * 60,
@@ -47,55 +59,96 @@ class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
     return [w for w in available_wavelengths if w != 0]
 
   async def _run_abs_measurement(self, signal_wl: int, reference_wl: int, is_reference: bool):
-    await self.send_command(
-      report_id=0x0010,
-      payload=b"\x00" * 60,
-      wait_for_response=False,
-    )
+    with self._measurement_in_flight(0x0320):
+      await self.send_command(
+        report_id=0x0010,
+        payload=b"\x00" * 60,
+        wait_for_response=False,
+      )
 
-    payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
-    await self.send_command(
-      report_id=0x0200,
-      payload=payload2,
-      wait_for_response=False,
-    )
+      payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
+      await self.send_command(
+        report_id=0x0200,
+        payload=payload2,
+        wait_for_response=False,
+      )
 
-    payload3 = Writer().i16(signal_wl).i16(reference_wl).u8(int(is_reference)).u8(0).finish()
-    await self.send_command(
-      report_id=0x0320,
-      payload=payload3,
-      wait_for_response=False,
-      routing_info=b"\x00\x40",
-    )
+      payload3 = Writer().i16(signal_wl).i16(reference_wl).u8(int(is_reference)).u8(0).finish()
+      await self.send_command(
+        report_id=0x0320,
+        payload=payload3,
+        wait_for_response=False,
+        routing_info=b"\x00\x40",
+      )
 
-    rows: List[float] = []
-    t0 = time.time()
+      # Index by seq so out-of-order/dropped chunks surface as None slots
+      # rather than silently shifting subsequent rows into the wrong wells.
+      rows_by_seq: List[Optional[List[float]]] = []
+      flags_by_seq: List[Optional[int]] = []
+      expected_chunks: Optional[int] = None
+      t0 = time.time()
 
-    while True:
-      if time.time() - t0 > 120:
-        raise TimeoutError("Measurement timeout.")
+      while True:
+        if self._abort_requested:
+          logger.info("[%s] measurement aborted by cancel()", self.name)
+          raise asyncio.CancelledError("Absorbance measurement aborted via cancel().")
+        if time.time() - t0 > 120:
+          logger.error(
+            "[%s] measurement timed out after 120s (signal=%d nm, ref=%d nm)",
+            self.name,
+            signal_wl,
+            reference_wl,
+          )
+          raise TimeoutError("Measurement timeout.")
 
-      chunk = await self.io.read(64, timeout=30)
-      if len(chunk) == 0:
-        continue
+        chunk = await self.io.read(64, timeout=30)
+        if len(chunk) == 0:
+          continue
 
-      reader = Reader(chunk)
-      report_id = reader.u16()
+        reader = Reader(chunk)
+        report_id = reader.u16()
 
-      if report_id == 0x0500:
-        seq = reader.u8()
-        seq_len = reader.u8()
-        _ = reader.i16()  # signal_wl_nm
-        _ = reader.i16()  # reference_wl_nm
-        _ = reader.u32()  # duration_ms
-        row = [reader.f32() for _ in range(12)]
-        _ = reader.u8()  # flags
-        _ = reader.u8()  # progress
+        if report_id == 0x0500:
+          seq = reader.u8()
+          seq_len = reader.u8()
+          _ = reader.i16()  # signal_wl_nm
+          _ = reader.i16()  # reference_wl_nm
+          _ = reader.u32()  # duration_ms
+          row = [reader.f32() for _ in range(12)]
+          flags = reader.u8()
+          _ = reader.u8()  # progress (0..100 running %); not surfaced
 
-        rows.extend(row)
+          if seq_len == 0:
+            raise RuntimeError(f"{self.name} firmware sent chunk with seq_len=0")
+          if expected_chunks is None:
+            expected_chunks = seq_len
+            rows_by_seq = [None] * seq_len
+            flags_by_seq = [None] * seq_len
+          elif seq_len != expected_chunks:
+            raise RuntimeError(
+              f"{self.name} firmware changed seq_len mid-stream: {expected_chunks} → {seq_len}"
+            )
+          if not 0 <= seq < seq_len:
+            raise RuntimeError(f"{self.name} firmware sent seq={seq} (seq_len={seq_len})")
+          rows_by_seq[seq] = row
+          flags_by_seq[seq] = flags
 
-        if seq == seq_len - 1:
-          break
+          if all(r is not None for r in rows_by_seq):
+            break
+
+    if expected_chunks is None:
+      raise RuntimeError(f"{self.name} absorbance read produced no chunks")
+    chunk_flags: List[int] = [f for f in flags_by_seq if f is not None]
+    rows: List[float] = [v for r in rows_by_seq if r is not None for v in r]
+
+    status = await self.request_status()
+    if status.error_code != 0:
+      raise RuntimeError(
+        f"{self.name} firmware error after measurement (signal={signal_wl} nm, "
+        f"ref={reference_wl} nm): {self.describe_error_code(status.error_code)} "
+        f"(chunk flags: {[f'0x{f:02x}' for f in chunk_flags]})"
+      )
+    self._warn_chunk_flags(chunk_flags)
 
     return rows
 
@@ -115,10 +168,19 @@ class ByonoyAbsorbance96Backend(ByonoyBase, AbsorbanceBackend):
     wavelength: int,
     backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
-    assert wavelength in self.available_wavelengths, (
-      f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
-    )
+    if wavelength not in self.available_wavelengths:
+      raise ValueError(
+        f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
+      )
 
+    logger.info(
+      "[%s] reading absorbance: plate='%s', wavelength=%d nm, wells=%d/%d",
+      self.name,
+      plate.name,
+      wavelength,
+      len(wells),
+      plate.num_items,
+    )
     rows = await self._run_abs_measurement(
       signal_wl=wavelength,
       reference_wl=0,
@@ -230,13 +292,13 @@ class ByonoyAbsorbanceBaseUnit(Resource):
   ) -> None:
     if isinstance(resource, _ByonoyAbsorbanceReaderPlateHolder):
       if self.plate_holder._byonoy_base is not None:
-        raise ValueError("ByonoyBase can only have one plate holder assigned.")
+        raise ValueError("ByonoyDriver can only have one plate holder assigned.")
       self.plate_holder._byonoy_base = self
     super().assign_child_resource(resource, location, reassign)
 
   def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
     raise RuntimeError(
-      "ByonoyBase does not support assigning child resources directly. "
+      "ByonoyDriver does not support assigning child resources directly. "
       "Use the plate_holder or illumination_unit_holder to assign plates and the "
       "illumination unit, respectively."
     )
@@ -282,8 +344,8 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, Device):
     backend = ByonoyAbsorbance96Backend()
     ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
     Device.__init__(self, driver=backend)
-    self._driver: ByonoyAbsorbance96Backend = backend
-    self.absorbance = AbsorbanceCapability(backend=backend)
+    self.driver: ByonoyAbsorbance96Backend = backend
+    self.absorbance = Absorbance(backend=backend)
     self._capabilities = [self.absorbance]
 
   def serialize(self) -> dict:

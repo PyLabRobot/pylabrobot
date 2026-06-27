@@ -55,5 +55,4 @@ They do **not** use heat, making them faster and simpler for certain workflows.
 :maxdepth: 1
 :hidden:
 
-Azenta a4S <a4s>
 ```

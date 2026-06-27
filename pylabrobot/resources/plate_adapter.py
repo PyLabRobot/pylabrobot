@@ -10,7 +10,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class PlateAdapter(Resource):
@@ -116,25 +116,6 @@ class PlateAdapter(Resource):
       "adapter_hole_dy": self.adapter_hole_dy,
       "plate_z_offset": self.plate_z_offset,
     }
-
-  @classmethod
-  def deserialize(cls, data: dict, allow_marshal: bool = False) -> PlateAdapter:
-    return cls(
-      name=data["name"],
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data["size_z"],
-      dx=data["dx"],
-      dy=data["dy"],
-      dz=data["dz"],
-      adapter_hole_size_x=data["adapter_hole_size_x"],
-      adapter_hole_size_y=data["adapter_hole_size_y"],
-      adapter_hole_dx=data["adapter_hole_dx"],
-      adapter_hole_dy=data["adapter_hole_dy"],
-      plate_z_offset=data["plate_z_offset"],
-      category=data.get("category"),
-      model=data.get("model"),
-    )
 
   def compute_plate_location(self, resource: Plate) -> Coordinate:
     """Compute the location of the `Plate` child resource in relationship to the `PlateAdapter` to

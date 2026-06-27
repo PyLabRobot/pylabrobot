@@ -130,5 +130,3 @@ parameter that controls how the scale handles measurement stability.
 .. toctree::
    :maxdepth: 1
    :hidden:
-
-   mettler-toledo-WXS205SDU

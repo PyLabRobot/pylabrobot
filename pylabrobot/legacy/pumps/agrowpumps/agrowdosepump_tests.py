@@ -41,9 +41,9 @@ class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
     self.agrow_backend = AgrowPumpArrayBackend(port="simulated", address=1)
 
     async def _mock_setup_modbus():
-      self.agrow_backend._driver._modbus = SimulatedModbusClient()
+      self.agrow_backend.driver._modbus = SimulatedModbusClient()
 
-    with patch.object(self.agrow_backend._driver, "_setup_modbus", _mock_setup_modbus):
+    with patch.object(self.agrow_backend.driver, "_setup_modbus", _mock_setup_modbus):
       self.pump_array = PumpArray(backend=self.agrow_backend, calibration=None)
       await self.pump_array.setup()
 

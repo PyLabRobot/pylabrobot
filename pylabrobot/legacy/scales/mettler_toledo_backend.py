@@ -19,19 +19,19 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   """Legacy. Use MettlerToledoWXS205SDUDriver + MettlerToledoWXS205SDUScaleBackend instead."""
 
   def __init__(self, port: Optional[str] = None, vid: int = 0x0403, pid: int = 0x6001):
-    self._driver = MettlerToledoWXS205SDUDriver(port=port, vid=vid, pid=pid)
-    self._scale = MettlerToledoWXS205SDUScaleBackend(self._driver)
+    self.driver = MettlerToledoWXS205SDUDriver(port=port, vid=vid, pid=pid)
+    self._scale = MettlerToledoWXS205SDUScaleBackend(self.driver)
 
   async def setup(self) -> None:
-    await self._driver.setup()
+    await self.driver.setup()
     await self._scale._on_setup()
 
   async def stop(self) -> None:
     await self._scale._on_stop()
-    await self._driver.stop()
+    await self.driver.stop()
 
   def serialize(self) -> dict:
-    return self._driver.serialize()
+    return self.driver.serialize()
 
   async def zero(self, timeout: Union[Literal["stable"], float, int] = "stable"):
     return await self._scale.zero(timeout=timeout)
@@ -51,7 +51,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     return await self._scale.read_weight(timeout=timeout)
 
   async def send_command(self, command: str, timeout: int = 60):
-    return await self._driver.send_command(command=command, timeout=timeout)
+    return await self.driver.send_command(command=command, timeout=timeout)
 
   async def request_serial_number(self) -> str:
     return await self._scale.request_serial_number()
@@ -69,10 +69,10 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     return await self._scale.read_weight_value_immediately()
 
   async def set_display_text(self, text: str):
-    return await self._driver.set_display_text(text=text)
+    return await self.driver.set_display_text(text=text)
 
   async def set_weight_display(self):
-    return await self._driver.set_weight_display()
+    return await self.driver.set_weight_display()
 
   # Deprecated aliases
 

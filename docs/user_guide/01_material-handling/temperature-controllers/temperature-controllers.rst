@@ -58,13 +58,13 @@ Implementation
 Backend
 ^^^^^^^
 
-PyLabRobot programmatically defines Temperature Controller machines based on the :class:`~pylabrobot.temperature_controlling.temperature_controller.TemperatureController` base class.
+PyLabRobot programmatically defines Temperature Controller machines based on the :class:`~pylabrobot.legacy.temperature_controlling.temperature_controller.TemperatureController` base class.
 
 e.g.:
 
 .. code-block:: python
 
-   from pylabrobot.temperature_controlling.temperature_controller import (
+   from pylabrobot.legacy.temperature_controlling.temperature_controller import (
      TemperatureControllerBackend
    )
 
@@ -123,7 +123,3 @@ e.g.:
 .. toctree::
    :maxdepth: 1
    :hidden:
-
-   ot-temperature-controller
-   hamilton-heater-cooler
-   inheco

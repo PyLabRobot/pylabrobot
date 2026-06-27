@@ -1,17 +1,21 @@
 import asyncio
 
-from pylabrobot.capabilities.capability import Capability
+from pylabrobot.capabilities.capability import Capability, need_capability_ready
 
 from .backend import FanBackend
 
 
-class FanControlCapability(Capability):
-  """Fan control capability."""
+class Fan(Capability):
+  """Fan control capability.
+
+  See :doc:`/user_guide/capabilities/fan-control` for a walkthrough.
+  """
 
   def __init__(self, backend: FanBackend):
     super().__init__(backend=backend)
     self.backend: FanBackend = backend
 
+  @need_capability_ready
   async def turn_on(self, intensity: int, duration=None):
     """Run the fan.
 
@@ -24,6 +28,7 @@ class FanControlCapability(Capability):
       await asyncio.sleep(duration)
       await self.backend.turn_off()
 
+  @need_capability_ready
   async def turn_off(self):
     """Turn the fan off."""
     await self.backend.turn_off()

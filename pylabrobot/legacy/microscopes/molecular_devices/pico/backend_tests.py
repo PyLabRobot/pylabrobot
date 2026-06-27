@@ -278,7 +278,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       f"/{_FC_SVC}/Get_InstalledFilterCubes",
       _sila_string_response(json.dumps({"filterCubesData": [{"Id": "DAPI"}]})),
     )
-    # get_available_objectives / get_available_filter_cubes for validation
+    # request_available_objectives / request_available_filter_cubes for validation
     channel.set_response(
       f"/{_OBJ_SVC}/GetAvailableObjectivesForPosition",
       _sila_string_response(json.dumps({"objectives": [{"Id": "PL FLUOTAR 4x/0.13"}]})),
@@ -394,7 +394,7 @@ class TestObjectiveMaintenanceCommands(unittest.IsolatedAsyncioTestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tests: get_configuration command + response decoding
+# Tests: request_configuration command + response decoding
 # ---------------------------------------------------------------------------
 
 
@@ -412,7 +412,7 @@ class TestGetConfiguration(unittest.IsolatedAsyncioTestCase):
       _sila_string_response(json.dumps(config)),
     )
 
-    result = await backend.get_configuration()
+    result = await backend.request_configuration()
 
     self.assertEqual(len(channel.calls), 1)
     self.assertEqual(channel.calls[0].path, f"/{_INST_SVC}/Get_InstrumentConfiguration")

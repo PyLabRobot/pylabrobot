@@ -121,7 +121,7 @@ for initialization that must happen after the driver is connected.
 from pylabrobot.capabilities.capability import Capability
 from .backend import ShakerBackend
 
-class ShakingCapability(Capability):
+class Shaker(Capability):
   def __init__(self, backend: ShakerBackend):
     super().__init__(backend=backend)
     self.backend: ShakerBackend = backend  # narrow the type
@@ -143,7 +143,7 @@ The `self.backend: ShakerBackend = backend` line narrows the type from `Capabili
 
 ```python
 from .backend import ShakerBackend
-from .<name> import ShakingCapability
+from .<name> import Shaker
 ```
 
 ## Implementing a vendor device
@@ -194,7 +194,7 @@ class MyFanFanBackend(FanBackend):
 `pylabrobot/<vendor>/<device>.py`:
 
 ```python
-from pylabrobot.capabilities.fan_control import FanControlCapability
+from pylabrobot.capabilities.fan_control import Fan
 from pylabrobot.device import Device
 from .backend import MyFanDriver, MyFanFanBackend
 
@@ -203,7 +203,7 @@ class MyFan(Device):
     driver = MyFanDriver(port=port)
     super().__init__(driver=driver)
     self._driver: MyFanDriver = driver
-    self.fan = FanControlCapability(backend=MyFanFanBackend(driver))
+    self.fan = Fan(backend=MyFanFanBackend(driver))
     self._capabilities = [self.fan]
 ```
 
@@ -276,8 +276,8 @@ class BioShake3000T(PlateHolder, Device):
     PlateHolder.__init__(self, name=name, ...)
     Device.__init__(self, driver=driver)
     self._driver: BioShakeDriver = driver
-    self.tc = TemperatureControlCapability(backend=BioShakeTemperatureBackend(driver))
-    self.shaker = ShakingCapability(backend=BioShakeShakerBackend(driver))
+    self.tc = TemperatureController(backend=BioShakeTemperatureBackend(driver))
+    self.shaker = Shaker(backend=BioShakeShakerBackend(driver))
     self._capabilities = [self.tc, self.shaker]
 ```
 
@@ -341,7 +341,7 @@ To test a capability without a real device, create it directly and call `_on_set
 ```python
 async def test_something(self):
     backend = MyFanChatterboxBackend()
-    cap = FanControlCapability(backend=backend)
+    cap = Fan(backend=backend)
     await cap._on_setup()
     await cap.turn_on(intensity=50)
 ```
@@ -353,7 +353,7 @@ async def test_something(self):
 | Driver | `<Vendor><Device>Driver` | `BioShakeDriver`, `PicoDriver` |
 | Capability backend | `<Vendor><Device><Capability>Backend` | `BioShakeShakerBackend`, `PicoMicroscopyBackend` |
 | Chatterbox backend | `<Vendor><Device>ChatterboxBackend` or `<Capability>ChatterboxBackend` | `HamiltonHepaFanChatterboxBackend` |
-| Capability (abstract) | `<Name>Capability` | `ShakingCapability`, `FanControlCapability` |
+| Capability (abstract) | `<Name>Capability` | `Shaker`, `Fan` |
 | Capability backend (abstract) | `<Name>Backend` | `ShakerBackend`, `FanBackend` |
 | Device | `<Vendor><Device>` or product name | `HamiltonHepaFan`, `BioShake3000T`, `Pico` |
 

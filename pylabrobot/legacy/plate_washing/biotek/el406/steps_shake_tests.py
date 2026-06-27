@@ -70,7 +70,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_basic(self):
     """Basic shake: 10 seconds, medium intensity."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=10.0,
       soak_duration=0.0,
@@ -90,7 +90,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_variable_intensity(self):
     """Variable intensity encoding."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=30.0,
       soak_duration=0.0,
@@ -109,7 +109,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
     ]
     for duration, expected_hex in cases:
       with self.subTest(duration=duration):
-        cmd = self.backend._build_shake_command(
+        cmd = self.backend._shaking._build_shake_command(
           PT96,
           shake_duration=duration,
           soak_duration=0.0,
@@ -121,7 +121,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_encoding_shake_disabled(self):
     """Shake disabled should zero the duration."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=30.0,
       soak_duration=0.0,
@@ -135,7 +135,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_encoding_move_home_false(self):
     """Verify encoding with move_home_first=false."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=30.0,
       soak_duration=0.0,
@@ -149,7 +149,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_encoding_soak_30s(self):
     """Verify encoding with 30s soak duration."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=30.0,
       soak_duration=30.0,
@@ -163,7 +163,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_encoding_soak_60s(self):
     """Verify encoding with 60s soak duration."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=30.0,
       soak_duration=60.0,
@@ -177,7 +177,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_encoding_slow_frequency(self):
     """Verify encoding with slow intensity."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=30.0,
       soak_duration=0.0,
@@ -191,7 +191,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_encoding_fast_frequency(self):
     """Verify encoding with fast intensity."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=30.0,
       soak_duration=0.0,
@@ -205,7 +205,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_encoding_complex(self):
     """Verify encoding with combined shake, soak, and slow intensity."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=300.0,
       soak_duration=120.0,
@@ -219,7 +219,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_encoding_move_home_false_with_soak(self):
     """Verify encoding with move_home_first=false and soak."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=30.0,
       soak_duration=60.0,
@@ -233,7 +233,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
 
   def test_shake_command_max_duration_encoding(self):
     """Verify encoding with maximum duration (3599s)."""
-    cmd = self.backend._build_shake_command(
+    cmd = self.backend._shaking._build_shake_command(
       PT96,
       shake_duration=3599,
       soak_duration=3599,

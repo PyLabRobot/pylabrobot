@@ -107,6 +107,12 @@ class Plate(ItemizedResource["Well"]):
     if lid is not None:
       self.assign_child_resource(lid)
 
+  def serialize(self) -> dict:
+    data = super().serialize()
+    if self.plate_type != "skirted":
+      data["plate_type"] = self.plate_type
+    return data
+
   @property
   def lid(self) -> Optional[Lid]:
     return self._lid

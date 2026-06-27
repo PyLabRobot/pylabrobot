@@ -34,16 +34,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
 
     with patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial):
       self.backend = MolecularDevicesBackend(port="COM1")
-      self.backend._driver.io = self.mock_serial
+      self.backend.driver.io = self.mock_serial
       self.send_command_mock = patch.object(
-        self.backend._driver, "send_command", new_callable=AsyncMock
+        self.backend.driver, "send_command", new_callable=AsyncMock
       ).start()
     self.addCleanup(patch.stopall)
 
   async def test_setup_stop(self):
     # un-mock send_command for this test
     with patch.object(
-      self.backend._driver, "send_command", wraps=self.backend._driver.send_command
+      self.backend.driver, "send_command", wraps=self.backend.driver.send_command
     ) as wrapped_send_command:
       await self.backend.setup()
       self.mock_serial.setup.assert_called_once()
@@ -683,7 +683,7 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     with patch("pylabrobot.io.serial.Serial", return_value=MagicMock()):
       self.backend = MolecularDevicesBackend(port="COM1")
       self.send_command_mock = patch.object(
-        self.backend._driver, "send_command", new_callable=AsyncMock
+        self.backend.driver, "send_command", new_callable=AsyncMock
       ).start()
 
   def test_parse_absorbance_single_wavelength(self):
@@ -943,7 +943,7 @@ class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
 
     with patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial):
       self.backend = MolecularDevicesBackend(port="/dev/tty01")
-      self.backend._driver.io = self.mock_serial
+      self.backend.driver.io = self.mock_serial
 
   async def _mock_send_command_response(self, response_str: str):
     self.mock_serial.readline.side_effect = [response_str.encode() + b">\r\n"]

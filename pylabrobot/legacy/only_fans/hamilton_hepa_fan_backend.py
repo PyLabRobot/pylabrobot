@@ -8,11 +8,11 @@ class HamiltonHepaFanBackend(FanBackend):
   """Legacy. Use pylabrobot.hamilton.only_fans.HamiltonHepaFan instead."""
 
   def __init__(self, device_id=None):
-    self._driver = HamiltonHepaFanDriver(device_id=device_id)
-    self._fan = HamiltonHepaFanFanBackend(self._driver)
+    self.driver = HamiltonHepaFanDriver(device_id=device_id)
+    self._fan = HamiltonHepaFanFanBackend(self.driver)
 
   async def setup(self) -> None:
-    await self._driver.setup()
+    await self.driver.setup()
 
   async def turn_on(self, intensity: int) -> None:
     await self._fan.turn_on(intensity=intensity)
@@ -21,7 +21,7 @@ class HamiltonHepaFanBackend(FanBackend):
     await self._fan.turn_off()
 
   async def stop(self) -> None:
-    await self._driver.stop()
+    await self.driver.stop()
 
 
 class HamiltonHepaFan:

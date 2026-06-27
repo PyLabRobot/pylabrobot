@@ -16,5 +16,5 @@ class HumidityControllerBackend(CapabilityBackend, metaclass=ABCMeta):
     """Set the target humidity as a fraction 0.0-1.0."""
 
   @abstractmethod
-  async def get_current_humidity(self) -> float:
+  async def request_current_humidity(self) -> float:
     """Get the current humidity as a fraction 0.0-1.0."""

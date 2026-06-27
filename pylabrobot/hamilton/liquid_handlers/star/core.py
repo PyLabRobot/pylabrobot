@@ -1,11 +1,15 @@
-from dataclasses import dataclass
-from typing import Optional
+from __future__ import annotations
 
-from pylabrobot.arms.backend import GripperArmBackend
-from pylabrobot.arms.standard import GripperLocation
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Optional
+
+from pylabrobot.capabilities.arms.backend import GripperArmBackend
+from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.legacy.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.resources import Coordinate
+
+if TYPE_CHECKING:
+  from pylabrobot.hamilton.liquid_handlers.star.driver import STARDriver
 
 
 class CoreGripper(GripperArmBackend):
@@ -15,18 +19,31 @@ class CoreGripper(GripperArmBackend):
   Tool management (pick up / return) is handled by the STAR backend.
   """
 
-  def __init__(self, interface: HamiltonLiquidHandler):
-    self.interface = interface
+  def __init__(self, driver: STARDriver):
+    self.driver = driver
 
   # -- lifecycle --------------------------------------------------------------
 
-  async def get_gripper_location(self, backend_params=None) -> GripperLocation:
-    raise NotImplementedError("CoreGripper does not support get_gripper_location")
+  async def request_gripper_pose(self, backend_params=None) -> CartesianPose:
+    raise NotImplementedError("CoreGripper does not support request_gripper_pose")
 
   # -- ArmBackend interface ---------------------------------------------------
 
   @dataclass
   class PickUpParams(BackendParams):
+    """CoRe gripper parameters for plate pickup.
+
+    Args:
+      grip_strength: Grip strength (0 = low, 99 = high). Must be between 0 and 99.
+        Default 15.
+      y_gripping_speed: Y-axis gripping speed in mm/s. Default 5.0.
+      z_speed: Z-axis speed in mm/s. Default 50.0.
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+      z_position_at_end: Z position in mm at the end of the command. Must be between
+        0 and 360.0. Default 280.0.
+    """
+
     grip_strength: int = 15
     y_gripping_speed: float = 5.0
     z_speed: float = 50.0
@@ -52,27 +69,31 @@ class CoreGripper(GripperArmBackend):
     open_gripper_position = resource_width + 3.0
     plate_width = resource_width - 3.0
 
-    if not 0 <= abs(location.x) <= 3000.0:
+    if not -3000.0 <= location.x <= 3000.0:
       raise ValueError("x_position must be between -3000.0 and 3000.0")
-    if not 0 <= abs(location.y) <= 650.0:
-      raise ValueError("y_position must be between -650.0 and 650.0")
-    if not 0 <= abs(location.z) <= 360.0:
-      raise ValueError("z_position must be between -360.0 and 360.0")
+    if not 0 <= location.y <= 650.0:
+      raise ValueError("y_position must be between 0 and 650.0")
+    if not 0 <= location.z <= 360.0:
+      raise ValueError("z_position must be between 0 and 360.0")
     if not 0 <= backend_params.grip_strength <= 99:
       raise ValueError("grip_strength must be between 0 and 99")
+    if not 0 <= backend_params.y_gripping_speed <= 160.0:
+      raise ValueError("y_gripping_speed must be between 0 and 160.0 mm/s")
+    if not 0 <= backend_params.z_speed <= 160.0:
+      raise ValueError("z_speed must be between 0 and 160.0 mm/s")
     if not 0 <= backend_params.minimum_traverse_height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
     if not 0 <= backend_params.z_position_at_end <= 360.0:
       raise ValueError("z_position_at_end must be between 0 and 360.0")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ZP",
       xs=f"{abs(round(location.x * 10)):05}",
       xd=int(location.x < 0),
-      yj=f"{abs(round(location.y * 10)):04}",
+      yj=f"{round(location.y * 10):04}",
       yv=f"{round(backend_params.y_gripping_speed * 10):04}",
-      zj=f"{abs(round(location.z * 10)):04}",
+      zj=f"{round(location.z * 10):04}",
       zy=f"{round(backend_params.z_speed * 10):04}",
       yo=f"{round(open_gripper_position * 10):04}",
       yg=f"{round(plate_width * 10):04}",
@@ -83,6 +104,18 @@ class CoreGripper(GripperArmBackend):
 
   @dataclass
   class DropParams(BackendParams):
+    """CoRe gripper parameters for plate drop.
+
+    Args:
+      z_press_on_distance: Distance in mm to press down on the plate after placing it.
+        Default 0.0.
+      z_speed: Z-axis speed in mm/s. Default 50.0.
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+      z_position_at_end: Z position in mm at the end of the command. Must be between
+        0 and 360.0. Default 280.0.
+    """
+
     z_press_on_distance: float = 0.0
     z_speed: float = 50.0
     minimum_traverse_height: float = 280.0
@@ -106,24 +139,28 @@ class CoreGripper(GripperArmBackend):
 
     open_gripper_position = resource_width + 3.0
 
-    if not 0 <= abs(location.x) <= 3000.0:
+    if not -3000.0 <= location.x <= 3000.0:
       raise ValueError("x_position must be between -3000.0 and 3000.0")
-    if not 0 <= abs(location.y) <= 650.0:
-      raise ValueError("y_position must be between -650.0 and 650.0")
-    if not 0 <= abs(location.z) <= 360.0:
-      raise ValueError("z_position must be between -360.0 and 360.0")
+    if not 0 <= location.y <= 650.0:
+      raise ValueError("y_position must be between 0 and 650.0")
+    if not 0 <= location.z <= 360.0:
+      raise ValueError("z_position must be between 0 and 360.0")
+    if not 0 <= backend_params.z_press_on_distance <= 5.0:
+      raise ValueError("z_press_on_distance must be between 0 and 5.0 mm")
+    if not 0 <= backend_params.z_speed <= 160.0:
+      raise ValueError("z_speed must be between 0 and 160.0 mm/s")
     if not 0 <= backend_params.minimum_traverse_height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
     if not 0 <= backend_params.z_position_at_end <= 360.0:
       raise ValueError("z_position_at_end must be between 0 and 360.0")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ZR",
       xs=f"{abs(round(location.x * 10)):05}",
       xd=int(location.x < 0),
-      yj=f"{abs(round(location.y * 10)):04}",
-      zj=f"{abs(round(location.z * 10)):04}",
+      yj=f"{round(location.y * 10):04}",
+      zj=f"{round(location.z * 10):04}",
       zi=f"{round(backend_params.z_press_on_distance * 10):03}",
       zy=f"{round(backend_params.z_speed * 10):04}",
       yo=f"{round(open_gripper_position * 10):04}",
@@ -133,6 +170,16 @@ class CoreGripper(GripperArmBackend):
 
   @dataclass
   class MoveToLocationParams(BackendParams):
+    """CoRe gripper parameters for moving a held plate to a new position.
+
+    Args:
+      acceleration_index: Acceleration index for movement. Must be between 0 and 4.
+        Default 4.
+      z_speed: Z-axis speed in mm/s. Default 50.0.
+      minimum_traverse_height: Minimum Z clearance in mm before lateral movement.
+        Must be between 0 and 360.0. Default 280.0.
+    """
+
     acceleration_index: int = 4
     z_speed: float = 50.0
     minimum_traverse_height: float = 280.0
@@ -151,39 +198,55 @@ class CoreGripper(GripperArmBackend):
     if not isinstance(backend_params, CoreGripper.MoveToLocationParams):
       backend_params = CoreGripper.MoveToLocationParams()
 
-    if not 0 <= abs(location.x) <= 3000.0:
+    if not -3000.0 <= location.x <= 3000.0:
       raise ValueError("x_position must be between -3000.0 and 3000.0")
-    if not 0 <= abs(location.y) <= 650.0:
-      raise ValueError("y_position must be between -650.0 and 650.0")
-    if not 0 <= abs(location.z) <= 360.0:
-      raise ValueError("z_position must be between -360.0 and 360.0")
+    if not 0 <= location.y <= 650.0:
+      raise ValueError("y_position must be between 0 and 650.0")
+    if not 0 <= location.z <= 360.0:
+      raise ValueError("z_position must be between 0 and 360.0")
+    if not 0 <= backend_params.acceleration_index <= 4:
+      raise ValueError("acceleration_index must be between 0 and 4")
+    if not 0 <= backend_params.z_speed <= 160.0:
+      raise ValueError("z_speed must be between 0 and 160.0 mm/s")
     if not 0 <= backend_params.minimum_traverse_height <= 360.0:
       raise ValueError("minimum_traverse_height must be between 0 and 360.0")
 
-    await self.interface.send_command(
+    await self.driver.send_command(
       module="C0",
       command="ZM",
       xs=f"{abs(round(location.x * 10)):05}",
       xd=int(location.x < 0),
       xg=backend_params.acceleration_index,
-      yj=f"{abs(round(location.y * 10)):04}",
-      zj=f"{abs(round(location.z * 10)):04}",
+      yj=f"{round(location.y * 10):04}",
+      zj=f"{round(location.z * 10):04}",
       zy=f"{round(backend_params.z_speed * 10):04}",
       th=f"{round(backend_params.minimum_traverse_height * 10):04}",
     )
 
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    """Open the CoRe gripper."""
-    await self.interface.send_command(module="C0", command="ZO")
+  # ``min`` is the fully-closed jaw width. ``max`` is None because the CoRe
+  # gripper has no commandable "open" width: the firmware ZO command opens the
+  # jaws fully and ``width`` is therefore ignored.
+  min_gripper_width: float = 9.0
+  max_gripper_width: Optional[float] = None
 
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
-    raise NotImplementedError(
-      "CoreGripper does not support close_gripper directly. Use pick_up_at_location instead."
-    )
+    """Open the CoRe gripper.
+
+    Sends the firmware ZO command, which opens the jaws fully; ``width`` has
+    no effect. Force-sensing closes happen as part of :meth:`pick_up_at_location`
+    and are not exposed here.
+    """
+    if force_sensing:
+      raise NotImplementedError(
+        "CoreGripper does not support force-sensing closes directly. "
+        "Use pick_up_at_location instead."
+      )
+    await self.driver.send_command(module="C0", command="ZO")
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     raise NotImplementedError("CoreGripper does not support is_gripper_closed")
@@ -195,3 +258,50 @@ class CoreGripper(GripperArmBackend):
     raise NotImplementedError(
       "CoreGripper does not support park. Tool management is handled by the STAR backend."
     )
+
+  async def check_resource_exists_at_location_center(
+    self,
+    location: Coordinate,
+    resource_size_y: float,
+    gripper_y_margin: float = 0.5,
+    minimum_traverse_height: float = 275.0,
+    z_position_at_end: float = 275.0,
+  ) -> bool:
+    """Check that a resource is present at the given center location.
+
+    Performs a "Get plate" CoRe-gripper bump at ``location``: if the firmware
+    reports a "resource present" trace (information code 62) the bump was
+    blocked by the resource and we return True. Any other firmware-error trace
+    is re-raised. If the CoRe-gripper bump completes without error, the
+    resource was not present and we return False.
+
+    Args:
+      location: Target center position [mm] of the resource to probe.
+      resource_size_y: The Y-extent of the expected resource [mm].
+      gripper_y_margin: Margin between gripper jaws and resource walls [mm].
+      minimum_traverse_height: Traversal height at start [mm].
+      z_position_at_end: Z position at end [mm].
+    """
+    # Lazy import to avoid a cycle (errors imports nothing from this module).
+    from .errors import STARFirmwareError
+
+    y_width_to_gripper_bump = resource_size_y - gripper_y_margin * 2
+
+    try:
+      await self.pick_up_at_location(
+        location=location,
+        resource_width=y_width_to_gripper_bump,
+        backend_params=CoreGripper.PickUpParams(
+          y_gripping_speed=50.0,
+          z_speed=60.0,
+          grip_strength=20,
+          minimum_traverse_height=minimum_traverse_height,
+          z_position_at_end=z_position_at_end,
+        ),
+      )
+    except STARFirmwareError as exc:
+      for module_error in exc.errors.values():
+        if module_error.trace_information == 62:
+          return True
+      raise
+    return False

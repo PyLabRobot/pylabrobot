@@ -16,7 +16,7 @@ from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 RES_TERM_CHAR = b">"
 COMMAND_TERMINATORS: Dict[str, int] = {
@@ -285,12 +285,14 @@ class MolecularDevicesDriver(Driver):
       timeout=0.2,
     )
 
-  async def setup(self) -> None:
+  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self.io.setup()
     await self.send_command("!")
+    logger.info("[SpectraMax %s] connected", self.port)
 
   async def stop(self) -> None:
     await self.io.stop()
+    logger.info("[SpectraMax %s] disconnected", self.port)
 
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}
@@ -314,10 +316,12 @@ class MolecularDevicesDriver(Driver):
       raw_response += await self.io.readline()
       await asyncio.sleep(0.001)
       if time.time() > timeout_time:
+        logger.error(
+          "[SpectraMax %s] timeout waiting for response to command: %s", self.port, command
+        )
         raise TimeoutError(f"Timeout waiting for response to command: {command}")
       if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
         break
-    logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
     response = raw_response.decode("utf-8", errors="replace").strip().split(RES_TERM_CHAR.decode())
     response = [r.strip() for r in response if r.strip() != ""]
     self._parse_basic_errors(response, command)
@@ -325,6 +329,7 @@ class MolecularDevicesDriver(Driver):
 
   def _parse_basic_errors(self, response: List[str], command: str) -> None:
     if not response:
+      logger.error("[SpectraMax %s] command '%s' returned empty response", self.port, command)
       raise MolecularDevicesError(f"Command '{command}' failed with empty response.")
 
     error_code_msg = response[0] if "FAIL" in response[0] else response[-1]
@@ -347,7 +352,7 @@ class MolecularDevicesDriver(Driver):
     if not any("OK" in r for r in response):
       raise MolecularDevicesError(f"Command '{command}' failed with response: {response}")
     if "warning" in response[0].lower():
-      logger.warning("Warning for command '%s': %s", command, response)
+      logger.warning("[SpectraMax %s] warning for command '%s': %s", self.port, command, response)
 
   # -- device-level operations --
 
@@ -359,7 +364,7 @@ class MolecularDevicesDriver(Driver):
     """Close the plate tray."""
     await self.send_command("!CLOSE")
 
-  async def get_status(self) -> List[str]:
+  async def request_status(self) -> List[str]:
     """Get the current device status."""
     res = await self.send_command("!STATUS")
     if len(res) > 1:
@@ -377,7 +382,7 @@ class MolecularDevicesDriver(Driver):
     """Clear the device error log."""
     await self.send_command("!CLEAR ERROR")
 
-  async def get_firmware_version(self) -> List[str]:
+  async def request_firmware_version(self) -> List[str]:
     """Get the firmware version."""
     res = await self.send_command("!OPTION")
     return res[1].split()
@@ -395,8 +400,9 @@ class MolecularDevicesDriver(Driver):
     start_time = time.time()
     while True:
       if time.time() - start_time > timeout:
+        logger.error("[SpectraMax %s] timeout waiting for idle after %ds", self.port, timeout)
         raise TimeoutError("Timeout waiting for plate reader to become idle.")
-      status = await self.get_status()
+      status = await self.request_status()
       if status and status[1] == "IDLE":
         break
       await asyncio.sleep(1)
@@ -410,13 +416,13 @@ class MolecularDevicesDriver(Driver):
 class _MolecularDevicesProtocol:
   """Mixin with shared _set_* command builders for Molecular Devices readers.
 
-  Subclasses must have ``self._driver: MolecularDevicesDriver``.
+  Subclasses must have ``self.driver: MolecularDevicesDriver``.
   """
 
-  _driver: MolecularDevicesDriver
+  driver: MolecularDevicesDriver
 
   async def _read_now(self) -> None:
-    await self._driver.send_command("!READ")
+    await self.driver.send_command("!READ")
 
   async def _transfer_data(self, settings: MolecularDevicesSettings) -> List[Dict]:
     """Transfer data from the plate reader."""
@@ -433,13 +439,13 @@ class _MolecularDevicesProtocol:
 
       all_reads = []
       for _ in range(num_readings):
-        res = await self._driver.send_command("!TRANSFER")
+        res = await self.driver.send_command("!TRANSFER")
         data_str = res[1]
         read_data = self._parse_data(data_str, settings)
         all_reads.extend(read_data)
       return all_reads
 
-    res = await self._driver.send_command("!TRANSFER")
+    res = await self.driver.send_command("!TRANSFER")
     data_str = res[1]
     return self._parse_data(data_str, settings)
 
@@ -518,7 +524,7 @@ class _MolecularDevicesProtocol:
     return measurements
 
   async def _set_clear(self) -> None:
-    await self._driver.send_command("!CLEAR DATA")
+    await self.driver.send_command("!CLEAR DATA")
 
   async def _set_mode(self, settings: MolecularDevicesSettings) -> None:
     cmd = f"!MODE {settings.read_type.value}"
@@ -530,7 +536,7 @@ class _MolecularDevicesProtocol:
       cmd = "!MODE"
       scan_type = ss.excitation_emission_type or "SPECTRUM"
       cmd += f" {scan_type} {ss.start_wavelength} {ss.step} {ss.num_steps}"
-    await self._driver.send_command(cmd)
+    await self.driver.send_command(cmd)
 
   async def _set_wavelengths(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
@@ -540,15 +546,15 @@ class _MolecularDevicesProtocol:
       wl_str = " ".join(wl_parts)
       if settings.path_check:
         wl_str += " 900 998"
-      await self._driver.send_command(f"!WAVELENGTH {wl_str}")
+      await self.driver.send_command(f"!WAVELENGTH {wl_str}")
     elif settings.read_mode in (ReadMode.FLU, ReadMode.POLAR, ReadMode.TIME):
       ex_wl_str = " ".join(map(str, settings.excitation_wavelengths))
       em_wl_str = " ".join(map(str, settings.emission_wavelengths))
-      await self._driver.send_command(f"!EXWAVELENGTH {ex_wl_str}")
-      await self._driver.send_command(f"!EMWAVELENGTH {em_wl_str}")
+      await self.driver.send_command(f"!EXWAVELENGTH {ex_wl_str}")
+      await self.driver.send_command(f"!EMWAVELENGTH {em_wl_str}")
     elif settings.read_mode == ReadMode.LUM:
       wl_str = " ".join(map(str, settings.emission_wavelengths))
-      await self._driver.send_command(f"!EMWAVELENGTH {wl_str}")
+      await self.driver.send_command(f"!EMWAVELENGTH {wl_str}")
     else:
       raise NotImplementedError(f"{settings.read_mode} not supported")
 
@@ -571,15 +577,15 @@ class _MolecularDevicesProtocol:
 
     x_pos_cmd = f"!XPOS {top_left_well_center.x:.3f} {dx:.3f} {num_cols}"
     y_pos_cmd = f"!YPOS {size_y - top_left_well_center.y:.3f} {dy:.3f} {num_rows}"
-    await self._driver.send_command(x_pos_cmd)
-    await self._driver.send_command(y_pos_cmd)
+    await self.driver.send_command(x_pos_cmd)
+    await self.driver.send_command(y_pos_cmd)
 
   async def _set_strip(self, settings: MolecularDevicesSettings) -> None:
-    await self._driver.send_command(f"!STRIP 1 {settings.plate.num_items_x}")
+    await self.driver.send_command(f"!STRIP 1 {settings.plate.num_items_x}")
 
   async def _set_shake(self, settings: MolecularDevicesSettings) -> None:
     if not settings.shake_settings:
-      await self._driver.send_command("!SHAKE OFF")
+      await self.driver.send_command("!SHAKE OFF")
       return
     ss = settings.shake_settings
     shake_mode = "ON" if ss.before_read or ss.between_reads else "OFF"
@@ -591,33 +597,33 @@ class _MolecularDevicesProtocol:
     else:
       between_duration = 0
       wait_duration = 0
-    await self._driver.send_command(f"!SHAKE {shake_mode}")
-    await self._driver.send_command(
+    await self.driver.send_command(f"!SHAKE {shake_mode}")
+    await self.driver.send_command(
       f"!SHAKE {before_duration} {ki} {wait_duration} {between_duration} 0"
     )
 
   async def _set_carriage_speed(self, settings: MolecularDevicesSettings) -> None:
-    await self._driver.send_command(f"!CSPEED {settings.carriage_speed.value}")
+    await self.driver.send_command(f"!CSPEED {settings.carriage_speed.value}")
 
   async def _set_read_stage(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
       stage = "BOT" if settings.read_from_bottom else "TOP"
-      await self._driver.send_command(f"!READSTAGE {stage}")
+      await self.driver.send_command(f"!READSTAGE {stage}")
 
   async def _set_flashes_per_well(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
-      await self._driver.send_command(f"!FPW {settings.flashes_per_well}")
+      await self.driver.send_command(f"!FPW {settings.flashes_per_well}")
 
   async def _set_pmt(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode not in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
       return
     gain = settings.pmt_gain
     if gain == PmtGain.AUTO:
-      await self._driver.send_command("!AUTOPMT ON")
+      await self.driver.send_command("!AUTOPMT ON")
     else:
       gain_val = gain.value if isinstance(gain, PmtGain) else gain
-      await self._driver.send_command("!AUTOPMT OFF")
-      await self._driver.send_command(f"!PMT {gain_val}")
+      await self.driver.send_command("!AUTOPMT OFF")
+      await self.driver.send_command(f"!PMT {gain_val}")
 
   async def _set_filter(self, settings: MolecularDevicesSettings) -> None:
     if (
@@ -625,24 +631,24 @@ class _MolecularDevicesProtocol:
       and settings.cutoff_filters
     ):
       cf_str = " ".join(map(str, settings.cutoff_filters))
-      await self._driver.send_command("!AUTOFILTER OFF")
-      await self._driver.send_command(f"!EMFILTER {cf_str}")
+      await self.driver.send_command("!AUTOFILTER OFF")
+      await self.driver.send_command(f"!EMFILTER {cf_str}")
     else:
-      await self._driver.send_command("!AUTOFILTER ON")
+      await self.driver.send_command("!AUTOFILTER ON")
 
   async def _set_calibrate(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
-      await self._driver.send_command(f"!CALIBRATE {settings.calibrate.value}")
+      await self.driver.send_command(f"!CALIBRATE {settings.calibrate.value}")
     else:
-      await self._driver.send_command(f"!PMTCAL {settings.calibrate.value}")
+      await self.driver.send_command(f"!PMTCAL {settings.calibrate.value}")
 
   async def _set_order(self, settings: MolecularDevicesSettings) -> None:
-    await self._driver.send_command(f"!ORDER {settings.read_order.value}")
+    await self.driver.send_command(f"!ORDER {settings.read_order.value}")
 
   async def _set_speed(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
       mode = "ON" if settings.speed_read else "OFF"
-      await self._driver.send_command(f"!SPEED {mode}")
+      await self.driver.send_command(f"!SPEED {mode}")
 
   async def _set_nvram(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.POLAR:
@@ -651,13 +657,13 @@ class _MolecularDevicesProtocol:
     else:
       command = "CARCOL"
       value = settings.settling_time if settings.settling_time > 100 else 100
-    await self._driver.send_command(f"!NVRAM {command} {value}")
+    await self.driver.send_command(f"!NVRAM {command} {value}")
 
   async def _set_tag(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.POLAR and settings.read_type == ReadType.KINETIC:
-      await self._driver.send_command("!TAG ON")
+      await self.driver.send_command("!TAG ON")
     else:
-      await self._driver.send_command("!TAG OFF")
+      await self.driver.send_command("!TAG OFF")
 
   async def _set_readtype(self, settings: MolecularDevicesSettings) -> None:
     """Set the READTYPE command and the expected number of response fields."""
@@ -681,14 +687,14 @@ class _MolecularDevicesProtocol:
     else:
       raise ValueError(f"Unsupported read mode: {settings.read_mode}")
 
-    await self._driver.send_command(cmd, num_res_fields=num_res_fields)
+    await self.driver.send_command(cmd, num_res_fields=num_res_fields)
 
   async def _set_integration_time(
     self, settings: MolecularDevicesSettings, delay_time: int, integration_time: int
   ) -> None:
     if settings.read_mode == ReadMode.TIME:
-      await self._driver.send_command(f"!COUNTTIMEDELAY {delay_time}")
-      await self._driver.send_command(f"!COUNTTIME {integration_time * 0.001}")
+      await self.driver.send_command(f"!COUNTTIMEDELAY {delay_time}")
+      await self.driver.send_command(f"!COUNTTIME {integration_time * 0.001}")
 
   def _get_cutoff_filter_index_from_wavelength(self, wavelength: int) -> int:
     """Converts a wavelength to a cutoff filter index."""
@@ -725,10 +731,33 @@ class MolecularDevicesAbsorbanceBackend(_MolecularDevicesProtocol, AbsorbanceBac
   """Translates AbsorbanceBackend interface into Molecular Devices commands."""
 
   def __init__(self, driver: MolecularDevicesDriver) -> None:
-    self._driver = driver
+    self.driver = driver
 
   @dataclass
   class AbsorbanceParams(BackendParams):
+    """Molecular Devices parameters for absorbance reads.
+
+    Args:
+      wavelengths: List of wavelengths to read. Each entry is either an int (wavelength
+        in nm) or a tuple of ``(wavelength, pathcheck_reference)`` where the bool
+        indicates if that wavelength is used as a PathCheck reference. If None, uses the
+        wavelength from the ``read_absorbance`` call.
+      read_type: Read type (endpoint, kinetic, spectrum, or well scan). Default ENDPOINT.
+      read_order: Read order (column or row). Default COLUMN.
+      calibrate: Calibration mode (once, always, or never). Default ONCE.
+      shake_settings: Optional shake settings to apply before reading.
+      carriage_speed: Carriage speed (normal or low). Default NORMAL.
+      speed_read: If True, enable speed read mode for faster measurements with reduced
+        accuracy. Default False.
+      path_check: If True, enable PathCheck pathlength correction for absorbance values.
+        Default False.
+      kinetic_settings: Optional kinetic read settings (for kinetic read type).
+      spectrum_settings: Optional spectrum scan settings (for spectrum read type).
+      cuvette: If True, read a cuvette instead of a plate. Default False.
+      settling_time: Settling time in milliseconds before reading. Default 0.
+      timeout: Read timeout in seconds. Default 600.
+    """
+
     wavelengths: Optional[List[Union[int, Tuple[int, bool]]]] = None
     read_type: ReadType = ReadType.ENDPOINT
     read_order: ReadOrder = ReadOrder.COLUMN
@@ -755,6 +784,12 @@ class MolecularDevicesAbsorbanceBackend(_MolecularDevicesProtocol, AbsorbanceBac
 
     wavelengths = (
       backend_params.wavelengths if backend_params.wavelengths is not None else [wavelength]
+    )
+    logger.info(
+      "[SpectraMax %s] read absorbance: plate='%s', wavelengths=%s nm",
+      self.driver.port,
+      plate.name,
+      wavelengths,
     )
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -789,7 +824,7 @@ class MolecularDevicesAbsorbanceBackend(_MolecularDevicesProtocol, AbsorbanceBac
     await self._set_readtype(settings)
 
     await self._read_now()
-    await self._driver.wait_for_idle(timeout=backend_params.timeout)
+    await self.driver.wait_for_idle(timeout=backend_params.timeout)
     dicts = await self._transfer_data(settings)
     return [
       AbsorbanceResult(
@@ -806,15 +841,15 @@ class MolecularDevicesTemperatureBackend(TemperatureControllerBackend):
   """Translates TemperatureControllerBackend interface into Molecular Devices commands."""
 
   def __init__(self, driver: MolecularDevicesDriver) -> None:
-    self._driver = driver
+    self.driver = driver
 
   @property
   def supports_active_cooling(self) -> bool:
     return False
 
-  async def get_temperature(self) -> Tuple[float, float]:
+  async def request_temperature(self) -> Tuple[float, float]:
     """Get (current_temp, set_point) from the device."""
-    res = await self._driver.send_command("!TEMP")
+    res = await self.driver.send_command("!TEMP")
     if len(res) > 1:
       parts = res[1].split()
     else:
@@ -824,14 +859,17 @@ class MolecularDevicesTemperatureBackend(TemperatureControllerBackend):
       return (float(parts[1]), float(parts[0]))
     raise ValueError(f"Could not parse temperature from response: {res}")
 
-  async def get_current_temperature(self) -> float:
-    current, _ = await self.get_temperature()
+  async def request_current_temperature(self) -> float:
+    current, _ = await self.request_temperature()
+    logger.info("[SpectraMax %s] read temperature: actual=%.1f C", self.driver.port, current)
     return current
 
   async def set_temperature(self, temperature: float) -> None:
     if not (0 <= temperature <= 45):
       raise ValueError("Temperature must be between 0 and 45°C.")
-    await self._driver.send_command(f"!TEMP {temperature}")
+    logger.info("[SpectraMax %s] set temperature: target=%.1f C", self.driver.port, temperature)
+    await self.driver.send_command(f"!TEMP {temperature}")
 
   async def deactivate(self) -> None:
-    await self._driver.send_command("!TEMP 0")
+    logger.info("[SpectraMax %s] deactivate temperature control", self.driver.port)
+    await self.driver.send_command("!TEMP 0")

@@ -3,6 +3,9 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional, Union
 
+from pylabrobot.legacy.liquid_handling.channel_positioning import (
+  GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS,
+)
 from pylabrobot.legacy.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -157,6 +160,27 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     where each element is `True` if a tip is mounted, `False` if not, or `None` if unknown."""
 
     raise NotImplementedError()
+
+  def get_channel_spacings(self, use_channels: List[int]) -> List[float]:
+    """Get the per-channel occupancy diameter for each channel being used.
+
+    Each value is the channel's occupancy diameter - the physical space it takes up.
+    The required center-to-center distance between two adjacent channels is the sum of
+    their radii: ``spacing[i]/2 + spacing[j]/2``.
+
+    Args:
+      use_channels: The channels being used, in order.
+
+    Returns:
+      List of per-channel occupancy diameters (mm), length = ``len(use_channels)``.
+      Defaults to ``GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS`` (9mm) for all channels.
+      Backends with variable channel spacing should override this.
+
+    Note: This assumes channels spread along Y. Backends where channels are fixed in Y
+    (e.g. OT2 with 2 channels at fixed X spacing) should either override this or
+    signal that Y-spread is not supported via a ``supports_y_spread`` property.
+    """
+    return [GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS] * len(use_channels)
 
   @abstractmethod
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
