@@ -18,7 +18,7 @@ from pylabrobot.capabilities.liquid_handling.standard import (
   Pickup,
   TipDrop,
 )
-from pylabrobot.tecan.liquid_classes import (
+from pylabrobot.tecan.evo.liquid_classes import (
   TecanLiquidClass,
   get_liquid_class,
 )
