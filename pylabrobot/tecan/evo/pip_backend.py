@@ -7,6 +7,7 @@ Tecan firmware commands via the TecanEVODriver and LiHa firmware wrapper.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from pylabrobot.capabilities.capability import BackendParams
@@ -29,7 +30,6 @@ from pylabrobot.tecan.evo.driver import TecanEVODriver
 from pylabrobot.tecan.evo.errors import TecanError
 from pylabrobot.tecan.evo.firmware import LiHa
 from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
-from pylabrobot.tecan.evo.params import TecanPIPParams
 
 logger = logging.getLogger(__name__)
 
@@ -450,6 +450,24 @@ class EVOPIPBackend(PIPBackend):
     )
     await self.liha.drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=0)
 
+  @dataclass(frozen=True)
+  class TecanPIPParams(BackendParams):
+    """EVO-specific parameters for PIP operations.
+
+    Attributes:
+      liquid_detection_proc: Detection procedure for LLD.
+          7 = double detection sequential (default).
+      liquid_detection_sense: Conductivity setting for LLD.
+          1 = high conductivity (default).
+      tip_touch: If True, touch vessel wall after dispense to remove droplet.
+      tip_touch_offset_y: Y offset for tip touch in mm.
+    """
+
+    liquid_detection_proc: Optional[int] = None
+    liquid_detection_sense: Optional[int] = None
+    tip_touch: bool = False
+    tip_touch_offset_y: float = 1.0
+
   async def aspirate(
     self,
     ops: List[Aspiration],
@@ -496,7 +514,7 @@ class EVOPIPBackend(PIPBackend):
       assert tlc is not None
       lld_proc = tlc.lld_mode
       lld_sense = tlc.lld_conductivity
-      if isinstance(backend_params, TecanPIPParams):
+      if isinstance(backend_params, EVOPIPBackend.TecanPIPParams):
         if backend_params.liquid_detection_proc is not None:
           lld_proc = backend_params.liquid_detection_proc
         if backend_params.liquid_detection_sense is not None:
@@ -570,7 +588,7 @@ class EVOPIPBackend(PIPBackend):
     await self._perform_blow_out(ops, use_channels)
 
     # Tip touch
-    if isinstance(backend_params, TecanPIPParams) and backend_params.tip_touch:
+    if isinstance(backend_params, EVOPIPBackend.TecanPIPParams) and backend_params.tip_touch:
       touch_offset = int(backend_params.tip_touch_offset_y * 10)
       await self.liha.position_absolute_all_axis(
         x,

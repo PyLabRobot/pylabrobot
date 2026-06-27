@@ -7,6 +7,7 @@ TecanEVODriver and RoMa firmware wrapper.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
@@ -19,7 +20,6 @@ from pylabrobot.tecan.evo.driver import TecanEVODriver
 from pylabrobot.tecan.evo.errors import TecanError
 from pylabrobot.tecan.evo.firmware import RoMa
 from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
-from pylabrobot.tecan.evo.params import TecanRoMaParams
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,26 @@ class EVORoMaBackend(OrientableGripperArmBackend):
     self._park_position = park_position
     self.roma: Optional[RoMa] = None
 
+  @dataclass(frozen=True)
+  class TecanRoMaParams(BackendParams):
+    """EVO-specific parameters for RoMa operations.
+
+    Attributes:
+      speed_x: X-axis fast speed in 1/10 mm/s.
+      speed_y: Y-axis fast speed in 1/10 mm/s.
+      speed_z: Z-axis fast speed in 1/10 mm/s.
+      speed_r: R-axis fast speed in 1/10 deg/s.
+      accel_y: Y-axis acceleration in 1/10 mm/s^2.
+      accel_r: R-axis acceleration in 1/10 deg/s^2.
+    """
+
+    speed_x: Optional[int] = None
+    speed_y: Optional[int] = None
+    speed_z: Optional[int] = None
+    speed_r: Optional[int] = None
+    accel_y: Optional[int] = None
+    accel_r: Optional[int] = None
+
   def _get_speeds(self, backend_params: Optional[BackendParams]) -> Dict[str, int]:
     """Get speed settings, applying overrides from backend_params."""
     defaults = {
@@ -67,7 +87,7 @@ class EVORoMaBackend(OrientableGripperArmBackend):
       "accel_y": 1500,
       "accel_r": 1500,
     }
-    if isinstance(backend_params, TecanRoMaParams):
+    if isinstance(backend_params, EVORoMaBackend.TecanRoMaParams):
       for key, attr in [
         ("x", "speed_x"),
         ("y", "speed_y"),
