@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from pylabrobot.tecan.evo.arm import TecanGripperArm
+from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
 from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, Resource
@@ -97,10 +97,10 @@ class TecanEVO(Resource, Device):
     self._pip_backend = pip_backend
 
     # RoMa arm capability
-    self.arm: Optional[TecanGripperArm] = None
+    self.arm: Optional[OrientableGripperArm] = None
     if has_roma:
       roma_backend = EVORoMaBackend(driver=driver, deck=deck_ref)
-      self.arm = TecanGripperArm(backend=roma_backend, reference_resource=deck_ref)
+      self.arm = OrientableGripperArm(backend=roma_backend, reference_resource=deck_ref)
 
     # Capabilities list: PIP first (LiHa PIA), then arm (RoMa PIA + park)
     caps: list = [self.pip]

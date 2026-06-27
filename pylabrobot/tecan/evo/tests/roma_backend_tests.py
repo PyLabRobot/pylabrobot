@@ -8,12 +8,16 @@ from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
 from pylabrobot.resources.tecan.plates import Microplate_96_Well
 from pylabrobot.tecan.evo.driver import TecanEVODriver
 from pylabrobot.tecan.evo.firmware import RoMa
+from pylabrobot.tecan.evo.firmware.arm_base import EVOArm
 from pylabrobot.tecan.evo.roma_backend import EVORoMaBackend
 
 
 class RoMaTestBase(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     super().setUp()
+
+    # Isolate the cross-arm collision cache (class-level, shared across tests).
+    EVOArm._pos_cache.clear()
 
     self.driver = TecanEVODriver()
     self.driver.send_command = AsyncMock()
@@ -85,8 +89,9 @@ class RoMaLocationTests(RoMaTestBase):
 
 
 class RoMaPickUpTests(RoMaTestBase):
-  async def test_pick_up_from_carrier_sends_trajectory(self):
-    await self.backend.pick_up_from_carrier(self.plate)
+  async def test_pick_up_at_location_sends_trajectory(self):
+    loc = self.plate.get_location_wrt(self.deck)
+    await self.backend.pick_up_at_location(loc, direction=90.0, resource_width=85.0)
     cmd_names = [c.kwargs.get("command", "?") for c in self.driver.send_command.call_args_list]
     # Should send speed configs, SAA (vector coords), AAC (execute), SGG (gripper), AGR (grip)
     self.assertIn("SFX", cmd_names)
@@ -95,11 +100,16 @@ class RoMaPickUpTests(RoMaTestBase):
     self.assertIn("SGG", cmd_names)
     self.assertIn("AGR", cmd_names)
 
+  async def test_unvalidated_direction_raises(self):
+    loc = self.plate.get_location_wrt(self.deck)
+    with self.assertRaises(NotImplementedError):
+      await self.backend.pick_up_at_location(loc, direction=0.0, resource_width=85.0)
+
 
 class RoMaDropTests(RoMaTestBase):
-  async def test_drop_at_carrier_sends_trajectory(self):
+  async def test_drop_at_location_sends_trajectory(self):
     dest = self.plate.get_location_wrt(self.deck)
-    await self.backend.drop_at_carrier(self.plate, dest)
+    await self.backend.drop_at_location(dest, direction=90.0, resource_width=85.0)
     cmd_names = [c.kwargs.get("command", "?") for c in self.driver.send_command.call_args_list]
     # Multi-point trajectory: STW (target windows), SAA (vector coords), AAC (execute), PAG (open gripper)
     self.assertIn("STW", cmd_names)
