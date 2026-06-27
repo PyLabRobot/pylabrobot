@@ -562,6 +562,10 @@ class CytationMicroscopyBackend(MicroscopyBackend):
       def image_size(magnification: float) -> Tuple[float, float]:
         if magnification == 4:
           return (3474 / 1000, 3474 / 1000)
+        if magnification == 10:
+          # Estimated from the ~13880 um * magnification^-1 pattern of the other entries; the
+          # 4/20/40x values are measured. Refine with a measured 10x field of view if available.
+          return (1388 / 1000, 1388 / 1000)
         if magnification == 20:
           return (694 / 1000, 694 / 1000)
         if magnification == 40:
