@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Dict, Optional, Tuple
 
-from pylabrobot.arms.backend import GripperArmBackend
-from pylabrobot.arms.standard import GripperLocation
+from pylabrobot.capabilities.arms.backend import GripperArmBackend
+from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate, Resource, TecanPlateCarrier
 from pylabrobot.resources.rotation import Rotation
@@ -272,33 +272,47 @@ class EVORoMaBackend(GripperArmBackend):
     await self.roma.set_vector_coordinate_position(1, px, py, pz, pr, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
 
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    assert self.roma is not None
-    await self.roma.position_absolute_g(int(gripper_width * 10))
+  # Jaw-width bounds are hardware-specific and not documented for the RoMa.
+  # Declaring them None leaves move_gripper unvalidated (any width passes
+  # through) and makes the capability-level open_gripper/close_gripper
+  # convenience raise NotImplementedError until the range is measured.
+  @property
+  def min_gripper_width(self) -> Optional[float]:
+    return None
 
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  @property
+  def max_gripper_width(self) -> Optional[float]:
+    return None
+
+  async def move_gripper(
+    self,
+    width: float,
+    force_sensing: bool = False,
+    backend_params: Optional[BackendParams] = None,
   ) -> None:
     assert self.roma is not None
-    await self.roma.set_gripper_params(100, 75)
-    await self.roma.grip_plate(int(gripper_width * 10))
+    if force_sensing:
+      # Close with force feedback, stopping on plate contact.
+      await self.roma.set_gripper_params(100, 75)
+      await self.roma.grip_plate(int(width * 10))
+    else:
+      # Drive the jaws to the target width without sensing.
+      await self.roma.position_absolute_g(int(width * 10))
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     assert self.roma is not None
     pos = await self.roma.report_g_param(0)
     return pos < 100  # heuristic: < 10mm = closed
 
-  async def get_gripper_location(
+  async def request_gripper_pose(
     self, backend_params: Optional[BackendParams] = None
-  ) -> GripperLocation:
+  ) -> CartesianPose:
     assert self.roma is not None
     x = await self.roma.report_x_param(0)
     y = (await self.roma.report_y_param(0))[0]
     z = await self.roma.report_z_param(0)
     r = await self.roma.report_r_param(0)
-    return GripperLocation(
+    return CartesianPose(
       location=Coordinate(x=x / 10.0, y=y / 10.0, z=z / 10.0),
       rotation=Rotation(x=0, y=0, z=r / 10.0),
     )

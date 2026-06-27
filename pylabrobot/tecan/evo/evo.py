@@ -93,7 +93,7 @@ class TecanEVO(Resource, Device):
       pip_backend = AirEVOPIPBackend(driver=driver, deck=deck_ref, diti_count=diti_count)
     else:
       pip_backend = EVOPIPBackend(driver=driver, deck=deck_ref, diti_count=diti_count)
-    self.pip = PIP(backend=pip_backend)
+    self.pip = PIP(backend=pip_backend, deck=deck_ref)
     self._pip_backend = pip_backend
 
     # RoMa arm capability

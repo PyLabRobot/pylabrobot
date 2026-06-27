@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, Union
 
-from pylabrobot.arms.arm import GripperArm, _PickedUpState
+from pylabrobot.capabilities.arms.arm import GripperArm, _PickedUpState
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import (
   Coordinate,
@@ -82,3 +82,25 @@ class TecanGripperArm(GripperArm):
 
     # Use base class resource tracking
     self._finalize_drop(resource, destination, 0)
+
+  async def move_resource(
+    self,
+    resource: Resource,
+    to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
+    pickup_offset: Coordinate = Coordinate.zero(),
+    destination_offset: Coordinate = Coordinate.zero(),
+    pickup_distance_from_top: Optional[float] = None,
+    pickup_backend_params: Optional[BackendParams] = None,
+    drop_backend_params: Optional[BackendParams] = None,
+  ):
+    await self.pick_up_resource(
+      resource=resource,
+      offset=pickup_offset,
+      pickup_distance_from_top=pickup_distance_from_top,
+      backend_params=pickup_backend_params,
+    )
+    await self.drop_resource(
+      destination=to,
+      offset=destination_offset,
+      backend_params=drop_backend_params,
+    )

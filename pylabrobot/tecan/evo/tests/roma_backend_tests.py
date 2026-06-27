@@ -59,12 +59,12 @@ class RoMaHaltTests(RoMaTestBase):
 
 
 class RoMaGripperTests(RoMaTestBase):
-  async def test_open_gripper(self):
-    await self.backend.open_gripper(gripper_width=90.0)
+  async def test_move_gripper_without_force_drives_jaws(self):
+    await self.backend.move_gripper(width=90.0)
     self.driver.send_command.assert_called_with(module="C1", command="PAG", params=[900])
 
-  async def test_close_gripper(self):
-    await self.backend.close_gripper(gripper_width=50.0)
+  async def test_move_gripper_with_force_grips(self):
+    await self.backend.move_gripper(width=50.0, force_sensing=True)
     cmd_names = [c.kwargs.get("command", "?") for c in self.driver.send_command.call_args_list]
     self.assertIn("SGG", cmd_names)
     self.assertIn("AGR", cmd_names)
@@ -76,8 +76,8 @@ class RoMaGripperTests(RoMaTestBase):
 
 
 class RoMaLocationTests(RoMaTestBase):
-  async def test_get_gripper_location(self):
-    loc = await self.backend.get_gripper_location()
+  async def test_request_gripper_pose(self):
+    loc = await self.backend.request_gripper_pose()
     self.assertEqual(loc.location.x, 900.0)  # 9000 / 10
     self.assertEqual(loc.location.y, 200.0)  # 2000 / 10
     self.assertEqual(loc.location.z, 250.0)  # 2500 / 10
