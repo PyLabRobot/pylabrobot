@@ -32,7 +32,7 @@ class SCILADrawerLoadingTrayBackend(LoadingTrayBackend):
   async def close(
     self,
     backend_params: Optional[BackendParams] = None,
-    plate: Optional[Resource] = None,
+    resource: Optional[Resource] = None,
   ):
     await self._driver.send_command("PrepareForOutput", position=self._drawer_id)
     try:

@@ -11,6 +11,7 @@ except ImportError:
   HAS_PYLIBFTDI = False
   FtdiError = Exception  # type: ignore[misc,assignment]
 
+from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
 from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
@@ -126,6 +127,7 @@ class SynergyH1(Resource, Device):
     )
     Device.__init__(self, driver=backend)
     self.driver: SynergyH1Backend = backend
+    self._loading_tray_backend = BioTekLoadingTrayBackend(driver=backend)
     self.absorbance = Absorbance(backend=backend)
     self.luminescence = Luminescence(backend=backend)
     self.fluorescence = Fluorescence(backend=backend)
@@ -146,7 +148,11 @@ class SynergyH1(Resource, Device):
     return {**Resource.serialize(self), **Device.serialize(self)}
 
   async def open(self, slow: bool = False) -> None:
-    await self.driver.open(slow=slow)
+    await self._loading_tray_backend.open(
+      backend_params=BioTekLoadingTrayBackend.OpenParams(slow=slow)
+    )
 
   async def close(self, slow: bool = False) -> None:
-    await self.driver.close(slow=slow)
+    await self._loading_tray_backend.close(
+      backend_params=BioTekLoadingTrayBackend.CloseParams(slow=slow)
+    )

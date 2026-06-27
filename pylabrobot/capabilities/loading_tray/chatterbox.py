@@ -20,6 +20,6 @@ class LoadingTrayChatterboxBackend(LoadingTrayBackend):
   async def close(
     self,
     backend_params: Optional[BackendParams] = None,
-    plate: Optional["Resource"] = None,
+    resource: Optional["Resource"] = None,
   ):
     logger.info("Closing loading tray.")

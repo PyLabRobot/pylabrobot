@@ -25,19 +25,21 @@ class BioTekLoadingTrayBackend(LoadingTrayBackend):
   async def open(self, backend_params: Optional[BackendParams] = None):
     if not isinstance(backend_params, self.OpenParams):
       backend_params = self.OpenParams()
-    await self._driver._set_slow_mode(backend_params.slow)
+    await self._driver.set_slow_mode(backend_params.slow)
     await self._driver.send_command("J")
 
   async def close(
     self,
     backend_params: Optional[BackendParams] = None,
-    plate: Optional[Resource] = None,
+    resource: Optional[Resource] = None,
   ):
     if not isinstance(backend_params, self.CloseParams):
       backend_params = self.CloseParams()
-    await self._driver._set_slow_mode(backend_params.slow)
+    # Closing invalidates whatever plate geometry the firmware last had loaded.
+    self._driver.clear_plate()
+    await self._driver.set_slow_mode(backend_params.slow)
     # Send the plate geometry to the firmware before closing so the carrier accounts for the
     # labware height during the close motion. Without this, a tall plate can jam the tray.
-    if isinstance(plate, Plate):
-      await self._driver.set_plate(plate)
+    if isinstance(resource, Plate):
+      await self._driver.set_plate(resource)
     await self._driver.send_command("A")

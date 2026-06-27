@@ -22,7 +22,7 @@ class TecanInfiniteLoadingTrayBackend(LoadingTrayBackend):
   async def close(
     self,
     backend_params: Optional[BackendParams] = None,
-    plate: Optional["Resource"] = None,
+    resource: Optional["Resource"] = None,
   ):
     await self._driver.send_command("ABSOLUTE MTP,IN")
     await self._driver.send_command("BY#T5000")

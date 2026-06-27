@@ -10,6 +10,7 @@ import pytest
 
 pytest.importorskip("pylibftdi")
 
+from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
 from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
@@ -64,13 +65,13 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def test_open(self):
     self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x03"]
-    await self.backend.open()
+    await BioTekLoadingTrayBackend(driver=self.backend).open()
     self.backend.io.write.assert_called_with(b"J")
 
   async def test_close(self):
     self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x06", b"\x03", b"\x03"]
     plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
-    await self.backend.close(plate=plate)
+    await BioTekLoadingTrayBackend(driver=self.backend).close(resource=plate)
     self.backend.io.write.assert_called_with(b"A")
 
   async def test_request_current_temperature(self):
@@ -405,7 +406,7 @@ class TestBioTekLoadingTrayBackend(unittest.IsolatedAsyncioTestCase):
 
     self.manager = unittest.mock.Mock()
     self.driver = unittest.mock.MagicMock()
-    self.driver._set_slow_mode = unittest.mock.AsyncMock()
+    self.driver.set_slow_mode = unittest.mock.AsyncMock()
     self.driver.set_plate = unittest.mock.AsyncMock()
     self.driver.send_command = unittest.mock.AsyncMock()
     self.manager.attach_mock(self.driver.set_plate, "set_plate")
@@ -414,13 +415,13 @@ class TestBioTekLoadingTrayBackend(unittest.IsolatedAsyncioTestCase):
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
   async def test_close_sends_plate_geometry_then_closes(self):
-    await self.backend.close(plate=self.plate)
+    await self.backend.close(resource=self.plate)
     self.driver.set_plate.assert_awaited_once_with(self.plate)
     self.driver.send_command.assert_awaited_once_with("A")
     # set_plate must run before the close ("A") command.
     self.assertEqual([call[0] for call in self.manager.mock_calls], ["set_plate", "send_command"])
 
   async def test_close_without_plate_skips_set_plate(self):
-    await self.backend.close(plate=None)
+    await self.backend.close(resource=None)
     self.driver.set_plate.assert_not_awaited()
     self.driver.send_command.assert_awaited_once_with("A")

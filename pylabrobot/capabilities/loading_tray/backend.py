@@ -18,12 +18,12 @@ class LoadingTrayBackend(CapabilityBackend, metaclass=ABCMeta):
   async def close(
     self,
     backend_params: Optional[BackendParams] = None,
-    plate: Optional["Resource"] = None,
+    resource: Optional["Resource"] = None,
   ):
     """Close the loading tray.
 
     Args:
-      plate: the resource currently held by the tray, if any. Backends that need the labware
+      resource: the resource currently held by the tray, if any. Backends that need the labware
         geometry during the close motion (e.g. to give a tall plate enough clearance) can use it;
         others ignore it.
     """

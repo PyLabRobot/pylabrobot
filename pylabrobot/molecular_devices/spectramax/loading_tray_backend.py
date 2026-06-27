@@ -21,6 +21,6 @@ class MolecularDevicesLoadingTrayBackend(LoadingTrayBackend):
   async def close(
     self,
     backend_params: Optional[BackendParams] = None,
-    plate: Optional["Resource"] = None,
+    resource: Optional["Resource"] = None,
   ):
     await self._driver.send_command("!CLOSE")

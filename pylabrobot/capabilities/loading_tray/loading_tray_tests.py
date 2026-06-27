@@ -13,7 +13,7 @@ from pylabrobot.resources.well import Well
 
 
 class _RecordingTrayBackend(LoadingTrayBackend):
-  """Records the plate passed to close()."""
+  """Records the resource passed to close()."""
 
   def __init__(self):
     self.closed_with: Optional[Resource] = "unset"  # type: ignore[assignment]
@@ -24,9 +24,9 @@ class _RecordingTrayBackend(LoadingTrayBackend):
   async def close(
     self,
     backend_params: Optional[BackendParams] = None,
-    plate: Optional[Resource] = None,
+    resource: Optional[Resource] = None,
   ):
-    self.closed_with = plate
+    self.closed_with = resource
 
 
 def _plate() -> Plate:

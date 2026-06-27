@@ -42,4 +42,4 @@ class LoadingTray(Capability, ResourceHolder):
   async def close(self, backend_params: Optional[BackendParams] = None):
     # Pass the held resource so backends that need the labware geometry during the close motion
     # (e.g. to clear a tall plate) can use it.
-    await self.backend.close(backend_params=backend_params, plate=self.resource)
+    await self.backend.close(backend_params=backend_params, resource=self.resource)
