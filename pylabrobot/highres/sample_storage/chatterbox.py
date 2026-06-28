@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
 
-from .backend import (
+from .driver import (
   HighResSampleStorageAutomatedRetrievalBackend,
   HighResSampleStorageDriver,
   HighResSampleStorageHumidityControllerBackend,

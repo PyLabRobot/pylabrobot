@@ -1,7 +1,7 @@
 import unittest
 from typing import Dict, List
 
-from pylabrobot.highres.sample_storage.backend import HighResSampleStorageDriver
+from pylabrobot.highres.sample_storage.driver import HighResSampleStorageDriver
 from pylabrobot.highres.sample_storage.errors import (
   PlateNotFoundError,
   HighResSampleStorageError,

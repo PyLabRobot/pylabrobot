@@ -1,4 +1,4 @@
-from .backend import (
+from .driver import (
   HighResSampleStorageAutomatedRetrievalBackend,
   HighResSampleStorageDriver,
   HighResSampleStorageHumidityControllerBackend,

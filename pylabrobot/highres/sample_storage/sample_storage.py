@@ -14,7 +14,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.resource import Resource
 
-from .backend import HighResSampleStorageDriver
+from .driver import HighResSampleStorageDriver
 
 
 class _HighResSampleStorage(Resource, Device):
