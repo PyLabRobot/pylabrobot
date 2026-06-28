@@ -41,7 +41,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
@@ -698,7 +698,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.tip_rack = hamilton_96_tiprack_300uL("tip_rack")
     self.deck.assign_child_resource(self.tip_rack, rails=1)
 
-    self.plate = Cor_96_wellplate_360ul_Fb("plate")
+    self.plate = cor_96_wellplate_360uL_Fb("plate")
     self.deck.assign_child_resource(self.plate, rails=10)
 
     self.tip = HamiltonTip(

@@ -16,7 +16,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
 )
 from pylabrobot.resources import Coordinate, Tip, no_volume_tracking
-from pylabrobot.resources.celltreat import CellTreat_96_wellplate_350ul_Fb
+from pylabrobot.resources.celltreat import celltreat_96_wellplate_350uL_Fb
 from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
 from pylabrobot.resources.well import Well
 
@@ -112,7 +112,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
     self.deck.assign_child_at_slot(self.tip_rack, slot=1)
-    self.plate = CellTreat_96_wellplate_350ul_Fb(name="plate")
+    self.plate = celltreat_96_wellplate_350uL_Fb(name="plate")
     self.deck.assign_child_at_slot(self.plate, slot=11)
 
   @patch("ot_api.lh.pick_up_tip")
