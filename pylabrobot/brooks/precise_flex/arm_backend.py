@@ -1716,21 +1716,6 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     wrist: Optional[Wrist] = None
     rail_position: Optional[float] = None
 
-  @dataclass
-  class MoveThroughCartesianPosesParams(BackendParams):
-    """PreciseFlex arm parameters for blended Cartesian pose routes.
-
-    Args:
-      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
-        current speed setting.
-      blend: When True, temporarily set the active motion profile's ``InRange`` value to
-        ``-1`` so the controller may blend through intermediate waypoints instead of stopping
-        at each one. The original profile is restored after the final waypoint is reached.
-    """
-
-    speed_pct: Optional[float] = None
-    blend: bool = True
-
   async def move_to_location(
     self,
     location: Coordinate,
@@ -1801,6 +1786,21 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       planned_joints = target
       planned_pose = cart
     return targets
+
+  @dataclass
+  class MoveThroughCartesianPosesParams(BackendParams):
+    """PreciseFlex arm parameters for blended Cartesian pose routes.
+
+    Args:
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+      blend: When True, temporarily set the active motion profile's ``InRange`` value to
+        ``-1`` so the controller may blend through intermediate waypoints instead of stopping
+        at each one. The original profile is restored after the final waypoint is reached.
+    """
+
+    speed_pct: Optional[float] = None
+    blend: bool = True
 
   async def move_through_cartesian_poses(
     self,
