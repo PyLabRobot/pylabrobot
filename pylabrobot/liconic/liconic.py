@@ -64,7 +64,7 @@ class Liconic(Resource, Device):
       self.assign_child_resource(rack, location=None)
 
     self.retrieval = AutomatedRetrieval(
-      backend=backend, racks=self._racks, loading_tray=self.loading_tray
+      backend=backend, racks=self._racks, loading_trays=[self.loading_tray]
     )
     self.tc = (
       TemperatureController(backend=backend) if liconic_model.has_temperature_control else None

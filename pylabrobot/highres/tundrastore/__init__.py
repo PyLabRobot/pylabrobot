@@ -14,4 +14,6 @@ from .standard import (
   StackerDimensions,
   VersionInfo,
 )
-from .tundrastore import NoFreeSiteError, TundraStore
+from pylabrobot.capabilities.automated_retrieval import NoFreeSiteError
+
+from .tundrastore import TundraStore

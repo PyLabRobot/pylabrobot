@@ -19,10 +19,15 @@ class NoFreeSiteError(Exception):
 class AutomatedRetrieval(Capability):
   """Automated plate retrieval/storage capability.
 
-  Owns the storage racks and the loading tray, and implements the site
+  Owns the storage racks and the loading tray(s), and implements the site
   bookkeeping (free-site counting, lookup and selection) shared by all
   automated storage systems so devices composing this capability do not have to
   reimplement it.
+
+  Most devices have a single loading tray and pass it as a one-element list.
+  Devices with several transfer nests (e.g. the TundraStore) pass one
+  :class:`PlateHolder` per nest and address them by ``tray_index`` (0-based,
+  defaulting to the first tray).
 
   See :doc:`/user_guide/capabilities/automated-retrieval` for a walkthrough.
   """
@@ -31,16 +36,26 @@ class AutomatedRetrieval(Capability):
     self,
     backend: AutomatedRetrievalBackend,
     racks: Optional[List[PlateCarrier]] = None,
-    loading_tray: Optional[PlateHolder] = None,
+    loading_trays: Optional[List[PlateHolder]] = None,
   ):
     super().__init__(backend=backend)
     self.backend: AutomatedRetrievalBackend = backend
     self._racks: List[PlateCarrier] = racks if racks is not None else []
-    self.loading_tray = loading_tray
+    self.loading_trays: List[PlateHolder] = loading_trays if loading_trays is not None else []
 
   @property
   def racks(self) -> List[PlateCarrier]:
     return self._racks
+
+  def _loading_tray(self, tray_index: int) -> PlateHolder:
+    if not self.loading_trays:
+      raise RuntimeError("No loading tray configured for this automated retrieval.")
+    if not 0 <= tray_index < len(self.loading_trays):
+      raise ValueError(
+        f"tray_index {tray_index} out of range; this device has "
+        f"{len(self.loading_trays)} loading tray(s)."
+      )
+    return self.loading_trays[tray_index]
 
   # -- site bookkeeping --
 
@@ -83,29 +98,29 @@ class AutomatedRetrieval(Capability):
   # -- storage operations --
 
   @need_capability_ready
-  async def fetch_plate_to_loading_tray(self, plate_name: str) -> Plate:
-    """Retrieve the plate with the given name from storage onto the loading tray."""
-    if self.loading_tray is None:
-      raise RuntimeError("No loading tray configured for this automated retrieval.")
+  async def fetch_plate_to_loading_tray(self, plate_name: str, tray_index: int = 0) -> Plate:
+    """Retrieve the named plate from storage onto loading tray ``tray_index``."""
+    tray = self._loading_tray(tray_index)
     site = self.get_site_by_plate_name(plate_name)
     plate = cast(Plate, site.resource)
-    await self.backend.fetch_plate_to_loading_tray(plate)
+    await self.backend.fetch_plate_to_loading_tray(plate, tray_index=tray_index)
     plate.unassign()
-    self.loading_tray.assign_child_resource(plate)
+    tray.assign_child_resource(plate)
     return plate
 
   @need_capability_ready
   async def take_in_plate(
-    self, site: Union[PlateHolder, Literal["random", "smallest"]] = "smallest"
+    self,
+    site: Union[PlateHolder, Literal["random", "smallest"]] = "smallest",
+    tray_index: int = 0,
   ):
-    """Take the plate from the loading tray and store it into storage.
+    """Take the plate from loading tray ``tray_index`` and store it into storage.
 
     `site` may be an explicit free `PlateHolder`, or `"smallest"`/`"random"` to
     let the capability pick a fitting free site.
     """
-    if self.loading_tray is None:
-      raise RuntimeError("No loading tray configured for this automated retrieval.")
-    plate = cast(Optional[Plate], self.loading_tray.resource)
+    tray = self._loading_tray(tray_index)
+    plate = cast(Optional[Plate], tray.resource)
     if plate is None:
       raise ResourceNotFoundError("No plate on the loading tray.")
 
@@ -119,7 +134,7 @@ class AutomatedRetrieval(Capability):
     else:
       raise ValueError(f"Invalid site: {site}")
 
-    await self.backend.store_plate(plate, site)
+    await self.backend.store_plate(plate, site, tray_index=tray_index)
     plate.unassign()
     site.assign_child_resource(plate)
 

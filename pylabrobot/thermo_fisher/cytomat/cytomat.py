@@ -66,7 +66,7 @@ class Cytomat(Resource, Device):
       self.assign_child_resource(rack, location=None)
 
     self.retrieval = AutomatedRetrieval(
-      backend=driver, racks=self._racks, loading_tray=self.loading_tray
+      backend=driver, racks=self._racks, loading_trays=[self.loading_tray]
     )
     self.tc = TemperatureController(backend=driver)
     self.humidity = HumidityController(backend=driver)
