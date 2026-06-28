@@ -1844,19 +1844,17 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
           original_profile[8],
         )
 
-    moves_sent = 0
-    waited_for_eom = False
     try:
       for target in targets:
         await self._move_j(profile_index=profile_index, joint_coords=target)
-        moves_sent += 1
-      await self.driver._wait_for_eom()
-      waited_for_eom = True
     finally:
-      if should_restore_profile and original_profile is not None:
-        if moves_sent > 0 and not waited_for_eom:
-          await self.driver._wait_for_eom()
-        await self.set_motion_profile_values(*original_profile)
+      # Let queued motion settle before returning or restoring the profile - restoring InRange
+      # mid-move would change the in-flight blend.
+      try:
+        await self.driver._wait_for_eom()
+      finally:
+        if should_restore_profile and original_profile is not None:
+          await self.set_motion_profile_values(*original_profile)
 
   async def dest_c(self, arg1: int = 0) -> tuple[float, float, float, float, float, float, int]:
     """Get the destination or current Cartesian location of the robot.
