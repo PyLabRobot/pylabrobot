@@ -9,10 +9,8 @@ from .errors import (
 from .settings import TundraStoreSettings
 from .standard import (
   DoorState,
-  DoorStatus,
   EnvironmentParameter,
   NestState,
-  NestStatus,
   StackerDimensions,
   VersionInfo,
 )

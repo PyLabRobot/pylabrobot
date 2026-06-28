@@ -21,10 +21,8 @@ from .errors import (
 from .settings import TundraStoreSettings
 from .standard import (
   DoorState,
-  DoorStatus,
   EnvironmentParameter,
   NestState,
-  NestStatus,
   StackerDimensions,
   VersionInfo,
 )
@@ -225,16 +223,18 @@ class TundraStoreBackend(
     lines = await self.send_command("homedstatus")
     return any(line.strip().lower() == "homed" for line in lines)
 
-  async def request_door_status(self) -> DoorStatus:
+  async def request_door_status(self) -> Dict[str, DoorState]:
+    """Parsed ``doorstatus`` output, keyed by door name."""
     doors: Dict[str, DoorState] = {}
     for name, value in self._parse_kv(await self.send_command("doorstatus")).items():
       try:
         doors[name] = DoorState(value)
       except ValueError:
         doors[name] = DoorState.UNKNOWN
-    return DoorStatus(doors=doors)
+    return doors
 
-  async def request_nest_status(self) -> NestStatus:
+  async def request_nest_status(self) -> Dict[int, NestState]:
+    """Parsed ``neststatus`` output, keyed by nest number."""
     nests: Dict[int, NestState] = {}
     for key, value in self._parse_kv(await self.send_command("neststatus")).items():
       try:
@@ -245,7 +245,7 @@ class TundraStoreBackend(
         nests[nest] = NestState(value)
       except ValueError:
         nests[nest] = NestState.UNKNOWN
-    return NestStatus(nests=nests)
+    return nests
 
   async def spatula_request_is_holding(self) -> bool:
     """Whether a plate is currently held on the spatula (``platestatus``)."""
@@ -258,7 +258,7 @@ class TundraStoreBackend(
     Note: this unit reports an occupied nest as ``UNKNOWN`` rather than
     ``OCCUPIED``; anything other than ``CLEAR`` counts as holding.
     """
-    state = (await self.request_nest_status()).nests.get(nest)
+    state = (await self.request_nest_status()).get(nest)
     return state is not None and state is not NestState.CLEAR
 
   async def probe_presence(self, stacker: int, slot: int, to_nest: int = 1) -> bool:

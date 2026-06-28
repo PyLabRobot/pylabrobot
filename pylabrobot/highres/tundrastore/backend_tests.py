@@ -107,15 +107,15 @@ class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(await self.backend.is_homed())
 
   async def test_door_status(self):
-    status = await self.backend.request_door_status()
-    self.assertEqual(status.doors["User Door"], DoorState.CLOSED)
-    self.assertEqual(status.doors["SEAL"], DoorState.CLOSING)
-    self.assertEqual(status.doors["RO1"], DoorState.CLOSING)
-    self.assertFalse(status.all_closed)
+    doors = await self.backend.request_door_status()
+    self.assertEqual(doors["User Door"], DoorState.CLOSED)
+    self.assertEqual(doors["SEAL"], DoorState.CLOSING)
+    self.assertEqual(doors["RO1"], DoorState.CLOSING)
+    self.assertFalse(all(state is DoorState.CLOSED for state in doors.values()))
 
   async def test_nest_status(self):
-    status = await self.backend.request_nest_status()
-    self.assertEqual(status.nests, {1: NestState.CLEAR, 2: NestState.CLEAR})
+    nests = await self.backend.request_nest_status()
+    self.assertEqual(nests, {1: NestState.CLEAR, 2: NestState.CLEAR})
 
   async def test_plate_on_spatula(self):
     self.assertFalse(await self.backend.spatula_request_is_holding())

@@ -47,24 +47,6 @@ class EnvironmentParameter:
 
 
 @dataclass
-class DoorStatus:
-  """Parsed output of the ``doorstatus`` command, keyed by door name."""
-
-  doors: Dict[str, DoorState]
-
-  @property
-  def all_closed(self) -> bool:
-    return all(state is DoorState.CLOSED for state in self.doors.values())
-
-
-@dataclass
-class NestStatus:
-  """Parsed output of the ``neststatus`` command, keyed by nest number."""
-
-  nests: Dict[int, NestState]
-
-
-@dataclass
 class StackerDimensions:
   """One stacker's geometry, from ``getstackerdimensions``."""
 
