@@ -73,7 +73,8 @@ def agilent_96_wellplate_150uL_Vb(name: str) -> Plate:
     "size_x": diameter,  # from spec
     "size_y": diameter,  # from spec
     "size_z": 14.0,  # from spec
-    "bottom_type": WellBottomType.U,
+    "bottom_type": WellBottomType.V,
+    "cross_section_type": CrossSectionType.CIRCLE,
     "material_z_thickness": 0.88,  # measured using z-probing
     "max_volume": 190,  # measured
     "compute_volume_from_height": _compute_volume_from_height_agilent_96_wellplate_150uL_Vb,
@@ -111,7 +112,7 @@ def agilent_96_wellplate_150uL_Ub(name: str) -> Plate:
   return agilent_96_wellplate_150uL_Vb(name)
 
 
-def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
+def agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
   """Agilent 2 Reservoir 144mL V bottom
   Part Number: 203852-100
   - Max Volume: 144 mL
@@ -122,7 +123,7 @@ def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
     size_x=127.76,  # from spec
     size_y=85.47,  # from spec
     size_z=44.04,  # from spec
-    model="Agilent_2_reservoir_144mL_Vb",
+    model="agilent_2_reservoir_144mL_Vb",
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=2,  # from spec
@@ -140,3 +141,23 @@ def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
       material_z_thickness=1.15,
     ),
   )
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
+
+
+def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:  # remove 2026-10
+  """Deprecated alias for agilent_2_reservoir_144mL_Vb().
+
+  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  Use `agilent_2_reservoir_144mL_Vb()` instead.
+  """
+  warnings.warn(
+    "Agilent_2_reservoir_144mL_Vb() is deprecated and will be removed after 2026-10. "
+    "Use agilent_2_reservoir_144mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return agilent_2_reservoir_144mL_Vb(name)
