@@ -7,11 +7,11 @@ from .backend import (
 from .chatterbox import HighResSampleStorageChatterboxDriver
 from .errors import (
   PlateNotFoundError,
-  TundraStoreAbortedError,
-  TundraStoreError,
-  TundraStoreFault,
+  HighResSampleStorageAbortedError,
+  HighResSampleStorageError,
+  HighResSampleStorageFault,
 )
-from .settings import MachineType, TundraStoreSettings
+from .settings import MachineType, HighResSampleStorageSettings
 from .types import (
   DoorState,
   EnvironmentParameter,
@@ -21,4 +21,4 @@ from .types import (
 )
 from pylabrobot.capabilities.automated_retrieval import NoFreeSiteError
 
-from .tundrastore import TundraStore
+from .sample_storage import AmbiStore, SteriStore, TundraStore

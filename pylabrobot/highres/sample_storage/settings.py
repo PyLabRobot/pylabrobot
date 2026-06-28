@@ -3,7 +3,7 @@
 The device exposes its full calibration/configuration via the ``settings``
 command as ``NAME = value`` text. Each key is surfaced here as one explicitly
 typed attribute (the device ``NAME`` lower-cased); types are inferred from the
-device's own values. A :class:`TundraStoreSettings` is loaded whole from the
+device's own values. A :class:`HighResSampleStorageSettings` is loaded whole from the
 device (or a capture) and is frozen once built.
 """
 
@@ -24,7 +24,7 @@ KNOWN_MACHINE_TYPES: Tuple[str, ...] = ("SteriStore2",)
 
 
 @dataclass(frozen=True)
-class TundraStoreSettings:
+class HighResSampleStorageSettings:
   """All on-device settings, one typed attribute per device key."""
 
   product_name: str
@@ -665,7 +665,7 @@ class TundraStoreSettings:
   lidvalet_wait_for_lift_rise_ms: int
 
   @classmethod
-  def from_lines(cls, lines: Iterable[str]) -> "TundraStoreSettings":
+  def from_lines(cls, lines: Iterable[str]) -> "HighResSampleStorageSettings":
     """Build from the device's ``settings`` output (``NAME = value`` lines)."""
     data: Dict[str, str] = {}
     for line in lines:

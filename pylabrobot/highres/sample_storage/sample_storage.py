@@ -1,3 +1,4 @@
+import warnings
 from typing import List, Optional
 
 from pylabrobot.capabilities.automated_retrieval import AutomatedRetrieval
@@ -16,16 +17,24 @@ from pylabrobot.resources.resource import Resource
 from .backend import HighResSampleStorageDriver
 
 
-class TundraStore(Resource, Device):
-  """HighRes Biosolutions TundraStore refrigerated plate store.
+class _HighResSampleStorage(Resource, Device):
+  """Base device for HighRes Biosolutions sample stores.
 
-  Each rack is a *stacker* (a vertical column of plate slots); plates enter and
-  leave through one of the device's *nests* (transfer stations). The store has
-  two nests, exposed as the loading trays of the :class:`AutomatedRetrieval`
-  capability (:attr:`retrieval`). Storage bookkeeping and the fetch/store
-  operations live on the capability; address a particular nest with its
-  ``tray_index`` (0-based, defaulting to the first nest).
+  The TundraStore, SteriStore and AmbiStore are the same machine family behind a
+  shared port-1000 API, so all of the implementation lives here and the concrete
+  devices are thin subclasses. Each rack is a *stacker* (a vertical column of
+  plate slots); plates enter and leave through one of the device's *nests*
+  (transfer stations), exposed as the loading trays of the
+  :class:`AutomatedRetrieval` capability (:attr:`retrieval`). Storage bookkeeping
+  and the fetch/store operations live on the capability; address a particular
+  nest with its ``tray_index`` (0-based, defaulting to the first nest).
+
+  Subclasses set :attr:`_model_name` and :attr:`_has_environment_control` (the
+  latter controls whether the temperature/humidity capabilities are wired).
   """
+
+  _model_name: str = "HighResSampleStorage"
+  _has_environment_control: bool = True
 
   def __init__(
     self,
@@ -38,7 +47,7 @@ class TundraStore(Resource, Device):
     size_z: float = 0,
     rotation: Optional[Rotation] = None,
     category: Optional[str] = "plate_store",
-    model: Optional[str] = "TundraStore",
+    model: Optional[str] = None,
   ):
     """
     Args:
@@ -54,7 +63,7 @@ class TundraStore(Resource, Device):
       size_z=size_z,
       rotation=rotation,
       category=category,
-      model=model,
+      model=model or self._model_name,
     )
     Device.__init__(self, driver=driver)
     self.driver: HighResSampleStorageDriver = driver
@@ -74,9 +83,12 @@ class TundraStore(Resource, Device):
     self.retrieval = AutomatedRetrieval(
       backend=driver.automated_retrieval, racks=self._racks, loading_trays=self.nests
     )
-    self.tc = TemperatureController(backend=driver.temperature)
-    self.humidity = HumidityController(backend=driver.humidity)
-    self._capabilities = [self.tc, self.humidity, self.retrieval]
+    self._capabilities = [self.retrieval]
+
+    if self._has_environment_control:
+      self.tc = TemperatureController(backend=driver.temperature)
+      self.humidity = HumidityController(backend=driver.humidity)
+      self._capabilities = [self.tc, self.humidity, self.retrieval]
 
   @property
   def racks(self) -> List[PlateCarrier]:
@@ -95,3 +107,35 @@ class TundraStore(Resource, Device):
       "racks": [rack.serialize() for rack in self._racks],
       "nest_locations": [serialize(nest.location) for nest in self.nests],
     }
+
+
+class TundraStore(_HighResSampleStorage):
+  """HighRes Biosolutions TundraStore refrigerated plate store."""
+
+  _model_name = "TundraStore"
+
+
+class SteriStore(_HighResSampleStorage):
+  """HighRes Biosolutions SteriStore plate store (same API as the TundraStore)."""
+
+  _model_name = "SteriStore"
+
+
+class AmbiStore(_HighResSampleStorage):
+  """HighRes Biosolutions AmbiStore plate store.
+
+  WORK IN PROGRESS: the AmbiStore is ambient (no refrigeration), so it exposes
+  only the retrieval capability — no temperature/humidity control. Whether it
+  has any environment control at all is not yet confirmed against hardware.
+  """
+
+  _model_name = "AmbiStore"
+  _has_environment_control = False
+
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "AmbiStore support is a work in progress and unverified against hardware; "
+      "it currently exposes only the retrieval capability (no environment control).",
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)

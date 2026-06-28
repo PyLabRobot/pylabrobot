@@ -1,11 +1,11 @@
 import unittest
 from typing import Dict, List
 
-from pylabrobot.highres.tundrastore.backend import HighResSampleStorageDriver
-from pylabrobot.highres.tundrastore.errors import (
+from pylabrobot.highres.sample_storage.backend import HighResSampleStorageDriver
+from pylabrobot.highres.sample_storage.errors import (
   PlateNotFoundError,
-  TundraStoreError,
-  TundraStoreFault,
+  HighResSampleStorageError,
+  HighResSampleStorageFault,
 )
 
 # Real responses captured from a TundraStore (firmware 3.0.0.119, serial
@@ -84,7 +84,7 @@ class FakeSocket:
     return self._queue.pop(0).encode("ascii") + b"\r\n"
 
 
-class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
+class HighResSampleStorageBackendTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.driver = HighResSampleStorageDriver(host="10.253.253.253")
     self.socket = FakeSocket(CAPTURES)
@@ -148,7 +148,7 @@ class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(dims[1].slot_count, 24)
 
   async def test_home_error_raises_with_stack_detail(self):
-    with self.assertRaises(TundraStoreError) as ctx:
+    with self.assertRaises(HighResSampleStorageError) as ctx:
       await self.retrieval.home()
     self.assertIn("Unable to close all doors", str(ctx.exception))
     self.assertEqual(ctx.exception.command, "home")
@@ -207,7 +207,7 @@ class ScriptedSocket:
     return self._queue.pop(0).encode("ascii") + b"\r\n"
 
 
-class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
+class HighResSampleStorageRecoveryTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.driver = HighResSampleStorageDriver(host="10.253.253.253")
     self.retrieval = self.driver.automated_retrieval
@@ -234,7 +234,7 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
   async def test_top_slot_stuck_raises_fault_despite_homed_lie(self):
     # Empty TOP slot: "No plate detected" but the spatula is left extended and
     # the firmware reports "unsafe for rotation" while homedstatus still says
-    # homed. The "unsafe" signal must win -> TundraStoreFault (no homedstatus
+    # homed. The "unsafe" signal must win -> HighResSampleStorageFault (no homedstatus
     # query needed, the signature short-circuits).
     stuck = [
       "ACK! pick 5 24 1 60",
@@ -244,7 +244,7 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
     ]
     sock = ScriptedSocket([("pick 5 24 1", stuck)])
     self.driver.io = sock  # type: ignore[assignment]
-    with self.assertRaises(TundraStoreFault):
+    with self.assertRaises(HighResSampleStorageFault):
       await self.retrieval.pick(5, 24, 1)
     self.assertEqual(sock.commands, ["pick 5 24 1"])
 
@@ -262,7 +262,7 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
       ]
     )
     self.driver.io = sock  # type: ignore[assignment]
-    with self.assertRaises(TundraStoreFault):
+    with self.assertRaises(HighResSampleStorageFault):
       await self.retrieval.pick(5, 24, 1)
     self.assertEqual(sock.commands, ["pick 5 24 1", "homedstatus"])
 

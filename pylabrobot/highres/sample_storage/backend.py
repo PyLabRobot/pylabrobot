@@ -13,12 +13,12 @@ from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 from .errors import (
   PlateNotFoundError,
-  TundraStoreAbortedError,
-  TundraStoreError,
-  TundraStoreFault,
+  HighResSampleStorageAbortedError,
+  HighResSampleStorageError,
+  HighResSampleStorageFault,
   left_unsafe,
 )
-from .settings import TundraStoreSettings
+from .settings import HighResSampleStorageSettings
 from .types import (
   DOOR_STATES,
   NEST_STATES,
@@ -172,11 +172,11 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
         continue
     return dims
 
-  async def request_settings(self) -> TundraStoreSettings:
+  async def request_settings(self) -> HighResSampleStorageSettings:
     """Read the device's full settings file (``NAME = value`` pairs) into a
-    frozen :class:`TundraStoreSettings`."""
+    frozen :class:`HighResSampleStorageSettings`."""
     lines = await self._driver.send_command("settings", timeout=self._driver.read_timeout)
-    return TundraStoreSettings.from_lines(lines)
+    return HighResSampleStorageSettings.from_lines(lines)
 
   async def scan_stacker_barcodes(self, stacker, slot: Optional[int] = None) -> List[str]:
     """Scan a stacker (or a single slot) for barcodes.
@@ -196,7 +196,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
   async def home(self):
     """Home the system. The first step closes all doors, which requires the
     pneumatic supply (clean dry air >80 psi); without it this raises
-    :class:`TundraStoreError` ("Unable to close all doors")."""
+    :class:`HighResSampleStorageError` ("Unable to close all doors")."""
     await self._driver.send_command("home", timeout=self._driver.motion_timeout)
 
   async def is_parked(self) -> bool:
@@ -226,11 +226,11 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
       for command in ("enable", "spatulaout"):
         try:
           await self._driver.send_command(command, timeout=self._driver.motion_timeout)
-        except TundraStoreError:
+        except HighResSampleStorageError:
           pass
       try:
         await self._driver.send_command("home", timeout=self._driver.motion_timeout)
-      except TundraStoreError:
+      except HighResSampleStorageError:
         pass
       if await self.is_parked():
         return True
@@ -245,7 +245,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
 
     - :class:`PlateNotFoundError` — the slot was empty ("No plate detected")
       and the store retracted cleanly; the machine is safe to keep using.
-    - :class:`TundraStoreFault` — the machine was left unsafe (spatula extended
+    - :class:`HighResSampleStorageFault` — the machine was left unsafe (spatula extended
       / unhomed), e.g. an empty *top* slot where the firmware can't complete its
       safe-travel retract. Call :meth:`recover` before any further motion.
 
@@ -256,9 +256,9 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
     command = f"pick {stacker} {slot} {nest}"
     try:
       await self._driver.send_command(command, timeout=self._driver.motion_timeout)
-    except TundraStoreError as exc:
+    except HighResSampleStorageError as exc:
       if left_unsafe(exc.error_lines) or not await self.is_homed():
-        raise TundraStoreFault(command, exc.error_lines) from exc
+        raise HighResSampleStorageFault(command, exc.error_lines) from exc
       if any("no plate detected" in line.lower() for line in exc.error_lines):
         raise PlateNotFoundError(command, exc.error_lines) from exc
       raise
@@ -347,7 +347,7 @@ class HighResSampleStorageTemperatureControllerBackend(TemperatureControllerBack
   async def request_current_temperature(self) -> float:
     env = await self._driver.request_environment()
     if "TEMP" not in env:
-      raise TundraStoreError("environmentstatus", ["no TEMP channel reported"])
+      raise HighResSampleStorageError("environmentstatus", ["no TEMP channel reported"])
     return env["TEMP"].current
 
   async def set_temperature(self, temperature: float):
@@ -371,7 +371,7 @@ class HighResSampleStorageHumidityControllerBackend(HumidityControllerBackend):
   async def request_current_humidity(self) -> float:
     env = await self._driver.request_environment()
     if "RH" not in env:
-      raise TundraStoreError("environmentstatus", ["no RH channel reported"])
+      raise HighResSampleStorageError("environmentstatus", ["no RH channel reported"])
     return env["RH"].current / 100.0
 
   async def set_humidity(self, humidity: float):
@@ -488,8 +488,8 @@ class HighResSampleStorageDriver(Driver):
     and the completion line).
 
     Raises:
-      TundraStoreError: if the device replies ``ERROR!``.
-      TundraStoreAbortedError: if the device replies ``ABORTED!``.
+      HighResSampleStorageError: if the device replies ``ERROR!``.
+      HighResSampleStorageAbortedError: if the device replies ``ABORTED!``.
     """
     if timeout is None:
       timeout = self._read_timeout
@@ -513,9 +513,9 @@ class HighResSampleStorageDriver(Driver):
       # Firmware 3.0.x emits the ``Error <n>: ...`` stack as data lines *before*
       # the ERROR! completion, so they are already collected in data_lines.
       error_lines = [ln for ln in data_lines if ln.startswith("Error")] or data_lines
-      raise TundraStoreError(command, error_lines)
+      raise HighResSampleStorageError(command, error_lines)
     if completion.startswith(COMPLETION_ABORTED):
-      raise TundraStoreAbortedError(command)
+      raise HighResSampleStorageAbortedError(command)
     assert completion.startswith(COMPLETION_OK)
     return data_lines
 
