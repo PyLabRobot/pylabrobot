@@ -98,8 +98,8 @@ def create_equally_spaced_2d(
     dx: The bottom left corner for items in the left column
     dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
-    item_dx: The size of the items in the x direction
-    item_dy: The size of the items in the y direction
+    item_dx: The spacing of the items in the x direction (origin to origin)
+    item_dy: The spacing of the items in the y direction (origin to origin)
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
@@ -143,7 +143,7 @@ def create_equally_spaced_x(
     dx: The bottom left corner for items in the left column
     dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
-    item_dx: The size of the items in the x direction
+    item_dx: The spacing of the items in the x direction (origin to origin)
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
@@ -182,7 +182,7 @@ def create_equally_spaced_y(
     dx: The bottom left corner for items in the left column
     dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
-    item_dy: The size of the items in the y direction
+    item_dy: The spacing of the items in the y direction (origin to origin)
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
@@ -224,8 +224,8 @@ def create_ordered_items_2d(
     dx: The bottom left corner for items in the left column wrt the parent
     dy: The bottom left corner for items in the bottom row wrt the parent
     dz: The z coordinate for all items
-    item_dx: The spacing of the items in the x direction (center to center)
-    item_dy: The spacing of the items in the y direction (center to center)
+    item_dx: The spacing of the items in the x direction (origin to origin)
+    item_dy: The spacing of the items in the y direction (origin to origin)
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
