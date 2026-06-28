@@ -91,10 +91,6 @@ class PIPChannel:
     self.index = index
     self.backend = backend
 
-  async def send_command(self, *args, **kwargs):
-    """Send a firmware command. C0 commands are serialized; Px commands go direct."""
-    return await self.backend.send_command(*args, **kwargs)
-
   @property
   def module_id(self) -> str:
     """Firmware module identifier for this channel (e.g. ``"P1"``)."""
@@ -104,7 +100,7 @@ class PIPChannel:
 
   async def request_firmware_version(self) -> datetime.date:
     """Query the firmware version of this channel (Px:RF)."""
-    resp = await self.send_command(
+    resp = await self.driver.send_command(
       module=self.module_id,
       command="RF",
       fmt="rf" + "&" * 17,
@@ -124,7 +120,7 @@ class PIPChannel:
       ``aspiration_cycles``, and ``dispensing_cycles``.
     """
 
-    resp = await self.send_command(
+    resp = await self.driver.send_command(
       module=self.module_id,
       command="RV",
       fmt="na##########nb##########nc##########nd##########",
@@ -141,7 +137,7 @@ class PIPChannel:
   async def request_dispensing_drive_position(self) -> float:
     """Request the current position of the channel's dispensing drive"""
 
-    resp = await self.send_command(
+    resp = await self.driver.send_command(
       module=self.module_id,
       command="RD",
       fmt="rd##### #####",
@@ -191,7 +187,7 @@ class PIPChannel:
     acceleration_increment = _vol_to_disp_inc(acceleration)
     acceleration_increment_thousands = round(acceleration_increment * 0.001)
 
-    await self.send_command(
+    await self.driver.send_command(
       module=self.module_id,
       command="DS",
       ds=f"{relative_vol_movement_increment:05}",
@@ -282,7 +278,7 @@ class PIPChannel:
     if not (0 <= current_limit <= 7):
       raise ValueError(f"current_limit must be between 0 and 7, got {current_limit}")
 
-    return await self.send_command(
+    return await self.driver.send_command(
       module=self.module_id,
       command="ZA",
       za=f"{z_inc:05}",
@@ -327,7 +323,7 @@ class PIPChannel:
         f"for tip length {tip_len} mm on channel {self.index}"
       )
 
-    await self.send_command(
+    await self.driver.send_command(
       module="C0",
       command="KZ",
       pn=f"{self.index + 1:02}",
@@ -430,7 +426,7 @@ class PIPChannel:
     y_position = round(y * 10)
     if not 0 <= y_position <= 6500:
       raise ValueError("y_position must be between 0 and 650 mm")
-    await self.send_command(
+    await self.driver.send_command(
       module="C0",
       command="KY",
       pn=f"{self.index + 1:02}",
@@ -441,7 +437,7 @@ class PIPChannel:
 
   async def request_probe_z_position(self) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
-    resp = await self.send_command(module=self.module_id, command="RZ", fmt="rz######")
+    resp = await self.driver.send_command(module=self.module_id, command="RZ", fmt="rz######")
     increments = resp["rz"]
     return _z_inc_to_mm(increments)
 
@@ -482,7 +478,7 @@ class PIPChannel:
   # -- Px:QC  volume in tip ---------------------------------------------------
 
   async def request_volume_in_tip(self) -> float:
-    resp = await self.send_command(self.module_id, "QC", fmt="qc##### (n)")
+    resp = await self.driver.send_command(self.module_id, "QC", fmt="qc##### (n)")
     _, current_volume = resp["qc"]  # first is max volume
     return float(current_volume) / 10
 
@@ -570,7 +566,7 @@ class PIPChannel:
         + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
       )
 
-    await self.send_command(
+    await self.driver.send_command(
       module=self.module_id,
       command="ZL",
       zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
@@ -810,7 +806,7 @@ class PIPChannel:
         + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
       )
 
-    resp_raw = await self.send_command(
+    resp_raw = await self.driver.send_command(
       module=self.module_id,
       command="ZE",
       zh=f"{lowest_immers_pos_increments:05}",
@@ -868,7 +864,7 @@ class PIPChannel:
 
       Consider this method an easter egg. Not for serious use.
     """
-    await self.send_command(module=self.module_id, command="SI")
+    await self.driver.send_command(module=self.module_id, command="SI")
 
   # ---------------------------------------------------------------------------
   # Probe / query methods — delegate to backend C0 helpers as needed.
@@ -1208,7 +1204,7 @@ class PIPChannel:
         f"Post detection distance must be between 0 and 245 mm, is {post_detection_dist}"
       )
 
-    ztouch_probed_z_height = await self.send_command(
+    ztouch_probed_z_height = await self.driver.send_command(
       module=self.module_id,
       command="ZH",
       zb=f"{start_pos_search_increments:05}",
@@ -1349,7 +1345,7 @@ class PIPChannel:
       raise ValueError(f"Current limit must be between 0 and 7, is {current_limit_int}")
 
     # Send Px:YL command
-    await self.send_command(
+    await self.driver.send_command(
       module=self.module_id,
       command="YL",
       ya=f"{max_y_search_pos_increments:05}",
