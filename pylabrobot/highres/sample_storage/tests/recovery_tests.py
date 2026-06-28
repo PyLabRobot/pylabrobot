@@ -108,11 +108,11 @@ class HighResSampleStorageRecoveryTests(unittest.IsolatedAsyncioTestCase):
       f"OK! status {cid}",
     ]
 
-  async def test_is_parked_catches_the_homed_lie(self):
+  async def test_request_is_parked_catches_the_homed_lie(self):
     # homedstatus says homed, but the spatula is stuck extended (Y=256) -> NOT parked.
     sock = ScriptedSocket([("homedstatus", self._homed(1)), ("status", self._status(2, 255.9999))])
     self.driver.io = sock  # type: ignore[assignment]
-    self.assertFalse(await self.retrieval.is_parked())
+    self.assertFalse(await self.retrieval.request_is_parked())
 
   async def test_recover_always_retracts_and_rehomes(self):
     # recover() must issue retract+home even when homedstatus already says homed

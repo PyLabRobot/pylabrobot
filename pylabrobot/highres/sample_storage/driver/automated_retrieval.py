@@ -45,7 +45,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
     self.loading_tray_nest = loading_tray_nest
     self.num_nests = num_nests
     # Slide (Y) below this is "retracted"; a spatula stuck in a stacker sits at
-    # the ~256mm slide-in depth, home is 0. Used by is_parked()/recover().
+    # the ~256mm slide-in depth, home is 0. Used by request_is_parked()/recover().
     self._retracted_y_max = 50.0
     # stacker/slot lookup, built from racks by set_racks().
     self._site_locations: Dict[str, Tuple[int, int]] = {}
@@ -62,7 +62,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
         continue
     return out
 
-  async def is_homed(self) -> bool:
+  async def request_is_homed(self) -> bool:
     lines = await self._driver.send_command("homedstatus")
     return any(line.strip().lower() == "homed" for line in lines)
 
@@ -86,12 +86,12 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
       nests[nest] = cast(NestState, state) if state in NEST_STATES else "unknown"
     return nests
 
-  async def spatula_request_is_holding(self) -> bool:
+  async def request_spatula_is_holding(self) -> bool:
     """Whether a plate is currently held on the spatula (``platestatus``)."""
     lines = await self._driver.send_command("platestatus")
     return not any("NO_PLATE" in line for line in lines)
 
-  async def nest_request_is_holding(self, nest: int) -> bool:
+  async def request_nest_is_holding(self, nest: int) -> bool:
     """Whether a plate is present on ``nest`` (per its plate sensor).
 
     Note: this unit reports an occupied nest as ``UNKNOWN`` rather than
@@ -107,7 +107,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
     SIDE EFFECT: a plate that is found is moved to ``to_nest`` (the only way to
     sense a stacker slot is to pick it). Only safe for non-top slots, where an
     empty pick is graceful; the top slot (24) faults when empty — see
-    :meth:`pick`. For nests, use :meth:`nest_request_is_holding` instead (a
+    :meth:`pick`. For nests, use :meth:`request_nest_is_holding` instead (a
     non-destructive sensor read).
     """
     try:
@@ -116,7 +116,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
     except PlateNotFoundError:
       return False
 
-  async def get_stacker_dimensions(self) -> List[StackerDimensions]:
+  async def request_stacker_dimensions(self) -> List[StackerDimensions]:
     """Parse ``getstackerdimensions`` (``<stacker>: <zero_offset> <slot_height>
     <slot_count>``)."""
     dims: List[StackerDimensions] = []
@@ -143,7 +143,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
     lines = await self._driver.send_command("settings", timeout=self._driver.read_timeout)
     return HighResSampleStorageSettings.from_lines(lines)
 
-  async def scan_stacker_barcodes(self, stacker, slot: Optional[int] = None) -> List[str]:
+  async def request_stacker_barcodes(self, stacker, slot: Optional[int] = None) -> List[str]:
     """Scan a stacker (or a single slot) for barcodes.
 
     Args:
@@ -164,16 +164,16 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
     :class:`HighResSampleStorageError` ("Unable to close all doors")."""
     await self._driver.send_command("home", timeout=self._driver.motion_timeout)
 
-  async def is_parked(self) -> bool:
+  async def request_is_parked(self) -> bool:
     """Whether the machine is genuinely safe to move: homed AND the spatula
     retracted out of the carousel.
 
-    Prefer this over :meth:`is_homed`. ``homedstatus`` reports homed even while
+    Prefer this over :meth:`request_is_homed`. ``homedstatus`` reports homed even while
     the spatula is stuck extended in a stacker after a faulted top-slot pick, so
     it alone is not a safe-state check; this also verifies the slide (Y) axis is
     near its home position (a stuck spatula sits at the ~256mm slide-in depth).
     """
-    if not await self.is_homed():
+    if not await self.request_is_homed():
       return False
     y = (await self.request_axis_positions()).get("Y axis")
     return y is not None and abs(y) < self._retracted_y_max
@@ -185,7 +185,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
     leave the spatula extended. This ALWAYS issues the retract (``spatulaout``)
     + ``home`` — it does not trust ``homedstatus`` to decide whether recovery is
     needed, because that reports homed even while the spatula is stuck extended.
-    Retries a few times. Returns ``True`` once :meth:`is_parked`.
+    Retries a few times. Returns ``True`` once :meth:`request_is_parked`.
     """
     for _ in range(3):
       for command in ("enable", "spatulaout"):
@@ -197,7 +197,7 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
         await self._driver.send_command("home", timeout=self._driver.motion_timeout)
       except HighResSampleStorageError:
         pass
-      if await self.is_parked():
+      if await self.request_is_parked():
         return True
     return False
 
@@ -216,13 +216,13 @@ class HighResSampleStorageAutomatedRetrievalBackend(AutomatedRetrievalBackend):
 
     Note: ``homedstatus`` reports homed even when the spatula is stuck extended
     at a top slot, so the firmware's own "unsafe for rotation" signal is used
-    (not just :meth:`is_homed`) to detect that case.
+    (not just :meth:`request_is_homed`) to detect that case.
     """
     command = f"pick {stacker} {slot} {nest}"
     try:
       await self._driver.send_command(command, timeout=self._driver.motion_timeout)
     except HighResSampleStorageError as exc:
-      if left_unsafe(exc.error_lines) or not await self.is_homed():
+      if left_unsafe(exc.error_lines) or not await self.request_is_homed():
         raise HighResSampleStorageFault(command, exc.error_lines) from exc
       if any("no plate detected" in line.lower() for line in exc.error_lines):
         raise PlateNotFoundError(command, exc.error_lines) from exc

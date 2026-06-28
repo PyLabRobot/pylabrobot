@@ -99,8 +99,8 @@ class HighResSampleStorageBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(v.firmware_version, "3.0.0.119")
     self.assertEqual(v.firmware_build, "D9BE232A")
 
-  async def test_is_homed(self):
-    self.assertFalse(await self.retrieval.is_homed())
+  async def test_request_is_homed(self):
+    self.assertFalse(await self.retrieval.request_is_homed())
 
   async def test_door_status(self):
     doors = await self.retrieval.request_door_status()
@@ -114,7 +114,7 @@ class HighResSampleStorageBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(nests, {1: "clear", 2: "clear"})
 
   async def test_plate_on_spatula(self):
-    self.assertFalse(await self.retrieval.spatula_request_is_holding())
+    self.assertFalse(await self.retrieval.request_spatula_is_holding())
 
   async def test_environment_parsing(self):
     env = await self.driver.request_environment()
@@ -136,7 +136,7 @@ class HighResSampleStorageBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(self.driver.humidity.supports_humidity_control)
 
   async def test_stacker_dimensions(self):
-    dims = await self.retrieval.get_stacker_dimensions()
+    dims = await self.retrieval.request_stacker_dimensions()
     self.assertEqual(dims[0].stacker, 1)
     self.assertEqual(dims[0].slot_count, 0)
     self.assertEqual(dims[1].stacker, 2)
