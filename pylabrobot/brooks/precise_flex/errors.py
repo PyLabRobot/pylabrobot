@@ -1944,6 +1944,20 @@ class OperationInterrupted(Exception):
   """
 
 
+class OutOfRangeOfMotionError(Exception):
+  """An axis's current position is outside its soft limits, so the controller rejects every
+  commanded move (-1012) until it is driven back into range.
+
+  Its own type so the recover-and-retry path can catch this recoverable arm *state* without also
+  catching a bad commanded *target* (which stays a ``ValueError``). ``axes`` maps each offending
+  ``Axis`` to ``(value, (lo, hi))``.
+  """
+
+  def __init__(self, message: str, axes: dict):
+    super().__init__(message)
+    self.axes = axes
+
+
 # -- collision detection ---------------------------------------------------
 
 # Collision / over-drive errors: the servo trips one of these when an axis is blocked - it hit an
