@@ -1,6 +1,8 @@
 # https://btxonline.com/media/wysiwyg/tab_content/BTX-Electroporation-Multiwell-Plates-25.pdf
 # https://support.btxonline.com/hc/en-us/article_attachments/6352046003987
 
+import warnings
+
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
@@ -9,13 +11,13 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-_btx_96_wellplate_125ul_Fb_2mm_height_volume_data = {
+_btx_96_wellplate_125uL_Fb_2mm_height_volume_data = {
   0.0: 0.0,
   10.0: 160.0,  # measured brim volume at approximately 10 mm liquid height
 }
 
 
-def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:
+def btx_96_wellplate_125uL_Fb_2mm(name: str) -> Plate:
   """BTX 96-well disposable electroporation plate, 2 mm gap.
 
   - BTX part no.: 45-0450 / 45-0450-M
@@ -41,7 +43,7 @@ def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:
     "material_z_thickness": 0.8,  # inferred from side profile measurements
     "cross_section_type": CrossSectionType.RECTANGLE,
     "max_volume": 160,  # measured brim volume; BTX nominal volume is 125 uL
-    "height_volume_data": _btx_96_wellplate_125ul_Fb_2mm_height_volume_data,
+    "height_volume_data": _btx_96_wellplate_125uL_Fb_2mm_height_volume_data,
   }
 
   return Plate(
@@ -50,7 +52,7 @@ def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:
     size_y=85.5,  # from BTX spec
     size_z=15.9,  # from BTX spec
     lid=None,
-    model=BTX_96_wellplate_125ul_Fb_2mm.__name__,
+    model=btx_96_wellplate_125uL_Fb_2mm.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -63,3 +65,23 @@ def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:
       **well_kwargs,
     ),
   )
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
+
+
+def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:  # remove 2026-10
+  """Deprecated alias for btx_96_wellplate_125uL_Fb_2mm().
+
+  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  Use `btx_96_wellplate_125uL_Fb_2mm()` instead.
+  """
+  warnings.warn(
+    "BTX_96_wellplate_125ul_Fb_2mm() is deprecated and will be removed after 2026-10. "
+    "Use btx_96_wellplate_125uL_Fb_2mm() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return btx_96_wellplate_125uL_Fb_2mm(name)
