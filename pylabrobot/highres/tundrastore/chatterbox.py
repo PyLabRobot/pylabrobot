@@ -40,11 +40,13 @@ class TundraStoreChatterboxBackend(
   async def place(self, stacker: int, slot: int, nest: int):
     logger.info("[tundrastore] place stacker=%d slot=%d nest=%d", stacker, slot, nest)
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate, tray: Optional[int] = None):
-    logger.info("[tundrastore] fetch plate %s to loading tray %s", plate.name, tray)
+  async def fetch_plate_to_loading_tray(self, plate: Plate, tray_index: Optional[int] = None):
+    logger.info("[tundrastore] fetch plate %s to loading tray %s", plate.name, tray_index)
 
-  async def store_plate(self, plate: Plate, site: PlateHolder, tray: Optional[int] = None):
-    logger.info("[tundrastore] store plate %s at site %s (tray %s)", plate.name, site.name, tray)
+  async def store_plate(self, plate: Plate, site: PlateHolder, tray_index: Optional[int] = None):
+    logger.info(
+      "[tundrastore] store plate %s at site %s (tray %s)", plate.name, site.name, tray_index
+    )
 
   @property
   def supports_active_cooling(self) -> bool:

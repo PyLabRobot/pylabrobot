@@ -29,8 +29,8 @@ class TundraStore(Resource, Device):
   Each rack is a *stacker* (a vertical column of plate slots); plates enter and
   leave through one of the device's *nests* (transfer stations). The store has
   two nests, modeled here as two loading trays — :attr:`nests` ``[0]`` and
-  ``[1]`` — addressed by the ``tray`` argument of the :class:`AutomatedRetrieval`
-  capability (0-based). ``tray=None`` uses :attr:`default_tray`.
+  ``[1]`` — addressed by the ``tray_index`` argument of the :class:`AutomatedRetrieval`
+  capability (0-based). ``tray_index=None`` uses :attr:`default_tray`.
   """
 
   def __init__(
@@ -52,7 +52,7 @@ class TundraStore(Resource, Device):
       racks: Storage racks; rack *i* maps to device stacker ``i + 1``.
       nest_locations: One :class:`Coordinate` per transfer nest (the device has
         two). ``nest_locations[i]`` is the location of nest/tray ``i``.
-      default_tray: 0-based nest used when a ``tray`` argument is omitted.
+      default_tray: 0-based nest used when a ``tray_index`` argument is omitted.
     """
     Resource.__init__(
       self,
@@ -89,10 +89,10 @@ class TundraStore(Resource, Device):
   def racks(self) -> List[PlateCarrier]:
     return self._racks
 
-  def _tray_index(self, tray: Optional[int]) -> int:
-    idx = self.default_tray if tray is None else tray
+  def _tray_index(self, tray_index: Optional[int]) -> int:
+    idx = self.default_tray if tray_index is None else tray_index
     if not 0 <= idx < len(self.nests):
-      raise ValueError(f"'{self.name}' has trays 0..{len(self.nests) - 1}; got tray={idx}.")
+      raise ValueError(f"'{self.name}' has trays 0..{len(self.nests) - 1}; got tray_index={idx}.")
     return idx
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
@@ -123,12 +123,12 @@ class TundraStore(Resource, Device):
       raise NoFreeSiteError(f"No free site in '{self.name}' for plate '{plate.name}'")
     return sorted(available, key=lambda s: s.get_size_z())
 
-  async def fetch_plate_to_nest(self, plate_name: str, tray: Optional[int] = None) -> Plate:
+  async def fetch_plate_to_nest(self, plate_name: str, tray_index: Optional[int] = None) -> Plate:
     """Retrieve a stored plate and place it on a nest (default :attr:`default_tray`)."""
-    idx = self._tray_index(tray)
+    idx = self._tray_index(tray_index)
     site = self.get_site_by_plate_name(plate_name)
     plate = cast(Plate, site.resource)
-    await self.retrieval.fetch_plate_to_loading_tray(plate, tray=idx)
+    await self.retrieval.fetch_plate_to_loading_tray(plate, tray_index=idx)
     plate.unassign()
     self.nests[idx].assign_child_resource(plate)
     return plate
@@ -136,15 +136,15 @@ class TundraStore(Resource, Device):
   async def take_in_plate(
     self,
     site: Union[PlateHolder, Literal["random", "smallest"]],
-    tray: Optional[int] = None,
+    tray_index: Optional[int] = None,
   ):
     """Store the plate currently on a nest into a stacker slot.
 
     Args:
       site: Destination slot, or ``"smallest"`` / ``"random"`` to auto-select.
-      tray: Which nest the plate is on (default :attr:`default_tray`).
+      tray_index: Which nest the plate is on (default :attr:`default_tray`).
     """
-    idx = self._tray_index(tray)
+    idx = self._tray_index(tray_index)
     plate = cast(Plate, self.nests[idx].resource)
     if plate is None:
       raise ResourceNotFoundError(f"No plate on nest {idx} of '{self.name}'")
@@ -161,7 +161,7 @@ class TundraStore(Resource, Device):
     else:
       raise ValueError(f"Invalid site: {site}")
 
-    await self.retrieval.store_plate(plate, target, tray=idx)
+    await self.retrieval.store_plate(plate, target, tray_index=idx)
     plate.unassign()
     target.assign_child_resource(plate)
 
