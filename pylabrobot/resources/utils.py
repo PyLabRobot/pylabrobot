@@ -84,8 +84,8 @@ def create_equally_spaced_2d(
   dx: float,
   dy: float,
   dz: float,
-  item_dx: float,
-  item_dy: float,
+  item_dx: Optional[float],
+  item_dy: Optional[float],
   **kwargs,
 ) -> List[List[T]]:
   """Make equally spaced resources in a 2D grid. Also see :meth:`create_equally_spaced_x` and
@@ -98,8 +98,8 @@ def create_equally_spaced_2d(
     dx: The bottom left corner for items in the left column
     dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
-    item_dx: The spacing of the items in the x direction (origin to origin)
-    item_dy: The spacing of the items in the y direction (origin to origin)
+    item_dx: The spacing of the items in the x direction (origin to origin), or None when num_items_x is 1
+    item_dy: The spacing of the items in the y direction (origin to origin), or None when num_items_y is 1
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
@@ -109,6 +109,13 @@ def create_equally_spaced_2d(
 
   # TODO: It probably makes more sense to transpose this.
 
+  if num_items_x > 1 and item_dx is None:
+    raise ValueError("item_dx is required (got None) when num_items_x > 1")
+  if num_items_y > 1 and item_dy is None:
+    raise ValueError("item_dy is required (got None) when num_items_y > 1")
+  spacing_x = 0.0 if item_dx is None else item_dx
+  spacing_y = 0.0 if item_dy is None else item_dy
+
   items: List[List[T]] = []
   for i in range(num_items_x):
     items.append([])
@@ -116,8 +123,8 @@ def create_equally_spaced_2d(
       name = f"{klass.__name__.lower()}_{i}_{j}"
       item = klass(name=name, **kwargs)
       item.location = Coordinate(
-        x=dx + i * item_dx,
-        y=dy + (num_items_y - j - 1) * item_dy,
+        x=dx + i * spacing_x,
+        y=dy + (num_items_y - j - 1) * spacing_y,
         z=dz,
       )
       items[i].append(item)
@@ -131,7 +138,7 @@ def create_equally_spaced_x(
   dx: float,
   dy: float,
   dz: float,
-  item_dx: float,
+  item_dx: Optional[float],
   **kwargs,
 ) -> List[T]:
   """Make equally spaced resources over the x-axis. See :meth:`create_equally_spaced_2d` for more
@@ -143,7 +150,7 @@ def create_equally_spaced_x(
     dx: The bottom left corner for items in the left column
     dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
-    item_dx: The spacing of the items in the x direction (origin to origin)
+    item_dx: The spacing of the items in the x direction (origin to origin), or None when num_items_x is 1
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
@@ -158,7 +165,7 @@ def create_equally_spaced_x(
     dy=dy,
     dz=dz,
     item_dx=item_dx,
-    item_dy=0,
+    item_dy=None,
     **kwargs,
   )
   return [items[i][0] for i in range(num_items_x)]
@@ -170,7 +177,7 @@ def create_equally_spaced_y(
   dx: float,
   dy: float,
   dz: float,
-  item_dy: float,
+  item_dy: Optional[float],
   **kwargs,
 ) -> List[T]:
   """Make equally spaced resources over the y-axis. See :meth:`create_equally_spaced_2d` for more
@@ -182,7 +189,7 @@ def create_equally_spaced_y(
     dx: The bottom left corner for items in the left column
     dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
-    item_dy: The spacing of the items in the y direction (origin to origin)
+    item_dy: The spacing of the items in the y direction (origin to origin), or None when num_items_y is 1
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
@@ -196,7 +203,7 @@ def create_equally_spaced_y(
     dx=dx,
     dy=dy,
     dz=dz,
-    item_dx=0,
+    item_dx=None,
     item_dy=item_dy,
     **kwargs,
   )
@@ -210,8 +217,8 @@ def create_ordered_items_2d(
   dx: float,
   dy: float,
   dz: float,
-  item_dx: float,
-  item_dy: float,
+  item_dx: Optional[float],
+  item_dy: Optional[float],
   **kwargs,
 ) -> Dict[str, T]:
   """Make ordered resources in a 2D grid, with the keys being the identifiers in transposed
@@ -224,8 +231,8 @@ def create_ordered_items_2d(
     dx: The bottom left corner for items in the left column wrt the parent
     dy: The bottom left corner for items in the bottom row wrt the parent
     dz: The z coordinate for all items
-    item_dx: The spacing of the items in the x direction (origin to origin)
-    item_dy: The spacing of the items in the y direction (origin to origin)
+    item_dx: The spacing of the items in the x direction (origin to origin), or None when num_items_x is 1
+    item_dy: The spacing of the items in the y direction (origin to origin), or None when num_items_y is 1
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
