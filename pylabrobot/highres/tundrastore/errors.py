@@ -40,7 +40,8 @@ class TundraStoreFault(TundraStoreError):
   """A motion command faulted and left the machine UNHOMED/extended.
 
   The canonical trigger is picking an empty *top* slot. The machine is not
-  usable until recovered — call :meth:`TundraStoreBackend.recover` (retract the
+  usable until recovered — call
+  :meth:`HighResSampleStorageAutomatedRetrievalBackend.recover` (retract the
   spatula and re-home) before issuing further motion.
   """
 
@@ -63,6 +64,7 @@ _UNSAFE_SIGNATURES = (
 
 def left_unsafe(error_lines: List[str]) -> bool:
   """Whether an error stack indicates the machine was left unsafe (spatula
-  extended / unhomed), requiring :meth:`TundraStoreBackend.recover`."""
+  extended / unhomed), requiring
+  :meth:`HighResSampleStorageAutomatedRetrievalBackend.recover`."""
   blob = " ".join(error_lines).lower()
   return any(sig in blob for sig in _UNSAFE_SIGNATURES)

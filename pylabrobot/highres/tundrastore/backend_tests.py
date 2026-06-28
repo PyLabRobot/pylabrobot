@@ -1,7 +1,7 @@
 import unittest
 from typing import Dict, List
 
-from pylabrobot.highres.tundrastore.backend import TundraStoreBackend
+from pylabrobot.highres.tundrastore.backend import HighResSampleStorageDriver
 from pylabrobot.highres.tundrastore.errors import (
   PlateNotFoundError,
   TundraStoreError,
@@ -86,41 +86,42 @@ class FakeSocket:
 
 class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = TundraStoreBackend(host="10.253.253.253")
+    self.driver = HighResSampleStorageDriver(host="10.253.253.253")
     self.socket = FakeSocket(CAPTURES)
-    self.backend.io = self.socket  # type: ignore[assignment]
+    self.driver.io = self.socket  # type: ignore[assignment]
+    self.retrieval = self.driver.automated_retrieval
 
   async def test_send_command_strips_ack_and_completion(self):
-    data = await self.backend.send_command("neststatus")
+    data = await self.driver.send_command("neststatus")
     self.assertEqual(data, ["1: CLEAR", "2: CLEAR"])
     self.assertEqual(self.socket.written, ["neststatus"])
 
   async def test_version(self):
-    v = await self.backend.request_version()
+    v = await self.driver.request_version()
     self.assertEqual(v.product_name, "SteriStore")
     self.assertEqual(v.serial_number, "HRB-2209-35148")
     self.assertEqual(v.firmware_version, "3.0.0.119")
     self.assertEqual(v.firmware_build, "D9BE232A")
 
   async def test_is_homed(self):
-    self.assertFalse(await self.backend.is_homed())
+    self.assertFalse(await self.retrieval.is_homed())
 
   async def test_door_status(self):
-    doors = await self.backend.request_door_status()
+    doors = await self.retrieval.request_door_status()
     self.assertEqual(doors["User Door"], "closed")
     self.assertEqual(doors["SEAL"], "closing")
     self.assertEqual(doors["RO1"], "closing")
     self.assertFalse(all(state == "closed" for state in doors.values()))
 
   async def test_nest_status(self):
-    nests = await self.backend.request_nest_status()
+    nests = await self.retrieval.request_nest_status()
     self.assertEqual(nests, {1: "clear", 2: "clear"})
 
   async def test_plate_on_spatula(self):
-    self.assertFalse(await self.backend.spatula_request_is_holding())
+    self.assertFalse(await self.retrieval.spatula_request_is_holding())
 
   async def test_environment_parsing(self):
-    env = await self.backend.request_environment()
+    env = await self.driver.request_environment()
     self.assertAlmostEqual(env["TEMP"].current, 21.9)
     self.assertIsNotNone(env["TEMP"].setpoint)
     assert env["TEMP"].setpoint is not None  # narrow for type checker
@@ -131,15 +132,15 @@ class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(env["TANK1"].setpoint)
 
   async def test_temperature_capability_reads_temp_channel(self):
-    self.assertAlmostEqual(await self.backend.request_current_temperature(), 21.9)
-    self.assertTrue(self.backend.supports_active_cooling)
+    self.assertAlmostEqual(await self.driver.temperature.request_current_temperature(), 21.9)
+    self.assertTrue(self.driver.temperature.supports_active_cooling)
 
   async def test_humidity_capability_reads_rh_as_fraction(self):
-    self.assertAlmostEqual(await self.backend.request_current_humidity(), 0.547)
-    self.assertFalse(self.backend.supports_humidity_control)
+    self.assertAlmostEqual(await self.driver.humidity.request_current_humidity(), 0.547)
+    self.assertFalse(self.driver.humidity.supports_humidity_control)
 
   async def test_stacker_dimensions(self):
-    dims = await self.backend.get_stacker_dimensions()
+    dims = await self.retrieval.get_stacker_dimensions()
     self.assertEqual(dims[0].stacker, 1)
     self.assertEqual(dims[0].slot_count, 0)
     self.assertEqual(dims[1].stacker, 2)
@@ -148,30 +149,30 @@ class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_home_error_raises_with_stack_detail(self):
     with self.assertRaises(TundraStoreError) as ctx:
-      await self.backend.home()
+      await self.retrieval.home()
     self.assertIn("Unable to close all doors", str(ctx.exception))
     self.assertEqual(ctx.exception.command, "home")
 
   async def test_pick_formats_command(self):
     self.socket.captures["pick 3 12 1"] = ["ACK! pick 3 12 1 99", "OK! pick 3 12 1 99"]
-    await self.backend.pick(3, 12, 1)
+    await self.retrieval.pick(3, 12, 1)
     self.assertEqual(self.socket.written, ["pick 3 12 1"])
 
   def test_tray_maps_to_nest(self):
     # 0-based capability tray -> 1-based device nest; None uses the default.
-    self.assertEqual(self.backend._nest_for_tray(None), 1)
-    self.assertEqual(self.backend._nest_for_tray(0), 1)
-    self.assertEqual(self.backend._nest_for_tray(1), 2)
+    self.assertEqual(self.retrieval._nest_for_tray(None), 1)
+    self.assertEqual(self.retrieval._nest_for_tray(0), 1)
+    self.assertEqual(self.retrieval._nest_for_tray(1), 2)
     with self.assertRaises(ValueError):
-      self.backend._nest_for_tray(2)
+      self.retrieval._nest_for_tray(2)
 
   def test_default_tray_follows_loading_tray_nest(self):
-    backend = TundraStoreBackend(host="10.253.253.253", loading_tray_nest=2)
-    self.assertEqual(backend._nest_for_tray(None), 2)
+    driver = HighResSampleStorageDriver(host="10.253.253.253", loading_tray_nest=2)
+    self.assertEqual(driver.automated_retrieval._nest_for_tray(None), 2)
 
   async def test_set_humidity_unsupported(self):
     with self.assertRaises(NotImplementedError):
-      await self.backend.set_humidity(0.5)
+      await self.driver.humidity.set_humidity(0.5)
 
 
 def _ok(command: str, cid: int) -> List[str]:
@@ -208,7 +209,8 @@ class ScriptedSocket:
 
 class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = TundraStoreBackend(host="10.253.253.253")
+    self.driver = HighResSampleStorageDriver(host="10.253.253.253")
+    self.retrieval = self.driver.automated_retrieval
 
   async def test_empty_slot_pick_raises_plate_not_found_and_stays_homed(self):
     # The store reports "No plate detected" and stays homed (graceful empty).
@@ -223,9 +225,9 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
         ("homedstatus", ["ACK! homedstatus 51", "homed", "OK! homedstatus 51"]),
       ]
     )
-    self.backend.io = sock  # type: ignore[assignment]
+    self.driver.io = sock  # type: ignore[assignment]
     with self.assertRaises(PlateNotFoundError):
-      await self.backend.pick(5, 12, 1)
+      await self.retrieval.pick(5, 12, 1)
     # classified by state, no recovery motion issued
     self.assertEqual(sock.commands, ["pick 5 12 1", "homedstatus"])
 
@@ -241,9 +243,9 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
       "ERROR! pick 5 24 1 60",
     ]
     sock = ScriptedSocket([("pick 5 24 1", stuck)])
-    self.backend.io = sock  # type: ignore[assignment]
+    self.driver.io = sock  # type: ignore[assignment]
     with self.assertRaises(TundraStoreFault):
-      await self.backend.pick(5, 24, 1)
+      await self.retrieval.pick(5, 24, 1)
     self.assertEqual(sock.commands, ["pick 5 24 1"])
 
   async def test_dehomed_pick_raises_fault(self):
@@ -259,9 +261,9 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
         ("homedstatus", ["ACK! homedstatus 71", "not homed", "OK! homedstatus 71"]),
       ]
     )
-    self.backend.io = sock  # type: ignore[assignment]
+    self.driver.io = sock  # type: ignore[assignment]
     with self.assertRaises(TundraStoreFault):
-      await self.backend.pick(5, 24, 1)
+      await self.retrieval.pick(5, 24, 1)
     self.assertEqual(sock.commands, ["pick 5 24 1", "homedstatus"])
 
   def _homed(self, cid: int) -> List[str]:
@@ -279,8 +281,8 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
   async def test_is_parked_catches_the_homed_lie(self):
     # homedstatus says homed, but the spatula is stuck extended (Y=256) -> NOT parked.
     sock = ScriptedSocket([("homedstatus", self._homed(1)), ("status", self._status(2, 255.9999))])
-    self.backend.io = sock  # type: ignore[assignment]
-    self.assertFalse(await self.backend.is_parked())
+    self.driver.io = sock  # type: ignore[assignment]
+    self.assertFalse(await self.retrieval.is_parked())
 
   async def test_recover_always_retracts_and_rehomes(self):
     # recover() must issue retract+home even when homedstatus already says homed
@@ -294,8 +296,8 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
         ("status", self._status(5, 0.0)),
       ]
     )
-    self.backend.io = sock  # type: ignore[assignment]
-    self.assertTrue(await self.backend.recover())
+    self.driver.io = sock  # type: ignore[assignment]
+    self.assertTrue(await self.retrieval.recover())
     self.assertEqual(sock.commands, ["enable", "spatulaout", "home", "homedstatus", "status"])
 
   async def test_recover_retries_until_parked(self):
@@ -314,13 +316,13 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
         ("status", self._status(10, 0.0)),  # now retracted
       ]
     )
-    self.backend.io = sock  # type: ignore[assignment]
-    self.assertTrue(await self.backend.recover())
+    self.driver.io = sock  # type: ignore[assignment]
+    self.assertTrue(await self.retrieval.recover())
 
   async def test_place_default_leaves_doors_sealed(self):
     sock = ScriptedSocket([("place 2 5 1", _ok("place 2 5 1", 1))])
-    self.backend.io = sock  # type: ignore[assignment]
-    await self.backend.place(2, 5, 1)  # close_door=True default
+    self.driver.io = sock  # type: ignore[assignment]
+    await self.retrieval.place(2, 5, 1)  # close_door=True default
     self.assertEqual(sock.commands, ["place 2 5 1"])
 
   async def test_place_close_door_false_reopens(self):
@@ -330,8 +332,8 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
         ("openalldoors", _ok("openalldoors", 2)),
       ]
     )
-    self.backend.io = sock  # type: ignore[assignment]
-    await self.backend.place(2, 5, 1, close_door=False)
+    self.driver.io = sock  # type: ignore[assignment]
+    await self.retrieval.place(2, 5, 1, close_door=False)
     self.assertEqual(sock.commands, ["place 2 5 1", "openalldoors"])
 
   async def test_pick_close_door_false_reopens(self):
@@ -341,8 +343,8 @@ class TundraStoreRecoveryTests(unittest.IsolatedAsyncioTestCase):
         ("openalldoors", _ok("openalldoors", 2)),
       ]
     )
-    self.backend.io = sock  # type: ignore[assignment]
-    await self.backend.pick(2, 5, 1, close_door=False)
+    self.driver.io = sock  # type: ignore[assignment]
+    await self.retrieval.pick(2, 5, 1, close_door=False)
     self.assertEqual(sock.commands, ["pick 2 5 1", "openalldoors"])
 
 

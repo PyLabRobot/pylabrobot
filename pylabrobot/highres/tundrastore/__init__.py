@@ -1,5 +1,10 @@
-from .backend import TundraStoreBackend
-from .chatterbox import TundraStoreChatterboxBackend
+from .backend import (
+  HighResSampleStorageAutomatedRetrievalBackend,
+  HighResSampleStorageDriver,
+  HighResSampleStorageHumidityControllerBackend,
+  HighResSampleStorageTemperatureControllerBackend,
+)
+from .chatterbox import HighResSampleStorageChatterboxDriver
 from .errors import (
   PlateNotFoundError,
   TundraStoreAbortedError,

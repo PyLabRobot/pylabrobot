@@ -1,73 +1,69 @@
 import logging
-from typing import Optional
+from typing import Dict, List, Optional
 
-from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
-from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.device import Driver
-from pylabrobot.resources import Plate, PlateHolder
+
+from .backend import (
+  HighResSampleStorageAutomatedRetrievalBackend,
+  HighResSampleStorageDriver,
+  HighResSampleStorageHumidityControllerBackend,
+  HighResSampleStorageTemperatureControllerBackend,
+)
+from .types import EnvironmentParameter, VersionInfo
 
 logger = logging.getLogger(__name__)
 
 
-class TundraStoreChatterboxBackend(
-  AutomatedRetrievalBackend,
-  TemperatureControllerBackend,
-  HumidityControllerBackend,
-  Driver,
-):
-  """Device-free TundraStore backend that logs calls instead of talking to
-  hardware. Useful for testing protocols and resource assignment offline."""
+class HighResSampleStorageChatterboxDriver(HighResSampleStorageDriver):
+  """Device-free driver that logs commands instead of talking to hardware.
 
-  def __init__(self, temperature: float = 4.0, humidity: float = 0.5):
-    super().__init__()
+  Owns the real per-capability backends, so it exercises their command-building
+  logic; only the transport (:meth:`send_command`) and the shared device queries
+  are faked. Useful for testing protocols and resource assignment offline.
+  """
+
+  def __init__(
+    self,
+    temperature: float = 4.0,
+    humidity: float = 0.5,
+    loading_tray_nest: int = 1,
+    num_nests: int = 2,
+  ):
+    Driver.__init__(self)
+    self.io = None  # type: ignore[assignment]
+    self._read_timeout = 30.0
+    self._motion_timeout = 240.0
     self._temperature = temperature
     self._humidity = humidity
 
+    self.automated_retrieval = HighResSampleStorageAutomatedRetrievalBackend(
+      self, loading_tray_nest=loading_tray_nest, num_nests=num_nests
+    )
+    self.temperature = HighResSampleStorageTemperatureControllerBackend(self)
+    self.humidity = HighResSampleStorageHumidityControllerBackend(self)
+
   async def setup(self, backend_params: Optional[BackendParams] = None):
-    logger.info("[tundrastore] setup")
+    logger.info("[chatterbox] setup")
 
   async def stop(self):
-    logger.info("[tundrastore] stop")
+    logger.info("[chatterbox] stop")
 
-  async def home(self):
-    logger.info("[tundrastore] home")
+  async def send_command(self, command: str, timeout: Optional[float] = None) -> List[str]:
+    logger.info("[chatterbox] %s", command)
+    return []
 
-  async def pick(self, stacker: int, slot: int, nest: int):
-    logger.info("[tundrastore] pick stacker=%d slot=%d nest=%d", stacker, slot, nest)
-
-  async def place(self, stacker: int, slot: int, nest: int):
-    logger.info("[tundrastore] place stacker=%d slot=%d nest=%d", stacker, slot, nest)
-
-  async def fetch_plate_to_loading_tray(self, plate: Plate, tray_index: Optional[int] = None):
-    logger.info("[tundrastore] fetch plate %s to loading tray %s", plate.name, tray_index)
-
-  async def store_plate(self, plate: Plate, site: PlateHolder, tray_index: Optional[int] = None):
-    logger.info(
-      "[tundrastore] store plate %s at site %s (tray %s)", plate.name, site.name, tray_index
+  async def request_version(self) -> VersionInfo:
+    return VersionInfo(
+      product_name="HighRes sample store",
+      serial_number="CHATTERBOX",
+      firmware_version="0.0.0",
+      firmware_build=None,
+      raw={},
     )
 
-  @property
-  def supports_active_cooling(self) -> bool:
-    return True
-
-  async def request_current_temperature(self) -> float:
-    return self._temperature
-
-  async def set_temperature(self, temperature: float):
-    logger.info("[tundrastore] set temperature %.1f C", temperature)
-    self._temperature = temperature
-
-  async def deactivate(self):
-    logger.info("[tundrastore] deactivate temperature control")
-
-  @property
-  def supports_humidity_control(self) -> bool:
-    return False
-
-  async def request_current_humidity(self) -> float:
-    return self._humidity
-
-  async def set_humidity(self, humidity: float):
-    raise NotImplementedError("The TundraStore does not support active humidity control.")
+  async def request_environment(self) -> Dict[str, EnvironmentParameter]:
+    return {
+      "TEMP": EnvironmentParameter(name="TEMP", current=self._temperature),
+      "RH": EnvironmentParameter(name="RH", current=self._humidity * 100.0),
+    }

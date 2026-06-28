@@ -13,7 +13,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.resource import Resource
 
-from .backend import TundraStoreBackend
+from .backend import HighResSampleStorageDriver
 
 
 class TundraStore(Resource, Device):
@@ -30,7 +30,7 @@ class TundraStore(Resource, Device):
   def __init__(
     self,
     name: str,
-    driver: TundraStoreBackend,
+    driver: HighResSampleStorageDriver,
     racks: List[PlateCarrier],
     nest_locations: List[Coordinate],
     size_x: float = 0,
@@ -57,7 +57,7 @@ class TundraStore(Resource, Device):
       model=model,
     )
     Device.__init__(self, driver=driver)
-    self.driver: TundraStoreBackend = driver
+    self.driver: HighResSampleStorageDriver = driver
 
     self.nests: List[PlateHolder] = []
     for i, location in enumerate(nest_locations):
@@ -72,10 +72,10 @@ class TundraStore(Resource, Device):
       self.assign_child_resource(rack, location=None)
 
     self.retrieval = AutomatedRetrieval(
-      backend=driver, racks=self._racks, loading_trays=self.nests
+      backend=driver.automated_retrieval, racks=self._racks, loading_trays=self.nests
     )
-    self.tc = TemperatureController(backend=driver)
-    self.humidity = HumidityController(backend=driver)
+    self.tc = TemperatureController(backend=driver.temperature)
+    self.humidity = HumidityController(backend=driver.humidity)
     self._capabilities = [self.tc, self.humidity, self.retrieval]
 
   @property
@@ -84,7 +84,7 @@ class TundraStore(Resource, Device):
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
     await super().setup(backend_params=backend_params)
-    await self.driver.set_racks(self._racks)
+    await self.driver.automated_retrieval.set_racks(self._racks)
 
   def serialize(self) -> dict:
     from pylabrobot.serializer import serialize
