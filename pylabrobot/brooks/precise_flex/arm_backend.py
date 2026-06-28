@@ -21,7 +21,7 @@ import dataclasses
 import logging
 import warnings
 from dataclasses import dataclass
-from typing import ClassVar, Dict, List, Literal, Optional, Sequence
+from typing import ClassVar, Dict, List, Literal, NamedTuple, Optional, Sequence
 
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -47,6 +47,23 @@ from .kinematics import ElbowOrientation, PreciseFlexCartesianPose, Wrist
 from .tcs_modules import missing_required_modules
 
 logger = logging.getLogger(__name__)
+
+# InRange sentinel that lets the controller blend through waypoints instead of stopping at each one.
+BLEND_IN_RANGE = -1
+
+
+class MotionProfile(NamedTuple):
+  """A controller motion profile, as reported by ``Profile <n>`` (field order matches the wire)."""
+
+  profile: int
+  speed: float
+  speed2: float
+  acceleration: float
+  deceleration: float
+  acceleration_ramp: float
+  deceleration_ramp: float
+  in_range: float  # -1 (BLEND_IN_RANGE) to 100; -1 blends, 0 stops, >0 enforces position accuracy
+  straight: bool  # True = straight-line path, False = joint-based path
 
 
 def _parse_scalar(response: str) -> float:
@@ -766,9 +783,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     straight_int = 1 if straight_mode else 0
     await self.driver.send_command(f"Straight {profile_index} {straight_int}")
 
-  async def request_motion_profile_values(
-    self, profile: int
-  ) -> tuple[int, float, float, float, float, float, float, float, bool]:
+  async def request_motion_profile_values(self, profile: int) -> MotionProfile:
     """
     Get the current motion profile values for the specified profile index on the PreciseFlex robot.
 
@@ -776,22 +791,13 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       profile: Profile index to get values for.
 
     Returns:
-      A tuple containing (profile, speed, speed2, acceleration, deceleration, acceleration_ramp, deceleration_ramp, in_range, straight)
-        - profile: Profile index
-        - speed: Percentage of maximum speed
-        - speed2: Secondary speed setting
-        - acceleration: Percentage of maximum acceleration
-        - deceleration: Percentage of maximum deceleration
-        - acceleration_ramp: Acceleration ramp time in seconds
-        - deceleration_ramp: Deceleration ramp time in seconds
-        - in_range: InRange value (-1 to 100)
-        - straight: True if straight-line path, False if joint-based path
+      A :class:`MotionProfile` with the profile's speed, acceleration, ramps, InRange and path mode.
     """
     data = await self.driver.send_command(f"Profile {profile}")
     parts = data.split(" ")
     if len(parts) != 9:
       raise PreciseFlexError(-1, "Unexpected response format from device.")
-    return (
+    return MotionProfile(
       int(parts[0]),
       float(parts[1]),
       float(parts[2]),
@@ -1830,19 +1836,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     should_restore_profile = False
     if backend_params.blend:
       original_profile = await self.request_motion_profile_values(profile_index)
-      should_restore_profile = original_profile[7] != -1
+      should_restore_profile = original_profile.in_range != BLEND_IN_RANGE
       if should_restore_profile:
-        await self.set_motion_profile_values(
-          original_profile[0],
-          original_profile[1],
-          original_profile[2],
-          original_profile[3],
-          original_profile[4],
-          original_profile[5],
-          original_profile[6],
-          -1,
-          original_profile[8],
-        )
+        await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
 
     try:
       for target in targets:
