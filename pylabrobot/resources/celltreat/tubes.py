@@ -1,7 +1,9 @@
-from pylabrobot.resources.tube import Tube
+import warnings
+
+from pylabrobot.resources.tube import Tube, TubeBottomType
 
 
-def celltreat_15000ul_centrifuge_tube_Vb(name: str) -> Tube:
+def celltreat_tube_15mL_Vb(name: str) -> Tube:
   """CELLTREAT® Centrifuge Tubes-RackMaster 15mL Centrifuge Tube, Best Value - Paperboard Rack, Sterile
   Part no.: 229414
 
@@ -13,7 +15,28 @@ def celltreat_15000ul_centrifuge_tube_Vb(name: str) -> Tube:
     size_x=diameter,
     size_y=diameter,
     size_z=190.5,  # measured
-    model=celltreat_15000ul_centrifuge_tube_Vb.__name__,
+    model=celltreat_tube_15mL_Vb.__name__,
+    bottom_type=TubeBottomType.V,
     max_volume=15_000,  # units: ul
     material_z_thickness=0.8,  # measured
   )
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
+
+
+def celltreat_15000ul_centrifuge_tube_Vb(name: str) -> Tube:  # remove 2026-10
+  """Deprecated alias for celltreat_tube_15mL_Vb().
+
+  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  Use `celltreat_tube_15mL_Vb()` instead.
+  """
+  warnings.warn(
+    "celltreat_15000ul_centrifuge_tube_Vb() is deprecated and will be removed after 2026-10. "
+    "Use celltreat_tube_15mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return celltreat_tube_15mL_Vb(name)
