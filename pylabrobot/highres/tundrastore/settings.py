@@ -7,10 +7,9 @@ device's own values. A :class:`TundraStoreSettings` is loaded whole from the
 device (or a capture) and is frozen once built.
 """
 
-import json
 import warnings
 from dataclasses import dataclass, fields
-from typing import Any, Iterable, Mapping, Tuple
+from typing import Any, Dict, Iterable, Tuple
 
 try:
   from typing import Literal
@@ -674,8 +673,14 @@ class TundraStoreSettings:
   lidvalet_wait_for_lift_rise_ms: int
 
   @classmethod
-  def from_dict(cls, data: Mapping[str, str]) -> "TundraStoreSettings":
-    """Build from a mapping of device ``NAME`` -> value (the device's own keys)."""
+  def from_lines(cls, lines: Iterable[str]) -> "TundraStoreSettings":
+    """Build from the device's ``settings`` output (``NAME = value`` lines)."""
+    data: Dict[str, str] = {}
+    for line in lines:
+      if "=" in line:
+        key, _, value = line.partition("=")
+        data[key.strip()] = value.strip()
+
     values = {}
     missing = []
     for f in fields(cls):
@@ -698,26 +703,3 @@ class TundraStoreSettings:
         stacklevel=2,
       )
     return cls(**values)
-
-  @classmethod
-  def from_lines(cls, lines: Iterable[str]) -> "TundraStoreSettings":
-    """Parse the device's ``NAME = value`` settings output."""
-    data = {}
-    for line in lines:
-      if "=" in line:
-        key, _, value = line.partition("=")
-        data[key.strip()] = value.strip()
-    return cls.from_dict(data)
-
-  @classmethod
-  def from_json(cls, path: str) -> "TundraStoreSettings":
-    """Load from a JSON capture (a flat dict, or one nested under ``settings``)."""
-    with open(path) as f:
-      obj = json.load(f)
-    return cls.from_dict(obj.get("settings", obj))
-
-  def to_json(self, path: str) -> None:
-    """Write the settings to a JSON capture, keyed by device ``NAME``."""
-    data = {f.name.upper(): getattr(self, f.name) for f in fields(self)}
-    with open(path, "w") as f:
-      json.dump({"settings": data}, f, indent=2)
