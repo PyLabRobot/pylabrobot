@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import enum
 import logging
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -34,45 +33,6 @@ if TYPE_CHECKING:
   from .driver import STARDriver
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Firmware command lock
-# ---------------------------------------------------------------------------
-
-
-class _FirmwareLock:
-  """Coordinates Px and C0 firmware commands.
-
-  Px commands (per-channel) can run in parallel with each other.
-  C0 commands (master module) need exclusive access: no Px or C0 may be in flight.
-  """
-
-  def __init__(self):
-    self._px_count = 0
-    self._px_count_lock = asyncio.Lock()
-    self._exclusive_lock = asyncio.Lock()
-
-  @asynccontextmanager
-  async def px(self):
-    """Run a Px command. Multiple Px can be in flight simultaneously."""
-    async with self._px_count_lock:
-      self._px_count += 1
-      if self._px_count == 1:
-        await self._exclusive_lock.acquire()
-    try:
-      yield
-    finally:
-      async with self._px_count_lock:
-        self._px_count -= 1
-        if self._px_count == 0:
-          self._exclusive_lock.release()
-
-  @asynccontextmanager
-  async def c0(self):
-    """Run a C0 command. Waits for all Px to finish, then runs exclusively."""
-    async with self._exclusive_lock:
-      yield
 
 
 # ---------------------------------------------------------------------------
@@ -243,15 +203,6 @@ class STARPIPBackend(PIPBackend):
     self.driver = driver
     self.traversal_height = traversal_height
     self.channels: List[PIPChannel] = []
-    self._fw_lock = _FirmwareLock()
-
-  async def send_command(self, module: str, command: str, **kwargs):
-    """Send a firmware command. C0 gets exclusive access; Px commands run in parallel."""
-    if module == "C0":
-      async with self._fw_lock.c0():
-        return await self.driver.send_command(module=module, command=command, **kwargs)
-    async with self._fw_lock.px():
-      return await self.driver.send_command(module=module, command=command, **kwargs)
 
   async def _on_setup(self, backend_params: Optional[BackendParams] = None):
     self.channels = [PIPChannel(self.driver, i, backend=self) for i in range(self.num_channels)]
@@ -1456,11 +1407,11 @@ class STARPIPBackend(PIPBackend):
 
   async def spread_pip_channels(self):
     """Spread PIP channels (C0:JE)."""
-    return await self.send_command(module="C0", command="JE")
+    return await self.driver.send_command(module="C0", command="JE")
 
   async def move_all_channels_in_z_safety(self):
     """Move all pipetting channels to Z-safety position (C0:ZA)."""
-    return await self.send_command(module="C0", command="ZA")
+    return await self.driver.send_command(module="C0", command="ZA")
 
   async def move_all_pipetting_channels_to_defined_position(
     self,
@@ -1742,7 +1693,7 @@ class STARPIPBackend(PIPBackend):
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
     """Measure tip presence on all channels using their sleeve sensors."""
-    resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
+    resp = await self.driver.send_command(module="C0", command="RT", fmt="rt# (n)")
     return [bool(v) for v in resp.get("rt")]
 
   async def request_tadm_status(self) -> List[int]:
@@ -1751,7 +1702,7 @@ class STARPIPBackend(PIPBackend):
     Returns:
       A list of 0/1 ints, one per channel: 0 = TADM off, 1 = TADM on.
     """
-    resp = await self.send_command(module="C0", command="QS", fmt="qs# (n)")
+    resp = await self.driver.send_command(module="C0", command="QS", fmt="qs# (n)")
     return [int(v) for v in resp.get("qs", [])]
 
   async def prepare_for_manual_channel_operation(self, channel: int):
@@ -1776,7 +1727,7 @@ class STARPIPBackend(PIPBackend):
 
   async def request_pip_height_last_lld(self) -> List[float]:
     """Return absolute liquid heights (mm) from the last LLD event for each channel."""
-    resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
+    resp = await self.driver.send_command(module="C0", command="RL", fmt="lh#### (n)")
     return [float(v / 10) for v in resp.get("lh")]
 
   async def position_components_for_free_iswap_y_range(self):
