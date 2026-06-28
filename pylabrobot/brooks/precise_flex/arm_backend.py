@@ -12,16 +12,16 @@ capability API, so reading top to bottom climbs the abstraction stack:
 - L3 - high-level capability API: joint-space and cartesian motion, gripper, rail, pick & place, parking.
 
 Within each group methods run reads (``request_``) then writes (``set_``) then actions, with private
-helpers last. Each method carries a tag for who calls it: ``[PLR]`` implements a capability-ABC method
-that PyLabRobot core drives, ``[cmd]`` is a public PreciseFlex firmware command outside the ABC, and
-``[int]`` is a private helper or primitive.
+helpers last. A method that implements a capability-ABC method PyLabRobot core drives is tagged
+``[PLR]``; the rest are public PreciseFlex firmware commands (no leading underscore) or private
+helpers/primitives (leading underscore).
 """
 
 import dataclasses
 import logging
 import warnings
 from dataclasses import dataclass
-from typing import Callable, ClassVar, Dict, List, Literal, Optional
+from typing import Callable, ClassVar, Dict, List, Literal, NamedTuple, Optional, Sequence
 
 from pylabrobot.capabilities.arms.backend import (
   CanFreedrive,
@@ -47,6 +47,23 @@ from .kinematics import ElbowOrientation, PreciseFlexCartesianPose, Wrist
 from .tcs_modules import missing_required_modules
 
 logger = logging.getLogger(__name__)
+
+# InRange sentinel that lets the controller blend through waypoints instead of stopping at each one.
+BLEND_IN_RANGE = -1
+
+
+class MotionProfile(NamedTuple):
+  """A controller motion profile, as reported by ``Profile <n>`` (field order matches the wire)."""
+
+  profile: int
+  speed: float
+  speed2: float
+  acceleration: float
+  deceleration: float
+  acceleration_ramp: float
+  deceleration_ramp: float
+  in_range: float  # -1 (BLEND_IN_RANGE) to 100; -1 blends, 0 stops, >0 enforces position accuracy
+  straight: bool  # True = straight-line path, False = joint-based path
 
 
 def _parse_scalar(response: str) -> float:
@@ -492,10 +509,9 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       rail_position=current.rail_position if cart.rail_position is None else cart.rail_position,
     )
     ik_joints = _snap_to_current(kinematics.ik(cart, p=self._kinematics_params), joints, cart.wrist)
-    joints[Axis.BASE] = ik_joints[1]
-    joints[Axis.SHOULDER] = ik_joints[2]
-    joints[Axis.ELBOW] = ik_joints[3]
-    joints[Axis.WRIST] = ik_joints[4]
+    # IK only solves the arm axes; gripper and rail keep their current values.
+    for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST):
+      joints[axis] = ik_joints[axis]
     if cart.rail_position is not None:
       joints[Axis.RAIL] = cart.rail_position
     return joints
@@ -769,9 +785,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     straight_int = 1 if straight_mode else 0
     await self.driver.send_command(f"Straight {profile_index} {straight_int}")
 
-  async def request_motion_profile_values(
-    self, profile: int
-  ) -> tuple[int, float, float, float, float, float, float, float, bool]:
+  async def request_motion_profile_values(self, profile: int) -> MotionProfile:
     """
     Get the current motion profile values for the specified profile index on the PreciseFlex robot.
 
@@ -779,22 +793,13 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       profile: Profile index to get values for.
 
     Returns:
-      A tuple containing (profile, speed, speed2, acceleration, deceleration, acceleration_ramp, deceleration_ramp, in_range, straight)
-        - profile: Profile index
-        - speed: Percentage of maximum speed
-        - speed2: Secondary speed setting
-        - acceleration: Percentage of maximum acceleration
-        - deceleration: Percentage of maximum deceleration
-        - acceleration_ramp: Acceleration ramp time in seconds
-        - deceleration_ramp: Deceleration ramp time in seconds
-        - in_range: InRange value (-1 to 100)
-        - straight: True if straight-line path, False if joint-based path
+      A :class:`MotionProfile` with the profile's speed, acceleration, ramps, InRange and path mode.
     """
     data = await self.driver.send_command(f"Profile {profile}")
     parts = data.split(" ")
     if len(parts) != 9:
       raise PreciseFlexError(-1, "Unexpected response format from device.")
-    return (
+    return MotionProfile(
       int(parts[0]),
       float(parts[1]),
       float(parts[2]),
@@ -1799,6 +1804,106 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     )
     joints = await self._cart_to_joints(coords)
     await self._guarded_move_j(lambda _current: joints)
+
+  async def _plan_cartesian_pose_route(
+    self, poses: Sequence[PreciseFlexCartesianPose]
+  ) -> List[JointPose]:
+    """Plan a Cartesian pose route into joint targets, snapshotting state once.
+
+    Unlike :meth:`_cart_to_joints`, this does not query the controller for every waypoint: it
+    reads the current state once and resolves each waypoint's IK from the previous waypoint's
+    result. Omitted pose fields inherit from the previous pose so IK branch selection remains
+    continuous across the route.
+    """
+    prev_joints, prev_pose = await self._request_state()
+    targets: List[JointPose] = []
+    for pose in poses:
+      cart = dataclasses.replace(
+        pose,
+        orientation=prev_pose.orientation if pose.orientation is None else pose.orientation,
+        wrist=prev_pose.wrist if pose.wrist is None else pose.wrist,
+        # PF400 IK expects a shoulder/reference rail position even on rail-less arms.
+        # Mirror _cart_to_joints(): omitted pose fields inherit from the previous pose.
+        rail_position=prev_pose.rail_position if pose.rail_position is None else pose.rail_position,
+      )
+      ik_joints = _snap_to_current(
+        kinematics.ik(cart, p=self._kinematics_params),
+        prev_joints,
+        cart.wrist,
+      )
+      # IK only solves the arm axes; gripper and rail keep the previous values.
+      target = dict(prev_joints)
+      for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST):
+        target[axis] = ik_joints[axis]
+      if self._has_rail and cart.rail_position is not None:
+        target[Axis.RAIL] = cart.rail_position
+
+      self._assert_within_soft_limits(prev_joints, target)
+      targets.append(target)
+      prev_joints = target
+      prev_pose = cart
+    return targets
+
+  @dataclass
+  class MoveThroughCartesianPosesParams(BackendParams):
+    """PreciseFlex arm parameters for blended Cartesian pose routes.
+
+    Args:
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+      blend: When True, temporarily set the active motion profile's ``InRange`` value to
+        ``-1`` so the controller may blend through intermediate waypoints instead of stopping
+        at each one. The original profile is restored after the final waypoint is reached.
+    """
+
+    speed_pct: Optional[float] = None
+    blend: bool = True
+
+  async def move_through_cartesian_poses(
+    self,
+    poses: Sequence[PreciseFlexCartesianPose],
+    backend_params: Optional[BackendParams] = None,
+  ) -> None:
+    """Move through a sequence of Cartesian poses using one planned IK route.
+
+    The standard Cartesian move path snapshots the current state for each waypoint,
+    which waits for end-of-motion between moves. For taught air-transit routes, this
+    method snapshots state once, plans each subsequent IK target from the previous
+    planned target, queues the joint moves, and waits only after the final waypoint.
+
+    This is a PreciseFlex-specific primitive: intermediate waypoints may be blended
+    by the controller and should not be used for operations that require an exact
+    stop, gripper action, or physical contact at every pose.
+    """
+    if not isinstance(backend_params, self.MoveThroughCartesianPosesParams):
+      backend_params = PreciseFlexArmBackend.MoveThroughCartesianPosesParams()
+    if not poses:
+      return
+    if backend_params.speed_pct is not None:
+      await self._set_speed(backend_params.speed_pct)
+
+    targets = await self._plan_cartesian_pose_route(poses)
+
+    profile_index = self.profile_index
+    original_profile = None
+    should_restore_profile = False
+    if backend_params.blend:
+      original_profile = await self.request_motion_profile_values(profile_index)
+      should_restore_profile = original_profile.in_range != BLEND_IN_RANGE
+      if should_restore_profile:
+        await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
+
+    try:
+      for target in targets:
+        await self._move_j(profile_index=profile_index, joint_coords=target)
+    finally:
+      # Let queued motion settle before returning or restoring the profile - restoring InRange
+      # mid-move would change the in-flight blend.
+      try:
+        await self.driver._wait_for_eom()
+      finally:
+        if should_restore_profile and original_profile is not None:
+          await self.set_motion_profile_values(*original_profile)
 
   async def dest_c(self, arg1: int = 0) -> tuple[float, float, float, float, float, float, int]:
     """Get the destination or current Cartesian location of the robot.
