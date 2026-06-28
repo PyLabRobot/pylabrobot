@@ -2,14 +2,8 @@ import logging
 from typing import Dict, List, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.device import Driver
 
-from .driver import (
-  HighResSampleStorageAutomatedRetrievalBackend,
-  HighResSampleStorageDriver,
-  HighResSampleStorageHumidityControllerBackend,
-  HighResSampleStorageTemperatureControllerBackend,
-)
+from .driver import HighResSampleStorageDriver
 from .types import EnvironmentParameter, VersionInfo
 
 logger = logging.getLogger(__name__)
@@ -18,9 +12,11 @@ logger = logging.getLogger(__name__)
 class HighResSampleStorageChatterboxDriver(HighResSampleStorageDriver):
   """Device-free driver that logs commands instead of talking to hardware.
 
-  Owns the real per-capability backends, so it exercises their command-building
-  logic; only the transport (:meth:`send_command`) and the shared device queries
-  are faked. Useful for testing protocols and resource assignment offline.
+  Builds on the real driver, so it owns the real per-capability backends and
+  exercises their command-building logic; only the transport (:meth:`send_command`)
+  and the shared device queries are faked. The socket is constructed (inert) but
+  never connected, because :meth:`setup` is overridden to skip the connect.
+  Useful for testing protocols and resource assignment offline.
   """
 
   def __init__(
@@ -30,18 +26,9 @@ class HighResSampleStorageChatterboxDriver(HighResSampleStorageDriver):
     loading_tray_nest: int = 1,
     num_nests: int = 2,
   ):
-    Driver.__init__(self)
-    self.io = None  # type: ignore[assignment]
-    self._read_timeout = 30.0
-    self._motion_timeout = 240.0
+    super().__init__(host="chatterbox", loading_tray_nest=loading_tray_nest, num_nests=num_nests)
     self._temperature = temperature
     self._humidity = humidity
-
-    self.automated_retrieval = HighResSampleStorageAutomatedRetrievalBackend(
-      self, loading_tray_nest=loading_tray_nest, num_nests=num_nests
-    )
-    self.temperature = HighResSampleStorageTemperatureControllerBackend(self)
-    self.humidity = HighResSampleStorageHumidityControllerBackend(self)
 
   async def setup(self, backend_params: Optional[BackendParams] = None):
     logger.info("[chatterbox] setup")
