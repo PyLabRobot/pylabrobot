@@ -1,7 +1,24 @@
+import enum
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from .constants import DoorState, NestState
+
+class DoorState(enum.Enum):
+  """State of a single TundraStore door, as reported by ``doorstatus``."""
+
+  OPEN = "OPEN"
+  CLOSED = "CLOSED"
+  OPENING = "OPENING"
+  CLOSING = "CLOSING"
+  UNKNOWN = "UNKNOWN"
+
+
+class NestState(enum.Enum):
+  """State of a transfer nest, as reported by ``neststatus``."""
+
+  CLEAR = "CLEAR"
+  OCCUPIED = "OCCUPIED"
+  UNKNOWN = "UNKNOWN"
 
 
 @dataclass

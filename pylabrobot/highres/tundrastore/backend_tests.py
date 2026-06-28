@@ -2,12 +2,12 @@ import unittest
 from typing import Dict, List
 
 from pylabrobot.highres.tundrastore.backend import TundraStoreBackend
-from pylabrobot.highres.tundrastore.constants import DoorState, NestState
 from pylabrobot.highres.tundrastore.errors import (
   PlateNotFoundError,
   TundraStoreError,
   TundraStoreFault,
 )
+from pylabrobot.highres.tundrastore.standard import DoorState, NestState
 
 # Real responses captured from a TundraStore (firmware 3.0.0.119, serial
 # HRB-2209-35148) over the port-1000 remote-control server.

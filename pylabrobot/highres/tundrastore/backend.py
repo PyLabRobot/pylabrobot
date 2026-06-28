@@ -11,15 +11,6 @@ from pylabrobot.device import Driver
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Plate, PlateHolder
 
-from .constants import (
-  ACK_TOKEN,
-  COMPLETION_ABORTED,
-  COMPLETION_ERROR,
-  COMPLETION_OK,
-  COMPLETION_TOKENS,
-  DoorState,
-  NestState,
-)
 from .errors import (
   PlateNotFoundError,
   TundraStoreAbortedError,
@@ -29,14 +20,26 @@ from .errors import (
 )
 from .settings import TundraStoreSettings
 from .standard import (
+  DoorState,
   DoorStatus,
   EnvironmentParameter,
+  NestState,
   NestStatus,
   StackerDimensions,
   VersionInfo,
 )
 
 logger = logging.getLogger(__name__)
+
+# Completion-status tokens that terminate a command's reply (see the manual,
+# "Message Formatting"). Every command ends with exactly one of these.
+COMPLETION_OK = "OK!"
+COMPLETION_ABORTED = "ABORTED!"
+COMPLETION_ERROR = "ERROR!"
+COMPLETION_TOKENS = (COMPLETION_OK, COMPLETION_ABORTED, COMPLETION_ERROR)
+
+# Immediate command-receipt echo prefix.
+ACK_TOKEN = "ACK!"
 
 
 class TundraStoreBackend(
