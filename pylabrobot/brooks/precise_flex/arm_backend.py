@@ -497,49 +497,6 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
       joints[Axis.RAIL] = cart.rail_position
     return joints
 
-  def _plan_cartesian_pose_route(
-    self,
-    poses: Sequence[PreciseFlexCartesianPose],
-    planned_joints: JointPose,
-    planned_pose: PreciseFlexCartesianPose,
-  ) -> List[JointPose]:
-    """Plan a Cartesian pose route into joint targets from an initial state snapshot.
-
-    Unlike :meth:`_cart_to_joints`, this helper does not query the controller for every
-    waypoint. Omitted pose fields inherit from the *planned* previous pose so IK branch
-    selection remains continuous across the route.
-    """
-    planned_joints = dict(planned_joints)
-    targets: List[JointPose] = []
-    for pose in poses:
-      cart = dataclasses.replace(
-        pose,
-        orientation=planned_pose.orientation if pose.orientation is None else pose.orientation,
-        wrist=planned_pose.wrist if pose.wrist is None else pose.wrist,
-        # PF400 IK expects a shoulder/reference rail position even on rail-less arms.
-        # Mirror _cart_to_joints(): omitted pose fields inherit from the previous pose.
-        rail_position=planned_pose.rail_position
-        if pose.rail_position is None
-        else pose.rail_position,
-      )
-      ik_joints = _snap_to_current(
-        kinematics.ik(cart, p=self._kinematics_params),
-        planned_joints,
-        cart.wrist,
-      )
-      # IK only solves the arm axes; gripper and rail keep the planned values.
-      target = dict(planned_joints)
-      for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST):
-        target[axis] = ik_joints[axis]
-      if self._has_rail and cart.rail_position is not None:
-        target[Axis.RAIL] = cart.rail_position
-
-      self._assert_within_soft_limits(planned_joints, target)
-      targets.append(target)
-      planned_joints = target
-      planned_pose = cart
-    return targets
-
   # -- speed & motion profiles --------------------------------------------------------------
 
   async def request_monitor_speed(self) -> int:
@@ -1801,6 +1758,49 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     )
     joints = await self._cart_to_joints(coords)
     await self._move_j(profile_index=self.profile_index, joint_coords=joints)
+
+  def _plan_cartesian_pose_route(
+    self,
+    poses: Sequence[PreciseFlexCartesianPose],
+    planned_joints: JointPose,
+    planned_pose: PreciseFlexCartesianPose,
+  ) -> List[JointPose]:
+    """Plan a Cartesian pose route into joint targets from an initial state snapshot.
+
+    Unlike :meth:`_cart_to_joints`, this helper does not query the controller for every
+    waypoint. Omitted pose fields inherit from the *planned* previous pose so IK branch
+    selection remains continuous across the route.
+    """
+    planned_joints = dict(planned_joints)
+    targets: List[JointPose] = []
+    for pose in poses:
+      cart = dataclasses.replace(
+        pose,
+        orientation=planned_pose.orientation if pose.orientation is None else pose.orientation,
+        wrist=planned_pose.wrist if pose.wrist is None else pose.wrist,
+        # PF400 IK expects a shoulder/reference rail position even on rail-less arms.
+        # Mirror _cart_to_joints(): omitted pose fields inherit from the previous pose.
+        rail_position=planned_pose.rail_position
+        if pose.rail_position is None
+        else pose.rail_position,
+      )
+      ik_joints = _snap_to_current(
+        kinematics.ik(cart, p=self._kinematics_params),
+        planned_joints,
+        cart.wrist,
+      )
+      # IK only solves the arm axes; gripper and rail keep the planned values.
+      target = dict(planned_joints)
+      for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST):
+        target[axis] = ik_joints[axis]
+      if self._has_rail and cart.rail_position is not None:
+        target[Axis.RAIL] = cart.rail_position
+
+      self._assert_within_soft_limits(planned_joints, target)
+      targets.append(target)
+      planned_joints = target
+      planned_pose = cart
+    return targets
 
   async def move_through_cartesian_poses(
     self,
