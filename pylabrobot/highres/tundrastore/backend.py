@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, cast
 
 from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
 from pylabrobot.capabilities.capability import BackendParams
@@ -19,7 +19,9 @@ from .errors import (
   left_unsafe,
 )
 from .settings import TundraStoreSettings
-from .standard import (
+from .types import (
+  DOOR_STATES,
+  NEST_STATES,
   DoorState,
   EnvironmentParameter,
   NestState,
@@ -227,10 +229,8 @@ class TundraStoreBackend(
     """Parsed ``doorstatus`` output, keyed by door name."""
     doors: Dict[str, DoorState] = {}
     for name, value in self._parse_kv(await self.send_command("doorstatus")).items():
-      try:
-        doors[name] = DoorState(value)
-      except ValueError:
-        doors[name] = DoorState.UNKNOWN
+      state = value.lower()
+      doors[name] = cast(DoorState, state) if state in DOOR_STATES else "unknown"
     return doors
 
   async def request_nest_status(self) -> Dict[int, NestState]:
@@ -241,10 +241,8 @@ class TundraStoreBackend(
         nest = int(key)
       except ValueError:
         continue
-      try:
-        nests[nest] = NestState(value)
-      except ValueError:
-        nests[nest] = NestState.UNKNOWN
+      state = value.lower()
+      nests[nest] = cast(NestState, state) if state in NEST_STATES else "unknown"
     return nests
 
   async def spatula_request_is_holding(self) -> bool:
@@ -259,7 +257,7 @@ class TundraStoreBackend(
     ``OCCUPIED``; anything other than ``CLEAR`` counts as holding.
     """
     state = (await self.request_nest_status()).get(nest)
-    return state is not None and state is not NestState.CLEAR
+    return state is not None and state != "clear"
 
   async def probe_presence(self, stacker: int, slot: int, to_nest: int = 1) -> bool:
     """Probe whether a plate is present in ``(stacker, slot)`` by attempting a

@@ -7,7 +7,6 @@ from pylabrobot.highres.tundrastore.errors import (
   TundraStoreError,
   TundraStoreFault,
 )
-from pylabrobot.highres.tundrastore.standard import DoorState, NestState
 
 # Real responses captured from a TundraStore (firmware 3.0.0.119, serial
 # HRB-2209-35148) over the port-1000 remote-control server.
@@ -108,14 +107,14 @@ class TundraStoreBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_door_status(self):
     doors = await self.backend.request_door_status()
-    self.assertEqual(doors["User Door"], DoorState.CLOSED)
-    self.assertEqual(doors["SEAL"], DoorState.CLOSING)
-    self.assertEqual(doors["RO1"], DoorState.CLOSING)
-    self.assertFalse(all(state is DoorState.CLOSED for state in doors.values()))
+    self.assertEqual(doors["User Door"], "closed")
+    self.assertEqual(doors["SEAL"], "closing")
+    self.assertEqual(doors["RO1"], "closing")
+    self.assertFalse(all(state == "closed" for state in doors.values()))
 
   async def test_nest_status(self):
     nests = await self.backend.request_nest_status()
-    self.assertEqual(nests, {1: NestState.CLEAR, 2: NestState.CLEAR})
+    self.assertEqual(nests, {1: "clear", 2: "clear"})
 
   async def test_plate_on_spatula(self):
     self.assertFalse(await self.backend.spatula_request_is_holding())

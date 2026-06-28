@@ -1,24 +1,19 @@
-import enum
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
+
+try:
+  from typing import Literal
+except ImportError:  # pragma: no cover
+  from typing_extensions import Literal  # type: ignore
 
 
-class DoorState(enum.Enum):
-  """State of a single TundraStore door, as reported by ``doorstatus``."""
+# State of a single TundraStore door, as reported by ``doorstatus``.
+DoorState = Literal["open", "closed", "opening", "closing", "unknown"]
+DOOR_STATES: Tuple[DoorState, ...] = ("open", "closed", "opening", "closing", "unknown")
 
-  OPEN = "OPEN"
-  CLOSED = "CLOSED"
-  OPENING = "OPENING"
-  CLOSING = "CLOSING"
-  UNKNOWN = "UNKNOWN"
-
-
-class NestState(enum.Enum):
-  """State of a transfer nest, as reported by ``neststatus``."""
-
-  CLEAR = "CLEAR"
-  OCCUPIED = "OCCUPIED"
-  UNKNOWN = "UNKNOWN"
+# State of a transfer nest, as reported by ``neststatus``.
+NestState = Literal["clear", "occupied", "unknown"]
+NEST_STATES: Tuple[NestState, ...] = ("clear", "occupied", "unknown")
 
 
 @dataclass
