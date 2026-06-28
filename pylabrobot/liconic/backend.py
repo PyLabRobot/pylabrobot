@@ -13,10 +13,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.automated_retrieval.backend import (
-  AutomatedRetrievalBackend,
-  ensure_single_tray,
-)
+from pylabrobot.capabilities.automated_retrieval.backend import AutomatedRetrievalBackend
 from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling.backend import HumidityControllerBackend
@@ -153,7 +150,10 @@ class LiconicBackend(
   # -- AutomatedRetrievalBackend --
 
   async def fetch_plate_to_loading_tray(self, plate: Plate, tray_index: Optional[int] = None):
-    ensure_single_tray(tray_index)
+    if tray_index not in (None, 0):
+      raise ValueError(
+        f"This device has a single loading tray; got tray_index={tray_index}. Use None or 0."
+      )
     site = plate.parent
     assert isinstance(site, PlateHolder), "Plate not in storage"
 
@@ -177,7 +177,10 @@ class LiconicBackend(
     )
 
   async def store_plate(self, plate: Plate, site: PlateHolder, tray_index: Optional[int] = None):
-    ensure_single_tray(tray_index)
+    if tray_index not in (None, 0):
+      raise ValueError(
+        f"This device has a single loading tray; got tray_index={tray_index}. Use None or 0."
+      )
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
 

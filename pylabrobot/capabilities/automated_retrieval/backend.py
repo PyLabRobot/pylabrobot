@@ -5,18 +5,6 @@ from pylabrobot.capabilities.capability import CapabilityBackend
 from pylabrobot.resources import Plate, PlateHolder
 
 
-def ensure_single_tray(tray_index: Optional[int]) -> None:
-  """Guard for backends with exactly one loading tray.
-
-  Raises ``ValueError`` if ``tray_index`` is anything other than ``None`` (default) or
-  ``0`` (the only tray).
-  """
-  if tray_index not in (None, 0):
-    raise ValueError(
-      f"This device has a single loading tray; got tray_index={tray_index}. Use None or 0."
-    )
-
-
 class AutomatedRetrievalBackend(CapabilityBackend, metaclass=ABCMeta):
   """Abstract backend for automated plate retrieval/storage devices."""
 
@@ -28,8 +16,7 @@ class AutomatedRetrievalBackend(CapabilityBackend, metaclass=ABCMeta):
       plate: The plate to retrieve.
       tray_index: 0-based index of the loading tray to deliver the plate to. ``None``
         selects the device's default tray. Devices with a single loading tray
-        accept ``None``/``0`` and reject any other value (see
-        :func:`ensure_single_tray`).
+        accept ``None``/``0`` and reject any other value.
     """
 
   @abstractmethod
