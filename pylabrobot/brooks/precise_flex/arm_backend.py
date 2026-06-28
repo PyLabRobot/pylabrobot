@@ -1744,47 +1744,45 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     joints = await self._cart_to_joints(coords)
     await self._move_j(profile_index=self.profile_index, joint_coords=joints)
 
-  def _plan_cartesian_pose_route(
-    self,
-    poses: Sequence[PreciseFlexCartesianPose],
-    planned_joints: JointPose,
-    planned_pose: PreciseFlexCartesianPose,
+  async def _plan_cartesian_pose_route(
+    self, poses: Sequence[PreciseFlexCartesianPose]
   ) -> List[JointPose]:
-    """Plan a Cartesian pose route into joint targets from an initial state snapshot.
+    """Plan a Cartesian pose route into joint targets, snapshotting state once.
 
-    Unlike :meth:`_cart_to_joints`, this helper does not query the controller for every
-    waypoint. Omitted pose fields inherit from the *planned* previous pose so IK branch
-    selection remains continuous across the route.
+    Unlike :meth:`_cart_to_joints`, this does not query the controller for every waypoint: it
+    reads the current state once and resolves each waypoint's IK from the previous waypoint's
+    result. Omitted pose fields inherit from the previous pose so IK branch selection remains
+    continuous across the route.
     """
-    planned_joints = dict(planned_joints)
+    prev_joints, prev_pose = await self._request_state()
     targets: List[JointPose] = []
     for pose in poses:
       cart = dataclasses.replace(
         pose,
-        orientation=planned_pose.orientation if pose.orientation is None else pose.orientation,
-        wrist=planned_pose.wrist if pose.wrist is None else pose.wrist,
+        orientation=prev_pose.orientation if pose.orientation is None else pose.orientation,
+        wrist=prev_pose.wrist if pose.wrist is None else pose.wrist,
         # PF400 IK expects a shoulder/reference rail position even on rail-less arms.
         # Mirror _cart_to_joints(): omitted pose fields inherit from the previous pose.
-        rail_position=planned_pose.rail_position
+        rail_position=prev_pose.rail_position
         if pose.rail_position is None
         else pose.rail_position,
       )
       ik_joints = _snap_to_current(
         kinematics.ik(cart, p=self._kinematics_params),
-        planned_joints,
+        prev_joints,
         cart.wrist,
       )
-      # IK only solves the arm axes; gripper and rail keep the planned values.
-      target = dict(planned_joints)
+      # IK only solves the arm axes; gripper and rail keep the previous values.
+      target = dict(prev_joints)
       for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST):
         target[axis] = ik_joints[axis]
       if self._has_rail and cart.rail_position is not None:
         target[Axis.RAIL] = cart.rail_position
 
-      self._assert_within_soft_limits(planned_joints, target)
+      self._assert_within_soft_limits(prev_joints, target)
       targets.append(target)
-      planned_joints = target
-      planned_pose = cart
+      prev_joints = target
+      prev_pose = cart
     return targets
 
   @dataclass
@@ -1825,8 +1823,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
     if backend_params.speed_pct is not None:
       await self._set_speed(backend_params.speed_pct)
 
-    planned_joints, planned_pose = await self._request_state()
-    targets = self._plan_cartesian_pose_route(poses, planned_joints, planned_pose)
+    targets = await self._plan_cartesian_pose_route(poses)
 
     profile_index = self.profile_index
     original_profile = None
