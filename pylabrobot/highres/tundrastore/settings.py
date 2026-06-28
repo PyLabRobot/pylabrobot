@@ -9,7 +9,7 @@ device (or a capture) and is frozen once built.
 
 import warnings
 from dataclasses import dataclass, fields
-from typing import Any, Dict, Iterable, Tuple
+from typing import Dict, Iterable, Tuple
 
 try:
   from typing import Literal
@@ -21,14 +21,6 @@ except ImportError:  # pragma: no cover
 # setting. Extend this (and MachineType) when a new model is encountered.
 MachineType = Literal["SteriStore2"]
 KNOWN_MACHINE_TYPES: Tuple[str, ...] = ("SteriStore2",)
-
-
-def _coerce(typ: Any, raw: Any) -> Any:
-  if typ is int:
-    return int(raw)
-  if typ is float:
-    return float(raw)
-  return str(raw)
 
 
 @dataclass(frozen=True)
@@ -688,7 +680,7 @@ class TundraStoreSettings:
       if key not in data:
         missing.append(key)
         continue
-      values[f.name] = _coerce(f.type, data[key])
+      values[f.name] = f.type(data[key]) if f.type in (int, float) else data[key]
     if missing:
       raise ValueError(
         f"settings is missing {len(missing)} expected key(s): "
