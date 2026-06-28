@@ -20,10 +20,6 @@ from typing import (
   Union,
 )
 
-from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
-from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
-from pylabrobot.capabilities.arms.standard import GripperDirection as _NewGripperDirection
-from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.head96_backend import (
   Head96Backend as _NewHead96Backend,
@@ -74,6 +70,8 @@ from pylabrobot.legacy.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
 )
 from pylabrobot.legacy.machines.machine import Machine, need_setup_finished
+from pylabrobot.legacy.plate_reading import PlateReader
+from pylabrobot.legacy.tilting.tilter import Tilter
 from pylabrobot.resources import (
   Container,
   Coordinate,
@@ -81,6 +79,7 @@ from pylabrobot.resources import (
   Lid,
   Plate,
   PlateAdapter,
+  PlateHolder,
   Resource,
   ResourceHolder,
   ResourceStack,
@@ -305,62 +304,6 @@ class _Head96Adapter(_NewHead96Backend):
     await self._legacy.dispense96(dispense=legacy_disp, **kw)
 
 
-_LEGACY_TO_NEW_GRIP: Dict[GripDirection, _NewGripperDirection] = {
-  GripDirection.FRONT: "front",
-  GripDirection.BACK: "back",
-  GripDirection.LEFT: "left",
-  GripDirection.RIGHT: "right",
-}
-
-
-class _ArmAdapter(OrientableGripperArmBackend):
-  """Adapts legacy LiquidHandlerBackend arm methods to new OrientableGripperArmBackend."""
-
-  def __init__(self, legacy: LiquidHandlerBackend):
-    self._legacy = legacy
-
-  async def pick_up_at_location(self, location, direction, resource_width, backend_params=None):
-    kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
-    pickup = kw.pop("_pickup")
-    await self._legacy.pick_up_resource(pickup=pickup, **kw)
-
-  async def drop_at_location(self, location, direction, resource_width, backend_params=None):
-    kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
-    drop = kw.pop("_drop")
-    await self._legacy.drop_resource(drop=drop, **kw)
-
-  async def move_to_location(self, location, direction, backend_params=None):
-    kw = backend_params.kwargs.copy() if isinstance(backend_params, _DictBackendParams) else {}
-    move = kw.pop("_move")
-    await self._legacy.move_picked_up_resource(move=move, **kw)
-
-  # -- stubs for abstract methods not used via legacy path ----
-
-  async def setup(self, backend_params=None, **kwargs):
-    pass
-
-  async def stop(self):
-    pass
-
-  async def halt(self, backend_params=None):
-    pass
-
-  async def park(self, backend_params=None):
-    pass
-
-  async def request_gripper_pose(self, backend_params=None) -> CartesianPose:
-    raise NotImplementedError("request_gripper_pose not available via legacy adapter")
-
-  async def open_gripper(self, gripper_width, backend_params=None):
-    pass
-
-  async def close_gripper(self, gripper_width, backend_params=None):
-    pass
-
-  async def is_gripper_closed(self, backend_params=None) -> bool:
-    return False
-
-
 # ---------------------------------------------------------------------------
 # LiquidHandler
 # ---------------------------------------------------------------------------
@@ -397,7 +340,6 @@ class LiquidHandler(Resource, Machine):
     # New capability instances — created during setup()
     self._lh_cap: Optional[PIP] = None
     self._head96_cap: Optional[Head96] = None
-    self._arm_cap: Optional[OrientableGripperArm] = None
 
     # Default offset applied to all 96-head operations. Any offset passed to a 96-head method is
     # added to this value.
@@ -448,13 +390,6 @@ class LiquidHandler(Resource, Machine):
       tracker.register_callback(self._state_updated)
 
     self._resource_pickups = {a: None for a in range(self.backend.num_arms)}
-
-    # Create arm capability with adapter backend
-    if self.backend.num_arms > 0:
-      self._arm_cap = OrientableGripperArm(
-        backend=_ArmAdapter(self.backend), reference_resource=self.deck
-      )
-      await self._arm_cap._on_setup()
 
   def serialize_state(self) -> Dict[str, Any]:
     head_state = {channel: tracker.serialize() for channel, tracker in self.head.items()}
@@ -1236,7 +1171,7 @@ class LiquidHandler(Resource, Machine):
     if self._resource_pickup is not None:
       raise RuntimeError(f"Resource {self._resource_pickup.resource.name} already picked up")
 
-    resource_pickup = ResourcePickup(
+    self._resource_pickup = ResourcePickup(
       resource=resource,
       offset=offset,
       pickup_distance_from_top=pickup_distance_from_top,
@@ -1249,16 +1184,15 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    pickup_distance_from_bottom = resource.get_size_z() - pickup_distance_from_top
-    await self._arm_cap.pick_up_resource(
-      resource=resource,
-      offset=offset,
-      pickup_distance_from_bottom=pickup_distance_from_bottom,
-      direction=_LEGACY_TO_NEW_GRIP[direction],
-      backend_params=_DictBackendParams({"_pickup": resource_pickup, **backend_kwargs}),
-    )
+    try:
+      await self.backend.pick_up_resource(
+        pickup=self._resource_pickup,
+        **backend_kwargs,
+      )
+    except Exception as e:
+      self._resource_pickup = None
+      raise e
 
-    self._resource_pickup = resource_pickup
     self._state_updated()
 
   async def move_picked_up_resource(
@@ -1278,20 +1212,15 @@ class LiquidHandler(Resource, Machine):
     if self._resource_pickup is None:
       raise RuntimeError("No resource picked up")
 
-    move = ResourceMove(
-      location=to,
-      resource=self._resource_pickup.resource,
-      gripped_direction=direction or self._resource_pickup.direction,
-      pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
-      offset=offset,
-    )
-
-    grip_dir = _LEGACY_TO_NEW_GRIP[direction or self._resource_pickup.direction]
-    await self._arm_cap.move_picked_up_resource(
-      to=to,
-      direction=grip_dir,
-      offset=offset,
-      backend_params=_DictBackendParams({"_move": move, **backend_kwargs}),
+    await self.backend.move_picked_up_resource(
+      ResourceMove(
+        location=to,
+        resource=self._resource_pickup.resource,
+        gripped_direction=direction or self._resource_pickup.direction,
+        pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
+        offset=offset,
+      ),
+      **backend_kwargs,
     )
 
   async def drop_resource(
@@ -1402,16 +1331,44 @@ class LiquidHandler(Resource, Machine):
       rotation=rotation_applied_by_move,
     )
 
-    # Delegate to arm capability — handles backend call + resource tree update
-    await self._arm_cap.drop_resource(
-      destination=destination,
-      offset=offset,
-      direction=_LEGACY_TO_NEW_GRIP[direction],
-      backend_params=_DictBackendParams({"_drop": drop, **backend_kwargs}),
-    )
+    result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
 
     self._resource_pickup = None
     self._state_updated()
+
+    # we rotate the resource on top of its original rotation. So in order to set the new rotation,
+    # we have to subtract its current rotation.
+    resource.rotate(z=resource_rotation_wrt_destination - resource.rotation.z)
+
+    # assign to destination
+    resource.unassign()
+    if isinstance(destination, Coordinate):
+      to_location -= self.deck.location  # passed as an absolute location, but stored as relative
+      self.deck.assign_child_resource(resource, location=to_location)
+    elif isinstance(destination, PlateHolder):  # .zero() resources
+      destination.assign_child_resource(resource)
+    elif isinstance(destination, ResourceHolder):  # .zero() resources
+      destination.assign_child_resource(resource)
+    elif isinstance(destination, (ResourceStack, PlateReader)):  # manage its own resources
+      if isinstance(destination, ResourceStack) and destination.direction != "z":
+        raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
+      destination.assign_child_resource(resource)
+    elif isinstance(destination, Tilter):
+      destination.assign_child_resource(resource, location=destination.child_location)
+    elif isinstance(destination, PlateAdapter):
+      if not isinstance(resource, Plate):
+        raise ValueError("Only plates can be moved to a PlateAdapter")
+      destination.assign_child_resource(
+        resource, location=destination.compute_plate_location(resource)
+      )
+    elif isinstance(destination, Plate) and isinstance(resource, Lid):
+      destination.assign_child_resource(resource)
+    elif isinstance(destination, Trash):
+      pass  # don't assign to trash, resource will simply be unassigned
+    else:
+      destination.assign_child_resource(resource, location=to_location)
+
+    return result
 
   async def move_resource(
     self,

@@ -1,3 +1,5 @@
+"""PreciseFlex controller reply codes (the error-code table) and the driver's exception type."""
+
 ERROR_CODES = {
   0: {"text": "Success", "description": "Operation completed successfully without an error."},
   1: {
@@ -1919,3 +1921,59 @@ Older GPL systems may display the license number shown above in ( ) rather than 
     "description": "A remote request to load a new vision project has failed because the current project has not been saved. Save the current project before attempting to load a new one.",
   },
 }
+
+
+class PreciseFlexError(Exception):
+  def __init__(self, replycode: int, message: str):
+    self.replycode = replycode
+    self.message = message
+    if replycode in ERROR_CODES:
+      text = ERROR_CODES[replycode]["text"]
+      description = ERROR_CODES[replycode]["description"]
+      super().__init__(f"PreciseFlexError {replycode}: {text}. {description} - {message}")
+    else:
+      super().__init__(f"PreciseFlexError {replycode}: {message}")
+
+
+class OperationInterrupted(Exception):
+  """Raised when a user interrupt (Jupyter stop / Ctrl+C) halts an in-flight device operation.
+
+  The device has been sent a stop and the connection has been resynced and left open, so the session
+  can continue. Raised in place of a bare ``KeyboardInterrupt``; an ``asyncio.CancelledError`` is
+  re-raised as-is rather than converted, so cancellation semantics are preserved.
+  """
+
+
+class OutOfRangeOfMotionError(Exception):
+  """An axis's current position is outside its soft limits, so the controller rejects every
+  commanded move (-1012) until it is driven back into range.
+
+  Its own type so the recover-and-retry path can catch this recoverable arm *state* without also
+  catching a bad commanded *target* (which stays a ``ValueError``). ``axes`` maps each offending
+  ``Axis`` to ``(value, (lo, hi))``.
+  """
+
+  def __init__(self, message: str, axes: dict):
+    super().__init__(message)
+    self.axes = axes
+
+
+# -- collision detection ---------------------------------------------------
+
+# Collision / over-drive errors: the servo trips one of these when an axis is blocked - it hit an
+# obstacle (or is otherwise over-driven) - and the controller stops the arm itself. Two mechanisms:
+# position-tracking (envelope) and torque saturation. Each surfaces as a ``PreciseFlexError`` on the
+# next command:
+#   -3100  hard envelope error  (position tracking; severe, turns power off)
+#   -3122  soft envelope error  (position tracking; leaves power on)
+#   -3101  PID output saturated too long  (torque saturated - over-driven / collided)
+#   -3105  motor stalled  (torque saturated at the peak rating)
+COLLISION_ERROR_CODES = frozenset({-3100, -3101, -3105, -3122})
+
+
+def is_collision(exc: object) -> bool:
+  """Whether ``exc`` is a ``PreciseFlexError`` from a collision / over-drive (the arm hit something) -
+  an envelope (``-3100`` / ``-3122``) or torque-saturation (``-3101`` / ``-3105``) error - as opposed
+  to an ordinary command error. Lets protocol code branch on "did I crash?".
+  """
+  return isinstance(exc, PreciseFlexError) and exc.replycode in COLLISION_ERROR_CODES

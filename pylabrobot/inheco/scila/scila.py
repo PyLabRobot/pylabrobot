@@ -29,7 +29,11 @@ class SCILADrawerLoadingTrayBackend(LoadingTrayBackend):
     except RuntimeError as e:
       self._handle_warning("open", e)
 
-  async def close(self, backend_params: Optional[BackendParams] = None):
+  async def close(
+    self,
+    backend_params: Optional[BackendParams] = None,
+    resource: Optional[Resource] = None,
+  ):
     await self._driver.send_command("PrepareForOutput", position=self._drawer_id)
     try:
       await self._driver.send_command("CloseDoor")

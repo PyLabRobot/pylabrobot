@@ -4,6 +4,7 @@ from .microscopy import (
   evaluate_focus_nvmg_sobel,
   fraction_overexposed,
   max_pixel_at_fraction,
+  white_balance,
 )
 from .standard import (
   AutoExposure,

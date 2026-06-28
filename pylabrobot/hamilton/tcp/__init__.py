@@ -14,10 +14,10 @@ from pylabrobot.hamilton.tcp.messages import (
 )
 from pylabrobot.hamilton.tcp.packets import Address, HarpPacket, HoiPacket, IpPacket
 from pylabrobot.hamilton.tcp.protocol import (
-  Hoi2Action,
   HamiltonDataType,
   HamiltonProtocol,
   HarpTransportableProtocol,
+  Hoi2Action,
   HoiRequestId,
   RegistrationActionCode,
   RegistrationOptionType,
