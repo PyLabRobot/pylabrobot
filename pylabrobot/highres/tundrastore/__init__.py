@@ -6,7 +6,7 @@ from .errors import (
   TundraStoreError,
   TundraStoreFault,
 )
-from .settings import TundraStoreSettings
+from .settings import MachineType, TundraStoreSettings
 from .standard import (
   DoorState,
   EnvironmentParameter,

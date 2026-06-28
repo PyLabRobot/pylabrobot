@@ -326,15 +326,11 @@ class TundraStoreBackend(
         continue
     return dims
 
-  async def request_settings(self, search: str = "") -> TundraStoreSettings:
-    """Read the device's settings file (``NAME = value`` pairs) into a
-    :class:`TundraStoreSettings`. Pass ``search`` to filter by substring."""
-    command = "settings" + (f" {search}" if search else "")
-    lines = await self.send_command(command, timeout=self._read_timeout)
-    version = await self.request_version()
-    return TundraStoreSettings.from_lines(
-      lines, serial=version.serial_number, firmware=version.firmware_version
-    )
+  async def request_settings(self) -> TundraStoreSettings:
+    """Read the device's full settings file (``NAME = value`` pairs) into a
+    frozen :class:`TundraStoreSettings`."""
+    lines = await self.send_command("settings", timeout=self._read_timeout)
+    return TundraStoreSettings.from_lines(lines)
 
   async def scan_stacker_barcodes(self, stacker, slot: Optional[int] = None) -> List[str]:
     """Scan a stacker (or a single slot) for barcodes.
