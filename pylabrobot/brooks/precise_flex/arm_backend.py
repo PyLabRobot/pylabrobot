@@ -1824,9 +1824,7 @@ class PreciseFlexArmBackend(OrientableGripperArmBackend, HasJoints, CanFreedrive
         wrist=prev_pose.wrist if pose.wrist is None else pose.wrist,
         # PF400 IK expects a shoulder/reference rail position even on rail-less arms.
         # Mirror _cart_to_joints(): omitted pose fields inherit from the previous pose.
-        rail_position=prev_pose.rail_position
-        if pose.rail_position is None
-        else pose.rail_position,
+        rail_position=prev_pose.rail_position if pose.rail_position is None else pose.rail_position,
       )
       ik_joints = _snap_to_current(
         kinematics.ik(cart, p=self._kinematics_params),

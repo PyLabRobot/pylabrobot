@@ -253,9 +253,7 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
 
   def _profile_cmds(self) -> list[str]:
     return [
-      c.args[0]
-      for c in self.driver.send_command.call_args_list
-      if c.args[0].startswith("Profile")
+      c.args[0] for c in self.driver.send_command.call_args_list if c.args[0].startswith("Profile")
     ]
 
   async def test_move_through_cartesian_poses_plans_from_one_state_snapshot(self):
