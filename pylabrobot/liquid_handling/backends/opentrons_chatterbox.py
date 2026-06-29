@@ -125,6 +125,7 @@ class OpentronsOT2ChatterboxBackend(OpentronsOT2Backend):
     host: str = "chatterbox",
     port: int = 31950,
     api_version: str = _OT_DECK_IS_ADDRESSABLE_AREA_VERSION,
+    allow_undeclared_tip_pickup: bool = False,
     verbose: bool = True,
   ):
     """Initialize the chatterbox.
@@ -149,6 +150,7 @@ class OpentronsOT2ChatterboxBackend(OpentronsOT2Backend):
     self._right_pipette_name = right_pipette_name
     self.host = host
     self.port = port
+    self.allow_undeclared_tip_pickup = allow_undeclared_tip_pickup
 
     left = (
       {"name": left_pipette_name, "pipetteId": "chatterbox-left"} if left_pipette_name else None

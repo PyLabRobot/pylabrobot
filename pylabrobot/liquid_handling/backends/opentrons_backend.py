@@ -1,6 +1,7 @@
 import inspect
 import logging
 import uuid
+import warnings
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot import utils
@@ -28,9 +29,10 @@ from pylabrobot.liquid_handling.standard import (
 from pylabrobot.resources import (
   Coordinate,
   Tip,
+  does_tip_tracking,
 )
 from pylabrobot.resources.opentrons import OTDeck
-from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
 try:
   import ot_api
@@ -98,7 +100,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     "p1000_single_gen3": 1000,
   }
 
-  def __init__(self, host: str, port: int = 31950):
+  def __init__(self, host: str, port: int = 31950, allow_undeclared_tip_pickup: bool = False):
     super().__init__()
 
     if not USE_OT:
@@ -109,6 +111,10 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     self.host = host
     self.port = port
+
+    # Default for whether a multi pickup may absorb undeclared tips grabbed by unused
+    # nozzles; overridable per call via pick_up_tips(..., allow_undeclared_tip_pickup=).
+    self.allow_undeclared_tip_pickup = allow_undeclared_tip_pickup
 
     # All hardware I/O goes through this handle so a subclass (e.g. the chatterbox)
     # can dry-run the backend by swapping it for a recording stand-in. The real handle
@@ -390,14 +396,135 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     raise ValueError(f"Unknown or unconfigured pipette_id {pipette_id!r} in _set_tip_state.")
 
-  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
+  def _check_head8_pickup(
+    self, ops: List[Pickup], use_channels: List[int]
+  ) -> List[Tuple[int, TipSpot]]:
+    """Validate an 8-channel pickup against what the Opentrons API can declare.
+
+    A default-layout multi anchors the pickup at the referenced well - the back /
+    channel-0 nozzle - and fills toward the front (row H). The API only approves
+    front-anchored nozzle layouts, so use_channels must be a channel-0-anchored
+    contiguous block ``[0, 1, ..., k]``; a back-anchored set such as ``[1..7]``
+    (leaving row A) cannot be declared at all.
+
+    Returns the ``(nozzle, tipspot)`` pairs the head would also grab BELOW the
+    declared selection (occupied tipspots within its 8-nozzle reach) - undeclared
+    tips for the caller to reject or absorb. An empty list means a clean pickup.
+    """
+    head8_pitch = 9.0
+    num_nozzles = 8
+
+    ordered = sorted(use_channels)
+    if ordered != list(range(len(ordered))):
+      raise ValueError(
+        f"OT-2 8-channel pickup must use a channel-0-anchored contiguous block of channels "
+        f"[0, 1, ..., k]; got use_channels={ordered}. The Opentrons API anchors a multi pickup "
+        f"at the back (channel-0) nozzle and only approves front-anchored nozzle layouts, so a "
+        f"back-anchored selection such as [1..7] (which would leave row A and overhang the back "
+        f"edge) cannot be declared. To pick fewer tips, keep channel 0 and use the topmost rows."
+      )
+
+    def loc(resource):
+      return resource.get_absolute_location("c", "c", "b")
+
+    tip_spots = [op.resource for op in ops]
+    rack = tip_spots[0].parent
+    if not isinstance(rack, TipRack) or any(s.parent is not rack for s in tip_spots):
+      raise ValueError("OT-2 8-channel pickup must come from a single tip rack.")
+
+    col_x = loc(tip_spots[0]).x
+    if any(abs(loc(s).x - col_x) > 0.5 for s in tip_spots):
+      raise ValueError(
+        "OT-2 8-channel pickup must be within a single column (all tipspots must share x)."
+      )
+
+    col_spots = [s for s in rack.get_all_items() if abs(loc(s).x - col_x) < 0.5]
+    top_y = max(loc(s).y for s in col_spots)
+
+    def row_of(y: float) -> int:
+      return int(round((top_y - y) / head8_pitch))
+
+    spot_by_row = {row_of(loc(s).y): s for s in col_spots}
+
+    # The declared tipspots must run consecutively down the column in channel order
+    # (channel 0 = topmost well, then one row per channel at 9 mm pitch).
+    offsets = {row_of(loc(op.resource).y) - ch for op, ch in zip(ops, use_channels)}
+    if len(offsets) != 1:
+      raise ValueError(
+        "OT-2 8-channel pickup tipspots must run consecutively down the column in channel order "
+        "(channel 0 = topmost well, then one row per channel at 9 mm pitch). The given tipspots "
+        "do not line up 1:1 with the channels."
+      )
+    top_row = offsets.pop()
+
+    # The head also grabs any occupied tipspot BELOW the selection, within its 8-nozzle reach
+    # (unused nozzles k+1..7). Those are undeclared tips.
+    used = set(use_channels)
+    extras: List[Tuple[int, TipSpot]] = []
+    for nozzle in range(num_nozzles):
+      if nozzle in used:
+        continue
+      spot = spot_by_row.get(nozzle + top_row)
+      if spot is not None and spot.has_tip():
+        extras.append((nozzle, spot))
+    return extras
+
+  def _absorb_undeclared_tips(self, extras: List[Tuple[int, TipSpot]]) -> None:
+    """Account for tips grabbed by unused nozzles so PLR tracking stays consistent.
+
+    Mirrors the frontend's pickup bookkeeping (add tip to the channel, remove it from
+    the tipspot) for each nozzle the caller did not declare.
+    """
+    if self._head is None:
+      return
+    for nozzle, spot in extras:
+      self._head[nozzle].add_tip(spot.get_tip(), origin=spot, commit=True)
+      if does_tip_tracking() and not spot.tracker.is_disabled:
+        spot.tracker.remove_tip(commit=True)
+
+  async def pick_up_tips(
+    self,
+    ops: List[Pickup],
+    use_channels: List[int],
+    *,
+    allow_undeclared_tip_pickup: Optional[bool] = None,
+  ):
     """Pick up tips from the specified resource.
 
     A multi-channel pickup (one op per channel) issues a single ``ot_api`` command
     targeting the primary op's well; the firmware engages the remaining nozzles.
+
+    ``allow_undeclared_tip_pickup`` overrides the backend default for this call only;
+    when ``None`` the backend's ``self.allow_undeclared_tip_pickup`` is used. When the
+    8-nozzle head would also grab occupied tipspots below the selection, the pickup is
+    rejected unless this is True, in which case those tips are absorbed (with a warning).
     """
 
     pipette_id, op = self._resolve_pipette_and_primary(ops, use_channels)
+
+    allow_undeclared = (
+      self.allow_undeclared_tip_pickup
+      if allow_undeclared_tip_pickup is None
+      else allow_undeclared_tip_pickup
+    )
+    if "multi" in self.get_pipette_name(pipette_id):
+      extras = self._check_head8_pickup(ops, use_channels)
+      if extras:
+        where = ", ".join(spot.name for _, spot in extras)
+        if not allow_undeclared:
+          raise ValueError(
+            f"OT-2 8-channel pickup would also grab undeclared tips at {where}. The head fills "
+            f"from channel 0 down toward row H, and these occupied tipspots sit below your "
+            f"selection within its 8-nozzle reach, so the hardware would pick them up too. "
+            f"Extend use_channels down to include them, clear those spots first, or pass "
+            f"allow_undeclared_tip_pickup=True (per call or on the backend) to absorb them."
+          )
+        warnings.warn(
+          f"OT-2 8-channel pickup is also grabbing undeclared tips at {where} (below the "
+          f"selection) and absorbing them into tracking (allow_undeclared_tip_pickup=True).",
+          stacklevel=2,
+        )
+        self._absorb_undeclared_tips(extras)
 
     offset_x, offset_y, offset_z = (
       op.offset.x,

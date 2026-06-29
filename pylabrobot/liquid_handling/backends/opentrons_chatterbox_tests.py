@@ -5,6 +5,7 @@ no hardware and no ot_api library is the whole point of the chatterbox.
 """
 
 import unittest
+import warnings
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import OpentronsOT2ChatterboxBackend
@@ -133,6 +134,34 @@ class OpentronsChatterboxHead8Tests(unittest.IsolatedAsyncioTestCase):
     ops = [object(), object()]
     with self.assertRaises(NoChannelError):
       self.backend._resolve_pipette_and_primary(ops, use_channels=[0, 8])  # type: ignore[arg-type]
+
+  async def test_back_anchored_pickup_is_rejected(self):
+    """use_channels must be a channel-0-anchored block; [1..7] (leaving row A) is rejected."""
+    with self.assertRaises(ValueError):
+      await self.lh.pick_up_tips(
+        [self.tips.get_item(f"{r}1") for r in "BCDEFGH"], use_channels=list(range(1, 8))
+      )
+
+  async def test_pickup_grabbing_undeclared_tips_below_is_rejected(self):
+    """Picking A1:F1 from a full column would also grab the occupied G1/H1 below it within
+    the head's 8-nozzle reach; rejected by default."""
+    with self.assertRaises(ValueError):
+      await self.lh.pick_up_tips(
+        [self.tips.get_item(f"{r}1") for r in "ABCDEF"], use_channels=list(range(6))
+      )
+
+  async def test_allow_undeclared_absorbs_grabbed_tips(self):
+    """allow_undeclared_tip_pickup=True absorbs the extra grabbed tips into tracking (with a
+    warning) so all eight nozzles are accounted for."""
+    with warnings.catch_warnings(record=True) as caught:
+      warnings.simplefilter("always")
+      await self.lh.pick_up_tips(
+        [self.tips.get_item(f"{r}1") for r in "ABCDEF"],
+        use_channels=list(range(6)),
+        allow_undeclared_tip_pickup=True,
+      )
+    self.assertTrue(all(self.lh.head[c].has_tip for c in range(8)))
+    self.assertTrue(any("undeclared tips" in str(w.message) for w in caught))
 
 
 if __name__ == "__main__":
