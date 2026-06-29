@@ -12,7 +12,11 @@ from pylabrobot.liquid_handling.backends import OpentronsOT2ChatterboxBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.resources import Coordinate, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.celltreat import CellTreat_96_wellplate_350ul_Fb
-from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
+from pylabrobot.resources.opentrons import (
+  OTDeck,
+  opentrons_96_filtertiprack_20ul,
+  opentrons_96_tiprack_300ul,
+)
 
 
 def _names(backend: OpentronsOT2ChatterboxBackend):
@@ -318,6 +322,92 @@ class OpentronsChatterboxPartialPickupTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_at_slot(CellTreat_96_wellplate_350ul_Fb(name="short_neighbour"), slot=7)
     await self.lh.pick_up_tips([rack.get_item(f"{r}1") for r in "EFGH"], use_channels=[0, 1, 2, 3])
     self.assertTrue(all(self.lh.head[c].has_tip for c in range(4)))
+
+  async def test_collision_z_reference_is_the_nozzle_engagement_height(self):
+    """Pins the collision z-reference to where the nozzles engage (tip top - fitting depth), not
+    the tipspot anchor (the tip bottom). For a 300 uL tip the tip bottom sits near the deck, so the
+    buggy reference would drive the z threshold negative and wrongly reject even a short neighbour.
+    So a 300 uL partial pickup over a short 96-well plate must be ALLOWED - cleared only with the
+    correct reference. (This is the test that would fail if the z-fix were reverted.)"""
+    backend = OpentronsOT2ChatterboxBackend(
+      left_pipette_name="p300_multi_gen2", right_pipette_name="p20_single_gen2", verbose=False
+    )
+    deck = OTDeck()
+    lh = LiquidHandler(backend=backend, deck=deck)
+    await lh.setup()
+    rack = opentrons_96_tiprack_300ul(name="t300")
+    deck.assign_child_at_slot(rack, slot=10)
+    for r in "ABCD":
+      rack.get_item(f"{r}1").tracker.remove_tip(commit=True)
+    deck.assign_child_at_slot(CellTreat_96_wellplate_350ul_Fb(name="short"), slot=7)
+    await lh.pick_up_tips([rack.get_item(f"{r}1") for r in "EFGH"], use_channels=[0, 1, 2, 3])
+    self.assertTrue(all(lh.head[c].has_tip for c in range(4)))
+
+
+class _StubResource:
+  """A deck resource with a fixed footprint and height, for the collision-math unit test."""
+
+  children: list = []
+
+  def __init__(self, name, x, y, z, sx, sy, sz, parent=None):
+    self.name = name
+    self.parent = parent
+    self._loc = Coordinate(x, y, z)
+    self._sx, self._sy, self._sz = sx, sy, sz
+
+  def get_absolute_location(self, *args, **kwargs):
+    return self._loc
+
+  def get_absolute_size_x(self):
+    return self._sx
+
+  def get_absolute_size_y(self):
+    return self._sy
+
+  def get_absolute_size_z(self):
+    return self._sz
+
+
+class _StubTip:
+  total_tip_length = 39.2
+  fitting_depth = 8.25
+
+
+class _StubPickup:
+  def __init__(self, x, y, z, parent):
+    self.resource = _StubResource("primary_spot", x, y, z, 0, 0, 0, parent=parent)
+    self.tip = _StubTip()
+
+
+class OpentronsCollisionMathTests(unittest.TestCase):
+  """Unit test of _check_head8_surrounding_resources with synthetic coordinates, decoupled from the
+  real deck geometry: verifies the x-y bounding-box overlap and the z-height threshold directly."""
+
+  def test_box_overlap_and_z_threshold(self):
+    backend = OpentronsOT2ChatterboxBackend(
+      left_pipette_name="p20_multi_gen2", right_pipette_name="p20_single_gen2", verbose=False
+    )
+    target_rack = object()
+    # primary tip at (130, 380, 25.5): col_x=130, pickup_z = 25.5 + 39.2 - 8.25 = 56.45;
+    # head box x [125, 135], y [380 - 7*9 - 5, 385] = [312, 385]; collide iff top z >= 46.45.
+    primary = _StubPickup(130, 380, 25.5, parent=target_rack)
+
+    tall_overlap = _StubResource("tall_overlap", 120, 340, 0, 20, 20, 64.7)  # overlaps + tall
+    short_overlap = _StubResource("short_overlap", 120, 340, 0, 20, 20, 14.3)  # overlaps but short
+    tall_far = _StubResource("tall_far", 200, 340, 0, 20, 20, 64.7)  # tall but no x overlap
+
+    class _Holder:
+      def __init__(self, res):
+        self.children = [res]
+
+    class _Deck:
+      children = [_Holder(tall_overlap), _Holder(short_overlap), _Holder(tall_far)]
+
+    backend.set_deck(_Deck())  # type: ignore[arg-type]
+    names = [r.name for r in backend._check_head8_surrounding_resources([primary], [0])]  # type: ignore[list-item]
+    self.assertIn("tall_overlap", names)  # overlap + tall enough -> collision
+    self.assertNotIn("short_overlap", names)  # overlap but below the head's path -> cleared
+    self.assertNotIn("tall_far", names)  # tall but outside the x band -> no collision
 
 
 if __name__ == "__main__":

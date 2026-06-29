@@ -52,6 +52,7 @@ _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 # resource as in the way when its top is within this z of the tip-pickup height.
 _HEAD8_XY_TOLERANCE = 5.0  # mm
 _HEAD8_Z_TOLERANCE = 10.0  # mm
+_HEAD8_NOZZLE_PITCH = 9.0  # mm between adjacent nozzles on the 8-channel head
 
 logger = logging.getLogger(__name__)
 
@@ -421,7 +422,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     declared selection (occupied tipspots within its 8-nozzle reach) - undeclared
     tips for the caller to reject or absorb. An empty list means a clean pickup.
     """
-    head8_pitch = 9.0
+    head8_pitch = _HEAD8_NOZZLE_PITCH
     num_nozzles = 8
 
     ordered = sorted(use_channels)
@@ -510,7 +511,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     to be in the head's path), is a collision. Unlike _check_head8_pickup (which only inspects the
     target rack and ignores z), this is z-aware: a short resource under the box is cleared.
     """
-    pitch = 9.0
+    pitch = _HEAD8_NOZZLE_PITCH
 
     primary = next(op for op, ch in zip(ops, use_channels) if ch == 0)
     spot = primary.resource.get_absolute_location("c", "c", "b")
