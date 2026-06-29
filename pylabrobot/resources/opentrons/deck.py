@@ -130,8 +130,10 @@ class OTDeck(Deck):
       if not reassign:
         raise ValueError(f"Resource '{resource.name}' already assigned to deck")
       super().unassign_child_resource(existing)
-      if existing in self._slot_holders:
-        self._slot_holders[self._slot_holders.index(existing)] = cast(ResourceHolder, resource)
+      for i, holder in enumerate(self._slot_holders):
+        if holder is existing:
+          self._slot_holders[i] = cast(ResourceHolder, resource)
+          break
     elif not isinstance(resource, ResourceHolder):
       raise ValueError(
         f"Cannot assign '{resource.name}' directly to the deck. Use assign_child_at_slot to place "
