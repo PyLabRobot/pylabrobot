@@ -640,6 +640,11 @@ var frameImages = [];
 let frameInterval = 8;
 var _recordingTimer = null;
 
+// The deck resource, found by type rather than a hardcoded name (decks may be named anything).
+function getDeck() {
+  return Object.values(resources).find((r) => r instanceof Deck);
+}
+
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
   // A snapping resource is a spot within a plate/tip carrier or the OT deck.
@@ -670,7 +675,7 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   }
 
   // Check if the resource is in a ResourceHolder.
-  let deck = resources["deck"];
+  let deck = getDeck();
   for (let resource_name in deck.children) {
     const resource = deck.children[resource_name];
 
@@ -753,7 +758,7 @@ function getSnappingGrid(x, y, width, height) {
 
   let snappingLines = {};
 
-  const deck = resources["deck"];
+  const deck = getDeck();
   if (
     deck.constructor.name === "HamiltonSTARDeck" ||
     deck.constructor.name === "VantageDeck"
@@ -1735,7 +1740,7 @@ class Tube extends Container {
 // Nothing special.
 class Trash extends Resource {
   drawMainShape() {
-    if (resources["deck"].constructor.name) {
+    if (getDeck()) {
       return undefined;
     }
     return super.drawMainShape();
