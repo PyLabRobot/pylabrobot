@@ -10,7 +10,7 @@ import warnings
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import OpentronsOT2ChatterboxBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
-from pylabrobot.resources import set_tip_tracking, set_volume_tracking
+from pylabrobot.resources import Coordinate, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.celltreat import CellTreat_96_wellplate_350ul_Fb
 from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
 
@@ -162,6 +162,69 @@ class OpentronsChatterboxHead8Tests(unittest.IsolatedAsyncioTestCase):
       )
     self.assertTrue(all(self.lh.head[c].has_tip for c in range(8)))
     self.assertTrue(any("undeclared tips" in str(w.message) for w in caught))
+
+
+class _FarTarget:
+  """Stub resource that always reports a location far beyond the gantry envelope."""
+
+  def get_location_wrt(self, *args, **kwargs):
+    return Coordinate(150, 800, 5)
+
+
+class _FarOp:
+  def __init__(self):
+    self.resource = _FarTarget()
+    self.offset = Coordinate(0, 0, 0)
+
+
+class OpentronsChatterboxReachTests(unittest.IsolatedAsyncioTestCase):
+  """Center-based reachability check (OT2RobotGeometry wired into the operations)."""
+
+  async def asyncSetUp(self):
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+    self.backend = OpentronsOT2ChatterboxBackend(
+      left_pipette_name="p20_multi_gen2", right_pipette_name="p300_single_gen2", verbose=False
+    )
+    self.deck = OTDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    await self.lh.setup()
+    self.tips = opentrons_96_filtertiprack_20ul(name="tips")
+    self.deck.assign_child_at_slot(self.tips, slot=5)
+
+  async def asyncTearDown(self):
+    set_tip_tracking(False)
+    set_volume_tracking(False)
+
+  async def test_can_reach_position_central_yes_far_no(self):
+    """A central deck coordinate is reachable; one far past the back envelope is not -
+    for both a multi nozzle (channel 0) and the single (channel 8)."""
+    central, far = Coordinate(150, 150, 5), Coordinate(150, 800, 5)
+    self.assertTrue(self.backend.can_reach_position(0, central))
+    self.assertTrue(self.backend.can_reach_position(8, central))
+    self.assertFalse(self.backend.can_reach_position(0, far))
+    self.assertFalse(self.backend.can_reach_position(8, far))
+
+  async def test_out_of_envelope_target_raises(self):
+    """ensure_can_reach_position rejects a target outside the gantry envelope."""
+    with self.assertRaises(ValueError):
+      self.backend.ensure_can_reach_position([0], [_FarOp()], "pick_up_tips")
+
+  async def test_reachable_head8_column_pickup_passes(self):
+    """A normal on-deck head8 column pickup passes the reach guard and runs."""
+    await self.lh.pick_up_tips(
+      [self.tips.get_item(f"{r}1") for r in "ABCDEFGH"], use_channels=list(range(8))
+    )
+    self.assertTrue(all(self.lh.head[c].has_tip for c in range(8)))
+
+  async def test_trash_discard_skips_reach_check(self):
+    """Discarding to the fixed trash is exempt from the reach check (it routes through the
+    addressable area, not a reach-bounded move), so it is not falsely rejected."""
+    await self.lh.pick_up_tips(
+      [self.tips.get_item(f"{r}1") for r in "ABCDEFGH"], use_channels=list(range(8))
+    )
+    await self.lh.discard_tips()
+    self.assertFalse(any(self.lh.head[c].has_tip for c in range(8)))
 
 
 if __name__ == "__main__":

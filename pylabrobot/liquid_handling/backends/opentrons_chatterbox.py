@@ -19,6 +19,7 @@ from pylabrobot.liquid_handling.backends.opentrons_backend import (
   _OT_DECK_IS_ADDRESSABLE_AREA_VERSION,
   OpentronsOT2Backend,
 )
+from pylabrobot.resources.opentrons import OT2RobotGeometry
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,7 @@ class OpentronsOT2ChatterboxBackend(OpentronsOT2Backend):
     self.host = host
     self.port = port
     self.allow_undeclared_tip_pickup = allow_undeclared_tip_pickup
+    self.geometry = OT2RobotGeometry()
 
     left = (
       {"name": left_pipette_name, "pipetteId": "chatterbox-left"} if left_pipette_name else None

@@ -31,7 +31,7 @@ from pylabrobot.resources import (
   Tip,
   does_tip_tracking,
 )
-from pylabrobot.resources.opentrons import OTDeck
+from pylabrobot.resources.opentrons import OT2RobotGeometry, OTDeck
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
 try:
@@ -115,6 +115,8 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     # Default for whether a multi pickup may absorb undeclared tips grabbed by unused
     # nozzles; overridable per call via pick_up_tips(..., allow_undeclared_tip_pickup=).
     self.allow_undeclared_tip_pickup = allow_undeclared_tip_pickup
+
+    self.geometry = OT2RobotGeometry()
 
     # All hardware I/O goes through this handle so a subclass (e.g. the chatterbox)
     # can dry-run the backend by swapping it for a recording stand-in. The real handle
@@ -484,6 +486,38 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       if does_tip_tracking() and not spot.tracker.is_disabled:
         spot.tracker.remove_tip(commit=True)
 
+  def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
+    """Whether ``channel_idx`` can reach ``position`` (deck frame), centre-based.
+
+    Maps the channel to its mount and per-nozzle y offset - a single pipette resolves to its
+    centre (channel_offset 0), a multi to each nozzle's offset - converts the target into the
+    robot frame, and tests it against the OT-2 gantry envelope. Works for single and multi alike.
+    """
+    pipette, nozzle = self._channel_map()[channel_idx]
+    mount = "left" if pipette is self.left_pipette else "right"
+    n = self._pipette_channel_count(pipette)
+    channel_offset = self.geometry.channel_y_offsets(n)[nozzle] if n > 1 else 0.0
+    return self.geometry.can_reach_position(
+      mount, self._deck_to_robot_frame(position), channel_offset
+    )
+
+  def ensure_can_reach_position(
+    self, use_channels: List[int], ops: Sequence[PipettingOp], op_name: str
+  ) -> None:
+    """Raise if any declared channel cannot reach its target position (the STAR pattern)."""
+    cant = [
+      ch
+      for ch, op in zip(use_channels, ops)
+      if not self.can_reach_position(
+        ch, op.resource.get_location_wrt(self.deck, "c", "c", "b") + op.offset
+      )
+    ]
+    if cant:
+      raise ValueError(
+        f"Channels {cant} cannot reach their target positions in '{op_name}'. Near the front/back "
+        f"deck limits only a subset of a multi's nozzles reach; try different channels or placement."
+      )
+
   async def pick_up_tips(
     self,
     ops: List[Pickup],
@@ -503,6 +537,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     """
 
     pipette_id, op = self._resolve_pipette_and_primary(ops, use_channels)
+    self.ensure_can_reach_position(use_channels, ops, "pick_up_tips")
 
     allow_undeclared = (
       self.allow_undeclared_tip_pickup
@@ -566,6 +601,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
       and op.resource.name == "trash"
     )
+
+    if not use_fixed_trash:
+      self.ensure_can_reach_position(use_channels, ops, "drop_tips")
     if use_fixed_trash:
       labware_id = "fixedTrash"
     else:
@@ -678,6 +716,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     """
 
     pipette_id, primary = self._resolve_pipette_and_primary(ops, use_channels)
+    self.ensure_can_reach_position(use_channels, ops, "aspirate")
     op = cast(SingleChannelAspiration, primary)
     volume = op.volume
 
@@ -757,6 +796,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     """
 
     pipette_id, primary = self._resolve_pipette_and_primary(ops, use_channels)
+    self.ensure_can_reach_position(use_channels, ops, "dispense")
     op = cast(SingleChannelDispense, primary)
     volume = op.volume
 
