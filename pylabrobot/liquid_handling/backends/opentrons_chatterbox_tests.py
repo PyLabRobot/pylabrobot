@@ -208,7 +208,7 @@ class OpentronsChatterboxReachTests(unittest.IsolatedAsyncioTestCase):
   async def test_out_of_envelope_target_raises(self):
     """ensure_can_reach_position rejects a target outside the gantry envelope."""
     with self.assertRaises(ValueError):
-      self.backend.ensure_can_reach_position([0], [_FarOp()], "pick_up_tips")
+      self.backend.ensure_can_reach_position([0], [_FarOp()], "pick_up_tips")  # type: ignore[list-item]
 
   async def test_reachable_head8_column_pickup_passes(self):
     """A normal on-deck head8 column pickup passes the reach guard and runs."""
@@ -225,6 +225,99 @@ class OpentronsChatterboxReachTests(unittest.IsolatedAsyncioTestCase):
     )
     await self.lh.discard_tips()
     self.assertFalse(any(self.lh.head[c].has_tip for c in range(8)))
+
+
+class OpentronsChatterboxPartialPickupTests(unittest.IsolatedAsyncioTestCase):
+  """Careful coverage of partial head8 pickup: a channel-0-anchored block of k < 8 channels.
+
+  Allowed only when the tipspots the unused nozzles cover are empty; the unused nozzles may
+  overhang past the last row into empty space. Exercises the deck-accessibility guard at both
+  the front (slot 1) and back (slot 10) edges. (Surrounding-resource collision - e.g. a tall
+  resource in an adjacent slot the head overhangs into - is NOT modelled and not tested here.)
+  """
+
+  async def asyncSetUp(self):
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+    self.backend = OpentronsOT2ChatterboxBackend(
+      left_pipette_name="p20_multi_gen2", right_pipette_name="p300_single_gen2", verbose=False
+    )
+    self.deck = OTDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    await self.lh.setup()
+
+  async def asyncTearDown(self):
+    set_tip_tracking(False)
+    set_volume_tracking(False)
+
+  def _rack(self, slot, present_rows):
+    """A 20 uL tiprack on ``slot`` whose column-1 tips exist only on ``present_rows``."""
+    rack = opentrons_96_filtertiprack_20ul(name=f"tips_{slot}")
+    self.deck.assign_child_at_slot(rack, slot=slot)
+    for r in "ABCDEFGH":
+      if r not in present_rows:
+        rack.get_item(f"{r}1").tracker.remove_tip(commit=True)
+    return rack
+
+  async def test_partial_pickup_picks_exactly_k(self):
+    """For k = 1..7 a channel-0-anchored block picks exactly k tips (channels 0..k-1) in one
+    command, leaving the unused channels empty - when the rows below the selection are empty."""
+    rows = "ABCDEFGH"
+    for k in range(1, 8):
+      with self.subTest(k=k):
+        rack = self._rack(slot=k, present_rows=rows[:k])
+        mark = len(self.backend.commands)
+        await self.lh.pick_up_tips(
+          [rack.get_item(f"{r}1") for r in rows[:k]], use_channels=list(range(k))
+        )
+        names = [n for n, _, _ in self.backend.commands[mark:]]
+        self.assertEqual(names.count("lh.pick_up_tip"), 1)
+        self.assertTrue(all(self.lh.head[c].has_tip for c in range(k)))
+        self.assertFalse(any(self.lh.head[c].has_tip for c in range(k, 8)))
+        await self.lh.return_tips()
+
+  async def test_partial_pickup_of_bottom_rows_overhangs_into_empty_space(self):
+    """Picking the bottom rows E-H with channels 0-3 (anchored at E1) is allowed at both the
+    front (slot 1) and back (slot 10) edge - the unused nozzles overhang past row H, over no tips."""
+    for slot in (1, 10):
+      with self.subTest(slot=slot):
+        rack = self._rack(slot=slot, present_rows="EFGH")
+        await self.lh.pick_up_tips(
+          [rack.get_item(f"{r}1") for r in "EFGH"], use_channels=[0, 1, 2, 3]
+        )
+        self.assertTrue(all(self.lh.head[c].has_tip for c in range(4)))
+        self.assertFalse(any(self.lh.head[c].has_tip for c in range(4, 8)))
+        await self.lh.return_tips()
+
+  async def test_partial_pickup_rejected_when_a_covered_tipspot_is_occupied(self):
+    """Picking A-C (channels 0-2) is rejected when row D - covered by unused nozzle 3 - still
+    holds a tip: the head would grab it too."""
+    rack = self._rack(slot=2, present_rows="ABCD")
+    with self.assertRaises(ValueError):
+      await self.lh.pick_up_tips([rack.get_item(f"{r}1") for r in "ABC"], use_channels=[0, 1, 2])
+
+  async def test_overhang_into_tall_adjacent_resource_is_rejected(self):
+    """Guard 2 (surrounding-resource): a partial pickup at slot 10 overhangs into slot 7. Allowed
+    when slot 7 is empty; rejected once slot 7 holds a tall tiprack the head footprint would hit."""
+    rack = self._rack(slot=10, present_rows="EFGH")
+    await self.lh.pick_up_tips(
+      [rack.get_item(f"{r}1") for r in "EFGH"], use_channels=[0, 1, 2, 3]
+    )  # slot 7 empty -> allowed
+    await self.lh.return_tips()
+
+    self.deck.assign_child_at_slot(opentrons_96_filtertiprack_20ul(name="tall_neighbour"), slot=7)
+    with self.assertRaises(ValueError):
+      await self.lh.pick_up_tips(
+        [rack.get_item(f"{r}1") for r in "EFGH"], use_channels=[0, 1, 2, 3]
+      )
+
+  async def test_overhang_clears_short_adjacent_resource(self):
+    """The collision check is z-aware: the same slot-10 overhang is allowed when slot 7 holds only
+    a short resource (a 96-well plate) whose top sits below the head's path."""
+    rack = self._rack(slot=10, present_rows="EFGH")
+    self.deck.assign_child_at_slot(CellTreat_96_wellplate_350ul_Fb(name="short_neighbour"), slot=7)
+    await self.lh.pick_up_tips([rack.get_item(f"{r}1") for r in "EFGH"], use_channels=[0, 1, 2, 3])
+    self.assertTrue(all(self.lh.head[c].has_tip for c in range(4)))
 
 
 if __name__ == "__main__":

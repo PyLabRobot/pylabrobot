@@ -28,6 +28,7 @@ from pylabrobot.liquid_handling.standard import (
 )
 from pylabrobot.resources import (
   Coordinate,
+  Resource,
   Tip,
   does_tip_tracking,
 )
@@ -46,6 +47,11 @@ except ImportError as e:
 # https://github.com/Opentrons/opentrons/issues/14590
 # https://labautomation.io/t/connect-pylabrobot-to-ot2/2862/18
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
+
+# head8 surrounding-resource collision guard: pad the head footprint by this in x and y, and treat a
+# resource as in the way when its top is within this z of the tip-pickup height.
+_HEAD8_XY_TOLERANCE = 5.0  # mm
+_HEAD8_Z_TOLERANCE = 10.0  # mm
 
 logger = logging.getLogger(__name__)
 
@@ -486,6 +492,52 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       if does_tip_tracking() and not spot.tracker.is_disabled:
         spot.tracker.remove_tip(commit=True)
 
+  def _deck_resources(self) -> List[Resource]:
+    """Labware assigned to deck slots (the children of the slot holders)."""
+    resources: List[Resource] = []
+    for holder in self.deck.children:
+      resources.extend(holder.children)
+    return resources
+
+  def _check_head8_surrounding_resources(
+    self, ops: List[Pickup], use_channels: List[int]
+  ) -> List[Resource]:
+    """Other deck resources the head8's footprint would collide with (surrounding-resource guard).
+
+    Builds a bounding box around the head - the full eight-nozzle column span, padded by
+    ``_HEAD8_XY_TOLERANCE`` in x and y. Any other deck resource whose footprint overlaps that box,
+    and whose top sits within ``_HEAD8_Z_TOLERANCE`` of the tip-pickup height (so it is tall enough
+    to be in the head's path), is a collision. Unlike _check_head8_pickup (which only inspects the
+    target rack and ignores z), this is z-aware: a short resource under the box is cleared.
+    """
+    pitch = 9.0
+
+    primary = next(op for op, ch in zip(ops, use_channels) if ch == 0)
+    spot = primary.resource.get_absolute_location("c", "c", "b")
+    col_x = spot.x
+    # the head's lowest point over an adjacent slot is the bare nozzle bottoms, which during pickup
+    # sit where the nozzle engages the tip: the tip top minus the fitting depth.
+    pickup_z = spot.z + primary.tip.total_tip_length - primary.tip.fitting_depth
+    # the head physically spans all eight nozzles: channel 0 at the primary (back), channel 7 in front
+    y_back, y_front = spot.y, spot.y - 7 * pitch
+    box_x0, box_x1 = col_x - _HEAD8_XY_TOLERANCE, col_x + _HEAD8_XY_TOLERANCE
+    box_y0, box_y1 = y_front - _HEAD8_XY_TOLERANCE, y_back + _HEAD8_XY_TOLERANCE
+
+    target_rack = ops[0].resource.parent
+    collisions: List[Resource] = []
+    for res in self._deck_resources():
+      if res is target_rack:
+        continue
+      corner = res.get_absolute_location()
+      rx0, ry0 = corner.x, corner.y
+      rx1, ry1 = rx0 + res.get_absolute_size_x(), ry0 + res.get_absolute_size_y()
+      if rx1 < box_x0 or rx0 > box_x1 or ry1 < box_y0 or ry0 > box_y1:
+        continue  # no x-y overlap with the head box
+      res_top_z = corner.z + res.get_absolute_size_z()
+      if res_top_z >= pickup_z - _HEAD8_Z_TOLERANCE:  # tall enough to be in the head's path
+        collisions.append(res)
+    return collisions
+
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
     """Whether ``channel_idx`` can reach ``position`` (deck frame), centre-based.
 
@@ -562,6 +614,15 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
           stacklevel=2,
         )
         self._absorb_undeclared_tips(extras)
+
+      collisions = self._check_head8_surrounding_resources(ops, use_channels)
+      if collisions:
+        where = ", ".join(r.name for r in collisions)
+        raise ValueError(
+          f"OT-2 8-channel head would collide with an adjacent resource ({where}): the head's "
+          f"footprint overhangs into that slot and the resource is tall enough to be in its path. "
+          f"Use a slot without a tall resource in the overhang direction, or clear it."
+        )
 
     offset_x, offset_y, offset_z = (
       op.offset.x,
