@@ -1,7 +1,7 @@
 import inspect
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot import utils
 from pylabrobot.io import LOG_LEVEL_IO
@@ -18,6 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  PipettingOp,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
@@ -312,6 +313,35 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     self._tip_racks[tip_rack.name] = slot
 
+  def _resolve_pipette_and_primary(
+    self, ops: Sequence[PipettingOp], use_channels: List[int]
+  ) -> Tuple[str, PipettingOp]:
+    """Map ``use_channels`` to the single pipette they address, plus the primary op.
+
+    All channels in one operation must belong to the same pipette/mount (a multi
+    pipette is a ganged head - the OT-2 cannot operate two mounts in one command;
+    issue separate calls per mount). The primary op is the one on the lowest
+    nozzle index (nozzle 0 = back / row A). The single ``ot_api`` command targets
+    the primary op's well; the firmware fans the remaining nozzles out from there.
+    """
+    channel_map = self._channel_map()
+    pipette_ids = set()
+    primary_op: Optional[PipettingOp] = None
+    primary_nozzle: Optional[int] = None
+    for op, channel in zip(ops, use_channels):
+      if not 0 <= channel < len(channel_map):
+        raise NoChannelError(f"Channel {channel} not available on this OT-2 setup.")
+      pipette, nozzle = channel_map[channel]
+      pipette_ids.add(cast(str, pipette["pipetteId"]))
+      if primary_nozzle is None or nozzle < primary_nozzle:
+        primary_nozzle, primary_op = nozzle, op
+    if len(pipette_ids) != 1 or primary_op is None:
+      raise NoChannelError(
+        "All channels in one operation must address the same pipette (mount); "
+        "issue separate calls per mount."
+      )
+    return pipette_ids.pop(), primary_op
+
   def _get_pickup_pipette(self, ops: List[Pickup]) -> str:
     """Get the pipette for a tip pick-up, or raise."""
     assert len(ops) == 1, "only one channel supported for now"
@@ -361,10 +391,13 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     raise ValueError(f"Unknown or unconfigured pipette_id {pipette_id!r} in _set_tip_state.")
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
-    """Pick up tips from the specified resource."""
+    """Pick up tips from the specified resource.
 
-    pipette_id = self._get_pickup_pipette(ops)
-    op = ops[0]
+    A multi-channel pickup (one op per channel) issues a single ``ot_api`` command
+    targeting the primary op's well; the firmware engages the remaining nozzles.
+    """
+
+    pipette_id, op = self._resolve_pipette_and_primary(ops, use_channels)
 
     offset_x, offset_y, offset_z = (
       op.offset.x,
@@ -392,10 +425,13 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self._set_tip_state(pipette_id, True)
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
-    """Drop tips from the specified resource."""
+    """Drop tips from the specified resource.
 
-    pipette_id = self._get_drop_pipette(ops)
-    op = ops[0]
+    A multi-channel drop issues one ``ot_api`` command at the primary op's well.
+    """
+
+    pipette_id, primary = self._resolve_pipette_and_primary(ops, use_channels)
+    op = cast(Drop, primary)
 
     use_fixed_trash = (
       cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
@@ -497,10 +533,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     }[pipette_name]
 
   async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
-    """Aspirate liquid from the specified resource using pip."""
+    """Aspirate liquid from the specified resource using pip.
 
-    pipette_id = self._get_liquid_pipette(ops)
-    op = ops[0]
+    A multi-channel aspirate issues one ``ot_api`` command at the primary op's
+    well; all nozzles draw the same volume.
+    """
+
+    pipette_id, primary = self._resolve_pipette_and_primary(ops, use_channels)
+    op = cast(SingleChannelAspiration, primary)
     volume = op.volume
 
     pipette_name = self.get_pipette_name(pipette_id)
@@ -572,10 +612,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     }[pipette_name]
 
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
-    """Dispense liquid from the specified resource using pip."""
+    """Dispense liquid from the specified resource using pip.
 
-    pipette_id = self._get_liquid_pipette(ops)
-    op = ops[0]
+    A multi-channel dispense issues one ``ot_api`` command at the primary op's
+    well; all nozzles dispense the same volume.
+    """
+
+    pipette_id, primary = self._resolve_pipette_and_primary(ops, use_channels)
+    op = cast(SingleChannelDispense, primary)
     volume = op.volume
 
     pipette_name = self.get_pipette_name(pipette_id)
@@ -752,14 +796,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         return tip_vol in {1000}
       raise ValueError(f"Unknown channel volume: {channel_vol}")
 
-    if channel_idx == 0:
-      if self.left_pipette is None:
-        return False
-      left_volume = OpentronsOT2Backend.pipette_name2volume[self.left_pipette["name"]]
-      return supports_tip(left_volume, tip.maximal_volume)
-    if channel_idx == 1:
-      if self.right_pipette is None:
-        return False
-      right_volume = OpentronsOT2Backend.pipette_name2volume[self.right_pipette["name"]]
-      return supports_tip(right_volume, tip.maximal_volume)
-    return False
+    channel_map = self._channel_map()
+    if channel_idx < 0 or channel_idx >= len(channel_map):
+      return False
+    pipette, _nozzle = channel_map[channel_idx]
+    channel_volume = OpentronsOT2Backend.pipette_name2volume[pipette["name"]]
+    return supports_tip(channel_volume, tip.maximal_volume)
