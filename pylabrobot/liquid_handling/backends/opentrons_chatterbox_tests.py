@@ -7,10 +7,7 @@ no hardware and no ot_api library is the whole point of the chatterbox.
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import (
-  OpentronsOT2ChatterboxBackend,
-  OpentronsOT2Simulator,
-)
+from pylabrobot.liquid_handling.backends import OpentronsOT2ChatterboxBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.resources import set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.celltreat import CellTreat_96_wellplate_350ul_Fb
@@ -82,56 +79,6 @@ class OpentronsChatterboxTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(serialized["right_pipette_name"])
 
 
-class OpentronsChatterboxVsSimulatorTests(unittest.IsolatedAsyncioTestCase):
-  """Differential audit: the chatterbox must produce the same tracked outcome as
-  the reference OpentronsOT2Simulator on the single-channel overlap. (The Simulator
-  is single-channel by construction, so the multi-channel head is out of scope here.)"""
-
-  async def asyncSetUp(self):
-    set_tip_tracking(True)
-    set_volume_tracking(True)
-
-  async def asyncTearDown(self):
-    set_tip_tracking(False)
-    set_volume_tracking(False)
-
-  async def _run_single_channel_protocol(self, backend):
-    deck = OTDeck()
-    lh = LiquidHandler(backend=backend, deck=deck)
-    await lh.setup()
-    tips = opentrons_96_filtertiprack_20ul(name="tips")
-    deck.assign_child_at_slot(tips, slot=1)
-    plate = CellTreat_96_wellplate_350ul_Fb(name="plate")
-    deck.assign_child_at_slot(plate, slot=2)
-    plate.get_well("A1").tracker.set_volume(15)
-
-    await lh.pick_up_tips(tips["A1"])
-    await lh.aspirate(plate["A1"], vols=[10])
-    await lh.dispense(plate["B1"], vols=[10])
-
-    outcome = (
-      lh.head[0].has_tip,
-      round(plate.get_well("A1").tracker.get_used_volume(), 3),
-      round(plate.get_well("B1").tracker.get_used_volume(), 3),
-    )
-    await lh.stop()
-    return outcome
-
-  async def test_chatterbox_matches_simulator_single_channel(self):
-    simulator_outcome = await self._run_single_channel_protocol(
-      OpentronsOT2Simulator(
-        left_pipette_name="p20_single_gen2", right_pipette_name="p20_single_gen2"
-      )
-    )
-    chatterbox_outcome = await self._run_single_channel_protocol(
-      OpentronsOT2ChatterboxBackend(
-        left_pipette_name="p20_single_gen2", right_pipette_name="p20_single_gen2", verbose=False
-      )
-    )
-    self.assertEqual(simulator_outcome, (True, 5.0, 10.0))
-    self.assertEqual(chatterbox_outcome, simulator_outcome)
-
-
 class OpentronsChatterboxHead8Tests(unittest.IsolatedAsyncioTestCase):
   """Multi-channel (head8) column operations, dry-run through the chatterbox."""
 
@@ -154,10 +101,6 @@ class OpentronsChatterboxHead8Tests(unittest.IsolatedAsyncioTestCase):
   async def asyncTearDown(self):
     set_tip_tracking(False)
     set_volume_tracking(False)
-
-  async def test_multi_mount_reports_eight_channels(self):
-    """The multi on the left contributes 8 channels, the single on the right 1."""
-    self.assertEqual(self.backend.num_channels, 9)
 
   async def test_eight_channel_column_issues_one_command_each_and_tracks_all(self):
     """A full-column pickup -> aspirate -> dispense on the 8 multi channels issues

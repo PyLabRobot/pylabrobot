@@ -128,9 +128,6 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(labware_id, self.backend.get_ot_name("tip_rack"))
       self.assertEqual(well_name, self.backend.get_ot_name("tip_rack_A1"))
       self.assertEqual(pipette_id, "left-pipette-id")
-      self.assertEqual(offset_x, offset_x)
-      self.assertEqual(offset_y, offset_y)
-      self.assertEqual(offset_z, offset_z)
 
     mock_pick_up_tip.side_effect = assert_parameters
 
@@ -140,11 +137,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   async def test_tip_drop(self, mock_drop_tip):
     def assert_parameters(labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
       self.assertEqual(well_name, self.backend.get_ot_name("tip_rack_A1"))
-      self.assertEqual(well_name, self.backend.get_ot_name("tip_rack_A1"))
       self.assertEqual(pipette_id, "left-pipette-id")
-      self.assertEqual(offset_x, offset_x)
-      self.assertEqual(offset_y, offset_y)
-      self.assertEqual(offset_z, offset_z)
 
     mock_drop_tip.side_effect = assert_parameters
 
