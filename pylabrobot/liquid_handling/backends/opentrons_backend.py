@@ -31,9 +31,6 @@ from pylabrobot.resources.tip_rack import TipRack
 try:
   import ot_api
 
-  # for run cancellation
-  import ot_api.requestor as _req
-
   USE_OT = True
 except ImportError as e:
   USE_OT = False
@@ -77,8 +74,12 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.host = host
     self.port = port
 
-    ot_api.set_host(host)
-    ot_api.set_port(port)
+    # All hardware I/O goes through this handle so a subclass (e.g. the chatterbox)
+    # can dry-run the backend by swapping it for a recording stand-in.
+    self._ot = ot_api
+
+    self._ot.set_host(host)
+    self._ot.set_port(port)
 
     self.ot_api_version: Optional[str] = None
     self.left_pipette: Optional[Dict[str, str]] = None
@@ -97,16 +98,16 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   async def setup(self, skip_home: bool = False):
     # create run
-    run_id = ot_api.runs.create()
-    ot_api.set_run(run_id)
+    run_id = self._ot.runs.create()
+    self._ot.set_run(run_id)
 
     # get pipettes, then assign them
-    self.left_pipette, self.right_pipette = ot_api.lh.add_mounted_pipettes()
+    self.left_pipette, self.right_pipette = self._ot.lh.add_mounted_pipettes()
 
     self.left_pipette_has_tip = self.right_pipette_has_tip = False
 
     # get api version
-    health = ot_api.health.get()
+    health = self._ot.health.get()
     self.ot_api_version = health["api_version"]
 
     if not skip_home:
@@ -124,16 +125,16 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.right_pipette = None
 
     # cancel the HTTP-API run if it exists (helpful to make device available again in official Opentrons app)
-    run_id = getattr(ot_api, "run_id", None)
+    run_id = getattr(self._ot, "run_id", None)
     if run_id:
       try:
-        _req.post(f"/runs/{run_id}/cancel")
+        self._ot.requestor.post(f"/runs/{run_id}/cancel")
       except Exception:
         try:
-          _req.post(f"/runs/{run_id}/actions/cancel")
+          self._ot.requestor.post(f"/runs/{run_id}/actions/cancel")
         except Exception:
           try:
-            _req.delete(f"/runs/{run_id}")
+            self._ot.requestor.delete(f"/runs/{run_id}")
           except Exception:
             pass
 
@@ -231,7 +232,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       ],
     }
 
-    data = ot_api.labware.define(lw)
+    data = self._ot.labware.define(lw)
     namespace, definition, version = data["data"]["definitionUri"].split("/")
 
     # assign labware to robot
@@ -242,7 +243,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     slot = deck.get_slot(tip_rack)
     assert slot is not None, "tip rack must be on deck"
 
-    ot_api.labware.add(
+    self._ot.labware.add(
       load_name=definition,
       namespace=namespace,
       ot_location=slot,
@@ -321,7 +322,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     offset_z += op.tip.total_tip_length
 
-    ot_api.lh.pick_up_tip(
+    self._ot.lh.pick_up_tip(
       labware_id=self.get_ot_name(tip_rack.name),
       well_name=self.get_ot_name(op.resource.name),
       pipette_id=pipette_id,
@@ -361,15 +362,15 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     offset_z += 10
 
     if use_fixed_trash:
-      ot_api.lh.move_to_addressable_area_for_drop_tip(
+      self._ot.lh.move_to_addressable_area_for_drop_tip(
         pipette_id=pipette_id,
         offset_x=offset_x,
         offset_y=offset_y,
         offset_z=offset_z,
       )
-      ot_api.lh.drop_tip_in_place(pipette_id=pipette_id)
+      self._ot.lh.drop_tip_in_place(pipette_id=pipette_id)
     else:
-      ot_api.lh.drop_tip(
+      self._ot.lh.drop_tip(
         labware_id,
         well_name=self.get_ot_name(op.resource.name),
         pipette_id=pipette_id,
@@ -461,18 +462,18 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     if op.mix is not None:
       for _ in range(op.mix.repetitions):
-        ot_api.lh.aspirate_in_place(
+        self._ot.lh.aspirate_in_place(
           volume=op.mix.volume,
           flow_rate=op.mix.flow_rate,
           pipette_id=pipette_id,
         )
-        ot_api.lh.dispense_in_place(
+        self._ot.lh.dispense_in_place(
           volume=op.mix.volume,
           flow_rate=op.mix.flow_rate,
           pipette_id=pipette_id,
         )
 
-    ot_api.lh.aspirate_in_place(
+    self._ot.lh.aspirate_in_place(
       volume=volume,
       flow_rate=flow_rate,
       pipette_id=pipette_id,
@@ -533,7 +534,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       pipette_id=pipette_id,
     )
 
-    ot_api.lh.dispense_in_place(
+    self._ot.lh.dispense_in_place(
       volume=volume,
       flow_rate=flow_rate,
       pipette_id=pipette_id,
@@ -541,12 +542,12 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     if op.mix is not None:
       for _ in range(op.mix.repetitions):
-        ot_api.lh.aspirate_in_place(
+        self._ot.lh.aspirate_in_place(
           volume=op.mix.volume,
           flow_rate=op.mix.flow_rate,
           pipette_id=pipette_id,
         )
-        ot_api.lh.dispense_in_place(
+        self._ot.lh.dispense_in_place(
           volume=op.mix.volume,
           flow_rate=op.mix.flow_rate,
           pipette_id=pipette_id,
@@ -563,7 +564,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     )
 
   async def home(self):
-    ot_api.health.home()
+    self._ot.health.home()
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
@@ -590,7 +591,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   async def list_connected_modules(self) -> List[dict]:
     """List all connected temperature modules."""
-    return cast(List[dict], ot_api.modules.list_connected_modules())
+    return cast(List[dict], self._ot.modules.list_connected_modules())
 
   def _pipette_id_for_channel(self, channel: int) -> str:
     pipettes = []
@@ -607,7 +608,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     pipette_id = self._pipette_id_for_channel(channel)
     try:
-      res = ot_api.lh.save_position(pipette_id=pipette_id)
+      res = self._ot.lh.save_position(pipette_id=pipette_id)
       pos = res["data"]["result"]["position"]
       current = Coordinate(pos["x"], pos["y"], pos["z"])
     except Exception as exc:  # noqa: BLE001
@@ -676,7 +677,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if pipette_id is None:
       raise ValueError("No pipette id given or left/right pipette not available.")
 
-    ot_api.lh.move_arm(
+    self._ot.lh.move_arm(
       pipette_id=pipette_id,
       location_x=location.x,
       location_y=location.y,
