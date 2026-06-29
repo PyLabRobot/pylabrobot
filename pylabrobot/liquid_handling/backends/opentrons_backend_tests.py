@@ -369,3 +369,30 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     self.backend._set_tip_state("right-id", True)
     self.assertFalse(self.backend.left_pipette_has_tip)
     self.assertTrue(self.backend.right_pipette_has_tip)
+
+  # -- channel model (head8 step 1) --
+
+  def test_channel_map_two_singles_is_one_channel_per_mount(self):
+    """Two single-channel pipettes give two channels, one per mount (unchanged)."""
+    backend = _make_backend_with_pipettes("p300_single_gen2", "p20_single_gen2")
+    self.assertEqual(backend.num_channels, 2)
+    self.assertEqual(backend._pipette_id_for_channel(0), "left-id")
+    self.assertEqual(backend._pipette_id_for_channel(1), "right-id")
+
+  def test_channel_map_multi_mount_is_eight_channels(self):
+    """A multi on the left + a single on the right gives channels 0-7 (the multi's
+    nozzles) and channel 8 (the single)."""
+    backend = _make_backend_with_pipettes("p20_multi_gen2", "p300_single_gen2")
+    self.assertEqual(backend.num_channels, 9)
+    self.assertTrue(all(pip is backend.left_pipette for pip, _ in backend._channel_map()[:8]))
+    self.assertIs(backend._channel_map()[8][0], backend.right_pipette)
+    self.assertEqual(backend._pipette_id_for_channel(0), "left-id")
+    self.assertEqual(backend._pipette_id_for_channel(7), "left-id")
+    self.assertEqual(backend._pipette_id_for_channel(8), "right-id")
+
+  def test_pipette_id_for_channel_out_of_range_raises(self):
+    """Channels beyond the mounted pipettes raise NoChannelError."""
+    backend = _make_backend_with_pipettes("p20_single_gen2", None)
+    self.assertEqual(backend.num_channels, 1)
+    with self.assertRaises(NoChannelError):
+      backend._pipette_id_for_channel(1)

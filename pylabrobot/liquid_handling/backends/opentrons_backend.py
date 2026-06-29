@@ -149,9 +149,31 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if not skip_home:
       await self.home()
 
+  @staticmethod
+  def _pipette_channel_count(pipette: Optional[Dict[str, str]]) -> int:
+    """Number of channels a mounted pipette presents: 8 for a multi, 1 for a single."""
+    if pipette is None:
+      return 0
+    return 8 if "multi" in pipette["name"] else 1
+
+  def _channel_map(self) -> List[Tuple[Dict[str, str], int]]:
+    """Per-mount channel blocks: channel index -> (pipette, nozzle index within it).
+
+    The left mount's channels come first, then the right mount's. A p20-multi on
+    the left plus a p300-single on the right gives channels 0-7 (the multi's
+    nozzles, 0 = back / row A) and channel 8 (the single).
+    """
+    channels: List[Tuple[Dict[str, str], int]] = []
+    for pipette in (self.left_pipette, self.right_pipette):
+      if pipette is None:
+        continue
+      for nozzle in range(self._pipette_channel_count(pipette)):
+        channels.append((pipette, nozzle))
+    return channels
+
   @property
   def num_channels(self) -> int:
-    return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
+    return len(self._channel_map())
 
   async def stop(self):
     """Cancel any active OT run, then clear labware definitions."""
@@ -630,14 +652,11 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     return cast(List[dict], self._ot.modules.list_connected_modules())
 
   def _pipette_id_for_channel(self, channel: int) -> str:
-    pipettes = []
-    if self.left_pipette is not None:
-      pipettes.append(self.left_pipette["pipetteId"])
-    if self.right_pipette is not None:
-      pipettes.append(self.right_pipette["pipetteId"])
-    if channel < 0 or channel >= len(pipettes):
+    channel_map = self._channel_map()
+    if channel < 0 or channel >= len(channel_map):
       raise NoChannelError(f"Channel {channel} not available on this OT-2 setup.")
-    return pipettes[channel]
+    pipette, _nozzle = channel_map[channel]
+    return cast(str, pipette["pipetteId"])
 
   def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     """Return the pipette id and current coordinate for a given channel."""
