@@ -1350,62 +1350,33 @@ class VantageDeck extends Deck {
   }
 }
 
+// Slot positions re-based onto the deck plate corner (matching the Python ResourceHolder slots).
+// Used only for the slot-number labels and drag-snapping; the slot rectangles themselves are
+// rendered by the ResourceHolder children.
 const otDeckSiteLocations = [
-  { x: 0.0, y: 0.0 },
-  { x: 132.5, y: 0.0 },
-  { x: 265.0, y: 0.0 },
-  { x: 0.0, y: 90.5 },
-  { x: 132.5, y: 90.5 },
-  { x: 265.0, y: 90.5 },
-  { x: 0.0, y: 181.0 },
-  { x: 132.5, y: 181.0 },
-  { x: 265.0, y: 181.0 },
-  { x: 0.0, y: 271.5 },
-  { x: 132.5, y: 271.5 },
-  { x: 265.0, y: 271.5 },
+  { x: 115.65, y: 68.03 },
+  { x: 248.15, y: 68.03 },
+  { x: 380.65, y: 68.03 },
+  { x: 115.65, y: 158.53 },
+  { x: 248.15, y: 158.53 },
+  { x: 380.65, y: 158.53 },
+  { x: 115.65, y: 249.03 },
+  { x: 248.15, y: 249.03 },
+  { x: 380.65, y: 249.03 },
+  { x: 115.65, y: 339.53 },
+  { x: 248.15, y: 339.53 },
+  { x: 380.65, y: 339.53 },
 ];
 
 class OTDeck extends Deck {
   constructor(resourceData) {
-    resourceData.location = { x: 115.65, y: 68.03 };
     super(resourceData, undefined);
   }
 
   drawMainShape() {
+    // The slot rectangles are drawn by the ResourceHolder children; the main shape is just the deck
+    // border. The slot-number labels are added in draw() so they sit on top of the holders.
     let group = new Konva.Group({});
-    const width = 128.0;
-    const height = 86.0;
-    // Draw the sites
-    for (let i = 0; i < otDeckSiteLocations.length; i++) {
-      const siteLocation = otDeckSiteLocations[i];
-      const site = new Konva.Rect({
-        x: siteLocation.x,
-        y: siteLocation.y,
-        width: width,
-        height: height,
-        fill: "white",
-        stroke: "black",
-        strokeWidth: 1,
-      });
-      group.add(site);
-
-      // Add a text label in the site
-      const siteLabel = new Konva.Text({
-        x: siteLocation.x,
-        y: siteLocation.y + height,
-        text: i + 1,
-        width: width,
-        height: height,
-        fontSize: 16,
-        fill: "black",
-        align: "center",
-        verticalAlign: "middle",
-        scaleY: -1, // Flip the text vertically
-      });
-      group.add(siteLabel);
-    }
-
-    // draw border around the deck
     group.add(
       new Konva.Rect({
         width: this.size_x,
@@ -1414,8 +1385,43 @@ class OTDeck extends Deck {
         strokeWidth: 1,
       })
     );
-
     return group;
+  }
+
+  draw(layer) {
+    super.draw(layer);
+    // Holder children are drawn after the main shape, so a slot number placed in the main shape is
+    // hidden. Add the number to the deck group last (on top) but only for empty slots, so the
+    // labware in an occupied slot is shown instead of being covered by the number.
+    const width = 128.0;
+    const height = 86.0;
+    for (const holder of this.children) {
+      if (!holder.location || (holder.children && holder.children.length > 0)) {
+        continue; // skip non-slot children and occupied slots
+      }
+      const match = holder.name ? holder.name.match(/slot_(\d+)$/) : null;
+      if (match === null) {
+        continue;
+      }
+      const siteLabel = new Konva.Text({
+        x: holder.location.x,
+        y: holder.location.y + height,
+        text: match[1],
+        width: width,
+        height: height,
+        fontSize: 16,
+        fill: "white",
+        stroke: "black",
+        strokeWidth: 0.5,
+        fillAfterStrokeEnabled: true,
+        align: "center",
+        verticalAlign: "middle",
+        scaleY: -1, // Flip the text vertically
+        listening: false,
+      });
+      this.group.add(siteLabel);
+      siteLabel.moveToTop();
+    }
   }
 
   serialize() {
