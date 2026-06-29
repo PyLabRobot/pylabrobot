@@ -54,9 +54,11 @@ class TestOTDeck(unittest.TestCase):
     labware (validates replacing the placeholder holders with the loaded ones)."""
     loaded = Resource.deserialize(self.deck.serialize())
     assert isinstance(loaded, OTDeck)
-    self.assertEqual(loaded.slots[6].name, "tip_rack_1")
-    self.assertEqual(loaded.get_slot(loaded.slots[6]), 7)
-    self.assertEqual(loaded.slots[3].name, "my_plate")
+    slot_6, slot_3 = loaded.slots[6], loaded.slots[3]
+    assert slot_6 is not None and slot_3 is not None
+    self.assertEqual(slot_6.name, "tip_rack_1")
+    self.assertEqual(loaded.get_slot(slot_6), 7)
+    self.assertEqual(slot_3.name, "my_plate")
     self.assertEqual(loaded.slot_locations[0], Coordinate(115.65, 68.03, 0))
 
   def test_summary(self):
