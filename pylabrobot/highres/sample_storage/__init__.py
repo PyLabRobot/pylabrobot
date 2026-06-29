@@ -4,7 +4,6 @@ from .driver import (
   HighResSampleStorageHumidityControllerBackend,
   HighResSampleStorageTemperatureControllerBackend,
 )
-from .chatterbox import HighResSampleStorageChatterboxDriver
 from .errors import (
   PlateNotFoundError,
   HighResSampleStorageAbortedError,
