@@ -122,7 +122,11 @@ class CytomatBackend(
 
   # -- AutomatedRetrievalBackend --
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, tray_index: Optional[int] = None):
+    if tray_index not in (None, 0):
+      raise ValueError(
+        f"This device has a single loading tray; got tray_index={tray_index}. Use None or 0."
+      )
     logger.info(
       "[Cytomat %s %s] fetch plate to loading tray: plate='%s'",
       self.model.value,
@@ -133,7 +137,11 @@ class CytomatBackend(
     assert isinstance(site, PlateHolder)
     await self.action_storage_to_transfer(site)
 
-  async def store_plate(self, plate: Plate, site: PlateHolder):
+  async def store_plate(self, plate: Plate, site: PlateHolder, tray_index: Optional[int] = None):
+    if tray_index not in (None, 0):
+      raise ValueError(
+        f"This device has a single loading tray; got tray_index={tray_index}. Use None or 0."
+      )
     logger.info(
       "[Cytomat %s %s] store plate: plate='%s', site='%s'",
       self.model.value,

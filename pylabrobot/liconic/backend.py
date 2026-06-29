@@ -149,7 +149,11 @@ class LiconicBackend(
 
   # -- AutomatedRetrievalBackend --
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, tray_index: Optional[int] = None):
+    if tray_index not in (None, 0):
+      raise ValueError(
+        f"This device has a single loading tray; got tray_index={tray_index}. Use None or 0."
+      )
     site = plate.parent
     assert isinstance(site, PlateHolder), "Plate not in storage"
 
@@ -172,7 +176,11 @@ class LiconicBackend(
       n,
     )
 
-  async def store_plate(self, plate: Plate, site: PlateHolder):
+  async def store_plate(self, plate: Plate, site: PlateHolder, tray_index: Optional[int] = None):
+    if tray_index not in (None, 0):
+      raise ValueError(
+        f"This device has a single loading tray; got tray_index={tray_index}. Use None or 0."
+      )
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
 
