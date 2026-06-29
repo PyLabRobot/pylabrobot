@@ -10,13 +10,17 @@ and volume bookkeeping, the per-operation wire calls) runs unchanged. Contrast
 with ``OpentronsOT2Simulator``, which overrides the high-level methods themselves.
 """
 
+import logging
 from typing import Dict, List, Optional, Tuple, cast
 
+from pylabrobot.io import LOG_LEVEL_IO
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.opentrons_backend import (
   _OT_DECK_IS_ADDRESSABLE_AREA_VERSION,
   OpentronsOT2Backend,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class _RecordingNamespace:
@@ -80,9 +84,12 @@ class _OTChatterboxModule:
 
   def log(self, qualified: str, args: tuple, kwargs: dict):
     self.calls.append((qualified, args, kwargs))
+    parts = [repr(a) for a in args] + [f"{k}={v!r}" for k, v in kwargs.items()]
+    rendered = f"{qualified}({', '.join(parts)})"
+    # log at LOG_LEVEL_IO so a dry run captures the same wire trace as a real run
+    logger.log(LOG_LEVEL_IO, "%s", rendered)
     if self._verbose:
-      parts = [repr(a) for a in args] + [f"{k}={v!r}" for k, v in kwargs.items()]
-      print(f"{qualified}({', '.join(parts)})")
+      print(rendered)
 
   def __getattr__(self, name: str):
     # top-level functions the backend calls directly: set_host, set_port, set_run

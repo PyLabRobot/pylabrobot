@@ -1,7 +1,10 @@
+import inspect
+import logging
 import uuid
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot import utils
+from pylabrobot.io import LOG_LEVEL_IO
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -41,6 +44,38 @@ except ImportError as e:
 # https://labautomation.io/t/connect-pylabrobot-to-ot2/2862/18
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 
+logger = logging.getLogger(__name__)
+
+
+class _IOLogger:
+  """Transparent proxy over the ``ot_api`` module that logs every call at
+  ``LOG_LEVEL_IO``.
+
+  The OT-2 talks HTTP through ``ot_api`` rather than a pylabrobot.io transport, so
+  this wrapper gives it the same wire-level logging every other backend gets from
+  its io object. Submodules (``lh``, ``health``, ...) are wrapped recursively;
+  plain attributes (e.g. ``run_id``) pass through untouched.
+  """
+
+  def __init__(self, target: Any, prefix: str = ""):
+    object.__setattr__(self, "_target", target)
+    object.__setattr__(self, "_prefix", prefix)
+
+  def __getattr__(self, name: str) -> Any:
+    attr = getattr(self._target, name)
+    qualified = f"{self._prefix}.{name}" if self._prefix else name
+    if inspect.ismodule(attr):
+      return _IOLogger(attr, qualified)
+    if callable(attr):
+
+      def _logged(*args, **kwargs):
+        parts = [repr(a) for a in args] + [f"{k}={v!r}" for k, v in kwargs.items()]
+        logger.log(LOG_LEVEL_IO, "%s(%s)", qualified, ", ".join(parts))
+        return attr(*args, **kwargs)
+
+      return _logged
+    return attr
+
 
 class OpentronsOT2Backend(LiquidHandlerBackend):
   """Backends for the Opentrons OT2 liquid handling robots."""
@@ -75,8 +110,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.port = port
 
     # All hardware I/O goes through this handle so a subclass (e.g. the chatterbox)
-    # can dry-run the backend by swapping it for a recording stand-in.
-    self._ot = ot_api
+    # can dry-run the backend by swapping it for a recording stand-in. The real handle
+    # wraps ot_api to log every HTTP call at LOG_LEVEL_IO, like other backends' io.
+    self._ot: Any = _IOLogger(ot_api)
 
     self._ot.set_host(host)
     self._ot.set_port(port)
