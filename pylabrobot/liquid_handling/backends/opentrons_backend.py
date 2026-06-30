@@ -304,6 +304,8 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     labware_uuid = self.get_ot_name(tip_rack.name)
 
     deck = tip_rack.parent
+    while deck is not None and not isinstance(deck, OTDeck):
+      deck = deck.parent  # labware sits in a slot holder, whose parent is the deck
     assert isinstance(deck, OTDeck)
     slot = deck.get_slot(tip_rack)
     assert slot is not None, "tip rack must be on deck"
@@ -659,6 +661,15 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6,
     }[pipette_name]
 
+  def _deck_to_robot_frame(self, location: Coordinate) -> Coordinate:
+    """Convert a deck-frame coordinate to the OT-2 robot frame.
+
+    pylabrobot positions OT deck slots from the deck plate corner, whereas the OT-2 motion API
+    expects coordinates in the robot frame whose origin is slot 1's corner. The two frames differ by
+    slot 1's position in the deck frame, so subtract it.
+    """
+    return location - cast(OTDeck, self.deck).slot_locations[0]
+
   async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     """Aspirate liquid from the specified resource using pip.
 
@@ -673,7 +684,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     pipette_name = self.get_pipette_name(pipette_id)
     flow_rate = op.flow_rate or self._get_default_aspiration_flow_rate(pipette_name)
 
-    location = (
+    location = self._deck_to_robot_frame(
       op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
       + op.offset
       + Coordinate(z=op.liquid_height or 0)
@@ -704,7 +715,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       pipette_id=pipette_id,
     )
 
-    traversal_location = (
+    traversal_location = self._deck_to_robot_frame(
       op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom") + op.offset
     )
     traversal_location.z = self.traversal_height
@@ -752,7 +763,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     pipette_name = self.get_pipette_name(pipette_id)
     flow_rate = op.flow_rate or self._get_default_dispense_flow_rate(pipette_name)
 
-    location = (
+    location = self._deck_to_robot_frame(
       op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
       + op.offset
       + Coordinate(z=op.liquid_height or 0)
@@ -782,7 +793,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
           pipette_id=pipette_id,
         )
 
-    traversal_location = (
+    traversal_location = self._deck_to_robot_frame(
       op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom") + op.offset
     )
     traversal_location.z = self.traversal_height

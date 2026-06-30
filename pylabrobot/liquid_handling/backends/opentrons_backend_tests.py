@@ -286,6 +286,19 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     with self.assertRaises(NoChannelError):
       self.backend._get_pickup_pipette(ops)
 
+  # -- _deck_to_robot_frame --
+
+  def test_deck_to_robot_frame_maps_slot1_corner_to_robot_origin(self):
+    """The deck->robot transform subtracts slot 1's corner, so a deck-frame point at slot 1's
+    corner becomes the robot origin and a point offset from it keeps that offset."""
+    self.backend.set_deck(self.deck)
+    corner = self.deck.slot_locations[0]
+    self.assertEqual(self.backend._deck_to_robot_frame(corner), Coordinate(0, 0, 0))
+    self.assertEqual(
+      self.backend._deck_to_robot_frame(corner + Coordinate(10, 20, 3)),
+      Coordinate(10, 20, 3),
+    )
+
   # -- _get_drop_pipette --
 
   def test_get_drop_pipette_selects_right_for_20ul(self):
