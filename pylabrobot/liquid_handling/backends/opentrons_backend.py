@@ -1,7 +1,10 @@
+import inspect
+import logging
 import uuid
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot import utils
+from pylabrobot.io import LOG_LEVEL_IO
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -15,6 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  PipettingOp,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
@@ -31,9 +35,6 @@ from pylabrobot.resources.tip_rack import TipRack
 try:
   import ot_api
 
-  # for run cancellation
-  import ot_api.requestor as _req
-
   USE_OT = True
 except ImportError as e:
   USE_OT = False
@@ -43,6 +44,38 @@ except ImportError as e:
 # https://github.com/Opentrons/opentrons/issues/14590
 # https://labautomation.io/t/connect-pylabrobot-to-ot2/2862/18
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
+
+logger = logging.getLogger(__name__)
+
+
+class _IOLogger:
+  """Transparent proxy over the ``ot_api`` module that logs every call at
+  ``LOG_LEVEL_IO``.
+
+  The OT-2 talks HTTP through ``ot_api`` rather than a pylabrobot.io transport, so
+  this wrapper gives it the same wire-level logging every other backend gets from
+  its io object. Submodules (``lh``, ``health``, ...) are wrapped recursively;
+  plain attributes (e.g. ``run_id``) pass through untouched.
+  """
+
+  def __init__(self, target: Any, prefix: str = ""):
+    object.__setattr__(self, "_target", target)
+    object.__setattr__(self, "_prefix", prefix)
+
+  def __getattr__(self, name: str) -> Any:
+    attr = getattr(self._target, name)
+    qualified = f"{self._prefix}.{name}" if self._prefix else name
+    if inspect.ismodule(attr):
+      return _IOLogger(attr, qualified)
+    if callable(attr):
+
+      def _logged(*args, **kwargs):
+        parts = [repr(a) for a in args] + [f"{k}={v!r}" for k, v in kwargs.items()]
+        logger.log(LOG_LEVEL_IO, "%s(%s)", qualified, ", ".join(parts))
+        return attr(*args, **kwargs)
+
+      return _logged
+    return attr
 
 
 class OpentronsOT2Backend(LiquidHandlerBackend):
@@ -77,8 +110,13 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.host = host
     self.port = port
 
-    ot_api.set_host(host)
-    ot_api.set_port(port)
+    # All hardware I/O goes through this handle so a subclass (e.g. the chatterbox)
+    # can dry-run the backend by swapping it for a recording stand-in. The real handle
+    # wraps ot_api to log every HTTP call at LOG_LEVEL_IO, like other backends' io.
+    self._ot: Any = _IOLogger(ot_api)
+
+    self._ot.set_host(host)
+    self._ot.set_port(port)
 
     self.ot_api_version: Optional[str] = None
     self.left_pipette: Optional[Dict[str, str]] = None
@@ -97,24 +135,46 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   async def setup(self, skip_home: bool = False):
     # create run
-    run_id = ot_api.runs.create()
-    ot_api.set_run(run_id)
+    run_id = self._ot.runs.create()
+    self._ot.set_run(run_id)
 
     # get pipettes, then assign them
-    self.left_pipette, self.right_pipette = ot_api.lh.add_mounted_pipettes()
+    self.left_pipette, self.right_pipette = self._ot.lh.add_mounted_pipettes()
 
     self.left_pipette_has_tip = self.right_pipette_has_tip = False
 
     # get api version
-    health = ot_api.health.get()
+    health = self._ot.health.get()
     self.ot_api_version = health["api_version"]
 
     if not skip_home:
       await self.home()
 
+  @staticmethod
+  def _pipette_channel_count(pipette: Optional[Dict[str, str]]) -> int:
+    """Number of channels a mounted pipette presents: 8 for a multi, 1 for a single."""
+    if pipette is None:
+      return 0
+    return 8 if "multi" in pipette["name"] else 1
+
+  def _channel_map(self) -> List[Tuple[Dict[str, str], int]]:
+    """Per-mount channel blocks: channel index -> (pipette, nozzle index within it).
+
+    The left mount's channels come first, then the right mount's. A p20-multi on
+    the left plus a p300-single on the right gives channels 0-7 (the multi's
+    nozzles, 0 = back / row A) and channel 8 (the single).
+    """
+    channels: List[Tuple[Dict[str, str], int]] = []
+    for pipette in (self.left_pipette, self.right_pipette):
+      if pipette is None:
+        continue
+      for nozzle in range(self._pipette_channel_count(pipette)):
+        channels.append((pipette, nozzle))
+    return channels
+
   @property
   def num_channels(self) -> int:
-    return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
+    return len(self._channel_map())
 
   async def stop(self):
     """Cancel any active OT run, then clear labware definitions."""
@@ -124,16 +184,16 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.right_pipette = None
 
     # cancel the HTTP-API run if it exists (helpful to make device available again in official Opentrons app)
-    run_id = getattr(ot_api, "run_id", None)
+    run_id = getattr(self._ot, "run_id", None)
     if run_id:
       try:
-        _req.post(f"/runs/{run_id}/cancel")
+        self._ot.requestor.post(f"/runs/{run_id}/cancel")
       except Exception:
         try:
-          _req.post(f"/runs/{run_id}/actions/cancel")
+          self._ot.requestor.post(f"/runs/{run_id}/actions/cancel")
         except Exception:
           try:
-            _req.delete(f"/runs/{run_id}")
+            self._ot.requestor.delete(f"/runs/{run_id}")
           except Exception:
             pass
 
@@ -231,7 +291,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       ],
     }
 
-    data = ot_api.labware.define(lw)
+    data = self._ot.labware.define(lw)
     namespace, definition, version = data["data"]["definitionUri"].split("/")
 
     # assign labware to robot
@@ -242,7 +302,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     slot = deck.get_slot(tip_rack)
     assert slot is not None, "tip rack must be on deck"
 
-    ot_api.labware.add(
+    self._ot.labware.add(
       load_name=definition,
       namespace=namespace,
       ot_location=slot,
@@ -252,6 +312,35 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     )
 
     self._tip_racks[tip_rack.name] = slot
+
+  def _resolve_pipette_and_primary(
+    self, ops: Sequence[PipettingOp], use_channels: List[int]
+  ) -> Tuple[str, PipettingOp]:
+    """Map ``use_channels`` to the single pipette they address, plus the primary op.
+
+    All channels in one operation must belong to the same pipette/mount (a multi
+    pipette is a ganged head - the OT-2 cannot operate two mounts in one command;
+    issue separate calls per mount). The primary op is the one on the lowest
+    nozzle index (nozzle 0 = back / row A). The single ``ot_api`` command targets
+    the primary op's well; the firmware fans the remaining nozzles out from there.
+    """
+    channel_map = self._channel_map()
+    pipette_ids = set()
+    primary_op: Optional[PipettingOp] = None
+    primary_nozzle: Optional[int] = None
+    for op, channel in zip(ops, use_channels):
+      if not 0 <= channel < len(channel_map):
+        raise NoChannelError(f"Channel {channel} not available on this OT-2 setup.")
+      pipette, nozzle = channel_map[channel]
+      pipette_ids.add(cast(str, pipette["pipetteId"]))
+      if primary_nozzle is None or nozzle < primary_nozzle:
+        primary_nozzle, primary_op = nozzle, op
+    if len(pipette_ids) != 1 or primary_op is None:
+      raise NoChannelError(
+        "All channels in one operation must address the same pipette (mount); "
+        "issue separate calls per mount."
+      )
+    return pipette_ids.pop(), primary_op
 
   def _get_pickup_pipette(self, ops: List[Pickup]) -> str:
     """Get the pipette for a tip pick-up, or raise."""
@@ -302,10 +391,13 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     raise ValueError(f"Unknown or unconfigured pipette_id {pipette_id!r} in _set_tip_state.")
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
-    """Pick up tips from the specified resource."""
+    """Pick up tips from the specified resource.
 
-    pipette_id = self._get_pickup_pipette(ops)
-    op = ops[0]
+    A multi-channel pickup (one op per channel) issues a single ``ot_api`` command
+    targeting the primary op's well; the firmware engages the remaining nozzles.
+    """
+
+    pipette_id, op = self._resolve_pipette_and_primary(ops, use_channels)
 
     offset_x, offset_y, offset_z = (
       op.offset.x,
@@ -321,7 +413,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     offset_z += op.tip.total_tip_length
 
-    ot_api.lh.pick_up_tip(
+    self._ot.lh.pick_up_tip(
       labware_id=self.get_ot_name(tip_rack.name),
       well_name=self.get_ot_name(op.resource.name),
       pipette_id=pipette_id,
@@ -333,10 +425,13 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self._set_tip_state(pipette_id, True)
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
-    """Drop tips from the specified resource."""
+    """Drop tips from the specified resource.
 
-    pipette_id = self._get_drop_pipette(ops)
-    op = ops[0]
+    A multi-channel drop issues one ``ot_api`` command at the primary op's well.
+    """
+
+    pipette_id, primary = self._resolve_pipette_and_primary(ops, use_channels)
+    op = cast(Drop, primary)
 
     use_fixed_trash = (
       cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
@@ -361,15 +456,15 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     offset_z += 10
 
     if use_fixed_trash:
-      ot_api.lh.move_to_addressable_area_for_drop_tip(
+      self._ot.lh.move_to_addressable_area_for_drop_tip(
         pipette_id=pipette_id,
         offset_x=offset_x,
         offset_y=offset_y,
         offset_z=offset_z,
       )
-      ot_api.lh.drop_tip_in_place(pipette_id=pipette_id)
+      self._ot.lh.drop_tip_in_place(pipette_id=pipette_id)
     else:
-      ot_api.lh.drop_tip(
+      self._ot.lh.drop_tip(
         labware_id,
         well_name=self.get_ot_name(op.resource.name),
         pipette_id=pipette_id,
@@ -438,10 +533,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     }[pipette_name]
 
   async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
-    """Aspirate liquid from the specified resource using pip."""
+    """Aspirate liquid from the specified resource using pip.
 
-    pipette_id = self._get_liquid_pipette(ops)
-    op = ops[0]
+    A multi-channel aspirate issues one ``ot_api`` command at the primary op's
+    well; all nozzles draw the same volume.
+    """
+
+    pipette_id, primary = self._resolve_pipette_and_primary(ops, use_channels)
+    op = cast(SingleChannelAspiration, primary)
     volume = op.volume
 
     pipette_name = self.get_pipette_name(pipette_id)
@@ -461,18 +560,18 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     if op.mix is not None:
       for _ in range(op.mix.repetitions):
-        ot_api.lh.aspirate_in_place(
+        self._ot.lh.aspirate_in_place(
           volume=op.mix.volume,
           flow_rate=op.mix.flow_rate,
           pipette_id=pipette_id,
         )
-        ot_api.lh.dispense_in_place(
+        self._ot.lh.dispense_in_place(
           volume=op.mix.volume,
           flow_rate=op.mix.flow_rate,
           pipette_id=pipette_id,
         )
 
-    ot_api.lh.aspirate_in_place(
+    self._ot.lh.aspirate_in_place(
       volume=volume,
       flow_rate=flow_rate,
       pipette_id=pipette_id,
@@ -513,10 +612,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     }[pipette_name]
 
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
-    """Dispense liquid from the specified resource using pip."""
+    """Dispense liquid from the specified resource using pip.
 
-    pipette_id = self._get_liquid_pipette(ops)
-    op = ops[0]
+    A multi-channel dispense issues one ``ot_api`` command at the primary op's
+    well; all nozzles dispense the same volume.
+    """
+
+    pipette_id, primary = self._resolve_pipette_and_primary(ops, use_channels)
+    op = cast(SingleChannelDispense, primary)
     volume = op.volume
 
     pipette_name = self.get_pipette_name(pipette_id)
@@ -533,7 +636,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       pipette_id=pipette_id,
     )
 
-    ot_api.lh.dispense_in_place(
+    self._ot.lh.dispense_in_place(
       volume=volume,
       flow_rate=flow_rate,
       pipette_id=pipette_id,
@@ -541,12 +644,12 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     if op.mix is not None:
       for _ in range(op.mix.repetitions):
-        ot_api.lh.aspirate_in_place(
+        self._ot.lh.aspirate_in_place(
           volume=op.mix.volume,
           flow_rate=op.mix.flow_rate,
           pipette_id=pipette_id,
         )
-        ot_api.lh.dispense_in_place(
+        self._ot.lh.dispense_in_place(
           volume=op.mix.volume,
           flow_rate=op.mix.flow_rate,
           pipette_id=pipette_id,
@@ -563,7 +666,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     )
 
   async def home(self):
-    ot_api.health.home()
+    self._ot.health.home()
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
@@ -590,24 +693,21 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   async def list_connected_modules(self) -> List[dict]:
     """List all connected temperature modules."""
-    return cast(List[dict], ot_api.modules.list_connected_modules())
+    return cast(List[dict], self._ot.modules.list_connected_modules())
 
   def _pipette_id_for_channel(self, channel: int) -> str:
-    pipettes = []
-    if self.left_pipette is not None:
-      pipettes.append(self.left_pipette["pipetteId"])
-    if self.right_pipette is not None:
-      pipettes.append(self.right_pipette["pipetteId"])
-    if channel < 0 or channel >= len(pipettes):
+    channel_map = self._channel_map()
+    if channel < 0 or channel >= len(channel_map):
       raise NoChannelError(f"Channel {channel} not available on this OT-2 setup.")
-    return pipettes[channel]
+    pipette, _nozzle = channel_map[channel]
+    return cast(str, pipette["pipetteId"])
 
   def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     """Return the pipette id and current coordinate for a given channel."""
 
     pipette_id = self._pipette_id_for_channel(channel)
     try:
-      res = ot_api.lh.save_position(pipette_id=pipette_id)
+      res = self._ot.lh.save_position(pipette_id=pipette_id)
       pos = res["data"]["result"]["position"]
       current = Coordinate(pos["x"], pos["y"], pos["z"])
     except Exception as exc:  # noqa: BLE001
@@ -676,7 +776,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if pipette_id is None:
       raise ValueError("No pipette id given or left/right pipette not available.")
 
-    ot_api.lh.move_arm(
+    self._ot.lh.move_arm(
       pipette_id=pipette_id,
       location_x=location.x,
       location_y=location.y,
@@ -696,14 +796,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         return tip_vol in {1000}
       raise ValueError(f"Unknown channel volume: {channel_vol}")
 
-    if channel_idx == 0:
-      if self.left_pipette is None:
-        return False
-      left_volume = OpentronsOT2Backend.pipette_name2volume[self.left_pipette["name"]]
-      return supports_tip(left_volume, tip.maximal_volume)
-    if channel_idx == 1:
-      if self.right_pipette is None:
-        return False
-      right_volume = OpentronsOT2Backend.pipette_name2volume[self.right_pipette["name"]]
-      return supports_tip(right_volume, tip.maximal_volume)
-    return False
+    channel_map = self._channel_map()
+    if channel_idx < 0 or channel_idx >= len(channel_map):
+      return False
+    pipette, _nozzle = channel_map[channel_idx]
+    channel_volume = OpentronsOT2Backend.pipette_name2volume[pipette["name"]]
+    return supports_tip(channel_volume, tip.maximal_volume)
