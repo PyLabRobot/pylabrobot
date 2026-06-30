@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 import enum
-from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
 from .errors import STARFirmwareError
 from .fw_parsing import parse_star_firmware_version_date
@@ -492,6 +492,100 @@ class PIPChannel:
       fmt="qs# (n)",
     )
     return bool(resp["qs"][self.index])
+
+  # -- Px:QL/QN  read recorded TADM pressure trace ----------------------------
+
+  async def request_tadm_recording_length(self, slot: int = 0) -> int:
+    """Number of TADM samples currently recorded in a measurement slot (Px:QL).
+
+    The firmware keeps one counter per measurement slot (the ``gi`` slot a recording was
+    started in). Use this to find how many samples ``request_tadm_recording`` will read.
+
+    Args:
+      slot: TADM measurement slot (0-4), matching the ``gi`` slot the recording was
+        started in. Defaults to 0.
+
+    Returns:
+      The number of samples recorded in that slot.
+
+    Raises:
+      ValueError: If ``slot`` is out of range.
+    """
+    if not 0 <= slot <= 4:
+      raise ValueError("slot must be between 0 and 4")
+    resp = await self.driver.send_command(
+      module=self.module_id,
+      command="QL",
+      fmt="ql#### (n)",
+    )
+    return int(resp["ql"][slot])
+
+  async def request_tadm_recording(
+    self,
+    num_samples: Optional[int] = None,
+    start: int = 0,
+    batch_size: int = 50,
+    slot: int = 0,
+  ) -> List[float]:
+    """Read a recorded TADM pressure trace from this channel into a list of floats.
+
+    After an aspiration or dispense run with ``recording_mode=2`` (record all TADM
+    measurements), the channel buffers one pressure sample per firmware tick. This reads
+    them via the ``Px:QN`` firmware command and returns them in acquisition order.
+
+    When ``num_samples`` is ``None`` (the default), the recording length is first queried
+    with ``Px:QL`` and the whole trace is read.
+
+    The values are the raw signed TADM pressure samples the firmware reports, cast to
+    ``float``. They are in the instrument's internal pressure units and are not scaled to
+    a physical unit.
+
+    Args:
+      num_samples: Number of samples to read. ``None`` (default) reads every recorded
+        sample from ``start`` to the end of the buffer.
+      start: Index of the first sample to read (0-based). Defaults to 0.
+      batch_size: Samples requested per firmware command. The firmware caps a single QN
+        read at 50 samples. Defaults to 50.
+      slot: TADM measurement slot (0-4) whose length is queried when ``num_samples`` is
+        ``None``. Defaults to 0.
+
+    Returns:
+      The recorded pressure trace as a list of floats. May be shorter than
+      ``num_samples`` if the recording buffer holds fewer samples.
+
+    Raises:
+      ValueError: If ``num_samples``, ``start``, ``batch_size``, or ``slot`` are out of
+        range.
+    """
+    if start < 0:
+      raise ValueError("start must be >= 0")
+    if not 1 <= batch_size <= 50:
+      raise ValueError("batch_size must be between 1 and 50")
+
+    if num_samples is None:
+      num_samples = max(0, await self.request_tadm_recording_length(slot) - start)
+    elif num_samples < 0:
+      raise ValueError("num_samples must be >= 0")
+
+    trace: List[float] = []
+    index = start
+    remaining = num_samples
+    while remaining > 0:
+      n = min(batch_size, remaining)
+      resp = await self.driver.send_command(
+        module=self.module_id,
+        command="QN",
+        li=f"{index:04}",  # index of first sample to read
+        ln=f"{n:02}",  # number of samples to read
+        fmt="qn#### (n)",
+      )
+      values = resp.get("qn", [])
+      trace.extend(float(v) for v in values)
+      if len(values) < n:  # buffer exhausted before num_samples
+        break
+      index += n
+      remaining -= n
+    return trace
 
   # -- Px:ZL  cLLD Z search (low-level, head-space) --------------------------
 
