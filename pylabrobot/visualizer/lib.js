@@ -4492,6 +4492,14 @@ window.addEventListener("load", function () {
 var umlPanelResourceName = null;
 var _umlPanelOpenedAt = 0;
 
+// Format a volume for display: at most 2 decimals (no trailing zeros, so 327.2 not
+// 327.20) and thousands separators, so values above 1000 read as e.g. 1,000. Passes
+// null/undefined through unchanged.
+function formatVolume(v) {
+  if (v == null) return v;
+  return Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
 function getUmlAttributes(resource) {
   var attrs = [];
   attrs.push({ key: "name", value: JSON.stringify(resource.name) });
@@ -4537,8 +4545,8 @@ function getUmlAttributes(resource) {
       attrs.push({ key: "material_z_thickness", value: resource.material_z_thickness });
     }
     attrs.push({ key: "height_volume_data", value: resource.has_height_volume_data ? "exists" : "None" });
-    attrs.push({ key: "max_volume", value: resource.maxVolume });
-    attrs.push({ key: "volume", value: resource.volume });
+    attrs.push({ key: "max_volume", value: formatVolume(resource.maxVolume) });
+    attrs.push({ key: "volume", value: formatVolume(resource.volume) });
   }
   // TipSpot
   if (resource instanceof TipSpot) {
