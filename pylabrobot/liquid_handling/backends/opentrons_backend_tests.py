@@ -7,6 +7,7 @@ pytest.importorskip("ot_api")
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.opentrons_backend import (
+  _OT_DECK_IS_ADDRESSABLE_AREA_VERSION,
   OpentronsOT2Backend,
 )
 from pylabrobot.liquid_handling.errors import NoChannelError
@@ -127,9 +128,6 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(labware_id, self.backend.get_ot_name("tip_rack"))
       self.assertEqual(well_name, self.backend.get_ot_name("tip_rack_A1"))
       self.assertEqual(pipette_id, "left-pipette-id")
-      self.assertEqual(offset_x, offset_x)
-      self.assertEqual(offset_y, offset_y)
-      self.assertEqual(offset_z, offset_z)
 
     mock_pick_up_tip.side_effect = assert_parameters
 
@@ -139,11 +137,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   async def test_tip_drop(self, mock_drop_tip):
     def assert_parameters(labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
       self.assertEqual(well_name, self.backend.get_ot_name("tip_rack_A1"))
-      self.assertEqual(well_name, self.backend.get_ot_name("tip_rack_A1"))
       self.assertEqual(pipette_id, "left-pipette-id")
-      self.assertEqual(offset_x, offset_x)
-      self.assertEqual(offset_y, offset_y)
-      self.assertEqual(offset_z, offset_z)
 
     mock_drop_tip.side_effect = assert_parameters
 
@@ -187,6 +181,59 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     await self.test_aspirate()  # aspirate first
     with no_volume_tracking():
       await self.lh.dispense(self.plate["A1"], vols=[10])
+
+  # -- characterization of the remaining ot_api call sites (Phase 0 safety net) --
+
+  @patch("ot_api.health.home")
+  async def test_home_calls_health_home(self, mock_home):
+    """home() issues exactly one ot_api.health.home() call."""
+    await self.backend.home()
+    mock_home.assert_called_once_with()
+
+  @patch("ot_api.modules.list_connected_modules")
+  async def test_list_connected_modules_passthrough(self, mock_modules):
+    """list_connected_modules() returns ot_api.modules.list_connected_modules() verbatim."""
+    mock_modules.return_value = [{"id": "tempdeck"}]
+    result = await self.backend.list_connected_modules()
+    mock_modules.assert_called_once_with()
+    self.assertEqual(result, [{"id": "tempdeck"}])
+
+  @patch("ot_api.run_id", "run-id", create=True)
+  @patch("ot_api.requestor.post")
+  async def test_stop_cancels_active_run_and_clears_pipettes(self, mock_post):
+    """stop() cancels the active run through the requestor and clears mounted pipettes."""
+    await self.backend.stop()
+    mock_post.assert_called_once_with("/runs/run-id/cancel")
+    self.assertIsNone(self.backend.left_pipette)
+    self.assertIsNone(self.backend.right_pipette)
+
+  @patch("ot_api.lh.drop_tip_in_place")
+  @patch("ot_api.lh.move_to_addressable_area_for_drop_tip")
+  @patch("ot_api.lh.drop_tip")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.define")
+  @patch("ot_api.labware.add")
+  async def test_tip_drop_to_trash_uses_addressable_area(
+    self,
+    mock_add,
+    mock_define,
+    mock_pick_up_tip,
+    mock_drop_tip,
+    mock_to_trash,
+    mock_drop_in_place,
+  ):
+    """At api_version >= 7.1.0 a discard to the deck trash routes via the addressable
+    area (move_to_addressable_area_for_drop_tip + drop_tip_in_place), not drop_tip."""
+    mock_define.side_effect = _mock_define
+    mock_add.side_effect = _mock_add
+    self.backend.ot_api_version = _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
+
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    await self.lh.discard_tips()
+
+    mock_to_trash.assert_called_once()
+    mock_drop_in_place.assert_called_once()
+    mock_drop_tip.assert_not_called()
 
 
 def _make_backend_with_pipettes(left_name="p300_single_gen2", right_name="p20_single_gen2"):
@@ -315,3 +362,30 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     self.backend._set_tip_state("right-id", True)
     self.assertFalse(self.backend.left_pipette_has_tip)
     self.assertTrue(self.backend.right_pipette_has_tip)
+
+  # -- channel model (head8 step 1) --
+
+  def test_channel_map_two_singles_is_one_channel_per_mount(self):
+    """Two single-channel pipettes give two channels, one per mount (unchanged)."""
+    backend = _make_backend_with_pipettes("p300_single_gen2", "p20_single_gen2")
+    self.assertEqual(backend.num_channels, 2)
+    self.assertEqual(backend._pipette_id_for_channel(0), "left-id")
+    self.assertEqual(backend._pipette_id_for_channel(1), "right-id")
+
+  def test_channel_map_multi_mount_is_eight_channels(self):
+    """A multi on the left + a single on the right gives channels 0-7 (the multi's
+    nozzles) and channel 8 (the single)."""
+    backend = _make_backend_with_pipettes("p20_multi_gen2", "p300_single_gen2")
+    self.assertEqual(backend.num_channels, 9)
+    self.assertTrue(all(pip is backend.left_pipette for pip, _ in backend._channel_map()[:8]))
+    self.assertIs(backend._channel_map()[8][0], backend.right_pipette)
+    self.assertEqual(backend._pipette_id_for_channel(0), "left-id")
+    self.assertEqual(backend._pipette_id_for_channel(7), "left-id")
+    self.assertEqual(backend._pipette_id_for_channel(8), "right-id")
+
+  def test_pipette_id_for_channel_out_of_range_raises(self):
+    """Channels beyond the mounted pipettes raise NoChannelError."""
+    backend = _make_backend_with_pipettes("p20_single_gen2", None)
+    self.assertEqual(backend.num_channels, 1)
+    with self.assertRaises(NoChannelError):
+      backend._pipette_id_for_channel(1)
