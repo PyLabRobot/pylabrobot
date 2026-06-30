@@ -50,11 +50,17 @@ FULL_ROTATION: int = 8000
 DEFAULT_BUCKET_1_OFFSET: int = 5337
 DEFAULT_BUCKET_1_REMAINDER: int = -DEFAULT_BUCKET_1_OFFSET
 DEFAULT_READ_TIMEOUT: float = 0.2
-STATUS_POLL_INTERVAL: float = 0.08
+COMMAND_GAP_SECONDS: float = 0.05
+CONTROLLER_CONNECT_SETTLE_SECONDS: float = 2.0
+INITIALIZE_PACKET_GAP_SECONDS: float = 0.01
+STATUS_POLL_INTERVAL: float = 0.15
 POSITION_TOLERANCE: int = 15
+POSITION_SETTLE_TOLERANCE: int = 200
 TACH_TO_RPM: float = -14.69320388
+DOOR_OPEN_SETTLE_SECONDS: float = 2.0
 
-_KNOWN_VSPIN_STATUSES = {0x08, 0x09, 0x11, 0x18, 0x19, 0x88, 0x89, 0x91, 0x99}
+_KNOWN_VSPIN_STATUSES = {0x08, 0x09, 0x0B, 0x11, 0x18, 0x19, 0x88, 0x89, 0x91, 0x99}
+_IDLE_VSPIN_STATUSES = {0x09, 0x0B, 0x11, 0x89, 0x91}
 
 
 def _with_vspin_checksum(cmd: bytes) -> bytes:
@@ -107,6 +113,20 @@ def _build_vspin_deceleration_command(deceleration: float) -> bytes:
   )
 
 
+def _normalize_vspin_home_position(home_position: int) -> int:
+  return int(home_position) % FULL_ROTATION
+
+
+def _vspin_position_matches_target(position: int, target: int, tolerance: int) -> bool:
+  absolute_delta = abs(int(position) - int(target))
+  if absolute_delta <= tolerance:
+    return True
+
+  angular_delta = abs((int(position) % FULL_ROTATION) - (int(target) % FULL_ROTATION))
+  angular_delta = min(angular_delta, FULL_ROTATION - angular_delta)
+  return angular_delta <= tolerance
+
+
 bucket_1_not_set_error = RuntimeError(
   "Bucket 1 position not set. "
   "Please rotate the bucket to bucket 1 using V11VSpinBackend.go_to_position and "
@@ -126,38 +146,79 @@ class V11VSpinBackend(CentrifugeBackend):
   hardware before relying on it in production.
   """
 
-  def __init__(self, device_id: Optional[str] = None):
+  def __init__(
+    self,
+    device_id: Optional[str] = None,
+    try_runtime_attach_after_startup_failure: bool = False,
+  ):
     """
     Args:
       device_id: The libftdi id for the centrifuge.
         Find using `python -m pylibftdi.examples.list_devices`.
+      try_runtime_attach_after_startup_failure: Try to attach to a controller
+        that is already in 57600-baud runtime mode before cold startup, and
+        retry that attach path if the normal 19200-baud startup handshake
+        fails. This is disabled by default because some
+        legacy controllers are sensitive to extra startup probes.
     """
     self.io = FTDI(human_readable_device_name="Velocity11 VSpin Centrifuge", device_id=device_id)
     self._bucket_1_remainder: Optional[int] = DEFAULT_BUCKET_1_REMAINDER
     self._last_position: int = 0
     self._last_home_position: int = 0
+    self._home_sensor_position: Optional[int] = None
     self._motion_is_prepared = False
     self._stop_requested = False
     self._command_lock: Optional[asyncio.Lock] = None
+    self._last_command_at = 0.0
+    self._try_runtime_attach_after_startup_failure = try_runtime_attach_after_startup_failure
     # only attempt loading calibration if device_id is not None
     # if it is None, we will load it after setup when we can query the device id from the io
     if device_id is not None:
-      self._bucket_1_remainder = _load_vspin_calibrations(device_id) or DEFAULT_BUCKET_1_REMAINDER
+      calibration = _load_vspin_calibrations(device_id)
+      self._bucket_1_remainder = (
+        calibration if calibration is not None else DEFAULT_BUCKET_1_REMAINDER
+      )
 
   async def setup(self):
     await self.io.setup()
-    self._command_lock = asyncio.Lock()
-    self._motion_is_prepared = False
+    try:
+      self._command_lock = asyncio.Lock()
+      self._motion_is_prepared = False
 
-    await self.configure_and_initialize()
-    await self._startup_handshake()
-    await self._enable_telemetry_and_pneumatics()
-    await self._home_rotor()
+      attached_to_runtime = False
+      if self._try_runtime_attach_after_startup_failure:
+        attached_to_runtime = await self._try_attach_to_runtime_controller()
+        if attached_to_runtime:
+          logger.info("[vspin] Attached to runtime controller before cold startup")
 
-    # If we have not set the calibration yet, load it now.
-    if self._bucket_1_remainder == DEFAULT_BUCKET_1_REMAINDER:
-      device_id = await self.io.get_serial()
-      self._bucket_1_remainder = _load_vspin_calibrations(device_id) or DEFAULT_BUCKET_1_REMAINDER
+      if not attached_to_runtime:
+        await self.configure_and_initialize()
+        try:
+          await self._startup_handshake()
+          await self._enable_telemetry_and_pneumatics()
+        except TimeoutError as e:
+          if (
+            self._try_runtime_attach_after_startup_failure
+            and await self._try_attach_to_runtime_controller()
+          ):
+            logger.info("[vspin] Recovered controller after partial startup")
+          else:
+            raise TimeoutError(
+              "VSpin did not respond to the 19200-baud startup handshake. "
+              "Power-cycle or restart the VSpin controller, then try setup again."
+            ) from e
+
+      await self._home_rotor()
+      # If we have not set the calibration yet, load it now.
+      if self._bucket_1_remainder == DEFAULT_BUCKET_1_REMAINDER:
+        device_id = await self.io.get_serial()
+        calibration = _load_vspin_calibrations(device_id)
+        self._bucket_1_remainder = (
+          calibration if calibration is not None else DEFAULT_BUCKET_1_REMAINDER
+        )
+    except Exception:
+      await self._close_connection_cleanly()
+      raise
 
   @property
   def bucket_1_remainder(self) -> int:
@@ -169,7 +230,15 @@ class V11VSpinBackend(CentrifugeBackend):
     """Set the current position as bucket 1 position and save calibration."""
     current_position = await self.get_position()
     device_id = await self.io.get_serial()
-    remainder = await self.get_home_position() - current_position
+    home_sensor_position = (
+      self._home_sensor_position
+      if self._home_sensor_position is not None
+      else await self.get_home_position()
+    )
+    home_sensor_position = _normalize_vspin_home_position(home_sensor_position)
+    home_rotations = (current_position - home_sensor_position) // FULL_ROTATION
+    home_position = home_sensor_position + home_rotations * FULL_ROTATION
+    remainder = home_position - current_position
     self._bucket_1_remainder = remainder
     _save_vspin_calibrations(device_id, remainder)
 
@@ -186,7 +255,19 @@ class V11VSpinBackend(CentrifugeBackend):
       raise ValueError("bucket_num must be 1 or 2")
     if self._bucket_1_remainder is None:
       raise bucket_1_not_set_error
-    home_position = await self.get_home_position()
+
+    home_position = self._home_sensor_position
+    if home_position is None:
+      live_home_position = await self.get_home_position()
+      if live_home_position == 0:
+        await self._home_rotor()
+        home_position = self._home_sensor_position
+      else:
+        home_position = live_home_position
+
+    if home_position is None:
+      raise RuntimeError("VSpin home sensor position is unknown. Run setup or _home_rotor first.")
+
     current_position = await self.get_position()
     target_position = home_position - self.bucket_1_remainder
     if bucket_num == 2:
@@ -198,8 +279,7 @@ class V11VSpinBackend(CentrifugeBackend):
     return target_position
 
   async def stop(self):
-    await self.configure_and_initialize()
-    await self.io.stop()
+    await self._close_connection_cleanly()
 
   class _StatusPositionTachometer(ctypes.LittleEndianStructure):
     _pack_ = 1
@@ -437,19 +517,23 @@ class V11VSpinBackend(CentrifugeBackend):
 
     logger.debug("[vspin] Sending %s", cmd.hex())
     async with lock:
+      command_gap = COMMAND_GAP_SECONDS - (time.monotonic() - self._last_command_at)
+      if command_gap > 0:
+        await asyncio.sleep(command_gap)
       written = await self.io.write(cmd)
       if written != len(cmd):
         raise RuntimeError(f"Failed to write all bytes ({written}/{len(cmd)} bytes written)")
       resp = await self._read_resp(timeout=read_timeout, expected_len=expected_len)
+      self._last_command_at = time.monotonic()
 
     logger.debug("[vspin] Response %s", resp.hex())
     return resp
 
   async def _startup_handshake(self) -> None:
-    await self._send_safe(bytes.fromhex("aa002101ff21"), expected_len=2)
-    await self._send_safe(bytes.fromhex("aa01132034"), expected_len=4)
-    await self._send_safe(bytes.fromhex("aa002102ff22"), expected_len=2)
-    await self._send_safe(bytes.fromhex("aa02132035"), expected_len=4)
+    await self._send_safe(bytes.fromhex("aa002101ff21"), timeout=0.60, expected_len=2)
+    await self._send_safe(bytes.fromhex("aa01132034"), timeout=0.60, expected_len=4)
+    await self._send_safe(bytes.fromhex("aa002102ff22"), timeout=0.60, expected_len=2)
+    await self._send_safe(bytes.fromhex("aa02132035"), timeout=0.60, expected_len=4)
 
     # The original software writes this and then tolerates silence for roughly
     # two seconds while the controller transitions into its startup state.
@@ -483,6 +567,40 @@ class V11VSpinBackend(CentrifugeBackend):
     while time.monotonic() < end:
       await self._read_resp(timeout=0.08, expected_len=None, quiet_time=0.01)
       await asyncio.sleep(0.03)
+
+  async def _try_attach_to_runtime_controller(self) -> bool:
+    """Attach to a VSpin controller that is already in 57600-baud runtime mode."""
+    await self.io.set_baudrate(57600)
+    await self.io.set_rts(True)
+    await self.io.set_dtr(True)
+    await self._purge_io_buffers()
+    await self._drain_startup_silence(0.25)
+
+    for _ in range(2):
+      for status_command in (
+        bytes.fromhex("aa010e0f"),
+        bytes.fromhex("aa01121f32"),
+      ):
+        resp = await self._send_command(
+          status_command,
+          read_timeout=0.40,
+          expected_len=14,
+        )
+        status = self._find_status_packet(resp)
+        if status is not None:
+          self._last_position = int(status.current_position)
+          self._last_home_position = int(status.home_position)
+          logger.info(
+            "[vspin] Attached to runtime controller "
+            "(status=0x%02x, position=%d, home=%d)",
+            status.status,
+            status.current_position,
+            status.home_position,
+          )
+          return True
+      await asyncio.sleep(0.20)
+
+    return False
 
   async def _enable_telemetry_and_pneumatics(self) -> None:
     await self._send_safe(bytes.fromhex("aa01121f32"), timeout=0.35, expected_len=14)
@@ -520,7 +638,7 @@ class V11VSpinBackend(CentrifugeBackend):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
       await self._send_safe(bytes.fromhex("aa020e10"), timeout=0.10, expected_len=5)
-      await asyncio.sleep(0.04)
+      await asyncio.sleep(0.12)
 
   async def _motor_enable(self) -> None:
     await self._send_safe(bytes.fromhex("aa0117021a"), timeout=0.30, expected_len=14)
@@ -534,6 +652,7 @@ class V11VSpinBackend(CentrifugeBackend):
     await self._send_safe(bytes.fromhex("aa010b0c"), timeout=0.30, expected_len=14)
 
   async def _home_rotor(self) -> None:
+    pre_home_status = await self._get_positions_and_tachometer()
     await self._motor_enable()
     await self._send_safe(bytes.fromhex("aa010001"), timeout=0.30, expected_len=14)
     await self._send_safe(
@@ -548,7 +667,13 @@ class V11VSpinBackend(CentrifugeBackend):
     )
     await self._send_safe(bytes.fromhex("aa01192842"), timeout=0.30, expected_len=14)
 
-    status = await self._wait_for_idle(label="homing", timeout=35.0)
+    status = await self._wait_for_idle(
+      label="homing",
+      timeout=35.0,
+      min_wait=1.0,
+      require_activity_from=pre_home_status,
+      activity_tolerance=POSITION_SETTLE_TOLERANCE,
+    )
     if status.home_position == 0:
       await self._send_safe(
         bytes.fromhex("aa01121f32"),
@@ -556,14 +681,20 @@ class V11VSpinBackend(CentrifugeBackend):
         expected_len=14,
         expect_response=False,
       )
-      status = await self._wait_for_full_status(timeout=5.0)
+      status = await self._wait_for_full_status(timeout=5.0, allow_zero_home_fallback=True)
 
     self._last_position = int(status.current_position)
     self._last_home_position = int(status.home_position)
+    self._home_sensor_position = _normalize_vspin_home_position(status.home_position)
 
-  async def _wait_for_full_status(self, timeout: float) -> _StatusPositionTachometer:
+  async def _wait_for_full_status(
+    self,
+    timeout: float,
+    allow_zero_home_fallback: bool = False,
+  ) -> _StatusPositionTachometer:
     end = time.monotonic() + timeout
     last_raw = b""
+    last_full_status: Optional[V11VSpinBackend._StatusPositionTachometer] = None
     while time.monotonic() < end:
       resp = await self._send_command(
         bytes.fromhex("aa010e0f"),
@@ -576,7 +707,14 @@ class V11VSpinBackend(CentrifugeBackend):
         self._last_position = int(status.current_position)
         self._last_home_position = int(status.home_position)
         return status
+      if status is not None:
+        last_full_status = status
       await asyncio.sleep(0.10)
+
+    if allow_zero_home_fallback and last_full_status is not None:
+      self._last_position = int(last_full_status.current_position)
+      self._last_home_position = int(last_full_status.home_position)
+      return last_full_status
 
     raise TimeoutError(
       "VSpin homing reached idle, but no full 14-byte status packet with a "
@@ -589,6 +727,9 @@ class V11VSpinBackend(CentrifugeBackend):
     timeout: float,
     target_position: Optional[int] = None,
     tolerance: int = POSITION_TOLERANCE,
+    min_wait: float = 0.0,
+    require_activity_from: Optional[_StatusPositionTachometer] = None,
+    activity_tolerance: int = POSITION_TOLERANCE,
   ) -> _StatusPositionTachometer:
     start = time.monotonic()
     last_status = self._make_status(
@@ -596,22 +737,46 @@ class V11VSpinBackend(CentrifugeBackend):
       self._last_position,
       home_position=self._last_home_position,
     )
+    observed_activity = require_activity_from is None
 
     while time.monotonic() - start <= timeout:
       status = await self._get_positions_and_tachometer()
       last_status = status
-      is_idle_status = status.status in (0x09, 0x11, 0x91)
+      is_idle_status = status.status in _IDLE_VSPIN_STATUSES
       is_stopped = abs(status.tachometer) <= 2
+      if require_activity_from is not None and not observed_activity:
+        observed_activity = (
+          not is_idle_status
+          or not is_stopped
+          or not _vspin_position_matches_target(
+            position=int(status.current_position),
+            target=int(require_activity_from.current_position),
+            tolerance=activity_tolerance,
+          )
+          or (
+            int(status.home_position) != 0
+            and int(status.home_position) != int(require_activity_from.home_position)
+          )
+        )
       is_at_target = (
         target_position is None
-        or abs(int(status.current_position) - int(target_position)) <= tolerance
+        or _vspin_position_matches_target(
+          position=int(status.current_position),
+          target=int(target_position),
+          tolerance=tolerance,
+        )
       )
 
-      if is_idle_status and is_stopped and is_at_target:
+      if (
+        is_idle_status
+        and is_stopped
+        and is_at_target
+        and observed_activity
+        and time.monotonic() - start >= min_wait
+      ):
         return status
 
       await asyncio.sleep(STATUS_POLL_INTERVAL)
-
     raise TimeoutError(
       f"VSpin {label} did not become idle within {timeout:.1f}s "
       f"(status=0x{last_status.status:02x}, position={last_status.current_position}, "
@@ -671,34 +836,68 @@ class V11VSpinBackend(CentrifugeBackend):
 
   async def configure_and_initialize(self):
     await self.set_configuration_data()
+    await self._settle_controller_connection()
     await self.initialize()
 
   async def set_configuration_data(self):
     """Set the device configuration data."""
+    await self._set_serial_line_defaults()
+    await self.io.set_baudrate(19200)
+
+  async def _set_serial_line_defaults(self) -> None:
     await self.io.set_latency_timer(16)
     await self.io.set_line_property(bits=8, stopbits=1, parity=0)
     await self.io.set_flowctrl(0)
-    await self.io.set_baudrate(19200)
+    await self.io.set_rts(True)
+    await self.io.set_dtr(True)
+
+  async def _settle_controller_connection(self) -> None:
+    await asyncio.sleep(CONTROLLER_CONNECT_SETTLE_SECONDS)
+
+  async def _purge_io_buffers(self) -> None:
+    try:
+      await self.io.usb_purge_rx_buffer()
+      await self.io.usb_purge_tx_buffer()
+    except Exception as e:
+      logger.debug("[vspin] Ignoring buffer purge during close/setup: %s", e)
+
+  async def _close_connection_cleanly(self) -> None:
+    try:
+      await asyncio.sleep(0.20)
+      await self._purge_io_buffers()
+      try:
+        await self.io.set_dtr(False)
+        await self.io.set_rts(False)
+      except Exception as e:
+        logger.debug("[vspin] Ignoring control-line reset during close: %s", e)
+      await asyncio.sleep(0.20)
+    finally:
+      await self.io.stop()
 
   async def initialize(self):
     for _ in range(2):
       await self.io.write(b"\x00" * 20)
+      await asyncio.sleep(INITIALIZE_PACKET_GAP_SECONDS)
       for i in range(33):
         packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
         await self.io.write(packet)
+        await asyncio.sleep(INITIALIZE_PACKET_GAP_SECONDS)
       await self._send_command(bytes.fromhex("aaff0f0e"), read_timeout=0.08)
+      await asyncio.sleep(COMMAND_GAP_SECONDS)
 
   # Centrifuge operations
 
   async def open_door(self):
     try:
       if await self.get_door_open():
+        await asyncio.sleep(DOOR_OPEN_SETTLE_SECONDS)
         return
     except IOError:
       pass
 
     await self._send_safe(bytes.fromhex("aa022600072f"), timeout=0.30)
     await self._wait_for_door(open_expected=True, timeout=4.0)
+    await asyncio.sleep(DOOR_OPEN_SETTLE_SECONDS)
 
   async def close_door(self):
     try:
@@ -767,7 +966,7 @@ class V11VSpinBackend(CentrifugeBackend):
       label=f"position {position}",
       timeout=25.0,
       target_position=position,
-      tolerance=10,
+      tolerance=POSITION_SETTLE_TOLERANCE,
     )
     await self.lock_bucket()
     await self.open_door()
@@ -778,6 +977,12 @@ class V11VSpinBackend(CentrifugeBackend):
     r = 10
     rpm = int((g / (1.118 * 10**-5 * r)) ** 0.5)
     return rpm
+
+  @staticmethod
+  def rpm_to_g(rpm: float) -> float:
+    # https://en.wikipedia.org/wiki/Centrifugation#Mathematical_formula
+    r = 10
+    return 1.118 * 10**-5 * r * float(rpm) ** 2
 
   async def spin(
     self,
@@ -804,6 +1009,37 @@ class V11VSpinBackend(CentrifugeBackend):
     if duration < 1:
       raise ValueError("Spin time must be at least 1 second")
 
+    await self.spin_rpm(
+      rpm=V11VSpinBackend.g_to_rpm(g),
+      duration=duration,
+      acceleration=acceleration,
+      deceleration=deceleration,
+    )
+
+  async def spin_rpm(
+    self,
+    rpm: int,
+    duration: float,
+    acceleration: float = 0.8,
+    deceleration: float = 0.8,
+  ) -> None:
+    """Start a spin cycle at a target RPM.
+
+    This is a V11-specific convenience wrapper around the same command path
+    used by :meth:`spin`. The public PLR centrifuge API remains g-based.
+    """
+    rpm = int(rpm)
+    duration = float(duration)
+
+    if rpm < 1 or rpm > 3000:
+      raise ValueError("RPM must be within 1-3000.")
+    if acceleration <= 0 or acceleration > 1:
+      raise ValueError("Acceleration must be within 0-1.")
+    if deceleration <= 0 or deceleration > 1:
+      raise ValueError("Deceleration must be within 0-1.")
+    if duration < 1:
+      raise ValueError("Spin time must be at least 1 second")
+
     if await self.get_door_open():
       await self.close_door()
     if not await self.get_door_locked():
@@ -811,8 +1047,6 @@ class V11VSpinBackend(CentrifugeBackend):
     if await self.get_bucket_locked():
       await self.unlock_bucket()
 
-    # 1 - compute the final position
-    rpm = V11VSpinBackend.g_to_rpm(g)
     self._stop_requested = False
 
     try:
