@@ -41,14 +41,14 @@ def biorad_384_wellplate_50uL_Vb(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:  # remove 2026-10
+def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:  # remove v1b1
   """Deprecated alias for biorad_384_wellplate_50uL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `biorad_384_wellplate_50uL_Vb()` instead.
   """
   warnings.warn(
-    "BioRad_384_wellplate_50uL_Vb() is deprecated and will be removed after 2026-10. "
+    "BioRad_384_wellplate_50uL_Vb() is deprecated and will be removed in v1b1. "
     "Use biorad_384_wellplate_50uL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,

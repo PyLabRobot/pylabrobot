@@ -86,14 +86,14 @@ def cor_falcon_tube_50mL_Vb(name: str) -> Tube:
 # --------------------------------------------------------------------------- #
 
 
-def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:  # remove 2026-10
+def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:  # remove v1b1
   """Deprecated alias for cor_falcon_tube_14mL_Rb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_falcon_tube_14mL_Rb()` instead.
   """
   warnings.warn(
-    "Cor_Falcon_tube_14mL_Rb() is deprecated and will be removed after 2026-10. "
+    "Cor_Falcon_tube_14mL_Rb() is deprecated and will be removed in v1b1. "
     "Use cor_falcon_tube_14mL_Rb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -101,14 +101,14 @@ def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:  # remove 2026-10
   return cor_falcon_tube_14mL_Rb(name)
 
 
-def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:  # remove 2026-10
+def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:  # remove v1b1
   """Deprecated alias for cor_falcon_tube_15mL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_falcon_tube_15mL_Vb()` instead.
   """
   warnings.warn(
-    "Cor_Falcon_tube_15mL_Vb() is deprecated and will be removed after 2026-10. "
+    "Cor_Falcon_tube_15mL_Vb() is deprecated and will be removed in v1b1. "
     "Use cor_falcon_tube_15mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -116,14 +116,14 @@ def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:  # remove 2026-10
   return cor_falcon_tube_15mL_Vb(name)
 
 
-def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:  # remove 2026-10
+def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:  # remove v1b1
   """Deprecated alias for cor_falcon_tube_50mL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_falcon_tube_50mL_Vb()` instead.
   """
   warnings.warn(
-    "Cor_Falcon_tube_50mL_Vb() is deprecated and will be removed after 2026-10. "
+    "Cor_Falcon_tube_50mL_Vb() is deprecated and will be removed in v1b1. "
     "Use cor_falcon_tube_50mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,

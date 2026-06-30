@@ -171,14 +171,14 @@ def _compute_height_from_volume_Cor_96_wellplate_2mL_Vb(
 # --------------------------------------------------------------------------- #
 
 
-def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:  # remove 2026-10
+def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
   """Deprecated alias for cor_96_wellplate_2mL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_96_wellplate_2mL_Vb()` instead.
   """
   warnings.warn(
-    "Cor_96_wellplate_2mL_Vb() is deprecated and will be removed after 2026-10. "
+    "Cor_96_wellplate_2mL_Vb() is deprecated and will be removed in v1b1. "
     "Use cor_96_wellplate_2mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -186,14 +186,14 @@ def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:  # remo
   return cor_96_wellplate_2mL_Vb(name)
 
 
-def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:  # remove 2026-10
+def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
   """Deprecated alias for cor_96_wellplate_360uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_96_wellplate_360uL_Fb()` instead.
   """
   warnings.warn(
-    "Cor_96_wellplate_360ul_Fb() is deprecated and will be removed after 2026-10. "
+    "Cor_96_wellplate_360ul_Fb() is deprecated and will be removed in v1b1. "
     "Use cor_96_wellplate_360uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -201,14 +201,14 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:  # re
   return cor_96_wellplate_360uL_Fb(name, with_lid)
 
 
-def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:  # remove 2026-10
+def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
   """Deprecated alias for cor_96_wellplate_360uL_Fb_lid().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_96_wellplate_360uL_Fb_lid()` instead.
   """
   warnings.warn(
-    "Cor_96_wellplate_360ul_Fb_Lid() is deprecated and will be removed after 2026-10. "
+    "Cor_96_wellplate_360ul_Fb_Lid() is deprecated and will be removed in v1b1. "
     "Use cor_96_wellplate_360uL_Fb_lid() instead.",
     DeprecationWarning,
     stacklevel=2,

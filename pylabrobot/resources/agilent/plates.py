@@ -148,14 +148,14 @@ def agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:  # remove 2026-10
+def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:  # remove v1b1
   """Deprecated alias for agilent_2_reservoir_144mL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `agilent_2_reservoir_144mL_Vb()` instead.
   """
   warnings.warn(
-    "Agilent_2_reservoir_144mL_Vb() is deprecated and will be removed after 2026-10. "
+    "Agilent_2_reservoir_144mL_Vb() is deprecated and will be removed in v1b1. "
     "Use agilent_2_reservoir_144mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,

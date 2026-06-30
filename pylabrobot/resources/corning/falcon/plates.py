@@ -168,16 +168,14 @@ def cor_falcon_96_wellplate_340uL_Fb_black(name: str, lid: Optional[Lid] = None)
 # --------------------------------------------------------------------------- #
 
 
-def Cor_Falcon_96_wellplate_250ul_Rb(
-  name: str, lid: Optional[Lid] = None
-) -> Plate:  # remove 2026-10
+def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for cor_falcon_96_wellplate_250uL_Rb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_falcon_96_wellplate_250uL_Rb()` instead.
   """
   warnings.warn(
-    "Cor_Falcon_96_wellplate_250ul_Rb() is deprecated and will be removed after 2026-10. "
+    "Cor_Falcon_96_wellplate_250ul_Rb() is deprecated and will be removed in v1b1. "
     "Use cor_falcon_96_wellplate_250uL_Rb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -185,16 +183,14 @@ def Cor_Falcon_96_wellplate_250ul_Rb(
   return cor_falcon_96_wellplate_250uL_Rb(name, lid)
 
 
-def Cor_Falcon_96_wellplate_275ul_Fb(
-  name: str, lid: Optional[Lid] = None
-) -> Plate:  # remove 2026-10
+def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for cor_falcon_96_wellplate_275uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_falcon_96_wellplate_275uL_Fb()` instead.
   """
   warnings.warn(
-    "Cor_Falcon_96_wellplate_275ul_Fb() is deprecated and will be removed after 2026-10. "
+    "Cor_Falcon_96_wellplate_275ul_Fb() is deprecated and will be removed in v1b1. "
     "Use cor_falcon_96_wellplate_275uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -204,14 +200,14 @@ def Cor_Falcon_96_wellplate_275ul_Fb(
 
 def Cor_Falcon_96_wellplate_340ul_Fb_Black(
   name: str, lid: Optional[Lid] = None
-) -> Plate:  # remove 2026-10
+) -> Plate:  # remove v1b1
   """Deprecated alias for cor_falcon_96_wellplate_340uL_Fb_black().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_falcon_96_wellplate_340uL_Fb_black()` instead.
   """
   warnings.warn(
-    "Cor_Falcon_96_wellplate_340ul_Fb_Black() is deprecated and will be removed after 2026-10. "
+    "Cor_Falcon_96_wellplate_340ul_Fb_Black() is deprecated and will be removed in v1b1. "
     "Use cor_falcon_96_wellplate_340uL_Fb_black() instead.",
     DeprecationWarning,
     stacklevel=2,

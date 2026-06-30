@@ -72,14 +72,14 @@ def bioer_96_wellplate_2200uL_Vb(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:  # remove 2026-10
+def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:  # remove v1b1
   """Deprecated alias for bioer_96_wellplate_2200uL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `bioer_96_wellplate_2200uL_Vb()` instead.
   """
   warnings.warn(
-    "BioER_96_wellplate_Vb_2200uL() is deprecated and will be removed after 2026-10. "
+    "BioER_96_wellplate_Vb_2200uL() is deprecated and will be removed in v1b1. "
     "Use bioer_96_wellplate_2200uL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,

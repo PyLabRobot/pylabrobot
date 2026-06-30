@@ -241,16 +241,14 @@ def agenbio_1_troughplate_100mL_Fl(name: str, lid: Optional[Lid] = None) -> Plat
 # --------------------------------------------------------------------------- #
 
 
-def AGenBio_1_troughplate_100000uL_Fl(
-  name: str, lid: Optional[Lid] = None
-) -> Plate:  # remove 2026-10
+def AGenBio_1_troughplate_100000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for agenbio_1_troughplate_100mL_Fl().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `agenbio_1_troughplate_100mL_Fl()` instead.
   """
   warnings.warn(
-    "AGenBio_1_troughplate_100000uL_Fl() is deprecated and will be removed after 2026-10. "
+    "AGenBio_1_troughplate_100000uL_Fl() is deprecated and will be removed in v1b1. "
     "Use agenbio_1_troughplate_100mL_Fl() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -258,16 +256,14 @@ def AGenBio_1_troughplate_100000uL_Fl(
   return agenbio_1_troughplate_100mL_Fl(name, lid)
 
 
-def AGenBio_1_troughplate_190000uL_Fl(
-  name: str, lid: Optional[Lid] = None
-) -> Plate:  # remove 2026-10
+def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for agenbio_1_troughplate_190mL_Fl().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `agenbio_1_troughplate_190mL_Fl()` instead.
   """
   warnings.warn(
-    "AGenBio_1_troughplate_190000uL_Fl() is deprecated and will be removed after 2026-10. "
+    "AGenBio_1_troughplate_190000uL_Fl() is deprecated and will be removed in v1b1. "
     "Use agenbio_1_troughplate_190mL_Fl() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -275,16 +271,14 @@ def AGenBio_1_troughplate_190000uL_Fl(
   return agenbio_1_troughplate_190mL_Fl(name, lid)
 
 
-def AGenBio_4_troughplate_75000uL_Vb(
-  name: str, lid: Optional[Lid] = None
-) -> Plate:  # remove 2026-10
+def AGenBio_4_troughplate_75000uL_Vb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for agenbio_4_troughplate_75mL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `agenbio_4_troughplate_75mL_Vb()` instead.
   """
   warnings.warn(
-    "AGenBio_4_troughplate_75000uL_Vb() is deprecated and will be removed after 2026-10. "
+    "AGenBio_4_troughplate_75000uL_Vb() is deprecated and will be removed in v1b1. "
     "Use agenbio_4_troughplate_75mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -292,14 +286,14 @@ def AGenBio_4_troughplate_75000uL_Vb(
   return agenbio_4_troughplate_75mL_Vb(name, lid)
 
 
-def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plate:  # remove 2026-10
+def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for agenbio_96_wellplate_Ub_2200uL().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `agenbio_96_wellplate_Ub_2200uL()` instead.
   """
   warnings.warn(
-    "AGenBio_96_wellplate_Ub_2200ul() is deprecated and will be removed after 2026-10. "
+    "AGenBio_96_wellplate_Ub_2200ul() is deprecated and will be removed in v1b1. "
     "Use agenbio_96_wellplate_Ub_2200uL() instead.",
     DeprecationWarning,
     stacklevel=2,

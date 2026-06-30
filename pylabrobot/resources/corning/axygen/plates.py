@@ -103,14 +103,14 @@ def cor_axy_96_wellplate_500uL_Ub(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:  # remove 2026-10
+def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
   """Deprecated alias for cor_axy_24_wellplate_10mL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_axy_24_wellplate_10mL_Vb()` instead.
   """
   warnings.warn(
-    "Cor_Axy_24_wellplate_10mL_Vb() is deprecated and will be removed after 2026-10. "
+    "Cor_Axy_24_wellplate_10mL_Vb() is deprecated and will be removed in v1b1. "
     "Use cor_axy_24_wellplate_10mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -118,14 +118,14 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:  #
   return cor_axy_24_wellplate_10mL_Vb(name)
 
 
-def Cor_Axy_96_wellplate_500uL_Ub(name: str, with_lid: bool = False) -> Plate:  # remove 2026-10
+def Cor_Axy_96_wellplate_500uL_Ub(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
   """Deprecated alias for cor_axy_96_wellplate_500uL_Ub().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_axy_96_wellplate_500uL_Ub()` instead.
   """
   warnings.warn(
-    "Cor_Axy_96_wellplate_500uL_Ub() is deprecated and will be removed after 2026-10. "
+    "Cor_Axy_96_wellplate_500uL_Ub() is deprecated and will be removed in v1b1. "
     "Use cor_axy_96_wellplate_500uL_Ub() instead.",
     DeprecationWarning,
     stacklevel=2,

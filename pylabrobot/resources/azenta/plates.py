@@ -68,14 +68,14 @@ def azenta_96_wellplate_200uL_Vb_4titudeframestar(name: str) -> Plate:
 
 def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(
   name: str, with_lid: bool = False
-) -> Plate:  # remove 2026-10
+) -> Plate:  # remove v1b1
   """Deprecated alias for azenta_96_wellplate_200uL_Vb_4titudeframestar().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `azenta_96_wellplate_200uL_Vb_4titudeframestar()` instead.
   """
   warnings.warn(
-    "Azenta4titudeFrameStar_96_wellplate_200ul_Vb() is deprecated and will be removed after 2026-10. "
+    "Azenta4titudeFrameStar_96_wellplate_200ul_Vb() is deprecated and will be removed in v1b1. "
     "Use azenta_96_wellplate_200uL_Vb_4titudeframestar() instead.",
     DeprecationWarning,
     stacklevel=2,

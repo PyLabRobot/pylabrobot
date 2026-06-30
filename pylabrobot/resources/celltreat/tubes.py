@@ -27,14 +27,14 @@ def celltreat_tube_15mL_Vb(name: str) -> Tube:
 # --------------------------------------------------------------------------- #
 
 
-def celltreat_15000ul_centrifuge_tube_Vb(name: str) -> Tube:  # remove 2026-10
+def celltreat_15000ul_centrifuge_tube_Vb(name: str) -> Tube:  # remove v1b1
   """Deprecated alias for celltreat_tube_15mL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_tube_15mL_Vb()` instead.
   """
   warnings.warn(
-    "celltreat_15000ul_centrifuge_tube_Vb() is deprecated and will be removed after 2026-10. "
+    "celltreat_15000ul_centrifuge_tube_Vb() is deprecated and will be removed in v1b1. "
     "Use celltreat_tube_15mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,

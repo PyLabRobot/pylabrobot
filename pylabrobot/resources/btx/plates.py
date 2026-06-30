@@ -72,14 +72,14 @@ def btx_96_wellplate_125uL_Fb_2mm(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:  # remove 2026-10
+def BTX_96_wellplate_125ul_Fb_2mm(name: str) -> Plate:  # remove v1b1
   """Deprecated alias for btx_96_wellplate_125uL_Fb_2mm().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `btx_96_wellplate_125uL_Fb_2mm()` instead.
   """
   warnings.warn(
-    "BTX_96_wellplate_125ul_Fb_2mm() is deprecated and will be removed after 2026-10. "
+    "BTX_96_wellplate_125ul_Fb_2mm() is deprecated and will be removed in v1b1. "
     "Use btx_96_wellplate_125uL_Fb_2mm() instead.",
     DeprecationWarning,
     stacklevel=2,

@@ -269,14 +269,14 @@ def celltreat_96_wellplate_350uL_Fb(name: str) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:  # remove 2026-10
+def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_12_troughplate_15mL_Vb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_12_troughplate_15mL_Vb()` instead.
   """
   warnings.warn(
-    "CellTreat_12_troughplate_15000ul_Vb() is deprecated and will be removed after 2026-10. "
+    "CellTreat_12_troughplate_15000ul_Vb() is deprecated and will be removed in v1b1. "
     "Use celltreat_12_troughplate_15mL_Vb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -284,14 +284,14 @@ def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:  # remove 2026-10
   return celltreat_12_troughplate_15mL_Vb(name)
 
 
-def CellTreat_24_wellplate_3300ul_Fb(name: str, with_lid: bool = False) -> Plate:  # remove 2026-10
+def CellTreat_24_wellplate_3300ul_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_24_wellplate_3300uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_24_wellplate_3300uL_Fb()` instead.
   """
   warnings.warn(
-    "CellTreat_24_wellplate_3300ul_Fb() is deprecated and will be removed after 2026-10. "
+    "CellTreat_24_wellplate_3300ul_Fb() is deprecated and will be removed in v1b1. "
     "Use celltreat_24_wellplate_3300uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -299,16 +299,14 @@ def CellTreat_24_wellplate_3300ul_Fb(name: str, with_lid: bool = False) -> Plate
   return celltreat_24_wellplate_3300uL_Fb(name, with_lid)
 
 
-def CellTreat_6_wellplate_16300ul_Fb(
-  name: str, lid: Optional[Lid] = None
-) -> Plate:  # remove 2026-10
+def CellTreat_6_wellplate_16300ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_6_wellplate_16300uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_6_wellplate_16300uL_Fb()` instead.
   """
   warnings.warn(
-    "CellTreat_6_wellplate_16300ul_Fb() is deprecated and will be removed after 2026-10. "
+    "CellTreat_6_wellplate_16300ul_Fb() is deprecated and will be removed in v1b1. "
     "Use celltreat_6_wellplate_16300uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -316,14 +314,14 @@ def CellTreat_6_wellplate_16300ul_Fb(
   return celltreat_6_wellplate_16300uL_Fb(name, lid)
 
 
-def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:  # remove 2026-10
+def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_96_wellplate_350uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_96_wellplate_350uL_Fb()` instead.
   """
   warnings.warn(
-    "CellTreat_96_wellplate_350ul_Fb() is deprecated and will be removed after 2026-10. "
+    "CellTreat_96_wellplate_350ul_Fb() is deprecated and will be removed in v1b1. "
     "Use celltreat_96_wellplate_350uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -331,14 +329,14 @@ def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:  # remove 2026-10
   return celltreat_96_wellplate_350uL_Fb(name)
 
 
-def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:  # remove 2026-10
+def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
   """Deprecated alias for celltreat_96_wellplate_350uL_Ub().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_96_wellplate_350uL_Ub()` instead.
   """
   warnings.warn(
-    "CellTreat_96_wellplate_350ul_Ub() is deprecated and will be removed after 2026-10. "
+    "CellTreat_96_wellplate_350ul_Ub() is deprecated and will be removed in v1b1. "
     "Use celltreat_96_wellplate_350uL_Ub() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -346,14 +344,14 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
   return celltreat_96_wellplate_350uL_Ub(name, with_lid)
 
 
-def CellTreat_6_wellplate_16300ul_Fb_Lid(name: str) -> Lid:  # remove 2026-10
+def CellTreat_6_wellplate_16300ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
   """Deprecated alias for celltreat_6_wellplate_16300uL_Fb_lid().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_6_wellplate_16300uL_Fb_lid()` instead.
   """
   warnings.warn(
-    "CellTreat_6_wellplate_16300ul_Fb_Lid() is deprecated and will be removed after 2026-10. "
+    "CellTreat_6_wellplate_16300ul_Fb_Lid() is deprecated and will be removed in v1b1. "
     "Use celltreat_6_wellplate_16300uL_Fb_lid() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -361,14 +359,14 @@ def CellTreat_6_wellplate_16300ul_Fb_Lid(name: str) -> Lid:  # remove 2026-10
   return celltreat_6_wellplate_16300uL_Fb_lid(name)
 
 
-def CellTreat_24_wellplate_3300ul_Fb_Lid(name: str) -> Lid:  # remove 2026-10
+def CellTreat_24_wellplate_3300ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
   """Deprecated alias for celltreat_24_wellplate_3300uL_Fb_lid().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_24_wellplate_3300uL_Fb_lid()` instead.
   """
   warnings.warn(
-    "CellTreat_24_wellplate_3300ul_Fb_Lid() is deprecated and will be removed after 2026-10. "
+    "CellTreat_24_wellplate_3300ul_Fb_Lid() is deprecated and will be removed in v1b1. "
     "Use celltreat_24_wellplate_3300uL_Fb_lid() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -376,14 +374,14 @@ def CellTreat_24_wellplate_3300ul_Fb_Lid(name: str) -> Lid:  # remove 2026-10
   return celltreat_24_wellplate_3300uL_Fb_lid(name)
 
 
-def CellTreat_96_wellplate_350ul_Ub_Lid(name: str) -> Lid:  # remove 2026-10
+def CellTreat_96_wellplate_350ul_Ub_Lid(name: str) -> Lid:  # remove v1b1
   """Deprecated alias for celltreat_96_wellplate_350uL_Ub_lid().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `celltreat_96_wellplate_350uL_Ub_lid()` instead.
   """
   warnings.warn(
-    "CellTreat_96_wellplate_350ul_Ub_Lid() is deprecated and will be removed after 2026-10. "
+    "CellTreat_96_wellplate_350ul_Ub_Lid() is deprecated and will be removed in v1b1. "
     "Use celltreat_96_wellplate_350uL_Ub_lid() instead.",
     DeprecationWarning,
     stacklevel=2,

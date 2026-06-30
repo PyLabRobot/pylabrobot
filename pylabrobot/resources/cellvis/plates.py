@@ -102,14 +102,14 @@ def cellvis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
 # --------------------------------------------------------------------------- #
 
 
-def CellVis_24_wellplate_3600uL_Fb_Lid(name: str) -> Lid:  # remove 2026-10
+def CellVis_24_wellplate_3600uL_Fb_Lid(name: str) -> Lid:  # remove v1b1
   """Deprecated alias for cellvis_24_wellplate_3600uL_Fb_lid().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cellvis_24_wellplate_3600uL_Fb_lid()` instead.
   """
   warnings.warn(
-    "CellVis_24_wellplate_3600uL_Fb_Lid() is deprecated and will be removed after 2026-10. "
+    "CellVis_24_wellplate_3600uL_Fb_Lid() is deprecated and will be removed in v1b1. "
     "Use cellvis_24_wellplate_3600uL_Fb_lid() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -117,14 +117,14 @@ def CellVis_24_wellplate_3600uL_Fb_Lid(name: str) -> Lid:  # remove 2026-10
   return cellvis_24_wellplate_3600uL_Fb_lid(name)
 
 
-def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:  # remove 2026-10
+def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
   """Deprecated alias for cellvis_24_wellplate_3600uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cellvis_24_wellplate_3600uL_Fb()` instead.
   """
   warnings.warn(
-    "CellVis_24_wellplate_3600uL_Fb() is deprecated and will be removed after 2026-10. "
+    "CellVis_24_wellplate_3600uL_Fb() is deprecated and will be removed in v1b1. "
     "Use cellvis_24_wellplate_3600uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -132,14 +132,14 @@ def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate: 
   return cellvis_24_wellplate_3600uL_Fb(name, with_lid)
 
 
-def CellVis_96_wellplate_350uL_Fb_Lid(name: str) -> Lid:  # remove 2026-10
+def CellVis_96_wellplate_350uL_Fb_Lid(name: str) -> Lid:  # remove v1b1
   """Deprecated alias for cellvis_96_wellplate_350uL_Fb_lid().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cellvis_96_wellplate_350uL_Fb_lid()` instead.
   """
   warnings.warn(
-    "CellVis_96_wellplate_350uL_Fb_Lid() is deprecated and will be removed after 2026-10. "
+    "CellVis_96_wellplate_350uL_Fb_Lid() is deprecated and will be removed in v1b1. "
     "Use cellvis_96_wellplate_350uL_Fb_lid() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -147,14 +147,14 @@ def CellVis_96_wellplate_350uL_Fb_Lid(name: str) -> Lid:  # remove 2026-10
   return cellvis_96_wellplate_350uL_Fb_lid(name)
 
 
-def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:  # remove 2026-10
+def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
   """Deprecated alias for cellvis_96_wellplate_350uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cellvis_96_wellplate_350uL_Fb()` instead.
   """
   warnings.warn(
-    "CellVis_96_wellplate_350uL_Fb() is deprecated and will be removed after 2026-10. "
+    "CellVis_96_wellplate_350uL_Fb() is deprecated and will be removed in v1b1. "
     "Use cellvis_96_wellplate_350uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,

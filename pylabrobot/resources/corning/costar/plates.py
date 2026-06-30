@@ -248,14 +248,14 @@ def cor_cos_48_wellplate_1620uL_Fb(name: str, lid: Optional[Lid] = None) -> Plat
 # --------------------------------------------------------------------------- #
 
 
-def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove 2026-10
+def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for cor_cos_12_wellplate_6900uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_cos_12_wellplate_6900uL_Fb()` instead.
   """
   warnings.warn(
-    "Cor_Cos_12_wellplate_6900ul_Fb() is deprecated and will be removed after 2026-10. "
+    "Cor_Cos_12_wellplate_6900ul_Fb() is deprecated and will be removed in v1b1. "
     "Use cor_cos_12_wellplate_6900uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -263,14 +263,14 @@ def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
   return cor_cos_12_wellplate_6900uL_Fb(name, lid)
 
 
-def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove 2026-10
+def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for cor_cos_24_wellplate_3470uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_cos_24_wellplate_3470uL_Fb()` instead.
   """
   warnings.warn(
-    "Cor_Cos_24_wellplate_3470ul_Fb() is deprecated and will be removed after 2026-10. "
+    "Cor_Cos_24_wellplate_3470ul_Fb() is deprecated and will be removed in v1b1. "
     "Use cor_cos_24_wellplate_3470uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -278,14 +278,14 @@ def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
   return cor_cos_24_wellplate_3470uL_Fb(name, lid)
 
 
-def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove 2026-10
+def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for cor_cos_48_wellplate_1620uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_cos_48_wellplate_1620uL_Fb()` instead.
   """
   warnings.warn(
-    "Cor_Cos_48_wellplate_1620ul_Fb() is deprecated and will be removed after 2026-10. "
+    "Cor_Cos_48_wellplate_1620ul_Fb() is deprecated and will be removed in v1b1. "
     "Use cor_cos_48_wellplate_1620uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -293,14 +293,14 @@ def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
   return cor_cos_48_wellplate_1620uL_Fb(name, lid)
 
 
-def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove 2026-10
+def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
   """Deprecated alias for cor_cos_6_wellplate_16800uL_Fb().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_cos_6_wellplate_16800uL_Fb()` instead.
   """
   warnings.warn(
-    "Cor_Cos_6_wellplate_16800ul_Fb() is deprecated and will be removed after 2026-10. "
+    "Cor_Cos_6_wellplate_16800ul_Fb() is deprecated and will be removed in v1b1. "
     "Use cor_cos_6_wellplate_16800uL_Fb() instead.",
     DeprecationWarning,
     stacklevel=2,
@@ -308,14 +308,14 @@ def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
   return cor_cos_6_wellplate_16800uL_Fb(name, lid)
 
 
-def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:  # remove 2026-10
+def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
   """Deprecated alias for cor_cos_6_wellplate_16800uL_Fb_lid().
 
-  This alias will be removed after 2026-10 in the dev branch and PLR v1 (whichever you are using).
+  This alias will be removed in v1b1.
   Use `cor_cos_6_wellplate_16800uL_Fb_lid()` instead.
   """
   warnings.warn(
-    "Cor_Cos_6_wellplate_16800ul_Fb_Lid() is deprecated and will be removed after 2026-10. "
+    "Cor_Cos_6_wellplate_16800ul_Fb_Lid() is deprecated and will be removed in v1b1. "
     "Use cor_cos_6_wellplate_16800uL_Fb_lid() instead.",
     DeprecationWarning,
     stacklevel=2,
