@@ -1,18 +1,18 @@
 import unittest
 from unittest import mock
 
-from pylabrobot.centrifuge.v11_vspin_backend import (
+from pylabrobot.centrifuge.vspin_backend import (
   DEFAULT_BUCKET_1_REMAINDER,
   HOMING_TIMEOUT,
   POSITION_SETTLE_TOLERANCE,
   POSITION_TOLERANCE,
-  V11VSpinBackend,
+  VSpinBackend,
   _IDLE_VSPIN_STATUSES,
   _build_vspin_deceleration_command,
   _normalize_vspin_home_position,
   _vspin_position_matches_target,
+  create_vspin_backend,
 )
-from pylabrobot.centrifuge.vspin_backend import VSpinBackend, create_vspin_backend
 
 
 class _FakeIO:
@@ -53,8 +53,14 @@ class _RecordingConfigIO:
     self.calls.append(("set_baudrate", baudrate))
 
 
-def _make_backend(io: _FakeIO) -> V11VSpinBackend:
-  backend = object.__new__(V11VSpinBackend)
+def _make_raw_backend(model: str = "velocity11") -> VSpinBackend:
+  backend = object.__new__(VSpinBackend)
+  backend._model = model
+  return backend
+
+
+def _make_backend(io: _FakeIO) -> VSpinBackend:
+  backend = _make_raw_backend()
   backend.io = io
   backend._command_lock = None
   backend._last_position = 0
@@ -84,7 +90,7 @@ def _status_packet(
   return packet + bytes([sum(packet) & 0xFF])
 
 
-class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
+class VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_read_resp_returns_expected_binary_packet_without_cr(self):
     backend = _make_backend(_FakeIO([b"\x00\x30", b"\x08\x30\x68"]))
 
@@ -104,7 +110,7 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
   def test_find_status_packet_scans_noise_and_validates_checksum(self):
     packet = _status_packet()
 
-    parsed = V11VSpinBackend._find_status_packet(b"\x00\xff" + packet + b"\x00")
+    parsed = VSpinBackend._find_status_packet(b"\x00\xff" + packet + b"\x00")
 
     assert parsed is not None
     self.assertEqual(parsed.status, 0x11)
@@ -116,10 +122,10 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     packet = bytearray(_status_packet())
     packet[-1] ^= 0xFF
 
-    self.assertIsNone(V11VSpinBackend._find_status_packet(bytes(packet)))
+    self.assertIsNone(VSpinBackend._find_status_packet(bytes(packet)))
 
   def test_find_short_status_from_io_packet(self):
-    self.assertEqual(V11VSpinBackend._find_short_status(bytes.fromhex("0030083068")), 0x08)
+    self.assertEqual(VSpinBackend._find_short_status(bytes.fromhex("0030083068")), 0x08)
 
   def test_status_0x89_is_idle_when_stopped_at_target(self):
     self.assertIn(0x89, _IDLE_VSPIN_STATUSES)
@@ -231,17 +237,17 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     )
 
   def test_rpm_to_g_roundtrips_1500_rpm(self):
-    g = V11VSpinBackend.rpm_to_g(1500)
+    g = VSpinBackend.rpm_to_g(1500)
 
-    self.assertEqual(V11VSpinBackend.g_to_rpm(g), 1500)
+    self.assertEqual(VSpinBackend.g_to_rpm(g), 1500)
 
   async def test_spin_uses_rpm_command_path(self):
-    backend = object.__new__(V11VSpinBackend)
+    backend = _make_raw_backend()
     backend.spin_rpm = mock.AsyncMock()
 
-    await V11VSpinBackend.spin(
+    await VSpinBackend.spin(
       backend,
-      g=V11VSpinBackend.rpm_to_g(1500),
+      g=VSpinBackend.rpm_to_g(1500),
       duration=10,
       acceleration=0.7,
       deceleration=0.6,
@@ -255,13 +261,13 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_spin_rpm_validates_target_rpm(self):
-    backend = object.__new__(V11VSpinBackend)
+    backend = _make_raw_backend()
 
     with self.assertRaises(ValueError):
-      await V11VSpinBackend.spin_rpm(backend, rpm=0, duration=10)
+      await VSpinBackend.spin_rpm(backend, rpm=0, duration=10)
 
   async def test_setup_uses_cold_startup_without_runtime_probe_by_default(self):
-    backend = object.__new__(V11VSpinBackend)
+    backend = _make_raw_backend()
     backend.io = mock.Mock()
     backend.io.setup = mock.AsyncMock()
     backend.io.stop = mock.AsyncMock()
@@ -291,13 +297,13 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend._enable_telemetry_and_pneumatics = enable_telemetry_and_pneumatics
     backend._home_rotor = home_rotor
 
-    await V11VSpinBackend.setup(backend)
+    await VSpinBackend.setup(backend)
 
     self.assertEqual(events, ["cold-start", "startup", "telemetry", "home"])
     backend._try_attach_to_runtime_controller.assert_not_awaited()
 
   async def test_setup_closes_io_with_clear_error_when_controller_never_responds(self):
-    backend = object.__new__(V11VSpinBackend)
+    backend = _make_raw_backend()
     backend.io = mock.Mock()
     backend.io.setup = mock.AsyncMock()
     backend.io.stop = mock.AsyncMock()
@@ -315,13 +321,13 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend._home_rotor = mock.AsyncMock()
 
     with self.assertRaisesRegex(TimeoutError, "Power-cycle or restart"):
-      await V11VSpinBackend.setup(backend)
+      await VSpinBackend.setup(backend)
 
     backend._try_attach_to_runtime_controller.assert_not_awaited()
     backend.io.stop.assert_awaited_once()
 
   async def test_setup_can_optionally_recover_with_runtime_attach_after_startup_failure(self):
-    backend = object.__new__(V11VSpinBackend)
+    backend = _make_raw_backend()
     backend.io = mock.Mock()
     backend.io.setup = mock.AsyncMock()
     backend.io.stop = mock.AsyncMock()
@@ -350,12 +356,12 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend._try_attach_to_runtime_controller = try_attach
     backend._home_rotor = home_rotor
 
-    await V11VSpinBackend.setup(backend)
+    await VSpinBackend.setup(backend)
 
     self.assertEqual(events, ["attach", "cold-start", "startup", "attach", "home"])
 
   async def test_setup_tries_runtime_attach_before_cold_start_when_enabled(self):
-    backend = object.__new__(V11VSpinBackend)
+    backend = _make_raw_backend()
     backend.io = mock.Mock()
     backend.io.setup = mock.AsyncMock()
     backend.io.get_serial = mock.AsyncMock(return_value="TEST")
@@ -369,7 +375,7 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend._enable_telemetry_and_pneumatics = mock.AsyncMock()
     backend._home_rotor = mock.AsyncMock()
 
-    await V11VSpinBackend.setup(backend)
+    await VSpinBackend.setup(backend)
 
     backend._try_attach_to_runtime_controller.assert_awaited_once()
     backend.configure_and_initialize.assert_not_awaited()
@@ -532,7 +538,12 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     tachometer = int(-(1000 * 0.95) / 14.69320388)
     backend = _make_backend(
       _FakeIO([
-        _status_packet(status=0x08, current_position=1000, tachometer=tachometer, home_position=100),
+        _status_packet(
+          status=0x08,
+          current_position=1000,
+          tachometer=tachometer,
+          home_position=100,
+        ),
       ])
     )
 
@@ -566,7 +577,7 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend._send_safe = send_safe
     backend._wait_for_door = wait_for_door
 
-    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.asyncio.sleep", sleep):
+    with mock.patch("pylabrobot.centrifuge.vspin_backend.asyncio.sleep", sleep):
       await backend.open_door()
 
     self.assertEqual(
@@ -601,7 +612,7 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend.get_door_locked = get_door_locked
     backend._send_safe = send_safe
 
-    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.asyncio.sleep", sleep):
+    with mock.patch("pylabrobot.centrifuge.vspin_backend.asyncio.sleep", sleep):
       await backend.unlock_door()
 
     self.assertEqual(
@@ -661,7 +672,7 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend.lock_bucket = lock_bucket
     backend.open_door = open_door
 
-    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.logger.warning"):
+    with mock.patch("pylabrobot.centrifuge.vspin_backend.logger.warning"):
       await backend.go_to_position(11842)
 
     self.assertEqual(
@@ -836,7 +847,7 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend._wait_for_idle = wait_for_idle
     backend._home_rotor = mock.AsyncMock()
 
-    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.logger.warning"):
+    with mock.patch("pylabrobot.centrifuge.vspin_backend.logger.warning"):
       await backend.spin_rpm(rpm=1500, duration=10)
 
     self.assertEqual(
@@ -887,9 +898,11 @@ class VSpinBackendSelectionTests(unittest.TestCase):
       backend = create_vspin_backend()
 
     self.assertIsInstance(backend, VSpinBackend)
+    self.assertEqual(backend._model, "agilent")
 
-  def test_factory_can_select_legacy_v11_backend(self):
-    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.FTDI"):
+  def test_factory_can_select_legacy_v11_model(self):
+    with mock.patch("pylabrobot.centrifuge.vspin_backend.FTDI"):
       backend = create_vspin_backend(variant="v11")
 
-    self.assertIsInstance(backend, V11VSpinBackend)
+    self.assertIsInstance(backend, VSpinBackend)
+    self.assertEqual(backend._model, "velocity11")
