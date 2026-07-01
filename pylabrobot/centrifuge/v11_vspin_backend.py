@@ -257,11 +257,15 @@ class V11VSpinBackend(CentrifugeBackend):
       raise bucket_1_not_set_error
 
     home_position = self._home_sensor_position
+    if home_position == 0:
+      home_position = None
     if home_position is None:
       live_home_position = await self.get_home_position()
       if live_home_position == 0:
         await self._home_rotor()
         home_position = self._home_sensor_position
+        if home_position == 0:
+          home_position = None
       else:
         home_position = live_home_position
 
@@ -705,7 +709,7 @@ class V11VSpinBackend(CentrifugeBackend):
         expected_len=14,
         expect_response=False,
       )
-      status = await self._wait_for_full_status(timeout=5.0, allow_zero_home_fallback=True)
+      status = await self._wait_for_full_status(timeout=15.0)
 
     self._last_position = int(status.current_position)
     self._last_home_position = int(status.home_position)
@@ -860,16 +864,28 @@ class V11VSpinBackend(CentrifugeBackend):
     expected = "open" if open_expected else "closed"
     raise TimeoutError(f"VSpin door did not report {expected} within {timeout:.1f}s")
 
-  async def _wait_for_speed_or_motion(self, rpm: int, final_position: int) -> None:
-    deadline = time.monotonic() + 25.0
+  async def _wait_for_speed_or_motion(
+    self,
+    rpm: int,
+    final_position: int,
+    timeout: float = 25.0,
+  ) -> None:
+    deadline = time.monotonic() + timeout
+    last_status = self._make_status(0x19, self._last_position, home_position=self._last_home_position)
+    last_live_rpm = 0.0
     while time.monotonic() < deadline and not self._stop_requested:
       status = await self._get_positions_and_tachometer()
-      live_rpm = status.tachometer * TACH_TO_RPM
-      if live_rpm >= rpm * 0.92:
-        return
-      if status.current_position >= final_position:
+      last_status = status
+      last_live_rpm = abs(status.tachometer * TACH_TO_RPM)
+      if last_live_rpm >= rpm * 0.92:
         return
       await asyncio.sleep(0.25)
+
+    raise TimeoutError(
+      f"VSpin did not reach target speed {rpm} rpm within {timeout:.1f}s "
+      f"(last rpm={last_live_rpm:.1f}, position={last_status.current_position}, "
+      f"home={last_status.home_position})"
+    )
 
   async def _hold_spin(self, duration: float) -> None:
     started = time.monotonic()

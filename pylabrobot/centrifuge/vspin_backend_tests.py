@@ -467,6 +467,45 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
         activity_tolerance=POSITION_SETTLE_TOLERANCE,
       )
 
+  async def test_home_rotor_requires_nonzero_home_position_after_idle(self):
+    backend = _make_backend(_FakeIO([]))
+    backend._get_positions_and_tachometer = mock.AsyncMock(
+      return_value=backend._make_status(0x09, 1000, home_position=0),
+    )
+    backend._motor_enable = mock.AsyncMock()
+    backend._send_safe = mock.AsyncMock()
+    backend._wait_for_idle = mock.AsyncMock(
+      return_value=backend._make_status(0x09, 1000, home_position=0),
+    )
+    backend._wait_for_full_status = mock.AsyncMock(
+      return_value=backend._make_status(0x09, 1000, home_position=7859),
+    )
+
+    await backend._home_rotor()
+
+    backend._wait_for_full_status.assert_awaited_once_with(timeout=15.0)
+    self.assertEqual(backend._home_sensor_position, 7859)
+
+  async def test_speed_wait_requires_measured_rpm_not_position_only(self):
+    backend = _make_backend(
+      _FakeIO([
+        _status_packet(status=0x09, current_position=5000, tachometer=0, home_position=100),
+      ])
+    )
+
+    with self.assertRaisesRegex(TimeoutError, "target speed"):
+      await backend._wait_for_speed_or_motion(rpm=1000, final_position=2000, timeout=0.01)
+
+  async def test_speed_wait_accepts_measured_target_rpm(self):
+    tachometer = int(-(1000 * 0.95) / 14.69320388)
+    backend = _make_backend(
+      _FakeIO([
+        _status_packet(status=0x08, current_position=1000, tachometer=tachometer, home_position=100),
+      ])
+    )
+
+    await backend._wait_for_speed_or_motion(rpm=1000, final_position=2000, timeout=0.5)
+
   async def test_configuration_reasserts_control_lines_before_startup_baud(self):
     io = _RecordingConfigIO()
     backend = _make_backend(io)  # type: ignore[arg-type]
