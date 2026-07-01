@@ -550,6 +550,75 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
       ],
     )
 
+  async def test_go_to_position_retries_after_wrong_idle_position(self):
+    backend = _make_backend(_FakeIO([]))
+    events = []
+    wait_calls = 0
+
+    async def get_door_open() -> bool:
+      return False
+
+    async def get_door_locked() -> bool:
+      return True
+
+    async def prepare_bucket_motion() -> None:
+      events.append("prepare")
+
+    async def motor_enable() -> None:
+      events.append("motor")
+
+    async def send_safe(cmd: bytes, **kwargs):
+      del kwargs
+      if cmd.startswith(bytes.fromhex("aa01e6c8")):
+        events.append("profile")
+      elif cmd.startswith(bytes.fromhex("aa01d497")):
+        events.append("move")
+      return b""
+
+    async def wait_for_idle(**kwargs) -> None:
+      nonlocal wait_calls
+      del kwargs
+      events.append("wait")
+      wait_calls += 1
+      if wait_calls == 1:
+        raise TimeoutError("wrong idle position")
+
+    async def lock_bucket() -> None:
+      events.append("lock_bucket")
+
+    async def open_door() -> None:
+      events.append("open_door")
+
+    backend.get_door_open = get_door_open
+    backend.get_door_locked = get_door_locked
+    backend._prepare_bucket_motion = prepare_bucket_motion
+    backend._motor_enable = motor_enable
+    backend._send_safe = send_safe
+    backend._wait_for_idle = wait_for_idle
+    backend.lock_bucket = lock_bucket
+    backend.open_door = open_door
+
+    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.logger.warning"):
+      await backend.go_to_position(11842)
+
+    self.assertEqual(
+      events,
+      [
+        "prepare",
+        "motor",
+        "profile",
+        "move",
+        "wait",
+        "prepare",
+        "motor",
+        "profile",
+        "move",
+        "wait",
+        "lock_bucket",
+        "open_door",
+      ],
+    )
+
   async def test_prepare_spin_motion_waits_for_spin_ready_io_state(self):
     backend = _make_backend(_FakeIO([]))
     commands = []
