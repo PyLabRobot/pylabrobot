@@ -97,6 +97,10 @@ await cf.setup()
 await cf.spin(g=800, duration=60)
 ```
 
+Use `VSpinBackend(command_set="old_firmware")` for VSpins that need the older
+pneumatic command bytes. Some Velocity11-labeled units work with the default
+command set.
+
 For a HighRes Biosolutions MicroSpin, use the MicroSpin factory:
 
 ```python
