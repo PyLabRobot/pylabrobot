@@ -3,11 +3,11 @@
 ``EchoMockServer`` is a localhost ``asyncio`` TCP server that speaks the same wire protocol
 as a real Echo (``POST /Medman`` HTTP requests with gzip-compressed SOAP bodies) and replays
 **real device responses** captured from a physical Echo 525 (serial ``E5XX-00000``, software
-``2.7.3``) running a HiFi PCR protocol. It lets you drive ``Echo``/``Echo525`` end-to-end with
+``2.7.3``) running a HiFi PCR protocol. It lets you drive ``Echo`` end-to-end with
 no instrument attached:
 
     async with EchoMockServer() as srv:
-        echo = Echo525(host=srv.host, rpc_port=srv.port)
+        echo = Echo(srv.host, model="Echo 525", rpc_port=srv.port)
         await echo.setup()
         info = await echo.get_instrument_info()   # -> Model "Echo 525"
 
@@ -150,7 +150,7 @@ class EchoMockServer:
 
   @property
   def host(self) -> str:
-    """The host the mock is listening on; pass to ``Echo``/``Echo525`` as ``host``."""
+    """The host the mock is listening on; pass to ``Echo`` as ``host``."""
     return self._host
 
   @property

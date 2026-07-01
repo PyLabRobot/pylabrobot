@@ -33,7 +33,8 @@ traffic rather than assumptions.
 | `client_version` | `2.7.3` | `3.1.0` |
 | reported `Model` | `Echo 525` | `Echo 650` |
 
-All of these remain constructor-overridable for newer firmware.
+These are defined per model in `ECHO_MODELS` in `echo.py`; add or adjust an entry there to support
+another Echo variant or newer firmware.
 
 ## Running a transfer
 

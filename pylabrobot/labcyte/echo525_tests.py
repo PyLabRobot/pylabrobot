@@ -11,18 +11,13 @@ import unittest
 from unittest.mock import patch
 
 from pylabrobot.labcyte.echo import (
-  MedmanEchoDriver,
   Echo,
   EchoDriver,
   EchoDryPlateMode,
   EchoPlateMap,
   EchoSurveyParams,
+  MedmanEchoDriver,
   build_echo_transfer_plan,
-)
-from pylabrobot.labcyte.echo525 import (
-  ECHO_525_TRANSFER_VOLUME_INCREMENT_NL,
-  Echo525,
-  Echo525Driver,
 )
 from pylabrobot.labcyte.echo_mock import EchoMockServer
 from pylabrobot.labcyte.echo_tests import (
@@ -40,7 +35,6 @@ class TestEcho525Defaults(unittest.IsolatedAsyncioTestCase):
     driver = MedmanEchoDriver(model="Echo 525", host="192.168.0.25")
     # GetTransferVolIncrNl / GetTransferVolMinimumNl both returned 25 on the device.
     self.assertEqual(driver.transfer_volume_increment_nl, 25.0)
-    self.assertEqual(ECHO_525_TRANSFER_VOLUME_INCREMENT_NL, 25.0)
     # Versions advertised in the instrument's Medman HTTP headers.
     self.assertEqual(driver.protocol_version, "2.6")
     self.assertEqual(driver.client_version, "2.7.3")
@@ -276,22 +270,6 @@ class TestEchoDriverArchitecture(unittest.IsolatedAsyncioTestCase):
     )
     await echo.driver.unlock()
     self.assertTrue(result.succeeded)
-
-
-class TestEcho525DeprecatedAliases(unittest.TestCase):
-  """The old Echo525 / Echo525Driver still work but warn and resolve to model='Echo 525'."""
-
-  def test_echo525driver_alias_warns_and_keeps_behaviour(self):
-    with self.assertWarns(DeprecationWarning):
-      driver = Echo525Driver(host="192.168.0.25")
-    self.assertEqual(driver.model, "Echo 525")
-    self.assertEqual(driver.transfer_volume_increment_nl, 25.0)
-
-  def test_echo525_alias_warns_and_keeps_behaviour(self):
-    with self.assertWarns(DeprecationWarning):
-      echo = Echo525(host="192.168.0.25")
-    self.assertEqual(echo.driver.model, "Echo 525")
-    self.assertEqual(echo.deck.model, "Echo 525")
 
 
 if __name__ == "__main__":

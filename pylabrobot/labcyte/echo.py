@@ -22,6 +22,7 @@ from typing import (
   Dict,
   TYPE_CHECKING,
   Iterable,
+  Literal,
   Optional,
   Sequence,
   Tuple,
@@ -83,7 +84,8 @@ ECHO_MODELS: Dict[str, EchoModel] = {
   "Echo 650": EchoModel("Echo 650", 2.5, "3.1.0", "3.1"),
   "Echo 525": EchoModel("Echo 525", 25.0, "2.7.3", "2.6"),
 }
-DEFAULT_ECHO_MODEL = "Echo 650"
+EchoModelName = Literal["Echo 650", "Echo 525"]
+DEFAULT_ECHO_MODEL: EchoModelName = "Echo 650"
 
 
 def _resolve_echo_model(model: str) -> EchoModel:
@@ -1812,13 +1814,9 @@ class EchoDriver(Driver, ABC):
     token: Optional[str] = None,
     token_slot_a: int = DEFAULT_SLOT_A,
     token_slot_b: int = DEFAULT_SLOT_B,
-    model: str = DEFAULT_ECHO_MODEL,
-    client_version: Optional[str] = None,
-    protocol_version: Optional[str] = None,
-    transfer_volume_increment_nl: Optional[float] = None,
+    model: EchoModelName = DEFAULT_ECHO_MODEL,
   ):
     super().__init__()
-    spec = _resolve_echo_model(model)
     self.host = host
     self.rpc_port = rpc_port
     self.event_port = event_port
@@ -1828,18 +1826,26 @@ class EchoDriver(Driver, ABC):
     self._token = token
     self.token_slot_a = token_slot_a
     self.token_slot_b = token_slot_b
-    self.model = model
-    # ``client_version`` / ``protocol_version`` / ``transfer_volume_increment_nl`` default to the
-    # model's values but remain overridable for newer firmware.
-    self.client_version = spec.client_version if client_version is None else client_version
-    self.protocol_version = spec.protocol_version if protocol_version is None else protocol_version
-    self.transfer_volume_increment_nl = (
-      spec.transfer_volume_increment_nl
-      if transfer_volume_increment_nl is None
-      else transfer_volume_increment_nl
-    )
+    #: The model's defaults. Version strings and the volume increment are exposed as properties.
+    self.spec = _resolve_echo_model(model)
     self._rpc_lock = asyncio.Lock()
     self._lock_held = False
+
+  @property
+  def model(self) -> str:
+    return self.spec.name
+
+  @property
+  def transfer_volume_increment_nl(self) -> float:
+    return self.spec.transfer_volume_increment_nl
+
+  @property
+  def client_version(self) -> str:
+    return self.spec.client_version
+
+  @property
+  def protocol_version(self) -> str:
+    return self.spec.protocol_version
 
   @property
   def token(self) -> str:
@@ -1886,7 +1892,6 @@ class EchoDriver(Driver, ABC):
   @abstractmethod
   async def open_event_stream(self, timeout: Optional[float] = None) -> EchoEventStream:
     """Open the instrument event stream. Implemented by transport-specific subclasses."""
-    raise NotImplementedError
 
   def serialize(self) -> dict:
     return {
@@ -1901,9 +1906,6 @@ class EchoDriver(Driver, ABC):
       "token_slot_a": self.token_slot_a,
       "token_slot_b": self.token_slot_b,
       "model": self.model,
-      "client_version": self.client_version,
-      "protocol_version": self.protocol_version,
-      "transfer_volume_increment_nl": self.transfer_volume_increment_nl,
     }
 
   async def read_events(
@@ -3168,7 +3170,6 @@ class EchoDriver(Driver, ABC):
     timeout: Optional[float] = None,
   ) -> _HttpMessage:
     """Send one Medman request and return the parsed HTTP response. Transport-specific."""
-    raise NotImplementedError
 
   async def _read_http_message(
     self,
