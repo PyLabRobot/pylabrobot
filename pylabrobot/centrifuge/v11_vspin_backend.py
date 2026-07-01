@@ -57,6 +57,7 @@ STATUS_POLL_INTERVAL: float = 0.15
 POSITION_TOLERANCE: int = 15
 POSITION_SETTLE_TOLERANCE: int = 200
 POSITION_MOVE_ATTEMPTS: int = 2
+SPIN_START_ATTEMPTS: int = 2
 TACH_TO_RPM: float = -14.69320388
 DOOR_OPEN_SETTLE_SECONDS: float = 2.0
 DOOR_UNLOCK_TO_OPEN_SETTLE_SECONDS: float = 0.5
@@ -1220,27 +1221,37 @@ class V11VSpinBackend(CentrifugeBackend):
     self._stop_requested = False
 
     try:
-      await self._prepare_spin_motion()
-      await self._motor_enable()
-      # Sample before entering the spin profile; D4 97 must follow it immediately.
-      current_position = await self.get_position()
-      await self._send_safe(
-        bytes.fromhex("aa01e60500640000000000fd00803e01000c"),
-        timeout=0.25,
-        expected_len=14,
-      )
+      for attempt in range(1, SPIN_START_ATTEMPTS + 1):
+        try:
+          await self._prepare_spin_motion()
+          await self._motor_enable()
+          # Sample before entering the spin profile; D4 97 must follow it immediately.
+          current_position = await self.get_position()
+          await self._send_safe(
+            bytes.fromhex("aa01e60500640000000000fd00803e01000c"),
+            timeout=0.25,
+            expected_len=14,
+          )
 
-      spin_command, final_position = _build_vspin_spin_command(
-        current_position=current_position,
-        rpm=rpm,
-        duration=duration,
-        acceleration=acceleration,
-      )
-      await self._send_safe(spin_command, timeout=0.25, expected_len=14)
+          spin_command, final_position = _build_vspin_spin_command(
+            current_position=current_position,
+            rpm=rpm,
+            duration=duration,
+            acceleration=acceleration,
+          )
+          await self._send_safe(spin_command, timeout=0.25, expected_len=14)
 
-      await self._wait_for_speed_or_motion(rpm=rpm, final_position=final_position)
-      await self._hold_spin(duration)
-      await self._send_deceleration(deceleration)
+          await self._wait_for_speed_or_motion(rpm=rpm, final_position=final_position)
+          await self._hold_spin(duration)
+          await self._send_deceleration(deceleration)
+          break
+        except TimeoutError:
+          if attempt == SPIN_START_ATTEMPTS:
+            raise
+          logger.warning("[vspin] Retrying spin start after target speed was not reached")
+          await self._send_deceleration(deceleration)
+          await self._wait_for_idle(label="spin retry rundown", timeout=45.0)
+          self._motion_is_prepared = False
     except asyncio.CancelledError:
       await self._send_deceleration(deceleration)
       raise
