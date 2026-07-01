@@ -3,6 +3,7 @@ from unittest import mock
 
 from pylabrobot.centrifuge.v11_vspin_backend import (
   DEFAULT_BUCKET_1_REMAINDER,
+  HOMING_TIMEOUT,
   POSITION_SETTLE_TOLERANCE,
   POSITION_TOLERANCE,
   V11VSpinBackend,
@@ -477,14 +478,45 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend._wait_for_idle = mock.AsyncMock(
       return_value=backend._make_status(0x09, 1000, home_position=0),
     )
-    backend._wait_for_full_status = mock.AsyncMock(
+    backend._wait_for_homed_status = mock.AsyncMock(
       return_value=backend._make_status(0x09, 1000, home_position=7859),
     )
 
     await backend._home_rotor()
 
-    backend._wait_for_full_status.assert_awaited_once_with(timeout=15.0)
+    backend._wait_for_homed_status.assert_awaited_once()
     self.assertEqual(backend._home_sensor_position, 7859)
+
+  async def test_home_rotor_waits_for_fresh_home_reference_after_runtime_attach(self):
+    backend = _make_backend(_FakeIO([]))
+    pre_home_status = backend._make_status(0x09, 4175, tachometer=0, home_position=4076)
+    stale_home_status = backend._make_status(0x89, 1145, tachometer=0, home_position=4076)
+    fresh_home_status = backend._make_status(0x89, 1202, tachometer=0, home_position=7900)
+
+    backend._get_positions_and_tachometer = mock.AsyncMock(return_value=pre_home_status)
+    backend._motor_enable = mock.AsyncMock()
+    backend._send_safe = mock.AsyncMock()
+    backend._wait_for_idle = mock.AsyncMock(return_value=stale_home_status)
+    backend._wait_for_homed_status = mock.AsyncMock(return_value=fresh_home_status)
+
+    await backend._home_rotor()
+
+    backend._wait_for_idle.assert_awaited_once_with(
+      label="homing",
+      timeout=HOMING_TIMEOUT,
+      min_wait=1.0,
+      require_activity_from=pre_home_status,
+      activity_tolerance=POSITION_SETTLE_TOLERANCE,
+    )
+    backend._wait_for_homed_status.assert_awaited_once()
+    self.assertEqual(
+      backend._wait_for_homed_status.await_args.kwargs["pre_home_status"],
+      pre_home_status,
+    )
+    self.assertGreater(backend._wait_for_homed_status.await_args.kwargs["timeout"], 0)
+    self.assertEqual(backend._last_position, 1202)
+    self.assertEqual(backend._last_home_position, 7900)
+    self.assertEqual(backend._home_sensor_position, 7900)
 
   async def test_speed_wait_requires_measured_rpm_not_position_only(self):
     backend = _make_backend(

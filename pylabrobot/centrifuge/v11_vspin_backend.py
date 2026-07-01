@@ -58,6 +58,8 @@ POSITION_TOLERANCE: int = 15
 POSITION_SETTLE_TOLERANCE: int = 200
 POSITION_MOVE_ATTEMPTS: int = 2
 SPIN_START_ATTEMPTS: int = 2
+HOMING_TIMEOUT: float = 60.0
+HOMING_MIN_WAIT_SECONDS: float = 1.0
 TACH_TO_RPM: float = -14.69320388
 DOOR_OPEN_SETTLE_SECONDS: float = 2.0
 DOOR_UNLOCK_TO_OPEN_SETTLE_SECONDS: float = 0.5
@@ -686,6 +688,7 @@ class V11VSpinBackend(CentrifugeBackend):
 
   async def _home_rotor(self) -> None:
     pre_home_status = await self._get_positions_and_tachometer()
+    homing_started_at = time.monotonic()
     await self._motor_enable()
     await self._send_safe(bytes.fromhex("aa010001"), timeout=0.30, expected_len=14)
     await self._send_safe(
@@ -702,23 +705,79 @@ class V11VSpinBackend(CentrifugeBackend):
 
     status = await self._wait_for_idle(
       label="homing",
-      timeout=35.0,
-      min_wait=1.0,
+      timeout=HOMING_TIMEOUT,
+      min_wait=HOMING_MIN_WAIT_SECONDS,
       require_activity_from=pre_home_status,
       activity_tolerance=POSITION_SETTLE_TOLERANCE,
     )
-    if status.home_position == 0:
-      await self._send_safe(
-        bytes.fromhex("aa01121f32"),
-        timeout=0.35,
-        expected_len=14,
-        expect_response=False,
+
+    if not self._has_fresh_home_reference(
+      status=status,
+      previous_home_position=int(pre_home_status.home_position),
+    ):
+      remaining_timeout = max(0.0, HOMING_TIMEOUT - (time.monotonic() - homing_started_at))
+      logger.debug(
+        "[vspin] Waiting for fresh homing reference "
+        "(previous home=%d, current home=%d)",
+        pre_home_status.home_position,
+        status.home_position,
       )
-      status = await self._wait_for_full_status(timeout=15.0)
+      status = await self._wait_for_homed_status(
+        pre_home_status=pre_home_status,
+        timeout=remaining_timeout,
+      )
 
     self._last_position = int(status.current_position)
     self._last_home_position = int(status.home_position)
     self._home_sensor_position = _normalize_vspin_home_position(status.home_position)
+
+  @staticmethod
+  def _has_fresh_home_reference(
+    status: _StatusPositionTachometer,
+    previous_home_position: int,
+  ) -> bool:
+    if int(status.home_position) == 0:
+      return False
+    if int(previous_home_position) == 0:
+      return True
+    return int(status.home_position) != int(previous_home_position)
+
+  async def _wait_for_homed_status(
+    self,
+    pre_home_status: _StatusPositionTachometer,
+    timeout: float,
+  ) -> _StatusPositionTachometer:
+    end = time.monotonic() + timeout
+    previous_home_position = int(pre_home_status.home_position)
+    last_status: Optional[V11VSpinBackend._StatusPositionTachometer] = None
+
+    while time.monotonic() < end:
+      status = await self._get_full_positions_and_tachometer()
+      last_status = status
+      is_idle_status = status.status in _IDLE_VSPIN_STATUSES
+      is_stopped = abs(status.tachometer) <= 2
+      if (
+        is_idle_status
+        and is_stopped
+        and self._has_fresh_home_reference(status, previous_home_position)
+      ):
+        return status
+      await asyncio.sleep(STATUS_POLL_INTERVAL)
+
+    if last_status is None:
+      last_status = self._make_status(
+        0x19,
+        self._last_position,
+        home_position=self._last_home_position,
+      )
+    raise TimeoutError(
+      "VSpin homing did not report a fresh home position within "
+      f"{timeout:.1f}s (previous home={previous_home_position}, "
+      f"last status=0x{last_status.status:02x}, "
+      f"position={last_status.current_position}, "
+      f"tachometer={last_status.tachometer}, "
+      f"home={last_status.home_position})"
+    )
 
   async def _wait_for_full_status(
     self,
