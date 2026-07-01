@@ -12,7 +12,7 @@ from pylabrobot.centrifuge import (
 )
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
 from pylabrobot.centrifuge.chatterbox import CentrifugeChatterboxBackend, LoaderChatterboxBackend
-from pylabrobot.resources import Coordinate, Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb
 
 
 class CentrifugeTests(unittest.IsolatedAsyncioTestCase):
@@ -45,7 +45,7 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
       size_z=1,
       child_location=Coordinate.zero(),
     )
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     return await super().asyncSetUp()
 
   async def test_go_to_bucket(self):
@@ -85,7 +85,7 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
     await self.centrifuge.open_door()
     assert self.centrifuge.at_bucket is not None
     self.centrifuge.at_bucket.assign_child_resource(self.plate)
-    another_plate = Cor_96_wellplate_360ul_Fb(name="another_plate")
+    another_plate = cor_96_wellplate_360uL_Fb(name="another_plate")
     self.loader.assign_child_resource(another_plate)
     with self.assertRaises(BucketHasPlateError):
       await self.loader.load()

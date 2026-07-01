@@ -1,5 +1,7 @@
 """Corning plates."""
 
+import warnings
+
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_in_container_2segments_square_vbottom,
   calculate_liquid_volume_container_2segments_square_vbottom,
@@ -12,10 +14,10 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-# # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #
+# # # # # # # # # # cor_96_wellplate_360uL_Fb # # # # # # # # # #
 
 # Well tapers from 6.35 mm (bottom) to 6.86 mm (top) over 10.67 mm depth.
-_cor_96_wellplate_360ul_Fb_height_volume_data = {
+_cor_96_wellplate_360uL_Fb_height_volume_data = {
   0.0: 0.0,
   0.45: 20.0,  # "dead volume" to cover the full flat bottom and ensure LLD detectability
   1.69: 50.0,
@@ -29,7 +31,7 @@ _cor_96_wellplate_360ul_Fb_height_volume_data = {
 }
 
 
-def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
+def cor_96_wellplate_360uL_Fb(name: str, with_lid: bool = False) -> Plate:
   """
   Corning cat. no.s: 3603
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
@@ -54,8 +56,8 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.76,
     size_y=85.48,
     size_z=14.2,
-    lid=Cor_96_wellplate_360ul_Fb_Lid(name=name + "_lid") if with_lid else None,
-    model="Cor_96_wellplate_360ul_Fb",
+    lid=cor_96_wellplate_360uL_Fb_lid(name=name + "_lid") if with_lid else None,
+    model=cor_96_wellplate_360uL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -72,12 +74,12 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,
-      height_volume_data=_cor_96_wellplate_360ul_Fb_height_volume_data,
+      height_volume_data=_cor_96_wellplate_360uL_Fb_height_volume_data,
     ),
   )
 
 
-def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
+def cor_96_wellplate_360uL_Fb_lid(name: str) -> Lid:
   """
   - brand: Corning
   """
@@ -88,19 +90,14 @@ def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
     size_y=85.48,
     size_z=8.9,  # measure the total z height
     nesting_z_height=7.6,  # measure overlap between lid and plate
-    model="Cor_96_wellplate_360ul_Fb_Lid",
+    model=cor_96_wellplate_360uL_Fb_lid.__name__,
   )
 
 
-# Previous names in PLR:
-def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
-  raise ValueError("Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead.")
+# # # # # # # # # # cor_96_wellplate_2mL_Vb # # # # # # # # # #
 
 
-# # # # # # # # # # Cor_96_wellplate_2mL_Vb # # # # # # # # # #
-
-
-def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
+def cor_96_wellplate_2mL_Vb(name: str) -> Plate:
   """
   Corning cat. no.: 3960
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Genomics-%26-
@@ -118,8 +115,8 @@ def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=43.5,
-    lid=Cor_96_wellplate_2mL_Vb_Lid(name=name + "_lid") if with_lid else None,
-    model="Cor_Cos_96_wellplate_2mL_Vb",
+    lid=None,
+    model=cor_96_wellplate_2mL_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -139,10 +136,6 @@ def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
       compute_height_from_volume=_compute_height_from_volume_Cor_96_wellplate_2mL_Vb,
     ),
   )
-
-
-def Cor_96_wellplate_2mL_Vb_Lid(name: str) -> Lid:
-  raise NotImplementedError("This lid is not currently defined.")
 
 
 # Volume-height functions
@@ -173,13 +166,51 @@ def _compute_height_from_volume_Cor_96_wellplate_2mL_Vb(
   )
 
 
-# Previous names in PLR:
-def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
-  raise NotImplementedError(
-    "This function is deprecated and will be removed in a future version."
-    " Use 'Cor_96_wellplate_2mL_Vb' instead."
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
+
+
+def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_96_wellplate_2mL_Vb().
+
+  This alias will be removed in v1b1.
+  Use `cor_96_wellplate_2mL_Vb()` instead.
+  """
+  warnings.warn(
+    "Cor_96_wellplate_2mL_Vb() is deprecated and will be removed in v1b1. "
+    "Use cor_96_wellplate_2mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
   )
+  return cor_96_wellplate_2mL_Vb(name)
 
 
-def Cos_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
-  raise NotImplementedError("deprecated. use Cor_96_wellplate_2mL_Vb instead")
+def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_96_wellplate_360uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `cor_96_wellplate_360uL_Fb()` instead.
+  """
+  warnings.warn(
+    "Cor_96_wellplate_360ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use cor_96_wellplate_360uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_96_wellplate_360uL_Fb(name, with_lid)
+
+
+def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
+  """Deprecated alias for cor_96_wellplate_360uL_Fb_lid().
+
+  This alias will be removed in v1b1.
+  Use `cor_96_wellplate_360uL_Fb_lid()` instead.
+  """
+  warnings.warn(
+    "Cor_96_wellplate_360ul_Fb_Lid() is deprecated and will be removed in v1b1. "
+    "Use cor_96_wellplate_360uL_Fb_lid() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_96_wellplate_360uL_Fb_lid(name)

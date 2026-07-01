@@ -18,13 +18,13 @@ from pylabrobot.resources import (
   PLT_CAR_P3AC_A01,
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
-  AGenBio_1_troughplate_190000uL_Fl,
-  CellTreat_96_wellplate_350ul_Ub,
   Container,
   Coordinate,
-  Cor_96_wellplate_360ul_Fb,
   Lid,
   ResourceStack,
+  agenbio_1_troughplate_190mL_Fl,
+  celltreat_96_wellplate_350uL_Ub,
+  cor_96_wellplate_360uL_Fb,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
   no_volume_tracking,
@@ -675,7 +675,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
+    self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
     lid = Lid(
       name="plate_01_lid",
       size_x=self.plate.get_size_x(),
@@ -685,7 +685,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
     self.plate.assign_child_resource(lid)
     assert self.plate.lid is not None
-    self.plt_car[1] = self.other_plate = Cor_96_wellplate_360ul_Fb(name="plate_02")
+    self.plt_car[1] = self.other_plate = cor_96_wellplate_360uL_Fb(name="plate_02")
     lid = Lid(
       name="plate_02_lid",
       size_x=self.other_plate.get_size_x(),
@@ -1782,7 +1782,7 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
 
     self.plt_car = PLT_CAR_L5MD_A00(name="plt_car")
-    self.plt_car[0] = self.plate = CellTreat_96_wellplate_350ul_Ub(name="plate", with_lid=True)
+    self.plt_car[0] = self.plate = celltreat_96_wellplate_350uL_Ub(name="plate", with_lid=True)
     self.deck.assign_child_resource(self.plt_car, rails=15)
 
     self.plt_car2 = PLT_CAR_P3AC_A01(name="plt_car2")
@@ -1860,10 +1860,10 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_move_lid_across_rotated_resources(self):
-    self.plt_car2[0] = plate2 = CellTreat_96_wellplate_350ul_Ub(
+    self.plt_car2[0] = plate2 = celltreat_96_wellplate_350uL_Ub(
       name="plate2", with_lid=False
     ).rotated(z=270)
-    self.plt_car2[1] = plate3 = CellTreat_96_wellplate_350ul_Ub(
+    self.plt_car2[1] = plate3 = celltreat_96_wellplate_350uL_Ub(
       name="plate3", with_lid=False
     ).rotated(z=90)
 
@@ -1913,7 +1913,7 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(tip_carrier, rails=1)
 
     plt_carrier = PLT_CAR_L5AC_A00(name="plt_carrier")
-    plt_carrier[0] = self.plate = AGenBio_1_troughplate_190000uL_Fl(name="plate")
+    plt_carrier[0] = self.plate = agenbio_1_troughplate_190mL_Fl(name="plate")
     self.well = self.plate.get_well("A1")
     self.deck.assign_child_resource(plt_carrier, rails=10)
 
@@ -2348,7 +2348,7 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
+    self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.STAR._num_channels = 8

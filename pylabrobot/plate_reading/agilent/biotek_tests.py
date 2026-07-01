@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("pylibftdi")
 
 from pylabrobot.plate_reading.agilent.biotek_cytation_backend import CytationBackend
-from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
+from pylabrobot.resources import cellvis_24_wellplate_3600uL_Fb, cellvis_96_wellplate_350uL_Fb
 
 
 def _byte_iter(s: str) -> Iterator[bytes]:
@@ -37,7 +37,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.io.set_line_property = unittest.mock.AsyncMock()
     self.backend.io.set_flowctrl = unittest.mock.AsyncMock()
     self.backend.io.set_rts = unittest.mock.AsyncMock()
-    self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
+    self.plate = cellvis_24_wellplate_3600uL_Fb(name="plate")
 
     # Mock time.time() to control the timestamp in the results
     self.mock_time = unittest.mock.patch("time.time", return_value=12345.6789).start()
@@ -68,7 +68,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def test_close(self):
     self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x06", b"\x03", b"\x03"]
-    plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
+    plate = cellvis_24_wellplate_3600uL_Fb(name="plate")
     await self.backend.close(plate=plate)
     self.backend.io.write.assert_called_with(b"A")
 
@@ -106,7 +106,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       + "\x062360000\x03"  # Temperature call
     )
 
-    plate = CellVis_96_wellplate_350uL_Fb(name="plate")
+    plate = cellvis_96_wellplate_350uL_Fb(name="plate")
     resp = await self.backend.read_absorbance(
       plate=plate, wells=plate.get_all_items(), wavelength=580
     )
@@ -230,7 +230,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       + "\x062360000\x03"  # Temperature call
     )
 
-    plate = CellVis_96_wellplate_350uL_Fb(name="plate")
+    plate = cellvis_96_wellplate_350uL_Fb(name="plate")
     wells = plate["A1"] + plate["B1:G3"] + plate["D4:F4"]
     resp = await self.backend.read_luminescence(
       focal_height=4.5, integration_time=0.4, plate=plate, wells=wells
@@ -300,7 +300,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       + "\x062360000\x03"  # Temperature call
     )
 
-    plate = CellVis_96_wellplate_350uL_Fb(name="plate")
+    plate = cellvis_96_wellplate_350uL_Fb(name="plate")
     resp = await self.backend.read_fluorescence(
       plate=plate,
       wells=plate.get_all_items(),
@@ -343,7 +343,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def test_parse_body_asterisks_as_nan(self):
     """Unmeasured wells return ******* which should be parsed as NaN."""
-    plate = CellVis_96_wellplate_350uL_Fb(name="plate")
+    plate = cellvis_96_wellplate_350uL_Fb(name="plate")
     self.backend._plate = plate
 
     body = (

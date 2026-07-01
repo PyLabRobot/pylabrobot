@@ -1,5 +1,8 @@
-# BioER 2.2 mL deepwell with polynomial height<->volume mapping
-# Uses fit: h(V) = a3*V^3 + a2*V^2 + a1*V + a0   (V in µL, h in mm)
+# BioER 2.2 mL deep-well plate (96 wells, square V-bottom).
+# Height<->volume is an explicit table sampled from the measured fill-height curve
+# (13 points, <=0.05 mm vs the original cubic fit); PLR interpolates piecewise-linearly.
+
+import warnings
 
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -9,70 +12,38 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-# Measured the height of vols in the plate. Graphed and then fitted polynomial.
-# Polynomial more accurate than circular conical frustum.
-
-# ---- Polynomial coefficients from your fit (units: µL -> mm) ----
-_A3 = 2.34770904e-09
-_A2 = -9.12279010e-06
-_A1 = 2.68872240e-02
-_A0 = 2.06530412e00
-
-# ---- Geometry / limits (from your earlier spec & measurements) ----
-_WELL_TOP_SIDE_MM = 8.25  # inner opening (square), mm
-_WELL_DEPTH_MM = 42.4  # well depth, mm
-_MAX_VOL_UL = 2200.0  # vendor spec, µL
-
-
-# Monotone cubic on [0, MAX_VOL] from your data — use binary search for inversion
-def _height_from_volume_poly(vol_ul: float) -> float:
-  """Height (mm) from volume (µL) using the fitted cubic."""
-  v = max(0.0, min(float(vol_ul), _MAX_VOL_UL))
-  h = ((_A3 * v + _A2) * v + _A1) * v + _A0
-  # Clamp to physical depth
-  if h < 0.0:
-    return 0.0
-  if h > _WELL_DEPTH_MM:
-    return _WELL_DEPTH_MM
-  return h
+# height (mm) -> volume (uL)
+# TODO: re-verify, moved from polynomial to height-volume dict computationally
+_HEIGHT_VOLUME = {
+  2.065: 0,
+  5.804: 146,
+  9.352: 299,
+  12.712: 459,
+  15.989: 631,
+  18.669: 784,
+  21.451: 954,
+  30.379: 1538,
+  33.994: 1764,
+  36.004: 1882,
+  38.001: 1993,
+  40.019: 2099,
+  42.061: 2200,
+}
 
 
-def _volume_from_height_poly(h_mm: float, *, tol: float = 1e-6, max_iter: int = 64) -> float:
-  """Volume (µL) from height (mm) by inverting the cubic with binary search."""
-  h_target = max(0.0, min(float(h_mm), _WELL_DEPTH_MM))
-  lo, hi = 0.0, _MAX_VOL_UL
-  # Quick outs
-  if h_target <= _height_from_volume_poly(lo):
-    return 0.0
-  if h_target >= _height_from_volume_poly(hi):
-    return _MAX_VOL_UL
-  for _ in range(max_iter):
-    mid = 0.5 * (lo + hi)
-    h_mid = _height_from_volume_poly(mid)
-    if abs(h_mid - h_target) <= tol:
-      return mid
-    if h_mid < h_target:
-      lo = mid
-    else:
-      hi = mid
-  return 0.5 * (lo + hi)
-
-
-def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:
+def bioer_96_wellplate_2200uL_Vb(name: str) -> Plate:
   """BioER Cat. No. BSH06M1T-A (KingFisher-compatible)
-  Spec: https://en.bioer.com/uploadfiles/2024/05/20240513165756879.pdf
+  Spec: https://bioer.com.cn/uploadfiles/2024/05/20240513165756879.pdf
   """
   well_kwargs = {
-    "size_x": _WELL_TOP_SIDE_MM,
-    "size_y": _WELL_TOP_SIDE_MM,
-    "size_z": _WELL_DEPTH_MM,
+    "size_x": 8.25,  # inner opening (square), mm
+    "size_y": 8.25,  # inner opening (square), mm
+    "size_z": 42.4,  # well depth, mm
     "bottom_type": WellBottomType.V,  # physical bottom shape
     "cross_section_type": CrossSectionType.RECTANGLE,
     "material_z_thickness": 0.8,  # measured
-    "max_volume": _MAX_VOL_UL,
-    # ---- height<->volume mapping used by PLR ----
-    "compute_height_from_volume": lambda vol_ul: _height_from_volume_poly(vol_ul),
-    "compute_volume_from_height": lambda h_mm: _volume_from_height_poly(h_mm),
+    "max_volume": 2200.0,  # vendor spec, uL
+    "height_volume_data": _HEIGHT_VOLUME,
   }
 
   return Plate(
@@ -81,7 +52,7 @@ def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:
     size_y=85.0,  # spec
     size_z=44.2,  # spec
     lid=None,
-    model=BioER_96_wellplate_Vb_2200uL.__name__,
+    model=bioer_96_wellplate_2200uL_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,  # spec
@@ -94,3 +65,23 @@ def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:
       **well_kwargs,
     ),
   )
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
+
+
+def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:  # remove v1b1
+  """Deprecated alias for bioer_96_wellplate_2200uL_Vb().
+
+  This alias will be removed in v1b1.
+  Use `bioer_96_wellplate_2200uL_Vb()` instead.
+  """
+  warnings.warn(
+    "BioER_96_wellplate_Vb_2200uL() is deprecated and will be removed in v1b1. "
+    "Use bioer_96_wellplate_2200uL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return bioer_96_wellplate_2200uL_Vb(name)

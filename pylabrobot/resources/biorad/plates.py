@@ -1,3 +1,5 @@
+import warnings
+
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
@@ -7,14 +9,14 @@ from pylabrobot.resources.well import (
 )
 
 
-def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:
+def biorad_384_wellplate_50uL_Vb(name: str) -> Plate:
   return Plate(
     name=name,
     size_x=127.76,
     size_y=85.48,
     size_z=10.40,
     lid=None,
-    model="BioRad_384_wellplate_50uL_Vb",
+    model="biorad_384_wellplate_50uL_Vb",
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=24,
@@ -32,3 +34,23 @@ def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
     ),
   )
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
+
+
+def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:  # remove v1b1
+  """Deprecated alias for biorad_384_wellplate_50uL_Vb().
+
+  This alias will be removed in v1b1.
+  Use `biorad_384_wellplate_50uL_Vb()` instead.
+  """
+  warnings.warn(
+    "BioRad_384_wellplate_50uL_Vb() is deprecated and will be removed in v1b1. "
+    "Use biorad_384_wellplate_50uL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return biorad_384_wellplate_50uL_Vb(name)

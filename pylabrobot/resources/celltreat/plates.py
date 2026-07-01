@@ -1,3 +1,4 @@
+import warnings
 from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
@@ -15,16 +16,149 @@ from pylabrobot.resources.well import (
 )
 
 
-def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
+def celltreat_6_wellplate_16300uL_Fb_lid(name: str) -> Lid:
+  return Lid(
+    name=name,
+    size_x=127.0,  # from plate specs/drawing
+    size_y=84.8,  # from plate specs/drawing
+    size_z=10.20,  # measured
+    nesting_z_height=9.0,  # measured as difference between 2-stack and single
+    model=celltreat_6_wellplate_16300uL_Fb_lid.__name__,
+  )
+
+
+def celltreat_6_wellplate_16300uL_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+  """
+  CellTreat cat. no.: 229105
+  - Material: Polystyrene
+  - Tissue culture treated: Yes
+
+  https://www.celltreat.com/wp-content/uploads/6-Well-Plate.pdf
+  """
+  UPPER_WELL_RADIUS = 17.75  # from plate specs/drawing
+  LOWER_WELL_RADIUS = 17.35  # from plate specs/drawing
+
+  well_kwargs = {
+    "size_x": 34.7,  # from plate specs/drawing
+    "size_y": 34.7,  # from plate specs/drawing
+    "size_z": 17.2,  # from plate specs/drawing
+    "bottom_type": WellBottomType.FLAT,
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
+      liquid_height, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
+    ),
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
+      liquid_volume, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
+    ),
+    "max_volume": 16300,  # from spec
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.8,  # from plate specs/drawing
+    size_y=85.38,  # from plate specs/drawing
+    size_z=20.2,  # from plate specs/drawing
+    lid=lid,
+    model=celltreat_6_wellplate_16300uL_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=3,
+      num_items_y=2,
+      dx=6.19,  # from plate specs/drawing
+      dy=3.65,  # from plate specs/drawing
+      dz=3,  # manually calibrated
+      item_dx=39.04,  # from plate specs/drawing
+      item_dy=39.04,  # from plate specs/drawing
+      **well_kwargs,
+    ),
+  )
+
+
+def celltreat_12_troughplate_15mL_Vb(name: str) -> Plate:
+  """Part number: 229562 (not sterile), 229566 (sterile)"""
+  well_kwargs = {
+    "size_x": 8.24,  # measured
+    "size_y": 70.9,  # measured
+    "size_z": 26.83,  # measured
+    "bottom_type": WellBottomType.V,
+    "material_z_thickness": 31.1 - 26.83 - 4.07,  # measured
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.76,  # standard
+    size_y=85.48,  # standard
+    size_z=31.1,  # measured
+    lid=None,
+    model=celltreat_12_troughplate_15mL_Vb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=1,
+      dx=9.83,  # measured
+      dy=7.07,  # measured
+      dz=4.07,  # measured
+      item_dx=9.0,  # standard
+      item_dy=9.0,  # standard
+      cross_section_type=CrossSectionType.RECTANGLE,
+      **well_kwargs,
+    ),
+  )
+
+
+def celltreat_24_wellplate_3300uL_Fb_lid(name: str) -> Lid:
+  return Lid(
+    name=name,
+    size_x=127.61,  # from spec
+    size_y=85.24,  # from spec
+    size_z=9.94,  # measured
+    nesting_z_height=8.94,  # measured as height of plate "plateau"
+    model=celltreat_24_wellplate_3300uL_Fb_lid.__name__,
+  )
+
+
+def celltreat_24_wellplate_3300uL_Fb(name: str, with_lid: bool = False) -> Plate:
+  """
+  CellTreat cat. no.: 229123, 229124
+  https://www.celltreat.com/wp-content/uploads/24-Well-Plate.pdf
+  """
+  well_kwargs = {
+    "size_x": 16.6,  # from spec
+    "size_y": 16.6,  # from spec
+    "size_z": 17.2,  # from spec
+    "bottom_type": WellBottomType.FLAT,
+    "material_z_thickness": 2.3,
+    "cross_section_type": CrossSectionType.CIRCLE,
+    "max_volume": 3300,
+  }
+  return Plate(
+    name=name,
+    size_x=128.02,  # from spec
+    size_y=85.74,  # from spec
+    size_z=20.2,  # from spec, without lid
+    lid=celltreat_24_wellplate_3300uL_Fb_lid(name + "_lid") if with_lid else None,
+    model=celltreat_24_wellplate_3300uL_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=6,
+      num_items_y=4,
+      dx=16.01 - 15.7 / 2,  # from spec
+      dy=14.06 - 15.7 / 2,  # from spec
+      dz=20.2 - 17.2 - 2.3,  # from spec
+      item_dx=19.2,  # from spec
+      item_dy=19.2,  # from spec
+      **well_kwargs,
+    ),
+  )
+
+
+def celltreat_96_wellplate_350uL_Ub(name: str, with_lid: bool = False) -> Plate:
   """
   CellTreat cat. no.: 229591
 
   Same as 229590 (229590 is sold with lids)
 
-  229195, 229196
-
   - Material: Polystyrene
-  - Tissue culture treated: No (229591 and 229590) / Yes (229195, 229196)
+  - Tissue culture treated: No
   """
   # WELL_UBOTTOM_HEIGHT = 2.81 # absolute height of cylindrical segment, measured
   # WELL_DIAMETER = 6.69 # measured
@@ -57,8 +191,8 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
     size_x=127.76,
     size_y=85.11,
     size_z=14.30,  # without lid
-    lid=CellTreat_96_wellplate_350ul_Ub_Lid(name + "_lid") if with_lid else None,
-    model=CellTreat_96_wellplate_350ul_Ub.__name__,
+    lid=celltreat_96_wellplate_350uL_Ub_lid(name + "_lid") if with_lid else None,
+    model=celltreat_96_wellplate_350uL_Ub.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -73,7 +207,7 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
   )
 
 
-def CellTreat_96_wellplate_350ul_Ub_Lid(name: str) -> Lid:
+def celltreat_96_wellplate_350uL_Ub_lid(name: str) -> Lid:
   """
   CellTreat cat. no.: 229591
   - Material: Polystyrene
@@ -85,75 +219,11 @@ def CellTreat_96_wellplate_350ul_Ub_Lid(name: str) -> Lid:
     size_y=85.471,
     size_z=10.71,  # measured
     nesting_z_height=8.30,  # measured as height of plate "plateau"
-    model=CellTreat_96_wellplate_350ul_Ub_Lid.__name__,
+    model=celltreat_96_wellplate_350uL_Ub_lid.__name__,
   )
 
 
-def CellTreat_6_wellplate_16300ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
-  """
-  CellTreat cat. no.: 229105
-  - Material: Polystyrene
-  - Tissue culture treated: No
-
-  https://www.celltreat.com/wp-content/uploads/6-Well-Plate.pdf
-  """
-  UPPER_WELL_RADIUS = 17.75  # from plate specs/drawing
-  LOWER_WELL_RADIUS = 17.35  # from plate specs/drawing
-
-  well_kwargs = {
-    "size_x": 34.7,  # from plate specs/drawing
-    "size_y": 34.7,  # from plate specs/drawing
-    "size_z": 17.2,  # from plate specs/drawing
-    "bottom_type": WellBottomType.FLAT,
-    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
-      liquid_height, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
-    ),
-    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
-      liquid_volume, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
-    ),
-    "max_volume": 16300,  # from spec
-  }
-
-  return Plate(
-    name=name,
-    size_x=127.8,  # from plate specs/drawing
-    size_y=85.38,  # from plate specs/drawing
-    size_z=20.2,  # from plate specs/drawing
-    lid=lid,
-    model=CellTreat_6_wellplate_16300ul_Fb.__name__,
-    ordered_items=create_ordered_items_2d(
-      Well,
-      num_items_x=3,
-      num_items_y=2,
-      dx=6.19,  # from plate specs/drawing
-      dy=3.65,  # from plate specs/drawing
-      dz=3,  # manually calibrated
-      item_dx=39.04,  # from plate specs/drawing
-      item_dy=39.04,  # from plate specs/drawing
-      **well_kwargs,
-    ),
-  )
-
-
-def CellTreat_6_wellplate_16300ul_Fb_Lid(name: str) -> Lid:
-  return Lid(
-    name=name,
-    size_x=127.0,  # from plate specs/drawing
-    size_y=84.8,  # from plate specs/drawing
-    size_z=10.20,  # measured
-    nesting_z_height=9.0,  # measured as difference between 2-stack and single
-    model=CellTreat_6_wellplate_16300ul_Fb_Lid.__name__,
-  )
-
-
-def CellTreat_96_wellplate_U(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError(
-    "This plate is the same as CellTreat_96_wellplate_350ul_Ub. This "
-    "function will be removed in the future."
-  )
-
-
-def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:
+def celltreat_96_wellplate_350uL_Fb(name: str) -> Plate:
   """
   CellTreat cat. no.: 229195, 229196
 
@@ -179,7 +249,7 @@ def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:
     size_y=85.24,
     size_z=14.30,  # without lid
     lid=None,
-    model=CellTreat_96_wellplate_350ul_Fb.__name__,
+    model=celltreat_96_wellplate_350uL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -194,79 +264,126 @@ def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:
   )
 
 
-def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:
-  """Part number: 229562 (not sterile), 229566 (sterile)"""
-  well_kwargs = {
-    "size_x": 8.24,  # measured
-    "size_y": 70.9,  # measured
-    "size_z": 26.83,  # measured
-    "bottom_type": WellBottomType.V,
-    "material_z_thickness": 31.1 - 26.83 - 4.07,  # measured
-  }
-
-  return Plate(
-    name=name,
-    size_x=127.76,  # standard
-    size_y=85.48,  # standard
-    size_z=31.1,  # measured
-    lid=None,
-    model=CellTreat_12_troughplate_15000ul_Vb.__name__,
-    ordered_items=create_ordered_items_2d(
-      Well,
-      num_items_x=12,
-      num_items_y=1,
-      dx=9.83,  # measured
-      dy=7.07,  # measured
-      dz=4.07,  # measured
-      item_dx=9.0,  # standard
-      item_dy=9.0,  # standard
-      cross_section_type=CrossSectionType.RECTANGLE,
-      **well_kwargs,
-    ),
-  )
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
 
 
-def CellTreat_24_wellplate_3300ul_Fb_Lid(name: str) -> Lid:
-  return Lid(
-    name=name,
-    size_x=127.61,  # from spec
-    size_y=85.24,  # from spec
-    size_z=9.94,  # measured
-    nesting_z_height=8.94,  # measured as height of plate "plateau"
-    model=CellTreat_24_wellplate_3300ul_Fb_Lid.__name__,
-  )
+def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:  # remove v1b1
+  """Deprecated alias for celltreat_12_troughplate_15mL_Vb().
 
-
-def CellTreat_24_wellplate_3300ul_Fb(name: str, with_lid: bool = False) -> Plate:
+  This alias will be removed in v1b1.
+  Use `celltreat_12_troughplate_15mL_Vb()` instead.
   """
-  CellTreat cat. no.: 229123, 229124
-  https://www.celltreat.com/wp-content/uploads/24-Well-Plate.pdf
-  """
-  well_kwargs = {
-    "size_x": 16.6,  # from spec
-    "size_y": 16.6,  # from spec
-    "size_z": 17.2,  # from spec
-    "bottom_type": WellBottomType.FLAT,
-    "material_z_thickness": 2.3,
-    "cross_section_type": CrossSectionType.CIRCLE,
-    "max_volume": 3300,
-  }
-  return Plate(
-    name=name,
-    size_x=128.02,  # from spec
-    size_y=85.74,  # from spec
-    size_z=20.2,  # from spec, without lid
-    lid=CellTreat_24_wellplate_3300ul_Fb_Lid(name + "_lid") if with_lid else None,
-    model=CellTreat_24_wellplate_3300ul_Fb.__name__,
-    ordered_items=create_ordered_items_2d(
-      Well,
-      num_items_x=6,
-      num_items_y=4,
-      dx=16.01 - 15.7 / 2,  # from spec
-      dy=14.06 - 15.7 / 2,  # from spec
-      dz=20.2 - 17.2 - 2.3,  # from spec
-      item_dx=19.2,  # from spec
-      item_dy=19.2,  # from spec
-      **well_kwargs,
-    ),
+  warnings.warn(
+    "CellTreat_12_troughplate_15000ul_Vb() is deprecated and will be removed in v1b1. "
+    "Use celltreat_12_troughplate_15mL_Vb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
   )
+  return celltreat_12_troughplate_15mL_Vb(name)
+
+
+def CellTreat_24_wellplate_3300ul_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+  """Deprecated alias for celltreat_24_wellplate_3300uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `celltreat_24_wellplate_3300uL_Fb()` instead.
+  """
+  warnings.warn(
+    "CellTreat_24_wellplate_3300ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use celltreat_24_wellplate_3300uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return celltreat_24_wellplate_3300uL_Fb(name, with_lid)
+
+
+def CellTreat_6_wellplate_16300ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+  """Deprecated alias for celltreat_6_wellplate_16300uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `celltreat_6_wellplate_16300uL_Fb()` instead.
+  """
+  warnings.warn(
+    "CellTreat_6_wellplate_16300ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use celltreat_6_wellplate_16300uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return celltreat_6_wellplate_16300uL_Fb(name, lid)
+
+
+def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:  # remove v1b1
+  """Deprecated alias for celltreat_96_wellplate_350uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `celltreat_96_wellplate_350uL_Fb()` instead.
+  """
+  warnings.warn(
+    "CellTreat_96_wellplate_350ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use celltreat_96_wellplate_350uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return celltreat_96_wellplate_350uL_Fb(name)
+
+
+def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+  """Deprecated alias for celltreat_96_wellplate_350uL_Ub().
+
+  This alias will be removed in v1b1.
+  Use `celltreat_96_wellplate_350uL_Ub()` instead.
+  """
+  warnings.warn(
+    "CellTreat_96_wellplate_350ul_Ub() is deprecated and will be removed in v1b1. "
+    "Use celltreat_96_wellplate_350uL_Ub() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return celltreat_96_wellplate_350uL_Ub(name, with_lid)
+
+
+def CellTreat_6_wellplate_16300ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
+  """Deprecated alias for celltreat_6_wellplate_16300uL_Fb_lid().
+
+  This alias will be removed in v1b1.
+  Use `celltreat_6_wellplate_16300uL_Fb_lid()` instead.
+  """
+  warnings.warn(
+    "CellTreat_6_wellplate_16300ul_Fb_Lid() is deprecated and will be removed in v1b1. "
+    "Use celltreat_6_wellplate_16300uL_Fb_lid() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return celltreat_6_wellplate_16300uL_Fb_lid(name)
+
+
+def CellTreat_24_wellplate_3300ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
+  """Deprecated alias for celltreat_24_wellplate_3300uL_Fb_lid().
+
+  This alias will be removed in v1b1.
+  Use `celltreat_24_wellplate_3300uL_Fb_lid()` instead.
+  """
+  warnings.warn(
+    "CellTreat_24_wellplate_3300ul_Fb_Lid() is deprecated and will be removed in v1b1. "
+    "Use celltreat_24_wellplate_3300uL_Fb_lid() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return celltreat_24_wellplate_3300uL_Fb_lid(name)
+
+
+def CellTreat_96_wellplate_350ul_Ub_Lid(name: str) -> Lid:  # remove v1b1
+  """Deprecated alias for celltreat_96_wellplate_350uL_Ub_lid().
+
+  This alias will be removed in v1b1.
+  Use `celltreat_96_wellplate_350uL_Ub_lid()` instead.
+  """
+  warnings.warn(
+    "CellTreat_96_wellplate_350ul_Ub_Lid() is deprecated and will be removed in v1b1. "
+    "Use celltreat_96_wellplate_350uL_Ub_lid() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return celltreat_96_wellplate_350uL_Ub_lid(name)

@@ -63,7 +63,7 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
   - Cleanliness: 390015: Free of detectable DNase, RNase
   - ANSI/SLAS-format for compatibility with automated systems
   - Tolerances: "Uniform external dimensions and tolerances"
-  - Each well is segmented into four V bottom wells similar to Cor_Axy_24_wellplate_10mL_Vb.
+  - Each well is segmented into four V bottom wells similar to cor_axy_24_wellplate_10mL_Vb.
   - The bottom can only be reached when using 2 or 4 channels.
   """
   return Plate(

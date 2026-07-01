@@ -20,7 +20,7 @@ from pylabrobot.plate_reading.molecular_devices.backend import (
 from pylabrobot.plate_reading.molecular_devices.spectramax_gemini_em_backend import (
   MolecularDevicesSpectraMaxGeminiEMBackend,
 )
-from pylabrobot.resources.agenbio.plates import AGenBio_96_wellplate_Ub_2200ul
+from pylabrobot.resources.agenbio.plates import agenbio_96_wellplate_Ub_2200uL
 
 
 class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
@@ -127,7 +127,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     self.send_command_mock.assert_called_once_with("!EMWAVELENGTH 590")
 
   async def test_set_plate_position(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.ABS,
@@ -146,7 +146,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_set_strip(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.ABS,
@@ -470,7 +470,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     new_callable=AsyncMock,
   )
   async def test_read_absorbance(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     await self.backend.read_absorbance(plate, [500])
 
     commands = [c.args[0] for c in self.send_command_mock.call_args_list]
@@ -507,7 +507,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     new_callable=AsyncMock,
   )
   async def test_read_fluorescence(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     await self.backend.read_fluorescence(plate, [485], [520], [515])
 
     commands = [c.args[0] for c in self.send_command_mock.call_args_list]
@@ -551,7 +551,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     new_callable=AsyncMock,
   )
   async def test_read_luminescence(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     await self.backend.read_luminescence(plate, [590])
 
     commands = [c.args[0] for c in self.send_command_mock.call_args_list]
@@ -595,7 +595,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     mock_transfer_data,
     mock_wait_for_idle,
   ):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     await self.backend.read_fluorescence_polarization(plate, [485], [520], [515])
 
     commands = [c.args[0] for c in self.send_command_mock.call_args_list]
@@ -644,7 +644,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     mock_transfer_data,
     mock_wait_for_idle,
   ):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     await self.backend.read_time_resolved_fluorescence(
       plate, [485], [520], [515], delay_time=10, integration_time=100
     )
@@ -813,7 +813,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     )
 
   async def test_experimental_read_fluorescence_wellscan_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     transfer_results = [[{"data": [[i]]}] for i in range(5)]
 
     with (
@@ -858,7 +858,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     self.assertEqual(result[-1]["wellscan_y"], 21.368)
 
   async def test_read_luminescence_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     shake_settings = ShakeSettings(before_read=True, before_read_duration=10)
 
     with (
@@ -909,7 +909,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     transfer_data_mock.assert_awaited_once()
 
   async def test_luminescence_rejects_unvalidated_options(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with self.assertRaisesRegex(NotImplementedError, "focal_height"):
       await self.backend.read_luminescence(
         plate=plate,
@@ -932,7 +932,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
       )
 
   async def test_experimental_read_time_resolved_fluorescence_top_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
 
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
@@ -987,7 +987,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     transfer_data_mock.assert_awaited_once()
 
   async def test_experimental_read_time_resolved_fluorescence_bottom_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
 
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
@@ -1009,7 +1009,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     send_command_mock.assert_any_call("!READSTAGE BOT", num_res_fields=1)
 
   async def test_experimental_read_time_resolved_fluorescence_kinetic_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     shake_settings = ShakeSettings(
       before_read=True,
       before_read_duration=5,
@@ -1055,7 +1055,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     transfer_data_mock.assert_awaited_once()
 
   async def test_time_resolved_fluorescence_kinetic_requires_settings(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with self.assertRaisesRegex(ValueError, "kinetic_settings is required"):
       await self.backend.experimental_read_time_resolved_fluorescence(
         plate=plate,
@@ -1068,7 +1068,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
       )
 
   async def test_experimental_read_fluorescence_emission_spectrum_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
 
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
@@ -1110,7 +1110,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     transfer_data_mock.assert_awaited_once()
 
   async def test_experimental_read_fluorescence_excitation_spectrum_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
 
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
@@ -1153,7 +1153,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     transfer_data_mock.assert_awaited_once()
 
   async def test_frontend_style_fluorescence_call(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
       patch.object(self.backend, "_read_now", new_callable=AsyncMock) as read_now_mock,
@@ -1184,7 +1184,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     transfer_data_mock.assert_awaited_once()
 
   async def test_frontend_style_fluorescence_accepts_explicit_cutoff_filter(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
       patch.object(self.backend, "_read_now", new_callable=AsyncMock),
@@ -1202,7 +1202,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     send_command_mock.assert_any_call("!EMFILTER 8")
 
   async def test_partial_plate_region_mapping(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     wells = plate.get_items("B2:G7")
     self.assertEqual(self.backend._get_well_region(plate, wells), (1, 6, 1, 6))
 
@@ -1218,7 +1218,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     )
 
   async def test_partial_plate_region_rejects_non_rectangular_wells(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with self.assertRaisesRegex(NotImplementedError, "rectangular contiguous"):
       self.backend._get_well_region(
         plate,
@@ -1226,7 +1226,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
       )
 
   async def test_partial_plate_fluorescence_region_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
       patch.object(self.backend, "_read_now", new_callable=AsyncMock),
@@ -1246,7 +1246,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     self.assertIn("!STRIP 2 6", commands)
 
   async def test_partial_plate_wellscan_unsupported(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with self.assertRaisesRegex(NotImplementedError, "Partial-plate reads"):
       await self.backend.experimental_read_fluorescence_wellscan(
         plate=plate,
@@ -1256,7 +1256,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
       )
 
   async def test_partial_plate_spectra_region_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
       patch.object(self.backend, "_read_now", new_callable=AsyncMock),
@@ -1274,7 +1274,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     self.assertIn("!STRIP 2 6", commands)
 
   async def test_partial_plate_time_resolved_region_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
       patch.object(self.backend, "_read_now", new_callable=AsyncMock),
@@ -1297,7 +1297,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     self.assertIn("!STRIP 2 6", commands)
 
   async def test_partial_plate_luminescence_region_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
       patch.object(self.backend, "_read_now", new_callable=AsyncMock),
@@ -1315,7 +1315,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     self.assertIn("!STRIP 2 6", commands)
 
   async def test_partial_plate_single_well_fluorescence_region_sequence(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with (
       patch.object(self.backend, "send_command", new_callable=AsyncMock) as send_command_mock,
       patch.object(self.backend, "_read_now", new_callable=AsyncMock),
@@ -1335,7 +1335,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
     self.assertIn("!STRIP 1 1", commands)
 
   async def test_fluorescence_requires_wavelengths(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with self.assertRaisesRegex(ValueError, "excitation_wavelength is required"):
       await self.backend.read_fluorescence(
         plate=plate,
@@ -1351,7 +1351,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
       )
 
   async def test_fluorescence_rejects_focal_height(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with self.assertRaisesRegex(NotImplementedError, "focal_height"):
       await self.backend.read_fluorescence(
         plate=plate,
@@ -1362,7 +1362,7 @@ class TestMolecularDevicesSpectraMaxGeminiEMBackend(unittest.IsolatedAsyncioTest
       )
 
   async def test_read_time_resolved_fluorescence_redirects_to_experimental(self):
-    plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
+    plate = agenbio_96_wellplate_Ub_2200uL("test_plate")
     with self.assertRaisesRegex(
       NotImplementedError, "experimental_read_time_resolved_fluorescence"
     ):

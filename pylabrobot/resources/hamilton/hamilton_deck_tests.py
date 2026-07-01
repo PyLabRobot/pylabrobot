@@ -3,7 +3,7 @@ import unittest
 
 from pylabrobot.resources import TipRack
 from pylabrobot.resources.corning import (
-  Cor_96_wellplate_360ul_Fb,
+  cor_96_wellplate_360uL_Fb,
 )
 from pylabrobot.resources.hamilton import (
   PLT_CAR_L5AC_A00,
@@ -30,8 +30,8 @@ class HamiltonDeckTests(unittest.TestCase):
     tip_car[3] = hamilton_96_tiprack_1000uL_filter(name="tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-    plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
+    plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
 
     deck.assign_child_resource(tip_car, rails=1)
     deck.assign_child_resource(plt_car, rails=21)

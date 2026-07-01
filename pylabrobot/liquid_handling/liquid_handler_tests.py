@@ -22,13 +22,13 @@ from pylabrobot.resources import (
   TIP_CAR_480_A00,
   Container,
   Coordinate,
-  Cor_96_wellplate_360ul_Fb,
   Deck,
   Lid,
   Plate,
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
+  cor_96_wellplate_360uL_Fb,
   nest_1_troughplate_195000uL_Vb,
   no_tip_tracking,
   set_tip_tracking,
@@ -126,8 +126,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car[3] = hamilton_96_tiprack_1000uL_filter("tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-    plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
+    plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
 
     self.deck.assign_child_resource(tip_car, rails=1)
     self.deck.assign_child_resource(plt_car, rails=21)
@@ -157,7 +157,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
     self.deck.assign_child_resource(tip_car, rails=1)
     self.deck.assign_child_resource(plt_car, rails=10)
 
@@ -192,8 +192,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     tip_car[3] = hamilton_96_tiprack_1000uL_filter(name="tip_rack_04")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-    plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
+    plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
     self.deck.assign_child_resource(tip_car, rails=1)
     self.deck.assign_child_resource(plt_car, rails=10)
 
@@ -240,7 +240,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="sub")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="sub")
     self.deck.assign_child_resource(tip_car, rails=1)
     with self.assertRaises(ValueError):
       self.deck.assign_child_resource(plt_car, rails=10)
@@ -251,15 +251,15 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="ok")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="ok")
     self.deck.assign_child_resource(tip_car, rails=1)
     self.deck.assign_child_resource(plt_car, rails=10)
     with self.assertRaises(ValueError):
-      plt_car[1] = Cor_96_wellplate_360ul_Fb(name="sub")
+      plt_car[1] = cor_96_wellplate_360uL_Fb(name="sub")
 
   async def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    plt_car[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(plt_car, rails=21)
 
     await self.lh.move_plate(plate, plt_car[2])
@@ -273,7 +273,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_plate_free(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    plt_car[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(plt_car, rails=1)
 
     await self.lh.move_plate(plate, Coordinate(1000, 1000, 1000))
@@ -486,7 +486,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
@@ -668,7 +668,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_dispense96_well_list_mixed_parents(self):
-    plate2 = Cor_96_wellplate_360ul_Fb(name="plate2")
+    plate2 = cor_96_wellplate_360uL_Fb(name="plate2")
     self.deck.assign_child_resource(plate2, location=Coordinate(400, 100, 0))
     mixed = self.plate.get_all_items()[:48] + plate2.get_all_items()[:48]
     await self.lh.pick_up_tips96(self.tip_rack)
@@ -1026,7 +1026,7 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     self.single_well_plate = nest_1_troughplate_195000uL_Vb(name="single_well_plate")
     self.deck.assign_child_resource(self.single_well_plate, location=Coordinate(300, 100, 0))
@@ -1134,7 +1134,7 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
