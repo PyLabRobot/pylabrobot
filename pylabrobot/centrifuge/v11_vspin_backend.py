@@ -56,6 +56,7 @@ INITIALIZE_PACKET_GAP_SECONDS: float = 0.01
 STATUS_POLL_INTERVAL: float = 0.15
 POSITION_TOLERANCE: int = 15
 POSITION_SETTLE_TOLERANCE: int = 200
+POSITION_MOVE_ATTEMPTS: int = 2
 TACH_TO_RPM: float = -14.69320388
 DOOR_OPEN_SETTLE_SECONDS: float = 2.0
 DOOR_UNLOCK_TO_OPEN_SETTLE_SECONDS: float = 0.5
@@ -1109,23 +1110,38 @@ class V11VSpinBackend(CentrifugeBackend):
     if not self._motion_is_prepared:
       await self._prepare_bucket_motion()
 
-    await self._motor_enable()
-    await self._send_safe(
-      bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"),
-      timeout=0.20,
-      expected_len=14,
-    )
-    await self._send_safe(
-      _build_vspin_position_command(position),
-      timeout=0.25,
-      expected_len=14,
-    )
-    await self._wait_for_idle(
-      label=f"position {position}",
-      timeout=25.0,
-      target_position=position,
-      tolerance=POSITION_SETTLE_TOLERANCE,
-    )
+    for attempt in range(1, POSITION_MOVE_ATTEMPTS + 1):
+      if attempt > 1:
+        logger.warning(
+          "[vspin] Retrying position move to %d after wrong idle position",
+          position,
+        )
+        self._motion_is_prepared = False
+        await self._prepare_bucket_motion()
+
+      await self._motor_enable()
+      await self._send_safe(
+        bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"),
+        timeout=0.20,
+        expected_len=14,
+      )
+      await self._send_safe(
+        _build_vspin_position_command(position),
+        timeout=0.25,
+        expected_len=14,
+      )
+      try:
+        await self._wait_for_idle(
+          label=f"position {position}",
+          timeout=25.0,
+          target_position=position,
+          tolerance=POSITION_SETTLE_TOLERANCE,
+        )
+        break
+      except TimeoutError:
+        if attempt == POSITION_MOVE_ATTEMPTS:
+          raise
+
     await self.lock_bucket()
     await self.open_door()
 
