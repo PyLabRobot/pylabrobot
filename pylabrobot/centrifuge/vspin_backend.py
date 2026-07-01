@@ -647,18 +647,18 @@ def create_vspin_backend(
   """Create a VSpin backend for the selected centrifuge generation.
 
   ``agilent`` keeps the existing PyLabRobot command path for newer
-  Agilent-branded VSpin centrifuges. ``v11``/``velocity11`` selects the legacy
-  Velocity11 path derived from old V11 hardware traces. The command sets should
+  Agilent-branded VSpin centrifuges. ``velocity11`` selects the legacy
+  Velocity11 path derived from old hardware traces. The command sets should
   not be treated as interchangeable until both generations are hardware-tested.
   """
   normalized_variant = variant.lower()
   if normalized_variant == "agilent":
     return VSpinBackend(device_id=device_id)
-  if normalized_variant in ("v11", "velocity11", "legacy"):
+  if normalized_variant == "velocity11":
     from .v11_vspin_backend import V11VSpinBackend
 
     return V11VSpinBackend(device_id=device_id)
-  raise ValueError("variant must be 'agilent', 'v11', 'velocity11', or 'legacy'")
+  raise ValueError("variant must be 'agilent', or 'velocity11'")
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
