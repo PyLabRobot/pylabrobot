@@ -377,7 +377,7 @@ class EVOPIPBackend(PIPBackend, EVOArm):
 
   # ============== Setup ==============
 
-  async def _on_setup(self) -> None:
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     """Initialize LiHa arm: PIA, query ranges, init plungers."""
     # PIA + BMX
     await self.position_init_all()
