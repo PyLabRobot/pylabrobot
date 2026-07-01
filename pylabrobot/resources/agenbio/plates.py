@@ -178,8 +178,8 @@ def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
       dx=10.1,
       dy=7.6,
       dz=5.88,
-      item_dx=INNER_WELL_WIDTH,
-      item_dy=INNER_WELL_HEIGHT,
+      item_dx=None,  # single column
+      item_dy=None,  # single row
       **well_kwargs,
     ),
   )
@@ -228,8 +228,8 @@ def AGenBio_1_troughplate_100000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
       dx=9.8,
       dy=7.6,
       dz=5.88,
-      item_dx=INNER_WELL_WIDTH,
-      item_dy=INNER_WELL_HEIGHT,
+      item_dx=None,  # single column
+      item_dy=None,  # single row
       **well_kwargs,
     ),
   )
