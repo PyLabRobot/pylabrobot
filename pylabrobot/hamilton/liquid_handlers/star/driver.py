@@ -148,8 +148,8 @@ class _FirmwareLock:
     — but you never have two X0, two H0, etc. at once. Modules without a dedicated mutex are
     gated but not per-module serialized.
 
-  Read-only request commands (``R*``) are not coordinated here at all — they take no lock
-  and run fully in parallel (see ``STARDriver.send_command``).
+  Read-only request (``R*``) and query (``Q*``) commands are not coordinated here at all —
+  they take no lock and run fully in parallel (see ``STARDriver.send_command``).
 
   The first slave-module command acquires the exclusive lock and the last one releases it,
   so a C0 command simply takes the same lock and automatically waits the slaves out.
@@ -268,13 +268,18 @@ class STARDriver(HamiltonLiquidHandler):
   async def send_command(self, module: str, command: str, *args, **kwargs):
     """Send a firmware command under the firmware lock.
 
-    Request commands (command starting with "R") are read-only on every module, so they
-    take no lock and run fully in parallel. A C0 master command runs exclusively — nothing
-    else is in flight. Every other (slave-module) command blocks the C0 master, overlaps
-    commands on *other* modules (so an X0 X-arm move, an H0 head move, and Px channel
-    commands can run together), but serializes against other commands on its *own* module.
+    Request ("R*") and query ("Q*") commands are read-only on every module, so they take no
+    lock and run fully in parallel — this lets a query (e.g. a Px:QN TADM-buffer read) run
+    concurrently with an in-flight C0 master command such as an aspiration. A C0 master
+    command runs exclusively — nothing else is in flight. Every other (slave-module) command
+    blocks the C0 master, overlaps commands on *other* modules (so an X0 X-arm move, an H0
+    head move, and Px channel commands can run together), but serializes against other
+    commands on its *own* module.
+
+    Caveat: C0:QS with an ``on`` parameter (cover.py reset_output) is a write, not a query;
+    it is rare and never issued during pipetting, so it is treated lock-free with the rest.
     """
-    if command.startswith("R"):
+    if command.startswith(("R", "Q")):
       return await super().send_command(module, command, *args, **kwargs)
 
     if module == "C0":
