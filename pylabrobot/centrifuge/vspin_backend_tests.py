@@ -506,6 +506,46 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
 
     await backend._wait_for_speed_or_motion(rpm=1000, final_position=2000, timeout=0.5)
 
+  async def test_spin_rpm_sends_spin_command_immediately_after_spin_profile(self):
+    backend = _make_backend(_FakeIO([]))
+    events = []
+
+    async def get_door_open() -> bool:
+      return False
+
+    async def get_door_locked() -> bool:
+      return True
+
+    async def get_bucket_locked() -> bool:
+      return False
+
+    async def get_position() -> int:
+      events.append("get_position")
+      return 12074
+
+    async def send_safe(cmd: bytes, **kwargs):
+      del kwargs
+      events.append(cmd.hex())
+      return _status_packet(status=0x09, current_position=12074, tachometer=0)
+
+    backend.get_door_open = get_door_open
+    backend.get_door_locked = get_door_locked
+    backend.get_bucket_locked = get_bucket_locked
+    backend.get_position = get_position
+    backend._prepare_spin_motion = mock.AsyncMock()
+    backend._motor_enable = mock.AsyncMock()
+    backend._send_safe = send_safe
+    backend._wait_for_speed_or_motion = mock.AsyncMock()
+    backend._hold_spin = mock.AsyncMock()
+    backend._wait_for_idle = mock.AsyncMock()
+    backend._home_rotor = mock.AsyncMock()
+
+    await backend.spin_rpm(rpm=1500, duration=10)
+
+    profile_index = events.index("aa01e60500640000000000fd00803e01000c")
+    self.assertEqual(events[profile_index + 1][:8], "aa01d497")
+    self.assertLess(events.index("get_position"), profile_index)
+
   async def test_configuration_reasserts_control_lines_before_startup_baud(self):
     io = _RecordingConfigIO()
     backend = _make_backend(io)  # type: ignore[arg-type]
