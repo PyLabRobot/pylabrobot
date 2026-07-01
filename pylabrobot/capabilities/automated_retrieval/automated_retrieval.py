@@ -1,7 +1,8 @@
 import random
 from typing import List, Literal, Optional, Union, cast
 
-from pylabrobot.capabilities.capability import Capability, need_capability_ready
+from pylabrobot.capabilities.capability import need_capability_ready
+from pylabrobot.capabilities.loading_tray_retrieval import LoadingTrayRetrieval
 from pylabrobot.resources import (
   Plate,
   PlateCarrier,
@@ -16,13 +17,15 @@ class NoFreeSiteError(Exception):
   pass
 
 
-class AutomatedRetrieval(Capability):
-  """Automated plate retrieval/storage capability.
+class AutomatedRetrieval(LoadingTrayRetrieval):
+  """Automated plate retrieval/storage capability (random access).
 
   Owns the storage racks and the loading tray, and implements the site
   bookkeeping (free-site counting, lookup and selection) shared by all
-  automated storage systems so devices composing this capability do not have to
-  reimplement it.
+  random-access automated storage systems so devices composing this capability
+  do not have to reimplement it. The loading tray and the shared plate-movement
+  plumbing live on :class:`~pylabrobot.capabilities.loading_tray_retrieval.LoadingTrayRetrieval`,
+  which the sequential :class:`~pylabrobot.capabilities.stacker.Stacker` also uses.
 
   See :doc:`/user_guide/capabilities/automated-retrieval` for a walkthrough.
   """
@@ -33,10 +36,9 @@ class AutomatedRetrieval(Capability):
     racks: Optional[List[PlateCarrier]] = None,
     loading_tray: Optional[PlateHolder] = None,
   ):
-    super().__init__(backend=backend)
+    super().__init__(backend=backend, loading_tray=loading_tray)
     self.backend: AutomatedRetrievalBackend = backend
     self._racks: List[PlateCarrier] = racks if racks is not None else []
-    self.loading_tray = loading_tray
 
   @property
   def racks(self) -> List[PlateCarrier]:
@@ -85,13 +87,12 @@ class AutomatedRetrieval(Capability):
   @need_capability_ready
   async def fetch_plate_to_loading_tray(self, plate_name: str) -> Plate:
     """Retrieve the plate with the given name from storage onto the loading tray."""
-    if self.loading_tray is None:
-      raise RuntimeError("No loading tray configured for this automated retrieval.")
+    loading_tray = self._require_loading_tray()
     site = self.get_site_by_plate_name(plate_name)
     plate = cast(Plate, site.resource)
     await self.backend.fetch_plate_to_loading_tray(plate)
     plate.unassign()
-    self.loading_tray.assign_child_resource(plate)
+    loading_tray.assign_child_resource(plate)
     return plate
 
   @need_capability_ready
@@ -103,11 +104,7 @@ class AutomatedRetrieval(Capability):
     `site` may be an explicit free `PlateHolder`, or `"smallest"`/`"random"` to
     let the capability pick a fitting free site.
     """
-    if self.loading_tray is None:
-      raise RuntimeError("No loading tray configured for this automated retrieval.")
-    plate = cast(Optional[Plate], self.loading_tray.resource)
-    if plate is None:
-      raise ResourceNotFoundError("No plate on the loading tray.")
+    plate = self._plate_on_loading_tray()
 
     if site == "random":
       site = self.find_random_site(plate)
@@ -124,36 +121,12 @@ class AutomatedRetrieval(Capability):
     site.assign_child_resource(plate)
 
   def summary(self) -> str:
-    def create_pretty_table(header, *columns) -> str:
-      col_widths = [
-        max(len(str(item)) for item in [header[i]] + list(columns[i])) for i in range(len(header))
-      ]
-
-      def format_row(row, border="|") -> str:
-        return (
-          f"{border} "
-          + " | ".join(f"{str(row[i]).ljust(col_widths[i])}" for i in range(len(row)))
-          + f" {border}"
-        )
-
-      def separator_line(cross: str = "+", line: str = "-") -> str:
-        return cross + cross.join(line * (width + 2) for width in col_widths) + cross
-
-      table = []
-      table.append(separator_line())  # Top border
-      table.append(format_row(header))
-      table.append(separator_line())  # Header separator
-      for row in zip(*columns):
-        table.append(format_row(row))
-      table.append(separator_line())  # Bottom border
-      return "\n".join(table)
-
     header = [f"Rack {i}" for i in range(len(self._racks))]
     sites = [
       [site.resource.name if site.resource else "<empty>" for site in reversed(rack.sites.values())]
       for rack in self._racks
     ]
-    return create_pretty_table(header, *sites)
+    return self._pretty_table(header, *sites)
 
   async def _on_stop(self):
     await super()._on_stop()
