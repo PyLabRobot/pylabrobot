@@ -37,6 +37,7 @@ brooks/index
 byonoy/index
 hamilton/index
 inheco/index
+labcyte/index
 liconic/index
 mettler_toledo/index
 molecular_devices/index

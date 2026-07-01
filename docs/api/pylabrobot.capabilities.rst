@@ -192,6 +192,21 @@ Barcode Scanning
     BarcodeScannerBackend
 
 
+Plate Access
+------------
+
+.. currentmodule:: pylabrobot.capabilities.plate_access
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    PlateAccess
+    PlateAccessBackend
+    PlateAccessState
+
+
 Microscopy
 ----------
 
