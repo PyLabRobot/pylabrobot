@@ -131,6 +131,22 @@ class ODTCMockServerTests(unittest.IsolatedAsyncioTestCase):
     await self.odtc.setup()
     self.assertEqual(await self.odtc.tc.backend.request_status(), SiLAState.IDLE)
 
+  async def test_progress_reported_from_data_events(self):
+    """A running method emits DataEvents; request_progress parses them into an
+    ODTCProgress. auto_complete=False keeps the method running so progress can
+    be read deterministically before completion."""
+    await self.odtc.setup()
+    self.server.auto_complete = False
+    # (elapsed_ms, target, current, lid) — temperatures in 1/100 °C.
+    self.server.data_events = [(5000, 9500, 9400, 10500)]
+    await self.odtc.tc.run_protocol(_pcr_protocol(), volume_ul=20.0)
+    progress = await self.odtc.tc.wait_for_first_progress(timeout=5)
+    self.assertIsNotNone(progress)
+    self.assertAlmostEqual(progress.elapsed_s, 5.0)
+    self.assertAlmostEqual(progress.current_temp_c, 94.0)
+    self.assertAlmostEqual(progress.target_temp_c, 95.0)
+    self.assertAlmostEqual(progress.lid_temp_c, 105.0)
+
   # ---- error handling -----------------------------------------------------
 
   async def test_execute_method_device_error_raises_sila_error(self):

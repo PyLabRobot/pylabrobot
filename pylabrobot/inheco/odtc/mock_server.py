@@ -96,6 +96,45 @@ def _response_event_body(request_id: int, return_code: int = 1, message: str = "
   return _build_envelope(ev)
 
 
+# The four data series the ODTC emits per DataEvent, in order.
+_DATA_SERIES: List[Tuple[str, str]] = [
+  ("Elapsed time", "ms"),
+  ("Target temperature", "1/100°C"),
+  ("Current temperature", "1/100°C"),
+  ("LID temperature", "1/100°C"),
+]
+
+
+def _data_event_body(
+  request_id: int,
+  elapsed_ms: int,
+  target_c100: int,
+  current_c100: int,
+  lid_c100: int,
+) -> bytes:
+  """Build a DataEvent whose ``dataValue`` matches ODTC's nested AnyData layout.
+
+  Temperatures are in 1/100 °C, elapsed time in ms — the raw integer units the
+  device reports and ``protocol._parse_data_event_payload`` expects.
+  """
+  series_root = ET.Element("DataSeriesSet")
+  for (name_id, unit), value in zip(
+    _DATA_SERIES, (elapsed_ms, target_c100, current_c100, lid_c100)
+  ):
+    ds = ET.SubElement(series_root, "dataSeries", nameId=name_id, unit=unit)
+    ET.SubElement(ds, "integerValue").text = str(int(value))
+  inner_xml = ET.tostring(series_root, encoding="unicode")
+
+  outer = ET.Element("DataValue")
+  ET.SubElement(outer, "AnyData").text = inner_xml  # escaped by tostring
+  data_value = ET.tostring(outer, encoding="unicode")
+
+  ev = ET.Element("DataEvent")
+  ET.SubElement(ev, "requestId").text = str(request_id)
+  ET.SubElement(ev, "dataValue").text = data_value  # escaped again by tostring
+  return _build_envelope(ev)
+
+
 class MockODTCServer:
   """A minimal in-process Inheco ODTC SiLA 1.x device for tests and demos."""
 
@@ -115,6 +154,13 @@ class MockODTCServer:
     # Test knob: map command name -> (return_code, message) to force a synchronous
     # error response (e.g. {"ExecuteMethod": (9, "Invalid state")}).
     self.error_responses: Dict[str, Tuple[int, str]] = {}
+
+    # Test knob: DataEvents (elapsed_ms, target, current, lid — temps in 1/100 °C)
+    # emitted during an ExecuteMethod run, before its completion ResponseEvent.
+    self.data_events: List[Tuple[int, int, int, int]] = []
+    # When False, ExecuteMethod runs "forever" (no completion ResponseEvent), so a
+    # test can read progress deterministically before the method finishes.
+    self.auto_complete: bool = True
 
     # observability for assertions
     self.received_commands: List[Tuple[str, dict]] = []
@@ -231,16 +277,32 @@ class MockODTCServer:
 
     request_id = params.get("requestId")
     if isinstance(request_id, int):
-      self._schedule_response_event(command, request_id)
+      self._schedule_events(command, request_id)
     return _response_payload(command, return_code=2, message="Accepted")
 
-  def _schedule_response_event(self, command: str, request_id: int) -> None:
-    def _fire() -> None:
-      if command == "ExecuteMethod":
-        self.state = "idle"
-      self._post_event(_response_event_body(request_id))
+  def _schedule_events(self, command: str, request_id: int) -> None:
+    """Emit any DataEvents (ExecuteMethod only), then the completion ResponseEvent."""
+    base = self.async_event_delay
+    tick = 0
+    if command == "ExecuteMethod":
+      for i, data_event in enumerate(self.data_events):
+        self._schedule(
+          base * (i + 1),
+          lambda de=data_event: self._post_event(_data_event_body(request_id, *de)),
+        )
+      tick = len(self.data_events)
 
-    timer = threading.Timer(self.async_event_delay, _fire)
+    if command != "ExecuteMethod" or self.auto_complete:
+
+      def _complete() -> None:
+        if command == "ExecuteMethod":
+          self.state = "idle"
+        self._post_event(_response_event_body(request_id))
+
+      self._schedule(base * (tick + 1), _complete)
+
+  def _schedule(self, delay: float, fn) -> None:
+    timer = threading.Timer(delay, fn)
     timer.daemon = True
     with self._lock:
       self._timers.append(timer)
