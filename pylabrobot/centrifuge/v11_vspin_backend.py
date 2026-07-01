@@ -845,10 +845,11 @@ class V11VSpinBackend(CentrifugeBackend):
     await self._send_safe(bytes.fromhex("aa0226000028"), timeout=0.20)
     await self._wait_for_io_state(
       label="bucket motion ready",
-      timeout=1.5,
+      timeout=2.5,
       door_open=False,
       door_locked=True,
       bucket_locked=False,
+      settled=True,
     )
     await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
     self._motion_is_prepared = True
@@ -866,10 +867,11 @@ class V11VSpinBackend(CentrifugeBackend):
     await self._send_safe(bytes.fromhex("aa0226000028"), timeout=0.20)
     await self._wait_for_io_state(
       label="spin ready",
-      timeout=1.5,
+      timeout=2.5,
       door_open=False,
       door_locked=True,
       bucket_locked=False,
+      settled=True,
     )
     await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
     self._motion_is_prepared = True
@@ -881,6 +883,7 @@ class V11VSpinBackend(CentrifugeBackend):
     door_open: Optional[bool] = None,
     door_locked: Optional[bool] = None,
     bucket_locked: Optional[bool] = None,
+    settled: bool = False,
   ) -> None:
     end = time.monotonic() + timeout
     last_status = b""
@@ -900,6 +903,8 @@ class V11VSpinBackend(CentrifugeBackend):
           matches.append((value & 0b0100 == 0) is door_locked)
         if bucket_locked is not None:
           matches.append((value & 0b0001 != 0) is bucket_locked)
+        if settled:
+          matches.append(last_status[1] in (0x00, 0x10))
         if all(matches):
           return
 
@@ -1044,10 +1049,11 @@ class V11VSpinBackend(CentrifugeBackend):
     await self._send_safe(bytes.fromhex("aa0226000028"), timeout=0.20)
     await self._wait_for_io_state(
       label="door lock",
-      timeout=1.5,
+      timeout=2.5,
       door_open=False,
       door_locked=True,
       bucket_locked=False,
+      settled=True,
     )
     await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
 

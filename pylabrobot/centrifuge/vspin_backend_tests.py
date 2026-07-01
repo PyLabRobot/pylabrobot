@@ -512,6 +512,7 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     statuses = [
       bytes.fromhex("0088090091"),
       bytes.fromhex("0008080010"),
+      bytes.fromhex("0010080018"),
     ]
 
     async def send_safe(cmd: bytes, **kwargs):
@@ -534,6 +535,7 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
         bytes.fromhex("aa0226000129"),
         bytes.fromhex("aa020e10"),
         bytes.fromhex("aa0226000028"),
+        bytes.fromhex("aa020e10"),
         bytes.fromhex("aa020e10"),
       ],
     )
