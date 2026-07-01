@@ -1111,13 +1111,14 @@ class V11VSpinBackend(CentrifugeBackend):
     try:
       await self._prepare_spin_motion()
       await self._motor_enable()
+      # Sample before entering the spin profile; D4 97 must follow it immediately.
+      current_position = await self.get_position()
       await self._send_safe(
         bytes.fromhex("aa01e60500640000000000fd00803e01000c"),
         timeout=0.25,
         expected_len=14,
       )
 
-      current_position = await self.get_position()
       spin_command, final_position = _build_vspin_spin_command(
         current_position=current_position,
         rpm=rpm,
