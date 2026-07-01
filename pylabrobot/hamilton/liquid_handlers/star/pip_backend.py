@@ -6,7 +6,17 @@ import enum
 import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Sequence, Tuple, Union
+from typing import (
+  TYPE_CHECKING,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Protocol,
+  Sequence,
+  Tuple,
+  Union,
+)
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.liquid_handling.pip_backend import PIPBackend
@@ -27,7 +37,7 @@ from .errors import (
   STARFirmwareError,
   convert_star_firmware_error_to_plr_error,
 )
-from .pip_channel import PIPChannel
+from .pip_channel import _TADM_RECORDING_FW, PIPChannel, TADMRecordingMode
 
 if TYPE_CHECKING:
   from .driver import STARDriver
@@ -194,6 +204,12 @@ def _assert_range(values, lo, hi, name):
   """Assert all values in a list are within [lo, hi]."""
   if not all(lo <= v <= hi for v in values):
     raise ValueError(f"{name} values must be between {lo} and {hi}, got {values}")
+
+
+class _RecordsTADM(Protocol):
+  """Structural type for aspirate/dispense params that can request TADM recording."""
+
+  tadm_recording_mode: TADMRecordingMode
 
 
 class STARPIPBackend(PIPBackend):
@@ -579,9 +595,7 @@ class STARPIPBackend(PIPBackend):
       z_drive_speed_during_2nd_section_search: Z drive speed during 2nd section search in
         mm/s. Must be between 0.3 and 160.0.
       cup_upper_edge: Cup upper edge in mm. Must be between 0 and 360.0.
-      tadm_algorithm: Whether to use the TADM algorithm. Default False.
-      recording_mode: Recording mode (0 = no recording, 1 = TADM errors only,
-        2 = all TADM measurements). Must be between 0 and 2.
+      tadm_recording_mode: How much of the trace to store: "off", "errors_only", or "all".
       probe_liquid_height: If True, use gamma LLD to probe the liquid height before
         aspirating. Cannot be used when liquid heights are already set on operations.
       auto_surface_following_distance: If True, automatically compute the surface
@@ -624,8 +638,7 @@ class STARPIPBackend(PIPBackend):
     dosing_drive_speed_during_2nd_section_search: Optional[List[float]] = None
     z_drive_speed_during_2nd_section_search: Optional[List[float]] = None
     cup_upper_edge: Optional[List[float]] = None
-    tadm_algorithm: bool = False
-    recording_mode: int = 0
+    tadm_recording_mode: TADMRecordingMode = "off"
     probe_liquid_height: bool = False
     auto_surface_following_distance: bool = False
 
@@ -874,8 +887,6 @@ class STARPIPBackend(PIPBackend):
       "mix_surface_following_distance",
     )
     _assert_range(limit_curve_index, 0, 999, "limit_curve_index")
-    if not 0 <= backend_params.recording_mode <= 2:
-      raise ValueError("recording_mode must be between 0 and 2")
     # 2nd section aspiration range checks
     _assert_range(
       [
@@ -920,6 +931,8 @@ class STARPIPBackend(PIPBackend):
       "cup_upper_edge",
     )
 
+    await self._begin_tadm_if_recording(use_channels, backend_params)
+
     try:
       await self.driver.send_command(
         module="C0",
@@ -960,8 +973,8 @@ class STARPIPBackend(PIPBackend):
         ms=[f"{round(s * 10):04}" for s in mix_speed],
         mh=[f"{round(d * 10):04}" for d in mix_surface_following_distance],
         gi=[f"{i:03}" for i in limit_curve_index],
-        gj=backend_params.tadm_algorithm,
-        gk=backend_params.recording_mode,
+        gj=0,
+        gk=_TADM_RECORDING_FW[backend_params.tadm_recording_mode],
         lk=[1 if x else 0 for x in _fill(backend_params.use_2nd_section_aspiration, [False] * n)],
         ik=[
           f"{round(x * 10):04}"
@@ -1059,9 +1072,7 @@ class STARPIPBackend(PIPBackend):
         0 and 360.0.
       min_z_endpos: Minimum Z position in mm at end of command. If None, uses backend's
         ``traversal_height``. Must be between 0 and 360.0.
-      tadm_algorithm: Whether to use the TADM algorithm. Default False.
-      recording_mode: Recording mode (0 = no recording, 1 = TADM errors only,
-        2 = all TADM measurements). Must be between 0 and 2.
+      tadm_recording_mode: How much of the trace to store: "off", "errors_only", or "all".
       probe_liquid_height: If True, use gamma LLD to probe the liquid height before
         dispensing. Cannot be used when liquid heights are already set on operations.
       auto_surface_following_distance: If True, automatically compute the surface
@@ -1097,8 +1108,7 @@ class STARPIPBackend(PIPBackend):
     limit_curve_index: Optional[List[int]] = None
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None
     min_z_endpos: Optional[float] = None
-    tadm_algorithm: bool = False
-    recording_mode: int = 0
+    tadm_recording_mode: TADMRecordingMode = "off"
     probe_liquid_height: bool = False
     auto_surface_following_distance: bool = False
 
@@ -1335,8 +1345,7 @@ class STARPIPBackend(PIPBackend):
       "mix_surface_following_distance",
     )
     _assert_range(limit_curve_index, 0, 999, "limit_curve_index")
-    if not 0 <= backend_params.recording_mode <= 2:
-      raise ValueError("recording_mode must be between 0 and 2")
+    await self._begin_tadm_if_recording(use_channels, backend_params)
 
     try:
       await self.driver.send_command(
@@ -1378,8 +1387,8 @@ class STARPIPBackend(PIPBackend):
         ms=[f"{round(s * 10):04}" for s in mix_speed],
         mh=[f"{round(d * 10):04}" for d in mix_surface_following_distance],
         gi=[f"{i:03}" for i in limit_curve_index],
-        gj=backend_params.tadm_algorithm,
-        gk=backend_params.recording_mode,
+        gj=0,
+        gk=_TADM_RECORDING_FW[backend_params.tadm_recording_mode],
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
@@ -1695,6 +1704,21 @@ class STARPIPBackend(PIPBackend):
     """Measure tip presence on all channels using their sleeve sensors."""
     resp = await self.driver.send_command(module="C0", command="RT", fmt="rt# (n)")
     return [bool(v) for v in resp.get("rt")]
+
+  async def _begin_tadm_if_recording(
+    self, use_channels: List[int], backend_params: _RecordsTADM
+  ) -> None:
+    """Auto-arm TADM monitoring (Px:BG) on each involved channel when the op records TADM.
+
+    So callers get the "begin monitoring" step for free on any aspirate/dispense that enables
+    TADM recording or limit-curve evaluation, rather than having to issue BG themselves.
+    """
+    if backend_params.tadm_recording_mode == "off":
+      return
+    for channel in use_channels:
+      await self.channels[channel].begin_tadm_monitoring(
+        recording_mode=backend_params.tadm_recording_mode
+      )
 
   async def request_tadm_status(self) -> List[int]:
     """Request TADM enable/disable status across all PIP channels.
