@@ -9,10 +9,8 @@ class OT2RobotGeometry:
   """Static geometry of an Opentrons OT-2, expressed in the robot frame.
 
   Every OT-2 Standard shares this geometry, so it is a constant rather than something probed from
-  the device. This is the key difference from Hamilton STAR hardware, whose installed configuration
-  varies per machine and must be read from firmware; the only OT-2 data worth discovering at runtime
-  is which pipettes are mounted, not where the deck is.
-
+  the device. The only OT-2 data worth discovering at runtime is which pipettes are mounted, not
+  where the deck is.
   The robot frame has its origin at the front-left corner of slot 1, with +x to the right, +y to
   the back, and +z up. All distances are in mm.
   """
