@@ -97,7 +97,7 @@ await cf.setup()
 await cf.spin(g=800, duration=60)
 ```
 
-Use `variant="v11"` for legacy Velocity11 VSpin centrifuges. The legacy backend has not yet been validated on hardware in PLR.
+Use `variant="velocity11"` for legacy Velocity11 VSpin centrifuges.
 
 For a HighRes Biosolutions MicroSpin, use the MicroSpin factory:
 
