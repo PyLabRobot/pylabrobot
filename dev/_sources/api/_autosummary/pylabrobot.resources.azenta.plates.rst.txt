@@ -19,8 +19,7 @@ pylabrobot.resources.azenta.plates
       :toctree:
    
       Azenta4titudeFrameStar_96_wellplate_200ul_Vb
-      Azenta4titudeFrameStar_96_wellplate_200ul_Vb_Lid
-      Azenta4titudeFrameStar_96_wellplate_skirted
+      azenta_96_wellplate_200uL_Vb_4titudeframestar
    
    
 

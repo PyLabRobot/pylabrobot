@@ -21,9 +21,9 @@ pylabrobot.resources.corning.falcon.tubes
       Cor_Falcon_tube_14mL_Rb
       Cor_Falcon_tube_15mL_Vb
       Cor_Falcon_tube_50mL_Vb
-      Falcon_tube_14mL_Rb
-      falcon_tube_15mL
-      falcon_tube_50mL
+      cor_falcon_tube_14mL_Rb
+      cor_falcon_tube_15mL_Vb
+      cor_falcon_tube_50mL_Vb
    
    
 

@@ -19,8 +19,9 @@ pylabrobot.resources.corning.axygen.plates
       :toctree:
    
       Cor_Axy_24_wellplate_10mL_Vb
-      Cor_Axy_24_wellplate_10mL_Vb_Lid
       Cor_Axy_96_wellplate_500uL_Ub
+      cor_axy_24_wellplate_10mL_Vb
+      cor_axy_96_wellplate_500uL_Ub
    
    
 

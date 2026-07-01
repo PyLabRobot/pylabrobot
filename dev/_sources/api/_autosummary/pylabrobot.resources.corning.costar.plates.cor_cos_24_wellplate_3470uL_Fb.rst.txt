@@ -1,0 +1,6 @@
+pylabrobot.resources.corning.costar.plates.cor\_cos\_24\_wellplate\_3470uL\_Fb
+==============================================================================
+
+.. currentmodule:: pylabrobot.resources.corning.costar.plates
+
+.. autofunction:: cor_cos_24_wellplate_3470uL_Fb

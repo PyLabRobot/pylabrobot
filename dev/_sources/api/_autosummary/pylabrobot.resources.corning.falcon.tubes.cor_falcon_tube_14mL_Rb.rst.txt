@@ -1,0 +1,6 @@
+pylabrobot.resources.corning.falcon.tubes.cor\_falcon\_tube\_14mL\_Rb
+=====================================================================
+
+.. currentmodule:: pylabrobot.resources.corning.falcon.tubes
+
+.. autofunction:: cor_falcon_tube_14mL_Rb
