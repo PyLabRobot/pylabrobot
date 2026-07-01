@@ -2,7 +2,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
+from pylabrobot.inheco.sila import InhecoSiLAInterface
 from pylabrobot.inheco.scila.scila import SCILADrawerLoadingTrayBackend
 from pylabrobot.inheco.scila.scila_backend import SCILADriver, SCILATemperatureBackend
 

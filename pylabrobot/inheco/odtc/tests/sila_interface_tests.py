@@ -8,7 +8,7 @@ from pylabrobot.capabilities.thermocycling.standard import Protocol, Ramp, Stage
 from pylabrobot.inheco.odtc.backend import ODTCThermocyclerBackend
 from pylabrobot.inheco.odtc.driver import ODTCDriver
 from pylabrobot.inheco.odtc.model import FluidQuantity, ODTCBackendParams, ODTCPID, ODTCProtocol
-from pylabrobot.inheco.scila.inheco_sila_interface import SiLAError, SiLAState
+from pylabrobot.inheco.sila import SiLAError, SiLAState
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ def _make_interface() -> ODTCDriver:
 
 def _add_pending(iface: ODTCDriver, command: str, request_id: int):
   """Register a pending async command future on the interface."""
-  from pylabrobot.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
+  from pylabrobot.inheco.sila import InhecoSiLAInterface
   fut = asyncio.get_event_loop().create_future()
   iface._pending_by_id[request_id] = InhecoSiLAInterface._SiLACommand(
     name=command, request_id=request_id, fut=fut

@@ -6,7 +6,7 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.temperature_controlling import TemperatureControllerBackend
 from pylabrobot.device import Driver
 
-from .inheco_sila_interface import InhecoSiLAInterface
+from pylabrobot.inheco.sila import InhecoSiLAInterface
 
 logger = logging.getLogger(__name__)
 

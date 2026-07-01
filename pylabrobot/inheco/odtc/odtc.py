@@ -10,7 +10,7 @@ from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.loading_tray import LoadingTray
 from pylabrobot.capabilities.thermocycling.thermocycler import Thermocycler
 from pylabrobot.device import Device
-from pylabrobot.inheco.scila.inheco_sila_interface import SiLAState
+from pylabrobot.inheco.sila import SiLAState
 from pylabrobot.resources import Coordinate, Resource
 
 from .backend import ODTCThermocyclerBackend
@@ -59,8 +59,11 @@ class ODTC(Resource, Device):
     name: str = "odtc",
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
+    odtc_port: int = 8080,
   ) -> None:
-    driver = ODTCDriver(machine_ip=odtc_ip, client_ip=client_ip, logger=logger)
+    driver = ODTCDriver(
+      machine_ip=odtc_ip, client_ip=client_ip, logger=logger, machine_port=odtc_port
+    )
     variant_normalized: ODTCVariant = normalize_variant(variant)
 
     Resource.__init__(
@@ -75,12 +78,14 @@ class ODTC(Resource, Device):
     self.driver: ODTCDriver = driver  # typed public reference (Device base stores self.driver)
     self.logger = logger or logging.getLogger(__name__)
 
-    self.tc = Thermocycler(backend=ODTCThermocyclerBackend(driver=driver, variant=variant_normalized))
+    self.tc = Thermocycler(
+      backend=ODTCThermocyclerBackend(driver=driver, variant=variant_normalized)
+    )
 
     self.door = LoadingTray(
       backend=ODTCDoorBackend(driver=driver),
       name=f"{name}_door",
-      size_x=127.76,   # SBS 96-well plate footprint
+      size_x=127.76,  # SBS 96-well plate footprint
       size_y=85.48,
       size_z=0.0,
       child_location=Coordinate.zero(),
@@ -146,10 +151,13 @@ class ODTC(Resource, Device):
       except Exception as e:  # noqa: BLE001
         last_error = e
         if attempt < max_attempts - 1:
-          wait_time = retry_backoff_base_seconds * (2 ** attempt)
+          wait_time = retry_backoff_base_seconds * (2**attempt)
           self.logger.warning(
             "Setup attempt %s/%s failed: %s. Retrying in %.1fs.",
-            attempt + 1, max_attempts, e, wait_time,
+            attempt + 1,
+            max_attempts,
+            e,
+            wait_time,
           )
           await asyncio.sleep(wait_time)
         else:
@@ -175,16 +183,13 @@ class ODTC(Resource, Device):
       await self.driver.send_command("Initialize")
       status_after_init = await self.driver.request_status()
       if status_after_init != SiLAState.IDLE:
-        raise RuntimeError(
-          f"Device not in idle after Initialize. Got {status_after_init.value!r}."
-        )
+        raise RuntimeError(f"Device not in idle after Initialize. Got {status_after_init.value!r}.")
       self.logger.info("Device initialized and idle")
     elif status == SiLAState.IDLE:
       self.logger.info("Device already idle after Reset")
     else:
       raise RuntimeError(
-        f"Unexpected device state after Reset: {status.value!r}. "
-        f"Expected standby or idle."
+        f"Unexpected device state after Reset: {status.value!r}. Expected standby or idle."
       )
 
   async def stop(self) -> None:

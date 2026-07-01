@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.capabilities.thermocycling.standard import Protocol
-from pylabrobot.inheco.scila.inheco_sila_interface import SiLAState
+from pylabrobot.inheco.sila import SiLAState
 
 from .driver import ODTCDriver
 from .model import (

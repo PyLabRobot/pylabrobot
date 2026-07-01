@@ -15,11 +15,10 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.thermocycling.standard import Protocol, Stage, Step
+from pylabrobot.capabilities.thermocycling.standard import Protocol
 
 ODTCVariant = Literal[96, 384]
 
@@ -47,9 +46,9 @@ class FluidQuantity(enum.IntEnum):
   """
 
   VERIFICATION_TOOL = -1  # calibration / dry run
-  UL_10_TO_29  = 0        # 10–29 µL
-  UL_30_TO_74  = 1        # 30–74 µL
-  UL_75_TO_100 = 2        # 75–100 µL
+  UL_10_TO_29 = 0  # 10–29 µL
+  UL_30_TO_74 = 1  # 30–74 µL
+  UL_75_TO_100 = 2  # 75–100 µL
 
 
 def volume_to_fluid_quantity(volume_ul: float) -> FluidQuantity:
@@ -65,13 +64,9 @@ def volume_to_fluid_quantity(volume_ul: float) -> FluidQuantity:
     ValueError: If volume_ul is <= 0 or > 100.
   """
   if volume_ul <= 0:
-    raise ValueError(
-      f"Volume must be > 0 µL, got {volume_ul} µL."
-    )
+    raise ValueError(f"Volume must be > 0 µL, got {volume_ul} µL.")
   if volume_ul > 100:
-    raise ValueError(
-      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL."
-    )
+    raise ValueError(f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL.")
   if volume_ul <= 29:
     return FluidQuantity.UL_10_TO_29
   if volume_ul <= 74:
@@ -136,65 +131,27 @@ def _variant_to_device_code(variant: ODTCVariant) -> int:
 
 
 # =============================================================================
-# XML Field Metadata
-# =============================================================================
-
-
-class XMLFieldType(Enum):
-  ELEMENT = "element"
-  ATTRIBUTE = "attribute"
-  CHILD_LIST = "child_list"
-
-
-@dataclass(frozen=True)
-class XMLField:
-  """Metadata for XML field mapping."""
-
-  tag: Optional[str] = None
-  field_type: XMLFieldType = XMLFieldType.ELEMENT
-  default: Any = None
-  scale: float = 1.0
-
-
-def xml_field(
-  tag: Optional[str] = None,
-  field_type: XMLFieldType = XMLFieldType.ELEMENT,
-  default: Any = None,
-  scale: float = 1.0,
-) -> Any:
-  metadata = {"xml": XMLField(tag=tag, field_type=field_type, default=default, scale=scale)}
-  if default is None:
-    return field(default=None, metadata=metadata)
-  return field(default=default, metadata=metadata)
-
-
-def xml_attr(tag: Optional[str] = None, default: Any = None) -> Any:
-  return xml_field(tag=tag, field_type=XMLFieldType.ATTRIBUTE, default=default)
-
-
-def xml_child_list(tag: Optional[str] = None) -> Any:
-  metadata = {"xml": XMLField(tag=tag, field_type=XMLFieldType.CHILD_LIST, default=None)}
-  return field(default_factory=list, metadata=metadata)
-
-
-# =============================================================================
 # ODTC Data Classes
 # =============================================================================
 
 
 @dataclass
 class ODTCPID:
-  """PID controller parameters."""
+  """PID controller parameters.
 
-  number: int = xml_attr(tag="number", default=1)
-  p_heating: float = xml_field(tag="PHeating", default=60.0)
-  p_cooling: float = xml_field(tag="PCooling", default=80.0)
-  i_heating: float = xml_field(tag="IHeating", default=250.0)
-  i_cooling: float = xml_field(tag="ICooling", default=100.0)
-  d_heating: float = xml_field(tag="DHeating", default=10.0)
-  d_cooling: float = xml_field(tag="DCooling", default=10.0)
-  p_lid: float = xml_field(tag="PLid", default=100.0)
-  i_lid: float = xml_field(tag="ILid", default=70.0)
+  XML serialization (element tags PHeating/PCooling/... and the ``number``
+  attribute) is handled explicitly in xml.py.
+  """
+
+  number: int = 1
+  p_heating: float = 60.0
+  p_cooling: float = 80.0
+  i_heating: float = 250.0
+  i_cooling: float = 100.0
+  d_heating: float = 10.0
+  d_cooling: float = 10.0
+  p_lid: float = 100.0
+  i_lid: float = 70.0
 
 
 @dataclass
@@ -213,8 +170,8 @@ class ODTCBackendParams(BackendParams):
   plate_type: int = 0
   post_heating: bool = True
   pid_set: List[ODTCPID] = field(default_factory=lambda: [ODTCPID(number=1)])
-  default_heating_slope: Optional[float] = None   # None = hardware max
-  default_cooling_slope: Optional[float] = None   # None = hardware max
+  default_heating_slope: Optional[float] = None  # None = hardware max
+  default_cooling_slope: Optional[float] = None  # None = hardware max
   name: Optional[str] = None
   creator: Optional[str] = None
   apply_overshoot: bool = True
@@ -252,17 +209,21 @@ class ODTCMethodSet:
 
 @dataclass
 class ODTCSensorValues:
-  """Temperature sensor readings from ODTC (values in °C)."""
+  """Temperature sensor readings from ODTC (values in °C).
 
-  timestamp: Optional[str] = xml_attr(tag="timestamp", default=None)
-  mount: float = xml_field(tag="Mount", scale=0.01, default=0.0)
-  mount_monitor: float = xml_field(tag="Mount_Monitor", scale=0.01, default=0.0)
-  lid: float = xml_field(tag="Lid", scale=0.01, default=0.0)
-  lid_monitor: float = xml_field(tag="Lid_Monitor", scale=0.01, default=0.0)
-  ambient: float = xml_field(tag="Ambient", scale=0.01, default=0.0)
-  pcb: float = xml_field(tag="PCB", scale=0.01, default=0.0)
-  heatsink: float = xml_field(tag="Heatsink", scale=0.01, default=0.0)
-  heatsink_tec: float = xml_field(tag="Heatsink_TEC", scale=0.01, default=0.0)
+  Parsed from the device's SensorValues XML in xml.py (raw integer values are
+  in 1/100 °C and scaled by 0.01 on parse).
+  """
+
+  timestamp: Optional[str] = None
+  mount: float = 0.0
+  mount_monitor: float = 0.0
+  lid: float = 0.0
+  lid_monitor: float = 0.0
+  ambient: float = 0.0
+  pcb: float = 0.0
+  heatsink: float = 0.0
+  heatsink_tec: float = 0.0
 
   def __str__(self) -> str:
     lines = [
@@ -275,22 +236,6 @@ class ODTCSensorValues:
     if self.timestamp:
       lines.insert(1, f"  timestamp={self.timestamp}")
     return "\n".join(lines)
-
-  def format_compact(self) -> str:
-    parts = [
-      f"Mount={self.mount:.1f}°C",
-      f"Lid={self.lid:.1f}°C",
-      f"Ambient={self.ambient:.1f}°C",
-      f"Mount_Monitor={self.mount_monitor:.1f}°C",
-      f"Lid_Monitor={self.lid_monitor:.1f}°C",
-      f"PCB={self.pcb:.1f}°C",
-      f"Heatsink={self.heatsink:.1f}°C",
-      f"Heatsink_TEC={self.heatsink_tec:.1f}°C",
-    ]
-    line = "  ".join(parts)
-    if self.timestamp:
-      return f"ODTCSensorValues({self.timestamp})  {line}"
-    return f"ODTCSensorValues  {line}"
 
 
 # =============================================================================
@@ -409,6 +354,7 @@ class ODTCProtocol(Protocol):
       ODTCProtocol ready for upload or direct execution.
     """
     from .protocol import _from_protocol  # lazy import — avoids circular dependency
+
     p = params if params is not None else ODTCBackendParams()
     fq = p.fluid_quantity if p.fluid_quantity is not None else FluidQuantity.UL_30_TO_74
     return _from_protocol(

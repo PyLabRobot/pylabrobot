@@ -18,11 +18,11 @@ fixed 3-hour ceiling.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Set
+from typing import Optional, Set
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.device import Driver
-from pylabrobot.inheco.scila.inheco_sila_interface import (
+from pylabrobot.inheco.sila import (
   InhecoSiLAInterface,
   SiLAError,
   SiLAState,
@@ -55,8 +55,15 @@ class ODTCDriver(InhecoSiLAInterface, Driver):
     machine_ip: str,
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
+    machine_port: int = 8080,
   ) -> None:
-    InhecoSiLAInterface.__init__(self, machine_ip=machine_ip, client_ip=client_ip, logger=logger)
+    InhecoSiLAInterface.__init__(
+      self,
+      machine_ip=machine_ip,
+      client_ip=client_ip,
+      logger=logger,
+      machine_port=machine_port,
+    )
     Driver.__init__(self)
 
   # ------------------------------------------------------------------
@@ -124,8 +131,11 @@ class ODTCDriver(InhecoSiLAInterface, Driver):
     if error_name or error_description or error_classification:
       self._logger.error(
         "StatusEvent error: classification=%r code=%d (%s) name=%r desc=%r",
-        error_classification, internal_error_code, internal_error_code_hex,
-        error_name, error_description,
+        error_classification,
+        internal_error_code,
+        internal_error_code_hex,
+        error_name,
+        error_description,
       )
 
     # Reject all pending futures when device enters an error state
@@ -135,10 +145,7 @@ class ODTCDriver(InhecoSiLAInterface, Driver):
       state = None
 
     if state in _ERROR_STATES and self._pending_by_id:
-      msg = (
-        error_description or error_name
-        or f"Device entered {device_state} state"
-      )
+      msg = error_description or error_name or f"Device entered {device_state} state"
       if internal_error_code:
         msg = f"{msg} [code {internal_error_code}]"
       if state == SiLAState.INERROR:
@@ -165,7 +172,9 @@ class ODTCDriver(InhecoSiLAInterface, Driver):
 
     self._logger.error(
       "ErrorEvent for requestId %s: code %s, message: %s",
-      req_id, return_code, message,
+      req_id,
+      return_code,
+      message,
     )
 
     err_msg = message.replace("\n", " ") if message else f"Error (code {return_code})"

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from pylabrobot.inheco.scila.soap import (
+from pylabrobot.inheco.sila.soap import (
   XSI,
   soap_decode,
   soap_encode,
@@ -150,9 +150,11 @@ class InhecoSiLAInterface:
     machine_ip: str,
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
+    machine_port: int = 8080,
   ) -> None:
     self._client_ip = client_ip or _get_local_ip(machine_ip)
     self._machine_ip = machine_ip
+    self._machine_port = machine_port
     self._logger = logger or logging.getLogger(__name__)
 
     # pending commands by request_id (supports multiple in-flight)
@@ -451,7 +453,7 @@ class InhecoSiLAInterface:
       extra_method_xmlns={"i": XSI},
     )
 
-    url = f"http://{self._machine_ip}:8080/"
+    url = f"http://{self._machine_ip}:{self._machine_port}/"
     req = urllib.request.Request(
       url=url,
       data=cmd_xml.encode("utf-8"),

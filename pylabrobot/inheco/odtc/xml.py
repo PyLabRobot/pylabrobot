@@ -12,138 +12,91 @@ Key differences from the original:
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, fields
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, get_args, get_origin, get_type_hints
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple
 
-from pylabrobot.capabilities.thermocycling.standard import Overshoot, Protocol, Ramp, Stage, Step
+from pylabrobot.capabilities.thermocycling.standard import Overshoot, Ramp, Stage, Step
 
 from .model import (
   ODTCPID,
   ODTCMethodSet,
   ODTCProtocol,
   ODTCSensorValues,
-  XMLField,
-  XMLFieldType,
   _variant_to_device_code,
   normalize_variant,
 )
 
-T = TypeVar("T")
 
-
-# =============================================================================
-# Generic dataclass XML helpers (for ODTCPID, ODTCSensorValues)
-# =============================================================================
-
-
-def _get_xml_meta(f) -> XMLField:
-  if "xml" in f.metadata:
-    return cast(XMLField, f.metadata["xml"])
-  return XMLField(tag=None, field_type=XMLFieldType.ELEMENT)
-
-
-def _get_tag(f, meta: XMLField) -> str:
-  return meta.tag if meta.tag else f.name
-
-
-def _get_inner_type(type_hint) -> Optional[Type[Any]]:
-  origin = get_origin(type_hint)
-  args = get_args(type_hint)
-  if origin is list and args:
-    return cast(Type[Any], args[0])
-  if origin is Union and type(None) in args:
-    result = next((a for a in args if a is not type(None)), None)
-    return cast(Type[Any], result) if result is not None else None
-  return None
-
-
-def _is_dataclass_type(tp: Type) -> bool:
-  return hasattr(tp, "__dataclass_fields__")
-
-
-def _parse_value(text: Optional[str], field_type: Type, scale: float = 1.0) -> Any:
-  if text is None:
-    return None
-  text = text.strip()
-  if field_type is bool:
-    return text.lower() == "true"
-  if field_type is int:
-    return int(float(text) * scale)
-  if field_type is float:
-    return float(text) * scale
-  return text
-
-
-def _format_value(value: Any, scale: float = 1.0) -> str:
+def _format_value(value: Any) -> str:
+  """Format a numeric/bool value for an ODTC XML element (ints stay integral)."""
   if isinstance(value, bool):
     return "true" if value else "false"
-  if isinstance(value, float):
-    scaled = value / scale if scale != 1.0 else value
-    if scaled == int(scaled):
-      return str(int(scaled))
-    return str(scaled)
-  if isinstance(value, int):
-    return str(int(value / scale) if scale != 1.0 else value)
+  if isinstance(value, float) and value == int(value):
+    return str(int(value))
   return str(value)
 
 
-def from_xml(elem: ET.Element, cls: Type[T]) -> T:
-  """Deserialize an XML element to a dataclass (for ODTCPID, ODTCSensorValues)."""
-  if not _is_dataclass_type(cls):
-    raise TypeError(f"{cls} is not a dataclass")
-  kwargs: Dict[str, Any] = {}
-  type_hints = get_type_hints(cls)
-  for f in fields(cls):  # type: ignore[arg-type]
-    meta = _get_xml_meta(f)
-    tag = _get_tag(f, meta)
-    field_type = type_hints.get(f.name, f.type)
-    inner_type = _get_inner_type(field_type)
-    actual_type = inner_type if inner_type and get_origin(field_type) is Union else field_type
-    if meta.field_type == XMLFieldType.ATTRIBUTE:
-      raw = elem.attrib.get(tag)
-      if raw is not None:
-        kwargs[f.name] = _parse_value(raw, actual_type, meta.scale)
-      elif meta.default is not None:
-        kwargs[f.name] = meta.default
-    elif meta.field_type == XMLFieldType.ELEMENT:
-      child = elem.find(tag)
-      if child is not None and child.text:
-        kwargs[f.name] = _parse_value(child.text, actual_type, meta.scale)
-      elif meta.default is not None:
-        kwargs[f.name] = meta.default
-    elif meta.field_type == XMLFieldType.CHILD_LIST:
-      list_type = _get_inner_type(field_type)
-      if list_type and _is_dataclass_type(list_type):
-        children = elem.findall(tag)
-        kwargs[f.name] = [from_xml(c, list_type) for c in children]
-      else:
-        kwargs[f.name] = []
-  return cls(**kwargs)
+# =============================================================================
+# ODTCPID / ODTCSensorValues XML (explicit field maps — no reflection)
+# =============================================================================
+
+# (dataclass attribute, XML element tag) for the eight PID gains.
+_PID_ELEMENTS: List[Tuple[str, str]] = [
+  ("p_heating", "PHeating"),
+  ("p_cooling", "PCooling"),
+  ("i_heating", "IHeating"),
+  ("i_cooling", "ICooling"),
+  ("d_heating", "DHeating"),
+  ("d_cooling", "DCooling"),
+  ("p_lid", "PLid"),
+  ("i_lid", "ILid"),
+]
+
+# (dataclass attribute, XML element tag) for the eight temperature sensors.
+_SENSOR_ELEMENTS: List[Tuple[str, str]] = [
+  ("mount", "Mount"),
+  ("mount_monitor", "Mount_Monitor"),
+  ("lid", "Lid"),
+  ("lid_monitor", "Lid_Monitor"),
+  ("ambient", "Ambient"),
+  ("pcb", "PCB"),
+  ("heatsink", "Heatsink"),
+  ("heatsink_tec", "Heatsink_TEC"),
+]
+
+# Device reports sensor temperatures as integers in 1/100 °C.
+_SENSOR_SCALE = 0.01
 
 
-def to_xml(obj: Any, tag_name: Optional[str] = None, parent: Optional[ET.Element] = None) -> ET.Element:
-  """Serialize a dataclass to XML (for ODTCPID, ODTCSensorValues)."""
-  if not _is_dataclass_type(type(obj)):
-    raise TypeError(f"{type(obj)} is not a dataclass")
-  if tag_name is None:
-    tag_name = type(obj).__name__
-  elem = ET.SubElement(parent, tag_name) if parent is not None else ET.Element(tag_name)
-  for f in fields(type(obj)):
-    meta = _get_xml_meta(f)
-    tag = _get_tag(f, meta)
-    value = getattr(obj, f.name)
-    if value is None:
-      continue
-    if meta.field_type == XMLFieldType.ATTRIBUTE:
-      elem.set(tag, _format_value(value, meta.scale))
-    elif meta.field_type == XMLFieldType.ELEMENT:
-      child = ET.SubElement(elem, tag)
-      child.text = _format_value(value, meta.scale)
-    elif meta.field_type == XMLFieldType.CHILD_LIST:
-      for item in value:
-        if _is_dataclass_type(type(item)):
-          to_xml(item, tag, elem)
+def _pid_to_xml(pid: ODTCPID, parent: ET.Element) -> ET.Element:
+  elem = ET.SubElement(parent, "PID")
+  elem.set("number", str(pid.number))
+  for attr, tag in _PID_ELEMENTS:
+    ET.SubElement(elem, tag).text = _format_value(getattr(pid, attr))
   return elem
+
+
+def _pid_from_xml(elem: ET.Element) -> ODTCPID:
+  kwargs: Dict[str, Any] = {}
+  number = elem.attrib.get("number")
+  if number is not None:
+    kwargs["number"] = int(float(number))
+  for attr, tag in _PID_ELEMENTS:
+    val = _read_opt_elem(elem, tag, parse_float=True)
+    if val is not None:
+      kwargs[attr] = val
+  return ODTCPID(**kwargs)
+
+
+def parse_sensor_values(xml_str: str) -> ODTCSensorValues:
+  """Parse a SensorValues XML string (raw ints in 1/100 °C, scaled to °C)."""
+  root = ET.fromstring(xml_str)
+  kwargs: Dict[str, Any] = {"timestamp": root.attrib.get("timestamp")}
+  for attr, tag in _SENSOR_ELEMENTS:
+    val = _read_opt_elem(root, tag, parse_float=True)
+    if val is not None:
+      kwargs[attr] = val * _SENSOR_SCALE
+  return ODTCSensorValues(**kwargs)
 
 
 # =============================================================================
@@ -192,7 +145,9 @@ class _ParsedStep:
     )
 
 
-def _read_opt_elem(elem: ET.Element, tag: str, default: Any = None, parse_float: bool = False) -> Any:
+def _read_opt_elem(
+  elem: ET.Element, tag: str, default: Any = None, parse_float: bool = False
+) -> Any:
   child = elem.find(tag)
   if child is None or child.text is None:
     return default
@@ -206,6 +161,7 @@ def _read_opt_elem(elem: ET.Element, tag: str, default: Any = None, parse_float:
 
 def _parse_step_element(elem: ET.Element) -> _ParsedStep:
   """Parse a single <Step> XML element to a _ParsedStep."""
+
   def f(tag: str, default: float = 0.0) -> float:
     return float(_read_opt_elem(elem, tag, default, parse_float=True))
 
@@ -387,7 +343,7 @@ def _flatten_one_stage(
       counter[0] += 1
     _flatten_one_stage(inner, result, counter)
   if len(steps) > len(inner_stages):
-    for step in steps[len(inner_stages):]:
+    for step in steps[len(inner_stages) :]:
       result.append((step, counter[0], 0, 0))
       counter[0] += 1
   elif not inner_stages:
@@ -436,6 +392,7 @@ def _step_to_xml_element(
 
   # Check for per-step backend_params PIDNumber override
   from pylabrobot.capabilities.capability import BackendParams  # noqa: F401 (lazy import)
+
   try:
     # Avoid circular import; just try attribute access
     bp = step.backend_params
@@ -488,7 +445,7 @@ def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
   pid_set: List[ODTCPID] = []
   pid_set_elem = elem.find("PIDSet")
   if pid_set_elem is not None:
-    pid_set = [from_xml(pid_elem, ODTCPID) for pid_elem in pid_set_elem.findall("PID")]
+    pid_set = [_pid_from_xml(pid_elem) for pid_elem in pid_set_elem.findall("PID")]
   if not pid_set:
     pid_set = [ODTCPID(number=1)]
 
@@ -560,8 +517,12 @@ def _odtc_protocol_to_method_xml(odtc_protocol: ODTCProtocol, parent: ET.Element
   ET.SubElement(elem, "PlateType").text = str(odtc_protocol.plate_type)
   ET.SubElement(elem, "FluidQuantity").text = str(int(odtc_protocol.fluid_quantity))
   ET.SubElement(elem, "PostHeating").text = "true" if odtc_protocol.post_heating else "false"
-  ET.SubElement(elem, "StartBlockTemperature").text = _format_value(odtc_protocol.start_block_temperature)
-  ET.SubElement(elem, "StartLidTemperature").text = _format_value(odtc_protocol.start_lid_temperature)
+  ET.SubElement(elem, "StartBlockTemperature").text = _format_value(
+    odtc_protocol.start_block_temperature
+  )
+  ET.SubElement(elem, "StartLidTemperature").text = _format_value(
+    odtc_protocol.start_lid_temperature
+  )
 
   flat = _flatten_stages_for_xml(odtc_protocol.stages)
   for step, number, goto, loop in flat:
@@ -570,7 +531,7 @@ def _odtc_protocol_to_method_xml(odtc_protocol: ODTCProtocol, parent: ET.Element
   if odtc_protocol.pid_set:
     pid_set_elem = ET.SubElement(elem, "PIDSet")
     for pid in odtc_protocol.pid_set:
-      to_xml(pid, "PID", pid_set_elem)
+      _pid_to_xml(pid, pid_set_elem)
 
   return elem
 
@@ -587,7 +548,9 @@ def _odtc_protocol_to_premethod_xml(odtc_protocol: ODTCProtocol, parent: ET.Elem
     elem.set("description", odtc_protocol.description)
   if odtc_protocol.datetime:
     elem.set("dateTime", odtc_protocol.datetime)
-  ET.SubElement(elem, "TargetBlockTemperature").text = _format_value(odtc_protocol.target_block_temperature)
+  ET.SubElement(elem, "TargetBlockTemperature").text = _format_value(
+    odtc_protocol.target_block_temperature
+  )
   ET.SubElement(elem, "TargetLidTemp").text = _format_value(odtc_protocol.target_lid_temperature)
   return elem
 
@@ -621,15 +584,11 @@ def parse_method_set_file(filepath: str) -> ODTCMethodSet:
 def method_set_to_xml(method_set: ODTCMethodSet) -> str:
   """Serialize a MethodSet to XML string."""
   root = ET.Element("MethodSet")
-  ET.SubElement(root, "DeleteAllMethods").text = "true" if method_set.delete_all_methods else "false"
+  ET.SubElement(root, "DeleteAllMethods").text = (
+    "true" if method_set.delete_all_methods else "false"
+  )
   for pm in method_set.premethods:
     _odtc_protocol_to_premethod_xml(pm, root)
   for m in method_set.methods:
     _odtc_protocol_to_method_xml(m, root)
   return ET.tostring(root, encoding="unicode", xml_declaration=True)
-
-
-def parse_sensor_values(xml_str: str) -> ODTCSensorValues:
-  """Parse SensorValues XML string."""
-  root = ET.fromstring(xml_str)
-  return from_xml(root, ODTCSensorValues)
