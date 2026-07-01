@@ -506,6 +506,50 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
 
     await backend._wait_for_speed_or_motion(rpm=1000, final_position=2000, timeout=0.5)
 
+  async def test_open_door_waits_after_unlock_before_open_command(self):
+    backend = _make_backend(_FakeIO([]))
+    events = []
+
+    async def get_door_open() -> bool:
+      events.append("get_door_open")
+      return False
+
+    async def get_door_locked() -> bool:
+      events.append("get_door_locked")
+      return True
+
+    async def send_safe(cmd: bytes, **kwargs):
+      del kwargs
+      events.append(cmd.hex())
+      return b""
+
+    async def wait_for_door(open_expected: bool, timeout: float) -> None:
+      events.append(("wait_for_door", open_expected, timeout))
+
+    async def sleep(seconds: float) -> None:
+      events.append(("sleep", seconds))
+
+    backend.get_door_open = get_door_open
+    backend.get_door_locked = get_door_locked
+    backend._send_safe = send_safe
+    backend._wait_for_door = wait_for_door
+
+    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.asyncio.sleep", sleep):
+      await backend.open_door()
+
+    self.assertEqual(
+      events,
+      [
+        "get_door_open",
+        "get_door_locked",
+        "aa022600042c",
+        ("sleep", 0.5),
+        "aa022600072f",
+        ("wait_for_door", True, 4.0),
+        ("sleep", 2.0),
+      ],
+    )
+
   async def test_prepare_spin_motion_waits_for_spin_ready_io_state(self):
     backend = _make_backend(_FakeIO([]))
     commands = []

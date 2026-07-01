@@ -58,6 +58,7 @@ POSITION_TOLERANCE: int = 15
 POSITION_SETTLE_TOLERANCE: int = 200
 TACH_TO_RPM: float = -14.69320388
 DOOR_OPEN_SETTLE_SECONDS: float = 2.0
+DOOR_UNLOCK_TO_OPEN_SETTLE_SECONDS: float = 0.5
 DOOR_CLOSE_SETTLE_SECONDS: float = 1.0
 PNEUMATIC_SETTLE_SECONDS: float = 0.35
 
@@ -1022,6 +1023,13 @@ class V11VSpinBackend(CentrifugeBackend):
       if await self.get_door_open():
         await asyncio.sleep(DOOR_OPEN_SETTLE_SECONDS)
         return
+    except IOError:
+      pass
+
+    try:
+      if await self.get_door_locked():
+        await self._send_safe(bytes.fromhex("aa022600042c"), timeout=0.20)
+        await asyncio.sleep(DOOR_UNLOCK_TO_OPEN_SETTLE_SECONDS)
     except IOError:
       pass
 
