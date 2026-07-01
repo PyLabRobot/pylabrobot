@@ -438,11 +438,20 @@ class EVOPIPBackend(PIPBackend, EVOArm):
     return b
 
   def _get_ys(self, ops: Sequence[Union[Aspiration, Dispense, Pickup, TipDrop]]) -> int:
-    """Get Y-spacing from plate well pitch or resource size."""
+    """Get Y-spacing from plate well pitch or resource size.
+
+    Itemized parents with fewer than 2 rows in Y have no defined ``item_dy`` (the
+    property raises ``ValueError``, which ``hasattr`` propagates); fall back to the
+    standard 9 mm tip pitch rather than crash.
+    """
     par = ops[0].resource.parent
-    if hasattr(par, "item_dy"):
-      return int(par.item_dy * 10)  # type: ignore[union-attr]
-    return int(ops[0].resource.get_absolute_size_y() * 10)
+    try:
+      ys = int(par.item_dy * 10)  # type: ignore[union-attr]
+    except AttributeError:
+      ys = int(ops[0].resource.get_absolute_size_y() * 10)  # parent not itemized (e.g. tube)
+    except ValueError:
+      ys = 90  # itemized parent with <2 rows in Y — no pitch; use 9 mm comb minimum
+    return ys
 
   def _liha_positions(
     self,
