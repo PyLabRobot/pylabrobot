@@ -83,21 +83,23 @@ data = await pr.read_luminescence()
 
 For Cytation5, use the `Cytation5` backend.
 
-### Centrifuges ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/01_material-handling/centrifuge/_centrifuge.html))
+### Centrifuges ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/_centrifuge.html))
 
 Centrifugation at 800g for 60 seconds with an Agilent VSpin:
 
 ```python
-from pylabrobot.centrifuge import Centrifuge, create_vspin_backend
+from pylabrobot.centrifuge import Centrifuge, VSpinBackend
 
-vspin_backend = create_vspin_backend(device_id="YOUR_FTDI_ID_HERE", variant="agilent")
+vspin_backend = VSpinBackend(device_id="YOUR_FTDI_ID_HERE")
 cf = Centrifuge(name="centrifuge", backend=vspin_backend, size_x=1, size_y=1, size_z=1)
 await cf.setup()
 
 await cf.spin(g=800, duration=60)
 ```
 
-Use `variant="velocity11"` for legacy Velocity11 VSpin centrifuges.
+Use `VSpinBackend(command_set="old_firmware")` for VSpins that need the older
+pneumatic command bytes. Some Velocity11-labeled units work with the default
+command set.
 
 For a HighRes Biosolutions MicroSpin, use the MicroSpin factory:
 
