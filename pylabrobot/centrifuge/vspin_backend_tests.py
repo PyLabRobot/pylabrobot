@@ -582,6 +582,37 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
       ],
     )
 
+  async def test_unlock_door_waits_after_unlock_command(self):
+    backend = _make_backend(_FakeIO([]))
+    events = []
+
+    async def get_door_locked() -> bool:
+      events.append("get_door_locked")
+      return True
+
+    async def send_safe(cmd: bytes, **kwargs):
+      del kwargs
+      events.append(cmd.hex())
+      return b""
+
+    async def sleep(seconds: float) -> None:
+      events.append(("sleep", seconds))
+
+    backend.get_door_locked = get_door_locked
+    backend._send_safe = send_safe
+
+    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.asyncio.sleep", sleep):
+      await backend.unlock_door()
+
+    self.assertEqual(
+      events,
+      [
+        "get_door_locked",
+        "aa022600042c",
+        ("sleep", 0.5),
+      ],
+    )
+
   async def test_go_to_position_retries_after_wrong_idle_position(self):
     backend = _make_backend(_FakeIO([]))
     events = []

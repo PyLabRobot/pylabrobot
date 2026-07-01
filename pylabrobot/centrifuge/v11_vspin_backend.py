@@ -1088,9 +1088,7 @@ class V11VSpinBackend(CentrifugeBackend):
       pass
 
     try:
-      if await self.get_door_locked():
-        await self._send_safe(bytes.fromhex("aa022600042c"), timeout=0.20)
-        await asyncio.sleep(DOOR_UNLOCK_TO_OPEN_SETTLE_SECONDS)
+      await self.unlock_door()
     except IOError:
       pass
 
@@ -1130,6 +1128,7 @@ class V11VSpinBackend(CentrifugeBackend):
     if not await self.get_door_locked():
       return
     await self._send_safe(bytes.fromhex("aa022600042c"), timeout=0.20)
+    await asyncio.sleep(DOOR_UNLOCK_TO_OPEN_SETTLE_SECONDS)
 
   async def lock_bucket(self):
     if await self.get_bucket_locked():
