@@ -114,7 +114,7 @@ class TecanEVO(Resource, Device):
     If the LiHa is already initialized but the RoMa needs PIA, the LiHa
     is homed first to clear the RoMa's path.
     """
-    await self._driver.setup()
+    await self.driver.setup()
 
     # Initialize PIP (LiHa) first
     await self.pip._on_setup()
