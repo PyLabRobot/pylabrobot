@@ -406,6 +406,47 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(backend._last_position, 12070)
     self.assertEqual(backend._last_home_position, 6733)
 
+  async def test_runtime_attach_rejects_blank_zero_status(self):
+    backend = _make_backend(_FakeIO([]))
+    backend.io.set_baudrate = mock.AsyncMock()
+    backend.io.set_rts = mock.AsyncMock()
+    backend.io.set_dtr = mock.AsyncMock()
+    backend._purge_io_buffers = mock.AsyncMock()
+    backend._drain_startup_silence = mock.AsyncMock()
+
+    async def send_command(cmd: bytes, read_timeout: float, expected_len: int):
+      return _status_packet(status=0x09, current_position=0, tachometer=0, home_position=0)
+
+    backend._send_command = send_command
+
+    self.assertFalse(await backend._try_attach_to_runtime_controller())
+    self.assertEqual(backend._last_position, 0)
+    self.assertEqual(backend._last_home_position, 0)
+
+  async def test_wait_for_idle_uses_full_status_when_short_idle_has_no_position(self):
+    full_status = _status_packet(
+      status=0x09,
+      current_position=8006,
+      tachometer=0,
+      home_position=7924,
+    )
+    backend = _make_backend(_FakeIO([bytes.fromhex("0909"), full_status]))
+    reference = backend._make_status(0x09, 0, home_position=0)
+
+    status = await backend._wait_for_idle(
+      label="homing",
+      timeout=1.0,
+      require_activity_from=reference,
+      activity_tolerance=POSITION_SETTLE_TOLERANCE,
+    )
+
+    self.assertEqual(status.current_position, 8006)
+    self.assertEqual(status.home_position, 7924)
+    self.assertEqual(
+      backend.io.writes,
+      [bytes.fromhex("aa010e0f"), bytes.fromhex("aa01121f32")],
+    )
+
   async def test_wait_for_idle_can_reject_stale_idle_before_homing_activity(self):
     stale_status = _status_packet(
       status=0x09,
