@@ -387,6 +387,17 @@ class V11VSpinBackend(CentrifugeBackend):
     self._last_home_position = int(status.home_position)
     return status
 
+  async def _get_full_positions_and_tachometer(self) -> _StatusPositionTachometer:
+    resp = await self._send_command(
+      bytes.fromhex("aa01121f32"),
+      read_timeout=0.40,
+      expected_len=14,
+    )
+    status = self._parse_position_status(resp)
+    self._last_position = int(status.current_position)
+    self._last_home_position = int(status.home_position)
+    return status
+
   async def get_position(self) -> int:
     return (await self._get_positions_and_tachometer()).current_position  # type: ignore
 
@@ -568,6 +579,10 @@ class V11VSpinBackend(CentrifugeBackend):
       await self._read_resp(timeout=0.08, expected_len=None, quiet_time=0.01)
       await asyncio.sleep(0.03)
 
+  @staticmethod
+  def _is_runtime_attach_status(status: _StatusPositionTachometer) -> bool:
+    return int(status.current_position) != 0 or int(status.home_position) != 0
+
   async def _try_attach_to_runtime_controller(self) -> bool:
     """Attach to a VSpin controller that is already in 57600-baud runtime mode."""
     await self.io.set_baudrate(57600)
@@ -588,6 +603,15 @@ class V11VSpinBackend(CentrifugeBackend):
         )
         status = self._find_status_packet(resp)
         if status is not None:
+          if not self._is_runtime_attach_status(status):
+            logger.debug(
+              "[vspin] Ignoring blank runtime attach status "
+              "(status=0x%02x, position=%d, home=%d)",
+              status.status,
+              status.current_position,
+              status.home_position,
+            )
+            continue
           self._last_position = int(status.current_position)
           self._last_home_position = int(status.home_position)
           logger.info(
@@ -744,6 +768,25 @@ class V11VSpinBackend(CentrifugeBackend):
       last_status = status
       is_idle_status = status.status in _IDLE_VSPIN_STATUSES
       is_stopped = abs(status.tachometer) <= 2
+      should_probe_full_status = is_idle_status and is_stopped and (
+        (require_activity_from is not None and not observed_activity)
+        or (
+          target_position is not None
+          and not _vspin_position_matches_target(
+            position=int(status.current_position),
+            target=int(target_position),
+            tolerance=tolerance,
+          )
+        )
+      )
+      if should_probe_full_status:
+        full_status = await self._get_full_positions_and_tachometer()
+        if full_status.status in _IDLE_VSPIN_STATUSES and abs(full_status.tachometer) <= 2:
+          status = full_status
+          last_status = status
+          is_idle_status = True
+          is_stopped = True
+
       if require_activity_from is not None and not observed_activity:
         observed_activity = (
           not is_idle_status
