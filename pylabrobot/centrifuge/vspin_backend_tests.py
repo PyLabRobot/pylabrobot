@@ -711,6 +711,94 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[profile_index + 1][:8], "aa01d497")
     self.assertLess(events.index("get_position"), profile_index)
 
+  async def test_spin_rpm_retries_when_target_speed_is_not_reached(self):
+    backend = _make_backend(_FakeIO([]))
+    events = []
+    speed_waits = 0
+
+    async def get_door_open() -> bool:
+      return False
+
+    async def get_door_locked() -> bool:
+      return True
+
+    async def get_bucket_locked() -> bool:
+      return False
+
+    async def get_position() -> int:
+      events.append("get_position")
+      return 12074
+
+    async def send_safe(cmd: bytes, **kwargs):
+      del kwargs
+      if cmd.startswith(bytes.fromhex("aa01e605")):
+        events.append("profile")
+      elif cmd.startswith(bytes.fromhex("aa01d497")):
+        events.append("spin")
+      return _status_packet(status=0x09, current_position=12074, tachometer=0)
+
+    async def prepare_spin_motion() -> None:
+      events.append("prepare_spin")
+
+    async def motor_enable() -> None:
+      events.append("motor")
+
+    async def wait_for_speed_or_motion(**kwargs) -> None:
+      nonlocal speed_waits
+      del kwargs
+      events.append("wait_speed")
+      speed_waits += 1
+      if speed_waits == 1:
+        raise TimeoutError("speed")
+
+    async def hold_spin(duration: float) -> None:
+      events.append(("hold", duration))
+
+    async def send_deceleration(deceleration: float) -> None:
+      events.append(("decelerate", deceleration))
+
+    async def wait_for_idle(**kwargs) -> None:
+      events.append(("wait_idle", kwargs["label"]))
+
+    backend.get_door_open = get_door_open
+    backend.get_door_locked = get_door_locked
+    backend.get_bucket_locked = get_bucket_locked
+    backend.get_position = get_position
+    backend._send_safe = send_safe
+    backend._prepare_spin_motion = prepare_spin_motion
+    backend._motor_enable = motor_enable
+    backend._wait_for_speed_or_motion = wait_for_speed_or_motion
+    backend._hold_spin = hold_spin
+    backend._send_deceleration = send_deceleration
+    backend._wait_for_idle = wait_for_idle
+    backend._home_rotor = mock.AsyncMock()
+
+    with mock.patch("pylabrobot.centrifuge.v11_vspin_backend.logger.warning"):
+      await backend.spin_rpm(rpm=1500, duration=10)
+
+    self.assertEqual(
+      events,
+      [
+        "prepare_spin",
+        "motor",
+        "get_position",
+        "profile",
+        "spin",
+        "wait_speed",
+        ("decelerate", 0.8),
+        ("wait_idle", "spin retry rundown"),
+        "prepare_spin",
+        "motor",
+        "get_position",
+        "profile",
+        "spin",
+        "wait_speed",
+        ("hold", 10.0),
+        ("decelerate", 0.8),
+        ("wait_idle", "spin rundown"),
+      ],
+    )
+
   async def test_configuration_reasserts_control_lines_before_startup_baud(self):
     io = _RecordingConfigIO()
     backend = _make_backend(io)  # type: ignore[arg-type]
