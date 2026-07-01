@@ -55,6 +55,7 @@ loading-tray
 pumping
 weighing
 barcode-scanning
+rack-reading
 microscopy
 automated-retrieval
 absorbance
