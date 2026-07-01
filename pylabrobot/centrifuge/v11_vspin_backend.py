@@ -58,6 +58,8 @@ POSITION_TOLERANCE: int = 15
 POSITION_SETTLE_TOLERANCE: int = 200
 TACH_TO_RPM: float = -14.69320388
 DOOR_OPEN_SETTLE_SECONDS: float = 2.0
+DOOR_CLOSE_SETTLE_SECONDS: float = 1.0
+PNEUMATIC_SETTLE_SECONDS: float = 0.35
 
 _KNOWN_VSPIN_STATUSES = {0x08, 0x09, 0x0B, 0x11, 0x18, 0x19, 0x88, 0x89, 0x91, 0x99}
 _IDLE_VSPIN_STATUSES = {0x09, 0x0B, 0x11, 0x89, 0x91}
@@ -832,17 +834,81 @@ class V11VSpinBackend(CentrifugeBackend):
 
   async def _prepare_bucket_motion(self) -> None:
     await self._send_safe(bytes.fromhex("aa0226000129"), timeout=0.20)
-    await self._poll_io_status(0.25)
+    await self._wait_for_io_state(
+      label="bucket motion lock",
+      timeout=1.5,
+      door_open=False,
+      door_locked=True,
+      bucket_locked=True,
+    )
+    await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
     await self._send_safe(bytes.fromhex("aa0226000028"), timeout=0.20)
-    await self._poll_io_status(0.25)
+    await self._wait_for_io_state(
+      label="bucket motion ready",
+      timeout=1.5,
+      door_open=False,
+      door_locked=True,
+      bucket_locked=False,
+    )
+    await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
     self._motion_is_prepared = True
 
   async def _prepare_spin_motion(self) -> None:
     await self._send_safe(bytes.fromhex("aa0226000129"), timeout=0.20)
-    await self._poll_io_status(0.40)
+    await self._wait_for_io_state(
+      label="spin bucket lock",
+      timeout=1.5,
+      door_open=False,
+      door_locked=True,
+      bucket_locked=True,
+    )
+    await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
     await self._send_safe(bytes.fromhex("aa0226000028"), timeout=0.20)
-    await self._poll_io_status(0.30)
+    await self._wait_for_io_state(
+      label="spin ready",
+      timeout=1.5,
+      door_open=False,
+      door_locked=True,
+      bucket_locked=False,
+    )
+    await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
     self._motion_is_prepared = True
+
+  async def _wait_for_io_state(
+    self,
+    label: str,
+    timeout: float,
+    door_open: Optional[bool] = None,
+    door_locked: Optional[bool] = None,
+    bucket_locked: Optional[bool] = None,
+  ) -> None:
+    end = time.monotonic() + timeout
+    last_status = b""
+    while time.monotonic() < end:
+      try:
+        last_status = await self._get_status()
+      except IOError:
+        await asyncio.sleep(0.05)
+        continue
+
+      if len(last_status) >= 3:
+        value = last_status[2]
+        matches = []
+        if door_open is not None:
+          matches.append((value & 0b0010 != 0) is door_open)
+        if door_locked is not None:
+          matches.append((value & 0b0100 == 0) is door_locked)
+        if bucket_locked is not None:
+          matches.append((value & 0b0001 != 0) is bucket_locked)
+        if all(matches):
+          return
+
+      await asyncio.sleep(0.05)
+
+    raise TimeoutError(
+      f"VSpin {label} IO state was not reached within {timeout:.1f}s "
+      f"(last status={last_status.hex() or '(empty)'})"
+    )
 
   async def _send_deceleration(self, deceleration: float) -> None:
     await self._send_safe(
@@ -967,6 +1033,7 @@ class V11VSpinBackend(CentrifugeBackend):
 
     await self._send_safe(bytes.fromhex("aa022600052d"), timeout=0.30)
     await self._wait_for_door(open_expected=False, timeout=4.0)
+    await asyncio.sleep(DOOR_CLOSE_SETTLE_SECONDS)
     self._motion_is_prepared = False
 
   async def lock_door(self):
@@ -975,6 +1042,14 @@ class V11VSpinBackend(CentrifugeBackend):
     if await self.get_door_locked():
       return
     await self._send_safe(bytes.fromhex("aa0226000028"), timeout=0.20)
+    await self._wait_for_io_state(
+      label="door lock",
+      timeout=1.5,
+      door_open=False,
+      door_locked=True,
+      bucket_locked=False,
+    )
+    await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
 
   async def unlock_door(self):
     if not await self.get_door_locked():
@@ -985,14 +1060,24 @@ class V11VSpinBackend(CentrifugeBackend):
     if await self.get_bucket_locked():
       return
     await self._send_safe(bytes.fromhex("aa0226000129"), timeout=0.25)
-    await self._poll_io_status(0.35)
+    await self._wait_for_io_state(
+      label="bucket lock",
+      timeout=1.5,
+      bucket_locked=True,
+    )
+    await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
     self._motion_is_prepared = False
 
   async def unlock_bucket(self):
     if not await self.get_bucket_locked():
       return
     await self._send_safe(bytes.fromhex("aa0226200048"), timeout=0.25)
-    await self._poll_io_status(0.25)
+    await self._wait_for_io_state(
+      label="bucket unlock",
+      timeout=1.5,
+      bucket_locked=False,
+    )
+    await asyncio.sleep(PNEUMATIC_SETTLE_SECONDS)
     self._motion_is_prepared = True
 
   async def go_to_bucket1(self):
@@ -1101,10 +1186,6 @@ class V11VSpinBackend(CentrifugeBackend):
 
     if await self.get_door_open():
       await self.close_door()
-    if not await self.get_door_locked():
-      await self.lock_door()
-    if await self.get_bucket_locked():
-      await self.unlock_bucket()
 
     self._stop_requested = False
 

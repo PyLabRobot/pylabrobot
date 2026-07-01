@@ -506,6 +506,54 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
 
     await backend._wait_for_speed_or_motion(rpm=1000, final_position=2000, timeout=0.5)
 
+  async def test_prepare_spin_motion_waits_for_spin_ready_io_state(self):
+    backend = _make_backend(_FakeIO([]))
+    commands = []
+    statuses = [
+      bytes.fromhex("0088090091"),
+      bytes.fromhex("0008080010"),
+    ]
+
+    async def send_safe(cmd: bytes, **kwargs):
+      del kwargs
+      commands.append(cmd)
+      return b""
+
+    async def get_status() -> bytes:
+      commands.append(bytes.fromhex("aa020e10"))
+      return statuses.pop(0)
+
+    backend._send_safe = send_safe
+    backend._get_status = get_status
+
+    await backend._prepare_spin_motion()
+
+    self.assertEqual(
+      commands,
+      [
+        bytes.fromhex("aa0226000129"),
+        bytes.fromhex("aa020e10"),
+        bytes.fromhex("aa0226000028"),
+        bytes.fromhex("aa020e10"),
+      ],
+    )
+
+  async def test_prepare_spin_motion_rejects_locked_bucket_before_spin(self):
+    backend = _make_backend(_FakeIO([]))
+
+    async def send_safe(cmd: bytes, **kwargs):
+      del cmd, kwargs
+      return b""
+
+    async def get_status() -> bytes:
+      return bytes.fromhex("0088090091")
+
+    backend._send_safe = send_safe
+    backend._get_status = get_status
+
+    with self.assertRaisesRegex(TimeoutError, "spin ready"):
+      await backend._prepare_spin_motion()
+
   async def test_spin_rpm_sends_spin_command_immediately_after_spin_profile(self):
     backend = _make_backend(_FakeIO([]))
     events = []
@@ -539,6 +587,8 @@ class V11VSpinBackendTests(unittest.IsolatedAsyncioTestCase):
     backend._hold_spin = mock.AsyncMock()
     backend._wait_for_idle = mock.AsyncMock()
     backend._home_rotor = mock.AsyncMock()
+    backend.lock_door = mock.AsyncMock(side_effect=AssertionError("unexpected lock door"))
+    backend.unlock_bucket = mock.AsyncMock(side_effect=AssertionError("unexpected unlock bucket"))
 
     await backend.spin_rpm(rpm=1500, duration=10)
 
