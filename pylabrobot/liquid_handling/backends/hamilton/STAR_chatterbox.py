@@ -442,3 +442,21 @@ class STARChatterboxBackend(STARBackend):
         absolute_height = z_cavity_bottom[orig_idx] + container.compute_height_from_volume(volume)
       measurements[orig_idx] = [absolute_height] * n_replicates
     return measurements
+
+  async def _run_ztouch_on_channel_batch(
+    self,
+    batch,
+    tip_lengths: List[float],
+    z_cavity_bottom: List[float],
+    z_top: List[float],
+    channel_speed: float,
+    channel_acceleration: float,
+    channel_speed_upwards: float,
+    detection_limiter_in_PWM: int,
+    push_down_force_in_PWM: int,
+    inter_channel_start_delay: float,
+    n_replicates: int,
+  ) -> Dict[int, List[float]]:
+    """Simulate ztouch by returning each target's cavity-bottom Z (the surface a
+    descending tip would hit first in an empty well). Absolute, not relative."""
+    return {orig_idx: [z_cavity_bottom[orig_idx]] * n_replicates for orig_idx in batch.indices}
