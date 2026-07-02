@@ -19,6 +19,7 @@ from pylabrobot.labcyte.echo import (
   EchoFluidInfo,
   EchoFocalSweepParams,
   EchoFocusState,
+  EchoPlannedTransfer,
   EchoPlateAccessBackend,
   EchoPlateCatalog,
   EchoPlateInfo,
@@ -38,6 +39,7 @@ from pylabrobot.labcyte.echo import (
   EchoTransferResult,
   MedmanEchoDriver,
   _HttpMessage,
+  _parse_echo_transfer_report,
   _RpcResult,
   build_echo_transfer_plan,
   create_plate_from_echo_info,
@@ -1701,6 +1703,109 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
         {"n": "B2", "dn": "A3", "v": "10"},
       ],
     )
+
+  async def test_transfer_plan_default_wp_is_byte_identical(self):
+    source_plate = _make_plate("source", "384PP_DMSO2")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+
+    plan = build_echo_transfer_plan(
+      source_plate,
+      destination_plate,
+      [
+        ("A1", "B1", 2.5),
+        ("B2", "A3", 10.0),
+      ],
+      protocol_name="parity",
+    )
+
+    # A default transfer (dx == dy == 0, tag is None) must emit exactly the minimal
+    # <wp n dn v> element, byte-for-byte identical to the pre-offset output.
+    self.assertEqual(
+      plan.protocol_xml,
+      '<?xml version="1.0" encoding="utf-8"?>'
+      '<Protocol Name="parity"><Name /><Layout>'
+      '<wp n="A1" dn="B1" v="2.5" />'
+      '<wp n="B2" dn="A3" v="10" />'
+      "</Layout></Protocol>",
+    )
+
+    # An EchoPlannedTransfer left at its defaults produces the identical bytes as the
+    # bare tuple form, so switching input shapes never changes the wire payload.
+    planned_plan = build_echo_transfer_plan(
+      source_plate,
+      destination_plate,
+      [
+        EchoPlannedTransfer(
+          source=source_plate.get_well("A1"),
+          destination=destination_plate.get_well("B1"),
+          volume_nl=2.5,
+        ),
+        EchoPlannedTransfer(
+          source=source_plate.get_well("B2"),
+          destination=destination_plate.get_well("A3"),
+          volume_nl=10.0,
+        ),
+      ],
+      protocol_name="parity",
+    )
+    self.assertEqual(planned_plan.protocol_xml, plan.protocol_xml)
+
+  async def test_transfer_plan_emits_dx_dy_and_tag_when_non_default(self):
+    source_plate = _make_plate("source", "384PP_DMSO2")
+    destination_plate = _make_plate("destination", "1536LDV_Dest")
+
+    plan = build_echo_transfer_plan(
+      source_plate,
+      destination_plate,
+      [
+        EchoPlannedTransfer(
+          source=source_plate.get_well("A1"),
+          destination=destination_plate.get_well("B1"),
+          volume_nl=2.5,
+          dx=1500,
+          dy=-250.5,
+          tag="ctrl",
+        ),
+        # A tag-only transfer emits tag but no dx/dy (offset still default).
+        EchoPlannedTransfer(
+          source=source_plate.get_well("A2"),
+          destination=destination_plate.get_well("B2"),
+          volume_nl=5.0,
+          tag="",
+        ),
+      ],
+      protocol_name="off",
+    )
+
+    layout = ET.fromstring(plan.protocol_xml).find("Layout")
+    assert layout is not None
+    self.assertEqual(
+      [well.attrib for well in layout.findall("wp")],
+      [
+        {"n": "A1", "dn": "B1", "v": "2.5", "dx": "1500", "dy": "-250.5", "tag": "ctrl"},
+        {"n": "A2", "dn": "B2", "v": "5", "tag": ""},
+      ],
+    )
+    self.assertIn(
+      '<wp n="A1" dn="B1" v="2.5" dx="1500" dy="-250.5" tag="ctrl" />',
+      plan.protocol_xml,
+    )
+
+  def test_transferred_well_parses_dx_dy_offset_from_report(self):
+    result = _parse_echo_transfer_report(
+      '<transfer date="d" serial_number="s"><printmap>'
+      '<w n="A1" r="0" c="0" dn="B1" dr="0" dc="0" vt="2.5" avt="2.5" '
+      'gx="1234500" gy="678900" tz="10" dx="1500" dy="-250" tag="ctrl" />'
+      "</printmap></transfer>",
+      raw={},
+      succeeded=True,
+      status="OK",
+    )
+    self.assertEqual(len(result.transfers), 1)
+    well = result.transfers[0]
+    self.assertEqual(well.dest_x_offset, 1500.0)
+    self.assertEqual(well.dest_y_offset, -250.0)
+    self.assertEqual(well.raw_attributes.get("tag"), "ctrl")
 
   async def test_transfer_plan_builds_sparse_unique_source_plate_map(self):
     source_plate = _make_plate("source", "384PP_DMSO2")

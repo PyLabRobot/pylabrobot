@@ -489,11 +489,22 @@ class EchoTransferPrintOptions(BackendParams):
 
 @dataclass(frozen=True)
 class EchoPlannedTransfer:
-  """One PLR well-to-well Echo transfer in Echo-native nL."""
+  """One PLR well-to-well Echo transfer in Echo-native nL.
+
+  ``dx``/``dy`` are an optional per-transfer destination XY offset in Echo device
+  units (~1e5 scale, the same space as the transfer report's resolved ``gx``/``gy``).
+  They default to ``0.0``, i.e. drop at the destination well centre. ``tag`` is an
+  optional per-transfer label that the firmware echoes back in the transfer report.
+  When ``dx``/``dy`` are both zero and ``tag`` is ``None`` the emitted ``<wp>``
+  element is byte-identical to the minimal ``<wp n dn v>`` form.
+  """
 
   source: Well
   destination: Well
   volume_nl: float
+  dx: float = 0.0
+  dy: float = 0.0
+  tag: Optional[str] = None
 
   @property
   def source_identifier(self) -> str:
@@ -576,6 +587,8 @@ class EchoTransferredWell:
   fluid_units: str = ""
   composition: Optional[float] = None
   fluid_thickness: Optional[float] = None
+  dest_x_offset: Optional[float] = None
+  dest_y_offset: Optional[float] = None
   reason: str = ""
   raw_attributes: Dict[str, str] = field(default_factory=dict)
 
@@ -1135,21 +1148,26 @@ def _is_plate_type_present(plate_type: Optional[str]) -> bool:
 
 
 def _make_transfer_protocol_xml(
-  transfers: Sequence[tuple[str, str, float]], protocol_name: str
+  transfers: Sequence[tuple[str, str, float, float, float, Optional[str]]],
+  protocol_name: str,
 ) -> str:
   protocol = ET.Element("Protocol", {"Name": protocol_name})
   ET.SubElement(protocol, "Name")
   layout = ET.SubElement(protocol, "Layout")
-  for source_identifier, destination_identifier, volume_nl in transfers:
-    ET.SubElement(
-      layout,
-      "wp",
-      {
-        "n": source_identifier,
-        "dn": destination_identifier,
-        "v": _format_transfer_volume_nl(volume_nl),
-      },
-    )
+  for source_identifier, destination_identifier, volume_nl, dx, dy, tag in transfers:
+    attributes = {
+      "n": source_identifier,
+      "dn": destination_identifier,
+      "v": _format_transfer_volume_nl(volume_nl),
+    }
+    # Only emit the optional per-transfer destination offset / tag when non-default so
+    # the default plate-to-plate reformat stays byte-identical to the minimal <wp n dn v>.
+    if dx or dy:
+      attributes["dx"] = _format_numeric_string(dx)
+      attributes["dy"] = _format_numeric_string(dy)
+    if tag is not None:
+      attributes["tag"] = tag
+    ET.SubElement(layout, "wp", attributes)
   return '<?xml version="1.0" encoding="utf-8"?>' + ET.tostring(
     protocol,
     encoding="unicode",
@@ -1172,10 +1190,16 @@ def build_echo_transfer_plan(
 
   ``volume_increment_nl`` is the device's droplet granularity used to validate every
   requested volume (2.5 nL for the Echo 650, 25 nL for the Echo 525).
+
+  To request a per-transfer destination XY offset (in Echo device units, ~1e5 scale)
+  and/or an optional per-transfer ``tag``, pass an :class:`EchoPlannedTransfer` with
+  its ``dx``/``dy``/``tag`` fields set. The plain ``(source, destination, volume)``
+  tuple form defaults them to a zero offset with no tag, which emits a byte-identical
+  minimal ``<wp n dn v>`` element.
   """
 
   planned_transfers: list[EchoPlannedTransfer] = []
-  protocol_transfers: list[tuple[str, str, float]] = []
+  protocol_transfers: list[tuple[str, str, float, float, float, Optional[str]]] = []
   for transfer in transfers:
     if isinstance(transfer, EchoPlannedTransfer):
       planned = transfer
@@ -1202,16 +1226,23 @@ def build_echo_transfer_plan(
       increment_nl=volume_increment_nl,
     )
     planned_transfers.append(planned)
-    protocol_transfers.append((source_identifier, destination_identifier, planned.volume_nl))
+    protocol_transfers.append(
+      (
+        source_identifier,
+        destination_identifier,
+        planned.volume_nl,
+        planned.dx,
+        planned.dy,
+        planned.tag,
+      )
+    )
 
   if not planned_transfers:
     raise ValueError("At least one transfer is required.")
 
   source_type = _resolve_plate_type(source_plate, source_plate_type, "Source")
   destination_type = _resolve_plate_type(destination_plate, destination_plate_type, "Destination")
-  source_wells = tuple(
-    dict.fromkeys(source for source, _destination, _volume in protocol_transfers)
-  )
+  source_wells = tuple(dict.fromkeys(transfer[0] for transfer in protocol_transfers))
   return EchoTransferPlan(
     source_plate=source_plate,
     destination_plate=destination_plate,
@@ -1531,6 +1562,8 @@ def _parse_echo_transfer_report(
         fluid_units=attributes.get("fldu", ""),
         composition=_float_or_none(attributes.get("fc")),
         fluid_thickness=_float_or_none(attributes.get("ft")),
+        dest_x_offset=_float_or_none(attributes.get("dx")),
+        dest_y_offset=_float_or_none(attributes.get("dy")),
         reason=attributes.get("reason", ""),
         raw_attributes=attributes,
       )
@@ -2958,6 +2991,12 @@ class EchoDriver(Driver, ABC):
     source and destination wells, so the source and destination plates are inferred
     from the well parents. Use ``transfer_wells`` when the caller only has well
     identifiers and wants to pass the plates explicitly.
+
+    Each entry may be a ``(source_well, destination_well, volume)`` tuple or an
+    :class:`EchoPlannedTransfer`. To request a per-transfer destination XY offset
+    (``dx``/``dy`` in Echo device units) and/or an optional per-transfer ``tag``,
+    pass an :class:`EchoPlannedTransfer` with those fields set; leaving them at their
+    defaults emits a byte-identical minimal ``<wp n dn v>`` element.
     """
     source_plate, destination_plate = _infer_transfer_plates(transfers)
     return await self.transfer_wells(
