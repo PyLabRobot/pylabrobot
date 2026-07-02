@@ -54,6 +54,10 @@ class Scale(Resource, Machine):
     """
     await self.backend.tare(**backend_kwargs)
 
+  async def request_tare_weight(self, **backend_kwargs) -> float:
+    """Query the current tare weight value stored in the scale, in grams."""
+    return await self.backend.request_tare_weight(**backend_kwargs)
+
   async def read_weight(self, **backend_kwargs) -> float:
     """Read the current weight in grams.
 
