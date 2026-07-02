@@ -1,6 +1,7 @@
 """Tests for Thermocycler capability and chatterbox backend."""
 
 import unittest
+from typing import cast
 
 from pylabrobot.capabilities.thermocycling.chatterbox import ThermocyclerChatterboxBackend
 from pylabrobot.capabilities.thermocycling.standard import (
@@ -49,7 +50,9 @@ class TestThermocyclerCapability(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_block_temperature(self):
     await self.tc.set_block_temperature(37.0)
-    self.assertAlmostEqual(self.tc.backend._block_temperature, 37.0)
+    self.assertAlmostEqual(
+      cast(ThermocyclerChatterboxBackend, self.tc.backend)._block_temperature, 37.0
+    )
 
   async def test_request_block_temperature(self):
     await self.tc.set_block_temperature(72.0)
@@ -73,7 +76,7 @@ class TestThermocyclerCapability(unittest.IsolatedAsyncioTestCase):
   async def test_request_progress_after_run(self):
     await self.tc.run_protocol(_simple_protocol())
     progress = await self.tc.request_progress()
-    self.assertIsNotNone(progress)
+    assert progress is not None
     self.assertEqual(progress["protocol_name"], "TestPCR")
 
   async def test_stop_protocol(self):

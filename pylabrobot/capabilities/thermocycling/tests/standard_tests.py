@@ -92,7 +92,7 @@ class TestStep(unittest.TestCase):
     self.assertIsNotNone(data["ramp"]["overshoot"])
     self.assertEqual(data["ramp"]["overshoot"]["target_temp"], 101.0)
     s2 = Step.deserialize(data)
-    self.assertIsNotNone(s2.ramp.overshoot)
+    assert s2.ramp.overshoot is not None
     self.assertEqual(s2.ramp.overshoot.target_temp, 101.0)
     self.assertEqual(s2.ramp.overshoot.return_rate, 2.2)
 
