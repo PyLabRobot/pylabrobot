@@ -281,24 +281,10 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     plate_temp = await self._driver.get_plate_temperature()
     return [plate_temp.current]
 
-  async def get_block_target_temperature(self) -> List[float]:
-    assert self._driver is not None
-    plate_temp = await self._driver.get_plate_temperature()
-    if plate_temp.target is not None:
-      return [plate_temp.target]
-    raise RuntimeError("Block target temperature is not set.")
-
   async def get_lid_current_temperature(self) -> List[float]:
     assert self._driver is not None
     lid_temp = await self._driver.get_lid_temperature()
     return [lid_temp.current]
-
-  async def get_lid_target_temperature(self) -> List[float]:
-    assert self._driver is not None
-    lid_temp = await self._driver.get_lid_temperature()
-    if lid_temp.target is not None:
-      return [lid_temp.target]
-    raise RuntimeError("Lid target temperature is not set.")
 
   async def get_lid_open(self) -> bool:
     """Return True if the lid is open."""
@@ -326,11 +312,5 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
   async def get_current_cycle_index(self) -> int:
     return self._current_cycle_index if self._current_cycle_index is not None else 0
 
-  async def get_total_cycle_count(self) -> int:
-    return self._total_cycle_count if self._total_cycle_count is not None else 0
-
   async def get_current_step_index(self) -> int:
     return self._current_step_index if self._current_step_index is not None else 0
-
-  async def get_total_step_count(self) -> int:
-    return self._total_step_count if self._total_step_count is not None else 0

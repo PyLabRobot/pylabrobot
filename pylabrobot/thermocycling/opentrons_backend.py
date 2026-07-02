@@ -126,21 +126,8 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   async def get_block_current_temperature(self) -> List[float]:
     return [cast(float, self._find_module()["currentTemperature"])]
 
-  async def get_block_target_temperature(self) -> List[float]:
-    target_temp = self._find_module().get("targetTemperature")
-    if target_temp is None:
-      raise RuntimeError("Block target temperature is not set. is a cycle running?")
-    return [cast(float, target_temp)]
-
   async def get_lid_current_temperature(self) -> List[float]:
     return [cast(float, self._find_module()["lidTemperature"])]
-
-  async def get_lid_target_temperature(self) -> List[float]:
-    """Get the lid target temperature in °C. Raises RuntimeError if no target is active."""
-    target_temp = self._find_module().get("lidTargetTemperature")
-    if target_temp is None:
-      raise RuntimeError("Lid target temperature is not set. is a cycle running?")
-    return [cast(float, target_temp)]
 
   async def get_lid_open(self) -> bool:
     return cast(str, self._find_module()["lidStatus"]) == "open"
@@ -185,10 +172,6 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
 
     raise RuntimeError("Current cycle index is not available. Is a profile running?")
 
-  async def get_total_cycle_count(self) -> int:
-    # https://github.com/PyLabRobot/pylabrobot/issues/632
-    raise NotImplementedError('Opentrons "cycle" concept is not understood currently.')
-
   async def get_current_step_index(self) -> int:
     """Get the zero-based index of the current step from the Opentrons API."""
     # Opentrons API returns one-based, convert to zero-based
@@ -196,9 +179,3 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     if step_index is None:
       raise RuntimeError("Current step index is not available. Is a profile running?")
     return cast(int, step_index) - 1
-
-  async def get_total_step_count(self) -> int:
-    total_steps = self._find_module().get("totalStepCount")
-    if total_steps is None:
-      raise RuntimeError("Total step count is not available. Is a profile running?")
-    return cast(int, total_steps)
