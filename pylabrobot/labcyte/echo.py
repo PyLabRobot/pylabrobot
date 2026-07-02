@@ -1918,7 +1918,7 @@ class EchoDriver(Driver, ABC):
   async def stop(self):
     if self._lock_held:
       try:
-        await self.unlock()
+        await self.unlock_instrument()
       except Exception as exc:  # pragma: no cover - best-effort cleanup
         logger.warning("Failed to unlock Echo during stop: %s", exc)
 
@@ -2000,7 +2000,7 @@ class EchoDriver(Driver, ABC):
     """Return typed power calibration values from ``GetPwrCal``."""
     return _power_calibration_from_values(await self.get_power_calibration())
 
-  async def get_access_state(self) -> PlateAccessState:
+  async def read_access_state(self) -> PlateAccessState:
     raw = await self.get_dio_ex2()
     source_plate_position = _coerce_int(raw.get("SPP"))
     destination_plate_position = _coerce_int(raw.get("DPP"))
@@ -2522,7 +2522,7 @@ class EchoDriver(Driver, ABC):
     self._ensure_success("CheckSrcPlateInsertCompatibility", result)
     return result.values
 
-  async def lock(self, app: Optional[str] = None, owner: Optional[str] = None) -> None:
+  async def lock_instrument(self, app: Optional[str] = None, owner: Optional[str] = None) -> None:
     result = await self._rpc(
       "LockInstrument",
       (
@@ -2546,7 +2546,7 @@ class EchoDriver(Driver, ABC):
     self._ensure_success("EndSession", result)
     return _first_result_value(result)
 
-  async def unlock(self) -> None:
+  async def unlock_instrument(self) -> None:
     if not self._lock_held:
       return
 
@@ -2561,12 +2561,12 @@ class EchoDriver(Driver, ABC):
     self._ensure_success("UnlockInstrument", result)
     self._lock_held = False
 
-  async def open_source_plate(self, timeout: Optional[float] = None) -> None:
+  async def present_source_gripper(self, timeout: Optional[float] = None) -> None:
     self._require_lock("PresentSrcPlateGripper")
     result = await self._rpc("PresentSrcPlateGripper", timeout=timeout)
     self._ensure_success("PresentSrcPlateGripper", result)
 
-  async def close_source_plate(
+  async def retract_source_gripper(
     self,
     plate_type: Optional[str] = None,
     barcode_location: Optional[str] = None,
@@ -2586,12 +2586,12 @@ class EchoDriver(Driver, ABC):
     barcode_value = result.values.get("BarCode")
     return None if barcode_value in (None, "") else str(barcode_value)
 
-  async def open_destination_plate(self, timeout: Optional[float] = None) -> None:
+  async def present_destination_gripper(self, timeout: Optional[float] = None) -> None:
     self._require_lock("PresentDstPlateGripper")
     result = await self._rpc("PresentDstPlateGripper", timeout=timeout)
     self._ensure_success("PresentDstPlateGripper", result)
 
-  async def close_destination_plate(
+  async def retract_destination_gripper(
     self,
     plate_type: Optional[str] = None,
     barcode_location: Optional[str] = None,
@@ -2611,7 +2611,7 @@ class EchoDriver(Driver, ABC):
     barcode_value = result.values.get("BarCode")
     return None if barcode_value in (None, "") else str(barcode_value)
 
-  async def close_door(self, timeout: Optional[float] = None) -> None:
+  async def close_instrument_door(self, timeout: Optional[float] = None) -> None:
     self._require_lock("CloseDoor")
     result = await self._rpc("CloseDoor", timeout=timeout)
     self._ensure_success("CloseDoor", result)
@@ -2932,7 +2932,7 @@ class EchoDriver(Driver, ABC):
     await self.get_plate_info(plan.source_plate_type)
 
     if close_door_before_transfer:
-      await self.close_door()
+      await self.close_instrument_door()
 
     if do_survey:
       max_source_row = max(transfer.source.get_row() for transfer in plan.transfers)
@@ -3030,12 +3030,12 @@ class EchoDriver(Driver, ABC):
     await self._require_registered_echo_plate_type(plate_type, "source")
     if open_door_first:
       await self.open_door()
-    await self.open_source_plate(timeout=present_timeout)
+    await self.present_source_gripper(timeout=present_timeout)
     await _call_operator_pause(operator_pause, "source plate presented")
     await self.get_power_calibration()
     await self.get_plate_info(plate_type)
     await self.get_current_source_plate_type()
-    barcode_result = await self.close_source_plate(
+    barcode_result = await self.retract_source_gripper(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -3068,11 +3068,11 @@ class EchoDriver(Driver, ABC):
     await self._require_registered_echo_plate_type(plate_type, "destination")
     if open_door_first:
       await self.open_door()
-    await self.open_destination_plate(timeout=present_timeout)
+    await self.present_destination_gripper(timeout=present_timeout)
     await _call_operator_pause(operator_pause, "destination plate presented")
     await self.get_power_calibration()
     await self.get_plate_info(plate_type)
-    barcode_result = await self.close_destination_plate(
+    barcode_result = await self.retract_destination_gripper(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -3101,9 +3101,9 @@ class EchoDriver(Driver, ABC):
     self._require_lock("EjectSourcePlate")
     if open_door_first:
       await self.open_door()
-    await self.open_source_plate(timeout=present_timeout)
+    await self.present_source_gripper(timeout=present_timeout)
     await _call_operator_pause(operator_pause, "source plate presented for removal")
-    barcode_result = await self.close_source_plate(timeout=retract_timeout)
+    barcode_result = await self.retract_source_gripper(timeout=retract_timeout)
     current_plate_type = await self.get_current_source_plate_type()
     dio = await self.get_dio_ex2()
     return EchoPlateWorkflowResult(
@@ -3126,9 +3126,9 @@ class EchoDriver(Driver, ABC):
     self._require_lock("EjectDestinationPlate")
     if open_door_first:
       await self.open_door()
-    await self.open_destination_plate(timeout=present_timeout)
+    await self.present_destination_gripper(timeout=present_timeout)
     await _call_operator_pause(operator_pause, "destination plate presented for removal")
-    barcode_result = await self.close_destination_plate(timeout=retract_timeout)
+    barcode_result = await self.retract_destination_gripper(timeout=retract_timeout)
     current_plate_type = await self.get_current_destination_plate_type()
     dio = await self.get_dio_ex2()
     return EchoPlateWorkflowResult(
@@ -3162,7 +3162,7 @@ class EchoDriver(Driver, ABC):
       retract_timeout=retract_timeout,
     )
     if close_door_after:
-      await self.close_door()
+      await self.close_instrument_door()
     return source_result, destination_result
 
   def _make_retract_params(
@@ -3537,16 +3537,16 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     self.driver = driver
 
   async def lock(self, app: Optional[str] = None, owner: Optional[str] = None) -> None:
-    await self.driver.lock(app=app, owner=owner)
+    await self.driver.lock_instrument(app=app, owner=owner)
 
   async def unlock(self) -> None:
-    await self.driver.unlock()
+    await self.driver.unlock_instrument()
 
   async def get_access_state(self) -> PlateAccessState:
-    return await self.driver.get_access_state()
+    return await self.driver.read_access_state()
 
   async def open_source_plate(self, timeout: Optional[float] = None) -> None:
-    await self.driver.open_source_plate(timeout=timeout)
+    await self.driver.present_source_gripper(timeout=timeout)
 
   async def close_source_plate(
     self,
@@ -3555,7 +3555,7 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     barcode: str = "",
     timeout: Optional[float] = None,
   ) -> Optional[str]:
-    return await self.driver.close_source_plate(
+    return await self.driver.retract_source_gripper(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -3563,7 +3563,7 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     )
 
   async def open_destination_plate(self, timeout: Optional[float] = None) -> None:
-    await self.driver.open_destination_plate(timeout=timeout)
+    await self.driver.present_destination_gripper(timeout=timeout)
 
   async def close_destination_plate(
     self,
@@ -3572,7 +3572,7 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     barcode: str = "",
     timeout: Optional[float] = None,
   ) -> Optional[str]:
-    return await self.driver.close_destination_plate(
+    return await self.driver.retract_destination_gripper(
       plate_type=plate_type,
       barcode_location=barcode_location,
       barcode=barcode,
@@ -3580,7 +3580,7 @@ class EchoPlateAccessBackend(PlateAccessBackend):
     )
 
   async def close_door(self, timeout: Optional[float] = None) -> None:
-    state = await self.driver.get_access_state()
+    state = await self.driver.read_access_state()
     open_paths = [
       path
       for path, is_open in (
@@ -3609,7 +3609,7 @@ class EchoPlateAccessBackend(PlateAccessBackend):
         "CloseDoor",
         f"Cannot confirm {unknown} access is closed before closing the door.",
       )
-    await self.driver.close_door(timeout=timeout)
+    await self.driver.close_instrument_door(timeout=timeout)
 
 
 class EchoPlatePosition(ResourceHolder):
@@ -4285,10 +4285,10 @@ class Echo(Device):
 
     results: list[EchoTransferResult] = []
     if acquire_lock:
-      await self.driver.lock()
+      await self.driver.lock_instrument()
     try:
       if close_door:
-        await self.driver.close_door()
+        await self.driver.close_instrument_door()
       for group in plan:
         if survey:
           source_wells = tuple(dict.fromkeys(t.source_well for t in group.transfers))
@@ -4311,7 +4311,7 @@ class Echo(Device):
           await self.driver.dry_plate()
     finally:
       if acquire_lock:
-        await self.driver.unlock()
+        await self.driver.unlock_instrument()
     return results
 
   @need_setup_finished

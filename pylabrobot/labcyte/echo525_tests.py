@@ -187,13 +187,13 @@ class TestEcho525AgainstMockServer(unittest.IsolatedAsyncioTestCase):
     async with EchoMockServer() as srv:
       echo = Echo(model="Echo 525", host=srv.host, rpc_port=srv.port, timeout=5.0)
       await echo.setup()
-      await echo.driver.lock()
+      await echo.driver.lock_instrument()
       xml = (
         '<?xml version="1.0"?><Protocol Name="hifi_pcr"><Name/>'
         '<Layout><wp n="A2" dn="A1" v="150"/></Layout></Protocol>'
       )
       result = await echo.driver.do_well_transfer(xml)
-      await echo.driver.unlock()
+      await echo.driver.unlock_instrument()
     self.assertTrue(result.succeeded)
     self.assertEqual(result.status, "OK")
     self.assertGreater(len(result.transfers), 0)  # replayed (trimmed) print-map report
@@ -210,7 +210,7 @@ class TestEcho525AgainstMockServer(unittest.IsolatedAsyncioTestCase):
     async with EchoMockServer() as srv:
       echo = Echo(model="Echo 525", host=srv.host, rpc_port=srv.port, timeout=5.0)
       await echo.setup()
-      await echo.driver.lock()
+      await echo.driver.lock_instrument()
       run = await echo.driver.survey_source_plate(
         EchoPlateMap(plate_type="6RES_AQ_BP2", well_identifiers=("A2",)),
         EchoSurveyParams(
@@ -222,7 +222,7 @@ class TestEcho525AgainstMockServer(unittest.IsolatedAsyncioTestCase):
         '<?xml version="1.0"?><Protocol Name="hifi_pcr"><Name/>'
         '<Layout><wp n="A2" dn="A1" v="150"/></Layout></Protocol>'
       )
-      await echo.driver.unlock()
+      await echo.driver.unlock_instrument()
     self.assertIsNotNone(run.saved_data)
     self.assertGreater(len(run.saved_data.wells), 0)  # real survey well from the capture
     self.assertEqual(run.dry_mode, EchoDryPlateMode.TWO_PASS)
@@ -266,12 +266,12 @@ class TestEchoDriverArchitecture(unittest.IsolatedAsyncioTestCase):
 
     echo = Echo(driver=EchoChatterboxDriver())  # no host needed; logs instead of I/O
     await echo.setup()
-    await echo.driver.lock()
+    await echo.driver.lock_instrument()
     result = await echo.driver.do_well_transfer(
       '<?xml version="1.0"?><Protocol Name="t"><Name/>'
       '<Layout><wp n="A1" dn="A1" v="25"/></Layout></Protocol>'
     )
-    await echo.driver.unlock()
+    await echo.driver.unlock_instrument()
     self.assertTrue(result.succeeded)
 
 

@@ -473,7 +473,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       "pylabrobot.labcyte.echo.asyncio.open_connection",
       return_value=(fake_reader, fake_writer),
     ):
-      state = await self.driver.get_access_state()
+      state = await self.driver.read_access_state()
 
     self.assertEqual(state.source_plate_position, -1)
     self.assertEqual(state.destination_plate_position, 0)
@@ -504,7 +504,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       "pylabrobot.labcyte.echo.asyncio.open_connection",
       return_value=(fake_reader, fake_writer),
     ):
-      state = await self.driver.get_access_state()
+      state = await self.driver.read_access_state()
 
     self.assertFalse(state.source_access_open)
     self.assertTrue(state.source_access_closed)
@@ -609,9 +609,9 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       return _FakeReader(responses.pop(0)), _FakeWriter()
 
     with patch("pylabrobot.labcyte.echo.asyncio.open_connection", side_effect=fake_open_connection):
-      await self.driver.lock()
+      await self.driver.lock_instrument()
       self.assertTrue(self.driver._lock_held)
-      await self.driver.unlock()
+      await self.driver.unlock_instrument()
       self.assertFalse(self.driver._lock_held)
 
   async def test_unlock_tolerates_stale_local_lock_state(self):
@@ -626,7 +626,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       )
     )
 
-    await self.driver.unlock()
+    await self.driver.unlock_instrument()
 
     self.driver._rpc.assert_awaited_once_with(
       "UnlockInstrument",
@@ -637,7 +637,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
   async def test_motion_requires_lock(self):
     await self.driver.setup()
     with self.assertRaises(EchoCommandError):
-      await self.driver.open_source_plate()
+      await self.driver.present_source_gripper()
 
   async def test_close_source_plate_uses_empty_retract_defaults(self):
     await self.driver.setup()
@@ -655,7 +655,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       "pylabrobot.labcyte.echo.asyncio.open_connection",
       return_value=(fake_reader, fake_writer),
     ):
-      await self.driver.close_source_plate()
+      await self.driver.retract_source_gripper()
 
     request = bytes(fake_writer.buffer)
     payload = gzip.decompress(request.split(b"\r\n\r\n", 1)[1]).decode("utf-8")
@@ -677,7 +677,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       )
     )
 
-    await self.driver.close_source_plate(plate_type="384PP_DMSO2")
+    await self.driver.retract_source_gripper(plate_type="384PP_DMSO2")
 
     self.driver._rpc.assert_awaited_once_with(
       "RetractSrcPlateGripper",
@@ -2129,7 +2129,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.driver.retrieve_parameter = AsyncMock(return_value=False)
     self.driver.set_plate_map = AsyncMock()
     self.driver.get_plate_info = AsyncMock(return_value={})
-    self.driver.close_door = AsyncMock()
+    self.driver.close_instrument_door = AsyncMock()
     self.driver.survey_plate = AsyncMock(return_value=None)
     self.driver.get_dio_ex2 = AsyncMock(return_value={})
     self.driver.get_dio = AsyncMock(return_value={})
@@ -2203,13 +2203,13 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       side_effect=lambda *_args, **_kwargs: calls.append("validate")
     )
     self.driver.open_door = AsyncMock(side_effect=lambda *_args, **_kwargs: calls.append("door"))
-    self.driver.open_source_plate = AsyncMock(
+    self.driver.present_source_gripper = AsyncMock(
       side_effect=lambda *_args, **_kwargs: calls.append("present")
     )
     self.driver.get_power_calibration = AsyncMock()
     self.driver.get_plate_info = AsyncMock()
     self.driver.get_current_source_plate_type = AsyncMock(side_effect=["None", "384PP_DMSO2"])
-    self.driver.close_source_plate = AsyncMock(return_value="BC123")
+    self.driver.retract_source_gripper = AsyncMock(return_value="BC123")
     self.driver.retrieve_parameter = AsyncMock()
     self.driver.get_dio_ex2 = AsyncMock(return_value={"SPP": -1})
 
@@ -2222,7 +2222,7 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(calls, ["validate", "door", "present", "source plate presented"])
     self.assertTrue(result.plate_present)
     self.assertEqual(result.barcode, "BC123")
-    self.driver.close_source_plate.assert_awaited_once_with(
+    self.driver.retract_source_gripper.assert_awaited_once_with(
       plate_type="384PP_DMSO2",
       barcode_location="Right-Side",
       barcode="",
@@ -2236,13 +2236,13 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
       side_effect=EchoCommandError("ResolveEchoPlateType", "Unknown source plate")
     )
     self.driver.open_door = AsyncMock()
-    self.driver.open_source_plate = AsyncMock()
+    self.driver.present_source_gripper = AsyncMock()
 
     with self.assertRaisesRegex(EchoCommandError, "Unknown source plate"):
       await self.driver.load_source_plate("NOT_REGISTERED")
 
     self.driver.open_door.assert_not_awaited()
-    self.driver.open_source_plate.assert_not_awaited()
+    self.driver.present_source_gripper.assert_not_awaited()
 
   async def test_eject_all_plates_ejects_source_before_destination(self):
     await self.driver.setup()
@@ -2260,7 +2260,9 @@ class TestEchoDriver(unittest.IsolatedAsyncioTestCase):
         or EchoPlateWorkflowResult(side="destination", plate_type=None, plate_present=False)
       )
     )
-    self.driver.close_door = AsyncMock(side_effect=lambda *_args, **_kwargs: calls.append("door"))
+    self.driver.close_instrument_door = AsyncMock(
+      side_effect=lambda *_args, **_kwargs: calls.append("door")
+    )
 
     source_result, destination_result = await self.driver.eject_all_plates()
 
@@ -2273,36 +2275,36 @@ class TestEchoPlateAccessBackend(unittest.IsolatedAsyncioTestCase):
   async def test_close_door_rejects_when_access_is_open(self):
     driver = MedmanEchoDriver(host="192.168.0.25")
     backend = EchoPlateAccessBackend(driver)
-    driver.get_access_state = AsyncMock(
+    driver.read_access_state = AsyncMock(
       return_value=PlateAccessState(source_access_open=True, source_access_closed=False)
     )
-    driver.close_door = AsyncMock()
+    driver.close_instrument_door = AsyncMock()
 
     with self.assertRaises(EchoCommandError):
       await backend.close_door()
 
-    driver.close_door.assert_not_awaited()
+    driver.close_instrument_door.assert_not_awaited()
 
   async def test_close_door_rejects_when_access_state_is_unknown(self):
     driver = MedmanEchoDriver(host="192.168.0.25")
     backend = EchoPlateAccessBackend(driver)
-    driver.get_access_state = AsyncMock(
+    driver.read_access_state = AsyncMock(
       return_value=PlateAccessState(
         source_access_open=False,
         destination_access_open=None,
       )
     )
-    driver.close_door = AsyncMock()
+    driver.close_instrument_door = AsyncMock()
 
     with self.assertRaisesRegex(EchoCommandError, "Cannot confirm destination access"):
       await backend.close_door()
 
-    driver.close_door.assert_not_awaited()
+    driver.close_instrument_door.assert_not_awaited()
 
   async def test_close_door_sends_rpc_when_access_paths_are_known_closed(self):
     driver = MedmanEchoDriver(host="192.168.0.25")
     backend = EchoPlateAccessBackend(driver)
-    driver.get_access_state = AsyncMock(
+    driver.read_access_state = AsyncMock(
       return_value=PlateAccessState(
         source_access_open=False,
         source_access_closed=True,
@@ -2310,11 +2312,11 @@ class TestEchoPlateAccessBackend(unittest.IsolatedAsyncioTestCase):
         destination_access_closed=True,
       )
     )
-    driver.close_door = AsyncMock()
+    driver.close_instrument_door = AsyncMock()
 
     await backend.close_door(timeout=5.0)
 
-    driver.close_door.assert_awaited_once_with(timeout=5.0)
+    driver.close_instrument_door.assert_awaited_once_with(timeout=5.0)
 
 
 class TestEchoPlateMap(unittest.TestCase):
@@ -2522,11 +2524,11 @@ class TestEchoDevice(unittest.IsolatedAsyncioTestCase):
     echo = Echo(host="192.168.0.25")
     echo._setup_finished = True
     echo.driver._lock_held = True
-    echo.driver.unlock = AsyncMock()
+    echo.driver.unlock_instrument = AsyncMock()
 
     await echo.stop()
 
-    echo.driver.unlock.assert_awaited_once()
+    echo.driver.unlock_instrument.assert_awaited_once()
 
 
 if __name__ == "__main__":
