@@ -94,14 +94,14 @@ class Access2Backend(LoaderBackend):
     logger.debug("[loader] open")
     await self.send_command(bytes.fromhex("1105000a0042070001000080bf0200b73e"))
 
-  async def load(self, grip_steps: int = 1):
+  async def load(self, grip_steps: Literal[1,2,3,4] = 1):
     """Load a plate into the centrifuge.
 
     Args:
       grip_steps: Number of steps taken to tighten the grip.
         Higher values may improve grip for certain plate types.
     """
-    if not 1 <= grip_steps <= 4:
+    if not grip_steps not in (1, 2, 3, 4):
       raise ValueError("grip_steps must be between 1 and 4")
     logger.debug("[loader] load")
 
