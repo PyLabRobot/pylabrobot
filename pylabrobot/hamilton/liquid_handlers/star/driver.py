@@ -6,8 +6,9 @@ import enum
 import logging
 import math
 import re
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.hamilton.liquid_handlers.base import HamiltonLiquidHandler
@@ -20,7 +21,7 @@ from .errors import (
 )
 from .fw_parsing import parse_star_firmware_version_date, parse_star_fw_string
 from .head96_backend import STARHead96Backend
-from .iswap import iSWAPBackend
+from .iswap import iSWAPBackend, iSWAPConfiguration
 from .pip_backend import STARPIPBackend
 from .wash_station import STARWashStation
 from .x_arm import STARXArm
@@ -109,6 +110,98 @@ class ExtendedConfiguration:
   right_arm_min_y_position: float = 6.0
 
 
+@dataclass
+class STARConfiguration:
+  """Per-capability configuration for a STAR, injected at construction.
+
+  One optional field per capability, named after the capability attribute
+  (``star.iswap`` -> ``iswap``); each value is that capability's own configuration
+  dataclass (e.g. ``iSWAPConfiguration``: encoder resolutions, drive ranges,
+  geometric constants, per-machine calibration). Passed to ``STAR``/``STARLet`` or
+  the driver and distributed to each backend as its ``.configuration``. An unset
+  field means that capability uses its own defaults - read from the device at setup
+  on real hardware, or factory defaults under the chatterbox (no device to read).
+  Grows one field per capability as each gains a configuration.
+  """
+
+  iswap: Optional[iSWAPConfiguration] = None
+
+
+# ---------------------------------------------------------------------------
+# Firmware command lock
+# ---------------------------------------------------------------------------
+
+
+class _FirmwareLock:
+  """Coordinates firmware commands across modules.
+
+  Two layers, both handled by ``slave_module(module)`` / ``c0()`` so callers never touch the
+  internals:
+
+  * A readers/writer gate between the C0 master and the slave modules. A slave-module
+    command blocks the C0 master while in flight; a C0 master command (``c0()``) is
+    *exclusive*: it waits for all slave-module commands to drain, then runs alone. So no
+    slave-module command ever overlaps a C0 master command.
+
+  * A per-module mutex so at most one command per module is in flight. Different modules
+    still overlap — an X0 arm move can run alongside an H0 head move and Px channel commands
+    — but you never have two X0, two H0, etc. at once. Modules without a dedicated mutex are
+    gated but not per-module serialized.
+
+  Read-only request (``R*``) and query (``Q*``) commands are not coordinated here at all —
+  they take no lock and run fully in parallel (see ``STARDriver.send_command``).
+
+  The first slave-module command acquires the exclusive lock and the last one releases it,
+  so a C0 command simply takes the same lock and automatically waits the slaves out.
+  """
+
+  # Slave modules that serialize against themselves: H0 (96-head), X0 (X-drives),
+  # R0 (iSWAP), I0 (autoload). All Px pipetting channels (P1..PG) share one mutex.
+  _SERIALIZED_MODULES = ("H0", "X0", "R0", "I0")
+
+  def __init__(self):
+    # Per-module mutexes: at most one in-flight command per module.
+    self._px_lock = asyncio.Lock()  # shared by all P1..PG pipetting channels
+    self._module_locks = {module: asyncio.Lock() for module in self._SERIALIZED_MODULES}
+
+    # Readers/writer gate: slave-module commands vs the exclusive C0 master.
+    self._slave_count = 0
+    self._slave_count_lock = asyncio.Lock()
+    self._exclusive_lock = asyncio.Lock()
+
+  def _module_lock(self, module: str) -> Optional[asyncio.Lock]:
+    """The per-module mutex for ``module``, or None if it needs no per-module serialization."""
+    if module.startswith("P"):
+      return self._px_lock  # P1..PG pipetting channels
+    return self._module_locks.get(module)
+
+  @asynccontextmanager
+  async def slave_module(self, module: str):
+    """Run a slave-module command: serialize on its module mutex and block the C0 master."""
+    module_lock = self._module_lock(module)
+    async with AsyncExitStack() as stack:
+      if module_lock is not None:
+        await stack.enter_async_context(module_lock)
+      # Join the slave group; first in acquires the exclusive lock, last out releases it.
+      async with self._slave_count_lock:
+        self._slave_count += 1
+        if self._slave_count == 1:
+          await self._exclusive_lock.acquire()
+      try:
+        yield
+      finally:
+        async with self._slave_count_lock:
+          self._slave_count -= 1
+          if self._slave_count == 0:
+            self._exclusive_lock.release()
+
+  @asynccontextmanager
+  async def c0(self):
+    """Run an exclusive C0 master command. Waits for all slave commands, then runs alone."""
+    async with self._exclusive_lock:
+      yield
+
+
 # ---------------------------------------------------------------------------
 # STARDriver
 # ---------------------------------------------------------------------------
@@ -133,6 +226,7 @@ class STARDriver(HamiltonLiquidHandler):
     read_timeout: int = 30,
     write_timeout: int = 30,
     left_side_panel_installed: bool = False,
+    configuration: Optional[STARConfiguration] = None,
   ):
     super().__init__(
       id_product=0x8000,
@@ -145,10 +239,19 @@ class STARDriver(HamiltonLiquidHandler):
     self.deck = deck
     self.left_side_panel_installed = left_side_panel_installed
 
+    # Coordinates firmware commands: C0 master commands run exclusively; Px/H0/X0 overlap
+    # across modules but serialize within a module, and none of them overlap C0.
+    self._fw_lock = _FirmwareLock()
+    # Injection-only bundle, consumed at setup to seed each capability's own
+    # `.configuration`. The runtime home is `star.iswap.configuration`, not here.
+    self._configuration = configuration if configuration is not None else STARConfiguration()
+
     # Populated during setup().
     self.machine_conf: Optional[MachineConfiguration] = None
     self.extended_conf: Optional[ExtendedConfiguration] = None
-    self._channels_minimum_y_spacing: List[float] = []
+    # Default to 8-channel uniform 9 mm spacing pre-setup (matches main's behaviour).
+    # Overwritten during setup() once the firmware-reported spacings come back.
+    self._channels_minimum_y_spacing: List[float] = [9.0] * 8
     self.pip: STARPIPBackend  # set in setup()
     self.head96: Optional[STARHead96Backend] = None  # set in setup() if installed
     self.iswap: Optional["iSWAPBackend"] = None  # set in setup() if installed
@@ -158,6 +261,34 @@ class STARDriver(HamiltonLiquidHandler):
     self.cover: Optional["STARCover"] = None  # set in setup()
     self.wash_station: Optional["STARWashStation"] = None  # set in setup()
 
+    # Authoritative channel count discovered during setup via RT (request_tip_presence).
+    # Falls back to machine_conf.num_pip_channels until populated.
+    self._num_channels: Optional[int] = None
+
+  async def send_command(self, module: str, command: str, *args, **kwargs):
+    """Send a firmware command under the firmware lock.
+
+    Request ("R*") and query ("Q*") commands are read-only on every module, so they take no
+    lock and run fully in parallel — this lets a query (e.g. a Px:QN TADM-buffer read) run
+    concurrently with an in-flight C0 master command such as an aspiration. A C0 master
+    command runs exclusively — nothing else is in flight. Every other (slave-module) command
+    blocks the C0 master, overlaps commands on *other* modules (so an X0 X-arm move, an H0
+    head move, and Px channel commands can run together), but serializes against other
+    commands on its *own* module.
+
+    Caveat: C0:QS with an ``on`` parameter (cover.py reset_output) is a write, not a query;
+    it is rare and never issued during pipetting, so it is treated lock-free with the rest.
+    """
+    if command.startswith(("R", "Q")):
+      return await super().send_command(module, command, *args, **kwargs)
+
+    if module == "C0":
+      async with self._fw_lock.c0():
+        return await super().send_command(module, command, *args, **kwargs)
+
+    async with self._fw_lock.slave_module(module):
+      return await super().send_command(module, command, *args, **kwargs)
+
   # -- HamiltonLiquidHandler abstract methods --------------------------------
 
   @property
@@ -166,6 +297,8 @@ class STARDriver(HamiltonLiquidHandler):
 
   @property
   def num_channels(self) -> int:
+    if self._num_channels is not None:
+      return self._num_channels
     if self.machine_conf is None:
       raise RuntimeError("Driver not set up — call setup() first.")
     return self.machine_conf.num_pip_channels
@@ -281,6 +414,14 @@ class STARDriver(HamiltonLiquidHandler):
     # Create backends based on discovered config.
     self.pip = STARPIPBackend(self)
 
+    # Cache the channel count from `RT` (request_tip_presence) — authoritative
+    # vs the `kp` field of the RM response which may not reflect hardware.
+    try:
+      tip_presence = await self.pip.request_tip_presence()
+      self._num_channels = len(tip_presence)
+    except Exception:  # pragma: no cover - chatterbox/no-hardware paths
+      self._num_channels = self.machine_conf.num_pip_channels
+
     self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
     if self.extended_conf.left_x_drive.core_96_head_installed:
@@ -289,7 +430,7 @@ class STARDriver(HamiltonLiquidHandler):
       self.head96 = None
 
     if self.extended_conf.left_x_drive.iswap_installed:
-      self.iswap = iSWAPBackend(driver=self)
+      self.iswap = iSWAPBackend(driver=self, configuration=self._configuration.iswap)
     else:
       self.iswap = None
 
@@ -341,7 +482,7 @@ class STARDriver(HamiltonLiquidHandler):
     await super().stop()
     self.machine_conf = None
     self.extended_conf = None
-    self._channels_minimum_y_spacing = []
+    self._channels_minimum_y_spacing = [9.0] * 8
     self.head96 = None
     self.iswap = None
     self.autoload = None
@@ -353,13 +494,98 @@ class STARDriver(HamiltonLiquidHandler):
   # -- liquid level probing ---------------------------------------------------
 
   async def probe_liquid_heights(
-    self, containers, use_channels, resource_offsets=None, move_to_z_safety_after=True, **kwargs
-  ):
-    """Probe liquid heights using cLLD. Override in subclasses with real implementation."""
-    raise NotImplementedError(
-      "probe_liquid_heights is not implemented on STARDriver. "
-      "Use STARBackend (legacy) or implement probing on your driver subclass."
+    self,
+    containers,
+    use_channels: List[int],
+    resource_offsets: Optional[List[Any]] = None,
+    move_to_z_safety_after: bool = True,
+    **kwargs,
+  ) -> List[float]:
+    """Probe liquid heights using cLLD.
+
+    Drives one cLLD scan per (container, channel) pairing using
+    :meth:`PIPChannel.clld_probe_z_height`, then optionally returns the channel
+    to its traversal height. Returns the detected liquid surface Z (mm) for
+    each container, in the same order as ``containers`` / ``use_channels``.
+    """
+    if len(containers) != len(use_channels):
+      raise ValueError("containers and use_channels must have the same length")
+    if resource_offsets is None:
+      resource_offsets = [None] * len(containers)
+    if len(resource_offsets) != len(containers):
+      raise ValueError("resource_offsets must align with containers")
+
+    pip = getattr(self, "pip", None)
+    if pip is None:
+      raise RuntimeError("Driver not set up — call setup() first.")
+
+    detected_heights: List[float] = []
+    for container, channel_idx, offset in zip(containers, use_channels, resource_offsets):
+      channel = pip.channels[channel_idx]
+      # Center the channel over the container in X/Y.
+      loc = container.get_absolute_location(x="c", y="c", z="b")
+      if offset is not None:
+        loc = loc + offset
+      await channel.move_x(loc.x)
+      await channel.move_y(loc.y)
+      # Probe Z (single-channel cLLD).
+      detected_heights.append(await channel.clld_probe_z_height())
+
+    if move_to_z_safety_after:
+      for channel_idx in use_channels:
+        channel = pip.channels[channel_idx]
+        await channel.move_stop_disk_z(pip.traversal_height)
+
+    return detected_heights
+
+  async def probe_liquid_volumes(
+    self,
+    containers,
+    use_channels: List[int],
+    resource_offsets: Optional[List[Any]] = None,
+    move_to_z_safety_after: bool = True,
+    **kwargs,
+  ) -> List[float]:
+    """Probe liquid volumes by measuring heights and converting via container geometry.
+
+    Convenience wrapper around :meth:`probe_liquid_heights`. Each container must
+    support :meth:`Container.compute_volume_from_height` (i.e. have a known
+    geometric model).
+    """
+    if any(not c.supports_compute_height_volume_functions() for c in containers):
+      raise ValueError(
+        "probe_liquid_volumes can only be used with containers that support "
+        "height<->volume conversion."
+      )
+
+    liquid_heights = await self.probe_liquid_heights(
+      containers=containers,
+      use_channels=use_channels,
+      resource_offsets=resource_offsets,
+      move_to_z_safety_after=move_to_z_safety_after,
+      **kwargs,
     )
+
+    volumes: List[float] = []
+    for container, height in zip(containers, liquid_heights):
+      surface_above_bottom = height - container.get_absolute_location(z="b").z
+      volumes.append(container.compute_volume_from_height(max(0.0, surface_above_bottom)))
+    return volumes
+
+  async def empty_tips(self) -> None:
+    """Empty the dispensing drive on every channel that currently has a tip.
+
+    Auto-discovers tip presence via :meth:`STARPIPBackend.request_tip_presence`
+    then issues per-channel :meth:`PIPChannel.empty_tip` in parallel.
+    """
+    pip = getattr(self, "pip", None)
+    if pip is None:
+      raise RuntimeError("Driver not set up — call setup() first.")
+    presence = await pip.request_tip_presence()
+    occupied = [i for i, p in enumerate(presence) if p]
+    if not occupied:
+      return
+    await asyncio.gather(*(pip.channels[i].empty_tip() for i in occupied))
 
   # -- core gripper tool management ------------------------------------------
 
@@ -412,6 +638,74 @@ class STARDriver(HamiltonLiquidHandler):
       th=round(traversal_height * 10),
       te=round(traversal_height * 10),
     )
+
+  async def core_read_barcode(
+    self,
+    rails: int,
+    reading_direction: str = "horizontal",
+    minimal_z_position: float = 220.0,
+    traverse_height_at_beginning_of_a_command: float = 275.0,
+    z_speed: float = 128.7,
+    allow_manual_input: bool = False,
+    labware_description: Optional[str] = None,
+  ):
+    """Read a 1D barcode using the CoRe gripper scanner (C0 ZB).
+
+    Requires the CoRe grippers to be picked up (use ``STAR.core_grippers()``).
+    Returns a :class:`Barcode` or raises ``ValueError`` if none was read.
+    """
+    from pylabrobot.resources.barcode import Barcode
+
+    if not 1 <= rails <= 54:
+      raise ValueError("rails must be between 1 and 54")
+    if not 0 <= minimal_z_position * 10 <= 3600:
+      raise ValueError("minimal_z_position must be between 0 and 360.0 mm")
+    if not 0 <= traverse_height_at_beginning_of_a_command * 10 <= 3600:
+      raise ValueError("traverse_height_at_beginning_of_a_command must be between 0 and 360.0 mm")
+    if not 0 <= z_speed * 10 <= 1287:
+      raise ValueError("z_speed must be between 0 and 128.7 mm/s")
+    try:
+      reading_direction_int = {"vertical": 0, "horizontal": 1, "free": 2}[reading_direction]
+    except KeyError as e:
+      raise ValueError("reading_direction must be 'vertical', 'horizontal', or 'free'") from e
+
+    resp = await self.send_command(
+      module="C0",
+      command="ZB",
+      cp=f"{rails:02}",
+      zb=f"{round(minimal_z_position * 10):04}",
+      th=f"{round(traverse_height_at_beginning_of_a_command * 10):04}",
+      zy=f"{round(z_speed * 10):04}",
+      bd=reading_direction_int,
+      ma="0250 2100 0860 0200",
+      mr=0,
+      mo="000 000 000 000 000 000 000",
+    )
+    if resp is None:
+      raise RuntimeError("No response received from CoRe barcode read command.")
+    s = str(resp).strip()
+    bb_index = s.find("bb/")
+    if bb_index == -1 or len(s) < bb_index + 5:
+      raise ValueError(f"Unexpected CoRe barcode response format: {s}")
+    try:
+      bb_len = int(s[bb_index + 3 : bb_index + 5])
+    except ValueError as e:
+      raise ValueError(f"Invalid CoRe barcode length field: {s}") from e
+    barcode_str = s[bb_index + 5 :].strip()
+    if bb_len == 0:
+      if allow_manual_input:
+        prompt = "No barcode read by CoRe scanner."
+        if labware_description is not None:
+          prompt += f" Labware: {labware_description}."
+        prompt += " Enter barcode manually (blank to abort): "
+        user_barcode = input(prompt).strip()
+        if not user_barcode:
+          raise ValueError("No barcode read by CoRe scanner and no manual barcode provided.")
+        return Barcode(data=user_barcode, symbology="code128", position_on_resource="front")
+      raise ValueError("No barcode read by CoRe scanner.")
+    if len(barcode_str) > bb_len:
+      barcode_str = barcode_str[:bb_len]
+    return Barcode(data=barcode_str, symbology="code128", position_on_resource="front")
 
   # -- machine configuration ------------------------------------------------
 
@@ -521,6 +815,49 @@ class STARDriver(HamiltonLiquidHandler):
 
     resp = await self.send_command(module="C0", command="RF")
     return parse_star_firmware_version_date(str(resp))
+
+  async def x_arm_request_firmware_version(self) -> Tuple[str, datetime.date]:
+    """Request the X-arm firmware version and build date (X0:RF).
+
+    Returns:
+      A tuple of ``(version_string, build_date)``, e.g. ``("1.0S", date(2009, 6, 24))``.
+    """
+
+    resp = await self.send_command(module="X0", command="RF")
+    resp_str = str(resp)
+    version = resp_str.split("rf")[-1].split(" ")[0]
+    build_date = parse_star_firmware_version_date(resp_str)
+    return version, build_date
+
+  async def experimental_x_arm_move(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the X-arm to an absolute X position with specified acceleration (X0:XP).
+
+    Args:
+      x: Target X coordinate in mm. Must be between 90.0 and 1350.0.
+      acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
+      current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
+    """
+    if not 90.0 <= x <= 1350.0:
+      raise ValueError(f"x must be between 90.0 and 1350.0 mm, is {x}")
+    if not 1 <= acceleration_level <= 5:
+      raise ValueError(f"acceleration_level must be between 1 and 5, is {acceleration_level}")
+    if not 0 <= current_protection_limiter <= 7:
+      raise ValueError(
+        f"current_protection_limiter must be between 0 and 7, is {current_protection_limiter}"
+      )
+
+    return await self.send_command(
+      module="X0",
+      command="XP",
+      la=f"{round(x * 10):05}",
+      lr=str(acceleration_level),
+      lw=str(current_protection_limiter),
+    )
 
   async def request_parameter_value(self):
     """Request parameter value (C0:RA)."""
@@ -1069,7 +1406,7 @@ class STARDriver(HamiltonLiquidHandler):
 
   # -- PIP channel helpers ---------------------------------------------------
 
-  y_drive_mm_per_increment = 0.046302082
+  y_drive_mm_per_increment = 0.046302083
 
   @staticmethod
   def channel_id(channel_idx: int) -> str:

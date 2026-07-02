@@ -8,8 +8,6 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
 from pylabrobot.device import Driver
-from pylabrobot.io.binary import Reader
-from pylabrobot.io.socket import Socket
 from pylabrobot.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.hamilton.tcp.messages import (
   CommandResponse,
@@ -25,6 +23,8 @@ from pylabrobot.hamilton.tcp.protocol import (
   RegistrationActionCode,
   RegistrationOptionType,
 )
+from pylabrobot.io.binary import Reader
+from pylabrobot.io.socket import Socket
 
 logger = logging.getLogger(__name__)
 

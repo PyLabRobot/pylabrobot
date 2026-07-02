@@ -623,7 +623,34 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       53: "Robotic channel task busy",
     }
   elif module_identifier == "I0":  # autoload
-    table = {36: "Hamilton will not run while the hood is open"}
+    table = {
+      0: "No error",
+      20: "No communication to EEPROM",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      35: "Voltages outside permitted range",
+      # generic firmware meaning of 36 is "Stop during execution of command"
+      36: "Hamilton will not run while the hood is open",
+      40: "No parallel processes permitted",
+      50: "Scanner X-drive: init position not found",
+      51: "Scanner X-drive: stepper motor not initialized",
+      52: "Scanner X-drive: movement error (step loss)",
+      55: "Scanner rotation drive: drive blocked",
+      60: "Carrier Y-drive: init position not found",
+      61: "Carrier Y-drive: stepper motor not initialized",
+      62: "Carrier Y-drive: movement error (step loss)",
+      65: "Carrier Z-drive: init position not found",
+      66: "Carrier Z-drive: stepper motor not initialized",
+      67: "Carrier Z-drive: movement error (step loss)",
+      70: "Barcode scanner: communication error",
+      75: "Loading indicator (LED): communication error",
+      80: "Identification barcode not readable",
+      81: "No carrier present",
+      82: "No carrier loaded",
+      83: "Loading tray is occupied",
+      84: "Data for free definable carrier not correct",
+    }
   elif module_identifier in [
     "PX",
     "P1",
@@ -699,7 +726,14 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
     }
   elif module_identifier == "H0":  # Core 96 head
     table = {
+      0: "No error",
       20: "No communication to EEPROM",
+      # 21 is the current-firmware transfer-check error; older firmware reports 20
+      21: "No communication to digital potentiometer",
+      25: "Flash EPROM data incorrect",
+      26: "Flash EPROM cannot be programmed",
+      27: "Flash EPROM cannot be erased",
+      28: "Flash EPROM checksum error",
       30: "Unknown command",
       31: "Unknown parameter",
       32: "Parameter out of range",
@@ -729,8 +763,21 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       75: "No tip picked up",
       76: "Tip already picked up",
       81: "Clot detected",
+      82: "TADM measurement out of lower limit curve",
+      83: "TADM measurement out of upper limit curve",
+      84: "Not enough memory for TADM measurement",
+      90: "Limit curve not resettable",
+      91: "Limit curve not programmable",
+      92: "Limit curve not found",
+      93: "Limit curve data incorrect",
+      94: "Not enough memory for limit curve",
+      95: "Invalid limit curve index",
+      96: "Limit curve already stored",
     }
   elif module_identifier == "R0":  # iswap
+    # These messages are iSWAP-specific. The internal plate gripper (IPG) also
+    # reports as module R0 but numbers its drives differently, so for an IPG the
+    # codes from 55 up map to different drives than the ones listed here.
     table = {
       20: "No communication to EEPROM",
       30: "Unknown command",
@@ -770,6 +817,39 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       96: "Plate not available",
       97: "Unexpected object found",
     }
+  elif module_identifier == "X0":  # X-drives
+    table = {
+      0: "No error",
+      20: "Transmission error (I2C bus or EEPROM)",
+      25: "Flash EPROM data incorrect",
+      26: "Flash EPROM cannot be programmed",
+      27: "Flash EPROM cannot be erased",
+      28: "Flash EPROM checksum error",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      35: "Voltages outside permitted range",
+      # older firmware reports 36 as an emergency-stop / cover-open event
+      36: "Stop during execution of command",
+      40: "No parallel processes permitted (X drive 1)",
+      41: "No parallel processes permitted (X drive 2)",
+      42: "No parallel processes permitted (reserve drive)",
+      50: "X drive 1: initialization failed",
+      51: "X drive 1: drive not initialized",
+      52: "X drive 1: movement error (drive blocked or lag too high)",
+      53: "X drive 1: position error (drive displaced)",
+      54: "X drive 1: dispense-on-fly error",
+      55: "X drive 1: positioning-to-dispense-on-fly error",
+      70: "X drive 2: initialization failed",
+      71: "X drive 2: drive not initialized",
+      72: "X drive 2: movement error (drive blocked or lag too high)",
+      73: "X drive 2: position error (drive displaced)",
+      74: "X drive 2: dispense-on-fly error",
+      75: "X drive 2: positioning-to-dispense-on-fly error",
+      80: "Reserve drive: initialization failed",
+      81: "Reserve drive: drive not initialized",
+      82: "Reserve drive: movement error (drive blocked or lag too high)",
+    }
 
   if table is not None and trace_information in table:
     return table[trace_information]
@@ -801,7 +881,7 @@ def star_firmware_string_to_error(
         int(error_code_str),
         int(trace_information_str),
       )
-      if error_code == 0:  # No error
+      if error_code == 0 and trace_information == 0:  # No error
         continue
       error_class = error_code_to_exception(error_code)
     elif module_id == "I0" and error == "36":

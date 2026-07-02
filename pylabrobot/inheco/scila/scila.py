@@ -27,20 +27,27 @@ class SCILADrawerLoadingTrayBackend(LoadingTrayBackend):
     try:
       await self._driver.send_command("OpenDoor")
     except RuntimeError as e:
-      # SCILA raises a non-fatal CO2-flow warning as an exception; log and continue.
-      if "warning" not in str(e).lower():
-        raise
-      logger.warning("drawer %d open: %s", self._drawer_id, e)
+      self._handle_warning("open", e)
 
-  async def close(self, backend_params: Optional[BackendParams] = None):
+  async def close(
+    self,
+    backend_params: Optional[BackendParams] = None,
+    resource: Optional[Resource] = None,
+  ):
     await self._driver.send_command("PrepareForOutput", position=self._drawer_id)
     try:
       await self._driver.send_command("CloseDoor")
     except RuntimeError as e:
-      # SCILA raises a non-fatal CO2-flow warning as an exception; log and continue.
-      if "warning" not in str(e).lower():
-        raise
-      logger.warning("drawer %d close: %s", self._drawer_id, e)
+      self._handle_warning("close", e)
+
+  def _handle_warning(self, action: str, e: RuntimeError) -> None:
+    if "warning" not in str(e).lower():
+      raise e
+    # SCILA emits a non-fatal CO2-flow warning when the gas mixer is absent or unhealthy.
+    # When the user has declared no gas mixer is connected, silence it; otherwise surface
+    # the warning so a real CO2 problem isn't hidden.
+    if self._driver.gas_mixer_connected:
+      logger.warning("drawer %d %s: %s", self._drawer_id, action, e)
 
 
 class SCILA(Resource, Device):
@@ -51,11 +58,14 @@ class SCILA(Resource, Device):
     name: str,
     scila_ip: str,
     client_ip: Optional[str] = None,
+    gas_mixer_connected: bool = True,
     size_x: float = 0.0,  # TODO: measure
     size_y: float = 0.0,  # TODO: measure
     size_z: float = 0.0,  # TODO: measure
   ):
-    driver = SCILADriver(scila_ip=scila_ip, client_ip=client_ip)
+    driver = SCILADriver(
+      scila_ip=scila_ip, client_ip=client_ip, gas_mixer_connected=gas_mixer_connected
+    )
     Resource.__init__(
       self,
       name=name,

@@ -1,59 +1,63 @@
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
-from pylabrobot.capabilities.arms.arm import GripOrientation, _BaseArm, _PickedUpState
+from pylabrobot.capabilities.arms.arm import GripperArm, GripperOrientation, _PickedUpState
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
-from pylabrobot.capabilities.arms.standard import GripDirection
+from pylabrobot.capabilities.arms.standard import (
+  _GRIPPER_DIRECTION_VALUES,
+  GripperDirection,
+)
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder, ResourceStack
 from pylabrobot.resources.rotation import Rotation
 
-_GRIP_DIRECTION_TO_DEGREES = {
-  GripDirection.FRONT: 0.0,
-  GripDirection.RIGHT: 90.0,
-  GripDirection.BACK: 180.0,
-  GripDirection.LEFT: 270.0,
+# Cardinal-direction → degrees under the standard ``rotation.z = 0 → +X``
+# convention (CCW about world +Z, right-hand rule looking down). In the
+# PLR deck frame (+X = right, +Y = back), this maps to: right=+X,
+# back=+Y, left=-X, front=-Y. ``front`` lives at 270° (rather than -90°)
+# so the table reads top-to-bottom in CCW order from +X.
+_GRIPPER_DIRECTION_TO_DEGREES: Dict[GripperDirection, float] = {
+  "right": 0.0,
+  "back": 90.0,
+  "left": 180.0,
+  "front": 270.0,
 }
 
 
-def _resolve_direction(direction: GripOrientation) -> float:
-  if isinstance(direction, GripDirection):
-    return _GRIP_DIRECTION_TO_DEGREES[direction]
+def _resolve_direction(direction: GripperOrientation) -> float:
+  if isinstance(direction, str):
+    if direction not in _GRIPPER_DIRECTION_VALUES:
+      raise ValueError(
+        f"direction must be one of {sorted(_GRIPPER_DIRECTION_VALUES)} or a float, "
+        f"got {direction!r}"
+      )
+    return _GRIPPER_DIRECTION_TO_DEGREES[direction]
   return direction
 
 
-class OrientableArm(_BaseArm):
-  """An arm with rotation capability. E.g. Hamilton iSWAP."""
+class OrientableGripperArm(GripperArm):
+  """A gripper arm with rotation capability. E.g. Hamilton iSWAP."""
 
   def __init__(self, backend: OrientableGripperArmBackend, reference_resource: Resource):
-    super().__init__(backend=backend, reference_resource=reference_resource)
+    super().__init__(backend=backend, reference_resource=reference_resource)  # type: ignore[arg-type]
     self.backend: OrientableGripperArmBackend = backend  # type: ignore[assignment]
-
-  async def open_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    await self.backend.open_gripper(gripper_width=gripper_width, backend_params=backend_params)
-
-  async def close_gripper(
-    self, gripper_width: float, backend_params: Optional[BackendParams] = None
-  ) -> None:
-    await self.backend.close_gripper(gripper_width=gripper_width, backend_params=backend_params)
-
-  async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
-    return await self.backend.is_gripper_closed(backend_params=backend_params)
 
   @staticmethod
   def _resource_width_for_direction(resource: Resource, direction: float) -> float:
+    # Front-finger axis is `direction`; jaws come together perpendicular to
+    # it. At 0°/180° the finger points along ±X (right/left), so the jaws
+    # grip the resource along Y; at 90°/270° the finger points along ±Y
+    # (back/front) so they grip along X.
     # TODO: resource rotation is not taken into account here.
     if direction % 180 == 0:
-      return resource.get_absolute_size_x()
-    else:
       return resource.get_absolute_size_y()
+    else:
+      return resource.get_absolute_size_x()
 
   async def pick_up_at_location(
     self,
     location: Coordinate,
     resource_width: float,
-    direction: GripOrientation = 0.0,
+    direction: GripperOrientation = 0.0,
     backend_params: Optional[BackendParams] = None,
   ):
     if self.holding:
@@ -73,7 +77,7 @@ class OrientableArm(_BaseArm):
     resource: Resource,
     offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_bottom: Optional[float] = None,
-    direction: GripOrientation = GripDirection.FRONT,
+    direction: GripperOrientation = "front",
     backend_params: Optional[BackendParams] = None,
   ):
     location, pickup_distance_from_bottom = self._prepare_pickup(
@@ -81,10 +85,7 @@ class OrientableArm(_BaseArm):
     )
     dir_degrees = _resolve_direction(direction)
     resource_width = self._resource_width_for_direction(resource, dir_degrees)
-    # if gripper:
     await self.pick_up_at_location(location, resource_width, dir_degrees, backend_params)
-    # if suction:
-    # TODO:
     self._picked_up = _PickedUpState(
       resource=resource,
       offset=offset,
@@ -97,7 +98,7 @@ class OrientableArm(_BaseArm):
   async def drop_at_location(
     self,
     location: Coordinate,
-    direction: GripOrientation,
+    direction: GripperOrientation,
     backend_params: Optional[BackendParams] = None,
   ):
     if self._holding_resource_width is None:
@@ -114,7 +115,7 @@ class OrientableArm(_BaseArm):
     self,
     destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     offset: Coordinate = Coordinate.zero(),
-    direction: GripOrientation = GripDirection.FRONT,
+    direction: GripperOrientation = "front",
     backend_params: Optional[BackendParams] = None,
   ):
     resource = self._prepare_drop(destination)
@@ -135,7 +136,7 @@ class OrientableArm(_BaseArm):
   async def move_to_location(
     self,
     location: Coordinate,
-    direction: GripOrientation = 0.0,
+    direction: GripperOrientation = 0.0,
     backend_params: Optional[BackendParams] = None,
   ):
     await self.backend.move_to_location(
@@ -147,7 +148,7 @@ class OrientableArm(_BaseArm):
   async def move_picked_up_resource(
     self,
     to: Coordinate,
-    direction: GripOrientation,
+    direction: GripperOrientation,
     offset: Coordinate = Coordinate.zero(),
     backend_params: Optional[BackendParams] = None,
   ):
@@ -169,8 +170,8 @@ class OrientableArm(_BaseArm):
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_bottom: Optional[float] = None,
-    pickup_direction: GripOrientation = GripDirection.FRONT,
-    drop_direction: GripOrientation = GripDirection.FRONT,
+    pickup_direction: GripperOrientation = "front",
+    drop_direction: GripperOrientation = "front",
     pickup_backend_params: Optional[BackendParams] = None,
     drop_backend_params: Optional[BackendParams] = None,
   ):

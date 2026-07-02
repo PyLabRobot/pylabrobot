@@ -2,7 +2,18 @@
 
 import contextlib
 import logging
-from typing import Dict, Generator, List, Literal, Optional, Sequence, Union
+from typing import (
+  Awaitable,
+  Callable,
+  Dict,
+  Generator,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  Union,
+)
 
 from pylabrobot.capabilities.capability import BackendParams, Capability, need_capability_ready
 from pylabrobot.resources import (
@@ -11,6 +22,7 @@ from pylabrobot.resources import (
   Deck,
   Plate,
   Tip,
+  TipRack,
   TipSpot,
   TipTracker,
   Trash,
@@ -804,3 +816,195 @@ class PIP(Capability):
         )
       else:
         await self.return_tips(use_channels=channels, drop_backend_params=drop_backend_params)
+
+  @need_capability_ready
+  async def probe_tip_presence_via_pickup(
+    self,
+    tip_spots: List[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    pick_up_backend_params: Optional[BackendParams] = None,
+    drop_backend_params: Optional[BackendParams] = None,
+  ) -> Dict[str, bool]:
+    """Detect which `tip_spots` actually have a tip by attempting to pick them up
+    and dropping them back. Channels that fail with `ChannelizedError` are marked
+    absent. Tip spots are clustered by x so they can be probed concurrently across
+    the PIP head.
+    """
+    if use_channels is None:
+      use_channels = list(range(len(tip_spots)))
+
+    if len(use_channels) > self.backend.num_channels:
+      raise ValueError(
+        f"Given {len(use_channels)} channels but PIP only has {self.backend.num_channels}."
+      )
+    if len(use_channels) != len(tip_spots):
+      raise ValueError(
+        f"Length mismatch: {len(use_channels)} channels for {len(tip_spots)} tip spots."
+      )
+
+    presence_flags = [True] * len(tip_spots)
+
+    clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}
+    for idx, tip_spot in enumerate(tip_spots):
+      assert tip_spot.location is not None, "TipSpot location must be set"
+      clusters_by_x.setdefault(tip_spot.location.x, []).append((tip_spot, use_channels[idx], idx))
+    sorted_clusters = [clusters_by_x[x] for x in sorted(clusters_by_x)]
+
+    for cluster in sorted_clusters:
+      tip_subset, channel_subset, index_subset = zip(*cluster)
+      try:
+        await self.pick_up_tips(
+          list(tip_subset),
+          use_channels=list(channel_subset),
+          backend_params=pick_up_backend_params,
+        )
+      except ChannelizedError as e:
+        for ch in e.errors:
+          if ch in channel_subset:
+            presence_flags[index_subset[channel_subset.index(ch)]] = False
+          else:
+            raise
+
+      live = [(ts, uc, i) for ts, uc, i in cluster if presence_flags[i]]
+      if live:
+        spots = [ts for ts, _, _ in live]
+        chans = [uc for _, uc, _ in live]
+        try:
+          await self.drop_tips(spots, use_channels=chans, backend_params=drop_backend_params)
+        except Exception as e:
+          assert cluster[0][0].location is not None
+          logger.warning("drop_tips failed for cluster at x=%s: %s", cluster[0][0].location.x, e)
+
+    return {ts.name: flag for ts, flag in zip(tip_spots, presence_flags)}
+
+  @need_capability_ready
+  async def probe_tip_inventory(
+    self,
+    tip_spots: List[TipSpot],
+    probing_fn: Optional[Callable[[List[TipSpot], List[int]], Awaitable[Dict[str, bool]]]] = None,
+    use_channels: Optional[List[int]] = None,
+  ) -> Dict[str, bool]:
+    """Probe presence on a long list of tip spots, batching by available channels."""
+    if probing_fn is None:
+      probing_fn = self.probe_tip_presence_via_pickup
+
+    results: Dict[str, bool] = {}
+    if use_channels is None:
+      use_channels = list(range(self.backend.num_channels))
+    num_channels = len(use_channels)
+
+    for i in range(0, len(tip_spots), num_channels):
+      subset = tip_spots[i : i + num_channels]
+      batch_channels = use_channels[: len(subset)]
+      results.update(await probing_fn(subset, batch_channels))
+
+    return results
+
+  @need_capability_ready
+  async def consolidate_tip_inventory(
+    self, tip_racks: List[TipRack], use_channels: Optional[List[int]] = None
+  ):
+    """Reorganize tips across partially-filled racks so that tips occupy the
+    first N positions (top-left, row-major) and the rest are empty. Racks must
+    have a single tip model per rack; only racks with the same model are
+    consolidated together. Skips racks that are fully empty or fully full.
+    """
+
+    def merge_sublists(lists: List[List[TipSpot]], max_len: int) -> List[List[TipSpot]]:
+      merged: List[List[TipSpot]] = []
+      buffer: List[TipSpot] = []
+      for sublist in lists:
+        if len(sublist) == 0:
+          continue
+        if len(buffer) + len(sublist) <= max_len:
+          buffer.extend(sublist)
+        else:
+          if buffer:
+            merged.append(buffer)
+          buffer = sublist
+      if len(buffer) > 0:
+        merged.append(buffer)
+      return merged
+
+    def divide_list_into_chunks(
+      list_l: List[TipSpot], chunk_size: int
+    ) -> Generator[List[TipSpot], None, None]:
+      for i in range(0, len(list_l), chunk_size):
+        yield list_l[i : i + chunk_size]
+
+    clusters_by_model: Dict[int, List[Tuple[TipRack, int]]] = {}
+
+    for tip_rack in tip_racks:
+      tip_status = [tip_spot.tracker.has_tip for tip_spot in tip_rack.get_all_items()]
+      if not (any(tip_status) and not all(tip_status)):
+        continue
+
+      tipspots_w_tips = [ts for has_tip, ts in zip(tip_status, tip_rack.get_all_items()) if has_tip]
+      current_model = hash(tipspots_w_tips[0].tracker.get_tip())
+      if not all(hash(ts.tracker.get_tip()) == current_model for ts in tipspots_w_tips[1:]):
+        raise ValueError(f"Tip rack {tip_rack.name} has mixed tip models, cannot consolidate.")
+      num_empty = len(tip_status) - len(tipspots_w_tips)
+      clusters_by_model.setdefault(current_model, []).append((tip_rack, num_empty))
+
+    for rack_list in clusters_by_model.values():
+      rack_list.sort(key=lambda x: x[1])
+
+    for rack_list in clusters_by_model.values():
+      logger.info("Consolidating: %s", ", ".join(rack.name for rack, _ in rack_list))
+
+      all_tip_spots_list = [ts for tip_rack, _ in rack_list for ts in tip_rack.get_all_items()]
+      current_tip_presence_list = [ts.has_tip() for ts in all_tip_spots_list]
+      total_length = len(all_tip_spots_list)
+      num_tips = sum(current_tip_presence_list)
+      target_tip_presence_list = [i < num_tips for i in range(total_length)]
+
+      tip_movement = [c - t for c, t in zip(current_tip_presence_list, target_tip_presence_list)]
+      origin_idxs = [i for i, v in enumerate(tip_movement) if v == 1]
+      target_idxs = [i for i, v in enumerate(tip_movement) if v == -1]
+      all_origin_tip_spots = [all_tip_spots_list[i] for i in origin_idxs]
+      all_target_tip_spots = [all_tip_spots_list[i] for i in target_idxs]
+
+      if len(all_target_tip_spots) == 0:
+        logger.info("Tips already optimally consolidated.")
+        continue
+
+      def key_for_tip_spot(ts: TipSpot) -> Tuple[str, float]:
+        assert ts.parent is not None and ts.location is not None
+        return (ts.parent.name, round(ts.location.x, 3))
+
+      sorted_tip_spots = sorted(all_target_tip_spots, key=key_for_tip_spot)
+      target_tip_clusters_by_parent_x: Dict[Tuple[str, float], List[TipSpot]] = {}
+      for ts in sorted_tip_spots:
+        target_tip_clusters_by_parent_x.setdefault(key_for_tip_spot(ts), []).append(ts)
+
+      current_tip_model = all_origin_tip_spots[0].tracker.get_tip()
+      if use_channels is None:
+        num_channels_available = len(
+          [
+            c
+            for c in range(self.backend.num_channels)
+            if self.backend.can_pick_up_tip(c, current_tip_model)
+          ]
+        )
+        use_channels = list(range(num_channels_available))
+      num_channels_available = len(use_channels)
+
+      if num_channels_available == 0:
+        raise ValueError(f"No channel capable of handling tips: {current_tip_model}")
+
+      if num_channels_available >= 8:
+        merged_target_tip_clusters = merge_sublists(
+          list(target_tip_clusters_by_parent_x.values()), max_len=8
+        )
+      else:
+        merged_target_tip_clusters = list(
+          divide_list_into_chunks(all_target_tip_spots, chunk_size=num_channels_available)
+        )
+
+      len_transfers = len(merged_target_tip_clusters)
+      for idx, target_tip_spots in enumerate(merged_target_tip_clusters):
+        logger.info("  tip transfer cycle %s/%s", idx + 1, len_transfers)
+        origin_tip_spots = [all_origin_tip_spots.pop(0) for _ in range(len(target_tip_spots))]
+        these_channels = use_channels[: len(target_tip_spots)]
+        await self.pick_up_tips(origin_tip_spots, use_channels=these_channels)
+        await self.drop_tips(target_tip_spots, use_channels=these_channels)

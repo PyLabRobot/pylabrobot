@@ -141,13 +141,13 @@ def parse_star_firmware_version_date(fw_version: str) -> datetime.date:
     ValueError: If no year can be parsed from the string.
   """
   # Prefer full date patterns like YYYY.MM.DD / YYYY_MM_DD / YYYY-MM-DD
-  date_match = re.search(r"(20\d{2})[._-](\d{2})[._-](\d{2})", fw_version)
+  date_match = re.search(r"\b(20\d{2})[._-](\d{2})[._-](\d{2})\b", fw_version)
   if date_match:
     y, m, d = map(int, date_match.groups())
     return datetime.date(y, m, d)
 
   # Handle quarter formats like 2023_Q2 -> first day of the quarter
-  q_match = re.search(r"(20\d{2})_Q([1-4])", fw_version, flags=re.IGNORECASE)
+  q_match = re.search(r"\b(20\d{2})_Q([1-4])\b", fw_version, flags=re.IGNORECASE)
   if q_match:
     y = int(q_match.group(1))
     q = int(q_match.group(2))
@@ -155,7 +155,7 @@ def parse_star_firmware_version_date(fw_version: str) -> datetime.date:
     return datetime.date(y, month, 1)
 
   # Fall back to year only -> Jan 1st of that year
-  year_match = re.search(r"(20\d{2})", fw_version)
+  year_match = re.search(r"\b(20\d{2})\b", fw_version)
   if year_match is None:
     raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
   return datetime.date(int(year_match.group(1)), 1, 1)

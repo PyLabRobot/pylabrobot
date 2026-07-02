@@ -35,31 +35,33 @@ class TestXArm6ArmBackend(unittest.IsolatedAsyncioTestCase):
 
   # -- Gripper ---------------------------------------------------------------
 
-  async def test_open_gripper_mm_to_units(self):
-    await self.backend.open_gripper(gripper_width=85)
+  async def test_move_gripper_mm_to_units(self):
+    # Default range is 71..150 mm mapped to 0..850 units, so 85 mm → ~151 units.
+    await self.backend.move_gripper(width=85, force_sensing=False)
     calls = self._sdk_calls_for(self.driver._arm.set_gripper_position)
     self.assertEqual(len(calls), 1)
-    self.assertEqual(calls[0].args[1], 850)
+    self.assertEqual(calls[0].args[1], 151)
     self.assertEqual(calls[0].kwargs["wait"], True)
     self.assertEqual(calls[0].kwargs["speed"], 0)
 
-  async def test_open_gripper_half(self):
-    await self.backend.open_gripper(gripper_width=42.5)
+  async def test_move_gripper_midpoint(self):
+    # Midpoint of the 71..150 range is 110.5 mm → 425 units.
+    await self.backend.move_gripper(width=110.5, force_sensing=False)
     calls = self._sdk_calls_for(self.driver._arm.set_gripper_position)
     self.assertEqual(calls[0].args[1], 425)
 
-  async def test_close_gripper(self):
-    await self.backend.close_gripper(gripper_width=0)
+  async def test_move_gripper_force_sensing(self):
+    await self.backend.move_gripper(width=71, force_sensing=True)
     calls = self._sdk_calls_for(self.driver._arm.set_gripper_position)
     self.assertEqual(calls[0].args[1], 0)
 
-  async def test_open_gripper_clamped_high(self):
-    await self.backend.open_gripper(gripper_width=200)
+  async def test_move_gripper_clamped_high(self):
+    await self.backend.move_gripper(width=200, force_sensing=False)
     calls = self._sdk_calls_for(self.driver._arm.set_gripper_position)
     self.assertEqual(calls[0].args[1], 850)
 
-  async def test_open_gripper_clamped_low(self):
-    await self.backend.open_gripper(gripper_width=-5)
+  async def test_move_gripper_clamped_low(self):
+    await self.backend.move_gripper(width=-5, force_sensing=False)
     calls = self._sdk_calls_for(self.driver._arm.set_gripper_position)
     self.assertEqual(calls[0].args[1], 0)
 
@@ -104,8 +106,8 @@ class TestXArm6ArmBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(set_pos_calls[0].kwargs["y"], 0)
     self.assertEqual(set_pos_calls[0].kwargs["z"], 300)
 
-  async def test_request_gripper_location(self):
-    location = await self.backend.request_gripper_location()
+  async def test_request_gripper_pose(self):
+    location = await self.backend.request_gripper_pose()
     self.assertEqual(location.location.x, 100)
     self.assertEqual(location.location.y, 200)
     self.assertEqual(location.location.z, 300)
@@ -150,7 +152,8 @@ class TestXArm6ArmBackend(unittest.IsolatedAsyncioTestCase):
 
     grip_calls = self._sdk_calls_for(self.driver._arm.set_gripper_position)
     self.assertEqual(len(grip_calls), 1)
-    self.assertEqual(grip_calls[0].args[1], 800)  # 80 mm → 800 units
+    # 80 mm in 71..150 mm range → (80-71)/(150-71) * 850 ≈ 97 units.
+    self.assertEqual(grip_calls[0].args[1], 97)
 
   async def test_drop_at_location_move_then_open_max(self):
     loc = Coordinate(x=300, y=100, z=50)
@@ -195,7 +198,7 @@ class TestXArm6ArmBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(self._sdk_calls_for(self.driver._arm.set_servo_angle)), 1)
     grip_calls = self._sdk_calls_for(self.driver._arm.set_gripper_position)
     self.assertEqual(len(grip_calls), 1)
-    self.assertEqual(grip_calls[0].args[1], 800)
+    self.assertEqual(grip_calls[0].args[1], 97)
 
   async def test_drop_at_joint_position(self):
     await self.backend.drop_at_joint_position({1: 0, 2: 0}, resource_width=80)
@@ -222,8 +225,9 @@ class TestXArm6ArmBackend(unittest.IsolatedAsyncioTestCase):
 
   # -- Custom configuration --------------------------------------------------
 
-  async def test_custom_mm_per_gripper_unit(self):
-    backend = XArm6ArmBackend(driver=self.driver, mm_per_gripper_unit=0.2)
-    await backend.open_gripper(gripper_width=85)
+  async def test_custom_gripper_range(self):
+    backend = XArm6ArmBackend(driver=self.driver, gripper_min_mm=50.0, gripper_max_mm=100.0)
+    await backend.move_gripper(width=75.0, force_sensing=False)
     calls = self._sdk_calls_for(self.driver._arm.set_gripper_position)
+    # Midpoint of 50..100 mm range → 0.5 * 850 = 425 units.
     self.assertEqual(calls[0].args[1], 425)

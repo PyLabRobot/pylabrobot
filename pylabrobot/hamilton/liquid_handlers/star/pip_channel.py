@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import enum
-from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
 from .errors import STARFirmwareError
 from .fw_parsing import parse_star_firmware_version_date
@@ -12,6 +13,11 @@ from .fw_parsing import parse_star_firmware_version_date
 if TYPE_CHECKING:
   from .driver import STARDriver
   from .pip_backend import STARPIPBackend
+
+
+# TADM recording mode: how much of the pressure trace the firmware stores (``gk``).
+TADMRecordingMode = Literal["off", "errors_only", "all"]
+_TADM_RECORDING_FW = {"off": 0, "errors_only": 1, "all": 2}
 
 
 # ---------------------------------------------------------------------------
@@ -91,10 +97,6 @@ class PIPChannel:
     self.index = index
     self.backend = backend
 
-  async def send_command(self, *args, **kwargs):
-    """Send a firmware command. C0 commands are serialized; Px commands go direct."""
-    return await self.backend.send_command(*args, **kwargs)
-
   @property
   def module_id(self) -> str:
     """Firmware module identifier for this channel (e.g. ``"P1"``)."""
@@ -104,7 +106,7 @@ class PIPChannel:
 
   async def request_firmware_version(self) -> datetime.date:
     """Query the firmware version of this channel (Px:RF)."""
-    resp = await self.send_command(
+    resp = await self.driver.send_command(
       module=self.module_id,
       command="RF",
       fmt="rf" + "&" * 17,
@@ -124,7 +126,7 @@ class PIPChannel:
       ``aspiration_cycles``, and ``dispensing_cycles``.
     """
 
-    resp = await self.send_command(
+    resp = await self.driver.send_command(
       module=self.module_id,
       command="RV",
       fmt="na##########nb##########nc##########nd##########",
@@ -141,7 +143,7 @@ class PIPChannel:
   async def request_dispensing_drive_position(self) -> float:
     """Request the current position of the channel's dispensing drive"""
 
-    resp = await self.send_command(
+    resp = await self.driver.send_command(
       module=self.module_id,
       command="RD",
       fmt="rd##### #####",
@@ -191,7 +193,7 @@ class PIPChannel:
     acceleration_increment = _vol_to_disp_inc(acceleration)
     acceleration_increment_thousands = round(acceleration_increment * 0.001)
 
-    await self.send_command(
+    await self.driver.send_command(
       module=self.module_id,
       command="DS",
       ds=f"{relative_vol_movement_increment:05}",
@@ -282,7 +284,7 @@ class PIPChannel:
     if not (0 <= current_limit <= 7):
       raise ValueError(f"current_limit must be between 0 and 7, got {current_limit}")
 
-    return await self.send_command(
+    return await self.driver.send_command(
       module=self.module_id,
       command="ZA",
       za=f"{z_inc:05}",
@@ -299,7 +301,6 @@ class PIPChannel:
 
   MAXIMUM_CHANNEL_Z_POSITION = 334.7  # mm
   MINIMUM_CHANNEL_Z_POSITION = 99.98  # mm
-  DEFAULT_TIP_FITTING_DEPTH = 8  # mm
 
   async def move_tool_z(self, z: float):
     """Move this channel in the Z direction, referenced to the tip/tool end (mm).
@@ -319,8 +320,8 @@ class PIPChannel:
 
     tip_len = await self.request_tip_length()
 
-    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
-    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + self.DEFAULT_TIP_FITTING_DEPTH
+    max_tip_z = self.MAXIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
+    min_tip_z = self.MINIMUM_CHANNEL_Z_POSITION - tip_len + DEFAULT_TIP_FITTING_DEPTH
 
     if not (min_tip_z <= z <= max_tip_z):
       raise ValueError(
@@ -328,7 +329,7 @@ class PIPChannel:
         f"for tip length {tip_len} mm on channel {self.index}"
       )
 
-    await self.send_command(
+    await self.driver.send_command(
       module="C0",
       command="KZ",
       pn=f"{self.index + 1:02}",
@@ -338,7 +339,7 @@ class PIPChannel:
   # -- delegate to left_x_arm (C0 RX) — channels share the X carriage ----------
   # TODO: we assume `C0RX` references the center of the x-arm, figure out what it
   # references for half-arms (see issue 822 and new Fluid Motion STAR)
-  
+
   async def request_x_pos(self) -> float:
     """Request current X-position of this channel (mm).
 
@@ -346,6 +347,30 @@ class PIPChannel:
     """
     assert self.driver.left_x_arm is not None, "left_x_arm not set; call driver.setup() first"
     return await self.driver.left_x_arm.request_position()
+
+  async def move_x(self, x: float):
+    """Move this channel in the X direction (mm).
+
+    All PIP channels share the X arm, so this delegates to ``STARXArm.move_to``.
+    Enforces the left-side-panel minimum X when applicable.
+    """
+    assert self.driver.left_x_arm is not None, "left_x_arm not set; call driver.setup() first"
+    return await self.driver.left_x_arm.move_to(x)
+
+  async def move_x_relative(self, distance: float):
+    """Move this channel in the X direction by a relative amount (mm)."""
+    current_x = await self.request_x_pos()
+    await self.move_x(current_x + distance)
+
+  async def move_y_relative(self, distance: float):
+    """Move this channel in the Y direction by a relative amount (mm)."""
+    current_y = await self.request_y_pos()
+    await self.move_y(current_y + distance)
+
+  async def move_tool_z_relative(self, distance: float):
+    """Move this channel in the Z direction (tool-end reference) by a relative amount (mm)."""
+    current_z = await self.request_tip_bottom_z_position()
+    await self.move_tool_z(current_z + distance)
 
   # -- C0:RB  request Y position ------------------------------------------------
 
@@ -407,7 +432,7 @@ class PIPChannel:
     y_position = round(y * 10)
     if not 0 <= y_position <= 6500:
       raise ValueError("y_position must be between 0 and 650 mm")
-    await self.send_command(
+    await self.driver.send_command(
       module="C0",
       command="KY",
       pn=f"{self.index + 1:02}",
@@ -418,7 +443,7 @@ class PIPChannel:
 
   async def request_probe_z_position(self) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
-    resp = await self.send_command(module=self.module_id, command="RZ", fmt="rz######")
+    resp = await self.driver.send_command(module=self.module_id, command="RZ", fmt="rz######")
     increments = resp["rz"]
     return _z_inc_to_mm(increments)
 
@@ -459,7 +484,7 @@ class PIPChannel:
   # -- Px:QC  volume in tip ---------------------------------------------------
 
   async def request_volume_in_tip(self) -> float:
-    resp = await self.send_command(self.module_id, "QC", fmt="qc##### (n)")
+    resp = await self.driver.send_command(self.module_id, "QC", fmt="qc##### (n)")
     _, current_volume = resp["qc"]  # first is max volume
     return float(current_volume) / 10
 
@@ -473,6 +498,170 @@ class PIPChannel:
       fmt="qs# (n)",
     )
     return bool(resp["qs"][self.index])
+
+  # -- Px:QL/QN  read recorded TADM pressure trace ----------------------------
+
+  async def request_tadm_recording_length(self, slot: int = 0) -> int:
+    """Number of TADM samples currently recorded in a measurement slot (Px:QL).
+
+    The firmware keeps one counter per measurement slot (the ``gi`` slot a recording was
+    started in). Use this to find how many samples ``request_tadm_recording`` will read.
+
+    Args:
+      slot: TADM measurement slot (0-4), matching the ``gi`` slot the recording was
+        started in. Defaults to 0.
+
+    Returns:
+      The number of samples recorded in that slot.
+
+    Raises:
+      ValueError: If ``slot`` is out of range.
+    """
+    if not 0 <= slot <= 4:
+      raise ValueError("slot must be between 0 and 4")
+    resp = await self.driver.send_command(
+      module=self.module_id,
+      command="QL",
+      fmt="ql#### (n)",
+    )
+    return int(resp["ql"][slot])
+
+  async def request_tadm_recording(
+    self,
+    num_samples: Optional[int] = None,
+    start: int = 0,
+    batch_size: int = 50,
+    slot: int = 0,
+  ) -> List[float]:
+    """Read a recorded TADM pressure trace from this channel into a list of floats.
+
+    After an aspiration or dispense run with ``tadm_recording_mode="all"`` (record all TADM
+    measurements), the channel buffers one pressure sample per firmware tick. This reads
+    them via the ``Px:QN`` firmware command and returns them in acquisition order.
+
+    When ``num_samples`` is ``None`` (the default), the recording length is first queried
+    with ``Px:QL`` and the whole trace is read.
+
+    The values are the raw signed TADM pressure samples the firmware reports, cast to
+    ``float``. They are in the instrument's internal pressure units and are not scaled to
+    a physical unit.
+
+    Args:
+      num_samples: Number of samples to read. ``None`` (default) reads every recorded
+        sample from ``start`` to the end of the buffer.
+      start: Index of the first sample to read (0-based). Defaults to 0.
+      batch_size: Samples requested per firmware command. The firmware caps a single QN
+        read at 50 samples. Defaults to 50.
+      slot: TADM measurement slot (0-4) whose length is queried when ``num_samples`` is
+        ``None``. Defaults to 0.
+
+    Returns:
+      The recorded pressure trace as a list of floats. May be shorter than
+      ``num_samples`` if the recording buffer holds fewer samples.
+
+    Raises:
+      ValueError: If ``num_samples``, ``start``, ``batch_size``, or ``slot`` are out of
+        range.
+    """
+    if start < 0:
+      raise ValueError("start must be >= 0")
+    if not 1 <= batch_size <= 50:
+      raise ValueError("batch_size must be between 1 and 50")
+
+    if num_samples is None:
+      num_samples = max(0, await self.request_tadm_recording_length(slot) - start)
+    elif num_samples < 0:
+      raise ValueError("num_samples must be >= 0")
+
+    trace: List[float] = []
+    index = start
+    remaining = num_samples
+    while remaining > 0:
+      n = min(batch_size, remaining)
+      resp = await self.driver.send_command(
+        module=self.module_id,
+        command="QN",
+        li=f"{index:04}",  # index of first sample to read
+        ln=f"{n:02}",  # number of samples to read
+        fmt="qn#### (n)",
+      )
+      values = resp.get("qn", [])
+      trace.extend(float(v) for v in values)
+      if len(values) < n:  # buffer exhausted before num_samples
+        break
+      index += n
+      remaining -= n
+    return trace
+
+  # -- Px:BG  begin TADM monitoring -------------------------------------------
+
+  async def begin_tadm_monitoring(
+    self,
+    measurement_id: str = "0001",
+    slot: int = 0,
+    recording_mode: TADMRecordingMode = "all",
+  ):
+    """Arm TADM recording for the next pipetting step (Px:BG).
+
+    A recording aspirate/dispense issues this automatically; call it directly only for custom
+    setups.
+
+    Args:
+      measurement_id: Measurement label stored with the recording (firmware ``nr``).
+      slot: Measurement slot 0-4 to record into (firmware ``gi``); read back with the same slot.
+      recording_mode: How much of the trace to store (firmware ``gk``): ``"off"``,
+        ``"errors_only"``, or ``"all"``.
+    """
+    if not 0 <= slot <= 4:
+      raise ValueError("slot must be between 0 and 4")
+    await self.driver.send_command(
+      self.module_id,
+      "BG",
+      nr=measurement_id,
+      gi=f"{slot:03}",
+      gj=0,
+      gk=_TADM_RECORDING_FW[recording_mode],
+    )
+
+  # -- Px:QL/QN  TADM streaming -----------------------------------------------
+
+  async def _tadm_recording_finalized(self, slot: int = 0) -> Tuple[bool, int]:
+    """Whether the current TADM recording has finalized, and its sample count (Px:QL).
+
+    The firmware's ``qm`` flag is 0 while a recording is in progress (count withheld, 0) and 1
+    once the recording phase ends and the count is published.
+    """
+    resp = await self.driver.send_command(self.module_id, "QL", fmt="qm#ql#### (n)")
+    return bool(resp["qm"]), int(resp["ql"][slot])
+
+  async def stream_tadm(self, slot: int = 0, poll_interval: float = 0.03):
+    """Yield the recorded TADM trace as soon as it finalizes during an in-flight op.
+
+    Run the aspiration/dispense as a background task (do not await it) and iterate this
+    concurrently. ``Q*`` queries are lock-free, so the poll runs alongside the in-flight C0
+    command; the trace is yielded when the recording phase finalizes, which happens partway
+    through the command — before it returns.
+
+    The firmware does not expose a live, growing sample count mid-recording (``QL`` reports
+    ``qm=0`` and count 0 until the recording finalizes) and the buffer cannot be cleared, so
+    samples cannot be surfaced strictly one-at-a-time without diffing the previous trace. This
+    waits for the recording to start (``qm`` -> 0) and then finalize (``qm`` -> 1), then yields
+    the whole trace in order.
+
+    Yields:
+      ``(index, value)`` pairs in acquisition order; value is in raw firmware pressure units.
+    """
+    started = False
+    while True:
+      finalized, count = await self._tadm_recording_finalized(slot)
+      if not finalized:
+        started = True  # qm=0: this recording is in progress
+      elif started:  # qm back to 1 after starting: this recording has finalized
+        trace = await self.request_tadm_recording(count, slot=slot)
+        for index, value in enumerate(trace):
+          yield index, value
+        return
+      await asyncio.sleep(poll_interval)
 
   # -- Px:ZL  cLLD Z search (low-level, head-space) --------------------------
 
@@ -547,7 +736,7 @@ class PIPChannel:
         + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
       )
 
-    await self.send_command(
+    await self.driver.send_command(
       module=self.module_id,
       command="ZL",
       zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
@@ -787,7 +976,7 @@ class PIPChannel:
         + f" and {_z_inc_to_mm(9_999)} mm, is {post_detection_dist} mm"
       )
 
-    resp_raw = await self.send_command(
+    resp_raw = await self.driver.send_command(
       module=self.module_id,
       command="ZE",
       zh=f"{lowest_immers_pos_increments:05}",
@@ -845,7 +1034,7 @@ class PIPChannel:
 
       Consider this method an easter egg. Not for serious use.
     """
-    await self.send_command(module=self.module_id, command="SI")
+    await self.driver.send_command(module=self.module_id, command="SI")
 
   # ---------------------------------------------------------------------------
   # Probe / query methods — delegate to backend C0 helpers as needed.
@@ -1185,7 +1374,7 @@ class PIPChannel:
         f"Post detection distance must be between 0 and 245 mm, is {post_detection_dist}"
       )
 
-    ztouch_probed_z_height = await self.send_command(
+    ztouch_probed_z_height = await self.driver.send_command(
       module=self.module_id,
       command="ZH",
       zb=f"{start_pos_search_increments:05}",
@@ -1326,7 +1515,7 @@ class PIPChannel:
       raise ValueError(f"Current limit must be between 0 and 7, is {current_limit_int}")
 
     # Send Px:YL command
-    await self.send_command(
+    await self.driver.send_command(
       module=self.module_id,
       command="YL",
       ya=f"{max_y_search_pos_increments:05}",
