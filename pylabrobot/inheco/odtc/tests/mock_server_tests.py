@@ -147,6 +147,26 @@ class ODTCMockServerTests(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(progress.target_temp_c, 95.0)
     self.assertAlmostEqual(progress.lid_temp_c, 105.0)
 
+  async def test_run_protocol_variant_384(self):
+    """The full stack runs for a 384-well ODTC and emits the 384 device code.
+
+    Mechanical 384 support only; overshoot tuning and real-hardware validation
+    for the 384 block are follow-ups.
+    """
+    server = MockODTCServer().start()
+    odtc = ODTC(
+      odtc_ip="127.0.0.1", odtc_port=server.port, client_ip="127.0.0.1", name="odtc384", variant=384
+    )
+    try:
+      await odtc.setup()
+      self.assertEqual(odtc.variant, 384)
+      await odtc.tc.run_protocol(_pcr_protocol(), volume_ul=20.0)
+      await odtc.tc.wait_for_completion(timeout=5, report_interval=0)
+      self.assertIn("<Variant>384000</Variant>", server.methods_xml)
+    finally:
+      await odtc.stop()
+      server.stop()
+
   # ---- error handling -----------------------------------------------------
 
   async def test_execute_method_device_error_raises_sila_error(self):
