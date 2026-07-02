@@ -34,6 +34,7 @@ agilent/index
 azenta/index
 bmg_labtech/index
 brooks/index
+btx/index
 byonoy/index
 hamilton/index
 inheco/index

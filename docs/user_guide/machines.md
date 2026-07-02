@@ -33,6 +33,7 @@ tr > td:nth-child(5) { width: 15%; }
 .badge-absorbance { background: #ffe6cc; }
 .badge-fluorescence { background: #e0ffcc; }
 .badge-luminescence { background: #e6e6ff; }
+.badge-electroporation { background: #ffe0f0; }
 .badge-time-resolved-fluo { background: #ddffdd; }
 .badge-fluo-polarization { background: #ddf2ffff; }
 </style>
@@ -126,6 +127,12 @@ tr > td:nth-child(5) { width: 15%; }
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
 | Azenta Life Sciences | a4S | Full | [PLR](01_material-handling/sealers/a4s.ipynb) / [OEM](https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s) |
+
+### Electroporators
+
+| Manufacturer | Machine | Features | PLR-Support | Links |
+|--------------|---------|----------|-------------|--------|
+| BTX | Gemini X2 | <span class="badge badge-electroporation">electroporation</span> | Mostly | [PLR](btx/gemini_x2/hello-world.ipynb) / [OEM](https://support.btxonline.com/hc/en-us/articles/6215664757907-Gemini-Twin-Wave-Electroporators-Manual-and-Quick-Start-guide) |
 
 ### Thermocyclers
 
