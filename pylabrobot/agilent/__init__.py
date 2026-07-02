@@ -1,3 +1,4 @@
+from .benchcel import BenchCel4R, BenchCel4RBackend
 from .biotek import (
   EL406,
   BioTekBackend,
