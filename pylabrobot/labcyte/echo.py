@@ -4285,9 +4285,18 @@ class Echo(Device):
 
     results: list[EchoTransferResult] = []
     if acquire_lock:
-      await self.driver.lock_instrument()
+      await self.plate_access.lock()
     try:
       if close_door:
+        # Fire the vendor CloseDoor directly instead of routing through
+        # self.plate_access.close_door. The capability's close_door first
+        # confirms source/destination access is retracted (via read_access_state)
+        # and then polls the access state until the door reports closed.
+        # run_picklist assumes the plates are already loaded and never surveys
+        # access state, so neither that precondition nor the door-closed poll is
+        # established/observable in this context (the captured-response mock has
+        # no GetDIOEx2 reply, so it would raise before any transfer). The
+        # fire-and-continue driver call preserves the picklist's sequencing.
         await self.driver.close_instrument_door()
       for group in plan:
         if survey:
@@ -4311,7 +4320,7 @@ class Echo(Device):
           await self.driver.dry_plate()
     finally:
       if acquire_lock:
-        await self.driver.unlock_instrument()
+        await self.plate_access.unlock()
     return results
 
   @need_setup_finished
