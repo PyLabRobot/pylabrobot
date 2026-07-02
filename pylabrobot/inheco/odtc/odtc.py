@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Optional, cast
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.loading_tray import LoadingTray
@@ -109,13 +109,13 @@ class ODTC(Resource, Device):
   @property
   def variant(self) -> ODTCVariant:
     """ODTC variant (96 or 384)."""
-    return self.tc.backend._variant  # type: ignore[attr-defined]
+    return cast(ODTCVariant, self.tc.backend._variant)  # type: ignore[attr-defined]
 
   # ------------------------------------------------------------------
   # Lifecycle
   # ------------------------------------------------------------------
 
-  async def setup(
+  async def setup(  # type: ignore[override]  # richer setup than Device.setup (adds retry/init)
     self,
     full: bool = True,
     simulation_mode: bool = False,

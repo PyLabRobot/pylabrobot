@@ -32,12 +32,12 @@ class TestODTCDoorBackend(unittest.IsolatedAsyncioTestCase):
   async def test_open_calls_open_door_command(self):
     door = _make_door_backend()
     await door.open()
-    door._driver.send_command.assert_called_once_with("OpenDoor")
+    door._driver.send_command.assert_called_once_with("OpenDoor")  # type: ignore[attr-defined]
 
   async def test_close_calls_close_door_command(self):
     door = _make_door_backend()
     await door.close()
-    door._driver.send_command.assert_called_once_with("CloseDoor")
+    door._driver.send_command.assert_called_once_with("CloseDoor")  # type: ignore[attr-defined]
 
   async def test_state_toggles_correctly(self):
     door = _make_door_backend()

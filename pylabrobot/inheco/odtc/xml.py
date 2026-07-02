@@ -19,10 +19,12 @@ from pylabrobot.capabilities.thermocycling.standard import Overshoot, Ramp, Stag
 
 from .model import (
   ODTCPID,
+  FluidQuantity,
   ODTCMethodSet,
   ODTCProtocol,
   ODTCSensorValues,
   _variant_to_device_code,
+  generate_odtc_timestamp,
   normalize_variant,
 )
 
@@ -434,7 +436,7 @@ def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
   datetime_ = elem.attrib["dateTime"]
   variant = normalize_variant(int(float(_read_opt_elem(elem, "Variant") or 960000)))
   plate_type = int(float(_read_opt_elem(elem, "PlateType") or 0))
-  fluid_quantity = int(float(_read_opt_elem(elem, "FluidQuantity") or 0))
+  fluid_quantity = FluidQuantity(int(float(_read_opt_elem(elem, "FluidQuantity") or 0)))
   post_heating = (_read_opt_elem(elem, "PostHeating") or "false").lower() == "true"
   start_block_temperature = float(_read_opt_elem(elem, "StartBlockTemperature") or 0.0)
   start_lid_temperature = float(_read_opt_elem(elem, "StartLidTemperature") or 0.0)
@@ -482,7 +484,7 @@ def _parse_premethod_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
   return ODTCProtocol(
     variant=96,
     plate_type=0,
-    fluid_quantity=0,
+    fluid_quantity=FluidQuantity.UL_10_TO_29,
     post_heating=False,
     start_block_temperature=0.0,
     start_lid_temperature=0.0,
@@ -493,7 +495,7 @@ def _parse_premethod_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
     is_scratch=False,
     creator=creator,
     description=description,
-    datetime=datetime_,
+    datetime=datetime_ or generate_odtc_timestamp(),
     target_block_temperature=target_block_temperature,
     target_lid_temperature=target_lid_temperature,
   )

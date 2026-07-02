@@ -28,7 +28,7 @@ def _make_method(**kwargs) -> ODTCProtocol:
     kind="method",
   )
   defaults.update(kwargs)
-  return ODTCProtocol(**defaults)
+  return ODTCProtocol(**defaults)  # type: ignore[arg-type]  # dict[str, object] test helper
 
 
 class TestODTCProtocolIsProtocol(unittest.TestCase):
@@ -97,7 +97,7 @@ class TestPremethod(unittest.TestCase):
       name="PreHeat",
       variant=96,
       plate_type=0,
-      fluid_quantity=1,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
       post_heating=False,
       start_block_temperature=37.0,
       start_lid_temperature=110.0,
@@ -166,7 +166,7 @@ class TestODTCMethodSet(unittest.TestCase):
       name="PreHeat",
       variant=96,
       plate_type=0,
-      fluid_quantity=1,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
       post_heating=False,
       start_block_temperature=37.0,
       start_lid_temperature=110.0,

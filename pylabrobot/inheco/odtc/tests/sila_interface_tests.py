@@ -226,7 +226,7 @@ class TestBackendResolvesProtocol(unittest.TestCase):
       name="DirectPCR",
       variant=96,
       plate_type=0,
-      fluid_quantity=1,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
       post_heating=True,
       start_block_temperature=25.0,
       start_lid_temperature=110.0,

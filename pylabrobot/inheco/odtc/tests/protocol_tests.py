@@ -1,6 +1,7 @@
 """Tests for ODTC protocol conversion, duration estimation, and progress parsing."""
 
 import unittest
+from typing import cast
 
 from pylabrobot.capabilities.thermocycling.standard import (
   Overshoot,
@@ -54,14 +55,14 @@ class TestCalcOvershoot(unittest.TestCase):
 
   def test_heating_overshoot_present(self):
     os = _calc_overshoot(95.0, 25.0, 4.4, 30.0, 1)
-    self.assertIsNotNone(os)
+    assert os is not None
     self.assertGreater(os.target_temp, 0.0)
     self.assertAlmostEqual(os.return_rate, 2.2)
 
   def test_cooling_overshoot_present(self):
     # plateau_temp must be > 35°C for cooling overshoot to trigger
     os = _calc_overshoot(40.0, 95.0, 2.2, 30.0, 1)
-    self.assertIsNotNone(os)
+    assert os is not None
     self.assertGreater(os.target_temp, 0.0)
 
   def test_overshoot_capped_at_102(self):
@@ -167,7 +168,7 @@ class TestFromProtocol(unittest.TestCase):
       apply_overshoot=True,
     )
     step = odtc.stages[0].steps[0]
-    self.assertIsNotNone(step.ramp.overshoot)
+    assert step.ramp.overshoot is not None
     self.assertAlmostEqual(step.ramp.overshoot.target_temp, 3.0)
     self.assertAlmostEqual(step.ramp.overshoot.return_rate, 1.5)
 
@@ -184,7 +185,7 @@ class TestFromProtocol(unittest.TestCase):
       lid_temperature=105.0,
     )
     step = odtc.stages[0].steps[0]
-    self.assertAlmostEqual(step.lid_temperature, 105.0)
+    self.assertAlmostEqual(cast(float, step.lid_temperature), 105.0)
 
   def test_name_sets_is_scratch_false(self):
     p = Protocol(stages=[], name="MyPCR")
@@ -288,7 +289,7 @@ class TestEstimateDuration(unittest.TestCase):
       stages=[],
       variant=96,
       plate_type=0,
-      fluid_quantity=0,
+      fluid_quantity=FluidQuantity.UL_10_TO_29,
       post_heating=False,
       start_block_temperature=37.0,
       start_lid_temperature=110.0,
@@ -334,7 +335,7 @@ class TestProgressFromDataEvent(unittest.TestCase):
     payload = self._make_payload(150.0)
     progress = build_progress_from_data_event(payload, odtc_protocol=odtc)
     self.assertAlmostEqual(progress.elapsed_s, 150.0)
-    self.assertGreater(progress.estimated_duration_s, 0)
+    self.assertGreater(cast(float, progress.estimated_duration_s), 0)
     self.assertGreaterEqual(progress.total_step_count, 1)
     self.assertGreaterEqual(progress.total_cycle_count, 1)
 
@@ -390,7 +391,7 @@ class TestApplyOvershoot(unittest.TestCase):
     )
     step = odtc.stages[0].steps[0]
     # delta 95-25=70 > threshold; fluid_quantity=1 → overshoot should be computed
-    self.assertIsNotNone(step.ramp.overshoot)
+    assert step.ramp.overshoot is not None
 
   def test_explicit_overshoot_honoured_when_apply_false(self):
     """Explicit Ramp.overshoot is always preserved even when apply_overshoot=False."""
@@ -415,7 +416,7 @@ class TestApplyOvershoot(unittest.TestCase):
       apply_overshoot=False,
     )
     step = odtc.stages[0].steps[0]
-    self.assertIsNotNone(step.ramp.overshoot)
+    assert step.ramp.overshoot is not None
     self.assertAlmostEqual(step.ramp.overshoot.target_temp, 3.0)
 
   def test_from_protocol_classmethod_is_proper_classmethod(self):
@@ -464,7 +465,7 @@ class TestBackendMethods(unittest.IsolatedAsyncioTestCase):
     driver.send_command = AsyncMock(return_value=None)
     driver.send_command_async = AsyncMock(return_value=(AsyncMock(), 12345))
     backend = ODTCThermocyclerBackend(driver=driver, variant=96)
-    backend.get_method_set = AsyncMock(return_value=ODTCMethodSet(methods=[]))
+    backend.get_method_set = AsyncMock(return_value=ODTCMethodSet(methods=[]))  # type: ignore[method-assign]
     return backend
 
   async def test_run_stored_protocol_raises_for_missing_name(self):

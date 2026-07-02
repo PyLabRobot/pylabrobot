@@ -9,10 +9,12 @@ these exercise the real path over a TCP socket:
 from __future__ import annotations
 
 import unittest
+from typing import cast
 
 from pylabrobot.capabilities.thermocycling.standard import Protocol, Stage, Step
 from pylabrobot.inheco.odtc import ODTC
-from pylabrobot.inheco.odtc.door import DoorStateUnknownError
+from pylabrobot.inheco.odtc.backend import ODTCThermocyclerBackend
+from pylabrobot.inheco.odtc.door import DoorStateUnknownError, ODTCDoorBackend
 from pylabrobot.inheco.odtc.mock_server import MockODTCServer
 from pylabrobot.inheco.odtc.model import ODTCBackendParams, ODTCProtocol
 from pylabrobot.inheco.sila import SiLAError, SiLAState
@@ -44,6 +46,14 @@ class ODTCMockServerTests(unittest.IsolatedAsyncioTestCase):
   def _commands(self) -> list:
     return [c for c, _ in self.server.received_commands]
 
+  @property
+  def _tc_backend(self) -> ODTCThermocyclerBackend:
+    return cast(ODTCThermocyclerBackend, self.odtc.tc.backend)
+
+  @property
+  def _door_backend(self) -> ODTCDoorBackend:
+    return cast(ODTCDoorBackend, self.odtc.door.backend)
+
   # ---- setup lifecycle ----------------------------------------------------
 
   async def test_setup_runs_reset_then_initialize_to_idle(self):
@@ -66,15 +76,15 @@ class ODTCMockServerTests(unittest.IsolatedAsyncioTestCase):
     await self.odtc.setup()
     await self.odtc.door.open()
     self.assertTrue(self.server.door_open)
-    self.assertTrue(self.odtc.door.backend.is_open)
+    self.assertTrue(self._door_backend.is_open)
     await self.odtc.door.close()
     self.assertFalse(self.server.door_open)
-    self.assertFalse(self.odtc.door.backend.is_open)
+    self.assertFalse(self._door_backend.is_open)
 
   async def test_door_state_unknown_before_first_move(self):
     await self.odtc.setup()
     with self.assertRaises(DoorStateUnknownError):
-      _ = self.odtc.door.backend.is_open
+      _ = self._door_backend.is_open
 
   # ---- temperatures -------------------------------------------------------
 
@@ -98,14 +108,14 @@ class ODTCMockServerTests(unittest.IsolatedAsyncioTestCase):
   async def test_run_protocol_stores_method_xml_on_device(self):
     await self.odtc.setup()
     await self.odtc.tc.run_protocol(_pcr_protocol(), volume_ul=20.0)
-    self.assertIsNotNone(self.server.methods_xml)
+    assert self.server.methods_xml is not None
     self.assertIn("<Method", self.server.methods_xml)
 
   async def test_set_block_temperature_uploads_premethod(self):
     await self.odtc.setup()
     await self.odtc.tc.set_block_temperature(50.0)
     await self.odtc.tc.wait_for_completion(timeout=5, report_interval=0)
-    self.assertIsNotNone(self.server.methods_xml)
+    assert self.server.methods_xml is not None
     self.assertIn("<PreMethod", self.server.methods_xml)
 
   async def test_stop_protocol_sends_stop_method(self):
@@ -121,15 +131,15 @@ class ODTCMockServerTests(unittest.IsolatedAsyncioTestCase):
     odtc_p = ODTCProtocol.from_protocol(
       _pcr_protocol("Stored"), variant=96, params=ODTCBackendParams(name="Stored")
     )
-    await self.odtc.tc.backend.upload_protocol(odtc_p)
-    await self.odtc.tc.backend.run_stored_protocol("Stored")
+    await self._tc_backend.upload_protocol(odtc_p)
+    await self._tc_backend.run_stored_protocol("Stored")
     await self.odtc.tc.wait_for_completion(timeout=5, report_interval=0)
     self.assertEqual(self.server.state, "idle")
     self.assertIn("GetParameters", self._commands())
 
   async def test_request_status_returns_idle(self):
     await self.odtc.setup()
-    self.assertEqual(await self.odtc.tc.backend.request_status(), SiLAState.IDLE)
+    self.assertEqual(await self._tc_backend.request_status(), SiLAState.IDLE)
 
   async def test_progress_reported_from_data_events(self):
     """A running method emits DataEvents; request_progress parses them into an
@@ -162,6 +172,7 @@ class ODTCMockServerTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(odtc.variant, 384)
       await odtc.tc.run_protocol(_pcr_protocol(), volume_ul=20.0)
       await odtc.tc.wait_for_completion(timeout=5, report_interval=0)
+      assert server.methods_xml is not None
       self.assertIn("<Variant>384000</Variant>", server.methods_xml)
     finally:
       await odtc.stop()

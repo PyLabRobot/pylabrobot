@@ -1,6 +1,7 @@
 """Tests for ODTC XML parsing and serialization — roundtrip fidelity."""
 
 import unittest
+from typing import cast
 
 from pylabrobot.capabilities.thermocycling.standard import Stage, Step
 from pylabrobot.inheco.odtc.model import ODTCMethodSet
@@ -83,7 +84,7 @@ class TestParsedStepToStep(unittest.TestCase):
     self.assertEqual(step.hold_seconds, 30.0)
     self.assertAlmostEqual(step.ramp.rate, 4.4)
     self.assertIsNone(step.ramp.overshoot)
-    self.assertAlmostEqual(step.lid_temperature, 110.0)
+    self.assertAlmostEqual(cast(float, step.lid_temperature), 110.0)
 
   def test_with_overshoot(self):
     ps = _ParsedStep(
@@ -100,7 +101,7 @@ class TestParsedStepToStep(unittest.TestCase):
       lid_temp=110.0,
     )
     step = ps.to_step()
-    self.assertIsNotNone(step.ramp.overshoot)
+    assert step.ramp.overshoot is not None
     self.assertAlmostEqual(step.ramp.overshoot.target_temp, 5.2)
     self.assertAlmostEqual(step.ramp.overshoot.return_rate, 2.2)
 
@@ -139,7 +140,7 @@ class TestBuildStagesFromParsedSteps(unittest.TestCase):
     ]
     stages = build_stages_from_parsed_steps(steps)
     outer = next((s for s in stages if s.repeats == 30), None)
-    self.assertIsNotNone(outer)
+    assert outer is not None
     self.assertEqual(len(outer.inner_stages), 1)
     self.assertEqual(outer.inner_stages[0].repeats, 5)
 
@@ -210,7 +211,7 @@ class TestXmlRoundtrip(unittest.TestCase):
     odtc2 = ms2.methods[0]
     # Find outer stage with repeats=30 and inner stage with repeats=5
     outer = next((s for s in odtc2.stages if s.repeats == 30), None)
-    self.assertIsNotNone(outer, "Expected stage with repeats=30")
+    assert outer is not None, "Expected stage with repeats=30"
     self.assertEqual(len(outer.inner_stages), 1)
     self.assertEqual(outer.inner_stages[0].repeats, 5)
 
@@ -218,13 +219,13 @@ class TestXmlRoundtrip(unittest.TestCase):
     ms = parse_method_set(_overshoot_xml())
     odtc = ms.methods[0]
     step = odtc.stages[0].steps[0]
-    self.assertIsNotNone(step.ramp.overshoot)
+    assert step.ramp.overshoot is not None
     self.assertAlmostEqual(step.ramp.overshoot.target_temp, 5.2, places=1)
     # Roundtrip
     xml_out = method_set_to_xml(ODTCMethodSet(methods=[odtc]))
     ms2 = parse_method_set(xml_out)
     step2 = ms2.methods[0].stages[0].steps[0]
-    self.assertIsNotNone(step2.ramp.overshoot)
+    assert step2.ramp.overshoot is not None
     self.assertAlmostEqual(step2.ramp.overshoot.target_temp, 5.2, places=1)
     self.assertAlmostEqual(step2.ramp.overshoot.return_rate, 2.2, places=1)
 
@@ -256,7 +257,7 @@ class TestXmlRoundtrip(unittest.TestCase):
     self.assertAlmostEqual(steps[1].temperature, 55.0)
     self.assertAlmostEqual(steps[0].ramp.rate, 4.4)
     self.assertAlmostEqual(steps[1].ramp.rate, 2.2)
-    self.assertAlmostEqual(steps[0].lid_temperature, 110.0)
+    self.assertAlmostEqual(cast(float, steps[0].lid_temperature), 110.0)
 
   def test_pid_set_preserved(self):
     ms = parse_method_set(_flat_loop_xml())

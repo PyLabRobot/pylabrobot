@@ -297,7 +297,7 @@ class InhecoSiLAInterface:
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
     except Exception as e:
-      self._logger.error(f"Error handling event: {e}\nRaw body: {req.body[:500]}")
+      self._logger.error(f"Error handling event: {e}\nRaw body: {req.body[:500]!r}")
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
   def _on_response_event(self, response_event: dict) -> None:
