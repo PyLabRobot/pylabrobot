@@ -211,7 +211,12 @@ class VantageCommandCatcher(VantageBackend):
 
   def __init__(self):
     super().__init__()
-    self.commands = []
+    self.commands: List[str] = []
+
+    # Replace the real driver with a chatterbox so delegated methods work without USB.
+    from pylabrobot.hamilton.liquid_handlers.vantage.chatterbox import VantageChatterboxDriver
+
+    self.driver = VantageChatterboxDriver()
 
   async def setup(self) -> None:  # type: ignore
     self.setup_finished = True
@@ -219,6 +224,22 @@ class VantageCommandCatcher(VantageBackend):
     self.iswap_installed = True
     self._num_arms = 1
     self._head96_installed = True
+
+    # Set up the chatterbox driver so delegated methods work.
+    await self.driver.setup()
+
+    # Route the driver's send_command back to our command list so tests can inspect commands.
+    catcher = self
+
+    async def _catching_send_command(module, command, auto_id=True, tip_pattern=None,
+                                     write_timeout=None, read_timeout=None, wait=True,
+                                     fmt=None, **kwargs):
+      cmd, _ = catcher.driver._assemble_command(
+        module=module, command=command, auto_id=auto_id, tip_pattern=tip_pattern, **kwargs
+      )
+      catcher.commands.append(cmd)
+
+    self.driver.send_command = _catching_send_command  # type: ignore[method-assign]
 
   async def send_command(
     self,
