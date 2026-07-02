@@ -6,7 +6,7 @@ import math
 import os
 import time
 import warnings
-from typing import Optional
+from typing import Literal, Optional
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -94,7 +94,7 @@ class Access2Backend(LoaderBackend):
     logger.debug("[loader] open")
     await self.send_command(bytes.fromhex("1105000a0042070001000080bf0200b73e"))
 
-  async def load(self, grip_steps: Literal[1,2,3,4] = 1):
+  async def load(self, grip_steps: Literal[1, 2, 3, 4] = 1):
     """Load a plate into the centrifuge.
 
     Args:
