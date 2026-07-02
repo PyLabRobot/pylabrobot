@@ -268,7 +268,7 @@ class EVORoMaBackend(OrientableGripperArmBackend, EVOArm):
           defaults[key] = val
     return defaults
 
-  async def _on_setup(self) -> None:
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
     """Initialize RoMa arm. Skips PIA if already initialized."""
     # Check if RoMa is present and already initialized
     try:

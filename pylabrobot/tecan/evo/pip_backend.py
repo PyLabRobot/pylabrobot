@@ -377,8 +377,14 @@ class EVOPIPBackend(PIPBackend, EVOArm):
 
   # ============== Setup ==============
 
-  async def _on_setup(self) -> None:
-    """Initialize LiHa arm: PIA, query ranges, init plungers."""
+  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
+    """Initialize LiHa arm: PIA, query ranges.
+
+    The plunger purge is intentionally not run here - ``TecanEVO.setup`` calls
+    ``purge`` after the RoMa initializes (legacy behavior), so the LiHa traverse
+    to the wash (which on some decks sits mid-table, right of the LiHa toward the
+    RoMa) happens with the RoMa initialized and parked clear.
+    """
     # PIA + BMX
     await self.position_init_all()
     await self.set_bus_mode(2)
@@ -388,8 +394,13 @@ class EVOPIPBackend(PIPBackend, EVOArm):
     self._x_range = await self.report_x_param(5)
     self._y_range = (await self.report_y_param(5))[0]
     self._z_range = (await self.report_z_param(5))[0]
+    logger.info("LiHa initialized: %d channels, z_range=%d", self._num_channels, self._z_range)
 
-    # Initialize plungers (assumes wash station at rail 1)
+  async def purge(self) -> None:
+    """Flush the plunger lines over the wash station.
+
+    Called by ``TecanEVO.setup`` after both arms initialize (see ``_on_setup``).
+    """
     await self.set_z_travel_height([self._z_range] * self.num_channels)
     await self.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
     await self.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
@@ -399,7 +410,7 @@ class EVOPIPBackend(PIPBackend, EVOArm):
     await self.set_end_speed_plunger([1800] * self.num_channels)
     await self.move_plunger_relative([-100] * self.num_channels)
     await self.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
-    logger.info("LiHa initialized: %d channels, z_range=%d", self._num_channels, self._z_range)
+    logger.info("LiHa plungers purged")
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     return isinstance(tip, TecanTip)
@@ -427,11 +438,20 @@ class EVOPIPBackend(PIPBackend, EVOArm):
     return b
 
   def _get_ys(self, ops: Sequence[Union[Aspiration, Dispense, Pickup, TipDrop]]) -> int:
-    """Get Y-spacing from plate well pitch or resource size."""
+    """Get Y-spacing from plate well pitch or resource size.
+
+    Itemized parents with fewer than 2 rows in Y have no defined ``item_dy`` (the
+    property raises ``ValueError``, which ``hasattr`` propagates); fall back to the
+    standard 9 mm tip pitch rather than crash.
+    """
     par = ops[0].resource.parent
-    if hasattr(par, "item_dy"):
-      return int(par.item_dy * 10)  # type: ignore[union-attr]
-    return int(ops[0].resource.get_absolute_size_y() * 10)
+    try:
+      ys = int(par.item_dy * 10)  # type: ignore[union-attr]
+    except AttributeError:
+      ys = int(ops[0].resource.get_absolute_size_y() * 10)  # parent not itemized (e.g. tube)
+    except ValueError:
+      ys = 90  # itemized parent with <2 rows in Y — no pitch; use 9 mm comb minimum
+    return ys
 
   def _liha_positions(
     self,

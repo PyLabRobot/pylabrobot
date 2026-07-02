@@ -112,9 +112,11 @@ class TecanEVO(Resource, Device):
     """Initialize EVO with collision-safe ordering.
 
     If the LiHa is already initialized but the RoMa needs PIA, the LiHa
-    is homed first to clear the RoMa's path.
+    is homed first to clear the RoMa's path. The LiHa plunger purge runs last —
+    after both arms initialize — so the traverse to the wash is collision-safe
+    even when the wash is not at rail 1 (see ``EVOPIPBackend.purge``).
     """
-    await self._driver.setup()
+    await self.driver.setup()
 
     # Initialize PIP (LiHa) first
     await self.pip._on_setup()
@@ -132,6 +134,9 @@ class TecanEVO(Resource, Device):
         await self._pip_backend.position_absolute_all_axis(45, 1031, 90, [z_range] * num_ch)
 
       await self.arm._on_setup()
+
+    # Purge last: the LiHa traverse to the wash now happens with the RoMa parked.
+    await self._pip_backend.purge()
 
     self._setup_finished = True
 

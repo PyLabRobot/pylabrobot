@@ -4,9 +4,10 @@ import unittest
 from unittest.mock import AsyncMock, call
 
 from pylabrobot.capabilities.liquid_handling.standard import Aspiration, Dispense, Pickup, TipDrop
-from pylabrobot.resources import Coordinate, EVO150Deck
+from pylabrobot.resources import Coordinate, EVO150Deck, Plate, Well
 from pylabrobot.resources.tecan.plate_carriers import MP_3Pos
 from pylabrobot.resources.tecan.plates import Microplate_96_Well
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.tecan.tip_carriers import DiTi_3Pos
 from pylabrobot.resources.tecan.tip_racks import DiTi_100ul_Te_MO
 from pylabrobot.tecan.evo.driver import TecanEVODriver
@@ -102,6 +103,41 @@ class UtilityTests(PIPBackendTestBase):
     ys = self.backend._get_ys([op])
     # Microplate_96_Well has ~9mm well pitch (int truncation of 8.999... * 10)
     self.assertIn(ys, [89, 90])
+
+  def test_get_ys_single_row_source(self):
+    # A source with fewer than 2 wells in Y (e.g. a single tube) has no defined
+    # item_dy — the property raises ValueError, which hasattr propagates. _get_ys
+    # must fall back to the 9 mm tip pitch instead of crashing.
+    trough = Plate(
+      name="single_row",
+      size_x=40,
+      size_y=10,
+      size_z=12,
+      ordered_items=create_ordered_items_2d(
+        Well,
+        num_items_x=4,
+        num_items_y=1,
+        dx=2,
+        dy=1,
+        dz=0,
+        item_dx=9,
+        item_dy=9,
+        size_x=8,
+        size_y=8,
+        size_z=10,
+      ),
+    )
+    op = Aspiration(
+      resource=trough.get_item("A1"),
+      offset=Coordinate.zero(),
+      tip=self.tip_rack.get_tip("A1"),
+      volume=25.0,
+      flow_rate=None,
+      liquid_height=None,
+      blow_out_air_volume=None,
+      mix=None,
+    )
+    self.assertEqual(self.backend._get_ys([op]), 90)
 
 
 class PickUpTipsTests(PIPBackendTestBase):
@@ -214,3 +250,23 @@ class NumChannelsTests(PIPBackendTestBase):
     fresh = EVOPIPBackend(driver=self.driver, deck=self.deck)
     with self.assertRaises(RuntimeError):
       _ = fresh.num_channels
+
+
+class PurgeTests(PIPBackendTestBase):
+  """The purge is a standalone method (TecanEVO.setup defers it past RoMa init),
+  no longer part of _on_setup."""
+
+  async def test_on_setup_does_not_purge(self):
+    self.driver.send_command.reset_mock()
+    await self.backend._on_setup()
+    cmds = [c.kwargs.get("command", "?") for c in self.driver.send_command.call_args_list]
+    # Plunger/valve traffic is the purge — it must not happen during axis init.
+    self.assertNotIn("PVL", cmds)
+    self.assertNotIn("PPR", cmds)
+
+  async def test_purge_emits_plunger_traffic(self):
+    self.driver.send_command.reset_mock()
+    await self.backend.purge()
+    cmds = [c.kwargs.get("command", "?") for c in self.driver.send_command.call_args_list]
+    self.assertIn("PVL", cmds)
+    self.assertIn("PPR", cmds)
