@@ -67,8 +67,6 @@ def _calc_overshoot(
 
   Returns an Overshoot if overshoot is warranted, or None for no overshoot.
   """
-  os2_default = 2.2 if slope >= 1.0 else 0.1
-
   if fluid_quantity not in (0, 1, 2) or hold_time == 0.0:
     return None
 
@@ -126,16 +124,24 @@ def _calculate_slope(
       logger.warning(
         "Requested %s rate %.2f °C/s exceeds hardware maximum %.2f °C/s. "
         "Clamping to maximum. Transition: %.1f°C → %.1f°C",
-        direction, rate, max_slope, from_temp, to_temp,
+        direction,
+        rate,
+        max_slope,
+        from_temp,
+        to_temp,
       )
       return max_slope
     return rate
 
   # inf = full device speed → use defaults
   if is_heating:
-    slope = default_heating_slope if default_heating_slope is not None else constraints.max_heating_slope
+    slope = (
+      default_heating_slope if default_heating_slope is not None else constraints.max_heating_slope
+    )
   else:
-    slope = default_cooling_slope if default_cooling_slope is not None else constraints.max_cooling_slope
+    slope = (
+      default_cooling_slope if default_cooling_slope is not None else constraints.max_cooling_slope
+    )
   return min(slope, max_slope)
 
 
@@ -151,13 +157,19 @@ def _transform_step(
 ) -> Step:
   """Transform a user Step into an ODTC-compiled Step with computed overshoot if needed."""
   slope = _calculate_slope(
-    prev_temp, step.temperature, step.ramp.rate,
-    variant, default_heating_slope, default_cooling_slope,
+    prev_temp,
+    step.temperature,
+    step.ramp.rate,
+    variant,
+    default_heating_slope,
+    default_cooling_slope,
   )
   # Honour explicit overshoot; compute automatically only when requested
   overshoot = step.ramp.overshoot
   if overshoot is None and apply_overshoot:
-    overshoot = _calc_overshoot(step.temperature, prev_temp, slope, step.hold_seconds, fluid_quantity)
+    overshoot = _calc_overshoot(
+      step.temperature, prev_temp, slope, step.hold_seconds, fluid_quantity
+    )
 
   ramp = Ramp(rate=slope, overshoot=overshoot)
   lid_temp = step.lid_temperature if step.lid_temperature is not None else default_lid_temp
@@ -199,24 +211,39 @@ def _transform_stages(
     for gi, inner in enumerate(inner_stages):
       if gi < len(steps):
         new_step = _transform_step(
-          steps[gi], prev_temp_box[0], variant, fluid_quantity,
-          default_heating_slope, default_cooling_slope, default_lid_temp,
+          steps[gi],
+          prev_temp_box[0],
+          variant,
+          fluid_quantity,
+          default_heating_slope,
+          default_cooling_slope,
+          default_lid_temp,
           apply_overshoot,
         )
         prev_temp_box[0] = steps[gi].temperature
         new_steps.append(new_step)
       transformed_inner = _transform_stages(
-        [inner], prev_temp_box, variant, fluid_quantity,
-        default_heating_slope, default_cooling_slope, default_lid_temp,
+        [inner],
+        prev_temp_box,
+        variant,
+        fluid_quantity,
+        default_heating_slope,
+        default_cooling_slope,
+        default_lid_temp,
         apply_overshoot,
       )
       new_inner.extend(transformed_inner)
 
     # Remaining steps after all inner stages (or all steps when no inner_stages)
-    for step in steps[len(inner_stages):]:
+    for step in steps[len(inner_stages) :]:
       new_step = _transform_step(
-        step, prev_temp_box[0], variant, fluid_quantity,
-        default_heating_slope, default_cooling_slope, default_lid_temp,
+        step,
+        prev_temp_box[0],
+        variant,
+        fluid_quantity,
+        default_heating_slope,
+        default_cooling_slope,
+        default_lid_temp,
         apply_overshoot,
       )
       prev_temp_box[0] = step.temperature
@@ -254,8 +281,13 @@ def _from_protocol(
 
   prev_temp_box: List[float] = [25.0]  # start from ambient
   transformed_stages = _transform_stages(
-    protocol.stages, prev_temp_box, variant, fluid_quantity,
-    default_heating_slope, default_cooling_slope, effective_lid,
+    protocol.stages,
+    prev_temp_box,
+    variant,
+    fluid_quantity,
+    default_heating_slope,
+    default_cooling_slope,
+    effective_lid,
     apply_overshoot,
   )
 
@@ -265,7 +297,9 @@ def _from_protocol(
   else:
     start_block_temp = 25.0
 
-  effective_start_lid = start_lid_temperature if start_lid_temperature is not None else effective_lid
+  effective_start_lid = (
+    start_lid_temperature if start_lid_temperature is not None else effective_lid
+  )
   resolved_datetime = datetime or generate_odtc_timestamp()
   resolved_name = name or protocol.name or "plr_currentProtocol"
   is_scratch = name is None
@@ -289,8 +323,6 @@ def _from_protocol(
   )
 
 
-
-
 # =============================================================================
 # Flat step view for duration / timeline / progress computation
 # =============================================================================
@@ -309,16 +341,13 @@ class _FlatStep:
 def _get_flat_steps(odtc_protocol: ODTCProtocol) -> List[_FlatStep]:
   """Flatten ODTCProtocol.stages to _FlatStep list with goto/loop derived from stage structure."""
   raw = _flatten_stages_for_xml(odtc_protocol.stages)
-  return [_FlatStep(step=s, number=n, goto_number=g, loop_number=l) for s, n, g, l in raw]
+  return [_FlatStep(step=s, number=n, goto_number=g, loop_number=ln) for s, n, g, ln in raw]
 
 
 def _analyze_flat_loops(flat_steps: List[_FlatStep]) -> List[Tuple[int, int, int]]:
   """Return (start_num, end_num, total_repeats) for each loop."""
   return sorted(
-    [
-      (fs.goto_number, fs.number, fs.loop_number + 1)
-      for fs in flat_steps if fs.goto_number > 0
-    ],
+    [(fs.goto_number, fs.number, fs.loop_number + 1) for fs in flat_steps if fs.goto_number > 0],
     key=lambda x: x[1],
   )
 
@@ -364,7 +393,8 @@ def _cycle_count(odtc_protocol: ODTCProtocol) -> int:
   if not loops:
     return 1
   top_level = [
-    (s, e, c) for (s, e, c) in loops
+    (s, e, c)
+    for (s, e, c) in loops
     if not any((s2, e2, _) != (s, e, c) and s2 <= s and e <= e2 for (s2, e2, _) in loops)
   ]
   if not top_level:
@@ -497,10 +527,12 @@ def _protocol_position_from_elapsed(
     total_steps = len(_expand_flat_sequence(flat, loops)) if flat else 0
     total_cycles = _cycle_count(odtc_protocol) if flat else 1
     return {
-      "step_index": 0, "cycle_index": 0,
+      "step_index": 0,
+      "cycle_index": 0,
       "setpoint_c": odtc_protocol.start_block_temperature,
       "remaining_hold_s": 0.0,
-      "total_steps": total_steps, "total_cycles": total_cycles,
+      "total_steps": total_steps,
+      "total_cycles": total_cycles,
     }
 
   flat = _get_flat_steps(odtc_protocol) if odtc_protocol.kind == "method" else []
@@ -517,17 +549,22 @@ def _protocol_position_from_elapsed(
   for t_start, t_end, step_index, cycle_index, setpoint_c, plateau_end_t in segments:
     if elapsed_s <= t_end:
       return {
-        "step_index": step_index, "cycle_index": cycle_index,
+        "step_index": step_index,
+        "cycle_index": cycle_index,
         "setpoint_c": setpoint_c,
         "remaining_hold_s": max(0.0, plateau_end_t - elapsed_s),
-        "total_steps": steps_per_cycle, "total_cycles": total_cycles,
+        "total_steps": steps_per_cycle,
+        "total_cycles": total_cycles,
       }
 
   _, _, step_index, cycle_index, setpoint_c, _ = segments[-1]
   return {
-    "step_index": step_index, "cycle_index": cycle_index,
-    "setpoint_c": setpoint_c, "remaining_hold_s": 0.0,
-    "total_steps": steps_per_cycle, "total_cycles": total_cycles,
+    "step_index": step_index,
+    "cycle_index": cycle_index,
+    "setpoint_c": setpoint_c,
+    "remaining_hold_s": 0.0,
+    "total_steps": steps_per_cycle,
+    "total_cycles": total_cycles,
   }
 
 
@@ -610,9 +647,12 @@ def build_progress_from_data_event(
 
   if odtc_protocol is None:
     return ODTCProgress(
-      elapsed_s=elapsed_s, target_temp_c=target_temp_c,
-      current_temp_c=current_temp_c, lid_temp_c=lid_temp_c,
-      estimated_duration_s=None, remaining_duration_s=0.0,
+      elapsed_s=elapsed_s,
+      target_temp_c=target_temp_c,
+      current_temp_c=current_temp_c,
+      lid_temp_c=lid_temp_c,
+      estimated_duration_s=None,
+      remaining_duration_s=0.0,
     )
 
   position = _protocol_position_from_elapsed(odtc_protocol, elapsed_s)
@@ -631,7 +671,9 @@ def build_progress_from_data_event(
     total_cycles = _cycle_count(odtc_protocol)
     steps_per_cycle = len(step_nums) // total_cycles if total_cycles > 0 else len(step_nums)
     current_flat = position["step_index"] + position["cycle_index"] * steps_per_cycle
-    snapped = _snap_step_from_target_temp(step_nums, by_num, target_temp_c, current_flat, total_cycles)
+    snapped = _snap_step_from_target_temp(
+      step_nums, by_num, target_temp_c, current_flat, total_cycles
+    )
     if snapped is not None:
       position = {**position, **snapped}
 
@@ -642,14 +684,17 @@ def build_progress_from_data_event(
     target = position["setpoint_c"]
 
   est_s: Optional[float] = (
-    PREMETHOD_ESTIMATED_DURATION_SECONDS if odtc_protocol.kind == "premethod"
+    PREMETHOD_ESTIMATED_DURATION_SECONDS
+    if odtc_protocol.kind == "premethod"
     else estimate_method_duration_seconds(odtc_protocol)
   )
   rem_s = max(0.0, (est_s or 0.0) - elapsed_s)
 
   return ODTCProgress(
-    elapsed_s=elapsed_s, target_temp_c=target,
-    current_temp_c=current_temp_c, lid_temp_c=lid_temp_c,
+    elapsed_s=elapsed_s,
+    target_temp_c=target,
+    current_temp_c=current_temp_c,
+    lid_temp_c=lid_temp_c,
     current_step_index=position["step_index"],
     total_step_count=position.get("total_steps") or 0,
     current_cycle_index=position["cycle_index"],

@@ -15,12 +15,15 @@ if neither open() nor close() has been called since the last setup().
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.loading_tray.backend import LoadingTrayBackend
 
 from .driver import ODTCDriver
+
+if TYPE_CHECKING:
+  from pylabrobot.resources.resource import Resource
 
 
 class DoorStateUnknownError(RuntimeError):
@@ -66,7 +69,15 @@ class ODTCDoorBackend(LoadingTrayBackend):
     await self._driver.send_command("OpenDoor")
     self._is_open = True
 
-  async def close(self, backend_params: Optional[BackendParams] = None) -> None:
-    """Close the door. Updates tracked state to closed on success."""
+  async def close(
+    self,
+    backend_params: Optional[BackendParams] = None,
+    resource: Optional["Resource"] = None,
+  ) -> None:
+    """Close the door. Updates tracked state to closed on success.
+
+    ``resource`` (the held labware) is accepted for LoadingTrayBackend contract
+    compatibility but ignored: the ODTC door needs no plate-height clearance.
+    """
     await self._driver.send_command("CloseDoor")
     self._is_open = False

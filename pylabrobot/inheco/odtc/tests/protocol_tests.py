@@ -1,8 +1,6 @@
 """Tests for ODTC protocol conversion, duration estimation, and progress parsing."""
 
-import math
 import unittest
-import xml.etree.ElementTree as ET
 
 from pylabrobot.capabilities.thermocycling.standard import (
   Overshoot,
@@ -19,7 +17,6 @@ from pylabrobot.inheco.odtc.protocol import (
   _expanded_step_count,
   estimate_method_duration_seconds,
   build_progress_from_data_event,
-  _build_protocol_timeline,
 )
 
 
@@ -78,25 +75,43 @@ class TestCalcOvershoot(unittest.TestCase):
 class TestFromProtocol(unittest.TestCase):
   def test_produces_odtc_protocol(self):
     p = _pcr_protocol()
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     self.assertIsInstance(odtc, ODTCProtocol)
     self.assertIsInstance(odtc, Protocol)
 
   def test_stage_count_preserved(self):
     p = _pcr_protocol()
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     self.assertEqual(len(odtc.stages), 3)
     self.assertEqual(odtc.stages[1].repeats, 35)
 
   def test_step_count_preserved(self):
     p = _pcr_protocol()
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     self.assertEqual(len(odtc.stages[1].steps), 3)
 
   def test_slope_clamped_to_hardware_max(self):
@@ -104,9 +119,15 @@ class TestFromProtocol(unittest.TestCase):
     p = Protocol(
       stages=[Stage(steps=[Step(95.0, 30.0, ramp=Ramp(rate=99.9))], repeats=1)],
     )
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     step = odtc.stages[0].steps[0]
     self.assertLessEqual(step.ramp.rate, 4.4 + 0.01)
 
@@ -115,9 +136,15 @@ class TestFromProtocol(unittest.TestCase):
     p = Protocol(
       stages=[Stage(steps=[Step(95.0, 30.0, ramp=Ramp(rate=4.4))], repeats=1)],
     )
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     step = odtc.stages[0].steps[0]
     # Not necessarily has overshoot (depends on prev_temp=25, delta=70 > 5 and target > 35)
     # So we just check it's a Ramp object with rate set
@@ -130,9 +157,15 @@ class TestFromProtocol(unittest.TestCase):
     p = Protocol(
       stages=[Stage(steps=[Step(95.0, 30.0, ramp=Ramp(rate=4.4, overshoot=user_os))], repeats=1)],
     )
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     step = odtc.stages[0].steps[0]
     self.assertIsNotNone(step.ramp.overshoot)
     self.assertAlmostEqual(step.ramp.overshoot.target_temp, 3.0)
@@ -140,41 +173,73 @@ class TestFromProtocol(unittest.TestCase):
 
   def test_lid_temperature_applied(self):
     p = Protocol(stages=[Stage(steps=[Step(95.0, 30.0)], repeats=1)])
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True, lid_temperature=105.0)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+      lid_temperature=105.0,
+    )
     step = odtc.stages[0].steps[0]
     self.assertAlmostEqual(step.lid_temperature, 105.0)
 
   def test_name_sets_is_scratch_false(self):
     p = Protocol(stages=[], name="MyPCR")
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True, name="MyPCR")
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+      name="MyPCR",
+    )
     self.assertFalse(odtc.is_scratch)
     self.assertEqual(odtc.name, "MyPCR")
 
   def test_no_name_sets_is_scratch_true(self):
     p = Protocol(stages=[])
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     self.assertTrue(odtc.is_scratch)
 
   def test_start_block_temperature_is_first_step(self):
     p = _pcr_protocol()
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     self.assertAlmostEqual(odtc.start_block_temperature, 95.0)
 
   def test_inner_stages_preserved(self):
     inner = Stage(steps=[Step(55.0, 30.0), Step(72.0, 60.0)], repeats=35)
     outer = Stage(steps=[Step(95.0, 10.0)], repeats=1, inner_stages=[inner])
     p = Protocol(stages=[outer])
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     self.assertEqual(len(odtc.stages[0].inner_stages), 1)
     self.assertEqual(odtc.stages[0].inner_stages[0].repeats, 35)
 
@@ -182,9 +247,15 @@ class TestFromProtocol(unittest.TestCase):
 class TestExpandedStepCount(unittest.TestCase):
   def _make_pcr_odtc(self) -> ODTCProtocol:
     p = _pcr_protocol()
-    return _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    return _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
 
   def test_step_count_with_loops(self):
     odtc = self._make_pcr_odtc()
@@ -200,17 +271,29 @@ class TestExpandedStepCount(unittest.TestCase):
 class TestEstimateDuration(unittest.TestCase):
   def test_duration_positive(self):
     p = _pcr_protocol()
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     dur = estimate_method_duration_seconds(odtc)
     self.assertGreater(dur, 0)
 
   def test_premethod_duration(self):
     odtc = ODTCProtocol(
-      stages=[], variant=96, plate_type=0, fluid_quantity=0,
-      post_heating=False, start_block_temperature=37.0, start_lid_temperature=110.0,
-      pid_set=[ODTCPID(number=1)], kind="premethod",
+      stages=[],
+      variant=96,
+      plate_type=0,
+      fluid_quantity=0,
+      post_heating=False,
+      start_block_temperature=37.0,
+      start_lid_temperature=110.0,
+      pid_set=[ODTCPID(number=1)],
+      kind="premethod",
     )
     dur = estimate_method_duration_seconds(odtc)
     self.assertAlmostEqual(dur, 600.0)
@@ -219,6 +302,7 @@ class TestEstimateDuration(unittest.TestCase):
 class TestProgressFromDataEvent(unittest.TestCase):
   def _make_payload(self, elapsed_s: float, request_id: int = 12345) -> dict:
     import html as html_mod
+
     ms = int(elapsed_s * 1000)
     inner = (
       f'<d><dataSeries nameId="Elapsed time" unit="ms">'
@@ -227,7 +311,7 @@ class TestProgressFromDataEvent(unittest.TestCase):
       f"<integerValue>9500</integerValue></dataSeries></d>"
     )
     inner_escaped = html_mod.escape(inner)
-    outer = f'<DataValue><AnyData>{inner_escaped}</AnyData></DataValue>'
+    outer = f"<DataValue><AnyData>{inner_escaped}</AnyData></DataValue>"
     return {"requestId": request_id, "dataValue": outer}
 
   def test_no_protocol_returns_basic_progress(self):
@@ -238,9 +322,15 @@ class TestProgressFromDataEvent(unittest.TestCase):
 
   def test_with_protocol_returns_enriched_progress(self):
     p = _pcr_protocol()
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     payload = self._make_payload(150.0)
     progress = build_progress_from_data_event(payload, odtc_protocol=odtc)
     self.assertAlmostEqual(progress.elapsed_s, 150.0)
@@ -250,9 +340,15 @@ class TestProgressFromDataEvent(unittest.TestCase):
 
   def test_str_format(self):
     p = _pcr_protocol()
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     payload = self._make_payload(5.0)
     progress = build_progress_from_data_event(payload, odtc_protocol=odtc)
     msg = str(progress)
@@ -264,18 +360,34 @@ class TestApplyOvershoot(unittest.TestCase):
   def test_apply_overshoot_false_produces_no_auto_overshoot(self):
     """apply_overshoot=False: steps with large temp delta get no auto-computed overshoot."""
     p = Protocol(stages=[Stage(steps=[Step(temperature=95.0, hold_seconds=30.0)], repeats=1)])
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=False)
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=False,
+    )
     step = odtc.stages[0].steps[0]
     self.assertIsNone(step.ramp.overshoot)
 
   def test_apply_overshoot_true_computes_for_large_delta(self):
     """apply_overshoot=True (default): large delta step gets overshoot computed."""
-    p = Protocol(stages=[Stage(steps=[Step(temperature=95.0, hold_seconds=30.0, ramp=Ramp(rate=4.4))], repeats=1)])
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=True)
+    p = Protocol(
+      stages=[
+        Stage(steps=[Step(temperature=95.0, hold_seconds=30.0, ramp=Ramp(rate=4.4))], repeats=1)
+      ]
+    )
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=True,
+    )
     step = odtc.stages[0].steps[0]
     # delta 95-25=70 > threshold; fluid_quantity=1 → overshoot should be computed
     self.assertIsNotNone(step.ramp.overshoot)
@@ -283,14 +395,25 @@ class TestApplyOvershoot(unittest.TestCase):
   def test_explicit_overshoot_honoured_when_apply_false(self):
     """Explicit Ramp.overshoot is always preserved even when apply_overshoot=False."""
     from pylabrobot.capabilities.thermocycling.standard import Overshoot
+
     user_os = Overshoot(target_temp=3.0, hold_seconds=1.0, return_rate=1.5)
-    p = Protocol(stages=[Stage(
-      steps=[Step(temperature=95.0, hold_seconds=30.0, ramp=Ramp(rate=4.4, overshoot=user_os))],
-      repeats=1,
-    )])
-    odtc = _from_protocol(p, variant=96, fluid_quantity=FluidQuantity.UL_30_TO_74,
-                          plate_type=0, post_heating=True, pid_set=[ODTCPID(number=1)],
-                          apply_overshoot=False)
+    p = Protocol(
+      stages=[
+        Stage(
+          steps=[Step(temperature=95.0, hold_seconds=30.0, ramp=Ramp(rate=4.4, overshoot=user_os))],
+          repeats=1,
+        )
+      ]
+    )
+    odtc = _from_protocol(
+      p,
+      variant=96,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      plate_type=0,
+      post_heating=True,
+      pid_set=[ODTCPID(number=1)],
+      apply_overshoot=False,
+    )
     step = odtc.stages[0].steps[0]
     self.assertIsNotNone(step.ramp.overshoot)
     self.assertAlmostEqual(step.ramp.overshoot.target_temp, 3.0)
@@ -298,9 +421,11 @@ class TestApplyOvershoot(unittest.TestCase):
   def test_from_protocol_classmethod_is_proper_classmethod(self):
     """ODTCProtocol.from_protocol is a proper classmethod, not a monkey-patch."""
     from pylabrobot.inheco.odtc.model import ODTCProtocol, FluidQuantity, ODTCBackendParams
+
     p = _pcr_protocol()
     odtc = ODTCProtocol.from_protocol(
-      p, variant=96,
+      p,
+      variant=96,
       params=ODTCBackendParams(fluid_quantity=FluidQuantity.UL_30_TO_74, name="TestPCR"),
     )
     self.assertIsInstance(odtc, ODTCProtocol)
@@ -311,9 +436,15 @@ class TestApplyOvershoot(unittest.TestCase):
   def test_from_protocol_classmethod_apply_overshoot_false(self):
     """ODTCProtocol.from_protocol apply_overshoot=False works via classmethod."""
     from pylabrobot.inheco.odtc.model import ODTCProtocol, FluidQuantity, ODTCBackendParams
-    p = Protocol(stages=[Stage(steps=[Step(temperature=95.0, hold_seconds=30.0, ramp=Ramp(rate=4.4))], repeats=1)])
+
+    p = Protocol(
+      stages=[
+        Stage(steps=[Step(temperature=95.0, hold_seconds=30.0, ramp=Ramp(rate=4.4))], repeats=1)
+      ]
+    )
     odtc = ODTCProtocol.from_protocol(
-      p, variant=96,
+      p,
+      variant=96,
       params=ODTCBackendParams(fluid_quantity=FluidQuantity.UL_30_TO_74, apply_overshoot=False),
     )
     step = odtc.stages[0].steps[0]
@@ -327,7 +458,8 @@ class TestBackendMethods(unittest.IsolatedAsyncioTestCase):
     from unittest.mock import AsyncMock, MagicMock
     from pylabrobot.inheco.odtc.backend import ODTCThermocyclerBackend
     from pylabrobot.inheco.odtc.driver import ODTCDriver
-    from pylabrobot.inheco.odtc.model import ODTCMethodSet, ODTCProtocol, ODTCPID, FluidQuantity
+    from pylabrobot.inheco.odtc.model import ODTCMethodSet
+
     driver = MagicMock(spec=ODTCDriver)
     driver.send_command = AsyncMock(return_value=None)
     driver.send_command_async = AsyncMock(return_value=(AsyncMock(), 12345))
@@ -345,19 +477,34 @@ class TestBackendMethods(unittest.IsolatedAsyncioTestCase):
   async def test_upload_protocol_raises_on_conflict_without_overwrite(self):
     from unittest.mock import AsyncMock
     from pylabrobot.inheco.odtc.model import ODTCMethodSet, ODTCProtocol, ODTCPID, FluidQuantity
+
     backend = self._make_backend()
     existing_method = ODTCProtocol(
-      stages=[], name="PCR1", variant=96, plate_type=0,
-      fluid_quantity=FluidQuantity.UL_30_TO_74, post_heating=True,
-      start_block_temperature=25.0, start_lid_temperature=110.0,
-      pid_set=[ODTCPID(number=1)], kind="method", is_scratch=False,
+      stages=[],
+      name="PCR1",
+      variant=96,
+      plate_type=0,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      post_heating=True,
+      start_block_temperature=25.0,
+      start_lid_temperature=110.0,
+      pid_set=[ODTCPID(number=1)],
+      kind="method",
+      is_scratch=False,
     )
     backend.get_method_set = AsyncMock(return_value=ODTCMethodSet(methods=[existing_method]))
     new_method = ODTCProtocol(
-      stages=[], name="PCR1", variant=96, plate_type=0,
-      fluid_quantity=FluidQuantity.UL_30_TO_74, post_heating=True,
-      start_block_temperature=25.0, start_lid_temperature=110.0,
-      pid_set=[ODTCPID(number=1)], kind="method", is_scratch=False,
+      stages=[],
+      name="PCR1",
+      variant=96,
+      plate_type=0,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      post_heating=True,
+      start_block_temperature=25.0,
+      start_lid_temperature=110.0,
+      pid_set=[ODTCPID(number=1)],
+      kind="method",
+      is_scratch=False,
     )
     with self.assertRaises(ValueError) as ctx:
       await backend.upload_protocol(new_method, allow_overwrite=False)
@@ -365,13 +512,21 @@ class TestBackendMethods(unittest.IsolatedAsyncioTestCase):
 
   async def test_upload_protocol_scratch_bypasses_conflict_check(self):
     from unittest.mock import AsyncMock
-    from pylabrobot.inheco.odtc.model import ODTCMethodSet, ODTCProtocol, ODTCPID, FluidQuantity
+    from pylabrobot.inheco.odtc.model import ODTCProtocol, ODTCPID, FluidQuantity
+
     backend = self._make_backend()
     scratch_method = ODTCProtocol(
-      stages=[], name="plr_currentProtocol", variant=96, plate_type=0,
-      fluid_quantity=FluidQuantity.UL_30_TO_74, post_heating=True,
-      start_block_temperature=25.0, start_lid_temperature=110.0,
-      pid_set=[ODTCPID(number=1)], kind="method", is_scratch=True,
+      stages=[],
+      name="plr_currentProtocol",
+      variant=96,
+      plate_type=0,
+      fluid_quantity=FluidQuantity.UL_30_TO_74,
+      post_heating=True,
+      start_block_temperature=25.0,
+      start_lid_temperature=110.0,
+      pid_set=[ODTCPID(number=1)],
+      kind="method",
+      is_scratch=True,
     )
     backend._upload_method_set = AsyncMock()
     await backend.upload_protocol(scratch_method, allow_overwrite=False)

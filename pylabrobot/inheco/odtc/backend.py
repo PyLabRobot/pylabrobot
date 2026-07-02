@@ -19,7 +19,6 @@ from .model import (
   ODTCBackendParams,
   ODTCPID,
   ODTCMethodSet,
-  ODTCProgress,
   ODTCProtocol,
   ODTCSensorValues,
   ODTCVariant,
@@ -57,6 +56,7 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     Pass as backend_params to set_block_temperature(). Device variant is taken
     from the backend's construction-time variant (ODTC(variant=...)).
     """
+
     fluid_quantity: FluidQuantity = field(default=FluidQuantity.UL_30_TO_74)
     plate_type: int = 0
     pid_set: List[ODTCPID] = field(default_factory=lambda: [ODTCPID(number=1)])
@@ -64,6 +64,7 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
   @dataclass
   class StepParams(BackendParams):
     """Per-step ODTC overrides. Attach to Step.backend_params."""
+
     pid_number: int = 1
 
   def __init__(
@@ -137,7 +138,9 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     param_set = ET.Element("ParameterSet")
     param = ET.SubElement(param_set, "Parameter", parameterType="String", name="MethodsXML")
     ET.SubElement(param, "String").text = method_set_xml
-    dpm_param = ET.SubElement(param_set, "Parameter", parameterType="Boolean", name="DynamicPreMethodDuration")
+    dpm_param = ET.SubElement(
+      param_set, "Parameter", parameterType="Boolean", name="DynamicPreMethodDuration"
+    )
     ET.SubElement(dpm_param, "Boolean").text = "true" if dynamic_pre_method_duration else "false"
     params_xml = ET.tostring(param_set, encoding="unicode", xml_declaration=False)
     await self._driver.send_command("SetParameters", paramsXML=params_xml)
@@ -312,14 +315,13 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     if resp is None:
       raise RuntimeError("ReadActualTemperature returned no data")
     if isinstance(resp, dict):
-      param = (resp.get("ReadActualTemperatureResponse", {})
-               .get("ResponseData", {})
-               .get("Parameter", {}))
+      param = (
+        resp.get("ReadActualTemperatureResponse", {}).get("ResponseData", {}).get("Parameter", {})
+      )
       if isinstance(param, list):
         param = next((p for p in param if p.get("name") == "SensorValues"), {})
       xml_str = param.get("String", "")
     else:
-      import xml.etree.ElementTree as ET2
       string_elem = resp.find(".//String")
       xml_str = string_elem.text if string_elem is not None else ""
     if not xml_str:
@@ -334,9 +336,7 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     if resp is None:
       raise RuntimeError("GetParameters returned no data")
     if isinstance(resp, dict):
-      param = (resp.get("GetParametersResponse", {})
-               .get("ResponseData", {})
-               .get("Parameter", {}))
+      param = resp.get("GetParametersResponse", {}).get("ResponseData", {}).get("Parameter", {})
       if isinstance(param, list):
         param = next((p for p in param if p.get("name") == "MethodsXML"), {})
       xml_str = param.get("String", "")
@@ -382,13 +382,13 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     if not allow_overwrite:
       existing = await self.get_method_set()
       conflicts = [
-        m.name for m in method_set.methods + method_set.premethods
+        m.name
+        for m in method_set.methods + method_set.premethods
         if existing.get(m.name) is not None
       ]
       if conflicts:
         raise ValueError(
-          f"Name conflicts on device: {conflicts}. "
-          f"Pass allow_overwrite=True to overwrite."
+          f"Name conflicts on device: {conflicts}. Pass allow_overwrite=True to overwrite."
         )
     await self._upload_method_set(method_set, dynamic_pre_method_duration)
 
@@ -454,7 +454,6 @@ class ODTCThermocyclerBackend(ThermocyclerBackend):
     resolved = await self.get_protocol(name)
     if resolved is None:
       raise ValueError(
-        f"Protocol {name!r} not found on device. "
-        f"Upload it first with upload_protocol()."
+        f"Protocol {name!r} not found on device. Upload it first with upload_protocol()."
       )
     await self._execute_method(resolved)

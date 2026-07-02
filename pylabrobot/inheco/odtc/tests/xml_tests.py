@@ -1,17 +1,14 @@
 """Tests for ODTC XML parsing and serialization — roundtrip fidelity."""
 
 import unittest
-import xml.etree.ElementTree as ET
 
-from pylabrobot.capabilities.thermocycling.standard import Overshoot, Ramp, Stage, Step
-from pylabrobot.inheco.odtc.model import ODTCPID, ODTCMethodSet, ODTCProtocol
+from pylabrobot.capabilities.thermocycling.standard import Stage, Step
+from pylabrobot.inheco.odtc.model import ODTCMethodSet
 from pylabrobot.inheco.odtc.xml import (
   build_stages_from_parsed_steps,
   method_set_to_xml,
   parse_method_set,
-  parse_method_set_file,
   _flatten_stages_for_xml,
-  _parse_step_element,
   _ParsedStep,
 )
 
@@ -69,9 +66,17 @@ def _overshoot_xml() -> str:
 class TestParsedStepToStep(unittest.TestCase):
   def test_no_overshoot(self):
     ps = _ParsedStep(
-      number=1, slope=4.4, plateau_temperature=95.0, plateau_time=30.0,
-      overshoot_slope1=4.4, overshoot_temperature=0.0, overshoot_time=0.0,
-      overshoot_slope2=2.2, goto_number=0, loop_number=0, lid_temp=110.0,
+      number=1,
+      slope=4.4,
+      plateau_temperature=95.0,
+      plateau_time=30.0,
+      overshoot_slope1=4.4,
+      overshoot_temperature=0.0,
+      overshoot_time=0.0,
+      overshoot_slope2=2.2,
+      goto_number=0,
+      loop_number=0,
+      lid_temp=110.0,
     )
     step = ps.to_step()
     self.assertEqual(step.temperature, 95.0)
@@ -82,9 +87,17 @@ class TestParsedStepToStep(unittest.TestCase):
 
   def test_with_overshoot(self):
     ps = _ParsedStep(
-      number=1, slope=4.4, plateau_temperature=95.0, plateau_time=30.0,
-      overshoot_slope1=4.4, overshoot_temperature=5.2, overshoot_time=0.0,
-      overshoot_slope2=2.2, goto_number=0, loop_number=0, lid_temp=110.0,
+      number=1,
+      slope=4.4,
+      plateau_temperature=95.0,
+      plateau_time=30.0,
+      overshoot_slope1=4.4,
+      overshoot_temperature=5.2,
+      overshoot_time=0.0,
+      overshoot_slope2=2.2,
+      goto_number=0,
+      loop_number=0,
+      lid_temp=110.0,
     )
     step = ps.to_step()
     self.assertIsNotNone(step.ramp.overshoot)
