@@ -1,7 +1,7 @@
 from typing import List, Optional, Union
 
+from pylabrobot.capabilities.automated_retrieval.automated_retrieval import AutomatedRetrieval
 from pylabrobot.capabilities.capability import need_capability_ready
-from pylabrobot.capabilities.loading_tray_retrieval import LoadingTrayRetrieval
 from pylabrobot.resources import Plate, PlateHolder, ResourceNotFoundError
 from pylabrobot.resources.resource_stack import ResourceStack
 
@@ -16,17 +16,19 @@ class LoadingTrayOccupiedError(Exception):
   """Raised when a transfer would collide with a plate already on the loading tray."""
 
 
-class Stacker(LoadingTrayRetrieval):
+class StackerRetrieval(AutomatedRetrieval):
   """Sequential ("stacking access") plate-storage capability.
 
   Owns one or more single-ended LIFO stacks -- each a
   :class:`~pylabrobot.resources.resource_stack.ResourceStack` (``direction="z"``) -- plus the
-  loading tray shared with :class:`~pylabrobot.capabilities.automated_retrieval.AutomatedRetrieval`
-  via :class:`~pylabrobot.capabilities.loading_tray_retrieval.LoadingTrayRetrieval`. Only the
-  accessible (top) plate of a stack can be moved without first moving the plates above it.
+  loading tray shared with
+  :class:`~pylabrobot.capabilities.automated_retrieval.RandomAccessRetrieval` via
+  :class:`~pylabrobot.capabilities.automated_retrieval.AutomatedRetrieval`. Only the accessible
+  (top) plate of a stack can be moved without first moving the plates above it.
 
   Devices that are stackers (e.g. the Agilent BenchCel or HighRes MicroServe) compose this
-  capability and provide a :class:`~pylabrobot.capabilities.stacker.backend.StackerBackend`.
+  capability and provide a
+  :class:`~pylabrobot.capabilities.automated_retrieval.backend.StackerBackend`.
   """
 
   def __init__(

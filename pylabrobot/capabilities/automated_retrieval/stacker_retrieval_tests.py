@@ -1,4 +1,4 @@
-"""Tests for the sequential Stacker capability."""
+"""Tests for the sequential StackerRetrieval capability."""
 
 import unittest
 
@@ -8,7 +8,7 @@ from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well
 
 from .chatterbox import StackerChatterboxBackend
-from .stacker import EmptyStackError, LoadingTrayOccupiedError, Stacker
+from .stacker_retrieval import EmptyStackError, LoadingTrayOccupiedError, StackerRetrieval
 
 
 def _plate(name: str) -> Plate:
@@ -33,10 +33,10 @@ def _plate(name: str) -> Plate:
   )
 
 
-def _make_stacker(num_stacks: int = 2) -> Stacker:
+def _make_stacker(num_stacks: int = 2) -> StackerRetrieval:
   stacks = [ResourceStack(f"stack_{i}", "z") for i in range(num_stacks)]
   loading_tray = PlateHolder(name="tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0)
-  return Stacker(
+  return StackerRetrieval(
     backend=StackerChatterboxBackend(),
     stacks=stacks,
     loading_tray=loading_tray,
@@ -110,7 +110,7 @@ class StackerTests(unittest.IsolatedAsyncioTestCase):
       await self.stacker.upstack(foreign)
 
   async def test_no_loading_tray_raises(self):
-    stacker = Stacker(backend=StackerChatterboxBackend(), stacks=[ResourceStack("s", "z")])
+    stacker = StackerRetrieval(backend=StackerChatterboxBackend(), stacks=[ResourceStack("s", "z")])
     await stacker._on_setup()
     with self.assertRaises(RuntimeError):
       await stacker.downstack(0)
