@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import enum
 import gzip
-from abc import ABC, abstractmethod
 import html
 import inspect
 import logging
@@ -13,8 +12,10 @@ import socket
 import time
 import xml.etree.ElementTree as ET
 import zlib
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import (
+  TYPE_CHECKING,
   Any,
   AsyncIterator,
   Awaitable,
@@ -3459,8 +3460,9 @@ class EchoChatterboxDriver(EchoDriver):
   def __init__(self, host: str = "chatterbox", **kwargs: Any):
     super().__init__(host=host, **kwargs)
     if self._token is None:
-      self._token = self.build_token(self.host, slot_a=self.token_slot_a, slot_b=self.token_slot_b,
-                                     epoch=0, pid=0)
+      self._token = self.build_token(
+        self.host, slot_a=self.token_slot_a, slot_b=self.token_slot_b, epoch=0, pid=0
+      )
 
   async def open_event_stream(self, timeout: Optional[float] = None) -> EchoEventStream:
     raise NotImplementedError("EchoChatterboxDriver does not support event streams.")
@@ -3620,7 +3622,7 @@ class Echo(Device):
     self,
     host: Optional[str] = None,
     *,
-    model: str = DEFAULT_ECHO_MODEL,
+    model: EchoModelName = DEFAULT_ECHO_MODEL,
     driver: Optional[EchoDriver] = None,
     rpc_port: int = DEFAULT_RPC_PORT,
     event_port: int = DEFAULT_EVENT_PORT,

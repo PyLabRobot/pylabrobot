@@ -47,8 +47,9 @@ class TestEcho525Defaults(unittest.IsolatedAsyncioTestCase):
 
   def test_token_matches_captured_host_header_shape(self):
     # Captured Host header: 192.168.0.25:47500:33224:1780941641:10347
-    token = EchoDriver.build_token("192.168.0.25", slot_a=47500, slot_b=33224,
-                                      epoch=1780941641, pid=10347)
+    token = EchoDriver.build_token(
+      "192.168.0.25", slot_a=47500, slot_b=33224, epoch=1780941641, pid=10347
+    )
     self.assertEqual(token, "192.168.0.25:47500:33224:1780941641:10347")
     fields = token.split(":")
     self.assertEqual(len(fields), 5)
@@ -254,6 +255,7 @@ class TestEchoDriverArchitecture(unittest.IsolatedAsyncioTestCase):
 
   def test_echodriver_is_abstract(self):
     from pylabrobot.labcyte.echo import EchoChatterboxDriver
+
     with self.assertRaises(TypeError):
       EchoDriver(host="x")  # cannot instantiate the ABC directly
     self.assertTrue(issubclass(MedmanEchoDriver, EchoDriver))
@@ -261,6 +263,7 @@ class TestEchoDriverArchitecture(unittest.IsolatedAsyncioTestCase):
 
   async def test_inject_chatterbox_driver_runs_without_io(self):
     from pylabrobot.labcyte.echo import EchoChatterboxDriver
+
     echo = Echo(driver=EchoChatterboxDriver())  # no host needed; logs instead of I/O
     await echo.setup()
     await echo.driver.lock()
