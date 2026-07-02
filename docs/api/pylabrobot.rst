@@ -37,6 +37,7 @@ Manufacturers
     pylabrobot.bmg_labtech
     pylabrobot.brooks
     pylabrobot.byonoy
+    pylabrobot.formulatrix
     pylabrobot.hamilton
     pylabrobot.inheco
     pylabrobot.liconic
