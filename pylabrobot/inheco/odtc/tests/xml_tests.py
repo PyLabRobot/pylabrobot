@@ -6,11 +6,11 @@ from typing import cast
 from pylabrobot.capabilities.thermocycling.standard import Stage, Step
 from pylabrobot.inheco.odtc.model import ODTCMethodSet
 from pylabrobot.inheco.odtc.xml import (
+  _flatten_stages_for_xml,
+  _ParsedStep,
   build_stages_from_parsed_steps,
   method_set_to_xml,
   parse_method_set,
-  _flatten_stages_for_xml,
-  _ParsedStep,
 )
 
 

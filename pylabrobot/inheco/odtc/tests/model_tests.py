@@ -4,8 +4,8 @@ import unittest
 
 from pylabrobot.capabilities.thermocycling.standard import Protocol, Stage, Step
 from pylabrobot.inheco.odtc.model import (
-  FluidQuantity,
   ODTCPID,
+  FluidQuantity,
   ODTCMethodSet,
   ODTCProtocol,
   get_constraints,

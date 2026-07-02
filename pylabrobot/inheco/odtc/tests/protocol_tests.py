@@ -10,14 +10,14 @@ from pylabrobot.capabilities.thermocycling.standard import (
   Stage,
   Step,
 )
-from pylabrobot.inheco.odtc.model import FluidQuantity, ODTCPID, ODTCProtocol
+from pylabrobot.inheco.odtc.model import ODTCPID, FluidQuantity, ODTCProtocol
 from pylabrobot.inheco.odtc.protocol import (
   _calc_overshoot,
-  _from_protocol,
   _cycle_count,
   _expanded_step_count,
-  estimate_method_duration_seconds,
+  _from_protocol,
   build_progress_from_data_event,
+  estimate_method_duration_seconds,
 )
 
 
@@ -421,7 +421,7 @@ class TestApplyOvershoot(unittest.TestCase):
 
   def test_from_protocol_classmethod_is_proper_classmethod(self):
     """ODTCProtocol.from_protocol is a proper classmethod, not a monkey-patch."""
-    from pylabrobot.inheco.odtc.model import ODTCProtocol, FluidQuantity, ODTCBackendParams
+    from pylabrobot.inheco.odtc.model import FluidQuantity, ODTCBackendParams, ODTCProtocol
 
     p = _pcr_protocol()
     odtc = ODTCProtocol.from_protocol(
@@ -436,7 +436,7 @@ class TestApplyOvershoot(unittest.TestCase):
 
   def test_from_protocol_classmethod_apply_overshoot_false(self):
     """ODTCProtocol.from_protocol apply_overshoot=False works via classmethod."""
-    from pylabrobot.inheco.odtc.model import ODTCProtocol, FluidQuantity, ODTCBackendParams
+    from pylabrobot.inheco.odtc.model import FluidQuantity, ODTCBackendParams, ODTCProtocol
 
     p = Protocol(
       stages=[
@@ -457,6 +457,7 @@ class TestBackendMethods(unittest.IsolatedAsyncioTestCase):
 
   def _make_backend(self):
     from unittest.mock import AsyncMock, MagicMock
+
     from pylabrobot.inheco.odtc.backend import ODTCThermocyclerBackend
     from pylabrobot.inheco.odtc.driver import ODTCDriver
     from pylabrobot.inheco.odtc.model import ODTCMethodSet
@@ -477,7 +478,8 @@ class TestBackendMethods(unittest.IsolatedAsyncioTestCase):
 
   async def test_upload_protocol_raises_on_conflict_without_overwrite(self):
     from unittest.mock import AsyncMock
-    from pylabrobot.inheco.odtc.model import ODTCMethodSet, ODTCProtocol, ODTCPID, FluidQuantity
+
+    from pylabrobot.inheco.odtc.model import ODTCPID, FluidQuantity, ODTCMethodSet, ODTCProtocol
 
     backend = self._make_backend()
     existing_method = ODTCProtocol(
@@ -513,7 +515,8 @@ class TestBackendMethods(unittest.IsolatedAsyncioTestCase):
 
   async def test_upload_protocol_scratch_bypasses_conflict_check(self):
     from unittest.mock import AsyncMock
-    from pylabrobot.inheco.odtc.model import ODTCProtocol, ODTCPID, FluidQuantity
+
+    from pylabrobot.inheco.odtc.model import ODTCPID, FluidQuantity, ODTCProtocol
 
     backend = self._make_backend()
     scratch_method = ODTCProtocol(

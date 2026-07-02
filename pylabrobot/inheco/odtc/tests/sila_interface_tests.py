@@ -7,9 +7,8 @@ from unittest.mock import MagicMock
 from pylabrobot.capabilities.thermocycling.standard import Protocol, Stage, Step
 from pylabrobot.inheco.odtc.backend import ODTCThermocyclerBackend
 from pylabrobot.inheco.odtc.driver import ODTCDriver
-from pylabrobot.inheco.odtc.model import FluidQuantity, ODTCBackendParams, ODTCPID, ODTCProtocol
+from pylabrobot.inheco.odtc.model import ODTCPID, FluidQuantity, ODTCBackendParams, ODTCProtocol
 from pylabrobot.inheco.sila import SiLAError
-
 
 # ---------------------------------------------------------------------------
 # Helpers

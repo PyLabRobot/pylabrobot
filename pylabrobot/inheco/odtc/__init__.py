@@ -4,9 +4,9 @@ from .backend import ODTCThermocyclerBackend
 from .door import DoorStateUnknownError, ODTCDoorBackend
 from .driver import ODTCDriver
 from .model import (
+  ODTCPID,
   FluidQuantity,
   ODTCBackendParams,
-  ODTCPID,
   ODTCMethodSet,
   ODTCProgress,
   ODTCProtocol,

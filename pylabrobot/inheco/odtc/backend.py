@@ -15,9 +15,9 @@ from pylabrobot.inheco.sila import SiLAState
 
 from .driver import ODTCDriver
 from .model import (
+  ODTCPID,
   FluidQuantity,
   ODTCBackendParams,
-  ODTCPID,
   ODTCMethodSet,
   ODTCProtocol,
   ODTCSensorValues,
