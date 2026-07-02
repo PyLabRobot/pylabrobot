@@ -713,27 +713,29 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
     }
   }
 
-  // Check if the resource is in the OT Deck.
+  // Check if the resource is in the OT Deck. The slots are ResourceHolder children of the deck, so
+  // their positions and sizes come from the serialized resource rather than being duplicated here.
   if (deck.constructor.name === "OTDeck") {
-    const siteWidth = 128.0;
-    const siteHeight = 86.0;
-
-    for (let i = 0; i < otDeckSiteLocations.length; i++) {
-      let siteLocation = otDeckSiteLocations[i];
+    for (const holder of deck.children) {
+      if (!holder.location || !(holder.name && /slot_\d+$/.test(holder.name))) {
+        continue;
+      }
+      const siteX = deck.location.x + holder.location.x;
+      const siteY = deck.location.y + holder.location.y;
       if (
-        x > deck.location.x + siteLocation.x &&
-        x < deck.location.x + siteLocation.x + siteWidth &&
-        y > deck.location.y + siteLocation.y &&
-        y < deck.location.y + siteLocation.y + siteHeight
+        x > siteX &&
+        x < siteX + holder.size_x &&
+        y > siteY &&
+        y < siteY + holder.size_y
       ) {
         return {
           resource: deck,
-          location: { x: siteLocation.x, y: siteLocation.y },
+          location: { x: holder.location.x, y: holder.location.y },
           snappingBox: {
-            x: deck.location.x + siteLocation.x,
-            y: deck.location.y + siteLocation.y,
-            width: siteWidth,
-            height: siteHeight,
+            x: siteX,
+            y: siteY,
+            width: holder.size_x,
+            height: holder.size_y,
           },
         };
       }
@@ -1355,24 +1357,6 @@ class VantageDeck extends Deck {
   }
 }
 
-// Slot positions re-based onto the deck plate corner (matching the Python ResourceHolder slots).
-// Used only for the slot-number labels and drag-snapping; the slot rectangles themselves are
-// rendered by the ResourceHolder children.
-const otDeckSiteLocations = [
-  { x: 115.65, y: 68.03 },
-  { x: 248.15, y: 68.03 },
-  { x: 380.65, y: 68.03 },
-  { x: 115.65, y: 158.53 },
-  { x: 248.15, y: 158.53 },
-  { x: 380.65, y: 158.53 },
-  { x: 115.65, y: 249.03 },
-  { x: 248.15, y: 249.03 },
-  { x: 380.65, y: 249.03 },
-  { x: 115.65, y: 339.53 },
-  { x: 248.15, y: 339.53 },
-  { x: 380.65, y: 339.53 },
-];
-
 class OTDeck extends Deck {
   constructor(resourceData) {
     super(resourceData, undefined);
@@ -1398,8 +1382,6 @@ class OTDeck extends Deck {
     // Holder children are drawn after the main shape, so a slot number placed in the main shape is
     // hidden. Add the number to the deck group last (on top) but only for empty slots, so the
     // labware in an occupied slot is shown instead of being covered by the number.
-    const width = 128.0;
-    const height = 86.0;
     for (const holder of this.children) {
       if (!holder.location || (holder.children && holder.children.length > 0)) {
         continue; // skip non-slot children and occupied slots
@@ -1410,10 +1392,10 @@ class OTDeck extends Deck {
       }
       const siteLabel = new Konva.Text({
         x: holder.location.x,
-        y: holder.location.y + height,
+        y: holder.location.y + holder.size_y,
         text: match[1],
-        width: width,
-        height: height,
+        width: holder.size_x,
+        height: holder.size_y,
         fontSize: 16,
         fill: "white",
         stroke: "black",
