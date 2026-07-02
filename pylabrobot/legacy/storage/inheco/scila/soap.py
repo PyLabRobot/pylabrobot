@@ -1,4 +1,4 @@
-"""Legacy. Use pylabrobot.inheco.scila.soap instead."""
+"""Legacy. Use pylabrobot.inheco.sila.soap instead."""
 
-from pylabrobot.inheco.scila.soap import *  # noqa: F401, F403
-from pylabrobot.inheco.scila.soap import XSI  # noqa: F401
+from pylabrobot.inheco.sila.soap import *  # noqa: F401, F403
+from pylabrobot.inheco.sila.soap import XSI  # noqa: F401
