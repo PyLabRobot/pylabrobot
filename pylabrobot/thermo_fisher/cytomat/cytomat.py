@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pylabrobot.capabilities.automated_retrieval import AutomatedRetrieval, NoFreeSiteError
+from pylabrobot.capabilities.automated_retrieval import NoFreeSiteError, RandomAccessRetrieval
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling import HumidityController
 from pylabrobot.capabilities.shaking import Shaker
@@ -24,7 +24,7 @@ class Cytomat(Resource, Device):
   _racks: List[PlateCarrier]
   driver: CytomatBackend
   loading_tray: PlateHolder
-  retrieval: AutomatedRetrieval
+  retrieval: RandomAccessRetrieval
   tc: TemperatureController
   humidity: HumidityController
   shaker: Shaker
@@ -65,7 +65,7 @@ class Cytomat(Resource, Device):
     for rack in self._racks:
       self.assign_child_resource(rack, location=None)
 
-    self.retrieval = AutomatedRetrieval(
+    self.retrieval = RandomAccessRetrieval(
       backend=driver, racks=self._racks, loading_tray=self.loading_tray
     )
     self.tc = TemperatureController(backend=driver)

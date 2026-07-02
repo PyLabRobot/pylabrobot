@@ -209,7 +209,7 @@ Microscopy
 Automated Retrieval
 -------------------
 
-.. currentmodule:: pylabrobot.capabilities.automated_retrieval.automated_retrieval
+.. currentmodule:: pylabrobot.capabilities.automated_retrieval
 
 .. autosummary::
   :toctree: _autosummary
@@ -217,7 +217,10 @@ Automated Retrieval
   :recursive:
 
     AutomatedRetrieval
+    RandomAccessRetrieval
+    StackerRetrieval
     AutomatedRetrievalBackend
+    StackerBackend
 
 
 Plate Reading - Absorbance

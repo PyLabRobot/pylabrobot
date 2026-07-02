@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
 
-from pylabrobot.capabilities.automated_retrieval import AutomatedRetrieval, NoFreeSiteError
+from pylabrobot.capabilities.automated_retrieval import NoFreeSiteError, RandomAccessRetrieval
 from pylabrobot.capabilities.barcode_scanning import BarcodeScanner
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.humidity_controlling import HumidityController
@@ -63,7 +63,7 @@ class Liconic(Resource, Device):
     for rack in self._racks:
       self.assign_child_resource(rack, location=None)
 
-    self.retrieval = AutomatedRetrieval(
+    self.retrieval = RandomAccessRetrieval(
       backend=backend, racks=self._racks, loading_tray=self.loading_tray
     )
     self.tc = (
