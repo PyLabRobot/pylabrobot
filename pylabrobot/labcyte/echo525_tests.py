@@ -50,8 +50,9 @@ class TestEcho525Defaults(unittest.IsolatedAsyncioTestCase):
 
   def test_token_matches_captured_host_header_shape(self):
     # Captured Host header: 192.168.0.25:47500:33224:1780941641:10347
-    token = Echo525Driver.build_token("192.168.0.25", slot_a=47500, slot_b=33224,
-                                      epoch=1780941641, pid=10347)
+    token = Echo525Driver.build_token(
+      "192.168.0.25", slot_a=47500, slot_b=33224, epoch=1780941641, pid=10347
+    )
     self.assertEqual(token, "192.168.0.25:47500:33224:1780941641:10347")
     fields = token.split(":")
     self.assertEqual(len(fields), 5)
@@ -68,9 +69,7 @@ class TestEcho525VolumeGranularity(unittest.IsolatedAsyncioTestCase):
     self.destination = _make_plate("destination", "384PP_AQ_BP2")
 
   def test_multiple_of_25nl_is_accepted(self):
-    plan = self.driver.build_transfer_plan(
-      self.source, self.destination, [("A1", "B1", 150)]
-    )
+    plan = self.driver.build_transfer_plan(self.source, self.destination, [("A1", "B1", 150)])
     self.assertIn('<wp n="A1" dn="B1" v="150" />', plan.protocol_xml)
 
   def test_non_multiple_of_25nl_is_rejected(self):
@@ -80,9 +79,7 @@ class TestEcho525VolumeGranularity(unittest.IsolatedAsyncioTestCase):
     self.assertIn("multiple of 25", str(ctx.exception))
 
   def test_25nl_minimum_droplet_is_accepted(self):
-    plan = self.driver.build_transfer_plan(
-      self.source, self.destination, [("A1", "B1", 25)]
-    )
+    plan = self.driver.build_transfer_plan(self.source, self.destination, [("A1", "B1", 25)])
     self.assertIn('v="25"', plan.protocol_xml)
 
   def test_650_increment_still_rejected_on_525(self):
@@ -236,8 +233,13 @@ class TestEcho525AgainstMockServer(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       [m for m, _ in srv.received],
       [
-        "LockInstrument", "SetPlateMap", "PlateSurvey", "GetSurveyData", "DryPlate",
-        "DoWellTransfer", "UnlockInstrument",
+        "LockInstrument",
+        "SetPlateMap",
+        "PlateSurvey",
+        "GetSurveyData",
+        "DryPlate",
+        "DoWellTransfer",
+        "UnlockInstrument",
       ],
     )
 

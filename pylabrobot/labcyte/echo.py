@@ -19,12 +19,16 @@ from typing import (
   Awaitable,
   Callable,
   Dict,
+  TYPE_CHECKING,
   Iterable,
   Optional,
   Sequence,
   Tuple,
   Union,
 )
+
+if TYPE_CHECKING:
+  from pylabrobot.labcyte.picklist import EchoProtocolGenerator, Transfer
 
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.capabilities.plate_access import PlateAccess, PlateAccessBackend, PlateAccessState
@@ -924,7 +928,7 @@ def _fluid_infos_from_values(values: Dict[str, Any]) -> list[EchoFluidInfo]:
   fc_mins = _value_list(_value_by_any_key(values, "FCMin"))
   fc_maxes = _value_list(_value_by_any_key(values, "FCMax"))
   fc_units = _value_list(_value_by_any_key(values, "FCUnits"))
-  fluids: list[EchoFluidInfo] = []
+  fluids = []
   for index, name in enumerate(names):
     fluid_name = str(name)
     fluids.append(
@@ -1019,11 +1023,11 @@ def _plate_type_ex_xml(plate_type: str, values: Dict[str, Any]) -> str:
   root = ET.Element("PlateTypeEx", {soap_encoding_style: encoding})
   normalized = _plate_type_ex_values_from_rpc_values(values)
   normalized["Name"] = plate_type
-  for field, value_type in _PLATE_TYPE_EX_FIELD_TYPES:
-    value = _plate_type_ex_value(normalized, field, value_type)
+  for attr, value_type in _PLATE_TYPE_EX_FIELD_TYPES:
+    value = _plate_type_ex_value(normalized, attr, value_type)
     child = ET.SubElement(
       root,
-      field,
+      attr,
       {
         soap_encoding_style: encoding,
         "type": f"xsd:{value_type}",
@@ -2170,9 +2174,7 @@ class EchoDriver(Driver):
   async def get_coupling_fluid_sound_velocity(self) -> Optional[float]:
     result = await self._rpc("GetCouplingFluidSoundVelocity")
     self._ensure_success("GetCouplingFluidSoundVelocity", result)
-    return _float_or_none(
-      _value_by_any_key(result.values, "CouplingFluidSoundVelocity", "Value")
-    )
+    return _float_or_none(_value_by_any_key(result.values, "CouplingFluidSoundVelocity", "Value"))
 
   async def get_focus_tof(self) -> Optional[float]:
     result = await self._rpc("GetTOFFocus")

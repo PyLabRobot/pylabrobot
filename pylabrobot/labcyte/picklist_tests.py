@@ -15,8 +15,14 @@ from pylabrobot.labcyte.picklist import (
 class TestPicklistParsing(unittest.TestCase):
   def test_reads_standard_echo_cherry_pick_columns(self):
     rows = [
-      {"Source Plate Name": "6res", "Source Well": "A2", "Destination Plate Name": "dst",
-       "Destination Well": "A1", "Volume": "150", "Source Plate Type": "6RES_AQ_BP2"},
+      {
+        "Source Plate Name": "6res",
+        "Source Well": "A2",
+        "Destination Plate Name": "dst",
+        "Destination Well": "A1",
+        "Volume": "150",
+        "Source Plate Type": "6RES_AQ_BP2",
+      },
     ]
     [t] = picklist_from_rows(rows)
     self.assertEqual((t.source_well, t.dest_well, t.volume_nl), ("A2", "A1", 150.0))
@@ -24,9 +30,15 @@ class TestPicklistParsing(unittest.TestCase):
 
   def test_reads_barcode_header_variant_with_offsets(self):
     rows = [
-      {"Source Plate Barcode": "P1", "Source Well": "D5", "Destination Plate Barcode": "D1",
-       "Destination Well": "A1", "Transfer Volume": "25", "DestXOffset": "100",
-       "DestYOffset": "-50"},
+      {
+        "Source Plate Barcode": "P1",
+        "Source Well": "D5",
+        "Destination Plate Barcode": "D1",
+        "Destination Well": "A1",
+        "Transfer Volume": "25",
+        "DestXOffset": "100",
+        "DestYOffset": "-50",
+      },
     ]
     [t] = picklist_from_rows(rows)
     self.assertEqual(t.source_plate_name, "P1")

@@ -126,8 +126,7 @@ class EchoProtocolGenerator(ABC):
   """
 
   @abstractmethod
-  def generate(self, transfers: List[Transfer]) -> List[GeneratedTransfer]:
-    ...
+  def generate(self, transfers: List[Transfer]) -> List[GeneratedTransfer]: ...
 
 
 def _wp(oid: int, t: Transfer) -> str:
@@ -162,5 +161,7 @@ class NaiveEchoProtocolGenerator(EchoProtocolGenerator):
         f'<Protocol Name="{self.protocol_name}"><Name></Name>'
         f"<SourcePlateName>{source_type}</SourcePlateName><Layout>{wps}</Layout></Protocol>"
       )
-      out.append(GeneratedTransfer(source_plate_type=source_type, protocol_xml=xml, transfers=group))
+      out.append(
+        GeneratedTransfer(source_plate_type=source_type, protocol_xml=xml, transfers=group)
+      )
     return out

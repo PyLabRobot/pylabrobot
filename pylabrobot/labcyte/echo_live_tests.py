@@ -9,7 +9,6 @@ import unittest
 
 from pylabrobot.labcyte import Echo, EchoCommandError
 
-
 ECHO_HOST = os.environ.get("PYLABROBOT_ECHO_HOST")
 EXPECTED_MODEL = os.environ.get("PYLABROBOT_ECHO_EXPECTED_MODEL", "Echo 650")
 VALIDATE_MOTION = os.environ.get("PYLABROBOT_ECHO_VALIDATE_MOTION") == "1"

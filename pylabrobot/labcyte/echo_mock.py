@@ -32,11 +32,20 @@ from types import TracebackType
 from typing import Dict, Optional, Tuple, Type
 
 # Methods that require the caller to hold the instrument lock on a real Echo.
-_LOCK_REQUIRED = frozenset({
-  "DoWellTransfer", "PlateSurvey", "DryPlate", "CloseDoor", "OpenDoor", "HomeAxes",
-  "PresentSrcPlateGripper", "PresentDstPlateGripper",
-  "RetractSrcPlateGripper", "RetractDstPlateGripper",
-})
+_LOCK_REQUIRED = frozenset(
+  {
+    "DoWellTransfer",
+    "PlateSurvey",
+    "DryPlate",
+    "CloseDoor",
+    "OpenDoor",
+    "HomeAxes",
+    "PresentSrcPlateGripper",
+    "PresentDstPlateGripper",
+    "RetractSrcPlateGripper",
+    "RetractDstPlateGripper",
+  }
+)
 
 _REQUEST_METHOD = re.compile(rb"<SOAP-ENV:Body[^>]*><([A-Za-z][A-Za-z0-9_]*)")
 _HEADER_END = b"\r\n\r\n"
@@ -110,14 +119,15 @@ _CAPTURED_RESPONSES_B64 = (
 
 def _load_captured_responses() -> Dict[str, str]:
   blob = base64.b64decode("".join(_CAPTURED_RESPONSES_B64))
-  return json.loads(gzip.decompress(blob).decode("utf-8"))
+  responses: Dict[str, str] = json.loads(gzip.decompress(blob).decode("utf-8"))
+  return responses
 
 
 def _generic_response(method: str, *, succeeded: bool = True, status: str = "OK") -> str:
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
     '<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">'
-    '<SOAP-ENV:Body>'
+    "<SOAP-ENV:Body>"
     f"<{method}Response><{method}>"
     f'<SUCCEEDED type="xsd:boolean">{succeeded}</SUCCEEDED>'
     f'<Status type="xsd:string">{status}</Status>'
@@ -132,7 +142,7 @@ class EchoMockServer:
   def __init__(self, host: str = "127.0.0.1", port: int = 0):
     self._host = host
     self._requested_port = port
-    self._server: Optional[asyncio.AbstractServer] = None
+    self._server: Optional[asyncio.Server] = None
     self._responses = _load_captured_responses()
     self._locked = False
     #: every (method, was_locked) the server handled - handy for assertions in tests.
@@ -148,14 +158,18 @@ class EchoMockServer:
     """The (possibly OS-assigned) port the mock is listening on; pass as ``rpc_port``."""
     if self._server is None:
       raise RuntimeError("EchoMockServer is not running; use 'async with EchoMockServer()'.")
-    return self._server.sockets[0].getsockname()[1]
+    return int(self._server.sockets[0].getsockname()[1])
 
   async def __aenter__(self) -> "EchoMockServer":
     await self.start()
     return self
 
-  async def __aexit__(self, exc_type: Optional[Type[BaseException]],
-                      exc: Optional[BaseException], tb: Optional[TracebackType]) -> None:
+  async def __aexit__(
+    self,
+    exc_type: Optional[Type[BaseException]],
+    exc: Optional[BaseException],
+    tb: Optional[TracebackType],
+  ) -> None:
     await self.stop()
 
   async def start(self) -> None:
