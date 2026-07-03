@@ -1,9 +1,11 @@
 import copy
 import datetime
+import logging
 import warnings
 from contextlib import asynccontextmanager
 from typing import Dict, List, Literal, Optional, Union
 
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   DriveConfiguration,
@@ -16,6 +18,8 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.tip_tracker import does_tip_tracking
 from pylabrobot.resources.well import Well
+
+logger = logging.getLogger("pylabrobot")
 
 _DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
   pip_type_1000ul=True,
@@ -200,7 +204,7 @@ class STARChatterboxBackend(STARBackend):
     read_timeout: Optional[int] = None,
     wait: bool = True,
   ) -> Optional[str]:
-    print(cmd)
+    logger.log(LOG_LEVEL_IO, "%s", cmd)
     return None
 
   async def send_raw_command(
@@ -210,7 +214,7 @@ class STARChatterboxBackend(STARBackend):
     read_timeout: Optional[int] = None,
     wait: bool = True,
   ) -> Optional[str]:
-    print(command)
+    logger.log(LOG_LEVEL_IO, "%s", command)
     return None
 
   # # # # # # # # STAR configuration # # # # # # # #
@@ -268,16 +272,16 @@ class STARChatterboxBackend(STARBackend):
     return list(self._channels_minimum_y_spacing)
 
   async def move_channel_y(self, channel: int, y: float):
-    print(f"moving channel {channel} to y: {y}")
+    logger.info("moving channel %s to y: %s", channel, y)
 
   async def move_channel_x(self, channel: int, x: float):
-    print(f"moving channel {channel} to x: {x}")
+    logger.info("moving channel %s to x: %s", channel, x)
 
   async def move_all_channels_in_z_safety(self):
-    print("moving all channels to z safety")
+    logger.info("moving all channels to z safety")
 
   async def position_channels_in_z_direction(self, zs: Dict[int, float]):
-    print(f"positioning channels in z: {zs}")
+    logger.info("positioning channels in z: %s", zs)
 
   # # # # # # # # 1_000 uL Channel: Complex Commands # # # # # # # #
 
@@ -289,9 +293,14 @@ class STARChatterboxBackend(STARBackend):
     move_inwards: float = 2,
     move_height: float = 15,
   ):
-    print(
-      f"stepping off foil | wells: {wells} | front channel: {front_channel} | "
-      f"back channel: {back_channel} | move inwards: {move_inwards} | move height: {move_height}"
+    logger.info(
+      "stepping off foil | wells: %s | front channel: %s | "
+      "back channel: %s | move inwards: %s | move height: %s",
+      wells,
+      front_channel,
+      back_channel,
+      move_inwards,
+      move_height,
     )
 
   async def pierce_foil(
@@ -304,10 +313,17 @@ class STARChatterboxBackend(STARBackend):
     one_by_one: bool = False,
     distance_from_bottom: float = 20.0,
   ):
-    print(
-      f"piercing foil | wells: {wells} | piercing channels: {piercing_channels} | "
-      f"hold down channels: {hold_down_channels} | move inwards: {move_inwards} | "
-      f"spread: {spread} | one by one: {one_by_one} | distance from bottom: {distance_from_bottom}"
+    logger.info(
+      "piercing foil | wells: %s | piercing channels: %s | "
+      "hold down channels: %s | move inwards: %s | "
+      "spread: %s | one by one: %s | distance from bottom: %s",
+      wells,
+      piercing_channels,
+      hold_down_channels,
+      move_inwards,
+      spread,
+      one_by_one,
+      distance_from_bottom,
     )
 
   # # # # # # # # Extension: 96-Head # # # # # # # #
@@ -358,7 +374,7 @@ class STARChatterboxBackend(STARBackend):
     acceleration_level: int = 3,
     current_protection_limiter: int = 7,
   ):
-    print("moving iswap x to", x_position)
+    logger.info("moving iswap x to %s", x_position)
 
   async def move_iswap_y(
     self,
@@ -368,7 +384,7 @@ class STARChatterboxBackend(STARBackend):
     current_protection_limiter: int = 7,
     make_space: bool = False,
   ):
-    print("moving iswap y to", y_position)
+    logger.info("moving iswap y to %s", y_position)
 
   async def move_iswap_z(
     self,
@@ -377,7 +393,7 @@ class STARChatterboxBackend(STARBackend):
     acceleration: float = 643.66,
     current_protection_limiter: int = 6,
   ):
-    print("moving iswap z to", z_position)
+    logger.info("moving iswap z to %s", z_position)
 
   @asynccontextmanager
   async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
@@ -390,7 +406,7 @@ class STARChatterboxBackend(STARBackend):
       yield
     finally:
       messages.append("end slow iswap")
-      print(" | ".join(messages))
+      logger.info("%s", " | ".join(messages))
 
   # # # # # # # # Liquid Level Detection (LLD) # # # # # # # #
 
@@ -410,7 +426,7 @@ class STARChatterboxBackend(STARBackend):
     return tip.total_tip_length
 
   async def position_channels_in_y_direction(self, ys, make_space=True):
-    print("positioning channels in y:", ys, "make_space:", make_space)
+    logger.info("positioning channels in y: %s make_space: %s", ys, make_space)
 
   async def request_pip_height_last_lld(self):
     return list(range(12))
