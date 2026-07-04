@@ -3305,6 +3305,10 @@ function isTubeRackLike(resource) {
     (resource.children.length > 0 && resource.children[0] instanceof Tube);
 }
 
+function isLid(resource) {
+  return resource.category === "lid" || resource.resourceType === "Lid";
+}
+
 function isCarrierLike(resource) {
   return resource instanceof Carrier ||
     ["carrier", "tip_carrier", "plate_carrier", "trough_carrier", "tube_carrier"]
@@ -3324,13 +3328,13 @@ function getResourceSummary(resource) {
   }
 
   if (isPlateLike(resource)) {
-    const numChildren = resource.children.length;
-    return `${numChildren} wells`;
+    const numWells = resource.children.filter((c) => !isLid(c)).length;
+    return `${numWells} wells`;
   }
 
   if (isTubeRackLike(resource)) {
-    const numChildren = resource.children.length;
-    return `${numChildren} tubes`;
+    const numTubes = resource.children.filter((c) => !isLid(c)).length;
+    return `${numTubes} tubes`;
   }
 
   if (resource instanceof Container) {
@@ -3434,9 +3438,10 @@ function getDisplayChildren(resource) {
     return result;
   }
 
-  // Leaf containers: don't show individual wells/tips/tubes
+  // Leaf containers: hide the individual wells/tips/tubes, but still surface
+  // other children such as a lid so they appear as their own tree nodes.
   if (isTipRackLike(resource) || isPlateLike(resource) || isTubeRackLike(resource)) {
-    return [];
+    return (resource.children || []).filter(isLid);
   }
 
   return resource.children || [];
