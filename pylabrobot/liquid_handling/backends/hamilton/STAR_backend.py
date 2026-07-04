@@ -2908,7 +2908,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def probe_liquid_volumes(
     self,
     containers: List[Container],
-    use_channels: List[int],
+    use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
     lld_mode: Union[LLDMode, List[LLDMode], None] = None,
     search_speed: float = 10.0,
@@ -2929,7 +2929,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       containers: List of Container objects to probe, one per channel. All must support height-to-volume conversion via compute_volume_from_height().
-      use_channels: Channel indices to use for probing (0-indexed).
+      use_channels: Channel indices to use for probing (0-indexed). None (default) uses channels [0, 1, ..., len(containers)-1].
       resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts. Defaults to container centers.
       lld_mode: Detection mode. Either a single ``LLDMode`` applied to all containers
         (deprecated, removed in v1b1) or a list of ``LLDMode``s (one per container). ``None``
