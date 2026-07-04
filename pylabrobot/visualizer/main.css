@@ -152,6 +152,39 @@ nav.navbar .status-box {
   width: fit-content;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   display: none;
+  /* Background + edges are a drag handle for repositioning the panel. */
+  cursor: move;
+}
+
+.machine-tool-dropdown.dragging {
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
+  border-color: #4a90d9;
+}
+
+.panel-reset-btn {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.75);
+  color: #888;
+  line-height: 1;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.panel-reset-btn svg {
+  display: block;
+}
+
+.panel-reset-btn:hover {
+  color: #4a90d9;
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .machine-tool-dropdown.open {
