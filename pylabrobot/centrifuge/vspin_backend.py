@@ -370,7 +370,7 @@ class VSpinBackend(CentrifugeBackend):
     await self.configure_and_initialize()
     await self.io.stop()
 
-  def _command(self, name: str) -> bytes:
+  def _get_command_bytes(self, name: str) -> bytes:
     return _VSPIN_COMMANDS[self._command_set][name]
 
   class _StatusPositionTachometer(ctypes.LittleEndianStructure):
@@ -518,7 +518,7 @@ class VSpinBackend(CentrifugeBackend):
   async def open_door(self):
     if await self.get_door_open():
       return
-    await self._send_command(self._command("open_door"))  # same as unlock door on new firmware
+    await self._send_command(self._get_command_bytes("open_door"))  # same as unlock door on new firmware
 
     # we can't tell when the door is fully open, so we just wait a bit
     await asyncio.sleep(4)
@@ -526,7 +526,7 @@ class VSpinBackend(CentrifugeBackend):
   async def close_door(self):
     if not (await self.get_door_open()):
       return
-    await self._send_command(self._command("close_door"))  # same as unlock door on new firmware
+    await self._send_command(self._get_command_bytes("close_door"))  # same as unlock door on new firmware
     # we can't tell when the door is fully closed, so we just wait a bit
     await asyncio.sleep(2)
 
@@ -535,22 +535,22 @@ class VSpinBackend(CentrifugeBackend):
       raise RuntimeError("Cannot lock door while it is open.")
     if await self.get_door_locked():
       return
-    await self._send_command(self._command("lock_door"))
+    await self._send_command(self._get_command_bytes("lock_door"))
 
   async def unlock_door(self):
     if not await self.get_door_locked():
       return
-    await self._send_command(self._command("unlock_door"))  # same as close door
+    await self._send_command(self._get_command_bytes("unlock_door"))  # same as close door
 
   async def lock_bucket(self):
     if await self.get_bucket_locked():
       return
-    await self._send_command(self._command("lock_bucket"))
+    await self._send_command(self._get_command_bytes("lock_bucket"))
 
   async def unlock_bucket(self):
     if not await self.get_bucket_locked():
       return
-    await self._send_command(self._command("unlock_bucket"))  # same as open door on new firmware
+    await self._send_command(self._get_command_bytes("unlock_bucket"))  # same as open door on new firmware
 
   async def go_to_bucket1(self):
     await self.go_to_position(await self.get_bucket_1_position())

@@ -35,18 +35,18 @@ class VSpinCommandSetTests(unittest.IsolatedAsyncioTestCase):
       backend = VSpinBackend()
 
     self.assertEqual(backend._command_set, "agilent")
-    self.assertEqual(backend._command("open_door"), bytes.fromhex("aa022600062e"))
-    self.assertEqual(backend._command("lock_bucket"), bytes.fromhex("aa022600072f"))
+    self.assertEqual(backend._get_command_bytes("open_door"), bytes.fromhex("aa022600062e"))
+    self.assertEqual(backend._get_command_bytes("lock_bucket"), bytes.fromhex("aa022600072f"))
 
   def test_old_firmware_command_set_uses_legacy_pneumatic_commands(self):
     with mock.patch("pylabrobot.centrifuge.vspin_backend.FTDI"):
       backend = VSpinBackend(command_set="old_firmware")
 
     self.assertEqual(backend._command_set, "old_firmware")
-    self.assertEqual(backend._command("open_door"), bytes.fromhex("aa022600072f"))
-    self.assertEqual(backend._command("close_door"), bytes.fromhex("aa022600052d"))
-    self.assertEqual(backend._command("lock_bucket"), bytes.fromhex("aa0226000129"))
-    self.assertEqual(backend._command("unlock_bucket"), bytes.fromhex("aa0226200048"))
+    self.assertEqual(backend._get_command_bytes("open_door"), bytes.fromhex("aa022600072f"))
+    self.assertEqual(backend._get_command_bytes("close_door"), bytes.fromhex("aa022600052d"))
+    self.assertEqual(backend._get_command_bytes("lock_bucket"), bytes.fromhex("aa0226000129"))
+    self.assertEqual(backend._get_command_bytes("unlock_bucket"), bytes.fromhex("aa0226200048"))
 
   def test_velocity11_label_is_not_a_command_set(self):
     with mock.patch("pylabrobot.centrifuge.vspin_backend.FTDI"):
