@@ -2908,12 +2908,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def probe_liquid_volumes(
     self,
     containers: List[Container],
-    use_channels: List[int],
+    use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: LLDMode = LLDMode.GAMMA,
+    lld_mode: Union[LLDMode, List[LLDMode], None] = None,
     search_speed: float = 10.0,
-    n_replicates: int = 3,
+    n_replicates: int = 1,
+    # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
+    min_traverse_height_at_beginning_of_command: Optional[float] = None,
+    min_traverse_height_during_command: Optional[float] = None,
     z_position_at_end_of_command: Optional[float] = None,
+    x_grouping_tolerance: Optional[float] = None,
     # Deprecated
     move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
@@ -2925,13 +2929,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       containers: List of Container objects to probe, one per channel. All must support height-to-volume conversion via compute_volume_from_height().
-      use_channels: Channel indices to use for probing (0-indexed).
+      use_channels: Channel indices to use for probing (0-indexed). None (default) uses channels [0, 1, ..., len(containers)-1].
       resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts. Defaults to container centers.
-      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.  Defaults to capacitive.
+      lld_mode: Detection mode. Either a single ``LLDMode`` applied to all containers
+        (deprecated, removed in v1b1) or a list of ``LLDMode``s (one per container). ``None``
+        (default) applies GAMMA (capacitive cLLD) to all containers.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
-      n_replicates: Number of measurements per channel. Default 3.
+      n_replicates: Number of measurements per channel. Default 1.
+      min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
+        channels to before the first batch. Must clear all deck obstacles since channels
+        travel laterally at this height. None (default) uses full Z safety.
+      min_traverse_height_during_command: Absolute Z height (mm) to move involved channels to
+        between batches. None (default) uses full Z safety.
       z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
         probing. None (default) uses full Z safety.
+      x_grouping_tolerance: Containers within this X distance (mm) are grouped and probed
+        together. Defaults to ``_x_grouping_tolerance_mm`` (0.1 mm).
       move_to_z_safety_after: Deprecated. Use ``z_position_at_end_of_command`` instead.
 
     Returns:
@@ -2967,7 +2980,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_mode=lld_mode,
       search_speed=search_speed,
       n_replicates=n_replicates,
+      min_traverse_height_at_beginning_of_command=min_traverse_height_at_beginning_of_command,
+      min_traverse_height_during_command=min_traverse_height_during_command,
       z_position_at_end_of_command=z_position_at_end_of_command,
+      x_grouping_tolerance=x_grouping_tolerance,
     )
 
     return [
