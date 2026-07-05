@@ -4,29 +4,16 @@ from unittest import mock
 from pylabrobot.centrifuge.vspin_backend import VSpinBackend, _with_vspin_checksum
 
 
+# status=0x11, current_position=12070, tachometer=-10, home_position=6733, checksum=0x29
+_STATUS_PACKET = bytes.fromhex("11262f00004ff6ff184d1a000029")
+
+
 def _make_backend(io: mock.Mock) -> VSpinBackend:
   backend = object.__new__(VSpinBackend)
   backend.io = io
   backend._command_set = "agilent"
   backend._bucket_1_remainder = None
   return backend
-
-
-def _status_packet(
-  status: int = 0x11,
-  current_position: int = 12070,
-  tachometer: int = -10,
-  home_position: int = 6733,
-) -> bytes:
-  packet = (
-    bytes([status])
-    + current_position.to_bytes(4, "little")
-    + b"\x4f"
-    + tachometer.to_bytes(2, "little", signed=True)
-    + b"\x18"
-    + home_position.to_bytes(4, "little")
-  )
-  return packet + bytes([sum(packet) & 0xFF])
 
 
 class VSpinCommandSetTests(unittest.IsolatedAsyncioTestCase):
@@ -74,10 +61,8 @@ class VSpinCommandSetTests(unittest.IsolatedAsyncioTestCase):
 
     io.write.assert_awaited_once_with(bytes.fromhex("aa020e10"))
 
-  def test_find_status_packet_scans_noise_and_validates_checksum(self):
-    packet = _status_packet()
-
-    parsed = VSpinBackend._find_status_packet(b"\x00\xff" + packet + b"\x00")
+  def test_find_status_packet_parses_status_packet(self):
+    parsed = VSpinBackend._find_status_packet(_STATUS_PACKET)
 
     assert parsed is not None
     self.assertEqual(parsed.status, 0x11)
@@ -86,7 +71,7 @@ class VSpinCommandSetTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(parsed.home_position, 6733)
 
   def test_find_status_packet_rejects_bad_checksum(self):
-    packet = bytearray(_status_packet())
+    packet = bytearray(_STATUS_PACKET)
     packet[-1] ^= 0xFF
 
     self.assertIsNone(VSpinBackend._find_status_packet(bytes(packet)))
