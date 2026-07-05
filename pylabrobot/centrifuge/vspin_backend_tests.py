@@ -4,22 +4,7 @@ from unittest import mock
 from pylabrobot.centrifuge.vspin_backend import VSpinBackend, _with_vspin_checksum
 
 
-class _FakeIO:
-  def __init__(self, read_chunks):
-    self.read_chunks = list(read_chunks)
-    self.writes = []
-
-  async def read(self, num_bytes: int) -> bytes:
-    if self.read_chunks:
-      return self.read_chunks.pop(0)
-    return b""
-
-  async def write(self, data: bytes) -> int:
-    self.writes.append(data)
-    return len(data)
-
-
-def _make_backend(io: _FakeIO) -> VSpinBackend:
+def _make_backend(io: mock.Mock) -> VSpinBackend:
   backend = object.__new__(VSpinBackend)
   backend.io = io
   backend._command_set = "agilent"
@@ -80,12 +65,14 @@ class VSpinCommandSetTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_send_command_repairs_checksum_before_write(self):
-    io = _FakeIO([b"\r"])
+    io = mock.Mock()
+    io.read = mock.AsyncMock(return_value=b"\r")
+    io.write = mock.AsyncMock(return_value=4)
     backend = _make_backend(io)
 
     await backend._send_command(bytes.fromhex("aa020e00"))
 
-    self.assertEqual(io.writes, [bytes.fromhex("aa020e10")])
+    io.write.assert_awaited_once_with(bytes.fromhex("aa020e10"))
 
   def test_find_status_packet_scans_noise_and_validates_checksum(self):
     packet = _status_packet()
