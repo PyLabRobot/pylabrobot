@@ -2075,7 +2075,8 @@ function _showPipetteInfoPanelInner(title, type, attrs, anchorDropdown) {
 }
 
 function fillHeadIcons(panel, headState) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   // Fixed height: pipette (27) + max tip (80mm * 0.8 = 64px)
   var maxTipPx = 64; // 80mm max tip
   var fixedSvgH = 27 + maxTipPx;
@@ -2256,7 +2257,8 @@ function head96PosId(ch, startCh) {
 }
 
 function fillHead96Grid(panel, head96State) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   if (!head96State || Object.keys(head96State).length === 0) {
     // Set panel dimensions to match a normal 96-head grid, then center message
     panel.style.minWidth = "180px";
@@ -2304,7 +2306,7 @@ function fillHead96Grid(panel, head96State) {
           { key: "channels", value: "96" },
           { key: "tips_loaded", value: tipCount + " / 96" },
         ];
-        showPipetteInfoPanel("96-Head Pipette", "CoRe96Head", attrs, panel, String(startCh), "channel");
+        showPipetteInfoPanel("96-Channel Head Pipette", "Head96", attrs, panel, String(startCh), "channel");
       });
     })(startCh, head96State);
     box.style.display = "inline-flex";
@@ -2636,7 +2638,8 @@ function buildSingleArm(armData, anchorDropdown, armId) {
 }
 
 function fillArmPanel(panel, armState) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   if (!armState || Object.keys(armState).length === 0) {
     // Set panel dimensions to match a normal arm panel, then center message
     var stdW = Math.round((Math.round(127 * Math.min(80 / 127, 80 / 86)) + 16) * 1.1) + 28;
@@ -2935,6 +2938,10 @@ window.addEventListener("load", function () {
       stage.height(newHeight);
       stage.offsetY(newHeight);
     }
+    // Re-clamp any open capability panels so a remembered position can't leave a
+    // panel stranded off-screen after the drawing area shrinks (window resize,
+    // sidebar expand/collapse). Positions and sizes are unchanged when they fit.
+    repositionAllMachineToolPanels();
   });
   resizeObserver.observe(canvas);
 
@@ -4783,6 +4790,168 @@ var integratedArmSVG =
   '<polygon points="29,30.3 30.5,29.5 30.5,38.5 29,39.3" fill="#1a1a1a" stroke="#000" stroke-width="0.4"/>' +
   '</g>';
 
+// Remembered machine-tool panel positions, keyed by panel id. Empty by default,
+// so each panel falls back to its computed group position until the user drags it.
+var machineToolPanelPositions = {};
+(function loadMachineToolPanelPositions() {
+  try {
+    var raw = window.localStorage.getItem("plr-machine-tool-panel-positions");
+    if (raw) machineToolPanelPositions = JSON.parse(raw) || {};
+  } catch (e) {
+    machineToolPanelPositions = {};
+  }
+})();
+
+function saveMachineToolPanelPositions() {
+  try {
+    window.localStorage.setItem(
+      "plr-machine-tool-panel-positions",
+      JSON.stringify(machineToolPanelPositions)
+    );
+  } catch (e) {
+    // localStorage unavailable (private mode / quota) — positions persist in-memory only.
+  }
+}
+
+// Reference to the per-liquid-handler positionPanels routine, published once it
+// is defined in buildNavbarLHMachineTools. It is pure given its arguments, so a
+// single reference can reposition any liquid handler's panels.
+var repositionMachineToolPanels = null;
+
+// Reposition every liquid handler's open panels using the current remembered
+// positions (a moved panel stays where it was dropped, others snap to default).
+function repositionAllMachineToolPanels() {
+  if (!repositionMachineToolPanels) return;
+  for (var name in resources) {
+    if (!(resources[name] instanceof LiquidHandler)) continue;
+    var singleBtn = document.getElementById("single-channel-btn-" + name);
+    if (singleBtn) repositionMachineToolPanels(name, singleBtn);
+  }
+}
+
+// Show a panel's return indicator only when that panel has been dragged off its
+// default position.
+function updatePanelResetVisibility() {
+  var btns = document.querySelectorAll(".machine-tool-dropdown .panel-reset-btn");
+  for (var i = 0; i < btns.length; i++) {
+    var panel = btns[i].parentElement;
+    btns[i].style.display = panel && machineToolPanelPositions[panel.id] ? "" : "none";
+  }
+}
+
+// Return a single panel to its default position and forget its remembered spot.
+function resetPanelPosition(panel) {
+  delete machineToolPanelPositions[panel.id];
+  saveMachineToolPanelPositions();
+  repositionAllMachineToolPanels();
+  updatePanelResetVisibility();
+}
+
+// Clear a panel's state-driven content while preserving the return indicator.
+// The fill functions rebuild content on every state update; using this instead
+// of panel.innerHTML = "" keeps the reset button (and its listeners) intact.
+function clearPanelContent(panel) {
+  var children = Array.prototype.slice.call(panel.children);
+  for (var i = 0; i < children.length; i++) {
+    if (!children[i].classList.contains("panel-reset-btn")) {
+      panel.removeChild(children[i]);
+    }
+  }
+}
+
+// Ensure a panel carries a top-right return indicator. Idempotent: the button is
+// created once and only its visibility is refreshed on later fills. The
+// indicator returns this panel to its default position when clicked.
+function ensurePanelResetButton(panel) {
+  var btn = panel.querySelector(".panel-reset-btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.className = "panel-reset-btn";
+    btn.title = "Return this panel to its default position";
+    btn.setAttribute("aria-label", "Return panel to default position");
+    // Same house icon as the deck "Reset view" home button.
+    btn.innerHTML =
+      '<svg width="15" height="15" viewBox="0 0 20 20" aria-hidden="true">' +
+      '<path d="M10 1L1 9h3v8h5v-5h2v5h5V9h3L10 1z" fill="currentColor"/></svg>';
+    btn.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      resetPanelPosition(panel);
+    });
+    panel.appendChild(btn);
+  }
+  btn.style.display = machineToolPanelPositions[panel.id] ? "" : "none";
+}
+
+// Place a machine-tool panel at its remembered position if the user has dragged
+// it, otherwise at the supplied default. Both are clamped to keep the panel
+// inside main; the left clamp uses the measured width (knownW) rather than
+// offsetWidth so a right-edge panel can't wrap and inflate its own height.
+function applyMachineToolPanelPos(panel, defLeft, defTop, knownW, mainRect) {
+  var stored = machineToolPanelPositions[panel.id];
+  // Only trust a stored position with finite numbers; a corrupted or partial
+  // localStorage entry falls back to the default rather than "NaNpx".
+  var hasStored = stored && Number.isFinite(stored.left) && Number.isFinite(stored.top);
+  var left = hasStored ? stored.left : defLeft;
+  var top = hasStored ? stored.top : defTop;
+  var maxLeft = Math.max(0, mainRect.width - knownW);
+  left = Math.max(0, Math.min(left, maxLeft));
+  panel.style.left = left + "px";
+  var maxTop = Math.max(0, mainRect.height - panel.offsetHeight);
+  top = Math.max(0, Math.min(top, maxTop));
+  panel.style.top = top + "px";
+}
+
+// Allow a machine-tool panel to be repositioned by dragging its background or
+// edges. Drags starting on an object inside the panel (channels, tips, grid,
+// gripper) are ignored, since those clicks already open info panels.
+function makeMachineToolPanelDraggable(panel) {
+  panel.addEventListener("mousedown", function (e) {
+    if (e.button !== 0) return;
+    if (e.target !== panel) return; // only the padding/border/background, not the objects
+    var mainEl = document.querySelector("main");
+    if (!mainEl) return;
+    var mainRect = mainEl.getBoundingClientRect();
+    var startX = e.clientX, startY = e.clientY;
+    var startLeft = parseFloat(panel.style.left) || 0;
+    var startTop = parseFloat(panel.style.top) || 0;
+    var panelW = panel.offsetWidth, panelH = panel.offsetHeight;
+    e.preventDefault();
+    panel.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    function onMove(ev) {
+      // If the button was released outside the window, the browser never sends
+      // mouseup to the document; the next move over the page reports no buttons
+      // held, so end the drag here instead of letting the panel "stick" to the
+      // cursor.
+      if (ev.buttons === 0) { onUp(); return; }
+      var nl = startLeft + (ev.clientX - startX);
+      var nt = startTop + (ev.clientY - startY);
+      nl = Math.max(0, Math.min(nl, Math.max(0, mainRect.width - panelW)));
+      nt = Math.max(0, Math.min(nt, Math.max(0, mainRect.height - panelH)));
+      panel.style.left = nl + "px";
+      panel.style.top = nt + "px";
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onUp);
+      panel.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      machineToolPanelPositions[panel.id] = {
+        left: parseFloat(panel.style.left) || 0,
+        top: parseFloat(panel.style.top) || 0,
+      };
+      saveMachineToolPanelPositions();
+      updatePanelResetVisibility();
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    // Losing window focus (alt-tab, releasing outside the page) also ends the drag.
+    window.addEventListener("blur", onUp);
+  });
+}
+
 function buildNavbarLHMachineTools() {
   var container = document.getElementById("navbar-lh-machine-tools");
   if (!container) return;
@@ -4804,11 +4973,11 @@ function buildNavbarLHMachineTools() {
     // Label (styled as button without changing appearance)
     var label = document.createElement("button");
     label.className = "navbar-pipette-label";
-    label.title = "Show/hide liquid handler machine tools";
+    label.title = "Show/hide liquid handler capabilities";
     label.textContent = "";
     label.appendChild(document.createTextNode(lhName));
     label.appendChild(document.createElement("br"));
-    label.appendChild(document.createTextNode("Machine Tools"));
+    label.appendChild(document.createTextNode("Capabilities"));
     group.appendChild(label);
 
     // Collapsible container for machine tool buttons
@@ -4816,17 +4985,22 @@ function buildNavbarLHMachineTools() {
     machineToolBtns.className = "navbar-machine-tool-btns";
     group.appendChild(machineToolBtns);
 
-    // Toggle machine tool buttons on label click
-    label.addEventListener("click", function () {
-      var collapsed = machineToolBtns.classList.toggle("collapsed");
-      label.classList.toggle("collapsed", collapsed);
-      // Close any open dropdowns when collapsing
-      if (collapsed) {
-        var dropdowns = document.querySelectorAll(".machine-tool-dropdown.open");
-        dropdowns.forEach(function (d) { d.classList.remove("open"); });
-        group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
-      }
-    });
+    // Toggle machine tool buttons on label click. Wrapped in an IIFE so the
+    // handler captures this iteration's label/machineToolBtns/group (they are
+    // var-scoped across the loop); without it every label toggles the last
+    // liquid handler's tools.
+    (function (label, machineToolBtns, group) {
+      label.addEventListener("click", function () {
+        var collapsed = machineToolBtns.classList.toggle("collapsed");
+        label.classList.toggle("collapsed", collapsed);
+        // Close any open dropdowns when collapsing
+        if (collapsed) {
+          var dropdowns = document.querySelectorAll(".machine-tool-dropdown.open");
+          dropdowns.forEach(function (d) { d.classList.remove("open"); });
+          group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
+        }
+      });
+    })(label, machineToolBtns, group);
 
     // Multi-channel button (hidden unless setState has already confirmed machine tool exists)
     var lhRes = resources[lhName];
@@ -4869,12 +5043,14 @@ function buildNavbarLHMachineTools() {
 
       var singlePanel = document.getElementById("single-channel-dropdown-" + handlerName);
 
-      // Measure single panel (temporarily show if hidden)
+      // Measure single panel (temporarily show if hidden) at its natural width.
+      // Measuring at left:0 gives the panel the full available width so a panel
+      // parked near the right edge of main can't wrap its channel columns into a
+      // tall stack and inflate the height that the plate/arm panels inherit.
       var singleW = 0, singleH = 0, singleLeft = singleCenterPx;
       if (singlePanel) {
-        // Temporarily set left + transform so we can measure offsetWidth accurately
         singlePanel.style.top = topPx + "px";
-        singlePanel.style.left = singleCenterPx + "px";
+        singlePanel.style.left = "0px";
         var wasHidden = !singlePanel.classList.contains("open");
         if (wasHidden) { singlePanel.style.visibility = "hidden"; singlePanel.classList.add("open"); }
         singleW = singlePanel.offsetWidth;
@@ -4903,26 +5079,30 @@ function buildNavbarLHMachineTools() {
         singleLeft = singleLeft + (-totalLeftEdge);
       }
 
-      // Always position single panel with direct left (no CSS transform),
-      // because html2canvas misrenders translateX(-50%).
+      // Default group layout (multi | single | arm), anchored on the single button.
+      // Each panel snaps to its default unless the user has dragged it, in which
+      // case its remembered position wins (see applyMachineToolPanelPos). Panels
+      // use direct left/top (no CSS transform) because html2canvas misrenders
+      // translateX(-50%).
       if (singlePanel) {
         singlePanel.style.transform = "none";
-        singlePanel.style.left = Math.max(0, singleLeft) + "px";
+        applyMachineToolPanelPos(singlePanel, singleLeft, topPx, singleW, mainRect);
       }
 
       if (multiPanel && multiPanel.classList.contains("open")) {
-        multiPanel.style.top = topPx + "px";
         multiPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
-        multiPanel.style.left = Math.max(0, singleLeft - multiW - 8) + "px";
+        applyMachineToolPanelPos(multiPanel, singleLeft - multiW - 8, topPx, multiW, mainRect);
       }
 
       if (armPanel && armPanel.classList.contains("open")) {
-        armPanel.style.top = topPx + "px";
         armPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
-        var singleRight = singleLeft + singleW;
-        armPanel.style.left = (singleRight + 8) + "px";
+        applyMachineToolPanelPos(armPanel, singleLeft + singleW + 8, topPx, armW, mainRect);
       }
     }
+    // Publish to module scope (after the declaration) so the resize re-clamp and
+    // per-panel reset can reuse it. positionPanels is parameterized by handler
+    // name and closes over no per-liquid-handler state, so one reference works.
+    repositionMachineToolPanels = positionPanels;
 
     // Single-channel dropdown panel
     (function (btn, handlerName) {
@@ -4944,6 +5124,7 @@ function buildNavbarLHMachineTools() {
         var headState = (lhResource && lhResource.headState) ? lhResource.headState : {};
         fillHeadIcons(panel, headState);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         btn.classList.add("active");
         positionPanels(handlerName, btn);
       });
@@ -4969,6 +5150,7 @@ function buildNavbarLHMachineTools() {
         var head96State = (lhResource && lhResource.head96State) ? lhResource.head96State : {};
         fillHead96Grid(panel, head96State);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         positionPanels(handlerName, singleBtnRef);
         btn.classList.add("active");
       });
@@ -5009,6 +5191,7 @@ function buildNavbarLHMachineTools() {
         var armState = (lhResource && lhResource.armState) ? lhResource.armState : {};
         fillArmPanel(panel, armState);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         positionPanels(handlerName, singleBtnRef);
         btn.classList.add("active");
       });
