@@ -31,6 +31,11 @@ const MODE_GUI = "gui";
 
 var layer = new Konva.Layer();
 var resourceLayer = new Konva.Layer();
+// Background grid: grey, semi-transparent lines at the scale-bar spacing, anchored at the
+// top-level resource's origin. Purely a visual aid - not a Resource, so it never appears in
+// the Workcell Tree. Lives in its own layer beneath the resources.
+var gridLayer = new Konva.Layer({ listening: false });
+var gridGroup = null; // current grid lines; destroyed and rebuilt on every view change
 var tooltip;
 var stage;
 var selectedResource;
@@ -128,20 +133,24 @@ function updateDeltaLinesScale() {
   resourceLayer.draw();
 }
 
+// The scale bar and the grid share one "nice" spacing: the smallest round mm step from the
+// ramp whose on-screen width is at least 60px (falls back to the largest step when zoomed
+// far out). `scale` is CSS pixels per mm (stage.scaleX()).
+function niceScaleMM(scale) {
+  var niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  var bestMM = niceSteps[0];
+  for (var i = 0; i < niceSteps.length; i++) {
+    if (niceSteps[i] * scale >= 60) return niceSteps[i];
+    bestMM = niceSteps[i];
+  }
+  return bestMM;
+}
+
 // Scale bar update: picks a round mm value that fits ~80-120px on screen.
 function updateScaleBar() {
   if (!stage) return;
   var scale = stage.scaleX(); // CSS pixels per mm
-  // Choose a nice round distance whose bar width falls near 100px
-  var niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
-  var bestMM = niceSteps[0];
-  for (var i = 0; i < niceSteps.length; i++) {
-    if (niceSteps[i] * scale >= 60) {
-      bestMM = niceSteps[i];
-      break;
-    }
-    bestMM = niceSteps[i];
-  }
+  var bestMM = niceScaleMM(scale);
   var barPx = bestMM * scale;
   var barLine = document.getElementById("scale-bar-line");
   var barLabel = document.getElementById("scale-bar-label");
@@ -149,9 +158,92 @@ function updateScaleBar() {
   if (barLabel) barLabel.textContent = bestMM + " mm";
 }
 
+// Background grid: grey lines at the scale-bar spacing, anchored at the top-level resource's
+// origin, covering the current viewport. Rebuilt on every zoom/pan/fit so the spacing stays
+// matched to the scale bar and coverage follows the view. Lines are in world-mm coordinates
+// (the same frame as the resources), so they pan and zoom locked to the deck.
+function updateWorkcellGrid() {
+  if (!stage || !gridLayer) return;
+  if (gridGroup) { gridGroup.destroy(); gridGroup = null; }
+  var scale = Math.abs(stage.scaleX());
+  if (!rootResource || !scale) { gridLayer.batchDraw(); return; }
+
+  var stepMM = niceScaleMM(scale);
+  var origin = getResourceWorldLocation(rootResource); // highest-level resource's origin
+
+  // Viewport bounds in world mm: invert the stage transform over the four screen corners
+  // (handles the y-flip and any pan/offset).
+  var inv = stage.getAbsoluteTransform().copy().invert();
+  var w = stage.width(), h = stage.height();
+  var pts = [inv.point({ x: 0, y: 0 }), inv.point({ x: w, y: 0 }),
+             inv.point({ x: 0, y: h }), inv.point({ x: w, y: h })];
+  var xs = pts.map(function (p) { return p.x; });
+  var ys = pts.map(function (p) { return p.y; });
+  var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+  var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+
+  // Phase the first line to the origin so every line sits at origin + k*stepMM (the origin
+  // itself is always on a line).
+  var startX = origin.x + Math.ceil((minX - origin.x) / stepMM) * stepMM;
+  var startY = origin.y + Math.ceil((minY - origin.y) / stepMM) * stepMM;
+
+  gridGroup = new Konva.Group({ listening: false });
+  var strokeW = 1 / scale; // ~1 CSS px regardless of zoom (stroke is scaled by the stage)
+  for (var x = startX; x <= maxX; x += stepMM) {
+    gridGroup.add(new Konva.Line({
+      points: [x, minY, x, maxY], stroke: "#808080", strokeWidth: strokeW,
+      opacity: 0.2, listening: false,
+    }));
+  }
+  for (var y = startY; y <= maxY; y += stepMM) {
+    gridGroup.add(new Konva.Line({
+      points: [minX, y, maxX, y], stroke: "#808080", strokeWidth: strokeW,
+      opacity: 0.2, listening: false,
+    }));
+  }
+
+  // The x-axis: a red line at y=0 (the top-level resource's origin row), in the same red as
+  // the x-axis arrow. The y-axis: a green line at x=0 (the origin column), matching the y-axis
+  // arrow. Drawn above the grid lines (so they read on top where they cross) but before the
+  // vignette, so the edge fade applies to them too - they are part of the grid.
+  gridGroup.add(new Konva.Line({
+    points: [minX, origin.y, maxX, origin.y], stroke: "#dc3545",
+    strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
+  }));
+  gridGroup.add(new Konva.Line({
+    points: [origin.x, minY, origin.x, maxY], stroke: "#198754",
+    strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
+  }));
+
+  // Fade the grid out towards the edges of the view window: a radial vignette over everything
+  // above (grid + axes), transparent at the centre and ramping to the background fill at the
+  // corners. It sits on top but still inside gridGroup (bottom layer), so it dims only the
+  // grid and never the resources. Drawn in world-mm over the current viewport bounds, so the
+  // fade is pinned to the view rather than the deck.
+  var halfW = (maxX - minX) / 2, halfH = (maxY - minY) / 2;
+  var endR = Math.sqrt(halfW * halfW + halfH * halfH); // centre to corner
+  gridGroup.add(new Konva.Rect({
+    x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+    fillRadialGradientStartPoint: { x: halfW, y: halfH },
+    fillRadialGradientStartRadius: 0,
+    fillRadialGradientEndPoint: { x: halfW, y: halfH },
+    fillRadialGradientEndRadius: endR,
+    fillRadialGradientColorStops: [
+      0, "rgba(255,255,255,0)",
+      0.5, "rgba(255,255,255,0)",
+      1, "rgba(255,255,255,1)",
+    ],
+    listening: false,
+  }));
+
+  gridLayer.add(gridGroup);
+  gridLayer.batchDraw();
+}
+
 // Call from any code path that changes stage scale or position.
 function refreshScaleOverlays() {
   updateScaleBar();
+  updateWorkcellGrid();
   updateBullseyeScale();
   updateWrtBullseyeScale();
   updateTooltipScale();
@@ -1215,6 +1307,19 @@ class HamiltonSTARDeck extends Deck {
   drawMainShape() {
     // Draw a transparent rectangle with an outline
     let mainShape = new Konva.Group();
+
+    // Opaque white footprint fill, drawn first (behind everything) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the margin bands outside
+    // the rail area are transparent and reveal the background grid underneath. Kept separate
+    // from the border outline below so the inner rail box's outline still draws on top.
+    mainShape.add(
+      new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        fill: "white",
+      })
+    );
+
     mainShape.add(
       new Konva.Rect({
         y: 63,
@@ -1297,6 +1402,18 @@ class VantageDeck extends Deck {
 
   drawMainShape() {
     let mainShape = new Konva.Group();
+
+    // Opaque white footprint fill, drawn first (behind everything) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the margin bands outside
+    // the rail area are transparent and reveal the background grid underneath.
+    mainShape.add(
+      new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        fill: "white",
+      })
+    );
+
     mainShape.add(
       new Konva.Rect({
         y: 63,
@@ -1378,6 +1495,18 @@ class OTDeck extends Deck {
     let group = new Konva.Group({});
     const width = 128.0;
     const height = 86.0;
+
+    // Opaque white footprint fill, drawn first (behind the sites) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the gaps around and
+    // between the sites are transparent and reveal the background grid underneath.
+    group.add(
+      new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        fill: "white",
+      })
+    );
+
     // Draw the sites
     for (let i = 0; i < otDeckSiteLocations.length; i++) {
       const siteLocation = otDeckSiteLocations[i];
@@ -2992,11 +3121,18 @@ window.addEventListener("load", function () {
     listening: false,
   });
 
-  // add the layer to the stage
+  // add the layers to the stage; gridLayer is bottom-most so the grid sits beneath every
+  // resource, then the resource layer, then the overlay layer on top.
+  stage.add(gridLayer);
   stage.add(layer);
   stage.add(resourceLayer);
 
-  layer.add(background);
+  // White fill lives at the very bottom of the grid layer, so the grid lines draw over it
+  // but still beneath all resources.
+  gridLayer.add(background);
+
+  // Redraw the grid on pan (the stage is draggable); the zoom/fit paths refresh overlays.
+  stage.on("dragmove", updateWorkcellGrid);
 
   // Mouse wheel zoom
   const scaleBy = 1.1;
