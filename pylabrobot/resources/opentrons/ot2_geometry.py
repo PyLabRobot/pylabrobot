@@ -11,6 +11,7 @@ class OT2RobotGeometry:
   Every OT-2 Standard shares this geometry, so it is a constant rather than something probed from
   the device. The only OT-2 data worth discovering at runtime is which pipettes are mounted, not
   where the deck is.
+
   The robot frame has its origin at the front-left corner of slot 1, with +x to the right, +y to
   the back, and +z up. All distances are in mm.
   """
@@ -57,15 +58,15 @@ class OT2RobotGeometry:
     return (off.x, self.extents.x + off.x, 0.0, self.extents.y)
 
   @staticmethod
-  def channel_y_offsets(num_channels: int = 8, channel_pitch: float = 9.0) -> List[float]:
-    """Y offset of each channel from the head center, in mm, for a linear multi-channel head.
+  def channel_y_offsets() -> List[float]:
+    """Y offset of each head8 channel from the head center, in mm.
 
     Indexed back-to-front to match the Opentrons nozzle map: index 0 is the back-most nozzle (row
     A, the primary/critical point) at the largest +y, descending to the front-most nozzle at -y.
-    Defaults describe the head8: 8 channels at 9 mm pitch spanning the head center by +-31.5 mm.
+    The head8's 8 channels at 9 mm pitch span the head center by +-31.5 mm.
     """
-    half = (num_channels - 1) / 2
-    return [(half - i) * channel_pitch for i in range(num_channels)]
+    half = (8 - 1) / 2
+    return [(half - i) * 9.0 for i in range(8)]
 
   def can_reach_position(
     self, mount: str, position: Coordinate, channel_offset: float = 0.0
