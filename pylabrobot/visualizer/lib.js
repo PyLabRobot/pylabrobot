@@ -858,6 +858,9 @@ class Resource {
       rotation: this.rotation ? this.rotation.z : 0,
       draggable: this.draggable,
     });
+    // Re-apply the tree eye-toggle state; draw() runs on every redraw (volume
+    // change, tip pickup, re-assign) and would otherwise resurrect a hidden item.
+    this.group.visible(!hiddenResourceNames.has(this.name));
     this.mainShape = this.drawMainShape();
     if (this.mainShape !== undefined) {
       this.group.add(this.mainShape);
@@ -3285,6 +3288,130 @@ var sidepanelHighlightRect = null;
 var sidepanelHoverRect = null;
 var sidepanelHoverGlow = null;
 
+// Names of resources currently hidden via the tree eye toggle. Keyed by name
+// rather than by JS instance so the state survives the destroy/redraw and
+// unassign/re-assign cycles that recreate a resource's Konva group.
+var hiddenResourceNames = new Set();
+
+// Blender-outliner-style eye. Shown: open almond outline with a filled pupil.
+// Hidden: a closed eyelid (downward arc), matching Blender's hide toggle.
+function treeEyeSvg(hidden) {
+  if (hidden) {
+    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M3 10.5c2.6 3.3 5.9 5 9 5s6.4-1.7 9-5" stroke-width="2.2"/></svg>';
+  }
+  return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M3.07 12C5.23 8.2 8.43 6 12 6s6.77 2.2 8.93 6c-2.16 3.8-5.36 6-8.93 6s-6.77-2.2-8.93-6Z" stroke-width="2.2"/>' +
+    '<circle cx="12" cy="12" r="3.8" fill="currentColor" stroke="none"/></svg>';
+}
+
+// The Set stores only *explicitly* hidden resources (a resource's own state).
+// A resource's effective visibility is its own state AND every ancestor being
+// visible; the ancestor half is enforced for free by Konva group nesting, so we
+// never copy hidden-ness onto descendants. This keeps "hidden because I was
+// toggled off" distinct from "hidden because a parent is off".
+
+// True if any ancestor (not the resource itself) is explicitly hidden, so the
+// resource is clipped on the canvas no matter its own state.
+function isHiddenByAncestor(resource) {
+  var p = resource ? resource.parent : undefined;
+  while (p) {
+    if (hiddenResourceNames.has(p.name)) return true;
+    p = p.parent;
+  }
+  return false;
+}
+
+// Push a resource's own hidden flag onto its Konva group. Descendants are
+// clipped automatically because their groups are nested inside this one, and
+// the resource keeps its slot in the parent's child list so re-showing
+// preserves stacking order (a destroy/redraw would re-append it last).
+function applyOwnVisibility(resource) {
+  if (resource && resource.group !== undefined) {
+    resource.group.visible(!hiddenResourceNames.has(resource.name));
+  }
+}
+
+function setResourceHidden(resourceName, hidden) {
+  if (hidden) {
+    hiddenResourceNames.add(resourceName);
+  } else {
+    hiddenResourceNames.delete(resourceName);
+  }
+  applyOwnVisibility(resources[resourceName]);
+  resourceLayer.draw();
+  refreshTreeVisibilityState();
+}
+
+// Opt-in gesture (alt-click) for a row clipped by a hidden ancestor: clear this
+// resource's own flag and every hidden ancestor so it actually becomes visible.
+function revealResourceAndAncestors(resource) {
+  if (!resource) return;
+  hiddenResourceNames.delete(resource.name);
+  applyOwnVisibility(resource);
+  var p = resource.parent;
+  while (p) {
+    hiddenResourceNames.delete(p.name);
+    applyOwnVisibility(p);
+    p = p.parent;
+  }
+  resourceLayer.draw();
+  refreshTreeVisibilityState();
+}
+
+// Sync one tree row from current state. Eye *shape* follows the resource's own
+// flag (closed eyelid iff explicitly hidden). The `inherited` styling marks
+// rows clipped by a hidden ancestor: their own toggle can't take effect, so the
+// eye is shown disabled with a tooltip rather than letting a click lie about
+// what happened on the canvas.
+function updateRowVisibility(row, resource) {
+  var ownHidden = hiddenResourceNames.has(resource.name);
+  var inherited = isHiddenByAncestor(resource);
+  var eye = row.querySelector(":scope > .tree-node-eye");
+  if (eye) {
+    eye.classList.toggle("hidden", ownHidden);
+    eye.classList.toggle("inherited", inherited);
+    eye.innerHTML = treeEyeSvg(ownHidden);
+    eye.title = inherited
+      ? "Hidden by a parent - alt-click to reveal it"
+      : (ownHidden ? "Show" : "Hide");
+  }
+  row.classList.toggle("resource-hidden", ownHidden || inherited);
+}
+
+// Re-sync every tree row's eye/dim state. Cheap: only rows present in the DOM
+// are walked (leaf wells/tips are not surfaced as tree nodes).
+function refreshTreeVisibilityState() {
+  var tree = document.getElementById("resource-tree");
+  if (!tree) return;
+  var nodes = tree.querySelectorAll(".tree-node[data-resource-name]");
+  for (var i = 0; i < nodes.length; i++) {
+    var resource = resources[nodes[i].dataset.resourceName];
+    var row = nodes[i].querySelector(":scope > .tree-node-row");
+    if (resource && row) updateRowVisibility(row, resource);
+  }
+}
+
+// Build the per-row eye button. State is read from the Set (not a local flag)
+// so it stays correct when a subtree is rebuilt via replaceWith.
+function createVisibilityToggle(resourceName) {
+  var btn = document.createElement("span");
+  btn.className = "tree-node-eye";
+  btn.innerHTML = treeEyeSvg(false);
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var resource = resources[resourceName];
+    if (resource && isHiddenByAncestor(resource)) {
+      // Clipped by a hidden ancestor: a plain click can't take effect, so it is
+      // a no-op. Alt-click reveals the ancestor chain to force it visible.
+      if (e.altKey) revealResourceAndAncestors(resource);
+      return;
+    }
+    setResourceHidden(resourceName, !hiddenResourceNames.has(resourceName));
+  });
+  return btn;
+}
+
 function getResourceTypeName(resource) {
   return resource.constructor.name;
 }
@@ -3548,6 +3675,8 @@ function buildTreeNodeDOM(resource, depth, slotIndex) {
   row.appendChild(nameSpan);
   row.appendChild(typeSpan);
   row.appendChild(info);
+  row.appendChild(createVisibilityToggle(resource.name));
+  updateRowVisibility(row, resource);
   node.appendChild(row);
 
   // Hover row to show yellow highlight on canvas
@@ -3646,6 +3775,8 @@ function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
   rootRow.appendChild(rootDot);
   rootRow.appendChild(rootName);
   rootRow.appendChild(rootType);
+  rootRow.appendChild(createVisibilityToggle(rootResource.name));
+  updateRowVisibility(rootRow, rootResource);
   rootNode.appendChild(rootRow);
 
   rootRow.addEventListener("mouseenter", function () {
