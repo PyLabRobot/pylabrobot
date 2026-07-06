@@ -21,6 +21,14 @@ const RESOURCE_COLORS = {
   ContainerBackground: "#E0EAEE"
 };
 
+// Deck surface fill: a soft central fade - a radial gradient from a slightly brighter centre out
+// to the settled light grey at the edges, so the surface reads as gently lit rather than flat.
+// The edge is the approved grey (never darker); only the centre lifts towards white. Equal RGB
+// channels so there is no colour tint; both stops are opaque, so it still occludes the grid. The
+// rail box / slot rects are drawn stroke-only over it so the fade stays continuous.
+const DECK_SURFACE_CENTER = "#FDFDFD";
+const DECK_SURFACE_EDGE = "#F6F6F6";
+
 // ===========================================================================
 // Mode and Layers
 // ===========================================================================
@@ -1354,11 +1362,24 @@ class HamiltonSTARDeck extends Deck {
     // the rail area are transparent and reveal the background grid underneath. Kept separate
     // from the border outline below so the inner rail box's outline still draws on top.
     mainShape.add(
-      new Konva.Rect({
-        width: this.size_x,
-        height: this.size_y,
-        fill: "white",
-      })
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
     );
 
     mainShape.add(
@@ -1366,7 +1387,6 @@ class HamiltonSTARDeck extends Deck {
         y: 63,
         width: this.size_x,
         height: this.railHeight,
-        fill: "white",
         stroke: "black",
         strokeWidth: 1,
       })
@@ -1448,11 +1468,24 @@ class VantageDeck extends Deck {
     // surface rather than relying on the global background; otherwise the margin bands outside
     // the rail area are transparent and reveal the background grid underneath.
     mainShape.add(
-      new Konva.Rect({
-        width: this.size_x,
-        height: this.size_y,
-        fill: "white",
-      })
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
     );
 
     mainShape.add(
@@ -1460,7 +1493,6 @@ class VantageDeck extends Deck {
         y: 63,
         width: this.size_x,
         height: this.railHeight,
-        fill: "white",
         stroke: "black",
         strokeWidth: 1,
       })
@@ -1541,11 +1573,24 @@ class OTDeck extends Deck {
     // surface rather than relying on the global background; otherwise the gaps around and
     // between the sites are transparent and reveal the background grid underneath.
     group.add(
-      new Konva.Rect({
-        width: this.size_x,
-        height: this.size_y,
-        fill: "white",
-      })
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
     );
 
     // Draw the sites
@@ -1556,7 +1601,6 @@ class OTDeck extends Deck {
         y: siteLocation.y,
         width: width,
         height: height,
-        fill: "white",
         stroke: "black",
         strokeWidth: 1,
       });
