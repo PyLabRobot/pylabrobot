@@ -728,6 +728,58 @@ main {
   font-weight: 600;
 }
 
+/* Blender-outliner-style eye: a neutral grey icon that is always visible on
+   every row (not hover-revealed), brightening slightly on hover. */
+.tree-node-eye {
+  margin-left: 8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #7a7f87;
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0.85;
+  transition: background 0.12s, color 0.12s, opacity 0.12s;
+}
+
+.tree-node-eye:hover {
+  opacity: 1;
+  background: #dee2e6;
+  color: #333;
+}
+
+/* Hidden item: keep the same grey (Blender does not recolour it), the closed
+   eyelid shape conveys the state; a touch lighter to read as "off". */
+.tree-node-eye.hidden {
+  color: #9aa0a8;
+}
+
+/* Clipped by a hidden ancestor: the eye is disabled (its own toggle can't take
+   effect), shown muted with a not-allowed cursor. Alt-click still reveals the
+   ancestor chain. */
+.tree-node-eye.inherited {
+  color: #c3c7cd;
+  cursor: not-allowed;
+}
+
+.tree-node-eye.inherited:hover {
+  background: transparent;
+  color: #c3c7cd;
+}
+
+.tree-node-row.resource-hidden .tree-node-name {
+  color: #aaa;
+  font-style: italic;
+}
+
+.tree-node-row.resource-hidden .tree-node-type,
+.tree-node-row.resource-hidden .tree-node-info {
+  opacity: 0.5;
+}
+
 .tree-node-children {
   display: block;
 }
