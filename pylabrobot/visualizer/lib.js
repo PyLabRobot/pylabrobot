@@ -35,7 +35,11 @@ var resourceLayer = new Konva.Layer();
 // top-level resource's origin. Purely a visual aid - not a Resource, so it never appears in
 // the Workcell Tree. Lives in its own layer beneath the resources.
 var gridLayer = new Konva.Layer({ listening: false });
-var gridGroup = null; // current grid lines; destroyed and rebuilt on every view change
+var gridGroup = null;       // persistent parent for the grid, created on first draw
+var gridLinesGroup = null;  // grid + axis lines; rebuilt only when spacing or coverage changes
+var gridVignette = null;    // single edge-fade rect; updated in place every frame
+var gridCache = null;       // { scale, loX, hiX, loY, hiY }: the extent the lines currently cover
+var _gridRAF = null;        // pending requestAnimationFrame handle, so redraws coalesce per frame
 var tooltip;
 var stage;
 var selectedResource;
@@ -158,17 +162,51 @@ function updateScaleBar() {
   if (barLabel) barLabel.textContent = bestMM + " mm";
 }
 
-// Background grid: grey lines at the scale-bar spacing, anchored at the top-level resource's
-// origin, covering the current viewport. Rebuilt on every zoom/pan/fit so the spacing stays
-// matched to the scale bar and coverage follows the view. Lines are in world-mm coordinates
-// (the same frame as the resources), so they pan and zoom locked to the deck.
-function updateWorkcellGrid() {
-  if (!stage || !gridLayer) return;
-  if (gridGroup) { gridGroup.destroy(); gridGroup = null; }
-  var scale = Math.abs(stage.scaleX());
-  if (!rootResource || !scale) { gridLayer.batchDraw(); return; }
+// Number of extra grid cells drawn beyond the viewport on each side. The lines cover this
+// margin so a pan only needs to rebuild them once it drifts a whole margin off the drawn
+// extent (see updateWorkcellGrid); until then the existing world-mm lines pan for free.
+var GRID_MARGIN_CELLS = 3;
 
-  var stepMM = niceScaleMM(scale);
+// Schedule a grid redraw on the next animation frame, coalescing the bursts of dragmove/wheel
+// events that fire between frames into a single rebuild. Cheaper than redrawing per event.
+function requestWorkcellGrid() {
+  if (_gridRAF !== null) return;
+  _gridRAF = requestAnimationFrame(function () {
+    _gridRAF = null;
+    updateWorkcellGrid();
+  });
+}
+
+// Background grid: grey lines at the scale-bar spacing, anchored at the top-level resource's
+// origin, with a red x-axis / green y-axis at the origin and a radial edge fade. Lines are in
+// world-mm (the same frame as the resources), so they pan and zoom locked to the deck.
+//
+// Cost control: the lines are the expensive part, so they are rebuilt only when the spacing
+// changes (zoom) or the viewport drifts off the drawn extent (a pan of GRID_MARGIN_CELLS
+// cells). On every other frame - the common case while panning - the lines are left untouched
+// (they pan with the stage transform) and only the single view-pinned vignette rect is moved.
+function updateWorkcellGrid() {
+  if (!stage || !gridLayer || !rootResource) return;
+  var scale = Math.abs(stage.scaleX());
+  if (!scale) return;
+
+  // Create the persistent nodes once: a lines group with the vignette rect layered above it.
+  if (!gridGroup) {
+    gridGroup = new Konva.Group({ listening: false });
+    gridLinesGroup = new Konva.Group({ listening: false });
+    gridVignette = new Konva.Rect({
+      listening: false,
+      fillRadialGradientColorStops: [
+        0, "rgba(255,255,255,0)",
+        0.5, "rgba(255,255,255,0)",
+        1, "rgba(255,255,255,1)",
+      ],
+    });
+    gridGroup.add(gridLinesGroup);
+    gridGroup.add(gridVignette);
+    gridLayer.add(gridGroup);
+  }
+
   var origin = getResourceWorldLocation(rootResource); // highest-level resource's origin
 
   // Viewport bounds in world mm: invert the stage transform over the four screen corners
@@ -182,68 +220,71 @@ function updateWorkcellGrid() {
   var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
   var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
 
-  // Phase the first line to the origin so every line sits at origin + k*stepMM (the origin
-  // itself is always on a line).
-  var startX = origin.x + Math.ceil((minX - origin.x) / stepMM) * stepMM;
-  var startY = origin.y + Math.ceil((minY - origin.y) / stepMM) * stepMM;
+  // Rebuild the lines only when the scale changed (spacing + stroke width depend on it, and it
+  // is constant during a pan) or the viewport has drifted outside the extent they cover.
+  var needLines = !gridCache || gridCache.scale !== scale ||
+    minX < gridCache.loX || maxX > gridCache.hiX ||
+    minY < gridCache.loY || maxY > gridCache.hiY;
+  if (needLines) {
+    var stepMM = niceScaleMM(scale);
+    // Snap the drawn extent out to whole cells (phased to the origin so the origin is on a
+    // line) and add a margin, so lines only change when a pan crosses the margin.
+    var m = GRID_MARGIN_CELLS;
+    var loX = origin.x + (Math.floor((minX - origin.x) / stepMM) - m) * stepMM;
+    var hiX = origin.x + (Math.ceil((maxX - origin.x) / stepMM) + m) * stepMM;
+    var loY = origin.y + (Math.floor((minY - origin.y) / stepMM) - m) * stepMM;
+    var hiY = origin.y + (Math.ceil((maxY - origin.y) / stepMM) + m) * stepMM;
+    gridCache = { scale: scale, loX: loX, hiX: hiX, loY: loY, hiY: hiY };
 
-  gridGroup = new Konva.Group({ listening: false });
-  var strokeW = 1 / scale; // ~1 CSS px regardless of zoom (stroke is scaled by the stage)
-  for (var x = startX; x <= maxX; x += stepMM) {
-    gridGroup.add(new Konva.Line({
-      points: [x, minY, x, maxY], stroke: "#808080", strokeWidth: strokeW,
-      opacity: 0.2, listening: false,
+    gridLinesGroup.destroyChildren();
+    var strokeW = 1 / scale; // ~1 CSS px regardless of zoom (stroke is scaled by the stage)
+    var eps = stepMM * 1e-6;
+    for (var x = loX; x <= hiX + eps; x += stepMM) {
+      gridLinesGroup.add(new Konva.Line({
+        points: [x, loY, x, hiY], stroke: "#808080", strokeWidth: strokeW,
+        opacity: 0.2, listening: false,
+      }));
+    }
+    for (var y = loY; y <= hiY + eps; y += stepMM) {
+      gridLinesGroup.add(new Konva.Line({
+        points: [loX, y, hiX, y], stroke: "#808080", strokeWidth: strokeW,
+        opacity: 0.2, listening: false,
+      }));
+    }
+    // The x-axis: a red line at y=0 (the origin row), matching the x-axis arrow. The y-axis: a
+    // green line at x=0 (the origin column), matching the y-axis arrow. Above the grid lines so
+    // they read on top where they cross; the vignette above still fades them.
+    gridLinesGroup.add(new Konva.Line({
+      points: [loX, origin.y, hiX, origin.y], stroke: "#dc3545",
+      strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
+    }));
+    gridLinesGroup.add(new Konva.Line({
+      points: [origin.x, loY, origin.x, hiY], stroke: "#198754",
+      strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
     }));
   }
-  for (var y = startY; y <= maxY; y += stepMM) {
-    gridGroup.add(new Konva.Line({
-      points: [minX, y, maxX, y], stroke: "#808080", strokeWidth: strokeW,
-      opacity: 0.2, listening: false,
-    }));
-  }
 
-  // The x-axis: a red line at y=0 (the top-level resource's origin row), in the same red as
-  // the x-axis arrow. The y-axis: a green line at x=0 (the origin column), matching the y-axis
-  // arrow. Drawn above the grid lines (so they read on top where they cross) but before the
-  // vignette, so the edge fade applies to them too - they are part of the grid.
-  gridGroup.add(new Konva.Line({
-    points: [minX, origin.y, maxX, origin.y], stroke: "#dc3545",
-    strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
-  }));
-  gridGroup.add(new Konva.Line({
-    points: [origin.x, minY, origin.x, maxY], stroke: "#198754",
-    strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
-  }));
-
-  // Fade the grid out towards the edges of the view window: a radial vignette over everything
-  // above (grid + axes), transparent at the centre and ramping to the background fill at the
-  // corners. It sits on top but still inside gridGroup (bottom layer), so it dims only the
-  // grid and never the resources. Drawn in world-mm over the current viewport bounds, so the
-  // fade is pinned to the view rather than the deck.
+  // Edge fade: a radial vignette over the grid + axes, transparent through the centre and
+  // ramping to the background fill towards the corners of the view window. It is inside
+  // gridGroup (bottom layer) above the lines, so it dims only the grid, never the resources.
+  // Updated in place every frame so the fade stays pinned to the view rather than the deck.
   var halfW = (maxX - minX) / 2, halfH = (maxY - minY) / 2;
   var endR = Math.sqrt(halfW * halfW + halfH * halfH); // centre to corner
-  gridGroup.add(new Konva.Rect({
+  gridVignette.setAttrs({
     x: minX, y: minY, width: maxX - minX, height: maxY - minY,
     fillRadialGradientStartPoint: { x: halfW, y: halfH },
     fillRadialGradientStartRadius: 0,
     fillRadialGradientEndPoint: { x: halfW, y: halfH },
     fillRadialGradientEndRadius: endR,
-    fillRadialGradientColorStops: [
-      0, "rgba(255,255,255,0)",
-      0.5, "rgba(255,255,255,0)",
-      1, "rgba(255,255,255,1)",
-    ],
-    listening: false,
-  }));
+  });
 
-  gridLayer.add(gridGroup);
   gridLayer.batchDraw();
 }
 
 // Call from any code path that changes stage scale or position.
 function refreshScaleOverlays() {
   updateScaleBar();
-  updateWorkcellGrid();
+  requestWorkcellGrid();
   updateBullseyeScale();
   updateWrtBullseyeScale();
   updateTooltipScale();
@@ -3132,7 +3173,7 @@ window.addEventListener("load", function () {
   gridLayer.add(background);
 
   // Redraw the grid on pan (the stage is draggable); the zoom/fit paths refresh overlays.
-  stage.on("dragmove", updateWorkcellGrid);
+  stage.on("dragmove", requestWorkcellGrid);
 
   // Mouse wheel zoom
   const scaleBy = 1.1;
