@@ -36,6 +36,9 @@ function setRootResource(data) {
   fitToViewport();
 
   buildResourceTree(resource);
+
+  // Cache idle plates/tip racks so subsequent updates don't repaint them.
+  cacheAllIdleOwners();
 }
 
 // Save the full serialized resource data before it is destroyed.
@@ -85,6 +88,8 @@ async function processCentralEvent(event, data) {
       resource.draw(resourceLayer);
       setState(data.state);
       addResourceToTree(resource);
+      // Cache the newly-assigned plate/tip rack (or the owner it landed in).
+      cacheResourceGroup(getCacheOwner(resource));
       break;
 
     case "resource_unassigned":
@@ -98,7 +103,16 @@ async function processCentralEvent(event, data) {
 
     case "set_state":
       let allStates = data;
+      // Clear the cache on each affected plate/tip rack so the update renders live,
+      // then re-cache it once it goes idle (handled by markCacheOwnerActive).
+      let activeOwners = new Set();
+      for (let resourceName in allStates) {
+        let owner = getCacheOwner(resources[resourceName]);
+        if (owner) activeOwners.add(owner);
+      }
+      activeOwners.forEach(uncacheResourceGroup);
       setState(allStates);
+      activeOwners.forEach(markCacheOwnerActive);
       // Update only the affected sidepanel nodes instead of rebuilding the entire
       // tree. Wells/tip spots/tubes all refresh their parent's summary, so dedupe
       // by target node to avoid recomputing the same plate/rack summary once per
