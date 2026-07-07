@@ -297,6 +297,7 @@ function refreshScaleOverlays() {
   updateWrtBullseyeScale();
   updateTooltipScale();
   updateDeltaLinesScale();
+  requestZoomRecache();
 }
 
 function drawDeltaLines(resource) {
@@ -740,6 +741,7 @@ function getResourceWorldReferencePoint(resource, xRefStr, yRefStr, zRefStr) {
 var scaleX, scaleY;
 
 var resources = {}; // name -> Resource object
+var methodRegistry = {}; // resource type name -> public method signatures (sent once per class)
 // Serialized resource data saved before resources are destroyed (e.g. picked up by arm).
 // Used by the arm panel to re-instantiate the resource and draw it on a live Konva stage
 // using the exact same draw() code as the main canvas — guaranteeing visual consistency.
@@ -961,7 +963,10 @@ class Resource {
     this.parent = parent;
     this.resourceType = resourceData.type || this.constructor.name;
     this.category = resourceData.category || "";
-    this.methods = resourceData.methods || [];
+    // Methods are sent once per class in methodRegistry (keyed by serialized type);
+    // fall back to an inline list for backward compatibility.
+    this.methods =
+      resourceData.methods || methodRegistry[resourceData.type] || [];
     this.model = resourceData.model || null;
     this.rotation = resourceData.rotation || null;
     this.barcode = resourceData.barcode || null;
@@ -3577,6 +3582,9 @@ function setResourceHidden(resourceName, hidden) {
     hiddenResourceNames.delete(resourceName);
   }
   applyOwnVisibility(resources[resourceName]);
+  // A visibility change on a plate's descendant (or the plate itself) must rebuild
+  // the cached bitmap, otherwise the change would not show until the next update.
+  touchCacheOwner(resources[resourceName]);
   resourceLayer.draw();
   refreshTreeVisibilityState();
 }
@@ -3593,6 +3601,7 @@ function revealResourceAndAncestors(resource) {
     applyOwnVisibility(p);
     p = p.parent;
   }
+  touchCacheOwner(resource);
   resourceLayer.draw();
   refreshTreeVisibilityState();
 }
@@ -4165,6 +4174,9 @@ function showHoverHighlight(resourceName) {
   clearHoverHighlight();
   const resource = resources[resourceName];
   if (!resource || !resource.group) return;
+  // The highlight rects are added inside the group; if that group (or its plate)
+  // is cached the rects would not render, so uncache the owner while highlighted.
+  suspendCacheForHighlight(resource);
   // Draw both highlight rects inside the resource's Konva.Group so they inherit
   // its transform (location + rotation, chained through any rotated parents).
   // Drawing on resourceLayer with the un-rotated absolute location leaves them
@@ -4206,6 +4218,7 @@ function clearHoverHighlight() {
     sidepanelHoverRect.destroy();
     sidepanelHoverRect = null;
   }
+  resumeCacheAfterHighlight();
   resourceLayer.draw();
 }
 
@@ -5705,4 +5718,136 @@ function openAllMachineToolPanels() {
       }
     }
   }
+}
+
+// ===========================================================================
+// Idle-plate caching (performance)
+// ---------------------------------------------------------------------------
+// A whole-layer Konva redraw costs proportionally to the number of shapes on the
+// layer, so on a busy deck a single well update repaints every other plate too.
+// While a plate/tip rack is idle we cache its group to an offscreen bitmap so it
+// blits in one operation instead of re-rendering all its wells/tips. When an
+// update arrives for a plate we clear its cache (so the new fill renders live),
+// then re-cache it after a short idle. The group hierarchy is untouched, so
+// transforms, rotation, moves, and hit detection are unaffected.
+// ===========================================================================
+const CACHE_IDLE_MS = 250;              // re-cache a plate this long after its last update
+const MAX_CACHE_PIXEL_RATIO = 4;        // cap so a zoomed-in cache bitmap stays bounded in memory
+const ZOOM_RECACHE_FACTOR = 1.5;        // re-cache when we can get this much sharper than the current cache
+const _recacheTimers = new Map();       // resourceName -> idle re-cache timeout handle
+let _cachePixelRatio = null;            // pixel ratio at which current caches were built
+let _highlightCacheOwner = null;        // owner uncached to show a sidebar hover highlight
+let _zoomRecacheRAF = null;             // coalesces zoom-driven re-cache to one per frame
+
+function isCacheOwnerType(resource) {
+  return resource instanceof Plate || resource instanceof TipRack;
+}
+
+// Nearest ancestor (or self) whose group we cache as a unit.
+function getCacheOwner(resource) {
+  let r = resource;
+  while (r) {
+    if (isCacheOwnerType(r)) return r;
+    r = r.parent;
+  }
+  return null;
+}
+
+// Cache bitmap resolution tracks the on-screen device pixels per mm (stage scale times
+// the display's device pixel ratio) so an idle cached plate stays as sharp as a live one,
+// capped to bound bitmap memory (matters most on low-RAM hosts such as a Raspberry Pi).
+function currentCachePixelRatio() {
+  const scale = (typeof stage !== "undefined" && stage) ? Math.abs(stage.scaleX()) : 1;
+  const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+  return Math.min(MAX_CACHE_PIXEL_RATIO, Math.max(1, scale * dpr));
+}
+
+function cacheResourceGroup(resource) {
+  if (!resource || !resource.group) return;
+  if (hiddenResourceNames.has(resource.name)) return; // don't freeze a hidden item visible
+  try {
+    if (!resource.group.isCached()) {
+      resource.group.cache({ pixelRatio: currentCachePixelRatio() });
+    }
+  } catch (e) {
+    // group may not be renderable yet (zero size); skip silently
+  }
+}
+
+function uncacheResourceGroup(resource) {
+  if (resource && resource.group && resource.group.isCached()) {
+    resource.group.clearCache();
+  }
+}
+
+// Clear the cache now (so a pending update renders live), then re-cache after idle.
+function markCacheOwnerActive(resource) {
+  if (!resource || !resource.group) return;
+  uncacheResourceGroup(resource);
+  const name = resource.name;
+  if (_recacheTimers.has(name)) clearTimeout(_recacheTimers.get(name));
+  _recacheTimers.set(name, setTimeout(() => {
+    _recacheTimers.delete(name);
+    if (resources[name] === resource) {
+      cacheResourceGroup(resource);
+      resourceLayer.batchDraw();
+    }
+  }, CACHE_IDLE_MS));
+}
+
+// Uncache the owner of `resource` and schedule its re-cache. Used by callers that
+// mutate a plate's contents outside the set_state path (e.g. per-item visibility).
+function touchCacheOwner(resource) {
+  markCacheOwnerActive(getCacheOwner(resource));
+}
+
+function cacheAllIdleOwners() {
+  for (const name in resources) {
+    const r = resources[name];
+    if (isCacheOwnerType(r) && !_recacheTimers.has(name)) cacheResourceGroup(r);
+  }
+  _cachePixelRatio = currentCachePixelRatio();
+  resourceLayer.batchDraw();
+}
+
+// Uncache the owner of a hovered resource so a sidebar highlight (drawn inside the
+// group) is visible; the owner is re-cached when the highlight clears.
+function suspendCacheForHighlight(resource) {
+  const owner = getCacheOwner(resource);
+  if (!owner || !owner.group) return;
+  if (_recacheTimers.has(owner.name)) { clearTimeout(_recacheTimers.get(owner.name)); _recacheTimers.delete(owner.name); }
+  uncacheResourceGroup(owner);
+  _highlightCacheOwner = owner;
+}
+
+function resumeCacheAfterHighlight() {
+  if (_highlightCacheOwner) {
+    const owner = _highlightCacheOwner;
+    _highlightCacheOwner = null;
+    if (resources[owner.name] === owner) markCacheOwnerActive(owner);
+  }
+}
+
+// On zoom-in past the resolution the caches were built at, rebuild them sharper.
+// Coalesced to one pass per frame; skips owners that are actively updating or highlighted.
+function requestZoomRecache() {
+  if (_zoomRecacheRAF !== null || typeof stage === "undefined" || !stage) return;
+  _zoomRecacheRAF = requestAnimationFrame(function () {
+    _zoomRecacheRAF = null;
+    if (_cachePixelRatio === null) return;
+    const target = currentCachePixelRatio();
+    // Only rebuild when we can get meaningfully sharper; this also no-ops once the
+    // pixel ratio is capped (target stops growing), so zooming further in is free.
+    if (target <= _cachePixelRatio * ZOOM_RECACHE_FACTOR) return;
+    const highlightedName = _highlightCacheOwner && _highlightCacheOwner.name;
+    for (const name in resources) {
+      const r = resources[name];
+      if (isCacheOwnerType(r) && !_recacheTimers.has(name) && name !== highlightedName) {
+        uncacheResourceGroup(r);
+        cacheResourceGroup(r);
+      }
+    }
+    _cachePixelRatio = target;
+    resourceLayer.batchDraw();
+  });
 }
