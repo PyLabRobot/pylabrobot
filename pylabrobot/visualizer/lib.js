@@ -21,6 +21,14 @@ const RESOURCE_COLORS = {
   ContainerBackground: "#E0EAEE"
 };
 
+// Deck surface fill: a soft central fade - a radial gradient from a slightly brighter centre out
+// to the settled light grey at the edges, so the surface reads as gently lit rather than flat.
+// The edge is the approved grey (never darker); only the centre lifts towards white. Equal RGB
+// channels so there is no colour tint; both stops are opaque, so it still occludes the grid. The
+// rail box / slot rects are drawn stroke-only over it so the fade stays continuous.
+const DECK_SURFACE_CENTER = "#FDFDFD";
+const DECK_SURFACE_EDGE = "#F6F6F6";
+
 // ===========================================================================
 // Mode and Layers
 // ===========================================================================
@@ -31,6 +39,15 @@ const MODE_GUI = "gui";
 
 var layer = new Konva.Layer();
 var resourceLayer = new Konva.Layer();
+// Background grid: grey, semi-transparent lines at the scale-bar spacing, anchored at the
+// top-level resource's origin. Purely a visual aid - not a Resource, so it never appears in
+// the Workcell Tree. Lives in its own layer beneath the resources.
+var gridLayer = new Konva.Layer({ listening: false });
+var gridGroup = null;       // persistent parent for the grid, created on first draw
+var gridLinesGroup = null;  // grid + axis lines; rebuilt only when spacing or coverage changes
+var gridVignette = null;    // single edge-fade rect; updated in place every frame
+var gridCache = null;       // { scale, loX, hiX, loY, hiY }: the extent the lines currently cover
+var _gridRAF = null;        // pending requestAnimationFrame handle, so redraws coalesce per frame
 var tooltip;
 var stage;
 var selectedResource;
@@ -128,20 +145,24 @@ function updateDeltaLinesScale() {
   resourceLayer.draw();
 }
 
+// The scale bar and the grid share one "nice" spacing: the smallest round mm step from the
+// ramp whose on-screen width is at least 60px (falls back to the largest step when zoomed
+// far out). `scale` is CSS pixels per mm (stage.scaleX()).
+function niceScaleMM(scale) {
+  var niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  var bestMM = niceSteps[0];
+  for (var i = 0; i < niceSteps.length; i++) {
+    if (niceSteps[i] * scale >= 60) return niceSteps[i];
+    bestMM = niceSteps[i];
+  }
+  return bestMM;
+}
+
 // Scale bar update: picks a round mm value that fits ~80-120px on screen.
 function updateScaleBar() {
   if (!stage) return;
   var scale = stage.scaleX(); // CSS pixels per mm
-  // Choose a nice round distance whose bar width falls near 100px
-  var niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
-  var bestMM = niceSteps[0];
-  for (var i = 0; i < niceSteps.length; i++) {
-    if (niceSteps[i] * scale >= 60) {
-      bestMM = niceSteps[i];
-      break;
-    }
-    bestMM = niceSteps[i];
-  }
+  var bestMM = niceScaleMM(scale);
   var barPx = bestMM * scale;
   var barLine = document.getElementById("scale-bar-line");
   var barLabel = document.getElementById("scale-bar-label");
@@ -149,9 +170,129 @@ function updateScaleBar() {
   if (barLabel) barLabel.textContent = bestMM + " mm";
 }
 
+// Number of extra grid cells drawn beyond the viewport on each side. The lines cover this
+// margin so a pan only needs to rebuild them once it drifts a whole margin off the drawn
+// extent (see updateWorkcellGrid); until then the existing world-mm lines pan for free.
+var GRID_MARGIN_CELLS = 3;
+
+// Schedule a grid redraw on the next animation frame, coalescing the bursts of dragmove/wheel
+// events that fire between frames into a single rebuild. Cheaper than redrawing per event.
+function requestWorkcellGrid() {
+  if (_gridRAF !== null) return;
+  _gridRAF = requestAnimationFrame(function () {
+    _gridRAF = null;
+    updateWorkcellGrid();
+  });
+}
+
+// Background grid: grey lines at the scale-bar spacing, anchored at the top-level resource's
+// origin, with a red x-axis / green y-axis at the origin and a radial edge fade. Lines are in
+// world-mm (the same frame as the resources), so they pan and zoom locked to the deck.
+//
+// Cost control: the lines are the expensive part, so they are rebuilt only when the spacing
+// changes (zoom) or the viewport drifts off the drawn extent (a pan of GRID_MARGIN_CELLS
+// cells). On every other frame - the common case while panning - the lines are left untouched
+// (they pan with the stage transform) and only the single view-pinned vignette rect is moved.
+function updateWorkcellGrid() {
+  if (!stage || !gridLayer || !rootResource) return;
+  var scale = Math.abs(stage.scaleX());
+  if (!scale) return;
+
+  // Create the persistent nodes once: a lines group with the vignette rect layered above it.
+  if (!gridGroup) {
+    gridGroup = new Konva.Group({ listening: false });
+    gridLinesGroup = new Konva.Group({ listening: false });
+    gridVignette = new Konva.Rect({
+      listening: false,
+      fillRadialGradientColorStops: [
+        0, "rgba(255,255,255,0)",
+        0.5, "rgba(255,255,255,0)",
+        1, "rgba(255,255,255,1)",
+      ],
+    });
+    gridGroup.add(gridLinesGroup);
+    gridGroup.add(gridVignette);
+    gridLayer.add(gridGroup);
+  }
+
+  var origin = getResourceWorldLocation(rootResource); // highest-level resource's origin
+
+  // Viewport bounds in world mm: invert the stage transform over the four screen corners
+  // (handles the y-flip and any pan/offset).
+  var inv = stage.getAbsoluteTransform().copy().invert();
+  var w = stage.width(), h = stage.height();
+  var pts = [inv.point({ x: 0, y: 0 }), inv.point({ x: w, y: 0 }),
+             inv.point({ x: 0, y: h }), inv.point({ x: w, y: h })];
+  var xs = pts.map(function (p) { return p.x; });
+  var ys = pts.map(function (p) { return p.y; });
+  var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+  var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+
+  // Rebuild the lines only when the scale changed (spacing + stroke width depend on it, and it
+  // is constant during a pan) or the viewport has drifted outside the extent they cover.
+  var needLines = !gridCache || gridCache.scale !== scale ||
+    minX < gridCache.loX || maxX > gridCache.hiX ||
+    minY < gridCache.loY || maxY > gridCache.hiY;
+  if (needLines) {
+    var stepMM = niceScaleMM(scale);
+    // Snap the drawn extent out to whole cells (phased to the origin so the origin is on a
+    // line) and add a margin, so lines only change when a pan crosses the margin.
+    var m = GRID_MARGIN_CELLS;
+    var loX = origin.x + (Math.floor((minX - origin.x) / stepMM) - m) * stepMM;
+    var hiX = origin.x + (Math.ceil((maxX - origin.x) / stepMM) + m) * stepMM;
+    var loY = origin.y + (Math.floor((minY - origin.y) / stepMM) - m) * stepMM;
+    var hiY = origin.y + (Math.ceil((maxY - origin.y) / stepMM) + m) * stepMM;
+    gridCache = { scale: scale, loX: loX, hiX: hiX, loY: loY, hiY: hiY };
+
+    gridLinesGroup.destroyChildren();
+    var strokeW = 1 / scale; // ~1 CSS px regardless of zoom (stroke is scaled by the stage)
+    var eps = stepMM * 1e-6;
+    for (var x = loX; x <= hiX + eps; x += stepMM) {
+      gridLinesGroup.add(new Konva.Line({
+        points: [x, loY, x, hiY], stroke: "#808080", strokeWidth: strokeW,
+        opacity: 0.2, listening: false,
+      }));
+    }
+    for (var y = loY; y <= hiY + eps; y += stepMM) {
+      gridLinesGroup.add(new Konva.Line({
+        points: [loX, y, hiX, y], stroke: "#808080", strokeWidth: strokeW,
+        opacity: 0.2, listening: false,
+      }));
+    }
+    // The x-axis: a red line at y=0 (the origin row), matching the x-axis arrow. The y-axis: a
+    // green line at x=0 (the origin column), matching the y-axis arrow. Above the grid lines so
+    // they read on top where they cross; the vignette above still fades them.
+    gridLinesGroup.add(new Konva.Line({
+      points: [loX, origin.y, hiX, origin.y], stroke: "#dc3545",
+      strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
+    }));
+    gridLinesGroup.add(new Konva.Line({
+      points: [origin.x, loY, origin.x, hiY], stroke: "#198754",
+      strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
+    }));
+  }
+
+  // Edge fade: a radial vignette over the grid + axes, transparent through the centre and
+  // ramping to the background fill towards the corners of the view window. It is inside
+  // gridGroup (bottom layer) above the lines, so it dims only the grid, never the resources.
+  // Updated in place every frame so the fade stays pinned to the view rather than the deck.
+  var halfW = (maxX - minX) / 2, halfH = (maxY - minY) / 2;
+  var endR = Math.sqrt(halfW * halfW + halfH * halfH); // centre to corner
+  gridVignette.setAttrs({
+    x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+    fillRadialGradientStartPoint: { x: halfW, y: halfH },
+    fillRadialGradientStartRadius: 0,
+    fillRadialGradientEndPoint: { x: halfW, y: halfH },
+    fillRadialGradientEndRadius: endR,
+  });
+
+  gridLayer.batchDraw();
+}
+
 // Call from any code path that changes stage scale or position.
 function refreshScaleOverlays() {
   updateScaleBar();
+  requestWorkcellGrid();
   updateBullseyeScale();
   updateWrtBullseyeScale();
   updateTooltipScale();
@@ -865,6 +1006,9 @@ class Resource {
       rotation: this.rotation ? this.rotation.z : 0,
       draggable: this.draggable,
     });
+    // Re-apply the tree eye-toggle state; draw() runs on every redraw (volume
+    // change, tip pickup, re-assign) and would otherwise resurrect a hidden item.
+    this.group.visible(!hiddenResourceNames.has(this.name));
     this.mainShape = this.drawMainShape();
     if (this.mainShape !== undefined) {
       this.group.add(this.mainShape);
@@ -1219,12 +1363,37 @@ class HamiltonSTARDeck extends Deck {
   drawMainShape() {
     // Draw a transparent rectangle with an outline
     let mainShape = new Konva.Group();
+
+    // Opaque white footprint fill, drawn first (behind everything) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the margin bands outside
+    // the rail area are transparent and reveal the background grid underneath. Kept separate
+    // from the border outline below so the inner rail box's outline still draws on top.
+    mainShape.add(
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
+    );
+
     mainShape.add(
       new Konva.Rect({
         y: 63,
         width: this.size_x,
         height: this.railHeight,
-        fill: "white",
         stroke: "black",
         strokeWidth: 1,
       })
@@ -1301,12 +1470,36 @@ class VantageDeck extends Deck {
 
   drawMainShape() {
     let mainShape = new Konva.Group();
+
+    // Opaque white footprint fill, drawn first (behind everything) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the margin bands outside
+    // the rail area are transparent and reveal the background grid underneath.
+    mainShape.add(
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
+    );
+
     mainShape.add(
       new Konva.Rect({
         y: 63,
         width: this.size_x,
         height: this.railHeight,
-        fill: "white",
         stroke: "black",
         strokeWidth: 1,
       })
@@ -1366,6 +1559,31 @@ class OTDeck extends Deck {
     // The slot rectangles are drawn by the ResourceHolder children; the main shape is just the deck
     // border. The slot-number labels are added in draw() so they sit on top of the holders.
     let group = new Konva.Group({});
+
+    // Opaque footprint fill, drawn first (behind the slot holders) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the gaps around and between
+    // the slots are transparent and reveal the background grid underneath.
+    group.add(
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
+    );
+
     group.add(
       new Konva.Rect({
         width: this.size_x,
@@ -2166,7 +2384,8 @@ function _showPipetteInfoPanelInner(title, type, attrs, anchorDropdown) {
 }
 
 function fillHeadIcons(panel, headState) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   // Fixed height: pipette (27) + max tip (80mm * 0.8 = 64px)
   var maxTipPx = 64; // 80mm max tip
   var fixedSvgH = 27 + maxTipPx;
@@ -2347,7 +2566,8 @@ function head96PosId(ch, startCh) {
 }
 
 function fillHead96Grid(panel, head96State) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   if (!head96State || Object.keys(head96State).length === 0) {
     // Set panel dimensions to match a normal 96-head grid, then center message
     panel.style.minWidth = "180px";
@@ -2395,7 +2615,7 @@ function fillHead96Grid(panel, head96State) {
           { key: "channels", value: "96" },
           { key: "tips_loaded", value: tipCount + " / 96" },
         ];
-        showPipetteInfoPanel("96-Head Pipette", "CoRe96Head", attrs, panel, String(startCh), "channel");
+        showPipetteInfoPanel("96-Channel Head Pipette", "Head96", attrs, panel, String(startCh), "channel");
       });
     })(startCh, head96State);
     box.style.display = "inline-flex";
@@ -2727,7 +2947,8 @@ function buildSingleArm(armData, anchorDropdown, armId) {
 }
 
 function fillArmPanel(panel, armState) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   if (!armState || Object.keys(armState).length === 0) {
     // Set panel dimensions to match a normal arm panel, then center message
     var stdW = Math.round((Math.round(127 * Math.min(80 / 127, 80 / 86)) + 16) * 1.1) + 28;
@@ -2979,11 +3200,18 @@ window.addEventListener("load", function () {
     listening: false,
   });
 
-  // add the layer to the stage
+  // add the layers to the stage; gridLayer is bottom-most so the grid sits beneath every
+  // resource, then the resource layer, then the overlay layer on top.
+  stage.add(gridLayer);
   stage.add(layer);
   stage.add(resourceLayer);
 
-  layer.add(background);
+  // White fill lives at the very bottom of the grid layer, so the grid lines draw over it
+  // but still beneath all resources.
+  gridLayer.add(background);
+
+  // Redraw the grid on pan (the stage is draggable); the zoom/fit paths refresh overlays.
+  stage.on("dragmove", requestWorkcellGrid);
 
   // Mouse wheel zoom
   const scaleBy = 1.1;
@@ -3027,6 +3255,10 @@ window.addEventListener("load", function () {
       stage.height(newHeight);
       stage.offsetY(newHeight);
     }
+    // Re-clamp any open capability panels so a remembered position can't leave a
+    // panel stranded off-screen after the drawing area shrinks (window resize,
+    // sidebar expand/collapse). Positions and sizes are unchanged when they fit.
+    repositionAllMachineToolPanels();
   });
   resizeObserver.observe(canvas);
 
@@ -3271,6 +3503,130 @@ var sidepanelHighlightRect = null;
 var sidepanelHoverRect = null;
 var sidepanelHoverGlow = null;
 
+// Names of resources currently hidden via the tree eye toggle. Keyed by name
+// rather than by JS instance so the state survives the destroy/redraw and
+// unassign/re-assign cycles that recreate a resource's Konva group.
+var hiddenResourceNames = new Set();
+
+// Blender-outliner-style eye. Shown: open almond outline with a filled pupil.
+// Hidden: a closed eyelid (downward arc), matching Blender's hide toggle.
+function treeEyeSvg(hidden) {
+  if (hidden) {
+    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M3 10.5c2.6 3.3 5.9 5 9 5s6.4-1.7 9-5" stroke-width="2.2"/></svg>';
+  }
+  return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M3.07 12C5.23 8.2 8.43 6 12 6s6.77 2.2 8.93 6c-2.16 3.8-5.36 6-8.93 6s-6.77-2.2-8.93-6Z" stroke-width="2.2"/>' +
+    '<circle cx="12" cy="12" r="3.8" fill="currentColor" stroke="none"/></svg>';
+}
+
+// The Set stores only *explicitly* hidden resources (a resource's own state).
+// A resource's effective visibility is its own state AND every ancestor being
+// visible; the ancestor half is enforced for free by Konva group nesting, so we
+// never copy hidden-ness onto descendants. This keeps "hidden because I was
+// toggled off" distinct from "hidden because a parent is off".
+
+// True if any ancestor (not the resource itself) is explicitly hidden, so the
+// resource is clipped on the canvas no matter its own state.
+function isHiddenByAncestor(resource) {
+  var p = resource ? resource.parent : undefined;
+  while (p) {
+    if (hiddenResourceNames.has(p.name)) return true;
+    p = p.parent;
+  }
+  return false;
+}
+
+// Push a resource's own hidden flag onto its Konva group. Descendants are
+// clipped automatically because their groups are nested inside this one, and
+// the resource keeps its slot in the parent's child list so re-showing
+// preserves stacking order (a destroy/redraw would re-append it last).
+function applyOwnVisibility(resource) {
+  if (resource && resource.group !== undefined) {
+    resource.group.visible(!hiddenResourceNames.has(resource.name));
+  }
+}
+
+function setResourceHidden(resourceName, hidden) {
+  if (hidden) {
+    hiddenResourceNames.add(resourceName);
+  } else {
+    hiddenResourceNames.delete(resourceName);
+  }
+  applyOwnVisibility(resources[resourceName]);
+  resourceLayer.draw();
+  refreshTreeVisibilityState();
+}
+
+// Opt-in gesture (alt-click) for a row clipped by a hidden ancestor: clear this
+// resource's own flag and every hidden ancestor so it actually becomes visible.
+function revealResourceAndAncestors(resource) {
+  if (!resource) return;
+  hiddenResourceNames.delete(resource.name);
+  applyOwnVisibility(resource);
+  var p = resource.parent;
+  while (p) {
+    hiddenResourceNames.delete(p.name);
+    applyOwnVisibility(p);
+    p = p.parent;
+  }
+  resourceLayer.draw();
+  refreshTreeVisibilityState();
+}
+
+// Sync one tree row from current state. Eye *shape* follows the resource's own
+// flag (closed eyelid iff explicitly hidden). The `inherited` styling marks
+// rows clipped by a hidden ancestor: their own toggle can't take effect, so the
+// eye is shown disabled with a tooltip rather than letting a click lie about
+// what happened on the canvas.
+function updateRowVisibility(row, resource) {
+  var ownHidden = hiddenResourceNames.has(resource.name);
+  var inherited = isHiddenByAncestor(resource);
+  var eye = row.querySelector(":scope > .tree-node-eye");
+  if (eye) {
+    eye.classList.toggle("hidden", ownHidden);
+    eye.classList.toggle("inherited", inherited);
+    eye.innerHTML = treeEyeSvg(ownHidden);
+    eye.title = inherited
+      ? "Hidden by a parent - alt-click to reveal it"
+      : (ownHidden ? "Show" : "Hide");
+  }
+  row.classList.toggle("resource-hidden", ownHidden || inherited);
+}
+
+// Re-sync every tree row's eye/dim state. Cheap: only rows present in the DOM
+// are walked (leaf wells/tips are not surfaced as tree nodes).
+function refreshTreeVisibilityState() {
+  var tree = document.getElementById("resource-tree");
+  if (!tree) return;
+  var nodes = tree.querySelectorAll(".tree-node[data-resource-name]");
+  for (var i = 0; i < nodes.length; i++) {
+    var resource = resources[nodes[i].dataset.resourceName];
+    var row = nodes[i].querySelector(":scope > .tree-node-row");
+    if (resource && row) updateRowVisibility(row, resource);
+  }
+}
+
+// Build the per-row eye button. State is read from the Set (not a local flag)
+// so it stays correct when a subtree is rebuilt via replaceWith.
+function createVisibilityToggle(resourceName) {
+  var btn = document.createElement("span");
+  btn.className = "tree-node-eye";
+  btn.innerHTML = treeEyeSvg(false);
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var resource = resources[resourceName];
+    if (resource && isHiddenByAncestor(resource)) {
+      // Clipped by a hidden ancestor: a plain click can't take effect, so it is
+      // a no-op. Alt-click reveals the ancestor chain to force it visible.
+      if (e.altKey) revealResourceAndAncestors(resource);
+      return;
+    }
+    setResourceHidden(resourceName, !hiddenResourceNames.has(resourceName));
+  });
+  return btn;
+}
+
 function getResourceTypeName(resource) {
   return resource.constructor.name;
 }
@@ -3298,6 +3654,10 @@ function isTubeRackLike(resource) {
     (resource.children.length > 0 && resource.children[0] instanceof Tube);
 }
 
+function isLid(resource) {
+  return resource.category === "lid" || resource.resourceType === "Lid";
+}
+
 function isCarrierLike(resource) {
   return resource instanceof Carrier ||
     ["carrier", "tip_carrier", "plate_carrier", "trough_carrier", "tube_carrier"]
@@ -3317,13 +3677,13 @@ function getResourceSummary(resource) {
   }
 
   if (isPlateLike(resource)) {
-    const numChildren = resource.children.length;
-    return `${numChildren} wells`;
+    const numWells = resource.children.filter((c) => !isLid(c)).length;
+    return `${numWells} wells`;
   }
 
   if (isTubeRackLike(resource)) {
-    const numChildren = resource.children.length;
-    return `${numChildren} tubes`;
+    const numTubes = resource.children.filter((c) => !isLid(c)).length;
+    return `${numTubes} tubes`;
   }
 
   if (resource instanceof Container) {
@@ -3427,9 +3787,10 @@ function getDisplayChildren(resource) {
     return result;
   }
 
-  // Leaf containers: don't show individual wells/tips/tubes
+  // Leaf containers: hide the individual wells/tips/tubes, but still surface
+  // other children such as a lid so they appear as their own tree nodes.
   if (isTipRackLike(resource) || isPlateLike(resource) || isTubeRackLike(resource)) {
-    return [];
+    return (resource.children || []).filter(isLid);
   }
 
   return resource.children || [];
@@ -3529,6 +3890,8 @@ function buildTreeNodeDOM(resource, depth, slotIndex) {
   row.appendChild(nameSpan);
   row.appendChild(typeSpan);
   row.appendChild(info);
+  row.appendChild(createVisibilityToggle(resource.name));
+  updateRowVisibility(row, resource);
   node.appendChild(row);
 
   // Hover row to show yellow highlight on canvas
@@ -3627,6 +3990,8 @@ function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
   rootRow.appendChild(rootDot);
   rootRow.appendChild(rootName);
   rootRow.appendChild(rootType);
+  rootRow.appendChild(createVisibilityToggle(rootResource.name));
+  updateRowVisibility(rootRow, rootResource);
   rootNode.appendChild(rootRow);
 
   rootRow.addEventListener("mouseenter", function () {
@@ -4887,6 +5252,168 @@ var integratedArmSVG =
   '<polygon points="29,30.3 30.5,29.5 30.5,38.5 29,39.3" fill="#1a1a1a" stroke="#000" stroke-width="0.4"/>' +
   '</g>';
 
+// Remembered machine-tool panel positions, keyed by panel id. Empty by default,
+// so each panel falls back to its computed group position until the user drags it.
+var machineToolPanelPositions = {};
+(function loadMachineToolPanelPositions() {
+  try {
+    var raw = window.localStorage.getItem("plr-machine-tool-panel-positions");
+    if (raw) machineToolPanelPositions = JSON.parse(raw) || {};
+  } catch (e) {
+    machineToolPanelPositions = {};
+  }
+})();
+
+function saveMachineToolPanelPositions() {
+  try {
+    window.localStorage.setItem(
+      "plr-machine-tool-panel-positions",
+      JSON.stringify(machineToolPanelPositions)
+    );
+  } catch (e) {
+    // localStorage unavailable (private mode / quota) — positions persist in-memory only.
+  }
+}
+
+// Reference to the per-liquid-handler positionPanels routine, published once it
+// is defined in buildNavbarLHMachineTools. It is pure given its arguments, so a
+// single reference can reposition any liquid handler's panels.
+var repositionMachineToolPanels = null;
+
+// Reposition every liquid handler's open panels using the current remembered
+// positions (a moved panel stays where it was dropped, others snap to default).
+function repositionAllMachineToolPanels() {
+  if (!repositionMachineToolPanels) return;
+  for (var name in resources) {
+    if (!(resources[name] instanceof LiquidHandler)) continue;
+    var singleBtn = document.getElementById("single-channel-btn-" + name);
+    if (singleBtn) repositionMachineToolPanels(name, singleBtn);
+  }
+}
+
+// Show a panel's return indicator only when that panel has been dragged off its
+// default position.
+function updatePanelResetVisibility() {
+  var btns = document.querySelectorAll(".machine-tool-dropdown .panel-reset-btn");
+  for (var i = 0; i < btns.length; i++) {
+    var panel = btns[i].parentElement;
+    btns[i].style.display = panel && machineToolPanelPositions[panel.id] ? "" : "none";
+  }
+}
+
+// Return a single panel to its default position and forget its remembered spot.
+function resetPanelPosition(panel) {
+  delete machineToolPanelPositions[panel.id];
+  saveMachineToolPanelPositions();
+  repositionAllMachineToolPanels();
+  updatePanelResetVisibility();
+}
+
+// Clear a panel's state-driven content while preserving the return indicator.
+// The fill functions rebuild content on every state update; using this instead
+// of panel.innerHTML = "" keeps the reset button (and its listeners) intact.
+function clearPanelContent(panel) {
+  var children = Array.prototype.slice.call(panel.children);
+  for (var i = 0; i < children.length; i++) {
+    if (!children[i].classList.contains("panel-reset-btn")) {
+      panel.removeChild(children[i]);
+    }
+  }
+}
+
+// Ensure a panel carries a top-right return indicator. Idempotent: the button is
+// created once and only its visibility is refreshed on later fills. The
+// indicator returns this panel to its default position when clicked.
+function ensurePanelResetButton(panel) {
+  var btn = panel.querySelector(".panel-reset-btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.className = "panel-reset-btn";
+    btn.title = "Return this panel to its default position";
+    btn.setAttribute("aria-label", "Return panel to default position");
+    // Same house icon as the deck "Reset view" home button.
+    btn.innerHTML =
+      '<svg width="15" height="15" viewBox="0 0 20 20" aria-hidden="true">' +
+      '<path d="M10 1L1 9h3v8h5v-5h2v5h5V9h3L10 1z" fill="currentColor"/></svg>';
+    btn.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      resetPanelPosition(panel);
+    });
+    panel.appendChild(btn);
+  }
+  btn.style.display = machineToolPanelPositions[panel.id] ? "" : "none";
+}
+
+// Place a machine-tool panel at its remembered position if the user has dragged
+// it, otherwise at the supplied default. Both are clamped to keep the panel
+// inside main; the left clamp uses the measured width (knownW) rather than
+// offsetWidth so a right-edge panel can't wrap and inflate its own height.
+function applyMachineToolPanelPos(panel, defLeft, defTop, knownW, mainRect) {
+  var stored = machineToolPanelPositions[panel.id];
+  // Only trust a stored position with finite numbers; a corrupted or partial
+  // localStorage entry falls back to the default rather than "NaNpx".
+  var hasStored = stored && Number.isFinite(stored.left) && Number.isFinite(stored.top);
+  var left = hasStored ? stored.left : defLeft;
+  var top = hasStored ? stored.top : defTop;
+  var maxLeft = Math.max(0, mainRect.width - knownW);
+  left = Math.max(0, Math.min(left, maxLeft));
+  panel.style.left = left + "px";
+  var maxTop = Math.max(0, mainRect.height - panel.offsetHeight);
+  top = Math.max(0, Math.min(top, maxTop));
+  panel.style.top = top + "px";
+}
+
+// Allow a machine-tool panel to be repositioned by dragging its background or
+// edges. Drags starting on an object inside the panel (channels, tips, grid,
+// gripper) are ignored, since those clicks already open info panels.
+function makeMachineToolPanelDraggable(panel) {
+  panel.addEventListener("mousedown", function (e) {
+    if (e.button !== 0) return;
+    if (e.target !== panel) return; // only the padding/border/background, not the objects
+    var mainEl = document.querySelector("main");
+    if (!mainEl) return;
+    var mainRect = mainEl.getBoundingClientRect();
+    var startX = e.clientX, startY = e.clientY;
+    var startLeft = parseFloat(panel.style.left) || 0;
+    var startTop = parseFloat(panel.style.top) || 0;
+    var panelW = panel.offsetWidth, panelH = panel.offsetHeight;
+    e.preventDefault();
+    panel.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    function onMove(ev) {
+      // If the button was released outside the window, the browser never sends
+      // mouseup to the document; the next move over the page reports no buttons
+      // held, so end the drag here instead of letting the panel "stick" to the
+      // cursor.
+      if (ev.buttons === 0) { onUp(); return; }
+      var nl = startLeft + (ev.clientX - startX);
+      var nt = startTop + (ev.clientY - startY);
+      nl = Math.max(0, Math.min(nl, Math.max(0, mainRect.width - panelW)));
+      nt = Math.max(0, Math.min(nt, Math.max(0, mainRect.height - panelH)));
+      panel.style.left = nl + "px";
+      panel.style.top = nt + "px";
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onUp);
+      panel.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      machineToolPanelPositions[panel.id] = {
+        left: parseFloat(panel.style.left) || 0,
+        top: parseFloat(panel.style.top) || 0,
+      };
+      saveMachineToolPanelPositions();
+      updatePanelResetVisibility();
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    // Losing window focus (alt-tab, releasing outside the page) also ends the drag.
+    window.addEventListener("blur", onUp);
+  });
+}
+
 function buildNavbarLHMachineTools() {
   var container = document.getElementById("navbar-lh-machine-tools");
   if (!container) return;
@@ -4908,11 +5435,11 @@ function buildNavbarLHMachineTools() {
     // Label (styled as button without changing appearance)
     var label = document.createElement("button");
     label.className = "navbar-pipette-label";
-    label.title = "Show/hide liquid handler machine tools";
+    label.title = "Show/hide liquid handler capabilities";
     label.textContent = "";
     label.appendChild(document.createTextNode(lhName));
     label.appendChild(document.createElement("br"));
-    label.appendChild(document.createTextNode("Machine Tools"));
+    label.appendChild(document.createTextNode("Capabilities"));
     group.appendChild(label);
 
     // Collapsible container for machine tool buttons
@@ -4920,17 +5447,22 @@ function buildNavbarLHMachineTools() {
     machineToolBtns.className = "navbar-machine-tool-btns";
     group.appendChild(machineToolBtns);
 
-    // Toggle machine tool buttons on label click
-    label.addEventListener("click", function () {
-      var collapsed = machineToolBtns.classList.toggle("collapsed");
-      label.classList.toggle("collapsed", collapsed);
-      // Close any open dropdowns when collapsing
-      if (collapsed) {
-        var dropdowns = document.querySelectorAll(".machine-tool-dropdown.open");
-        dropdowns.forEach(function (d) { d.classList.remove("open"); });
-        group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
-      }
-    });
+    // Toggle machine tool buttons on label click. Wrapped in an IIFE so the
+    // handler captures this iteration's label/machineToolBtns/group (they are
+    // var-scoped across the loop); without it every label toggles the last
+    // liquid handler's tools.
+    (function (label, machineToolBtns, group) {
+      label.addEventListener("click", function () {
+        var collapsed = machineToolBtns.classList.toggle("collapsed");
+        label.classList.toggle("collapsed", collapsed);
+        // Close any open dropdowns when collapsing
+        if (collapsed) {
+          var dropdowns = document.querySelectorAll(".machine-tool-dropdown.open");
+          dropdowns.forEach(function (d) { d.classList.remove("open"); });
+          group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
+        }
+      });
+    })(label, machineToolBtns, group);
 
     // Multi-channel button (hidden unless setState has already confirmed machine tool exists)
     var lhRes = resources[lhName];
@@ -4973,12 +5505,14 @@ function buildNavbarLHMachineTools() {
 
       var singlePanel = document.getElementById("single-channel-dropdown-" + handlerName);
 
-      // Measure single panel (temporarily show if hidden)
+      // Measure single panel (temporarily show if hidden) at its natural width.
+      // Measuring at left:0 gives the panel the full available width so a panel
+      // parked near the right edge of main can't wrap its channel columns into a
+      // tall stack and inflate the height that the plate/arm panels inherit.
       var singleW = 0, singleH = 0, singleLeft = singleCenterPx;
       if (singlePanel) {
-        // Temporarily set left + transform so we can measure offsetWidth accurately
         singlePanel.style.top = topPx + "px";
-        singlePanel.style.left = singleCenterPx + "px";
+        singlePanel.style.left = "0px";
         var wasHidden = !singlePanel.classList.contains("open");
         if (wasHidden) { singlePanel.style.visibility = "hidden"; singlePanel.classList.add("open"); }
         singleW = singlePanel.offsetWidth;
@@ -5007,26 +5541,30 @@ function buildNavbarLHMachineTools() {
         singleLeft = singleLeft + (-totalLeftEdge);
       }
 
-      // Always position single panel with direct left (no CSS transform),
-      // because html2canvas misrenders translateX(-50%).
+      // Default group layout (multi | single | arm), anchored on the single button.
+      // Each panel snaps to its default unless the user has dragged it, in which
+      // case its remembered position wins (see applyMachineToolPanelPos). Panels
+      // use direct left/top (no CSS transform) because html2canvas misrenders
+      // translateX(-50%).
       if (singlePanel) {
         singlePanel.style.transform = "none";
-        singlePanel.style.left = Math.max(0, singleLeft) + "px";
+        applyMachineToolPanelPos(singlePanel, singleLeft, topPx, singleW, mainRect);
       }
 
       if (multiPanel && multiPanel.classList.contains("open")) {
-        multiPanel.style.top = topPx + "px";
         multiPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
-        multiPanel.style.left = Math.max(0, singleLeft - multiW - 8) + "px";
+        applyMachineToolPanelPos(multiPanel, singleLeft - multiW - 8, topPx, multiW, mainRect);
       }
 
       if (armPanel && armPanel.classList.contains("open")) {
-        armPanel.style.top = topPx + "px";
         armPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
-        var singleRight = singleLeft + singleW;
-        armPanel.style.left = (singleRight + 8) + "px";
+        applyMachineToolPanelPos(armPanel, singleLeft + singleW + 8, topPx, armW, mainRect);
       }
     }
+    // Publish to module scope (after the declaration) so the resize re-clamp and
+    // per-panel reset can reuse it. positionPanels is parameterized by handler
+    // name and closes over no per-liquid-handler state, so one reference works.
+    repositionMachineToolPanels = positionPanels;
 
     // Single-channel dropdown panel
     (function (btn, handlerName) {
@@ -5048,6 +5586,7 @@ function buildNavbarLHMachineTools() {
         var headState = (lhResource && lhResource.headState) ? lhResource.headState : {};
         fillHeadIcons(panel, headState);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         btn.classList.add("active");
         positionPanels(handlerName, btn);
       });
@@ -5073,6 +5612,7 @@ function buildNavbarLHMachineTools() {
         var head96State = (lhResource && lhResource.head96State) ? lhResource.head96State : {};
         fillHead96Grid(panel, head96State);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         positionPanels(handlerName, singleBtnRef);
         btn.classList.add("active");
       });
@@ -5113,6 +5653,7 @@ function buildNavbarLHMachineTools() {
         var armState = (lhResource && lhResource.armState) ? lhResource.armState : {};
         fillArmPanel(panel, armState);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         positionPanels(handlerName, singleBtnRef);
         btn.classList.add("active");
       });
