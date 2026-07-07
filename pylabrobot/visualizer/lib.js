@@ -497,6 +497,12 @@ var resourceSnapshots = {}; // name -> serialized resource data
 
 var rootResource = null; // the root resource for fit-to-viewport
 
+// Find the deck by type rather than a hardcoded "deck" key: robust to the deck's name and to the
+// resource not yet being registered (returns undefined instead of throwing).
+function getDeck() {
+  return Object.values(resources).find((r) => r instanceof Deck);
+}
+
 function fitToViewport() {
   if (!rootResource || !stage) return;
   const padding = 40;
@@ -564,7 +570,7 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   }
 
   // Check if the resource is in a ResourceHolder.
-  let deck = resources["deck"];
+  let deck = getDeck();
   for (let resource_name in deck.children) {
     const resource = deck.children[resource_name];
 
@@ -647,7 +653,7 @@ function getSnappingGrid(x, y, width, height) {
 
   let snappingLines = {};
 
-  const deck = resources["deck"];
+  const deck = getDeck();
   if (
     deck.constructor.name === "HamiltonSTARDeck" ||
     deck.constructor.name === "VantageDeck"
@@ -1238,45 +1244,13 @@ const otDeckSiteLocations = [
 
 class OTDeck extends Deck {
   constructor(resourceData) {
-    resourceData.location = { x: 115.65, y: 68.03 };
     super(resourceData, undefined);
   }
 
   drawMainShape() {
-    let group = new Konva.Group({});
-    const width = 128.0;
-    const height = 86.0;
-    // Draw the sites
-    for (let i = 0; i < otDeckSiteLocations.length; i++) {
-      const siteLocation = otDeckSiteLocations[i];
-      const site = new Konva.Rect({
-        x: siteLocation.x,
-        y: siteLocation.y,
-        width: width,
-        height: height,
-        fill: "white",
-        stroke: "black",
-        strokeWidth: 1,
-      });
-      group.add(site);
-
-      // Add a text label in the site
-      const siteLabel = new Konva.Text({
-        x: siteLocation.x,
-        y: siteLocation.y + height,
-        text: i + 1,
-        width: width,
-        height: height,
-        fontSize: 16,
-        fill: "black",
-        align: "center",
-        verticalAlign: "middle",
-        scaleY: -1, // Flip the text vertically
-      });
-      group.add(siteLabel);
-    }
-
-    // draw border around the deck
+    // The slot rectangles are drawn by the ResourceHolder children; the main shape is just the deck
+    // border. The slot-number labels are added in draw() so they sit on top of the holders.
+    const group = new Konva.Group({});
     group.add(
       new Konva.Rect({
         width: this.size_x,
@@ -1285,8 +1259,41 @@ class OTDeck extends Deck {
         strokeWidth: 1,
       })
     );
-
     return group;
+  }
+
+  draw(layer) {
+    super.draw(layer);
+    // Holder children are drawn after the main shape, so a slot number placed in the main shape is
+    // hidden. Add the number to the deck group last (on top) but only for empty slots, so the
+    // labware in an occupied slot is shown instead of being covered by the number.
+    for (const holder of this.children) {
+      if (!holder.location || (holder.children && holder.children.length > 0)) {
+        continue; // skip non-slot children and occupied slots
+      }
+      const match = holder.name ? holder.name.match(/slot_(\d+)$/) : null;
+      if (match === null) {
+        continue;
+      }
+      const siteLabel = new Konva.Text({
+        x: holder.location.x,
+        y: holder.location.y + holder.size_y,
+        text: match[1],
+        width: holder.size_x,
+        height: holder.size_y,
+        fontSize: 16,
+        fill: "white",
+        stroke: "black",
+        strokeWidth: 0.5,
+        fillAfterStrokeEnabled: true,
+        align: "center",
+        verticalAlign: "middle",
+        scaleY: -1, // Flip the text vertically
+        listening: false,
+      });
+      this.group.add(siteLabel);
+      siteLabel.moveToTop();
+    }
   }
 
   serialize() {
@@ -1598,7 +1605,7 @@ class Tube extends Container {
 // Nothing special.
 class Trash extends Resource {
   drawMainShape() {
-    if (resources["deck"].constructor.name) {
+    if (getDeck()) {
       return undefined;
     }
     return super.drawMainShape();
