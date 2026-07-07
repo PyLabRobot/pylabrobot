@@ -741,6 +741,7 @@ function getResourceWorldReferencePoint(resource, xRefStr, yRefStr, zRefStr) {
 var scaleX, scaleY;
 
 var resources = {}; // name -> Resource object
+var methodRegistry = {}; // resource type name -> public method signatures (sent once per class)
 // Serialized resource data saved before resources are destroyed (e.g. picked up by arm).
 // Used by the arm panel to re-instantiate the resource and draw it on a live Konva stage
 // using the exact same draw() code as the main canvas — guaranteeing visual consistency.
@@ -962,7 +963,10 @@ class Resource {
     this.parent = parent;
     this.resourceType = resourceData.type || this.constructor.name;
     this.category = resourceData.category || "";
-    this.methods = resourceData.methods || [];
+    // Methods are sent once per class in methodRegistry (keyed by serialized type);
+    // fall back to an inline list for backward compatibility.
+    this.methods =
+      resourceData.methods || methodRegistry[resourceData.type] || [];
     this.model = resourceData.model || null;
     this.rotation = resourceData.rotation || null;
     this.barcode = resourceData.barcode || null;

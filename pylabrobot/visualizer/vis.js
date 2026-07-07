@@ -25,6 +25,9 @@ function updateStatusLabel(status) {
 }
 
 function setRootResource(data) {
+  // Method signatures arrive once per class; make them available before the tree is
+  // built so each Resource can attach its methods by type.
+  methodRegistry = data.method_registry || {};
   resource = loadResource(data.resource);
 
   resource.location = { x: 0, y: 0, z: 0 };
@@ -84,6 +87,7 @@ async function processCentralEvent(event, data) {
       break;
 
     case "resource_assigned":
+      Object.assign(methodRegistry, data.method_registry || {});
       resource = loadResource(data.resource);
       resource.draw(resourceLayer);
       setState(data.state);
