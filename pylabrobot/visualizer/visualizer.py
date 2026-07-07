@@ -188,6 +188,11 @@ class Visualizer:
     self._flush_scheduled = False
 
     self.received: List[dict] = []
+    # Ids of commands whose responses a caller is actively awaiting. Only these
+    # responses are retained in ``self.received``; responses to fire-and-forget
+    # commands (every state update) are dropped so the list cannot grow without
+    # bound over a long-running session.
+    self._pending_response_ids: set = set()
 
   @property
   def websocket(
@@ -251,7 +256,8 @@ class Visualizer:
         return
 
       data = json.loads(message)
-      self.received.append(data)
+      if data.get("id") in self._pending_response_ids:
+        self.received.append(data)
 
       # If the event is "ready", then we can save the connection and send the saved messages.
       if data.get("event") == "ready":
@@ -320,12 +326,16 @@ class Visualizer:
       await self.websocket.send(serialized_data)
 
       if wait_for_response:
-        while True:
-          if len(self.received) > 0:
-            message = self.received.pop()
-            if "id" in message and message["id"] == id_:
-              break
-          await asyncio.sleep(0.1)
+        self._pending_response_ids.add(id_)
+        try:
+          while True:
+            if len(self.received) > 0:
+              message = self.received.pop()
+              if "id" in message and message["id"] == id_:
+                break
+            await asyncio.sleep(0.1)
+        finally:
+          self._pending_response_ids.discard(id_)
 
         if not message["success"]:
           error = message.get("error", "unknown error")
@@ -602,6 +612,7 @@ class Visualizer:
 
     # Clear all relevant attributes.
     self.received.clear()
+    self._pending_response_ids.clear()
     self._websocket = None
     self._loop = None
     self._t = None

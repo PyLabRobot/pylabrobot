@@ -1720,7 +1720,15 @@ class Container extends Resource {
 
   setVolume(volume) {
     this.volume = volume;
-    this.update();
+    // Fast path: recolor the existing liquid shape in place instead of destroying
+    // and rebuilding the entire Konva group (and re-registering every event
+    // handler) on each volume change. `_liquidShape` is captured in drawMainShape;
+    // fall back to a full draw() if the resource has not been drawn yet.
+    if (this._liquidShape !== undefined && this._liquidShape !== null) {
+      this._liquidShape.fill(Container.colorForVolume(volume, this.maxVolume));
+    } else {
+      this.update();
+    }
   }
 
   setState(state) {
@@ -1766,6 +1774,7 @@ class Well extends Container {
 
   drawMainShape() {
     const mainShape = new Konva.Group({});
+    let liquid;
     if (this.cross_section_type === "circle") {
       mainShape.add(new Konva.Circle({  // background
         radius: this.size_x / 2,
@@ -1773,28 +1782,31 @@ class Well extends Container {
         offsetX: -this.size_x / 2,
         offsetY: -this.size_y / 2,
       }));
-      mainShape.add(new Konva.Circle({ // liquid
+      liquid = new Konva.Circle({ // liquid
         radius: this.size_x / 2,
         fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
         offsetX: -this.size_x / 2,
         offsetY: -this.size_y / 2,
-      }));
+      });
+      mainShape.add(liquid);
     } else {
       mainShape.add(new Konva.Rect({  // background
         width: this.size_x,
         height: this.size_y,
         fill: RESOURCE_COLORS["ContainerBackground"],
       }));
-      mainShape.add(new Konva.Rect({ // liquid
+      liquid = new Konva.Rect({ // liquid
         width: this.size_x,
         height: this.size_y,
         fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
-      }));
+      });
+      mainShape.add(liquid);
     }
+    this._liquidShape = liquid;
     return mainShape;
   }
 }
@@ -1809,11 +1821,13 @@ class Trough extends Container {
       stroke: "black",
       strokeWidth: 1,
     }));
-    group.add(new Konva.Rect({  // liquid layer
+    const liquid = new Konva.Rect({  // liquid layer
       width: this.size_x,
       height: this.size_y,
       fill: Trough.colorForVolume(this.getVolume(), this.maxVolume),
-    }));
+    });
+    group.add(liquid);
+    this._liquidShape = liquid;
     return group;
   }
 }
@@ -1870,7 +1884,7 @@ class TipSpot extends Resource {
   get canDelete() { return false; }
 
   drawMainShape() {
-    return new Konva.Circle({
+    this._tipShape = new Konva.Circle({
       radius: this.size_x / 2,
       fill: this.has_tip ? "#40CDA1" : "white",
       stroke: "black",
@@ -1878,12 +1892,19 @@ class TipSpot extends Resource {
       offsetX: -this.size_x / 2,
       offsetY: -this.size_y / 2,
     });
+    return this._tipShape;
   }
 
   setState(state) {
     super.setState(state);
     this.has_tip = state.tip !== null;
-    this.update();
+    // Fast path: recolor the existing tip circle in place instead of rebuilding
+    // the whole group. Fall back to a full draw() if not yet drawn.
+    if (this._tipShape !== undefined && this._tipShape !== null) {
+      this._tipShape.fill(this.has_tip ? "#40CDA1" : "white");
+    } else {
+      this.update();
+    }
   }
 
   serialize() {
@@ -1925,14 +1946,16 @@ class Tube extends Container {
       offsetX: -this.size_x / 2,
       offsetY: -this.size_y / 2,
     }));
-    mainShape.add(new Konva.Circle({  // liquid
+    const liquid = new Konva.Circle({  // liquid
       radius: this.size_x / 2,
       fill: Tube.colorForVolume(this.getVolume(), this.maxVolume),
       stroke: "black",
       strokeWidth: 1,
       offsetX: -this.size_x / 2,
       offsetY: -this.size_y / 2,
-    }));
+    });
+    mainShape.add(liquid);
+    this._liquidShape = liquid;
     return mainShape;
   }
 }

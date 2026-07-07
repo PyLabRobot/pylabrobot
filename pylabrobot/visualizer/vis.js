@@ -99,8 +99,20 @@ async function processCentralEvent(event, data) {
     case "set_state":
       let allStates = data;
       setState(allStates);
-      // Update only the affected sidepanel nodes instead of rebuilding the entire tree
+      // Update only the affected sidepanel nodes instead of rebuilding the entire
+      // tree. Wells/tip spots/tubes all refresh their parent's summary, so dedupe
+      // by target node to avoid recomputing the same plate/rack summary once per
+      // child (e.g. 96 identical refreshes for a single 96-channel operation).
+      let refreshedNodes = new Set();
       for (let resourceName in allStates) {
+        let target = resources[resourceName];
+        let targetName = resourceName;
+        if (target && (target instanceof TipSpot || target instanceof Well || target instanceof Tube)
+            && target.parent) {
+          targetName = target.parent.name;
+        }
+        if (refreshedNodes.has(targetName)) continue;
+        refreshedNodes.add(targetName);
         updateSidepanelState(resourceName);
       }
       break;
@@ -123,7 +135,7 @@ async function handleEvent(id, event, data) {
     return; // don't parse pongs.
   }
 
-  console.log("[event] " + event, data);
+  if (window.VIS_DEBUG) console.log("[event] " + event, data);
 
   const ret = {
     event: event,
@@ -192,7 +204,7 @@ function openSocket() {
       if (value == "-Infinity") return -Infinity;
       return value;
     });
-    console.log(`[message] Data received from server:`, data);
+    if (window.VIS_DEBUG) console.log(`[message] Data received from server:`, data);
     handleEvent(data.id, data.event, data.data);
   });
 }
