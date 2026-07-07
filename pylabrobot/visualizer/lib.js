@@ -781,6 +781,11 @@ var frameImages = [];
 let frameInterval = 8;
 var _recordingTimer = null;
 
+// The deck resource, found by type rather than a hardcoded name (decks may be named anything).
+function getDeck() {
+  return Object.values(resources).find((r) => r instanceof Deck);
+}
+
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
   // A snapping resource is a spot within a plate/tip carrier or the OT deck.
@@ -811,7 +816,7 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   }
 
   // Check if the resource is in a ResourceHolder.
-  let deck = resources["deck"];
+  let deck = getDeck();
   for (let resource_name in deck.children) {
     const resource = deck.children[resource_name];
 
@@ -849,27 +854,29 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
     }
   }
 
-  // Check if the resource is in the OT Deck.
+  // Check if the resource is in the OT Deck. The slots are ResourceHolder children of the deck, so
+  // their positions and sizes come from the serialized resource rather than being duplicated here.
   if (deck.constructor.name === "OTDeck") {
-    const siteWidth = 128.0;
-    const siteHeight = 86.0;
-
-    for (let i = 0; i < otDeckSiteLocations.length; i++) {
-      let siteLocation = otDeckSiteLocations[i];
+    for (const holder of deck.children) {
+      if (!holder.location || !(holder.name && /slot_\d+$/.test(holder.name))) {
+        continue;
+      }
+      const siteX = deck.location.x + holder.location.x;
+      const siteY = deck.location.y + holder.location.y;
       if (
-        x > deck.location.x + siteLocation.x &&
-        x < deck.location.x + siteLocation.x + siteWidth &&
-        y > deck.location.y + siteLocation.y &&
-        y < deck.location.y + siteLocation.y + siteHeight
+        x > siteX &&
+        x < siteX + holder.size_x &&
+        y > siteY &&
+        y < siteY + holder.size_y
       ) {
         return {
           resource: deck,
-          location: { x: siteLocation.x, y: siteLocation.y },
+          location: { x: holder.location.x, y: holder.location.y },
           snappingBox: {
-            x: deck.location.x + siteLocation.x,
-            y: deck.location.y + siteLocation.y,
-            width: siteWidth,
-            height: siteHeight,
+            x: siteX,
+            y: siteY,
+            width: holder.size_x,
+            height: holder.size_y,
           },
         };
       }
@@ -894,7 +901,7 @@ function getSnappingGrid(x, y, width, height) {
 
   let snappingLines = {};
 
-  const deck = resources["deck"];
+  const deck = getDeck();
   if (
     deck.constructor.name === "HamiltonSTARDeck" ||
     deck.constructor.name === "VantageDeck"
@@ -1543,35 +1550,19 @@ class VantageDeck extends Deck {
   }
 }
 
-const otDeckSiteLocations = [
-  { x: 0.0, y: 0.0 },
-  { x: 132.5, y: 0.0 },
-  { x: 265.0, y: 0.0 },
-  { x: 0.0, y: 90.5 },
-  { x: 132.5, y: 90.5 },
-  { x: 265.0, y: 90.5 },
-  { x: 0.0, y: 181.0 },
-  { x: 132.5, y: 181.0 },
-  { x: 265.0, y: 181.0 },
-  { x: 0.0, y: 271.5 },
-  { x: 132.5, y: 271.5 },
-  { x: 265.0, y: 271.5 },
-];
-
 class OTDeck extends Deck {
   constructor(resourceData) {
-    resourceData.location = { x: 115.65, y: 68.03 };
     super(resourceData, undefined);
   }
 
   drawMainShape() {
+    // The slot rectangles are drawn by the ResourceHolder children; the main shape is just the deck
+    // border. The slot-number labels are added in draw() so they sit on top of the holders.
     let group = new Konva.Group({});
-    const width = 128.0;
-    const height = 86.0;
 
-    // Opaque white footprint fill, drawn first (behind the sites) so the deck paints its own
-    // surface rather than relying on the global background; otherwise the gaps around and
-    // between the sites are transparent and reveal the background grid underneath.
+    // Opaque footprint fill, drawn first (behind the slot holders) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the gaps around and between
+    // the slots are transparent and reveal the background grid underneath.
     group.add(
       new Konva.Group({
         x: this.size_x / 2, y: this.size_y / 2,   // deck centre
@@ -1593,36 +1584,6 @@ class OTDeck extends Deck {
       )
     );
 
-    // Draw the sites
-    for (let i = 0; i < otDeckSiteLocations.length; i++) {
-      const siteLocation = otDeckSiteLocations[i];
-      const site = new Konva.Rect({
-        x: siteLocation.x,
-        y: siteLocation.y,
-        width: width,
-        height: height,
-        stroke: "black",
-        strokeWidth: 1,
-      });
-      group.add(site);
-
-      // Add a text label in the site
-      const siteLabel = new Konva.Text({
-        x: siteLocation.x,
-        y: siteLocation.y + height,
-        text: i + 1,
-        width: width,
-        height: height,
-        fontSize: 16,
-        fill: "black",
-        align: "center",
-        verticalAlign: "middle",
-        scaleY: -1, // Flip the text vertically
-      });
-      group.add(siteLabel);
-    }
-
-    // draw border around the deck
     group.add(
       new Konva.Rect({
         width: this.size_x,
@@ -1631,8 +1592,41 @@ class OTDeck extends Deck {
         strokeWidth: 1,
       })
     );
-
     return group;
+  }
+
+  draw(layer) {
+    super.draw(layer);
+    // Holder children are drawn after the main shape, so a slot number placed in the main shape is
+    // hidden. Add the number to the deck group last (on top) but only for empty slots, so the
+    // labware in an occupied slot is shown instead of being covered by the number.
+    for (const holder of this.children) {
+      if (!holder.location || (holder.children && holder.children.length > 0)) {
+        continue; // skip non-slot children and occupied slots
+      }
+      const match = holder.name ? holder.name.match(/slot_(\d+)$/) : null;
+      if (match === null) {
+        continue;
+      }
+      const siteLabel = new Konva.Text({
+        x: holder.location.x,
+        y: holder.location.y + holder.size_y,
+        text: match[1],
+        width: holder.size_x,
+        height: holder.size_y,
+        fontSize: 16,
+        fill: "white",
+        stroke: "black",
+        strokeWidth: 0.5,
+        fillAfterStrokeEnabled: true,
+        align: "center",
+        verticalAlign: "middle",
+        scaleY: -1, // Flip the text vertically
+        listening: false,
+      });
+      this.group.add(siteLabel);
+      siteLabel.moveToTop();
+    }
   }
 
   serialize() {
@@ -1946,7 +1940,7 @@ class Tube extends Container {
 // Nothing special.
 class Trash extends Resource {
   drawMainShape() {
-    if (resources["deck"].constructor.name) {
+    if (getDeck()) {
       return undefined;
     }
     return super.drawMainShape();
