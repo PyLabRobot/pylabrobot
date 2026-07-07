@@ -58,8 +58,8 @@ class _IOLogger:
   """
 
   def __init__(self, target: Any, prefix: str = ""):
-    object.__setattr__(self, "_target", target)
-    object.__setattr__(self, "_prefix", prefix)
+    self._target = target
+    self._prefix = prefix
 
   def __getattr__(self, name: str) -> Any:
     attr = getattr(self._target, name)
