@@ -74,8 +74,8 @@ class OT2RobotGeometry:
     """Whether a nozzle displaced ``channel_offset`` mm in y from the head center can reach
     ``position`` in x and y on ``mount``.
 
-    Mirrors ``STARBackend.can_reach_position``: a pure predicate over the reachable region, here the
-    single-channel deck extents for the mount. For a single channel use the default
+    A pure predicate over the reachable region, here the single-channel deck extents for the
+    mount. For a single channel use the default
     ``channel_offset=0``. For a head8, pass each channel's offset from :meth:`channel_y_offsets`; the
     center must land within the extents, so near the front/back limits only a subset of channels can
     reach, which is why an edge column is picked up partially rather than all 8. Z is not bounded by
