@@ -1,8 +1,10 @@
+import asyncio
 import json
 import time
 import unittest
 import unittest.mock
 import urllib.request
+from typing import Optional
 
 import pytest
 import websockets
@@ -212,11 +214,28 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
 
     await self.vis.setup()
 
+  async def _wait_for_event(self, event: str, data_key: Optional[str] = None, timeout: float = 5.0):
+    """Wait until the most recent send_command call is ``event`` (optionally carrying
+    ``data_key`` in its data), yielding to the loop.
+
+    Replaces fixed ``time.sleep()`` waits: those block the event loop and race under CI
+    load. Checking the last call - not just any call - matters when one action fans out
+    into many events (e.g. set_well_volumes emits a set_state per well); the assert reads
+    the last call, so we wait until that call carries the expected payload.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+      last = self.vis.send_command.call_args
+      if last is not None and last.kwargs.get("event") == event:
+        if data_key is None or data_key in last.kwargs.get("data", {}):
+          return
+      await asyncio.sleep(0.01)
+
   async def test_assign_child_resource(self):
     """Test that the assign_child_resource method sends the correct event."""
     child = Resource(size_x=100, size_y=100, size_z=100, name="child")
     self.r.assign_child_resource(child, location=Coordinate(0, 0, 0))
-    time.sleep(0.1)  # wait for the event to be sent
+    await self._wait_for_event("resource_assigned")
     self.vis.send_command.assert_called_once_with(  # type: ignore[attr-defined]
       event="resource_assigned",
       data={
@@ -233,7 +252,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     child = Resource(size_x=100, size_y=100, size_z=100, name="child")
     self.r.assign_child_resource(child, location=Coordinate(0, 0, 0))
     self.r.unassign_child_resource(child)
-    time.sleep(0.1)
+    await self._wait_for_event("resource_unassigned")
 
     self.vis.send_command.assert_called_with(  # type: ignore[attr-defined]
       event="resource_unassigned",
@@ -246,7 +265,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     plate = cor_96_wellplate_360uL_Fb(name="plate_01")
     self.r.assign_child_resource(plate, location=Coordinate(0, 0, 0))
     plate.set_well_volumes([500] * 96)
-    time.sleep(0.1)
+    await self._wait_for_event("set_state", data_key="plate_01_well_H12")
     self.vis.send_command.assert_called()  # type: ignore[attr-defined]
     call_args = self.vis.send_command.call_args[1]  # type: ignore[attr-defined]
     self.assertEqual(call_args["event"], "set_state")
