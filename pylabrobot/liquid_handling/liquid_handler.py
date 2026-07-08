@@ -39,6 +39,7 @@ from pylabrobot.resources import (
   Coordinate,
   Deck,
   Lid,
+  Liddable,
   Plate,
   PlateAdapter,
   PlateHolder,
@@ -2206,13 +2207,13 @@ class LiquidHandler(Resource, Machine):
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
       to_location = destination.get_location_wrt(self.deck) + adjusted_plate_anchor
-    elif isinstance(destination, Plate) and isinstance(resource, Lid):
+    elif isinstance(destination, Liddable) and isinstance(resource, Lid):
       lid = resource
-      plate_location = destination.get_location_wrt(self.deck)
+      parent_location = destination.get_location_wrt(self.deck)
       child_wrt_parent = destination.get_lid_location(
         lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
-      to_location = plate_location + child_wrt_parent
+      to_location = parent_location + child_wrt_parent
     else:
       to_location = destination.get_location_wrt(self.deck)
 
@@ -2258,7 +2259,7 @@ class LiquidHandler(Resource, Machine):
       destination.assign_child_resource(
         resource, location=destination.compute_plate_location(resource)
       )
-    elif isinstance(destination, Plate) and isinstance(resource, Lid):
+    elif isinstance(destination, Liddable) and isinstance(resource, Lid):
       destination.assign_child_resource(resource)
     elif isinstance(destination, Trash):
       pass  # don't assign to trash, resource will simply be unassigned
@@ -2348,7 +2349,7 @@ class LiquidHandler(Resource, Machine):
   async def move_lid(
     self,
     lid: Lid,
-    to: Union[Plate, ResourceStack, Coordinate],
+    to: Union[Liddable, ResourceStack, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
