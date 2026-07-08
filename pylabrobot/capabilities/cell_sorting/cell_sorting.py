@@ -32,6 +32,7 @@ from pylabrobot.capabilities.capability import BackendParams, Capability, need_c
 from .backend import CellSorterBackend
 
 _SUPPORTED_PLATE_FORMATS = ("96", "384")
+_WELLS_PER_FORMAT = {"96": 96, "384": 384}
 
 
 class CellSorter(Capability):
@@ -85,6 +86,11 @@ class CellSorter(Capability):
       raise ValueError(
         f"plate_format must be one of {_SUPPORTED_PLATE_FORMATS}, got {plate_format!r}"
       )
+    capacity = _WELLS_PER_FORMAT[plate_format]
+    if wells > capacity:
+      raise ValueError(
+        f"wells ({wells}) exceeds the {plate_format}-well plate capacity ({capacity})"
+      )
 
     await self.backend.load_template(name=template)
     await self.backend.set_deposition(cells_per_well=cells_per_well, plate_format=plate_format)
@@ -102,3 +108,14 @@ class CellSorter(Capability):
   async def clean(self) -> None:
     """Run the clean/flush cycle between samples."""
     await self.backend.clean()
+
+  async def _on_stop(self) -> None:
+    """Leave the sorter safe when the parent Device stops: abort any run in flight.
+
+    Mirrors Pump/Shaker/TemperatureController, which halt their actuation on stop.
+    ``abort`` is the non-actuating emergency stop, so this is safe in every config
+    (dry-run logs it, armed transmits it) and never trips the actuation guard.
+    """
+    if self._setup_finished:
+      await self.backend.abort()
+    await super()._on_stop()

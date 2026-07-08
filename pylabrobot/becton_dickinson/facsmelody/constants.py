@@ -25,6 +25,13 @@ class Transport(str, Enum):
 # The minimum command set a sort-to-plate run needs. A ProtocolMap must decode all
 # of these before the backend will drive live hardware. Kept as (name, purpose)
 # pairs so an incomplete map can report exactly what is missing.
+#
+# Note: `connect` and `wait_complete` are part of the required decode set so a
+# validated map is provably complete, but the current backend does not yet emit
+# them as discrete frames -- setup() opens the link directly and wait_for_completion
+# polls get_status. Whether a real Melody needs an explicit connect handshake and a
+# blocking wait_complete (vs. status polling) is resolved during hardware validation;
+# until then they are decode-required but unsent. See docs/facsmelody-re.md.
 REQUIRED_COMMANDS: List[Tuple[str, str]] = [
   ("connect", "open the control link / handshake with the cart"),
   ("get_status", "poll instrument state (idle/running/clog/error)"),

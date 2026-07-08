@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from typing import Dict, List, Optional
 
 from .constants import REQUIRED_COMMANDS, Transport
@@ -78,18 +78,33 @@ class ProtocolMap:
       created=d.get("created", time.time()),
       notes=d.get("notes", ""),
     )
+    # Tolerate unknown keys: this is the consumer side of an external toolkit whose
+    # map schema may grow. Drop fields this version does not model rather than
+    # crashing the whole load on a single extra key.
+    known = {f.name for f in fields(Command)}
     for name, c in d.get("commands", {}).items():
-      c = dict(c)
+      c = {k: v for k, v in c.items() if k in known}
       c["transport"] = Transport(c.get("transport", "unknown"))
       pm.commands[name] = Command(**c)
     return pm
 
   def coverage(self) -> dict:
-    """Report how many required commands are decoded and which are still missing."""
+    """Report required-command coverage: how many are decoded and which are missing.
+
+    Checked against ``REQUIRED_COMMANDS``, not merely the commands present in the
+    map, so a map that *omits* a required command entirely is still reported as
+    missing it. This is the gate a live run must clear (see ``FACSMelodyDriver.setup``),
+    so it fails closed: a command that is absent, or present but undecoded, counts as
+    missing.
+    """
+    required = [name for name, _ in REQUIRED_COMMANDS]
+    missing = [
+      name for name in required if name not in self.commands or not self.commands[name].decoded
+    ]
     return {
-      "decoded": sum(1 for c in self.commands.values() if c.decoded),
-      "total": len(self.commands),
-      "missing": [n for n, c in self.commands.items() if not c.decoded],
+      "decoded": len(required) - len(missing),
+      "total": len(required),
+      "missing": missing,
     }
 
 

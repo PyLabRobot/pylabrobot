@@ -122,6 +122,11 @@ class FACSMelodyDriver(Driver):
       return None
     if self._conn is None:
       raise SortNotReadyError("link is not open; call setup() with armed=True first.")
+    if not frame_hex:
+      raise SortNotReadyError(
+        f"'{name}' has no decoded frame; refusing to transmit an empty frame on a live "
+        "run. For an emergency stop this fails loud rather than silently doing nothing."
+      )
     data = bytes.fromhex(frame_hex)
     logger.info("SEND '%s': %s", name, frame_hex)
     self._conn.write(data)
@@ -161,6 +166,11 @@ class FACSMelodyCellSorterBackend(CellSorterBackend):
       return ""
     for key, value in params.items():
       template = template.replace("{" + key + "}", _encode_param(value))
+    if "{" in template or "}" in template:
+      raise ValueError(
+        f"frame for '{command}' has unsubstituted tokens after filling {list(params)}: "
+        f"{template!r}. The ProtocolMap template and the backend parameters disagree."
+      )
     return template
 
   async def get_status(self) -> str:
@@ -214,9 +224,20 @@ def _encode_param(value: object) -> str:
   (vary one setting, diff the frames) and set per parameter. Until then ints are
   emitted as a single byte and everything else as UTF-8 hex, so dry-runs are
   legible before the per-parameter encoders are confirmed on the instrument.
+
+  An int that does not fit one byte (e.g. filling all 384 wells) raises rather than
+  silently wrapping: the provisional width is unresolved, so a value it cannot
+  represent must fail closed, not encode to a different number. The true width
+  (and whether such a parameter is multi-byte) is fixed during validation.
   """
   if isinstance(value, int):
-    return f"{value & 0xFF:02x}"
+    if not 0 <= value <= 0xFF:
+      raise ValueError(
+        f"cannot encode integer parameter {value} as a single byte (0-255); the "
+        "per-parameter byte width is resolved during hardware validation "
+        "(see docs/facsmelody-re.md)."
+      )
+    return f"{value:02x}"
   return str(value).encode().hex()
 
 
