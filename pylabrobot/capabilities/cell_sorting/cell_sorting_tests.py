@@ -82,6 +82,28 @@ class TestCellSorter(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await sorter.get_status(), "idle")
     await sorter.sort_to_plate(cells_per_well=1, wells=4, template="t")
 
+  async def test_rejects_wells_exceeding_plate_capacity(self):
+    sorter = CellSorter(backend=_RecordingBackend())
+    await sorter._on_setup()
+    with self.assertRaises(ValueError):
+      await sorter.sort_to_plate(cells_per_well=1, wells=97, template="t", plate_format="96")
+    # Filling all wells of the matching format is allowed.
+    await sorter.sort_to_plate(cells_per_well=1, wells=384, template="t", plate_format="384")
+
+  async def test_on_stop_aborts_when_set_up(self):
+    backend = _RecordingBackend()
+    sorter = CellSorter(backend=backend)
+    await sorter._on_setup()
+    await sorter._on_stop()
+    self.assertIn(("abort", ()), backend.calls)
+    self.assertFalse(sorter.setup_finished)
+
+  async def test_on_stop_does_not_abort_when_never_set_up(self):
+    backend = _RecordingBackend()
+    sorter = CellSorter(backend=backend)
+    await sorter._on_stop()
+    self.assertNotIn(("abort", ()), backend.calls)
+
 
 if __name__ == "__main__":
   unittest.main()

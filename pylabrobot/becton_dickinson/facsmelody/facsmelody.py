@@ -59,9 +59,9 @@ class FACSMelody(Device):
     self.sorter = CellSorter(backend=FACSMelodyCellSorterBackend(driver))
     self._capabilities = [self.sorter]
 
-  def serialize(self) -> dict:
-    return {**Device.serialize(self)}
-
+  # serialize is inherited from Device: it emits {"driver": driver.serialize()}, which
+  # already carries protocol_path/armed/allow_actuation. deserialize is overridden
+  # because __init__ constructs its own driver rather than taking a driver= argument.
   @classmethod
   def deserialize(cls, data: dict) -> "FACSMelody":
     driver_data = data.get("driver") or data.get("backend") or {}
