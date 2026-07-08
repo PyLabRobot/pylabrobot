@@ -14,7 +14,11 @@ from pylabrobot.resources import (
   Resource,
 )
 from pylabrobot.visualizer import Visualizer
-from pylabrobot.visualizer.visualizer import _sanitize_floats, _serialize_with_methods
+from pylabrobot.visualizer.visualizer import (
+  _build_method_registry,
+  _sanitize_floats,
+  _serialize_resource_tree,
+)
 
 
 class SanitizeFloatsTests(unittest.TestCase):
@@ -150,7 +154,8 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
       {
         "event": "set_root_resource",
         "data": {
-          "resource": _serialize_with_methods(self.r),
+          "resource": _serialize_resource_tree(self.r),
+          "method_registry": _build_method_registry(self.r),
         },
         "id": "0001",
         "version": STANDARD_FORM_JSON_VERSION,
@@ -215,7 +220,8 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     self.vis.send_command.assert_called_once_with(  # type: ignore[attr-defined]
       event="resource_assigned",
       data={
-        "resource": _serialize_with_methods(child),
+        "resource": _serialize_resource_tree(child),
+        "method_registry": _build_method_registry(child),
         "state": child.serialize_all_state(),
         "parent_name": "root",
       },

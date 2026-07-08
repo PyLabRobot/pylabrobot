@@ -79,6 +79,9 @@ class Container(Resource):
 
     self.max_volume = max_volume or (size_x * size_y * size_z)
     self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
+    # Notify state-update subscribers (e.g. the Visualizer) on volume changes; without this
+    # a bare Container like a Trough updates its volume internally but never broadcasts it.
+    self.tracker.register_callback(self._state_updated)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
     self.no_go_zones: List[Tuple[Coordinate, Coordinate]] = self._validate_no_go_zones(
@@ -147,10 +150,14 @@ class Container(Resource):
     }
 
   def serialize_state(self) -> Dict[str, Any]:
-    return self.tracker.serialize()
+    return {**super().serialize_state(), **self.tracker.serialize()}
 
   def load_state(self, state: Dict[str, Any]):
-    self.tracker.load_state(state)
+    super().load_state(state)
+    # The tracker only consumes its own keys; extras (e.g. "rotation") are
+    # already handled by ``super().load_state``.
+    tracker_state = {k: v for k, v in state.items() if k != "rotation"}
+    self.tracker.load_state(tracker_state)
 
   def supports_compute_height_volume_functions(self) -> bool:
     return (

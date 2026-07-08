@@ -21,6 +21,14 @@ const RESOURCE_COLORS = {
   ContainerBackground: "#E0EAEE"
 };
 
+// Deck surface fill: a soft central fade - a radial gradient from a slightly brighter centre out
+// to the settled light grey at the edges, so the surface reads as gently lit rather than flat.
+// The edge is the approved grey (never darker); only the centre lifts towards white. Equal RGB
+// channels so there is no colour tint; both stops are opaque, so it still occludes the grid. The
+// rail box / slot rects are drawn stroke-only over it so the fade stays continuous.
+const DECK_SURFACE_CENTER = "#FDFDFD";
+const DECK_SURFACE_EDGE = "#F6F6F6";
+
 // ===========================================================================
 // Mode and Layers
 // ===========================================================================
@@ -31,6 +39,15 @@ const MODE_GUI = "gui";
 
 var layer = new Konva.Layer();
 var resourceLayer = new Konva.Layer();
+// Background grid: grey, semi-transparent lines at the scale-bar spacing, anchored at the
+// top-level resource's origin. Purely a visual aid - not a Resource, so it never appears in
+// the Workcell Tree. Lives in its own layer beneath the resources.
+var gridLayer = new Konva.Layer({ listening: false });
+var gridGroup = null;       // persistent parent for the grid, created on first draw
+var gridLinesGroup = null;  // grid + axis lines; rebuilt only when spacing or coverage changes
+var gridVignette = null;    // single edge-fade rect; updated in place every frame
+var gridCache = null;       // { scale, loX, hiX, loY, hiY }: the extent the lines currently cover
+var _gridRAF = null;        // pending requestAnimationFrame handle, so redraws coalesce per frame
 var tooltip;
 var stage;
 var selectedResource;
@@ -128,6 +145,161 @@ function updateDeltaLinesScale() {
   resourceLayer.draw();
 }
 
+// The scale bar and the grid share one "nice" spacing: the smallest round mm step from the
+// ramp whose on-screen width is at least 60px (falls back to the largest step when zoomed
+// far out). `scale` is CSS pixels per mm (stage.scaleX()).
+function niceScaleMM(scale) {
+  var niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  var bestMM = niceSteps[0];
+  for (var i = 0; i < niceSteps.length; i++) {
+    if (niceSteps[i] * scale >= 60) return niceSteps[i];
+    bestMM = niceSteps[i];
+  }
+  return bestMM;
+}
+
+// Scale bar update: picks a round mm value that fits ~80-120px on screen.
+function updateScaleBar() {
+  if (!stage) return;
+  var scale = stage.scaleX(); // CSS pixels per mm
+  var bestMM = niceScaleMM(scale);
+  var barPx = bestMM * scale;
+  var barLine = document.getElementById("scale-bar-line");
+  var barLabel = document.getElementById("scale-bar-label");
+  if (barLine) barLine.style.width = barPx + "px";
+  if (barLabel) barLabel.textContent = bestMM + " mm";
+}
+
+// Number of extra grid cells drawn beyond the viewport on each side. The lines cover this
+// margin so a pan only needs to rebuild them once it drifts a whole margin off the drawn
+// extent (see updateWorkcellGrid); until then the existing world-mm lines pan for free.
+var GRID_MARGIN_CELLS = 3;
+
+// Schedule a grid redraw on the next animation frame, coalescing the bursts of dragmove/wheel
+// events that fire between frames into a single rebuild. Cheaper than redrawing per event.
+function requestWorkcellGrid() {
+  if (_gridRAF !== null) return;
+  _gridRAF = requestAnimationFrame(function () {
+    _gridRAF = null;
+    updateWorkcellGrid();
+  });
+}
+
+// Background grid: grey lines at the scale-bar spacing, anchored at the top-level resource's
+// origin, with a red x-axis / green y-axis at the origin and a radial edge fade. Lines are in
+// world-mm (the same frame as the resources), so they pan and zoom locked to the deck.
+//
+// Cost control: the lines are the expensive part, so they are rebuilt only when the spacing
+// changes (zoom) or the viewport drifts off the drawn extent (a pan of GRID_MARGIN_CELLS
+// cells). On every other frame - the common case while panning - the lines are left untouched
+// (they pan with the stage transform) and only the single view-pinned vignette rect is moved.
+function updateWorkcellGrid() {
+  if (!stage || !gridLayer || !rootResource) return;
+  var scale = Math.abs(stage.scaleX());
+  if (!scale) return;
+
+  // Create the persistent nodes once: a lines group with the vignette rect layered above it.
+  if (!gridGroup) {
+    gridGroup = new Konva.Group({ listening: false });
+    gridLinesGroup = new Konva.Group({ listening: false });
+    gridVignette = new Konva.Rect({
+      listening: false,
+      fillRadialGradientColorStops: [
+        0, "rgba(255,255,255,0)",
+        0.5, "rgba(255,255,255,0)",
+        1, "rgba(255,255,255,1)",
+      ],
+    });
+    gridGroup.add(gridLinesGroup);
+    gridGroup.add(gridVignette);
+    gridLayer.add(gridGroup);
+  }
+
+  var origin = getResourceWorldLocation(rootResource); // highest-level resource's origin
+
+  // Viewport bounds in world mm: invert the stage transform over the four screen corners
+  // (handles the y-flip and any pan/offset).
+  var inv = stage.getAbsoluteTransform().copy().invert();
+  var w = stage.width(), h = stage.height();
+  var pts = [inv.point({ x: 0, y: 0 }), inv.point({ x: w, y: 0 }),
+             inv.point({ x: 0, y: h }), inv.point({ x: w, y: h })];
+  var xs = pts.map(function (p) { return p.x; });
+  var ys = pts.map(function (p) { return p.y; });
+  var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+  var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+
+  // Rebuild the lines only when the scale changed (spacing + stroke width depend on it, and it
+  // is constant during a pan) or the viewport has drifted outside the extent they cover.
+  var needLines = !gridCache || gridCache.scale !== scale ||
+    minX < gridCache.loX || maxX > gridCache.hiX ||
+    minY < gridCache.loY || maxY > gridCache.hiY;
+  if (needLines) {
+    var stepMM = niceScaleMM(scale);
+    // Snap the drawn extent out to whole cells (phased to the origin so the origin is on a
+    // line) and add a margin, so lines only change when a pan crosses the margin.
+    var m = GRID_MARGIN_CELLS;
+    var loX = origin.x + (Math.floor((minX - origin.x) / stepMM) - m) * stepMM;
+    var hiX = origin.x + (Math.ceil((maxX - origin.x) / stepMM) + m) * stepMM;
+    var loY = origin.y + (Math.floor((minY - origin.y) / stepMM) - m) * stepMM;
+    var hiY = origin.y + (Math.ceil((maxY - origin.y) / stepMM) + m) * stepMM;
+    gridCache = { scale: scale, loX: loX, hiX: hiX, loY: loY, hiY: hiY };
+
+    gridLinesGroup.destroyChildren();
+    var strokeW = 1 / scale; // ~1 CSS px regardless of zoom (stroke is scaled by the stage)
+    var eps = stepMM * 1e-6;
+    for (var x = loX; x <= hiX + eps; x += stepMM) {
+      gridLinesGroup.add(new Konva.Line({
+        points: [x, loY, x, hiY], stroke: "#808080", strokeWidth: strokeW,
+        opacity: 0.2, listening: false,
+      }));
+    }
+    for (var y = loY; y <= hiY + eps; y += stepMM) {
+      gridLinesGroup.add(new Konva.Line({
+        points: [loX, y, hiX, y], stroke: "#808080", strokeWidth: strokeW,
+        opacity: 0.2, listening: false,
+      }));
+    }
+    // The x-axis: a red line at y=0 (the origin row), matching the x-axis arrow. The y-axis: a
+    // green line at x=0 (the origin column), matching the y-axis arrow. Above the grid lines so
+    // they read on top where they cross; the vignette above still fades them.
+    gridLinesGroup.add(new Konva.Line({
+      points: [loX, origin.y, hiX, origin.y], stroke: "#dc3545",
+      strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
+    }));
+    gridLinesGroup.add(new Konva.Line({
+      points: [origin.x, loY, origin.x, hiY], stroke: "#198754",
+      strokeWidth: 1.5 / scale, opacity: 0.5, listening: false,
+    }));
+  }
+
+  // Edge fade: a radial vignette over the grid + axes, transparent through the centre and
+  // ramping to the background fill towards the corners of the view window. It is inside
+  // gridGroup (bottom layer) above the lines, so it dims only the grid, never the resources.
+  // Updated in place every frame so the fade stays pinned to the view rather than the deck.
+  var halfW = (maxX - minX) / 2, halfH = (maxY - minY) / 2;
+  var endR = Math.sqrt(halfW * halfW + halfH * halfH); // centre to corner
+  gridVignette.setAttrs({
+    x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+    fillRadialGradientStartPoint: { x: halfW, y: halfH },
+    fillRadialGradientStartRadius: 0,
+    fillRadialGradientEndPoint: { x: halfW, y: halfH },
+    fillRadialGradientEndRadius: endR,
+  });
+
+  gridLayer.batchDraw();
+}
+
+// Call from any code path that changes stage scale or position.
+function refreshScaleOverlays() {
+  updateScaleBar();
+  requestWorkcellGrid();
+  updateBullseyeScale();
+  updateWrtBullseyeScale();
+  updateTooltipScale();
+  updateDeltaLinesScale();
+  requestZoomRecache();
+}
+
 function drawDeltaLines(resource) {
   if (deltaLinesGroup) { deltaLinesGroup.destroy(); deltaLinesGroup = null; }
   if (!resource || activeTool !== "coords") return;
@@ -139,19 +311,27 @@ function drawDeltaLines(resource) {
   var wrtName = wrtRef ? wrtRef.value : null;
   var wrtRes = wrtName ? resources[wrtName] : null;
   if (!wrtRes) return;
-  var wrtAbs = wrtRes.getAbsoluteLocation();
-  var wrtOff = getWrtAnchorOffset(wrtRes);
-  var wx = wrtAbs.x + wrtOff.x;
-  var wy = wrtAbs.y + wrtOff.y;
+  // wrt endpoint - rotation-aware world position of the chosen wrt anchor.
+  var wrtXRefEl = document.getElementById("coords-wrt-x-ref");
+  var wrtYRefEl = document.getElementById("coords-wrt-y-ref");
+  var wrtPoint = getResourceWorldReferencePoint(
+    wrtRes,
+    wrtXRefEl ? wrtXRefEl.value : null,
+    wrtYRefEl ? wrtYRefEl.value : null,
+  );
+  var wx = wrtPoint.x;
+  var wy = wrtPoint.y;
 
-  // Get resource bullseye position
-  var abs = resource.getAbsoluteLocation();
+  // resource endpoint - rotation-aware world position of the chosen anchor.
   var xRef = document.getElementById("coords-x-ref");
   var yRef = document.getElementById("coords-y-ref");
-  var xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? resource.size_x / 2 : resource.size_x;
-  var yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? resource.size_y / 2 : resource.size_y;
-  var rx = abs.x + xOff;
-  var ry = abs.y + yOff;
+  var refPoint = getResourceWorldReferencePoint(
+    resource,
+    xRef ? xRef.value : null,
+    yRef ? yRef.value : null,
+  );
+  var rx = refPoint.x;
+  var ry = refPoint.y;
 
   var dx = rx - wx;
   var dy = ry - wy;
@@ -256,10 +436,15 @@ function updateWrtHighlight() {
   var wrtName = wrtRef ? wrtRef.value : null;
   var wrtRes = wrtName ? resources[wrtName] : null;
   if (!wrtRes) return;
-  var wrtAbs = wrtRes.getAbsoluteLocation();
-  var wrtOff = getWrtAnchorOffset(wrtRes);
-  var cx = wrtAbs.x + wrtOff.x;
-  var cy = wrtAbs.y + wrtOff.y;
+  var wrtXRefEl = document.getElementById("coords-wrt-x-ref");
+  var wrtYRefEl = document.getElementById("coords-wrt-y-ref");
+  var wrtPoint = getResourceWorldReferencePoint(
+    wrtRes,
+    wrtXRefEl ? wrtXRefEl.value : null,
+    wrtYRefEl ? wrtYRefEl.value : null,
+  );
+  var cx = wrtPoint.x;
+  var cy = wrtPoint.y;
   var r = 9.2;
   var barH = r * 1.0125;
   var wrtHaloColor = "#DDDDDD";
@@ -345,13 +530,15 @@ function updateBullseyeScale() {
 function showResHighlightBullseye(resource) {
   if (resHighlightBullseye) { resHighlightBullseye.destroy(); resHighlightBullseye = undefined; }
   if (!resource) return;
-  var abs = resource.getAbsoluteLocation();
   var xRef = document.getElementById("coords-x-ref");
   var yRef = document.getElementById("coords-y-ref");
-  var xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? resource.size_x / 2 : resource.size_x;
-  var yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? resource.size_y / 2 : resource.size_y;
-  var cx = abs.x + xOff;
-  var cy = abs.y + yOff;
+  var refPoint = getResourceWorldReferencePoint(
+    resource,
+    xRef ? xRef.value : null,
+    yRef ? yRef.value : null,
+  );
+  var cx = refPoint.x;
+  var cy = refPoint.y;
   var r = 9.2;
   var barH = r * 1.0125;
   var color = "#99DDFF";
@@ -446,49 +633,115 @@ function getAncestorAtDepth(resource, depth) {
   return null;
 }
 
-function getWrtAnchorOffset(wrtResource) {
-  var xRef = document.getElementById("coords-wrt-x-ref");
-  var yRef = document.getElementById("coords-wrt-y-ref");
-  var zRef = document.getElementById("coords-wrt-z-ref");
+// --- Rotation-aware position helpers ---------------------------------------
+// The base Resource.getAbsoluteLocation() is rotation-blind for backwards
+// compatibility. The helpers below mirror Python's Resource.get_absolute_*
+// semantics for the 2D top-down case (z-only rotation): they apply every
+// ancestor's rotation to its child's location vector and rotate the chosen
+// anchor offset by the resource's accumulated z-rotation. Use them anywhere a
+// visual marker has to land on the actual rendered geometry.
 
-  var xOff = 0;
-  if (xRef && xRef.value === "center") xOff = wrtResource.size_x / 2;
-  else if (xRef && xRef.value === "right") xOff = wrtResource.size_x;
-
-  var yOff = 0;
-  if (yRef && yRef.value === "center") yOff = wrtResource.size_y / 2;
-  else if (yRef && yRef.value === "back") yOff = wrtResource.size_y;
-
-  var zOff = 0;
-  if (zRef) {
-    if (zRef.value === "center") zOff = wrtResource.size_z / 2;
-    else if (zRef.value === "top") zOff = wrtResource.size_z;
-    else if (zRef.value === "cavity_bottom") {
-      if (wrtResource instanceof Container && wrtResource.material_z_thickness != null) {
-        zOff = wrtResource.material_z_thickness;
-      }
-    }
+// Sum of `rotation.z` (degrees) up the parent chain.
+function getResourceTotalRotationZ(resource) {
+  var z = 0;
+  for (var r = resource; r; r = r.parent) {
+    if (r.rotation && typeof r.rotation.z === "number") z += r.rotation.z;
   }
-
-  return { x: xOff, y: yOff, z: zOff };
+  return z;
 }
 
-function getLocationWrt(resource, wrtName) {
-  var wrtResource = resources[wrtName];
-  if (!wrtResource) return resource.getAbsoluteLocation();
-  var abs = resource.getAbsoluteLocation();
-  var wrtAbs = wrtResource.getAbsoluteLocation();
-  var wrtOff = getWrtAnchorOffset(wrtResource);
+// World-frame position of `resource.location` itself (the resource's origin),
+// applying each parent's accumulated rotation to its child's location vector.
+function getResourceWorldLocation(resource) {
+  if (!resource.parent || !resource.parent.location) {
+    return {
+      x: resource.location.x,
+      y: resource.location.y,
+      z: resource.location.z,
+    };
+  }
+  var parentWorld = getResourceWorldLocation(resource.parent);
+  var parentRotRad = getResourceTotalRotationZ(resource.parent) * Math.PI / 180;
+  var c = Math.cos(parentRotRad);
+  var s = Math.sin(parentRotRad);
   return {
-    x: abs.x - (wrtAbs.x + wrtOff.x),
-    y: abs.y - (wrtAbs.y + wrtOff.y),
-    z: (abs.z || 0) - ((wrtAbs.z || 0) + wrtOff.z),
+    x: parentWorld.x + resource.location.x * c - resource.location.y * s,
+    y: parentWorld.y + resource.location.x * s + resource.location.y * c,
+    z: (parentWorld.z || 0) + (resource.location.z || 0),
+  };
+}
+
+// World-frame position of a chosen anchor point on `resource`. Reference
+// strings follow PLR convention:
+//   xRefStr: "left" | "center" | "right"
+//   yRefStr: "front" | "center" | "back"
+//   zRefStr: "bottom" | "center" | "top" | "cavity_bottom"  (optional)
+// The (x, y) offset is rotated by the resource's accumulated z-rotation so
+// the returned point coincides with the visually-rendered anchor. Returns
+// { x, y, z, zNA } where `zNA` is true when "cavity_bottom" was requested on
+// a resource without `material_z_thickness` (matches the existing readout
+// convention).
+// World-frame axis-aligned bounding box of the resource's footprint, accounting
+// for self + ancestor z-rotation. Useful for viewport-fit calculations on
+// rotated resources (the bbox of a 45-degree-rotated rectangle is sqrt(2) times
+// larger than the rectangle's own size).
+function getResourceWorldAABB(resource) {
+  var world = getResourceWorldLocation(resource);
+  var totalRotRad = getResourceTotalRotationZ(resource) * Math.PI / 180;
+  var c = Math.cos(totalRotRad);
+  var s = Math.sin(totalRotRad);
+  var corners = [
+    [0, 0],
+    [resource.size_x, 0],
+    [resource.size_x, resource.size_y],
+    [0, resource.size_y],
+  ];
+  var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (var i = 0; i < corners.length; i++) {
+    var lx = corners[i][0], ly = corners[i][1];
+    var wx = world.x + lx * c - ly * s;
+    var wy = world.y + lx * s + ly * c;
+    if (wx < minX) minX = wx;
+    if (wx > maxX) maxX = wx;
+    if (wy < minY) minY = wy;
+    if (wy > maxY) maxY = wy;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function getResourceWorldReferencePoint(resource, xRefStr, yRefStr, zRefStr) {
+  // Match the original callsites' conditional exactly: missing or "left"/"front"
+  // -> 0; "center" -> size/2; anything else -> size (i.e. right/back). This keeps
+  // the unrotated path byte-equivalent to the legacy code.
+  var xOff = !xRefStr || xRefStr === "left" ? 0 : xRefStr === "center" ? resource.size_x / 2 : resource.size_x;
+  var yOff = !yRefStr || yRefStr === "front" ? 0 : yRefStr === "center" ? resource.size_y / 2 : resource.size_y;
+  var zOff = 0;
+  var zNA = false;
+  if (zRefStr === "center") zOff = resource.size_z / 2;
+  else if (zRefStr === "top") zOff = resource.size_z;
+  else if (zRefStr === "cavity_bottom") {
+    if (resource instanceof Container && resource.material_z_thickness != null) {
+      zOff = resource.material_z_thickness;
+    } else {
+      zNA = true;
+    }
+  }
+  var world = getResourceWorldLocation(resource);
+  var totalRotRad = getResourceTotalRotationZ(resource) * Math.PI / 180;
+  var c = Math.cos(totalRotRad);
+  var s = Math.sin(totalRotRad);
+  return {
+    x: world.x + xOff * c - yOff * s,
+    y: world.y + xOff * s + yOff * c,
+    z: (world.z || 0) + zOff,
+    zNA: zNA,
   };
 }
 
 var scaleX, scaleY;
 
 var resources = {}; // name -> Resource object
+var methodRegistry = {}; // resource type name -> public method signatures (sent once per class)
 // Serialized resource data saved before resources are destroyed (e.g. picked up by arm).
 // Used by the arm panel to re-instantiate the resource and draw it on a live Konva stage
 // using the exact same draw() code as the main canvas — guaranteeing visual consistency.
@@ -520,11 +773,7 @@ function fitToViewport() {
   stage.x(centerX);
   stage.y(centerY);
 
-  if (typeof updateScaleBar === "function") updateScaleBar();
-  updateBullseyeScale();
-  updateWrtBullseyeScale();
-  updateTooltipScale();
-  updateDeltaLinesScale();
+  refreshScaleOverlays();
 }
 
 let trash;
@@ -713,7 +962,10 @@ class Resource {
     this.parent = parent;
     this.resourceType = resourceData.type || this.constructor.name;
     this.category = resourceData.category || "";
-    this.methods = resourceData.methods || [];
+    // Methods are sent once per class in methodRegistry (keyed by serialized type);
+    // fall back to an inline list for backward compatibility.
+    this.methods =
+      resourceData.methods || methodRegistry[resourceData.type] || [];
     this.model = resourceData.model || null;
     this.rotation = resourceData.rotation || null;
     this.barcode = resourceData.barcode || null;
@@ -755,8 +1007,12 @@ class Resource {
     this.group = new Konva.Group({
       x: this.location.x,
       y: this.location.y,
+      rotation: this.rotation ? this.rotation.z : 0,
       draggable: this.draggable,
     });
+    // Re-apply the tree eye-toggle state; draw() runs on every redraw (volume
+    // change, tip pickup, re-assign) and would otherwise resurrect a hidden item.
+    this.group.visible(!hiddenResourceNames.has(this.name));
     this.mainShape = this.drawMainShape();
     if (this.mainShape !== undefined) {
       this.group.add(this.mainShape);
@@ -778,7 +1034,6 @@ class Resource {
     if (this.mainShape !== undefined) {
       this.mainShape.resource = this;
       this.mainShape.on("mouseover", () => {
-        const { x, y } = this.getAbsoluteLocation();
         if (tooltip !== undefined) {
           tooltip.destroy();
         }
@@ -789,34 +1044,41 @@ class Resource {
           const zRef = document.getElementById("coords-z-ref");
           const wrtRef = document.getElementById("coords-wrt-ref");
           const wrtName = wrtRef ? wrtRef.value : "root";
-          const base = getLocationWrt(this, wrtName);
-          const xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? this.size_x / 2 : this.size_x;
-          const yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? this.size_y / 2 : this.size_y;
-          var zOff = 0;
-          var zNA = false;
-          if (zRef) {
-            if (zRef.value === "center") zOff = this.size_z / 2;
-            else if (zRef.value === "top") zOff = this.size_z;
-            else if (zRef.value === "cavity_bottom") {
-              if (this instanceof Container && this.material_z_thickness != null) {
-                zOff = this.material_z_thickness;
-              } else {
-                zNA = true;
-              }
-            }
+          const selfPoint = getResourceWorldReferencePoint(
+            this,
+            xRef ? xRef.value : null,
+            yRef ? yRef.value : null,
+            zRef ? zRef.value : null,
+          );
+          let cx = selfPoint.x;
+          let cy = selfPoint.y;
+          let cz = selfPoint.z;
+          const zNA = selfPoint.zNA;
+          const wrtResource = resources[wrtName];
+          if (wrtResource) {
+            const wrtXRefEl = document.getElementById("coords-wrt-x-ref");
+            const wrtYRefEl = document.getElementById("coords-wrt-y-ref");
+            const wrtZRefEl = document.getElementById("coords-wrt-z-ref");
+            const wrtPoint = getResourceWorldReferencePoint(
+              wrtResource,
+              wrtXRefEl ? wrtXRefEl.value : null,
+              wrtYRefEl ? wrtYRefEl.value : null,
+              wrtZRefEl ? wrtZRefEl.value : null,
+            );
+            cx -= wrtPoint.x;
+            cy -= wrtPoint.y;
+            if (!zNA) cz -= wrtPoint.z;
           }
-          const cx = base.x + xOff;
-          const cy = base.y + yOff;
-          const cz = (base.z || 0) + zOff;
           const czStr = zNA ? "na" : cz.toFixed(1);
           const wrtLabel = "wrt " + wrtName;
           labelText = `${this.name}\n${wrtLabel}: (${cx.toFixed(1)}, ${cy.toFixed(1)}, ${czStr}) mm`;
         } else {
           labelText = this.tooltipLabel();
         }
+        const tipCenter = getResourceWorldReferencePoint(this, "center", "center");
         tooltip = new Konva.Label({
-          x: x + this.size_x / 2,
-          y: y + this.size_y / 2 + (activeTool === "coords" ? this.size_y * 0.25 : 0),
+          x: tipCenter.x,
+          y: tipCenter.y + (activeTool === "coords" ? this.size_y * 0.25 : 0),
           opacity: 0.75,
           listening: false,
         });
@@ -862,25 +1124,31 @@ class Resource {
           const zRef = document.getElementById("coords-z-ref");
           const wrtRef = document.getElementById("coords-wrt-ref");
           const wrtName = wrtRef ? wrtRef.value : "root";
-          const base = getLocationWrt(this, wrtName);
-          const xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? this.size_x / 2 : this.size_x;
-          const yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? this.size_y / 2 : this.size_y;
-          var zOff = 0;
-          var zNA = false;
-          if (zRef) {
-            if (zRef.value === "center") zOff = this.size_z / 2;
-            else if (zRef.value === "top") zOff = this.size_z;
-            else if (zRef.value === "cavity_bottom") {
-              if (this instanceof Container && this.material_z_thickness != null) {
-                zOff = this.material_z_thickness;
-              } else {
-                zNA = true;
-              }
-            }
+          const selfPoint = getResourceWorldReferencePoint(
+            this,
+            xRef ? xRef.value : null,
+            yRef ? yRef.value : null,
+            zRef ? zRef.value : null,
+          );
+          let cx = selfPoint.x;
+          let cy = selfPoint.y;
+          let cz = selfPoint.z;
+          const zNA = selfPoint.zNA;
+          const wrtResource = resources[wrtName];
+          if (wrtResource) {
+            const wrtXRefEl = document.getElementById("coords-wrt-x-ref");
+            const wrtYRefEl = document.getElementById("coords-wrt-y-ref");
+            const wrtZRefEl = document.getElementById("coords-wrt-z-ref");
+            const wrtPoint = getResourceWorldReferencePoint(
+              wrtResource,
+              wrtXRefEl ? wrtXRefEl.value : null,
+              wrtYRefEl ? wrtYRefEl.value : null,
+              wrtZRefEl ? wrtZRefEl.value : null,
+            );
+            cx -= wrtPoint.x;
+            cy -= wrtPoint.y;
+            if (!zNA) cz -= wrtPoint.z;
           }
-          const cx = base.x + xOff;
-          const cy = base.y + yOff;
-          const cz = (base.z || 0) + zOff;
           const czStr = zNA ? "na" : cz.toFixed(1);
           const container = document.getElementById("coords-measurements");
           if (container) {
@@ -1070,7 +1338,17 @@ class Resource {
     // GIF frame capture is now driven by _recordingTimer (setInterval)
   }
 
-  setState() {}
+  setState(state) {
+    // Rotation is shipped as part of every resource's state so that
+    // `Resource.rotate(...)` (which fires `_state_updated`) propagates to the
+    // visualizer through the existing `set_state` channel.
+    if (state && state.rotation !== undefined && state.rotation !== null) {
+      this.rotation = state.rotation;
+      if (this.group !== undefined) {
+        this.group.rotation(this.rotation.z || 0);
+      }
+    }
+  }
 }
 
 class Deck extends Resource {
@@ -1089,12 +1367,37 @@ class HamiltonSTARDeck extends Deck {
   drawMainShape() {
     // Draw a transparent rectangle with an outline
     let mainShape = new Konva.Group();
+
+    // Opaque white footprint fill, drawn first (behind everything) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the margin bands outside
+    // the rail area are transparent and reveal the background grid underneath. Kept separate
+    // from the border outline below so the inner rail box's outline still draws on top.
+    mainShape.add(
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
+    );
+
     mainShape.add(
       new Konva.Rect({
         y: 63,
         width: this.size_x,
         height: this.railHeight,
-        fill: "white",
         stroke: "black",
         strokeWidth: 1,
       })
@@ -1171,12 +1474,36 @@ class VantageDeck extends Deck {
 
   drawMainShape() {
     let mainShape = new Konva.Group();
+
+    // Opaque white footprint fill, drawn first (behind everything) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the margin bands outside
+    // the rail area are transparent and reveal the background grid underneath.
+    mainShape.add(
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
+    );
+
     mainShape.add(
       new Konva.Rect({
         y: 63,
         width: this.size_x,
         height: this.railHeight,
-        fill: "white",
         stroke: "black",
         strokeWidth: 1,
       })
@@ -1251,6 +1578,31 @@ class OTDeck extends Deck {
     // The slot rectangles are drawn by the ResourceHolder children; the main shape is just the deck
     // border. The slot-number labels are added in draw() so they sit on top of the holders.
     const group = new Konva.Group({});
+
+    // Opaque footprint fill, drawn first (behind the slot holders) so the deck paints its own
+    // surface rather than relying on the global background; otherwise the gaps around and between
+    // the slots are transparent and reveal the background grid underneath.
+    group.add(
+      new Konva.Group({
+        x: this.size_x / 2, y: this.size_y / 2,   // deck centre
+        scaleX: this.size_x, scaleY: this.size_y, // stretch the unit square to the footprint
+        listening: false,
+      }).add(
+        // A circular gradient in a 1x1 square: the group's non-uniform scale turns it into an
+        // ellipse matching the deck's aspect, so the fade reaches the edge evenly on a wide deck
+        // instead of only at the corners. endRadius = half-diagonal of the unit square (corners).
+        new Konva.Rect({
+          x: -0.5, y: -0.5, width: 1, height: 1,
+          fillRadialGradientStartPoint: { x: 0, y: 0 },
+          fillRadialGradientStartRadius: 0,
+          fillRadialGradientEndPoint: { x: 0, y: 0 },
+          fillRadialGradientEndRadius: Math.SQRT1_2,
+          fillRadialGradientColorStops: [0, DECK_SURFACE_CENTER, 1, DECK_SURFACE_EDGE],
+          listening: false,
+        })
+      )
+    );
+
     group.add(
       new Konva.Rect({
         width: this.size_x,
@@ -1387,10 +1739,19 @@ class Container extends Resource {
 
   setVolume(volume) {
     this.volume = volume;
-    this.update();
+    // Fast path: recolor the existing liquid shape in place instead of destroying
+    // and rebuilding the entire Konva group (and re-registering every event
+    // handler) on each volume change. `_liquidShape` is captured in drawMainShape;
+    // fall back to a full draw() if the resource has not been drawn yet.
+    if (this._liquidShape !== undefined && this._liquidShape !== null) {
+      this._liquidShape.fill(Container.colorForVolume(volume, this.maxVolume));
+    } else {
+      this.update();
+    }
   }
 
   setState(state) {
+    super.setState(state);
     this.setVolume(state.volume);
   }
 
@@ -1432,6 +1793,7 @@ class Well extends Container {
 
   drawMainShape() {
     const mainShape = new Konva.Group({});
+    let liquid;
     if (this.cross_section_type === "circle") {
       mainShape.add(new Konva.Circle({  // background
         radius: this.size_x / 2,
@@ -1439,28 +1801,31 @@ class Well extends Container {
         offsetX: -this.size_x / 2,
         offsetY: -this.size_y / 2,
       }));
-      mainShape.add(new Konva.Circle({ // liquid
+      liquid = new Konva.Circle({ // liquid
         radius: this.size_x / 2,
         fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
         offsetX: -this.size_x / 2,
         offsetY: -this.size_y / 2,
-      }));
+      });
+      mainShape.add(liquid);
     } else {
       mainShape.add(new Konva.Rect({  // background
         width: this.size_x,
         height: this.size_y,
         fill: RESOURCE_COLORS["ContainerBackground"],
       }));
-      mainShape.add(new Konva.Rect({ // liquid
+      liquid = new Konva.Rect({ // liquid
         width: this.size_x,
         height: this.size_y,
         fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
-      }));
+      });
+      mainShape.add(liquid);
     }
+    this._liquidShape = liquid;
     return mainShape;
   }
 }
@@ -1475,11 +1840,13 @@ class Trough extends Container {
       stroke: "black",
       strokeWidth: 1,
     }));
-    group.add(new Konva.Rect({  // liquid layer
+    const liquid = new Konva.Rect({  // liquid layer
       width: this.size_x,
       height: this.size_y,
       fill: Trough.colorForVolume(this.getVolume(), this.maxVolume),
-    }));
+    });
+    group.add(liquid);
+    this._liquidShape = liquid;
     return group;
   }
 }
@@ -1536,7 +1903,7 @@ class TipSpot extends Resource {
   get canDelete() { return false; }
 
   drawMainShape() {
-    return new Konva.Circle({
+    this._tipShape = new Konva.Circle({
       radius: this.size_x / 2,
       fill: this.has_tip ? "#40CDA1" : "white",
       stroke: "black",
@@ -1544,11 +1911,19 @@ class TipSpot extends Resource {
       offsetX: -this.size_x / 2,
       offsetY: -this.size_y / 2,
     });
+    return this._tipShape;
   }
 
   setState(state) {
+    super.setState(state);
     this.has_tip = state.tip !== null;
-    this.update();
+    // Fast path: recolor the existing tip circle in place instead of rebuilding
+    // the whole group. Fall back to a full draw() if not yet drawn.
+    if (this._tipShape !== undefined && this._tipShape !== null) {
+      this._tipShape.fill(this.has_tip ? "#40CDA1" : "white");
+    } else {
+      this.update();
+    }
   }
 
   serialize() {
@@ -1590,14 +1965,16 @@ class Tube extends Container {
       offsetX: -this.size_x / 2,
       offsetY: -this.size_y / 2,
     }));
-    mainShape.add(new Konva.Circle({  // liquid
+    const liquid = new Konva.Circle({  // liquid
       radius: this.size_x / 2,
       fill: Tube.colorForVolume(this.getVolume(), this.maxVolume),
       stroke: "black",
       strokeWidth: 1,
       offsetX: -this.size_x / 2,
       offsetY: -this.size_y / 2,
-    }));
+    });
+    mainShape.add(liquid);
+    this._liquidShape = liquid;
     return mainShape;
   }
 }
@@ -2049,7 +2426,8 @@ function _showPipetteInfoPanelInner(title, type, attrs, anchorDropdown) {
 }
 
 function fillHeadIcons(panel, headState) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   // Fixed height: pipette (27) + max tip (80mm * 0.8 = 64px)
   var maxTipPx = 64; // 80mm max tip
   var fixedSvgH = 27 + maxTipPx;
@@ -2230,7 +2608,8 @@ function head96PosId(ch, startCh) {
 }
 
 function fillHead96Grid(panel, head96State) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   if (!head96State || Object.keys(head96State).length === 0) {
     // Set panel dimensions to match a normal 96-head grid, then center message
     panel.style.minWidth = "180px";
@@ -2278,7 +2657,7 @@ function fillHead96Grid(panel, head96State) {
           { key: "channels", value: "96" },
           { key: "tips_loaded", value: tipCount + " / 96" },
         ];
-        showPipetteInfoPanel("96-Head Pipette", "CoRe96Head", attrs, panel, String(startCh), "channel");
+        showPipetteInfoPanel("96-Channel Head Pipette", "Head96", attrs, panel, String(startCh), "channel");
       });
     })(startCh, head96State);
     box.style.display = "inline-flex";
@@ -2610,7 +2989,8 @@ function buildSingleArm(armData, anchorDropdown, armId) {
 }
 
 function fillArmPanel(panel, armState) {
-  panel.innerHTML = "";
+  clearPanelContent(panel);
+  ensurePanelResetButton(panel);
   if (!armState || Object.keys(armState).length === 0) {
     // Set panel dimensions to match a normal arm panel, then center message
     var stdW = Math.round((Math.round(127 * Math.min(80 / 127, 80 / 86)) + 16) * 1.1) + 28;
@@ -2665,6 +3045,7 @@ class LiquidHandler extends Resource {
   }
 
   setState(state) {
+    super.setState(state);
     if (state.head_state) {
       this.headState = state.head_state;
       this.numHeads = Object.keys(state.head_state).length;
@@ -2861,31 +3242,18 @@ window.addEventListener("load", function () {
     listening: false,
   });
 
-  // add the layer to the stage
+  // add the layers to the stage; gridLayer is bottom-most so the grid sits beneath every
+  // resource, then the resource layer, then the overlay layer on top.
+  stage.add(gridLayer);
   stage.add(layer);
   stage.add(resourceLayer);
 
-  layer.add(background);
+  // White fill lives at the very bottom of the grid layer, so the grid lines draw over it
+  // but still beneath all resources.
+  gridLayer.add(background);
 
-  // Scale bar update: picks a round mm value that fits ~80-120px on screen.
-  function updateScaleBar() {
-    const scale = stage.scaleX(); // CSS pixels per mm
-    // Choose a nice round distance whose bar width falls near 100px
-    const niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
-    let bestMM = niceSteps[0];
-    for (let i = 0; i < niceSteps.length; i++) {
-      if (niceSteps[i] * scale >= 60) {
-        bestMM = niceSteps[i];
-        break;
-      }
-      bestMM = niceSteps[i];
-    }
-    const barPx = bestMM * scale;
-    const barLine = document.getElementById("scale-bar-line");
-    const barLabel = document.getElementById("scale-bar-label");
-    if (barLine) barLine.style.width = barPx + "px";
-    if (barLabel) barLabel.textContent = bestMM + " mm";
-  }
+  // Redraw the grid on pan (the stage is draggable); the zoom/fit paths refresh overlays.
+  stage.on("dragmove", requestWorkcellGrid);
 
   // Mouse wheel zoom
   const scaleBy = 1.1;
@@ -2914,11 +3282,7 @@ window.addEventListener("load", function () {
       y: pointer.y - mousePointTo.y * (-clampedScale),
     };
     stage.position(newPos);
-    updateScaleBar();
-    updateBullseyeScale();
-    updateWrtBullseyeScale();
-    updateTooltipScale();
-    updateDeltaLinesScale();
+    refreshScaleOverlays();
   });
 
   updateScaleBar();
@@ -2933,6 +3297,10 @@ window.addEventListener("load", function () {
       stage.height(newHeight);
       stage.offsetY(newHeight);
     }
+    // Re-clamp any open capability panels so a remembered position can't leave a
+    // panel stranded off-screen after the drawing area shrinks (window resize,
+    // sidebar expand/collapse). Positions and sizes are unchanged when they fit.
+    repositionAllMachineToolPanels();
   });
   resizeObserver.observe(canvas);
 
@@ -2961,11 +3329,7 @@ window.addEventListener("load", function () {
       x: center.x - mousePointTo.x * newScale,
       y: center.y - mousePointTo.y * (-newScale),
     });
-    if (typeof updateScaleBar === "function") updateScaleBar();
-    updateBullseyeScale();
-    updateWrtBullseyeScale();
-    updateTooltipScale();
-    updateDeltaLinesScale();
+    refreshScaleOverlays();
   }
 
   var zoomInBtn = document.getElementById("zoom-in-btn");
@@ -3181,6 +3545,134 @@ var sidepanelHighlightRect = null;
 var sidepanelHoverRect = null;
 var sidepanelHoverGlow = null;
 
+// Names of resources currently hidden via the tree eye toggle. Keyed by name
+// rather than by JS instance so the state survives the destroy/redraw and
+// unassign/re-assign cycles that recreate a resource's Konva group.
+var hiddenResourceNames = new Set();
+
+// Blender-outliner-style eye. Shown: open almond outline with a filled pupil.
+// Hidden: a closed eyelid (downward arc), matching Blender's hide toggle.
+function treeEyeSvg(hidden) {
+  if (hidden) {
+    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M3 10.5c2.6 3.3 5.9 5 9 5s6.4-1.7 9-5" stroke-width="2.2"/></svg>';
+  }
+  return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M3.07 12C5.23 8.2 8.43 6 12 6s6.77 2.2 8.93 6c-2.16 3.8-5.36 6-8.93 6s-6.77-2.2-8.93-6Z" stroke-width="2.2"/>' +
+    '<circle cx="12" cy="12" r="3.8" fill="currentColor" stroke="none"/></svg>';
+}
+
+// The Set stores only *explicitly* hidden resources (a resource's own state).
+// A resource's effective visibility is its own state AND every ancestor being
+// visible; the ancestor half is enforced for free by Konva group nesting, so we
+// never copy hidden-ness onto descendants. This keeps "hidden because I was
+// toggled off" distinct from "hidden because a parent is off".
+
+// True if any ancestor (not the resource itself) is explicitly hidden, so the
+// resource is clipped on the canvas no matter its own state.
+function isHiddenByAncestor(resource) {
+  var p = resource ? resource.parent : undefined;
+  while (p) {
+    if (hiddenResourceNames.has(p.name)) return true;
+    p = p.parent;
+  }
+  return false;
+}
+
+// Push a resource's own hidden flag onto its Konva group. Descendants are
+// clipped automatically because their groups are nested inside this one, and
+// the resource keeps its slot in the parent's child list so re-showing
+// preserves stacking order (a destroy/redraw would re-append it last).
+function applyOwnVisibility(resource) {
+  if (resource && resource.group !== undefined) {
+    resource.group.visible(!hiddenResourceNames.has(resource.name));
+  }
+}
+
+function setResourceHidden(resourceName, hidden) {
+  if (hidden) {
+    hiddenResourceNames.add(resourceName);
+  } else {
+    hiddenResourceNames.delete(resourceName);
+  }
+  applyOwnVisibility(resources[resourceName]);
+  // A visibility change on a plate's descendant (or the plate itself) must rebuild
+  // the cached bitmap, otherwise the change would not show until the next update.
+  touchCacheOwner(resources[resourceName]);
+  resourceLayer.draw();
+  refreshTreeVisibilityState();
+}
+
+// Opt-in gesture (alt-click) for a row clipped by a hidden ancestor: clear this
+// resource's own flag and every hidden ancestor so it actually becomes visible.
+function revealResourceAndAncestors(resource) {
+  if (!resource) return;
+  hiddenResourceNames.delete(resource.name);
+  applyOwnVisibility(resource);
+  var p = resource.parent;
+  while (p) {
+    hiddenResourceNames.delete(p.name);
+    applyOwnVisibility(p);
+    p = p.parent;
+  }
+  touchCacheOwner(resource);
+  resourceLayer.draw();
+  refreshTreeVisibilityState();
+}
+
+// Sync one tree row from current state. Eye *shape* follows the resource's own
+// flag (closed eyelid iff explicitly hidden). The `inherited` styling marks
+// rows clipped by a hidden ancestor: their own toggle can't take effect, so the
+// eye is shown disabled with a tooltip rather than letting a click lie about
+// what happened on the canvas.
+function updateRowVisibility(row, resource) {
+  var ownHidden = hiddenResourceNames.has(resource.name);
+  var inherited = isHiddenByAncestor(resource);
+  var eye = row.querySelector(":scope > .tree-node-eye");
+  if (eye) {
+    eye.classList.toggle("hidden", ownHidden);
+    eye.classList.toggle("inherited", inherited);
+    eye.innerHTML = treeEyeSvg(ownHidden);
+    eye.title = inherited
+      ? "Hidden by a parent - alt-click to reveal it"
+      : (ownHidden ? "Show" : "Hide");
+  }
+  row.classList.toggle("resource-hidden", ownHidden || inherited);
+}
+
+// Re-sync every tree row's eye/dim state. Cheap: only rows present in the DOM
+// are walked (leaf wells/tips are not surfaced as tree nodes).
+function refreshTreeVisibilityState() {
+  var tree = document.getElementById("resource-tree");
+  if (!tree) return;
+  var nodes = tree.querySelectorAll(".tree-node[data-resource-name]");
+  for (var i = 0; i < nodes.length; i++) {
+    var resource = resources[nodes[i].dataset.resourceName];
+    var row = nodes[i].querySelector(":scope > .tree-node-row");
+    if (resource && row) updateRowVisibility(row, resource);
+  }
+}
+
+// Build the per-row eye button. State is read from the Set (not a local flag)
+// so it stays correct when a subtree is rebuilt via replaceWith.
+function createVisibilityToggle(resourceName) {
+  var btn = document.createElement("span");
+  btn.className = "tree-node-eye";
+  btn.innerHTML = treeEyeSvg(false);
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var resource = resources[resourceName];
+    if (resource && isHiddenByAncestor(resource)) {
+      // Clipped by a hidden ancestor: a plain click can't take effect, so it is
+      // a no-op. Alt-click reveals the ancestor chain to force it visible.
+      if (e.altKey) revealResourceAndAncestors(resource);
+      return;
+    }
+    setResourceHidden(resourceName, !hiddenResourceNames.has(resourceName));
+  });
+  return btn;
+}
+
 function getResourceTypeName(resource) {
   return resource.constructor.name;
 }
@@ -3208,6 +3700,10 @@ function isTubeRackLike(resource) {
     (resource.children.length > 0 && resource.children[0] instanceof Tube);
 }
 
+function isLid(resource) {
+  return resource.category === "lid" || resource.resourceType === "Lid";
+}
+
 function isCarrierLike(resource) {
   return resource instanceof Carrier ||
     ["carrier", "tip_carrier", "plate_carrier", "trough_carrier", "tube_carrier"]
@@ -3227,13 +3723,13 @@ function getResourceSummary(resource) {
   }
 
   if (isPlateLike(resource)) {
-    const numChildren = resource.children.length;
-    return `${numChildren} wells`;
+    const numWells = resource.children.filter((c) => !isLid(c)).length;
+    return `${numWells} wells`;
   }
 
   if (isTubeRackLike(resource)) {
-    const numChildren = resource.children.length;
-    return `${numChildren} tubes`;
+    const numTubes = resource.children.filter((c) => !isLid(c)).length;
+    return `${numTubes} tubes`;
   }
 
   if (resource instanceof Container) {
@@ -3337,9 +3833,10 @@ function getDisplayChildren(resource) {
     return result;
   }
 
-  // Leaf containers: don't show individual wells/tips/tubes
+  // Leaf containers: hide the individual wells/tips/tubes, but still surface
+  // other children such as a lid so they appear as their own tree nodes.
   if (isTipRackLike(resource) || isPlateLike(resource) || isTubeRackLike(resource)) {
-    return [];
+    return (resource.children || []).filter(isLid);
   }
 
   return resource.children || [];
@@ -3439,6 +3936,8 @@ function buildTreeNodeDOM(resource, depth, slotIndex) {
   row.appendChild(nameSpan);
   row.appendChild(typeSpan);
   row.appendChild(info);
+  row.appendChild(createVisibilityToggle(resource.name));
+  updateRowVisibility(row, resource);
   node.appendChild(row);
 
   // Hover row to show yellow highlight on canvas
@@ -3537,6 +4036,8 @@ function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
   rootRow.appendChild(rootDot);
   rootRow.appendChild(rootName);
   rootRow.appendChild(rootType);
+  rootRow.appendChild(createVisibilityToggle(rootResource.name));
+  updateRowVisibility(rootRow, rootResource);
   rootNode.appendChild(rootRow);
 
   rootRow.addEventListener("mouseenter", function () {
@@ -3687,11 +4188,17 @@ function showHoverHighlight(resourceName) {
   clearHoverHighlight();
   const resource = resources[resourceName];
   if (!resource || !resource.group) return;
-  const absPos = resource.getAbsoluteLocation();
+  // The highlight rects are added inside the group; if that group (or its plate)
+  // is cached the rects would not render, so uncache the owner while highlighted.
+  suspendCacheForHighlight(resource);
+  // Draw both highlight rects inside the resource's Konva.Group so they inherit
+  // its transform (location + rotation, chained through any rotated parents).
+  // Drawing on resourceLayer with the un-rotated absolute location leaves them
+  // axis-aligned over rotated resources.
   // Outer glow rect (turquoise shadow, no fill)
   sidepanelHoverGlow = new Konva.Rect({
-    x: absPos.x,
-    y: absPos.y,
+    x: 0,
+    y: 0,
     width: resource.size_x,
     height: resource.size_y,
     stroke: "rgba(0, 220, 220, 0.7)",
@@ -3704,15 +4211,15 @@ function showHoverHighlight(resourceName) {
   });
   // Inner fill rect (yellow, no shadow)
   sidepanelHoverRect = new Konva.Rect({
-    x: absPos.x,
-    y: absPos.y,
+    x: 0,
+    y: 0,
     width: resource.size_x,
     height: resource.size_y,
     fill: "rgba(255, 230, 0, 0.25)",
     listening: false,
   });
-  resourceLayer.add(sidepanelHoverGlow);
-  resourceLayer.add(sidepanelHoverRect);
+  resource.group.add(sidepanelHoverGlow);
+  resource.group.add(sidepanelHoverRect);
   resourceLayer.draw();
 }
 
@@ -3725,6 +4232,7 @@ function clearHoverHighlight() {
     sidepanelHoverRect.destroy();
     sidepanelHoverRect = null;
   }
+  resumeCacheAfterHighlight();
   resourceLayer.draw();
 }
 
@@ -3795,13 +4303,13 @@ function highlightResourceOnCanvas(resourceName) {
 
   if (!resource.group) return;
 
-  // Get absolute position on the canvas
-  const absPos = resource.getAbsoluteLocation();
-
-  // Draw a highlight rectangle on the resource layer
+  // Draw the highlight inside the resource's Konva.Group so it inherits the
+  // same transform (location + rotation, chained through any rotated parents)
+  // as the resource itself. Drawing it on resourceLayer with the un-rotated
+  // absolute location would leave it axis-aligned over rotated resources.
   sidepanelHighlightRect = new Konva.Rect({
-    x: absPos.x - 2,
-    y: absPos.y - 2,
+    x: -2,
+    y: -2,
     width: resource.size_x + 4,
     height: resource.size_y + 4,
     stroke: "#0d6efd",
@@ -3809,7 +4317,7 @@ function highlightResourceOnCanvas(resourceName) {
     dash: [6, 3],
     listening: false,
   });
-  resourceLayer.add(sidepanelHighlightRect);
+  resource.group.add(sidepanelHighlightRect);
   resourceLayer.draw();
 
   // Auto-remove highlight after 2 seconds
@@ -3826,13 +4334,15 @@ function focusOnResource(resourceName) {
   var resource = resources[resourceName];
   if (!resource || !stage) return;
 
-  var absPos = resource.getAbsoluteLocation();
+  // Use the rotated world AABB so the viewport fits and centres on what the
+  // user actually sees, not on the un-rotated footprint of an inert plate def.
+  var aabb = getResourceWorldAABB(resource);
   var padding = 60;
   var stageW = stage.width();
   var stageH = stage.height();
   var viewW = stageW - padding * 2;
   var viewH = stageH - padding * 2;
-  var fitScale = Math.min(viewW / resource.size_x, viewH / resource.size_y);
+  var fitScale = Math.min(viewW / aabb.width, viewH / aabb.height);
 
   // Adaptive max zoom based on resource size (smaller resources get more zoom)
   var resourceArea = resource.size_x * resource.size_y;
@@ -3846,17 +4356,15 @@ function focusOnResource(resourceName) {
   stage.scaleX(fitScale);
   stage.scaleY(-fitScale);
 
-  // Center the resource in the viewport
-  var centerX = (stageW - resource.size_x * fitScale) / 2 - absPos.x * fitScale;
-  var centerY = (stageH + resource.size_y * fitScale) / 2 + absPos.y * fitScale - stageH * fitScale;
+  // Centre the (rotated) AABB in the viewport.
+  var aabbCx = aabb.x + aabb.width / 2;
+  var aabbCy = aabb.y + aabb.height / 2;
+  var centerX = stageW / 2 - aabbCx * fitScale;
+  var centerY = stageH / 2 + aabbCy * fitScale - stageH * fitScale;
   stage.x(centerX);
   stage.y(centerY);
 
-  if (typeof updateScaleBar === "function") updateScaleBar();
-  updateBullseyeScale();
-  updateWrtBullseyeScale();
-  updateTooltipScale();
-  updateDeltaLinesScale();
+  refreshScaleOverlays();
   stage.batchDraw();
 
   // Also highlight the resource
@@ -4392,6 +4900,14 @@ window.addEventListener("load", function () {
 var umlPanelResourceName = null;
 var _umlPanelOpenedAt = 0;
 
+// Format a volume for display: at most 2 decimals (no trailing zeros, so 327.2 not
+// 327.20) and thousands separators, so values above 1000 read as e.g. 1,000. Passes
+// null/undefined through unchanged.
+function formatVolume(v) {
+  if (v == null) return v;
+  return Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
 function getUmlAttributes(resource) {
   var attrs = [];
   attrs.push({ key: "name", value: JSON.stringify(resource.name) });
@@ -4400,7 +4916,9 @@ function getUmlAttributes(resource) {
   if (resource.model) {
     attrs.push({ key: "model", value: resource.model });
   }
-  var abs = resource.getAbsoluteLocation();
+  // Rotation-aware: matches Python's get_absolute_location() rather than the
+  // legacy rotation-blind JS sum, so the readout agrees with the deck math.
+  var abs = getResourceWorldLocation(resource);
   attrs.push({ key: "abs_location", value: "(" + abs.x.toFixed(1) + ", " + abs.y.toFixed(1) + ", " + (abs.z || 0).toFixed(1) + ")" });
   if (resource.rotation) {
     attrs.push({ key: "rotation", value: "(" + resource.rotation.x + ", " + resource.rotation.y + ", " + resource.rotation.z + ")" });
@@ -4435,8 +4953,8 @@ function getUmlAttributes(resource) {
       attrs.push({ key: "material_z_thickness", value: resource.material_z_thickness });
     }
     attrs.push({ key: "height_volume_data", value: resource.has_height_volume_data ? "exists" : "None" });
-    attrs.push({ key: "max_volume", value: resource.maxVolume });
-    attrs.push({ key: "volume", value: resource.volume });
+    attrs.push({ key: "max_volume", value: formatVolume(resource.maxVolume) });
+    attrs.push({ key: "volume", value: formatVolume(resource.volume) });
   }
   // TipSpot
   if (resource instanceof TipSpot) {
@@ -4784,6 +5302,168 @@ var integratedArmSVG =
   '<polygon points="29,30.3 30.5,29.5 30.5,38.5 29,39.3" fill="#1a1a1a" stroke="#000" stroke-width="0.4"/>' +
   '</g>';
 
+// Remembered machine-tool panel positions, keyed by panel id. Empty by default,
+// so each panel falls back to its computed group position until the user drags it.
+var machineToolPanelPositions = {};
+(function loadMachineToolPanelPositions() {
+  try {
+    var raw = window.localStorage.getItem("plr-machine-tool-panel-positions");
+    if (raw) machineToolPanelPositions = JSON.parse(raw) || {};
+  } catch (e) {
+    machineToolPanelPositions = {};
+  }
+})();
+
+function saveMachineToolPanelPositions() {
+  try {
+    window.localStorage.setItem(
+      "plr-machine-tool-panel-positions",
+      JSON.stringify(machineToolPanelPositions)
+    );
+  } catch (e) {
+    // localStorage unavailable (private mode / quota) — positions persist in-memory only.
+  }
+}
+
+// Reference to the per-liquid-handler positionPanels routine, published once it
+// is defined in buildNavbarLHMachineTools. It is pure given its arguments, so a
+// single reference can reposition any liquid handler's panels.
+var repositionMachineToolPanels = null;
+
+// Reposition every liquid handler's open panels using the current remembered
+// positions (a moved panel stays where it was dropped, others snap to default).
+function repositionAllMachineToolPanels() {
+  if (!repositionMachineToolPanels) return;
+  for (var name in resources) {
+    if (!(resources[name] instanceof LiquidHandler)) continue;
+    var singleBtn = document.getElementById("single-channel-btn-" + name);
+    if (singleBtn) repositionMachineToolPanels(name, singleBtn);
+  }
+}
+
+// Show a panel's return indicator only when that panel has been dragged off its
+// default position.
+function updatePanelResetVisibility() {
+  var btns = document.querySelectorAll(".machine-tool-dropdown .panel-reset-btn");
+  for (var i = 0; i < btns.length; i++) {
+    var panel = btns[i].parentElement;
+    btns[i].style.display = panel && machineToolPanelPositions[panel.id] ? "" : "none";
+  }
+}
+
+// Return a single panel to its default position and forget its remembered spot.
+function resetPanelPosition(panel) {
+  delete machineToolPanelPositions[panel.id];
+  saveMachineToolPanelPositions();
+  repositionAllMachineToolPanels();
+  updatePanelResetVisibility();
+}
+
+// Clear a panel's state-driven content while preserving the return indicator.
+// The fill functions rebuild content on every state update; using this instead
+// of panel.innerHTML = "" keeps the reset button (and its listeners) intact.
+function clearPanelContent(panel) {
+  var children = Array.prototype.slice.call(panel.children);
+  for (var i = 0; i < children.length; i++) {
+    if (!children[i].classList.contains("panel-reset-btn")) {
+      panel.removeChild(children[i]);
+    }
+  }
+}
+
+// Ensure a panel carries a top-right return indicator. Idempotent: the button is
+// created once and only its visibility is refreshed on later fills. The
+// indicator returns this panel to its default position when clicked.
+function ensurePanelResetButton(panel) {
+  var btn = panel.querySelector(".panel-reset-btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.className = "panel-reset-btn";
+    btn.title = "Return this panel to its default position";
+    btn.setAttribute("aria-label", "Return panel to default position");
+    // Same house icon as the deck "Reset view" home button.
+    btn.innerHTML =
+      '<svg width="15" height="15" viewBox="0 0 20 20" aria-hidden="true">' +
+      '<path d="M10 1L1 9h3v8h5v-5h2v5h5V9h3L10 1z" fill="currentColor"/></svg>';
+    btn.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      resetPanelPosition(panel);
+    });
+    panel.appendChild(btn);
+  }
+  btn.style.display = machineToolPanelPositions[panel.id] ? "" : "none";
+}
+
+// Place a machine-tool panel at its remembered position if the user has dragged
+// it, otherwise at the supplied default. Both are clamped to keep the panel
+// inside main; the left clamp uses the measured width (knownW) rather than
+// offsetWidth so a right-edge panel can't wrap and inflate its own height.
+function applyMachineToolPanelPos(panel, defLeft, defTop, knownW, mainRect) {
+  var stored = machineToolPanelPositions[panel.id];
+  // Only trust a stored position with finite numbers; a corrupted or partial
+  // localStorage entry falls back to the default rather than "NaNpx".
+  var hasStored = stored && Number.isFinite(stored.left) && Number.isFinite(stored.top);
+  var left = hasStored ? stored.left : defLeft;
+  var top = hasStored ? stored.top : defTop;
+  var maxLeft = Math.max(0, mainRect.width - knownW);
+  left = Math.max(0, Math.min(left, maxLeft));
+  panel.style.left = left + "px";
+  var maxTop = Math.max(0, mainRect.height - panel.offsetHeight);
+  top = Math.max(0, Math.min(top, maxTop));
+  panel.style.top = top + "px";
+}
+
+// Allow a machine-tool panel to be repositioned by dragging its background or
+// edges. Drags starting on an object inside the panel (channels, tips, grid,
+// gripper) are ignored, since those clicks already open info panels.
+function makeMachineToolPanelDraggable(panel) {
+  panel.addEventListener("mousedown", function (e) {
+    if (e.button !== 0) return;
+    if (e.target !== panel) return; // only the padding/border/background, not the objects
+    var mainEl = document.querySelector("main");
+    if (!mainEl) return;
+    var mainRect = mainEl.getBoundingClientRect();
+    var startX = e.clientX, startY = e.clientY;
+    var startLeft = parseFloat(panel.style.left) || 0;
+    var startTop = parseFloat(panel.style.top) || 0;
+    var panelW = panel.offsetWidth, panelH = panel.offsetHeight;
+    e.preventDefault();
+    panel.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    function onMove(ev) {
+      // If the button was released outside the window, the browser never sends
+      // mouseup to the document; the next move over the page reports no buttons
+      // held, so end the drag here instead of letting the panel "stick" to the
+      // cursor.
+      if (ev.buttons === 0) { onUp(); return; }
+      var nl = startLeft + (ev.clientX - startX);
+      var nt = startTop + (ev.clientY - startY);
+      nl = Math.max(0, Math.min(nl, Math.max(0, mainRect.width - panelW)));
+      nt = Math.max(0, Math.min(nt, Math.max(0, mainRect.height - panelH)));
+      panel.style.left = nl + "px";
+      panel.style.top = nt + "px";
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onUp);
+      panel.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      machineToolPanelPositions[panel.id] = {
+        left: parseFloat(panel.style.left) || 0,
+        top: parseFloat(panel.style.top) || 0,
+      };
+      saveMachineToolPanelPositions();
+      updatePanelResetVisibility();
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    // Losing window focus (alt-tab, releasing outside the page) also ends the drag.
+    window.addEventListener("blur", onUp);
+  });
+}
+
 function buildNavbarLHMachineTools() {
   var container = document.getElementById("navbar-lh-machine-tools");
   if (!container) return;
@@ -4805,11 +5485,11 @@ function buildNavbarLHMachineTools() {
     // Label (styled as button without changing appearance)
     var label = document.createElement("button");
     label.className = "navbar-pipette-label";
-    label.title = "Show/hide liquid handler machine tools";
+    label.title = "Show/hide liquid handler capabilities";
     label.textContent = "";
     label.appendChild(document.createTextNode(lhName));
     label.appendChild(document.createElement("br"));
-    label.appendChild(document.createTextNode("Machine Tools"));
+    label.appendChild(document.createTextNode("Capabilities"));
     group.appendChild(label);
 
     // Collapsible container for machine tool buttons
@@ -4817,17 +5497,22 @@ function buildNavbarLHMachineTools() {
     machineToolBtns.className = "navbar-machine-tool-btns";
     group.appendChild(machineToolBtns);
 
-    // Toggle machine tool buttons on label click
-    label.addEventListener("click", function () {
-      var collapsed = machineToolBtns.classList.toggle("collapsed");
-      label.classList.toggle("collapsed", collapsed);
-      // Close any open dropdowns when collapsing
-      if (collapsed) {
-        var dropdowns = document.querySelectorAll(".machine-tool-dropdown.open");
-        dropdowns.forEach(function (d) { d.classList.remove("open"); });
-        group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
-      }
-    });
+    // Toggle machine tool buttons on label click. Wrapped in an IIFE so the
+    // handler captures this iteration's label/machineToolBtns/group (they are
+    // var-scoped across the loop); without it every label toggles the last
+    // liquid handler's tools.
+    (function (label, machineToolBtns, group) {
+      label.addEventListener("click", function () {
+        var collapsed = machineToolBtns.classList.toggle("collapsed");
+        label.classList.toggle("collapsed", collapsed);
+        // Close any open dropdowns when collapsing
+        if (collapsed) {
+          var dropdowns = document.querySelectorAll(".machine-tool-dropdown.open");
+          dropdowns.forEach(function (d) { d.classList.remove("open"); });
+          group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
+        }
+      });
+    })(label, machineToolBtns, group);
 
     // Multi-channel button (hidden unless setState has already confirmed machine tool exists)
     var lhRes = resources[lhName];
@@ -4870,12 +5555,14 @@ function buildNavbarLHMachineTools() {
 
       var singlePanel = document.getElementById("single-channel-dropdown-" + handlerName);
 
-      // Measure single panel (temporarily show if hidden)
+      // Measure single panel (temporarily show if hidden) at its natural width.
+      // Measuring at left:0 gives the panel the full available width so a panel
+      // parked near the right edge of main can't wrap its channel columns into a
+      // tall stack and inflate the height that the plate/arm panels inherit.
       var singleW = 0, singleH = 0, singleLeft = singleCenterPx;
       if (singlePanel) {
-        // Temporarily set left + transform so we can measure offsetWidth accurately
         singlePanel.style.top = topPx + "px";
-        singlePanel.style.left = singleCenterPx + "px";
+        singlePanel.style.left = "0px";
         var wasHidden = !singlePanel.classList.contains("open");
         if (wasHidden) { singlePanel.style.visibility = "hidden"; singlePanel.classList.add("open"); }
         singleW = singlePanel.offsetWidth;
@@ -4904,26 +5591,30 @@ function buildNavbarLHMachineTools() {
         singleLeft = singleLeft + (-totalLeftEdge);
       }
 
-      // Always position single panel with direct left (no CSS transform),
-      // because html2canvas misrenders translateX(-50%).
+      // Default group layout (multi | single | arm), anchored on the single button.
+      // Each panel snaps to its default unless the user has dragged it, in which
+      // case its remembered position wins (see applyMachineToolPanelPos). Panels
+      // use direct left/top (no CSS transform) because html2canvas misrenders
+      // translateX(-50%).
       if (singlePanel) {
         singlePanel.style.transform = "none";
-        singlePanel.style.left = Math.max(0, singleLeft) + "px";
+        applyMachineToolPanelPos(singlePanel, singleLeft, topPx, singleW, mainRect);
       }
 
       if (multiPanel && multiPanel.classList.contains("open")) {
-        multiPanel.style.top = topPx + "px";
         multiPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
-        multiPanel.style.left = Math.max(0, singleLeft - multiW - 8) + "px";
+        applyMachineToolPanelPos(multiPanel, singleLeft - multiW - 8, topPx, multiW, mainRect);
       }
 
       if (armPanel && armPanel.classList.contains("open")) {
-        armPanel.style.top = topPx + "px";
         armPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
-        var singleRight = singleLeft + singleW;
-        armPanel.style.left = (singleRight + 8) + "px";
+        applyMachineToolPanelPos(armPanel, singleLeft + singleW + 8, topPx, armW, mainRect);
       }
     }
+    // Publish to module scope (after the declaration) so the resize re-clamp and
+    // per-panel reset can reuse it. positionPanels is parameterized by handler
+    // name and closes over no per-liquid-handler state, so one reference works.
+    repositionMachineToolPanels = positionPanels;
 
     // Single-channel dropdown panel
     (function (btn, handlerName) {
@@ -4945,6 +5636,7 @@ function buildNavbarLHMachineTools() {
         var headState = (lhResource && lhResource.headState) ? lhResource.headState : {};
         fillHeadIcons(panel, headState);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         btn.classList.add("active");
         positionPanels(handlerName, btn);
       });
@@ -4970,6 +5662,7 @@ function buildNavbarLHMachineTools() {
         var head96State = (lhResource && lhResource.head96State) ? lhResource.head96State : {};
         fillHead96Grid(panel, head96State);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         positionPanels(handlerName, singleBtnRef);
         btn.classList.add("active");
       });
@@ -5010,6 +5703,7 @@ function buildNavbarLHMachineTools() {
         var armState = (lhResource && lhResource.armState) ? lhResource.armState : {};
         fillArmPanel(panel, armState);
         mainEl.appendChild(panel);
+        makeMachineToolPanelDraggable(panel);
         positionPanels(handlerName, singleBtnRef);
         btn.classList.add("active");
       });
@@ -5038,4 +5732,136 @@ function openAllMachineToolPanels() {
       }
     }
   }
+}
+
+// ===========================================================================
+// Idle-plate caching (performance)
+// ---------------------------------------------------------------------------
+// A whole-layer Konva redraw costs proportionally to the number of shapes on the
+// layer, so on a busy deck a single well update repaints every other plate too.
+// While a plate/tip rack is idle we cache its group to an offscreen bitmap so it
+// blits in one operation instead of re-rendering all its wells/tips. When an
+// update arrives for a plate we clear its cache (so the new fill renders live),
+// then re-cache it after a short idle. The group hierarchy is untouched, so
+// transforms, rotation, moves, and hit detection are unaffected.
+// ===========================================================================
+const CACHE_IDLE_MS = 250;              // re-cache a plate this long after its last update
+const MAX_CACHE_PIXEL_RATIO = 4;        // cap so a zoomed-in cache bitmap stays bounded in memory
+const ZOOM_RECACHE_FACTOR = 1.5;        // re-cache when we can get this much sharper than the current cache
+const _recacheTimers = new Map();       // resourceName -> idle re-cache timeout handle
+let _cachePixelRatio = null;            // pixel ratio at which current caches were built
+let _highlightCacheOwner = null;        // owner uncached to show a sidebar hover highlight
+let _zoomRecacheRAF = null;             // coalesces zoom-driven re-cache to one per frame
+
+function isCacheOwnerType(resource) {
+  return resource instanceof Plate || resource instanceof TipRack;
+}
+
+// Nearest ancestor (or self) whose group we cache as a unit.
+function getCacheOwner(resource) {
+  let r = resource;
+  while (r) {
+    if (isCacheOwnerType(r)) return r;
+    r = r.parent;
+  }
+  return null;
+}
+
+// Cache bitmap resolution tracks the on-screen device pixels per mm (stage scale times
+// the display's device pixel ratio) so an idle cached plate stays as sharp as a live one,
+// capped to bound bitmap memory (matters most on low-RAM hosts such as a Raspberry Pi).
+function currentCachePixelRatio() {
+  const scale = (typeof stage !== "undefined" && stage) ? Math.abs(stage.scaleX()) : 1;
+  const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+  return Math.min(MAX_CACHE_PIXEL_RATIO, Math.max(1, scale * dpr));
+}
+
+function cacheResourceGroup(resource) {
+  if (!resource || !resource.group) return;
+  if (hiddenResourceNames.has(resource.name)) return; // don't freeze a hidden item visible
+  try {
+    if (!resource.group.isCached()) {
+      resource.group.cache({ pixelRatio: currentCachePixelRatio() });
+    }
+  } catch (e) {
+    // group may not be renderable yet (zero size); skip silently
+  }
+}
+
+function uncacheResourceGroup(resource) {
+  if (resource && resource.group && resource.group.isCached()) {
+    resource.group.clearCache();
+  }
+}
+
+// Clear the cache now (so a pending update renders live), then re-cache after idle.
+function markCacheOwnerActive(resource) {
+  if (!resource || !resource.group) return;
+  uncacheResourceGroup(resource);
+  const name = resource.name;
+  if (_recacheTimers.has(name)) clearTimeout(_recacheTimers.get(name));
+  _recacheTimers.set(name, setTimeout(() => {
+    _recacheTimers.delete(name);
+    if (resources[name] === resource) {
+      cacheResourceGroup(resource);
+      resourceLayer.batchDraw();
+    }
+  }, CACHE_IDLE_MS));
+}
+
+// Uncache the owner of `resource` and schedule its re-cache. Used by callers that
+// mutate a plate's contents outside the set_state path (e.g. per-item visibility).
+function touchCacheOwner(resource) {
+  markCacheOwnerActive(getCacheOwner(resource));
+}
+
+function cacheAllIdleOwners() {
+  for (const name in resources) {
+    const r = resources[name];
+    if (isCacheOwnerType(r) && !_recacheTimers.has(name)) cacheResourceGroup(r);
+  }
+  _cachePixelRatio = currentCachePixelRatio();
+  resourceLayer.batchDraw();
+}
+
+// Uncache the owner of a hovered resource so a sidebar highlight (drawn inside the
+// group) is visible; the owner is re-cached when the highlight clears.
+function suspendCacheForHighlight(resource) {
+  const owner = getCacheOwner(resource);
+  if (!owner || !owner.group) return;
+  if (_recacheTimers.has(owner.name)) { clearTimeout(_recacheTimers.get(owner.name)); _recacheTimers.delete(owner.name); }
+  uncacheResourceGroup(owner);
+  _highlightCacheOwner = owner;
+}
+
+function resumeCacheAfterHighlight() {
+  if (_highlightCacheOwner) {
+    const owner = _highlightCacheOwner;
+    _highlightCacheOwner = null;
+    if (resources[owner.name] === owner) markCacheOwnerActive(owner);
+  }
+}
+
+// On zoom-in past the resolution the caches were built at, rebuild them sharper.
+// Coalesced to one pass per frame; skips owners that are actively updating or highlighted.
+function requestZoomRecache() {
+  if (_zoomRecacheRAF !== null || typeof stage === "undefined" || !stage) return;
+  _zoomRecacheRAF = requestAnimationFrame(function () {
+    _zoomRecacheRAF = null;
+    if (_cachePixelRatio === null) return;
+    const target = currentCachePixelRatio();
+    // Only rebuild when we can get meaningfully sharper; this also no-ops once the
+    // pixel ratio is capped (target stops growing), so zooming further in is free.
+    if (target <= _cachePixelRatio * ZOOM_RECACHE_FACTOR) return;
+    const highlightedName = _highlightCacheOwner && _highlightCacheOwner.name;
+    for (const name in resources) {
+      const r = resources[name];
+      if (isCacheOwnerType(r) && !_recacheTimers.has(name) && name !== highlightedName) {
+        uncacheResourceGroup(r);
+        cacheResourceGroup(r);
+      }
+    }
+    _cachePixelRatio = target;
+    resourceLayer.batchDraw();
+  });
 }

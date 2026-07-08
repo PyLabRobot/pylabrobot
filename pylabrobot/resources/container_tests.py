@@ -195,6 +195,19 @@ class TestContainer(unittest.TestCase):
     c = Container(name="c", size_x=10, size_y=142, size_z=10, no_go_zones=zones)
     self.assertEqual(len(c.no_go_zones), 3)
 
+  def test_tracker_change_notifies_state_update_callbacks(self):
+    """A bare Container (e.g. a Trough) must forward volume-tracker changes to its
+    state-update callbacks, so subscribers like the Visualizer see the level change and do
+    not show a frozen volume."""
+    c = Container(name="c", size_x=10, size_y=10, size_z=10, max_volume=1000)
+    received: list = []
+    c.register_state_update_callback(received.append)
+    c.tracker.set_volume(500)
+    c.tracker.remove_liquid(100)
+    c.tracker.commit()
+    self.assertGreaterEqual(len(received), 2)  # at least set_volume and remove_liquid fired
+    self.assertEqual(c.tracker.get_used_volume(), 400)
+
 
 class TestNoGoZoneCollision(unittest.TestCase):
   def _make_container(self, size_y, no_go_zones=None):

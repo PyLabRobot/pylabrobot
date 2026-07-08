@@ -50,12 +50,32 @@ def _get_public_methods(cls: type) -> list:
   return sorted(methods)
 
 
-def _serialize_with_methods(resource: Resource) -> dict:
-  """Serialize a resource and enrich with Python method signatures for the visualizer."""
+def _serialize_resource_tree(resource: Resource) -> dict:
+  """Serialize a resource and its children for the visualizer.
+
+  Method signatures are not embedded per node; identical for every instance of a class,
+  they are sent once per class via :func:`_build_method_registry` and attached by type in
+  the browser. On a full deck this avoids repeating the same signature list on every well.
+  """
   data = resource.serialize()
-  data["methods"] = _get_public_methods(type(resource))  # type: ignore[arg-type]
-  data["children"] = [_serialize_with_methods(child) for child in resource.children]
+  data["children"] = [_serialize_resource_tree(child) for child in resource.children]
   return data
+
+
+def _build_method_registry(resource: Resource, registry: Optional[dict] = None) -> dict:
+  """Map each resource class name in the tree to its public method signatures.
+
+  The serialized ``type`` of a resource is its class name, so the browser can look up a
+  node's methods by ``type`` instead of receiving the same list on every node.
+  """
+  if registry is None:
+    registry = {}
+  type_name = type(resource).__name__
+  if type_name not in registry:
+    registry[type_name] = _get_public_methods(type(resource))  # type: ignore[arg-type]
+  for child in resource.children:
+    _build_method_registry(child, registry)
+  return registry
 
 
 def _sanitize_floats(obj):
@@ -188,6 +208,11 @@ class Visualizer:
     self._flush_scheduled = False
 
     self.received: List[dict] = []
+    # Ids of commands whose responses a caller is actively awaiting. Only these
+    # responses are retained in ``self.received``; responses to fire-and-forget
+    # commands (every state update) are dropped so the list cannot grow without
+    # bound over a long-running session.
+    self._pending_response_ids: set = set()
 
   @property
   def websocket(
@@ -251,7 +276,8 @@ class Visualizer:
         return
 
       data = json.loads(message)
-      self.received.append(data)
+      if data.get("id") in self._pending_response_ids:
+        self.received.append(data)
 
       # If the event is "ready", then we can save the connection and send the saved messages.
       if data.get("event") == "ready":
@@ -320,12 +346,16 @@ class Visualizer:
       await self.websocket.send(serialized_data)
 
       if wait_for_response:
-        while True:
-          if len(self.received) > 0:
-            message = self.received.pop()
-            if "id" in message and message["id"] == id_:
-              break
-          await asyncio.sleep(0.1)
+        self._pending_response_ids.add(id_)
+        try:
+          while True:
+            if len(self.received) > 0:
+              message = self.received.pop()
+              if "id" in message and message["id"] == id_:
+                break
+            await asyncio.sleep(0.1)
+        finally:
+          self._pending_response_ids.discard(id_)
 
         if not message["success"]:
           error = message.get("error", "unknown error")
@@ -602,6 +632,7 @@ class Visualizer:
 
     # Clear all relevant attributes.
     self.received.clear()
+    self._pending_response_ids.clear()
     self._websocket = None
     self._loop = None
     self._t = None
@@ -616,7 +647,10 @@ class Visualizer:
     # send the serialized root resource (including all children) to the browser
     await self.send_command(
       "set_root_resource",
-      {"resource": _serialize_with_methods(self._root_resource)},
+      {
+        "resource": _serialize_resource_tree(self._root_resource),
+        "method_registry": _build_method_registry(self._root_resource),
+      },
       wait_for_response=False,
     )
 
@@ -655,7 +689,8 @@ class Visualizer:
 
     # Send a `resource_assigned` event to the browser.
     data = {
-      "resource": _serialize_with_methods(resource),
+      "resource": _serialize_resource_tree(resource),
+      "method_registry": _build_method_registry(resource),
       "state": resource.serialize_all_state(),
       "parent_name": (resource.parent.name if resource.parent else None),
     }
