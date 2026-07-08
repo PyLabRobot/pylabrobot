@@ -210,7 +210,8 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     self.vis = Visualizer(self.r, open_browser=False)
 
     # mock the send_command method to catch the events
-    self.vis.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    self.send_command_mock = unittest.mock.AsyncMock()
+    self.vis.send_command = self.send_command_mock  # type: ignore[method-assign]
 
     await self.vis.setup()
 
@@ -225,7 +226,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-      last = self.vis.send_command.call_args
+      last = self.send_command_mock.call_args
       if last is not None and last.kwargs.get("event") == event:
         if data_key is None or data_key in last.kwargs.get("data", {}):
           return
@@ -236,7 +237,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     child = Resource(size_x=100, size_y=100, size_z=100, name="child")
     self.r.assign_child_resource(child, location=Coordinate(0, 0, 0))
     await self._wait_for_event("resource_assigned")
-    self.vis.send_command.assert_called_once_with(  # type: ignore[attr-defined]
+    self.send_command_mock.assert_called_once_with(
       event="resource_assigned",
       data={
         "resource": _serialize_resource_tree(child),
@@ -254,7 +255,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     self.r.unassign_child_resource(child)
     await self._wait_for_event("resource_unassigned")
 
-    self.vis.send_command.assert_called_with(  # type: ignore[attr-defined]
+    self.send_command_mock.assert_called_with(
       event="resource_unassigned",
       data={"resource_name": "child"},
       wait_for_response=False,
@@ -266,8 +267,8 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     self.r.assign_child_resource(plate, location=Coordinate(0, 0, 0))
     plate.set_well_volumes([500] * 96)
     await self._wait_for_event("set_state", data_key="plate_01_well_H12")
-    self.vis.send_command.assert_called()  # type: ignore[attr-defined]
-    call_args = self.vis.send_command.call_args[1]  # type: ignore[attr-defined]
+    self.send_command_mock.assert_called()
+    call_args = self.send_command_mock.call_args[1]
     self.assertEqual(call_args["event"], "set_state")
     self.assertEqual(
       call_args["data"]["plate_01_well_H12"]["volume"],
