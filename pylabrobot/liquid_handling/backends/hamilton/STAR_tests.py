@@ -2227,6 +2227,67 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     tip_rack.unassign()
 
 
+class TestSTARSetupTipDiscard(unittest.IsolatedAsyncioTestCase):
+  """Tests for setup-time handling of tips already mounted on STAR pip channels."""
+
+  def _make_backend(self, num_channels: int = 4) -> STARBackend:
+    backend = STARBackend(read_timeout=1)
+    backend._num_channels = num_channels
+    backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    backend._iswap_parked = True
+    # The setup-time discard helper derives the TR Z range from the deck trash resource.
+    backend.set_deck(STARLetDeck())
+    backend._write_and_read_command = unittest.mock.AsyncMock(return_value="C0DIid0001er00/00")
+    return backend
+
+  async def test_initialize_pip_keeps_existing_active_tip_pattern(self):
+    backend = self._make_backend()
+
+    await backend.initialize_pip()
+
+    # The public initialization wrapper should keep its previous behavior for normal init.
+    backend._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "C0DIid0001xp08000&yp4050 3425 2800 2175tp2450tz1220te3600tm1 1 1 1tt04ti0"
+        )
+      ]
+    )
+
+  async def test_initialize_pip_without_tip_discard_uses_inactive_tip_pattern(self):
+    backend = self._make_backend()
+
+    await backend._initialize_pip_without_tip_discard()
+
+    # Mounted-tip setup uses DI for initialization only: tm0 prevents DI from discarding tips.
+    backend._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "C0DIid0001xp08000&yp4050 3425 2800 2175tp2450tz1220te3600tm0 0 0 0tt04ti0"
+        )
+      ]
+    )
+
+  async def test_discard_existing_tips_to_waste_uses_tr_with_tip_presence_pattern(self):
+    backend = self._make_backend()
+    backend._write_and_read_command.return_value = (
+      "C0TRid0001er00/00kz000 000 000 000vz000 000 000 000"
+    )
+
+    await backend._discard_existing_tips_to_waste([True, False, True, False])
+
+    # Actual setup-time tip disposal happens through TR and preserves the mounted-tip pattern.
+    # The tp/tz values come from the same trash-height formula used by normal drop_tips().
+    backend._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "C0TRid0001xp08000 08000 08000 08000yp4050 3425 2800 2175"
+          "tm1 0 1 0tp1970tz1870th2450te2450ti0"
+        )
+      ]
+    )
+
+
 class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
   """Test that different channel spacing configurations produce different behavior.
 
