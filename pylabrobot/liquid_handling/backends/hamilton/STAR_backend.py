@@ -2095,8 +2095,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         # Skip pip-channel I/O; the __init__ defaults stand in.
         # TODO: does not yet gate request_tip_presence or instrument-init moves.
         return
-      if not initialized or any(tip_presences):
+      has_tips = any(tip_presences)
+      if has_tips:
+        await self._initialize_pip_without_tip_discard()
+      elif not initialized:
         await self.initialize_pip()
+      if has_tips:
+        await self._discard_existing_tips_to_waste(tip_presences)
+        tip_presences_after_discard = await self.request_tip_presence()
+        if any(tip_presences_after_discard):
+          raise RuntimeError(
+            "Failed to discard tips during backend initialization: "
+            f"{tip_presences_after_discard}"
+          )
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
       # VW is not supported on firmware from 2016 or older (see issue #1004). Skip the
@@ -6299,6 +6310,44 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tip_pattern=[True] * self.num_channels,
       tip_type=4,  # TODO: get from tip types
       discarding_method=0,
+    )
+
+  async def _initialize_pip_without_tip_discard(self) -> None:
+    """Initialize pip channels without using the DI command to discard mounted tips."""
+    dy = (4050 - 2175) // (self.num_channels - 1)
+    y_positions = [4050 - i * dy for i in range(self.num_channels)]
+
+    await self.initialize_pipetting_channels(
+      x_positions=[
+        int(self.extended_conf.tip_waste_x_position * 10)
+      ],  # Tip eject waste X position.
+      y_positions=y_positions,
+      begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
+      end_of_tip_deposit_process=1220,
+      z_position_at_end_of_a_command=3600,
+      tip_pattern=[False] * self.num_channels,
+      tip_type=4,  # TODO: get from tip types
+      discarding_method=0,
+    )
+
+  async def _discard_existing_tips_to_waste(self, tip_presences: List[Optional[bool]]) -> None:
+    """Discard tips found on channels during backend initialization."""
+    dy = (4050 - 2175) // (self.num_channels - 1)
+    y_positions = [4050 - i * dy for i in range(self.num_channels)]
+    x_position = int(self.extended_conf.tip_waste_x_position * 10)
+
+    trash = self.deck.get_trash_area()
+    max_z = trash.get_location_wrt(self.deck).z
+
+    await self.discard_tip(
+      x_positions=[x_position] * self.num_channels,
+      y_positions=y_positions,
+      tip_pattern=[bool(tip_present) for tip_present in tip_presences],
+      begin_tip_deposit_process=round((max_z + 59.9) * 10),
+      end_tip_deposit_process=round((max_z + 49.9) * 10),
+      minimum_traverse_height_at_beginning_of_a_command=int(self._channel_traversal_height * 10),
+      z_position_at_end_of_a_command=int(self._channel_traversal_height * 10),
+      discarding_method=TipDropMethod.PLACE_SHIFT,
     )
 
   async def initialize_pipetting_channels(
