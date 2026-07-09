@@ -947,8 +947,15 @@ class LiquidHandler(Resource, Machine):
 
     # Checks
     for resource in resources:
-      if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-        raise ValueError("Aspirating from a well with a lid is not supported.")
+      if resource.has_lid():
+        raise ValueError(
+          f"Cannot aspirate from {resource.name!r}: it has a lid. Remove the lid first."
+        )
+      if isinstance(resource.parent, Liddable) and resource.parent.has_lid():
+        raise ValueError(
+          f"Cannot aspirate from {resource.name!r}: its parent {resource.parent.name!r} has a lid. "
+          "Remove the lid first."
+        )
 
     self._make_sure_channels_exist(use_channels)
     for n, p in [
@@ -1161,8 +1168,15 @@ class LiquidHandler(Resource, Machine):
             raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
 
     for resource in resources:
-      if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-        raise ValueError("Dispensing to plate with lid")
+      if resource.has_lid():
+        raise ValueError(
+          f"Cannot dispense to {resource.name!r}: it has a lid. Remove the lid first."
+        )
+      if isinstance(resource.parent, Liddable) and resource.parent.has_lid():
+        raise ValueError(
+          f"Cannot dispense to {resource.name!r}: its parent {resource.parent.name!r} has a lid. "
+          "Remove the lid first."
+        )
 
     for n, p in [
       ("resources", resources),
@@ -1734,9 +1748,15 @@ class LiquidHandler(Resource, Machine):
     containers: Sequence[Container]
     if isinstance(resource, Plate):
       if resource.has_lid():
-        raise ValueError("Aspirating from plate with lid")
+        raise ValueError(
+          f"Cannot aspirate from {resource.name!r}: it has a lid. Remove the lid first."
+        )
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
+      if resource.has_lid():
+        raise ValueError(
+          f"Cannot aspirate from {resource.name!r}: it has a lid. Remove the lid first."
+        )
       containers = [resource]
     elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
       containers = resource
@@ -1884,9 +1904,15 @@ class LiquidHandler(Resource, Machine):
     containers: Sequence[Container]
     if isinstance(resource, Plate):
       if resource.has_lid():
-        raise ValueError("Dispensing to plate with lid is not possible. Remove the lid first.")
+        raise ValueError(
+          f"Cannot dispense to {resource.name!r}: it has a lid. Remove the lid first."
+        )
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
+      if resource.has_lid():
+        raise ValueError(
+          f"Cannot dispense to {resource.name!r}: it has a lid. Remove the lid first."
+        )
       containers = [resource]
     elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
       containers = resource

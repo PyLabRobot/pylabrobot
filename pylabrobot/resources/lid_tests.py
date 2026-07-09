@@ -1,6 +1,13 @@
 import unittest
 
-from pylabrobot.resources import Container, Lid, Liddable, Plate, Resource
+from pylabrobot.resources import (
+  Container,
+  Lid,
+  Liddable,
+  Plate,
+  Resource,
+  hamilton_1_trough_200mL_Vb,
+)
 
 
 class LidTests(unittest.TestCase):
@@ -21,6 +28,22 @@ class LidTests(unittest.TestCase):
     lid = Lid("cl", size_x=44, size_y=125, size_z=10, nesting_z_height=4)
     loc = c.get_lid_location(lid)
     self.assertEqual((loc.x, loc.y, loc.z), (-3.5, -3.5, 91))  # (37-44)/2, (118-125)/2, 95-4
+
+  def test_hamilton_trough_larger_lid_is_centred(self):
+    """A real Hamilton trough with a directly-built lid 2 mm larger in x and y: the lid centres on
+    the top face, overhanging 1 mm each side."""
+    trough = hamilton_1_trough_200mL_Vb(name="trough")
+    lid = Lid(
+      "trough_lid",
+      size_x=trough.get_size_x() + 2,
+      size_y=trough.get_size_y() + 2,
+      size_z=10,
+      nesting_z_height=4,
+    )
+    loc = trough.get_lid_location(lid)
+    self.assertEqual((loc.x, loc.y, loc.z), (-1, -1, 91))  # (37-39)/2, (118-120)/2, 95-4
+    trough.assign_child_resource(lid)
+    self.assertTrue(trough.has_lid())
 
   def test_containers_are_liddable_lids_are_not(self):
     self.assertIsInstance(Container("c", 10, 10, 10, material_z_thickness=1), Liddable)
