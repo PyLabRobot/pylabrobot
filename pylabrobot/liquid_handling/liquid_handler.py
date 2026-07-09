@@ -92,6 +92,34 @@ class BlowOutVolumeError(Exception):
   pass
 
 
+def _lidded_ancestor(resource: Resource) -> Optional[Liddable]:
+  """Return the nearest lidded resource at or above ``resource``, walking up the parent chain.
+
+  A lid anywhere in the ancestry blocks pipetting, not just one on the direct parent: a well is
+  enclosed by its plate, but plates may in turn sit in lidded holders or nested containers. Returns
+  ``resource`` itself if it carries a lid, else the closest lidded ancestor, else ``None``.
+  """
+  current: Optional[Resource] = resource
+  while current is not None:
+    if isinstance(current, Liddable) and current.has_lid():
+      return current
+    current = current.parent
+  return None
+
+
+def _check_no_lid(resource: Resource, action: str) -> None:
+  """Raise if ``resource`` or any ancestor carries a lid. ``action`` is a verb phrase for the error."""
+  lidded = _lidded_ancestor(resource)
+  if lidded is None:
+    return
+  if lidded is resource:
+    raise ValueError(f"Cannot {action} {resource.name!r}: it has a lid. Remove the lid first.")
+  raise ValueError(
+    f"Cannot {action} {resource.name!r}: its enclosing resource {lidded.name!r} has a lid. "
+    "Remove the lid first."
+  )
+
+
 class LiquidHandler(Resource, Machine):
   """
   Front end for liquid handlers.
@@ -947,15 +975,7 @@ class LiquidHandler(Resource, Machine):
 
     # Checks
     for resource in resources:
-      if resource.has_lid():
-        raise ValueError(
-          f"Cannot aspirate from {resource.name!r}: it has a lid. Remove the lid first."
-        )
-      if isinstance(resource.parent, Liddable) and resource.parent.has_lid():
-        raise ValueError(
-          f"Cannot aspirate from {resource.name!r}: its parent {resource.parent.name!r} has a lid. "
-          "Remove the lid first."
-        )
+      _check_no_lid(resource, "aspirate from")
 
     self._make_sure_channels_exist(use_channels)
     for n, p in [
@@ -1168,15 +1188,7 @@ class LiquidHandler(Resource, Machine):
             raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
 
     for resource in resources:
-      if resource.has_lid():
-        raise ValueError(
-          f"Cannot dispense to {resource.name!r}: it has a lid. Remove the lid first."
-        )
-      if isinstance(resource.parent, Liddable) and resource.parent.has_lid():
-        raise ValueError(
-          f"Cannot dispense to {resource.name!r}: its parent {resource.parent.name!r} has a lid. "
-          "Remove the lid first."
-        )
+      _check_no_lid(resource, "dispense to")
 
     for n, p in [
       ("resources", resources),
@@ -1747,16 +1759,10 @@ class LiquidHandler(Resource, Machine):
     # Convert Plate to either one Container (single well) or a list of Wells
     containers: Sequence[Container]
     if isinstance(resource, Plate):
-      if resource.has_lid():
-        raise ValueError(
-          f"Cannot aspirate from {resource.name!r}: it has a lid. Remove the lid first."
-        )
+      _check_no_lid(resource, "aspirate from")
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
-      if resource.has_lid():
-        raise ValueError(
-          f"Cannot aspirate from {resource.name!r}: it has a lid. Remove the lid first."
-        )
+      _check_no_lid(resource, "aspirate from")
       containers = [resource]
     elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
       containers = resource
@@ -1903,16 +1909,10 @@ class LiquidHandler(Resource, Machine):
     # Convert Plate to either one Container (single well) or a list of Wells
     containers: Sequence[Container]
     if isinstance(resource, Plate):
-      if resource.has_lid():
-        raise ValueError(
-          f"Cannot dispense to {resource.name!r}: it has a lid. Remove the lid first."
-        )
+      _check_no_lid(resource, "dispense to")
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
-      if resource.has_lid():
-        raise ValueError(
-          f"Cannot dispense to {resource.name!r}: it has a lid. Remove the lid first."
-        )
+      _check_no_lid(resource, "dispense to")
       containers = [resource]
     elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
       containers = resource

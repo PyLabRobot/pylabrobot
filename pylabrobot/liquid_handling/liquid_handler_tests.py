@@ -26,6 +26,7 @@ from pylabrobot.resources import (
   Lid,
   PetriDish,
   Plate,
+  Resource,
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
@@ -944,6 +945,29 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh.update_head_state({0: t})
     with self.assertRaises(ValueError):
       await self.lh.aspirate([dish], vols=[10])
+
+  async def test_lidded_ancestor_walks_full_chain(self):
+    # A lid on any ancestor blocks pipetting, not just the direct parent: nest a target two levels
+    # under a lidded container and check the walk finds it.
+    from pylabrobot.liquid_handling.liquid_handler import _lidded_ancestor
+
+    trough = hamilton_1_trough_200mL_Vb(name="trough")
+    trough.lid = Lid(
+      "trough_lid",
+      size_x=trough.get_size_x() + 2,
+      size_y=trough.get_size_y() + 2,
+      size_z=10,
+      nesting_z_height=4,
+    )
+    middle = Resource("middle", size_x=1, size_y=1, size_z=1)
+    target = Resource("target", size_x=1, size_y=1, size_z=1)
+    trough.assign_child_resource(middle, location=Coordinate.zero())
+    middle.assign_child_resource(target, location=Coordinate.zero())
+
+    self.assertIs(_lidded_ancestor(target), trough)
+    self.assertIs(_lidded_ancestor(middle), trough)
+    trough.lid = None
+    self.assertIsNone(_lidded_ancestor(target))
 
   @pytest.mark.filterwarnings("ignore:Extra arguments to backend")
   async def test_strictness(self):
