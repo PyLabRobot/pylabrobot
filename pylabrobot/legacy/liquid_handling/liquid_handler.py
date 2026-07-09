@@ -1176,6 +1176,7 @@ class LiquidHandler(Resource, Machine):
       offset=offset,
       pickup_distance_from_top=pickup_distance_from_top,
       direction=direction,
+      resource_absolute_rotation_at_pickup=resource.get_absolute_rotation(),
     )
 
     extras = self._check_args(
@@ -1193,6 +1194,7 @@ class LiquidHandler(Resource, Machine):
       self._resource_pickup = None
       raise e
 
+    resource.unassign()
     self._state_updated()
 
   async def move_picked_up_resource(
@@ -1269,8 +1271,12 @@ class LiquidHandler(Resource, Machine):
     ):
       rotation_applied_by_move = 270
 
+    resource_absolute_rotation_at_pickup = (
+      self._resource_pickup.resource_absolute_rotation_at_pickup
+      or resource.get_absolute_rotation()
+    )
     resource_absolute_rotation_after_move = (
-      resource.get_absolute_rotation().z + rotation_applied_by_move
+      resource_absolute_rotation_at_pickup.z + rotation_applied_by_move
     )
     destination_rotation = (
       destination.get_absolute_rotation().z if not isinstance(destination, Coordinate) else 0
@@ -1329,6 +1335,7 @@ class LiquidHandler(Resource, Machine):
       pickup_direction=self._resource_pickup.direction,
       direction=direction,
       rotation=rotation_applied_by_move,
+      resource_absolute_rotation_at_pickup=resource_absolute_rotation_at_pickup,
     )
 
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)

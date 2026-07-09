@@ -2859,11 +2859,17 @@ class STARBackend(HamiltonLiquidHandler):
     # This means that the center vector has to be rotated from the child local space by the
     # new child absolute rotation. The moved resource's rotation will be the original child
     # rotation plus the rotation applied by the movement.
-    # The resource is moved by drop.rotation
-    # The new resource absolute location is
-    # drop.resource.get_absolute_rotation().z + drop.rotation
+    # The resource is moved by drop.rotation. The source may already have been
+    # unassigned after pickup, so use the absolute rotation captured at pickup
+    # rather than asking the resource tree for its current parent-derived pose.
+    resource_absolute_rotation_at_pickup = (
+      drop.resource_absolute_rotation_at_pickup or drop.resource.get_absolute_rotation()
+    )
+    resource_absolute_rotation_after_move = resource_absolute_rotation_at_pickup + Rotation(
+      z=drop.rotation
+    )
     center_in_absolute_space = drop.resource.center().rotated(
-      Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation)
+      resource_absolute_rotation_after_move
     )
     x, y, z = drop.destination + center_in_absolute_space + drop.offset
 
@@ -2873,10 +2879,10 @@ class STARBackend(HamiltonLiquidHandler):
       )
       z_position_at_the_command_end = z_position_at_the_command_end or self._iswap.traversal_height
       assert (
-        drop.resource.get_absolute_rotation().x == 0
-        and drop.resource.get_absolute_rotation().y == 0
+        resource_absolute_rotation_at_pickup.x == 0
+        and resource_absolute_rotation_at_pickup.y == 0
       )
-      assert drop.resource.get_absolute_rotation().z % 90 == 0
+      assert resource_absolute_rotation_at_pickup.z % 90 == 0
 
       # Use the pickup direction to determine how wide the plate is gripped.
       # Note that the plate is still in the original orientation at this point,

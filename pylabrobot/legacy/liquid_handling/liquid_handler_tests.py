@@ -27,6 +27,7 @@ from pylabrobot.resources import (
   Lid,
   Plate,
   ResourceNotFoundError,
+  ResourceHolder,
   ResourceStack,
   TipRack,
   nest_1_troughplate_195000uL_Vb,
@@ -1129,6 +1130,26 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
+
+  async def test_resource_pickup_unassigns_source_after_success(self):
+    parent = self.plate.parent
+    await self.lh.pick_up_resource(self.plate)
+
+    self.assertIsNone(self.plate.parent)
+    self.assertNotIn(self.plate, parent.children)
+    self.assertIs(self.lh.get_picked_up_resource(), self.plate)
+
+  async def test_resource_drop_after_pickup_assigns_destination(self):
+    destination = ResourceHolder("destination", size_x=130, size_y=90, size_z=0)
+    self.deck.assign_child_resource(destination, location=Coordinate(300, 100, 0))
+
+    await self.lh.pick_up_resource(self.plate)
+    self.assertIsNone(self.plate.parent)
+
+    await self.lh.drop_resource(destination)
+
+    self.assertIs(destination.resource, self.plate)
+    self.assertIsNone(self.lh.get_picked_up_resource())
 
   async def test_serialize_state_after_setup(self):
     state = self.lh.serialize_state()

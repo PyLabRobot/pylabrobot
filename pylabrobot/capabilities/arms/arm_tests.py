@@ -8,6 +8,7 @@ from pylabrobot.capabilities.arms.backend import (
 )
 from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
+from pylabrobot.resources.rotation import Rotation
 
 
 def _assert_location(test, call, x, y, z, places=1):
@@ -68,6 +69,8 @@ class TestArm(unittest.IsolatedAsyncioTestCase):
     _assert_location(self, call, 165, 145, 58)
     # default grip_axis="x" → resource_width is X size = 120
     self.assertAlmostEqual(call.kwargs["resource_width"], 120)
+    self.assertIsNone(self.plate.parent)
+    self.assertIsNone(self.site_a.resource)
 
   async def test_drop_resource(self):
     await self.arm.pick_up_resource(self.plate, pickup_distance_from_bottom=8)
@@ -191,6 +194,8 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(call.kwargs["direction"], 270.0)
     # "front" grips along the X axis → X width = 120
     self.assertAlmostEqual(call.kwargs["resource_width"], 120)
+    self.assertIsNone(self.plate.parent)
+    self.assertIsNone(self.site_a.resource)
 
   async def test_pick_up_right(self):
     await self.arm.pick_up_resource(self.plate, pickup_distance_from_bottom=8, direction="right")
@@ -222,6 +227,16 @@ class TestOrientableArm(unittest.IsolatedAsyncioTestCase):
     drop_call = self.mock_backend.drop_at_location.call_args
     _assert_location(self, drop_call, 160, 340, 58)
     self.assertEqual(self.plate.parent.name, "site_b")
+
+  async def test_drop_after_pickup_uses_captured_source_rotation(self):
+    self.site_a.rotation = Rotation(z=90)
+    await self.arm.pick_up_resource(self.plate, pickup_distance_from_bottom=8, direction="front")
+    self.assertIsNone(self.plate.parent)
+
+    await self.arm.drop_resource(self.site_b, direction="front")
+
+    self.assertEqual(self.plate.parent.name, "site_b")
+    self.assertAlmostEqual(self.plate.get_absolute_rotation().z % 360, 90)
 
 
 class TestGripperArmAbstract(unittest.TestCase):
