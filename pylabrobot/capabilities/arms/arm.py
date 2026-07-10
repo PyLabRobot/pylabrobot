@@ -30,6 +30,10 @@ class _PickedUpState:
   offset: Coordinate
   pickup_distance_from_bottom: float
   resource_width: float
+  # Preserve the resource pose at pickup time. Once pickup succeeds, the
+  # resource is unassigned from its source so the source is immediately free in
+  # the model; later drop math must not depend on the old parent tree.
+  resource_absolute_rotation_at_pickup: Rotation
   rotation: Rotation = Rotation()
 
 
@@ -152,11 +156,9 @@ class _BaseArm(Capability):
     to_location: Coordinate,
     offset: Coordinate,
     pickup_distance_from_bottom: float,
-    rotation_applied_by_move: float,
+    resource_absolute_rotation_after_move: Rotation,
   ) -> Coordinate:
-    center = resource.center().rotated(
-      Rotation(z=resource.get_absolute_rotation().z + rotation_applied_by_move)
-    )
+    center = resource.center().rotated(resource_absolute_rotation_after_move)
     loc = to_location + center + offset
     return Coordinate(
       loc.x,
@@ -234,14 +236,18 @@ class _BaseArm(Capability):
     offset: Coordinate,
     pickup_distance_from_bottom: float,
     rotation_applied_by_move: float = 0,
+    resource_absolute_rotation_at_pickup: Optional[Rotation] = None,
   ) -> Tuple[Coordinate, float]:
-    resource_absolute_rotation_after_move = (
-      resource.get_absolute_rotation().z + rotation_applied_by_move
+    resource_absolute_rotation_at_pickup = (
+      resource_absolute_rotation_at_pickup or resource.get_absolute_rotation()
+    )
+    resource_absolute_rotation_after_move = resource_absolute_rotation_at_pickup + Rotation(
+      z=rotation_applied_by_move
     )
     dest_rotation = (
       destination.get_absolute_rotation().z if not isinstance(destination, Coordinate) else 0
     )
-    resource_rotation_wrt_destination = resource_absolute_rotation_after_move - dest_rotation
+    resource_rotation_wrt_destination = resource_absolute_rotation_after_move.z - dest_rotation
     resource_rotation_wrt_destination_wrt_local = (
       resource_rotation_wrt_destination - resource.rotation.z
     )
@@ -257,7 +263,11 @@ class _BaseArm(Capability):
       resource, destination, resource_rotation_wrt_destination_wrt_local
     )
     location = self._compute_end_effector_location(
-      resource, to_location, offset, pickup_distance_from_bottom, rotation_applied_by_move
+      resource,
+      to_location,
+      offset,
+      pickup_distance_from_bottom,
+      resource_absolute_rotation_after_move,
     )
     return location, resource_rotation_wrt_destination
 
@@ -445,13 +455,16 @@ class FixedAxisGripperArm(GripperArm):
       resource, offset, pickup_distance_from_bottom
     )
     resource_width = self._resource_width(resource)
+    resource_absolute_rotation_at_pickup = resource.get_absolute_rotation()
     await self.pick_up_at_location(location, resource_width, backend_params)
     self._picked_up = _PickedUpState(
       resource=resource,
       offset=offset,
       pickup_distance_from_bottom=pickup_distance_from_bottom,
       resource_width=resource_width,
+      resource_absolute_rotation_at_pickup=resource_absolute_rotation_at_pickup,
     )
+    resource.unassign()
     self._state_updated()
 
   async def drop_at_location(
@@ -480,6 +493,9 @@ class FixedAxisGripperArm(GripperArm):
       destination=destination,
       offset=offset,
       pickup_distance_from_bottom=self._picked_up.pickup_distance_from_bottom,
+      resource_absolute_rotation_at_pickup=(
+        self._picked_up.resource_absolute_rotation_at_pickup
+      ),
     )
     await self.drop_at_location(location, backend_params)
     self._finalize_drop(resource, destination, rotation)

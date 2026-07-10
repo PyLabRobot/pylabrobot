@@ -140,6 +140,8 @@ class ResourcePickup:
   offset: Coordinate
   pickup_distance_from_top: float
   direction: GripDirection
+  resource_absolute_rotation_at_pickup: Optional[Rotation] = None
+  resource_width_at_pickup: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +166,8 @@ class ResourceDrop:
   pickup_direction: GripDirection
   direction: GripDirection
   rotation: float
+  resource_absolute_rotation_at_pickup: Optional[Rotation] = None
+  resource_width_at_pickup: Optional[float] = None
 
 
 PipettingOp = Union[Pickup, Drop, SingleChannelAspiration, SingleChannelDispense]

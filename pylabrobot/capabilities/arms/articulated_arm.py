@@ -51,14 +51,17 @@ class ArticulatedGripperArm(GripperArm):
       resource, offset, pickup_distance_from_bottom
     )
     resource_width = self._resource_width_for_rotation(resource, rotation)
+    resource_absolute_rotation_at_pickup = resource.get_absolute_rotation()
     await self.pick_up_at_location(location, resource_width, rotation, backend_params)
     self._picked_up = _PickedUpState(
       resource=resource,
       offset=offset,
       pickup_distance_from_bottom=pickup_distance_from_bottom,
       resource_width=resource_width,
+      resource_absolute_rotation_at_pickup=resource_absolute_rotation_at_pickup,
       rotation=rotation,
     )
+    resource.unassign()
     self._state_updated()
 
   async def drop_at_location(
@@ -95,6 +98,9 @@ class ArticulatedGripperArm(GripperArm):
       offset=offset,
       pickup_distance_from_bottom=self._picked_up.pickup_distance_from_bottom,
       rotation_applied_by_move=rotation_applied_by_move,
+      resource_absolute_rotation_at_pickup=(
+        self._picked_up.resource_absolute_rotation_at_pickup
+      ),
     )
     await self.drop_at_location(location, rotation, backend_params)
     self._finalize_drop(resource, destination, final_rotation)
