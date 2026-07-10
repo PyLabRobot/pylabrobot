@@ -119,8 +119,8 @@ class Liddable(Resource):
         )
       self._lid = resource
       location = location or self.get_lid_location(resource)
-    else:
-      assert location is not None, "Location must be specified if resource is not a lid."
+    elif location is None:
+      raise ValueError("Location must be specified if resource is not a lid.")
     return super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def unassign_child_resource(self, resource: Resource):
