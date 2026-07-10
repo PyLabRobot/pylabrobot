@@ -35,6 +35,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.carrier import PlateHolder
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
@@ -1150,6 +1151,26 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
 
     self.assertIs(destination.resource, self.plate)
     self.assertIsNone(self.lh.get_picked_up_resource())
+
+  async def test_resource_drop_uses_width_captured_at_pickup(self):
+    source = ResourceHolder("rotated_source", size_x=130, size_y=90, size_z=0)
+    source.rotation = Rotation(z=90)
+    destination = ResourceHolder("destination", size_x=130, size_y=90, size_z=0)
+    self.plate.unassign()
+    self.deck.assign_child_resource(source, location=Coordinate(100, 100, 0))
+    self.deck.assign_child_resource(destination, location=Coordinate(300, 100, 0))
+    source.assign_child_resource(self.plate, location=Coordinate.zero())
+
+    width_at_pickup = self.plate.get_absolute_size_x()
+    width_after_unassign = self.plate.get_size_x()
+    self.assertNotEqual(width_at_pickup, width_after_unassign)
+
+    await self.lh.pick_up_resource(self.plate, direction=GripDirection.FRONT)
+    self.assertIsNone(self.plate.parent)
+    await self.lh.drop_resource(destination, direction=GripDirection.FRONT)
+
+    drop = self.backend.drop_resource.call_args.kwargs["drop"]
+    self.assertAlmostEqual(drop.resource_width_at_pickup, width_at_pickup)
 
   async def test_serialize_state_after_setup(self):
     state = self.lh.serialize_state()

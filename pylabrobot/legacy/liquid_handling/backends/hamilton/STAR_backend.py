@@ -2884,10 +2884,12 @@ class STARBackend(HamiltonLiquidHandler):
       )
       assert resource_absolute_rotation_at_pickup.z % 90 == 0
 
-      # Use the pickup direction to determine how wide the plate is gripped.
-      # Note that the plate is still in the original orientation at this point,
-      # so get_absolute_size_{x,y}() will return the size of the plate in the original orientation.
-      if (
+      # Use the width captured at pickup time. The resource may already be
+      # unassigned while it is held, so recomputing absolute size here can lose
+      # source/carrier rotation context and release the gripper too wide.
+      if drop.resource_width_at_pickup is not None:
+        plate_width = drop.resource_width_at_pickup
+      elif (
         drop.pickup_direction == GripDirection.FRONT or drop.pickup_direction == GripDirection.BACK
       ):
         plate_width = drop.resource.get_absolute_size_x()
