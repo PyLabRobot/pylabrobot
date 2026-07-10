@@ -314,8 +314,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_move_lid_to_trash(self):
-    # Trash is a Container, and so Liddable: a discarded lid must not be seated on it. The trash is
-    # always larger than the lid, so seating it would also trip the undersize guard.
+    # a lid moved to the trash is discarded, not seated on it
     plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
     self.deck.assign_child_resource(plate, location=Coordinate(0, 0, 100))
     lid = Lid(name="lid", size_x=100, size_y=100, size_z=10, nesting_z_height=10)
