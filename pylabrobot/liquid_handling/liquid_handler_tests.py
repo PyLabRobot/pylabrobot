@@ -313,6 +313,28 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       == lid.get_absolute_location().z
     )
 
+  async def test_move_lid_to_trash(self):
+    # Trash is a Container, and so Liddable: a discarded lid must not be seated on it. The trash is
+    # always larger than the lid, so seating it would also trip the undersize guard.
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
+    self.deck.assign_child_resource(plate, location=Coordinate(0, 0, 100))
+    lid = Lid(name="lid", size_x=100, size_y=100, size_z=10, nesting_z_height=10)
+    plate.assign_child_resource(lid)
+    trash = self.deck.get_trash_area()
+
+    with unittest.mock.patch.object(
+      self.lh.backend, "drop_resource", wraps=self.lh.backend.drop_resource
+    ) as mock_drop:
+      await self.lh.move_lid(lid, trash)
+
+    self.assertEqual(
+      mock_drop.call_args.kwargs["drop"].destination,
+      trash.get_location_wrt(self.deck),
+    )
+    self.assertFalse(plate.has_lid())
+    self.assertIsNone(lid.parent)
+    self.assertNotIn(lid, trash.children)
+
   async def test_move_plate_onto_resource_stack_with_lid(self):
     plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
     lid = Lid(

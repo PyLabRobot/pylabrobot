@@ -2218,6 +2218,10 @@ class LiquidHandler(Resource, Machine):
       ).rotated(destination.get_absolute_rotation())
     elif isinstance(destination, Coordinate):
       to_location = destination
+    elif isinstance(destination, Trash):
+      # A Trash destination discards whatever is dropped on it, so it is never a seat. Checked
+      # before every branch that places a resource on its destination.
+      to_location = destination.get_location_wrt(self.deck)
     elif isinstance(destination, ResourceHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
@@ -2269,6 +2273,10 @@ class LiquidHandler(Resource, Machine):
     if isinstance(destination, Coordinate):
       to_location -= self.deck.location  # passed as an absolute location, but stored as relative
       self.deck.assign_child_resource(resource, location=to_location)
+    elif isinstance(destination, Trash):
+      # A Trash destination discards: `resource.unassign()` above already detached it, and leaving
+      # it unparented is the discard. Checked before every branch that assigns to the destination.
+      pass
     elif isinstance(destination, PlateHolder):  # .zero() resources
       destination.assign_child_resource(resource)
     elif isinstance(destination, ResourceHolder):  # .zero() resources
@@ -2287,8 +2295,6 @@ class LiquidHandler(Resource, Machine):
       )
     elif isinstance(destination, Liddable) and isinstance(resource, Lid):
       destination.assign_child_resource(resource)
-    elif isinstance(destination, Trash):
-      pass  # don't assign to trash, resource will simply be unassigned
     else:
       destination.assign_child_resource(resource, location=to_location)
 
