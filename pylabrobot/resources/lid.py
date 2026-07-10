@@ -68,23 +68,22 @@ class Liddable(Resource):
   ``nesting_z_height``; a resource may hold at most one lid at a time.
   """
 
-  _lid: Optional[Lid] = None
-
   def has_lid(self) -> bool:
-    return self._lid is not None
+    return self.lid is not None
 
   @property
   def lid(self) -> Optional[Lid]:
-    return self._lid
+    """The lid seated on this resource, or ``None``. Derived from the children."""
+    return next((child for child in self.children if isinstance(child, Lid)), None)
 
   @lid.setter
   def lid(self, lid: Optional[Lid]) -> None:
     if lid is None:
-      if self._lid is not None:
-        self.unassign_child_resource(self._lid)
+      current_lid = self.lid
+      if current_lid is not None:
+        self.unassign_child_resource(current_lid)
     else:
       self.assign_child_resource(lid)
-    self._lid = lid
 
   def get_lid_location(self, lid: Lid) -> Coordinate:
     """Location of ``lid`` seated centred on this resource's top face, sunk by nesting_z_height.
@@ -117,13 +116,7 @@ class Liddable(Resource):
           f"Lid '{resource.name}' ({resource.get_size_x()} x {resource.get_size_y()} mm) is smaller "
           f"than '{self.name}' ({self.get_size_x()} x {self.get_size_y()} mm) and cannot cover it."
         )
-      self._lid = resource
       location = location or self.get_lid_location(resource)
     elif location is None:
       raise ValueError("Location must be specified if resource is not a lid.")
     return super().assign_child_resource(resource, location=location, reassign=reassign)
-
-  def unassign_child_resource(self, resource: Resource):
-    if isinstance(resource, Lid) and resource is self._lid:
-      self._lid = None
-    return super().unassign_child_resource(resource)
