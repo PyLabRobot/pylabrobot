@@ -9,7 +9,7 @@ from .resource import Coordinate, Resource
 # A lid may be modelled up to this much smaller than the resource it covers - its rim sits just
 # inside the outer edge, so real plate lids run a few tenths of a mm under. A larger shortfall means
 # the wrong lid. Used by Liddable.assign_child_resource.
-LID_UNDERSIZE_TOLERANCE_MM = 1.0
+LID_UNDERSIZE_TOLERANCE = 1.0
 
 
 class Lid(Resource):
@@ -109,8 +109,8 @@ class Liddable(Resource):
       if self.has_lid():
         raise ValueError(f"'{self.name}' already has a lid.")
       if (
-        resource.get_size_x() < self.get_size_x() - LID_UNDERSIZE_TOLERANCE_MM
-        or resource.get_size_y() < self.get_size_y() - LID_UNDERSIZE_TOLERANCE_MM
+        resource.get_size_x() < self.get_size_x() - LID_UNDERSIZE_TOLERANCE
+        or resource.get_size_y() < self.get_size_y() - LID_UNDERSIZE_TOLERANCE
       ):
         raise ValueError(
           f"Lid '{resource.name}' ({resource.get_size_x()} x {resource.get_size_y()} mm) is smaller "
