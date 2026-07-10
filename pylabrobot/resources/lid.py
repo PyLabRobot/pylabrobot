@@ -117,6 +117,4 @@ class Liddable(Resource):
           f"than '{self.name}' ({self.get_size_x()} x {self.get_size_y()} mm) and cannot cover it."
         )
       location = location or self.get_lid_location(resource)
-    elif location is None:
-      raise ValueError("Location must be specified if resource is not a lid.")
     return super().assign_child_resource(resource, location=location, reassign=reassign)

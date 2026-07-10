@@ -18,7 +18,7 @@ from pylabrobot.resources.liquid import Liquid
 
 from .itemized_resource import ItemizedResource
 from .lid import Lid, Liddable
-from .resource import Resource
+from .resource import Coordinate, Resource
 
 if TYPE_CHECKING:
   from .well import Well
@@ -70,6 +70,16 @@ class Plate(Liddable, ItemizedResource["Well"]):
 
     if lid is not None:
       self.assign_child_resource(lid)
+
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True,
+  ):
+    if not isinstance(resource, Lid) and location is None:
+      raise ValueError("Location must be specified if resource is not a lid.")
+    return super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def serialize(self) -> dict:
     return {
