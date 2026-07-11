@@ -1,101 +1,126 @@
 # Structured Concurrency in PyLabRobot
 
-## API
+This guide outlines the principles of structured concurrency as applied in PyLabRobot (PLR). All new features and refactorings must adhere to these guidelines to ensure robust resource management, error handling, and cancellation semantics.
 
-In PyLabRobot, all asynchronous resources expose the `pylabrobot.concurrency.AsyncResource` API: Resources are usable exactly within the body of `async with resource:`.
-What exactly *usable* means may depend on the resource though,
-as some functionality *may* be available outside the `async with` block too.
-Unless that is specified by the API for a specific resource, you should not rely on it.
+## 1. Background: What is Structured Concurrency?
+
+Structured concurrency is a programming paradigm that treats concurrent paths of execution as nested scopes, ensuring that child tasks are guaranteed to complete (or be cancelled) before their parent scope exits.
+
+For a detailed explanation of the concept and its benefits over unstructured concurrency (e.g., raw threads or raw `asyncio.create_task` - sometimes termed `go` statements), read the seminal blog post:
+[Notes on structured concurrency, or: Go statement considered harmful](https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/) by Nathaniel J. Smith.
+
+In short, structured concurrency brings the same safety guarantees to concurrent programming that structured programming (if/then, loops) brought over `goto` statements. It guarantees that:
+*   Tasks do not outlive their scope (no orphan background tasks).
+*   Errors are reliably propagated up the task tree.
+*   Cancellation is consistent and propagates down to all child tasks.
+
+---
+
+## 2. How Structured Concurrency is Implemented in PLR
+
+In PyLabRobot, structured concurrency is implemented on top of [Anyio](https://anyio.readthedocs.io/), a loop-agnostic asynchronous concurrency library.
+
+### The `AsyncResource` API
+All asynchronous resources (backends, decks, readers, etc.) must expose the `pylabrobot.concurrency.AsyncResource` API.
+Resources are usable **only** within the body of an `async with` block:
+
+```python
+async with LHBackend() as backend:
+    await backend.aspirate(...)
+    # backend is guaranteed to be initialized here and cleaned up when exiting the block
+```
 
 ### Implementing `AsyncResource`
+When implementing a new resource, do not write `__aenter__` and `__aexit__` directly. Instead, implement the `lifespan` async context manager.
 
-When implementing `AsyncResource` for a new class, you should not write `__aenter__` and `__aexit__` directly, as this is difficult to get right.
-Instead, you should implement the `lifespan` async context manager.
-It is often most convenient to do so in terms of a `contextlib.AsyncExitStack`,
-so the default implementation of `lifespan` does that and delegates to a `_enter_lifespan(stack)` coroutine.
-There is no `_exit_lifespan` (because separate enter and exit calls are the antithesis of structured concurrency),
-instead, all cleanup is registered with the `stack`.
+Most resources should use `_enter_lifespan(stack)` to register their setup and cleanup steps. We use `AsyncExitStackWithShielding` (a subclass of `AsyncExitStack` defined in `pylabrobot.concurrency`) which provides a helper for shielding async cleanups:
 
-### Legacy `setup`/`stop` calls
+1.  Inherit from `AsyncResource`.
+2.  Implement `async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:`.
+3.  Register sync cleanup actions with the `stack` using `stack.callback(sync_func)`.
+4.  Register async cleanup actions with the `stack` using `stack.push_shielded_async_callback(async_func)`.
+    *   *Note*: **Always** prefer `push_shielded_async_callback` over `push_async_callback` for cleanup to ensure it runs to completion even if the enclosing scope was cancelled (see [3h. Cancellation Shielding](#3h-cancellation-shielding-in-cleanup-actions)).
+5.  **No `_exit_lifespan` exists**: All cleanup must be registered dynamically with the stack during entry.
 
-For historical reasons and to support certain interactive use-cases,
-we still expose a `setup`/`stop` API in subclasses of `Machine`.
-Note however that, with this API, you give away control over the scope of the async work: For example, there is no way to reliably catch all errors in background tasks, or to handle cancellation of tasks consistently. Do not use that in production scripts.
+Example:
+```python
+class MyBackend(AsyncResource):
+    async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+        await super()._enter_lifespan(stack)
+        await self._connect()
+        # Register async cleanup with shielding (private disconnect method)
+        stack.push_shielded_async_callback(self._disconnect)
+```
 
-## Testing
+### Testing Async Code
+We use `pylabrobot.testing.concurrency.AnyioTestBase` for testing asynchronous code.
+*   **Do not use** `unittest.IsolatedAsyncioTestCase` as it is incompatible with structured scopes.
+*   `AnyioTestBase` is *not* a `unittest.TestCase` to avoid triggering pytest's legacy compatibility modes.
+*   **Prefer `pytest` assertions**: Write normal Python `assert a == b` statements instead of using legacy `unittest` assertion helpers (like `self.assertEqual`). The helpers are only kept for backwards compatibility during migration.
+*   Test classes themselves act as `AsyncResource`s. Test setup and teardown should be implemented via `_enter_lifespan`.
 
-Previous testing within PLR relied on `unittest.IsolatedAsyncioTestCase`.
-Unfortunately, the `unittest` paradigm is fundamentally incompatible with structured concurrency.
-There is no structured scope enclosing the tests, and all attempts to work around this failed.
+---
 
-Instead, we provide `pylabrobot.testing.concurrency.AnyioTestBase`.
-This is *not* a `unittest.TestCase` on purpose, in order not to trigger `pytest`'s
-`unittest` compatibility mode. It *does* however reimplement the asserts from `unittest`,
-as to streamline test conversion.
-Test cases can be left as-is, but the `setUp`/`asyncSetUp` / `tearDown`/`asyncTearDown` logic needs to be replaced by a `lifespan` or `_enter_lifespan` implementation (it is a `AsyncResource` itself).
+## 3. Rules and Gotchas
 
-### Gotchas:
-- `unittest.AsyncMock` creates `async` methods that do never yield.
-  This is a problem if they are used in a tight loop, with no other yield point;
-  leading to a deadlock. This appears in the wild in reader loops of I/O plumbing,
-  so we provide `pylabrobot.testing.mock_io.MockIO` as a more focussed alternative.
+When writing new code or merging upstream changes, strictly adhere to the following rules. **You are encouraged to override upstream design decisions if they violate these rules.**
 
-## Notes from the refactor:
-- Timeout semantics may have changed slightly. Usually, that's the case because previous
-  timeout semantics are often confusing or ill specified (because without structured concurrency,
-  it's very hard to implement good timeout semantics). We tried to stay as close as possible to the previous semantics. That said, going forward, one `timeout` arguments should always be a trigger to take a step back and think about semantics: Is it supposed to be a timeout on the full operation? Then, *don't* put a `timeout` argument at all! Users are better served by wrapping
-  *the whole operation* with `with anyio.fail_after`. If the timeout somehow applies to sub-parts,
-  then be very careful in specifying to what they apply (and what is being done if timeouts fail).
+### 3a. No `setup()` and/or `stop()` Implementation or Use
+*   **Rule**: Never implement or manually call `setup()` or `stop()` methods on resources.
+*   **Rationale**: These methods create unstructured lifespans where resources can be left open if an error occurs.
+*   **Resolution**: Subclasses of `AsyncResource` are strictly forbidden from implementing `setup()` and/or `stop()`. Use `_enter_lifespan` and register cleanup callbacks instead.
+*   **Exception**: Legacy `setup`/`stop` APIs may exist on some classes for interactive/notebook use cases, but they must not be used in library code or production scripts, and are hard to use correctly anyway.
 
-## Limitations:
- - The Opentrons thermocycler USB backend is `asyncio`-only.
+### 3b. Expose Context Managers, Not Start/End Methods
+*   **Rule**: Avoid exposing separate start/end methods in the public API (e.g., `start_shaking()` and `stop_shaking()`).
+*   **Rationale**: Separate calls are prone to leaks if the code in between raises an exception.
+*   **Resolution**: Expose a context manager that defines the active scope of the operation:
+    ```python
+    # Bad
+    await incubator.start_shaking()
+    await do_something()
+    await incubator.stop_shaking()
 
-## Issues found during the refactor
+    # Good
+    async with incubator.shaking():
+        await do_something()
+    ```
 
-### Unstructured start/stop behaviours that might be better off as context manager
-- `shake` and `stop_shaking` on Agilent Biotek.
+### 3c. No Manual Timeout Loops or API `timeout` Arguments
+*   **Rule**: Do not use manual timeout loops (polling `time.time()` in a loop). Do not add `timeout` arguments to public APIs.
+*   **Rationale**: Anyio provides structured timeout context managers which are safer and more flexible. Adding `timeout` to every function clutters the API.
+*   **Resolution**:
+    *   Use `async with anyio.fail_after(timeout):` to bound operations.
+    *   Only use internal timeouts if the implementation requires specific hardware-level timeouts that the user cannot configure.
 
-### Inconsistent "turn-off" behaviout of various machines.
-Most machines seem to turn off any ongoing actions and go back to some form of "parking position", but other machines don't:
-- Tecan EVO has a number of arms that one could park; currently, we don't.
+### 3d. No `asyncio`
+*   **Rule**: Do not import or use `asyncio` APIs directly (e.g., `asyncio.sleep`, `asyncio.create_task`, `unittest.AsyncMock`).
+*   **Rationale**: Code must remain loop-agnostic by using `anyio`.
+*   **Resolution**: Use `anyio` equivalents. Use `pylabrobot.testing.mock_io.MockIO` instead of `AsyncMock` to avoid deadlocks in mock reader loops.
 
+### 3e. No `time.sleep` or `time.monotonic`
+*   **Rule**: Do not use blocking time functions.
+*   **Resolution**:
+    *   Replace `time.sleep(t)` with `await anyio.sleep(t)`.
+    *   Replace `time.monotonic()` or `time.time()` (for duration tracking) with `anyio.current_time()`.
 
-## Structured concurrency checklist
-When refactoring code to structured concurrency, go through each of the following points to check for code smells.
+### 3f. Avoid Background Threads
+*   **Rule**: Avoid long-running background threads. PLR concurrency should be I/O-bound and run on the async event loop.
+*   **Resolution**: Use Anyio task groups (`async with anyio.create_task_group()`) for concurrent async tasks. If you must call a blocking synchronous API, wrap it in `anyio.to_thread.run_sync`, keeping the sync function stateless and minimal.
 
-### References to `setup`
- - No class should implement `setup` - instead, they should inherit from `AsyncResource`
- - Developer docs mentioning `setup` should mention the resource lifespan instead
- - Same with error messages
- - `.setup_done()` calls should be replaced with something like `.within_lifespan`
+### 3g. Never Swallow Cancellation Exceptions
+*   **Rule**: Never catch a cancellation exception without re-raising it.
+*   **Rationale**: Swallowing cancellation prevents the task group from tearing down properly and leads to hung tasks.
+*   **Resolution**: If you must catch `anyio.get_cancelled_exc_class()` to perform emergency local cleanup, you **must** re-raise it:
+    ```python
+    try:
+        await do_something()
+    except anyio.get_cancelled_exc_class():
+        # perform local non-async cleanup if needed
+        raise # MUST re-raise
+    ```
 
-### References to `asyncio`
- - Avoid raw `asyncio` APIs, should all be converted to `anyio` or something else that is loop-agnostic.
- - `asyncio.sleep` -> `anyio.sleep`; though be wary of manual timeout loops, these should
-   use anyio timeout context managers instead.
-
-### References to `threading`
- - `threading` is for CPU bound concurrency. This project shouldn't have any, it's all I/O bound.
- - Use anyio task groups instead.
- - To wrap a sync API, use `anyio.to_thread.sync`, but with minimally feasible sync functions:
-   No state synchronisation except function input/output.
-
-### References to `unittest`
- - Async tests now *require* pytest - let's remove all calls to `unittest.main()`
-
-### References to `time.time` or `time.monotonic()`
- - Usually, should at least be `anyio.current_time()`, but often is a sign for a busy-loop or manual timeout handling.
- - Use of anyio timeout context managers is preferred
- - The exception are `time.time` calls that are API-facing; IMHO, that's an unfortunate API choice (should be datetime.datetime)
-   instead, but refactoring these API is out of scope for the structurec-concurrency refactor.
-
-### `_enter_lifespan`
- - extra arguments other than `stack` should be *keyword-only*!
- - Have a look at all `stack.push_async_callback`, especially for `cleanup()` functions - these could often in fact be sync.
- - Verify that all cleanup logic has cancellation-shielding in place where necessary.
-
-### Cleanup actions
- - Verify if cancellation shielding is necessary: All async cleanup in general needs cancellation shielding
-
-### Catching cancellations:
-- We never ever catch a cancellation without re-raising. In basic `asyncio`, that might be ok, but in structured concurrency, it never is.
+### 3h. Cancellation Shielding in Cleanup Actions
+*   **Rule**: Async cleanup actions registered in `_enter_lifespan` must be shielded from cancellation.
+*   **Rationale**: If a scope is cancelled (e.g., via Ctrl-C or timeout), the cancellation propagates to all active tasks. If a cleanup function performs an `await` (e.g., sending a shutdown command to a robot), that `await` would immediately raise a `CancelledError` and abort the cleanup, leaving the hardware in an unsafe state.
+*   **Resolution**: Use `stack.push_shielded_async_callback` to register async cleanups. This wraps the cleanup in a shielded cancellation scope (`with anyio.CancelScope(shield=True):`), ensuring it runs to completion even if the main task was cancelled.
