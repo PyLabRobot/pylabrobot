@@ -1,6 +1,6 @@
-"""Legacy. Use pylabrobot.inheco.scila.InhecoSiLAInterface instead."""
+"""Legacy. Use pylabrobot.inheco.sila.InhecoSiLAInterface instead."""
 
-from pylabrobot.inheco.scila.inheco_sila_interface import (  # noqa: F401
+from pylabrobot.inheco.sila import (  # noqa: F401
   InhecoSiLAInterface,
   SiLAError,
 )
