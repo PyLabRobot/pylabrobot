@@ -3479,6 +3479,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"Well bottom: {well_bottoms}, liquid height: {liquid_heights}, surface_following_distance: {surface_following_distance}, minimum_height: {minimum_height}"
       )
 
+    # A tip fills to one of two transient peaks that never coexist: volume + pre_wetting
+    # (pre-wet over-aspiration) and volume + transport_air (air gap drawn above the liquid);
+    # blow-out air counts toward neither.
+    over_capacity = []
+    for i, op in enumerate(ops):
+      for label, extra in (
+        ("pre-wetting", pre_wetting_volume[i]),
+        ("transport-air", transport_air_volume[i]),
+      ):
+        peak = volumes[i] + extra
+        if peak > op.tip.maximal_volume:
+          over_capacity.append((i, label, peak, op.tip.maximal_volume))
+    if over_capacity:
+      raise ValueError(
+        "Aspiration would exceed tip capacity: "
+        + "; ".join(
+          f"channel {i} {label} peak {peak:.1f} uL > tip maximal volume {tip_max:.1f} uL"
+          for i, label, peak, tip_max in over_capacity
+        )
+      )
+
     try:
       return await self.aspirate_pip(
         aspiration_type=[0 for _ in range(n)],
