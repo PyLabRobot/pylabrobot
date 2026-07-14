@@ -1,0 +1,6 @@
+pylabrobot.resources.Container.has\_lid
+=======================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Container.has_lid

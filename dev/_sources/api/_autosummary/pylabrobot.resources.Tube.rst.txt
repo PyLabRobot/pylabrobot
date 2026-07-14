@@ -14,6 +14,7 @@ pylabrobot.resources.Tube
    .. autosummary::
       :toctree: .
    
+      ~Tube.lid
       ~Tube.material_z_thickness
       ~Tube.name
    
@@ -50,12 +51,14 @@ pylabrobot.resources.Tube
       ~Tube.get_all_children
       ~Tube.get_anchor
       ~Tube.get_highest_known_point
+      ~Tube.get_lid_location
       ~Tube.get_location_wrt
       ~Tube.get_resource
       ~Tube.get_root
       ~Tube.get_size_x
       ~Tube.get_size_y
       ~Tube.get_size_z
+      ~Tube.has_lid
       ~Tube.is_in_subtree_of
       ~Tube.load_all_state
       ~Tube.load_from_json_file

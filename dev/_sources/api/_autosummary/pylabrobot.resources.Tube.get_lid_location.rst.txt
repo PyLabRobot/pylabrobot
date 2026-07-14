@@ -1,0 +1,6 @@
+pylabrobot.resources.Tube.get\_lid\_location
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Tube.get_lid_location

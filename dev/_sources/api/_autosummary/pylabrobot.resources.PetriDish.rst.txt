@@ -14,6 +14,7 @@ pylabrobot.resources.PetriDish
    .. autosummary::
       :toctree: .
    
+      ~PetriDish.lid
       ~PetriDish.material_z_thickness
       ~PetriDish.name
    
@@ -50,12 +51,14 @@ pylabrobot.resources.PetriDish
       ~PetriDish.get_all_children
       ~PetriDish.get_anchor
       ~PetriDish.get_highest_known_point
+      ~PetriDish.get_lid_location
       ~PetriDish.get_location_wrt
       ~PetriDish.get_resource
       ~PetriDish.get_root
       ~PetriDish.get_size_x
       ~PetriDish.get_size_y
       ~PetriDish.get_size_z
+      ~PetriDish.has_lid
       ~PetriDish.is_in_subtree_of
       ~PetriDish.load_all_state
       ~PetriDish.load_from_json_file

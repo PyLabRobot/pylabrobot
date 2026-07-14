@@ -1,0 +1,6 @@
+pylabrobot.resources.Well.lid
+=============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Well.lid

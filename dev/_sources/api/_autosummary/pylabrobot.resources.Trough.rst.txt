@@ -14,6 +14,7 @@ pylabrobot.resources.Trough
    .. autosummary::
       :toctree: .
    
+      ~Trough.lid
       ~Trough.material_z_thickness
       ~Trough.name
    
@@ -50,12 +51,14 @@ pylabrobot.resources.Trough
       ~Trough.get_all_children
       ~Trough.get_anchor
       ~Trough.get_highest_known_point
+      ~Trough.get_lid_location
       ~Trough.get_location_wrt
       ~Trough.get_resource
       ~Trough.get_root
       ~Trough.get_size_x
       ~Trough.get_size_y
       ~Trough.get_size_z
+      ~Trough.has_lid
       ~Trough.is_in_subtree_of
       ~Trough.load_all_state
       ~Trough.load_from_json_file

@@ -14,6 +14,7 @@ pylabrobot.resources.Well
    .. autosummary::
       :toctree: .
    
+      ~Well.lid
       ~Well.material_z_thickness
       ~Well.name
    
@@ -52,6 +53,7 @@ pylabrobot.resources.Well
       ~Well.get_column
       ~Well.get_highest_known_point
       ~Well.get_identifier
+      ~Well.get_lid_location
       ~Well.get_location_wrt
       ~Well.get_resource
       ~Well.get_root
@@ -59,6 +61,7 @@ pylabrobot.resources.Well
       ~Well.get_size_x
       ~Well.get_size_y
       ~Well.get_size_z
+      ~Well.has_lid
       ~Well.is_in_subtree_of
       ~Well.load_all_state
       ~Well.load_from_json_file

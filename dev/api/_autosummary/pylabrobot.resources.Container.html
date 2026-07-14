@@ -27,8 +27,8 @@
   </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
-<link href="../../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+  <link href="../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
@@ -36,10 +36,10 @@
     <link rel="stylesheet" type="text/css" href="../../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
-  <script defer src="../../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <script defer src="../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
-<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
     <script src="../../_static/documentation_options.js?v=3ce10a4d"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
@@ -48,7 +48,7 @@
     <script src="../../_static/copybutton.js?v=f281be69"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.resources.Container';</script>
     <script>
-        DOCUMENTATION_OPTIONS.theme_version = '0.19.0';
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
         DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
@@ -60,7 +60,7 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.resources.Container.material_z_thickness" href="pylabrobot.resources.Container.material_z_thickness.html" />
+    <link rel="next" title="pylabrobot.resources.Container.lid" href="pylabrobot.resources.Container.lid.html" />
     <link rel="prev" title="pylabrobot.resources.Carrier.unassign_child_resource" href="pylabrobot.resources.Carrier.unassign_child_resource.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -583,15 +583,19 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="pylabrobot.resources.Container">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.resources.</span></span><span class="sig-name descname"><span class="pre">Container</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">size_x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">size_y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">size_z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">material_z_thickness</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">category</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_volume_from_height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.14)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_height_from_volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.14)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height_volume_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">no_go_zones</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.14)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><span class="pre">Coordinate</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><span class="pre">Coordinate</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.resources.Container" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.resource.Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">Resource</span></code></a></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Liddable</span></code>, <a class="reference internal" href="pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.resource.Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">Resource</span></code></a></p>
 <p>A container is an abstract base class for a resource that can hold liquid.</p>
+<p>Via the <code class="xref py py-class docutils literal notranslate"><span class="pre">Liddable</span></code> mixin, a container (trough, tube, petri dish, well) can host a lid.</p>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.material_z_thickness.html#pylabrobot.resources.Container.material_z_thickness" title="pylabrobot.resources.Container.material_z_thickness"><code class="xref py py-obj docutils literal notranslate"><span class="pre">material_z_thickness</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.lid.html#pylabrobot.resources.Container.lid" title="pylabrobot.resources.Container.lid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lid</span></code></a></p></td>
+<td><p>The lid seated on this resource, or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.material_z_thickness.html#pylabrobot.resources.Container.material_z_thickness" title="pylabrobot.resources.Container.material_z_thickness"><code class="xref py py-obj docutils literal notranslate"><span class="pre">material_z_thickness</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.name.html#pylabrobot.resources.Container.name" title="pylabrobot.resources.Container.name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">name</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.name.html#pylabrobot.resources.Container.name" title="pylabrobot.resources.Container.name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">name</span></code></a></p></td>
 <td><p>Get the name of this resource.</p></td>
 </tr>
 </tbody>
@@ -606,7 +610,7 @@
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.assign_child_by_anchor.html#pylabrobot.resources.Container.assign_child_by_anchor" title="pylabrobot.resources.Container.assign_child_by_anchor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assign_child_by_anchor</span></code></a>(resource[, ...])</p></td>
 <td><p>Assign a child resource by aligning anchor points.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.assign_child_resource.html#pylabrobot.resources.Container.assign_child_resource" title="pylabrobot.resources.Container.assign_child_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assign_child_resource</span></code></a>(resource, location[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.assign_child_resource.html#pylabrobot.resources.Container.assign_child_resource" title="pylabrobot.resources.Container.assign_child_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assign_child_resource</span></code></a>(resource[, location, ...])</p></td>
 <td><p>Assign a child resource to this resource.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.at.html#pylabrobot.resources.Container.at" title="pylabrobot.resources.Container.at"><code class="xref py py-obj docutils literal notranslate"><span class="pre">at</span></code></a>(location)</p></td>
@@ -672,23 +676,29 @@
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_highest_known_point.html#pylabrobot.resources.Container.get_highest_known_point" title="pylabrobot.resources.Container.get_highest_known_point"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_highest_known_point</span></code></a>()</p></td>
 <td><p>Recursively finds the highest known point in absolute space.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_location_wrt.html#pylabrobot.resources.Container.get_location_wrt" title="pylabrobot.resources.Container.get_location_wrt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_location_wrt</span></code></a>(other[, x, y, z])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_lid_location.html#pylabrobot.resources.Container.get_lid_location" title="pylabrobot.resources.Container.get_lid_location"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_lid_location</span></code></a>(lid)</p></td>
+<td><p>Location of <code class="docutils literal notranslate"><span class="pre">lid</span></code> seated centred on this resource's top face, sunk by nesting_z_height.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_location_wrt.html#pylabrobot.resources.Container.get_location_wrt" title="pylabrobot.resources.Container.get_location_wrt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_location_wrt</span></code></a>(other[, x, y, z])</p></td>
 <td><p>Get the location of this resource with respect to another resource.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_resource.html#pylabrobot.resources.Container.get_resource" title="pylabrobot.resources.Container.get_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_resource</span></code></a>(name)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_resource.html#pylabrobot.resources.Container.get_resource" title="pylabrobot.resources.Container.get_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_resource</span></code></a>(name)</p></td>
 <td><p>Get a resource by name.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_root.html#pylabrobot.resources.Container.get_root" title="pylabrobot.resources.Container.get_root"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_root</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_root.html#pylabrobot.resources.Container.get_root" title="pylabrobot.resources.Container.get_root"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_root</span></code></a>()</p></td>
 <td><p>Get the root of the resource tree.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_size_x.html#pylabrobot.resources.Container.get_size_x" title="pylabrobot.resources.Container.get_size_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_size_x</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_size_x.html#pylabrobot.resources.Container.get_size_x" title="pylabrobot.resources.Container.get_size_x"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_size_x</span></code></a>()</p></td>
 <td><p>Local size in the x direction.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_size_y.html#pylabrobot.resources.Container.get_size_y" title="pylabrobot.resources.Container.get_size_y"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_size_y</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_size_y.html#pylabrobot.resources.Container.get_size_y" title="pylabrobot.resources.Container.get_size_y"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_size_y</span></code></a>()</p></td>
 <td><p>Local size in the y direction.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_size_z.html#pylabrobot.resources.Container.get_size_z" title="pylabrobot.resources.Container.get_size_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_size_z</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.get_size_z.html#pylabrobot.resources.Container.get_size_z" title="pylabrobot.resources.Container.get_size_z"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_size_z</span></code></a>()</p></td>
 <td><p>Local size in the z direction.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.Container.has_lid.html#pylabrobot.resources.Container.has_lid" title="pylabrobot.resources.Container.has_lid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_lid</span></code></a>()</p></td>
+<td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.Container.is_in_subtree_of.html#pylabrobot.resources.Container.is_in_subtree_of" title="pylabrobot.resources.Container.is_in_subtree_of"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_in_subtree_of</span></code></a>(other)</p></td>
 <td><p>Return <code class="docutils literal notranslate"><span class="pre">True</span></code> if <code class="docutils literal notranslate"><span class="pre">self</span></code> is in the subtree rooted at <code class="docutils literal notranslate"><span class="pre">other</span></code>.</p></td>
@@ -798,11 +808,11 @@
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.resources.Container.material_z_thickness.html"
+       href="pylabrobot.resources.Container.lid.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.resources.Container.material_z_thickness</p>
+        <p class="prev-next-title">pylabrobot.resources.Container.lid</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -867,8 +877,8 @@
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script defer src="../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
-<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+  <script defer src="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
 
   <footer class="bd-footer">
 <div class="bd-footer__inner bd-page-width">
@@ -902,7 +912,7 @@
         <div class="footer-item">
 <p class="theme-version">
   <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
-  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.19.0.
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.20.0.
 </p></div>
       
     </div>

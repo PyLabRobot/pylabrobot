@@ -1,0 +1,6 @@
+pylabrobot.resources.Well.has\_lid
+==================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Well.has_lid

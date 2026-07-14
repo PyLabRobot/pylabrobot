@@ -1,0 +1,6 @@
+pylabrobot.resources.Tube.has\_lid
+==================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Tube.has_lid

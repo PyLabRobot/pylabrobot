@@ -14,6 +14,7 @@ pylabrobot.resources.Container
    .. autosummary::
       :toctree: .
    
+      ~Container.lid
       ~Container.material_z_thickness
       ~Container.name
    
@@ -50,12 +51,14 @@ pylabrobot.resources.Container
       ~Container.get_all_children
       ~Container.get_anchor
       ~Container.get_highest_known_point
+      ~Container.get_lid_location
       ~Container.get_location_wrt
       ~Container.get_resource
       ~Container.get_root
       ~Container.get_size_x
       ~Container.get_size_y
       ~Container.get_size_z
+      ~Container.has_lid
       ~Container.is_in_subtree_of
       ~Container.load_all_state
       ~Container.load_from_json_file

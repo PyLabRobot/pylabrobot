@@ -1,0 +1,6 @@
+pylabrobot.resources.Container.lid
+==================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Container.lid
