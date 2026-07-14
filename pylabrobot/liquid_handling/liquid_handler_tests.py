@@ -24,11 +24,14 @@ from pylabrobot.resources import (
   Coordinate,
   Deck,
   Lid,
+  PetriDish,
   Plate,
+  Resource,
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
   cor_96_wellplate_360uL_Fb,
+  hamilton_1_trough_200mL_Vb,
   nest_1_troughplate_195000uL_Vb,
   no_tip_tracking,
   set_tip_tracking,
@@ -309,6 +312,27 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       plate.get_absolute_location().z + plate.get_absolute_size_z() - lid_height
       == lid.get_absolute_location().z
     )
+
+  async def test_move_lid_to_trash(self):
+    # a lid moved to the trash is discarded, not seated on it
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
+    self.deck.assign_child_resource(plate, location=Coordinate(0, 0, 100))
+    lid = Lid(name="lid", size_x=100, size_y=100, size_z=10, nesting_z_height=10)
+    plate.assign_child_resource(lid)
+    trash = self.deck.get_trash_area()
+
+    with unittest.mock.patch.object(
+      self.lh.backend, "drop_resource", wraps=self.lh.backend.drop_resource
+    ) as mock_drop:
+      await self.lh.move_lid(lid, trash)
+
+    self.assertEqual(
+      mock_drop.call_args.kwargs["drop"].destination,
+      trash.get_location_wrt(self.deck),
+    )
+    self.assertFalse(plate.has_lid())
+    self.assertIsNone(lid.parent)
+    self.assertNotIn(lid, trash.children)
 
   async def test_move_plate_onto_resource_stack_with_lid(self):
     plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
@@ -914,6 +938,57 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh.update_head_state({0: t})
     with self.assertRaises(ValueError):
       await self.lh.aspirate([well], vols=[10])
+
+  async def test_aspirate_from_trough_with_lid(self):
+    trough = hamilton_1_trough_200mL_Vb(name="trough")
+    trough.lid = Lid(
+      "trough_lid",
+      size_x=trough.get_size_x() + 2,
+      size_y=trough.get_size_y() + 2,
+      size_z=10,
+      nesting_z_height=4,
+    )
+    t = self.tip_rack.get_item("A1").get_tip()
+    self.lh.update_head_state({0: t})
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([trough], vols=[10])
+
+  async def test_aspirate_from_petri_dish_with_lid(self):
+    dish = PetriDish("petri_dish", diameter=90, height=15)
+    dish.lid = Lid(
+      "petri_dish_lid",
+      size_x=dish.get_size_x() + 4,
+      size_y=dish.get_size_y() + 4,
+      size_z=10,
+      nesting_z_height=4,
+    )
+    t = self.tip_rack.get_item("A1").get_tip()
+    self.lh.update_head_state({0: t})
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([dish], vols=[10])
+
+  async def test_lidded_ancestor_walks_full_chain(self):
+    # A lid on any ancestor blocks pipetting, not just the direct parent: nest a target two levels
+    # under a lidded container and check the walk finds it.
+    from pylabrobot.liquid_handling.liquid_handler import _lidded_ancestor
+
+    trough = hamilton_1_trough_200mL_Vb(name="trough")
+    trough.lid = Lid(
+      "trough_lid",
+      size_x=trough.get_size_x() + 2,
+      size_y=trough.get_size_y() + 2,
+      size_z=10,
+      nesting_z_height=4,
+    )
+    middle = Resource("middle", size_x=1, size_y=1, size_z=1)
+    target = Resource("target", size_x=1, size_y=1, size_z=1)
+    trough.assign_child_resource(middle, location=Coordinate.zero())
+    middle.assign_child_resource(target, location=Coordinate.zero())
+
+    self.assertIs(_lidded_ancestor(target), trough)
+    self.assertIs(_lidded_ancestor(middle), trough)
+    trough.lid = None
+    self.assertIsNone(_lidded_ancestor(target))
 
   @pytest.mark.filterwarnings("ignore:Extra arguments to backend")
   async def test_strictness(self):

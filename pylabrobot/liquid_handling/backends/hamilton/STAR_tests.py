@@ -1880,22 +1880,22 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1142yd0zj2242zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
+          "C0PPid0001xs04829xd0yj1141yd0zj2242zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs02318xd0yj1644yd0zj1983zd0th2800te2800gr4go1308ga0gc0",
+          "C0PRid0002xs02317xd0yj1644yd0zj1983zd0th2800te2800gr4go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs02318xd0yj1644yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
+          "C0PPid0003xs02317xd0yj1644yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs02315xd0yj3104yd0zj1983zd0th2800te2800gr3go0885ga0gc0",
+          "C0PRid0004xs02317xd0yj3104yd0zj1983zd0th2800te2800gr3go0885ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0005xs02315xd0yj3104yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
+          "C0PPid0005xs02317xd0yj3104yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0006xs04829xd0yj1142yd0zj2242zd0th2800te2800gr4go0885ga0gc0",
+          "C0PRid0006xs04829xd0yj1141yd0zj2242zd0th2800te2800gr4go0885ga0gc0",
         ),
       ]
     )

@@ -39,6 +39,7 @@ from pylabrobot.resources import (
   Coordinate,
   Deck,
   Lid,
+  Liddable,
   Plate,
   PlateAdapter,
   PlateHolder,
@@ -89,6 +90,34 @@ TipPresenceProbingMethod = Callable[
 
 class BlowOutVolumeError(Exception):
   pass
+
+
+def _lidded_ancestor(resource: Resource) -> Optional[Liddable]:
+  """Return the nearest lidded resource at or above ``resource``, walking up the parent chain.
+
+  A lid anywhere in the ancestry blocks pipetting, not just one on the direct parent: a well is
+  enclosed by its plate, but plates may in turn sit in lidded holders or nested containers. Returns
+  ``resource`` itself if it carries a lid, else the closest lidded ancestor, else ``None``.
+  """
+  current: Optional[Resource] = resource
+  while current is not None:
+    if isinstance(current, Liddable) and current.has_lid():
+      return current
+    current = current.parent
+  return None
+
+
+def _check_no_lid(resource: Resource, action: str) -> None:
+  """Raise if ``resource`` or any ancestor carries a lid. ``action`` is a verb phrase for the error."""
+  lidded = _lidded_ancestor(resource)
+  if lidded is None:
+    return
+  if lidded is resource:
+    raise ValueError(f"Cannot {action} {resource.name!r}: it has a lid. Remove the lid first.")
+  raise ValueError(
+    f"Cannot {action} {resource.name!r}: its enclosing resource {lidded.name!r} has a lid. "
+    "Remove the lid first."
+  )
 
 
 class LiquidHandler(Resource, Machine):
@@ -946,8 +975,7 @@ class LiquidHandler(Resource, Machine):
 
     # Checks
     for resource in resources:
-      if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-        raise ValueError("Aspirating from a well with a lid is not supported.")
+      _check_no_lid(resource, "aspirate from")
 
     self._make_sure_channels_exist(use_channels)
     for n, p in [
@@ -1160,8 +1188,7 @@ class LiquidHandler(Resource, Machine):
             raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
 
     for resource in resources:
-      if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-        raise ValueError("Dispensing to plate with lid")
+      _check_no_lid(resource, "dispense to")
 
     for n, p in [
       ("resources", resources),
@@ -1732,10 +1759,10 @@ class LiquidHandler(Resource, Machine):
     # Convert Plate to either one Container (single well) or a list of Wells
     containers: Sequence[Container]
     if isinstance(resource, Plate):
-      if resource.has_lid():
-        raise ValueError("Aspirating from plate with lid")
+      _check_no_lid(resource, "aspirate from")
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
+      _check_no_lid(resource, "aspirate from")
       containers = [resource]
     elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
       containers = resource
@@ -1882,10 +1909,10 @@ class LiquidHandler(Resource, Machine):
     # Convert Plate to either one Container (single well) or a list of Wells
     containers: Sequence[Container]
     if isinstance(resource, Plate):
-      if resource.has_lid():
-        raise ValueError("Dispensing to plate with lid is not possible. Remove the lid first.")
+      _check_no_lid(resource, "dispense to")
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
+      _check_no_lid(resource, "dispense to")
       containers = [resource]
     elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
       containers = resource
@@ -2191,6 +2218,9 @@ class LiquidHandler(Resource, Machine):
       ).rotated(destination.get_absolute_rotation())
     elif isinstance(destination, Coordinate):
       to_location = destination
+    elif isinstance(destination, Trash):
+      # discarded, never seated - kept above the branches that place a resource on its destination
+      to_location = destination.get_location_wrt(self.deck)
     elif isinstance(destination, ResourceHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
@@ -2206,13 +2236,13 @@ class LiquidHandler(Resource, Machine):
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
       to_location = destination.get_location_wrt(self.deck) + adjusted_plate_anchor
-    elif isinstance(destination, Plate) and isinstance(resource, Lid):
+    elif isinstance(destination, Liddable) and isinstance(resource, Lid):
       lid = resource
-      plate_location = destination.get_location_wrt(self.deck)
+      parent_location = destination.get_location_wrt(self.deck)
       child_wrt_parent = destination.get_lid_location(
         lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
-      to_location = plate_location + child_wrt_parent
+      to_location = parent_location + child_wrt_parent
     else:
       to_location = destination.get_location_wrt(self.deck)
 
@@ -2242,6 +2272,9 @@ class LiquidHandler(Resource, Machine):
     if isinstance(destination, Coordinate):
       to_location -= self.deck.location  # passed as an absolute location, but stored as relative
       self.deck.assign_child_resource(resource, location=to_location)
+    elif isinstance(destination, Trash):
+      # discarded: `resource.unassign()` above already detached it, so leave it detached
+      pass
     elif isinstance(destination, PlateHolder):  # .zero() resources
       destination.assign_child_resource(resource)
     elif isinstance(destination, ResourceHolder):  # .zero() resources
@@ -2258,10 +2291,8 @@ class LiquidHandler(Resource, Machine):
       destination.assign_child_resource(
         resource, location=destination.compute_plate_location(resource)
       )
-    elif isinstance(destination, Plate) and isinstance(resource, Lid):
+    elif isinstance(destination, Liddable) and isinstance(resource, Lid):
       destination.assign_child_resource(resource)
-    elif isinstance(destination, Trash):
-      pass  # don't assign to trash, resource will simply be unassigned
     else:
       destination.assign_child_resource(resource, location=to_location)
 
@@ -2348,7 +2379,7 @@ class LiquidHandler(Resource, Machine):
   async def move_lid(
     self,
     lid: Lid,
-    to: Union[Plate, ResourceStack, Coordinate],
+    to: Union[Liddable, ResourceStack, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),

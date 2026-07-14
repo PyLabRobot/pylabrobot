@@ -4,12 +4,16 @@ from pylabrobot.serializer import serialize
 from pylabrobot.utils.interpolation import interpolate_1d
 
 from .coordinate import Coordinate
+from .lid import Liddable
 from .resource import Resource
 from .volume_tracker import VolumeTracker
 
 
-class Container(Resource):
-  """A container is an abstract base class for a resource that can hold liquid."""
+class Container(Liddable, Resource):
+  """A container is an abstract base class for a resource that can hold liquid.
+
+  Via the :class:`Liddable` mixin, a container (trough, tube, petri dish, well) can host a lid.
+  """
 
   def __init__(
     self,
