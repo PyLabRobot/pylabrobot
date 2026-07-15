@@ -123,26 +123,17 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
 
   # -- CanGrip ---------------------------------------------------------------
 
-  @property
-  def min_gripper_width(self) -> float:
-    return self.gripper_min_mm
-
-  @property
-  def max_gripper_width(self) -> float:
-    return self.gripper_max_mm
-
-  async def move_gripper(
-    self,
-    width: float,
-    force_sensing: bool = False,
-    backend_params: Optional[BackendParams] = None,
+  async def open_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
-    """Move the bio-gripper jaws to ``width`` mm.
+    """Open the bio-gripper to the specified width (mm)."""
+    await self._set_gripper_units(self._mm_to_gripper_units(gripper_width))
 
-    The xArm bio-gripper is position-controlled; ``force_sensing`` has no
-    effect on the SDK call.
-    """
-    await self._set_gripper_units(self._mm_to_gripper_units(width))
+  async def close_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    """Close the bio-gripper to the specified width (mm)."""
+    await self._set_gripper_units(self._mm_to_gripper_units(gripper_width))
 
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
     """Return True if the gripper width is at or below ``closed_threshold_mm``."""
@@ -175,7 +166,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
       num_retries=1,
     )
 
-  async def request_gripper_pose(
+  async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> CartesianPose:
     """Get the current gripper location and rotation."""
@@ -218,7 +209,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     """Move to ``location`` and close the gripper to ``resource_width``."""
     await self.move_to_location(location, rotation, backend_params=backend_params)
-    await self.move_gripper(width=resource_width, force_sensing=True)
+    await self.close_gripper(resource_width)
 
   async def drop_at_location(
     self,
@@ -271,7 +262,7 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   ) -> None:
     """Move to the joint target and close the gripper to ``resource_width``."""
     await self.move_to_joint_position(position, backend_params=backend_params)
-    await self.move_gripper(width=resource_width, force_sensing=True)
+    await self.close_gripper(resource_width)
 
   async def drop_at_joint_position(
     self,
@@ -286,14 +277,12 @@ class XArm6ArmBackend(ArticulatedGripperArmBackend, HasJoints, CanFreedrive):
   # -- CanFreedrive ----------------------------------------------------------
 
   async def start_freedrive_mode(
-    self,
-    free_axes: Optional[List[int]] = None,
-    backend_params: Optional[BackendParams] = None,
+    self, free_axes: List[int], backend_params: Optional[BackendParams] = None
   ) -> None:
     """Enter freedrive (manual teaching) mode.
 
-    The xArm SDK only supports freeing all axes at once, so ``free_axes`` has
-    no effect.
+    The xArm SDK only supports freeing all axes at once, so ``free_axes`` is
+    accepted for interface compatibility but ignored.
     """
     await self._driver._call_sdk(self._driver._arm.set_mode, 2, op="set_mode")
     await self._driver._call_sdk(self._driver._arm.set_state, 0, op="set_state")

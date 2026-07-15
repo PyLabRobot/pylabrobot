@@ -21,8 +21,8 @@ from typing import (
 )
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
-from pylabrobot.capabilities.arms.orientable_arm import OrientableGripperArm
-from pylabrobot.capabilities.arms.standard import GripperDirection as _NewGripperDirection
+from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
+from pylabrobot.capabilities.arms.standard import GripDirection as _NewGripDirection
 from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.capabilities.liquid_handling.head96 import Head96
 from pylabrobot.capabilities.liquid_handling.head96_backend import (
@@ -305,12 +305,7 @@ class _Head96Adapter(_NewHead96Backend):
     await self._legacy.dispense96(dispense=legacy_disp, **kw)
 
 
-_LEGACY_TO_NEW_GRIP: Dict[GripDirection, _NewGripperDirection] = {
-  GripDirection.FRONT: "front",
-  GripDirection.BACK: "back",
-  GripDirection.LEFT: "left",
-  GripDirection.RIGHT: "right",
-}
+_LEGACY_TO_NEW_GRIP = {d: _NewGripDirection[d.name] for d in GripDirection}
 
 
 class _ArmAdapter(OrientableGripperArmBackend):
@@ -348,8 +343,8 @@ class _ArmAdapter(OrientableGripperArmBackend):
   async def park(self, backend_params=None):
     pass
 
-  async def request_gripper_pose(self, backend_params=None) -> CartesianPose:
-    raise NotImplementedError("request_gripper_pose not available via legacy adapter")
+  async def request_gripper_location(self, backend_params=None) -> CartesianPose:
+    raise NotImplementedError("request_gripper_location not available via legacy adapter")
 
   async def open_gripper(self, gripper_width, backend_params=None):
     pass
@@ -397,7 +392,7 @@ class LiquidHandler(Resource, Machine):
     # New capability instances — created during setup()
     self._lh_cap: Optional[PIP] = None
     self._head96_cap: Optional[Head96] = None
-    self._arm_cap: Optional[OrientableGripperArm] = None
+    self._arm_cap: Optional[OrientableArm] = None
 
     # Default offset applied to all 96-head operations. Any offset passed to a 96-head method is
     # added to this value.
@@ -451,9 +446,7 @@ class LiquidHandler(Resource, Machine):
 
     # Create arm capability with adapter backend
     if self.backend.num_arms > 0:
-      self._arm_cap = OrientableGripperArm(
-        backend=_ArmAdapter(self.backend), reference_resource=self.deck
-      )
+      self._arm_cap = OrientableArm(backend=_ArmAdapter(self.backend), reference_resource=self.deck)
       await self._arm_cap._on_setup()
 
   def serialize_state(self) -> Dict[str, Any]:

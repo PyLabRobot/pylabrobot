@@ -10,12 +10,12 @@ from pylabrobot.resources.rotation import Rotation
 # - pick_up_at_location
 # - drop_at_location
 # - move_to_location
-# - request_gripper_pose
+# - request_gripper_location
 # - is_holding_resource
 
 # CanGrip
-# - min_gripper_width, max_gripper_width
-# - move_gripper(width, force_sensing)
+# - open_gripper
+# - close_gripper
 # - is_gripper_closed
 
 # CanSuction
@@ -37,18 +37,12 @@ class CanFreedrive(metaclass=ABCMeta):
 
   @abstractmethod
   async def start_freedrive_mode(
-    self,
-    free_axes: Optional[List[int]] = None,
-    backend_params: Optional[BackendParams] = None,
+    self, free_axes: List[int], backend_params: Optional[BackendParams] = None
   ) -> None:
     """Enter freedrive mode, allowing manual movement of the specified joints.
 
     Args:
-      free_axes: List of joint indices to free. ``None`` or ``[0]`` mean
-        the backend's default ("all freeable axes" — typically all motion
-        axes, excluding load-bearing axes like a gripper that's holding a
-        plate). Backends may reject per-axis selection if they only
-        support all-or-nothing freedrive.
+      free_axes: List of joint indices to free. Use [0] for all axes.
     """
 
   @abstractmethod
@@ -94,55 +88,19 @@ Smokes = HasJoints
 
 
 class CanGrip(metaclass=ABCMeta):
-  """Mixin for arms that have a gripper.
-
-  All widths in this interface are in **millimeters**. Backends that drive
-  their hardware in other units (encoder counts, SDK steps, etc.) must convert
-  from mm internally.
-
-  Gripper actuation has two fundamental modes, exposed through a single
-  :meth:`move_gripper` call:
-
-  - **Positional** (``force_sensing=False``): move the jaws to ``width`` mm
-    without force feedback. The jaws reach exactly that width.
-  - **Grip** (``force_sensing=True``): close toward ``width`` mm but stop on
-    contact. The final width may be larger than the target.
-
-  Backends must also declare the hardware limits of the gripper via
-  :attr:`min_gripper_width` and :attr:`max_gripper_width`.
-  """
-
-  @property
-  @abstractmethod
-  def min_gripper_width(self) -> Optional[float]:
-    """Smallest jaw width in mm, or ``None`` if the gripper cannot be commanded
-    closed via :meth:`move_gripper` (e.g. closing happens only as part of
-    pick-up)."""
-
-  @property
-  @abstractmethod
-  def max_gripper_width(self) -> Optional[float]:
-    """Largest jaw width in mm, or ``None`` if the gripper cannot be commanded
-    open via :meth:`move_gripper`."""
+  """Mixin for arms that have a gripper."""
 
   @abstractmethod
-  async def move_gripper(
-    self,
-    width: float,
-    force_sensing: bool = False,
-    backend_params: Optional[BackendParams] = None,
+  async def open_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
-    """Move the gripper jaws to ``width`` mm.
+    """Open the gripper to the specified width."""
 
-    Args:
-      width: Target jaw width in mm.
-      force_sensing: If ``True``, close with force feedback and stop on contact.
-        If ``False``, drive the jaws to ``width`` without sensing.
-
-    Backends that do not implement force feedback should either raise
-    :class:`NotImplementedError` when ``force_sensing=True`` is requested or
-    document that the flag has no effect on their hardware.
-    """
+  @abstractmethod
+  async def close_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    """Close the gripper to the specified width."""
 
   @abstractmethod
   async def is_gripper_closed(self, backend_params: Optional[BackendParams] = None) -> bool:
@@ -159,7 +117,7 @@ class _BaseArmBackend(CapabilityBackend, metaclass=ABCMeta):
     """Park the arm to its default position."""
 
   @abstractmethod
-  async def request_gripper_pose(
+  async def request_gripper_location(
     self, backend_params: Optional[BackendParams] = None
   ) -> CartesianPose:
     """Get the current location and rotation of the gripper."""

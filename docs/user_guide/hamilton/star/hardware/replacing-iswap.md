@@ -84,10 +84,11 @@ await star.driver.iswap.reengage_break()  # firmware command "R0BO"
 
 ```python
 from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
+from pylabrobot.capabilities.arms.standard import GripDirection
 
 await star.driver.iswap.rotate(
   rotation_drive=iSWAPBackend.RotationDriveOrientation.RIGHT,
-  grip_direction="back",
+  grip_direction=GripDirection.BACK,
 )
 ```
 
@@ -96,7 +97,7 @@ await star.driver.iswap.rotate(
 ```python
 await star.driver.iswap.rotate(
   rotation_drive=iSWAPBackend.RotationDriveOrientation.LEFT,
-  grip_direction="back",
+  grip_direction=GripDirection.BACK,
 )
 ```
 

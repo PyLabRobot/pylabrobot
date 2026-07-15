@@ -6929,7 +6929,7 @@ class STARBackend(HamiltonLiquidHandler):
 
     assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
 
-    return await self._iswap.move_gripper(width=open_position, force_sensing=False)
+    return await self._iswap.open_gripper(gripper_width=open_position)
 
   async def iswap_close_gripper(
     self,
@@ -6956,10 +6956,9 @@ class STARBackend(HamiltonLiquidHandler):
 
     from pylabrobot.hamilton.liquid_handlers.star.iswap import iSWAPBackend
 
-    return await self._iswap.move_gripper(
-      width=plate_width,
-      force_sensing=True,
-      backend_params=iSWAPBackend.GripParams(
+    return await self._iswap.close_gripper(
+      gripper_width=plate_width,
+      backend_params=iSWAPBackend.CloseGripperParams(
         grip_strength=grip_strength,
         plate_width_tolerance=plate_width_tolerance,
       ),
@@ -7391,7 +7390,7 @@ class STARBackend(HamiltonLiquidHandler):
 
   async def request_iswap_position(self) -> Coordinate:
     """Deprecated: use ``star.iswap.get_gripper_location()``."""
-    return (await self._iswap.request_gripper_pose()).location
+    return (await self._iswap.request_gripper_location()).location
 
   async def iswap_rotation_drive_request_y(self) -> float:
     """Deprecated: use ``star.iswap.rotation_drive_request_y()``."""

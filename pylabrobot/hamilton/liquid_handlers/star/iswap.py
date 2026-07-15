@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
 from pylabrobot.capabilities.arms.backend import OrientableGripperArmBackend
-from pylabrobot.capabilities.arms.standard import CartesianPose, GripperDirection
+from pylabrobot.capabilities.arms.standard import CartesianPose, GripDirection
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 def _direction_degrees_to_grip_direction(degrees: float) -> int:
   """Convert rotation angle in degrees to firmware grip_direction (1-4).
 
-  User-facing convention: ``rotation.z = 0 → +X (CCW about +Z)``.
-  Firmware:  1 = -Y (front), 2 = +X (right), 3 = +Y (back), 4 = -X (left).
+  Firmware:  1 = negative Y (front), 2 = positive X (right),
+             3 = positive Y (back),  4 = negative X (left).
   """
   normalized = round(degrees) % 360
-  mapping = {0: 2, 90: 3, 180: 4, 270: 1}
+  mapping = {0: 1, 90: 2, 180: 3, 270: 4}
   if normalized not in mapping:
     raise ValueError(f"grip direction must be a multiple of 90 degrees, got {degrees}")
   return mapping[normalized]
@@ -71,7 +71,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
     finally:
       self.traversal_height = original
 
-  async def request_gripper_pose(self, backend_params=None) -> CartesianPose:
+  async def request_gripper_location(self, backend_params=None) -> CartesianPose:
     """Request iSWAP grip center position (C0 QG).
 
     Returns:
@@ -224,17 +224,17 @@ class iSWAPBackend(OrientableGripperArmBackend):
 
   async def move_x(self, x: float) -> None:
     """Move iSWAP X to an absolute position [mm]."""
-    loc = (await self.request_gripper_pose()).location
+    loc = (await self.request_gripper_location()).location
     await self.move_relative_x(step_size=x - loc.x, allow_splitting=True)
 
   async def move_y(self, y: float) -> None:
     """Move iSWAP Y to an absolute position [mm]."""
-    loc = (await self.request_gripper_pose()).location
+    loc = (await self.request_gripper_location()).location
     await self.move_relative_y(step_size=y - loc.y, allow_splitting=True)
 
   async def move_z(self, z: float) -> None:
     """Move iSWAP Z to an absolute position [mm]."""
-    loc = (await self.request_gripper_pose()).location
+    loc = (await self.request_gripper_location()).location
     await self.move_relative_z(step_size=z - loc.z, allow_splitting=True)
 
   # -- rotation / wrist drive ------------------------------------------------
@@ -301,7 +301,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
   async def rotate(
     self,
     rotation_drive: "iSWAPBackend.RotationDriveOrientation",
-    grip_direction: GripperDirection,
+    grip_direction: GripDirection,
     gripper_velocity: int = 55_000,
     gripper_acceleration: int = 170,
     gripper_protection: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 5,
@@ -334,16 +334,16 @@ class iSWAPBackend(OrientableGripperArmBackend):
     else:
       raise ValueError(f"Invalid rotation drive orientation: {rotation_drive}")
 
-    if grip_direction == "front":
+    if grip_direction.value == GripDirection.FRONT.value:
       position += 1
-    elif grip_direction == "right":
+    elif grip_direction.value == GripDirection.RIGHT.value:
       position += 2
-    elif grip_direction == "back":
+    elif grip_direction.value == GripDirection.BACK.value:
       position += 3
-    elif grip_direction == "left":
+    elif grip_direction.value == GripDirection.LEFT.value:
       position += 4
     else:
-      raise ValueError(f"Invalid grip direction: {grip_direction!r}")
+      raise ValueError("Invalid grip direction")
 
     await self.driver.send_command(
       module="R0",
@@ -588,14 +588,23 @@ class iSWAPBackend(OrientableGripperArmBackend):
     )
     self._parked = True
 
-  # Physical jaw range for the iSWAP gripper. The firmware accepts up to 999.9 mm,
-  # but the mechanism cannot actually reach those extremes.
-  min_gripper_width: float = 50.0
-  max_gripper_width: float = 145.0
+  async def open_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
+  ) -> None:
+    """Open the iSWAP gripper.
+
+    Args:
+      gripper_width: Open position [mm].
+      backend_params: Unused, reserved for future use.
+    """
+    if not 0 <= gripper_width <= 999.9:
+      raise ValueError("gripper_width must be between 0 and 999.9")
+
+    await self.driver.send_command(module="C0", command="GF", go=f"{round(gripper_width * 10):04}")
 
   @dataclass
-  class GripParams(BackendParams):
-    """Parameters for a force-sensing close on the iSWAP gripper.
+  class CloseGripperParams(BackendParams):
+    """Parameters for closing the iSWAP gripper.
 
     The gripper should be at position plate_width + plate_width_tolerance + 2.0 mm
     before sending this command.
@@ -610,37 +619,22 @@ class iSWAPBackend(OrientableGripperArmBackend):
     grip_strength: int = 5
     plate_width_tolerance: float = 2.0
 
-  async def move_gripper(
-    self,
-    width: float,
-    force_sensing: bool = False,
-    backend_params: Optional[BackendParams] = None,
+  async def close_gripper(
+    self, gripper_width: float, backend_params: Optional[BackendParams] = None
   ) -> None:
-    """Move the iSWAP gripper jaws.
+    """Close the iSWAP gripper.
 
     Args:
-      width: Target jaw width [mm]. Must be between 0 and 999.9.
-      force_sensing: If True, close with force feedback (C0 GC) and stop on
-        contact. If False, drive the jaws to ``width`` without sensing (C0 GF).
-      backend_params: iSWAP.GripParams. Only valid when ``force_sensing=True``;
-        passing it with ``force_sensing=False`` raises ``ValueError``.
+      gripper_width: Plate width [mm].
+      backend_params: iSWAP.CloseGripperParams with grip_strength and plate_width_tolerance.
     """
-    if not 0 <= width <= 999.9:
-      raise ValueError("width must be between 0 and 999.9")
+    if not isinstance(backend_params, iSWAPBackend.CloseGripperParams):
+      backend_params = iSWAPBackend.CloseGripperParams()
 
-    if not force_sensing:
-      if backend_params is not None:
-        raise ValueError(
-          "GripParams is only valid with force_sensing=True. "
-          "Drop backend_params or set force_sensing=True."
-        )
-      await self.driver.send_command(module="C0", command="GF", go=f"{round(width * 10):04}")
-      return
-
-    if not isinstance(backend_params, iSWAPBackend.GripParams):
-      backend_params = iSWAPBackend.GripParams()
     if not 0 <= backend_params.grip_strength <= 9:
       raise ValueError("grip_strength must be between 0 and 9")
+    if not 0 <= gripper_width <= 999.9:
+      raise ValueError("gripper_width must be between 0 and 999.9")
     if not 0.5 <= backend_params.plate_width_tolerance <= 9.9:
       raise ValueError("plate_width_tolerance must be between 0.5 and 9.9")
 
@@ -648,7 +642,7 @@ class iSWAPBackend(OrientableGripperArmBackend):
       module="C0",
       command="GC",
       gw=backend_params.grip_strength,
-      gb=f"{round(width * 10):04}",
+      gb=f"{round(gripper_width * 10):04}",
       gt=f"{round(backend_params.plate_width_tolerance * 10):02}",
     )
 

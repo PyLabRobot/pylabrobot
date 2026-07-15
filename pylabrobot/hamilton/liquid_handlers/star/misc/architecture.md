@@ -30,7 +30,7 @@ STAR (Device) — only exposes Capabilities
   │
   pip: PIP ──────────► pip backend (above)
   head96: Head96 ────► head96 backend (above)
-  iswap: OrientableGripperArm ► iswap backend (above)
+  iswap: OrientableArm ► iswap backend (above)
 ```
 
 The STAR device only exposes Capabilities (PIP, Head96, iSWAP). Subsystems (autoload, x-arms, cover, wash station) and generic driver methods live on `star._driver`.
@@ -231,7 +231,7 @@ await star.setup()
   ├─ Wire capability frontends to backends (on STAR device)
   │    self.pip = PIP(backend=driver.pip)
   │    self.head96 = Head96(backend=driver.head96)   # if installed
-  │    self.iswap = OrientableGripperArm(backend=driver.iswap)        # if installed
+  │    self.iswap = OrientableArm(backend=driver.iswap)        # if installed
   │
   └─ Call _on_setup() for each Capability
 ```

@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.capabilities.arms.arm import GripperArm
-from pylabrobot.capabilities.arms.backend import (
+from pylabrobot.arms.arm import GripperArm
+from pylabrobot.arms.backend import (
   GripperArmBackend,
   OrientableGripperArmBackend,
 )
-from pylabrobot.capabilities.arms.orientable_arm import OrientableArm
-from pylabrobot.capabilities.arms.standard import GripDirection
+from pylabrobot.arms.orientable_arm import OrientableArm
+from pylabrobot.arms.standard import GripDirection
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
 

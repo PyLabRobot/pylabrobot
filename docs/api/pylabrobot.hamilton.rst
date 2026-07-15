@@ -123,7 +123,7 @@ STAR Liquid Handler
 .. autoclass:: pylabrobot.hamilton.liquid_handlers.star.iswap.iSWAPBackend.ParkParams
    :members:
 
-.. autoclass:: pylabrobot.hamilton.liquid_handlers.star.iswap.iSWAPBackend.GripParams
+.. autoclass:: pylabrobot.hamilton.liquid_handlers.star.iswap.iSWAPBackend.CloseGripperParams
    :members:
 
 .. autoclass:: pylabrobot.hamilton.liquid_handlers.star.iswap.iSWAPBackend.PickUpParams
