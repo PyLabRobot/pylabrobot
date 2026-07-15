@@ -988,6 +988,41 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_aspirate_rejects_over_tip_capacity(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})  # 300 uL filter tip, max 360
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    well = self.plate.get_item("A1")
+    # pre-wetting peak (volume + pre_wetting) exceeds the tip max
+    well.tracker.set_volume(300)
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([well], vols=[100], pre_wetting_volume=[300])
+    # transport-air peak (volume + transport_air) exceeds the tip max
+    well.tracker.set_volume(300)
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([well], vols=[100], transport_air_volume=[300])
+
+  async def test_aspirate_capacity_ignores_blow_out(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})  # 300 uL filter tip, max 360
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    well = self.plate.get_item("A1")
+    well.tracker.set_volume(200)
+    # blow-out counts toward neither peak, so a large blow-out stays within capacity
+    await self.lh.aspirate([well], vols=[100], blow_out_air_volume=[300])
+
+  async def test_aspirate_capacity_boundary_is_exclusive(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})  # 300 uL filter tip, max 360
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    well = self.plate.get_item("A1")
+    # a peak exactly at the tip's maximal volume is allowed; just above it is rejected (>)
+    well.tracker.set_volume(400)
+    await self.lh.aspirate([well], vols=[360], disable_volume_correction=[True])
+    well.tracker.set_volume(400)
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([well], vols=[361], disable_volume_correction=[True])
+
   async def test_single_channel_aspiration_liquid_height(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     # TODO: Hamilton liquid classes
