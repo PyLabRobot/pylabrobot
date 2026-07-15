@@ -1725,6 +1725,38 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
     return x_positions, y_positions, channels_involved
 
+  def _plan_pipetting_batches(
+    self,
+    ops: Sequence[PipettingOp],
+    use_channels: List[int],
+  ) -> List[ChannelBatch]:
+    """Plan the legal X/Y batches for a PIP aspirate or dispense operation.
+
+    This uses the instrument's cached channel spacing so tight targets, such as
+    adjacent 96-well rows on an 18 mm-spacing machine, are split into sequential
+    firmware commands instead of being sent as one unsafe simultaneous move.
+    """
+    return plan_batches(
+      use_channels=use_channels,
+      containers=[op.resource for op in ops],
+      channel_spacings=self._channels_minimum_y_spacing,
+      wrt_resource=self.deck,
+      x_tolerance=self._x_grouping_tolerance_mm,
+      resource_offsets=[op.offset for op in ops],
+    )
+
+  @staticmethod
+  def _batch_values(values: List[T], batch: ChannelBatch) -> List[T]:
+    """Return values aligned with the original operation indices in ``batch``."""
+    return [values[i] for i in batch.indices]
+
+  def _batch_kwargs(self, kwargs: Dict[str, Any], batch: ChannelBatch) -> Dict[str, Any]:
+    """Slice list-valued firmware kwargs to one batch, leaving scalar kwargs unchanged."""
+    return {
+      key: self._batch_values(value, batch) if isinstance(value, list) else value
+      for key, value in kwargs.items()
+    }
+
   @property
   def machine_conf(self) -> MachineConfiguration:
     """Machine configuration."""
@@ -3278,7 +3310,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self.ensure_can_reach_position(use_channels, ops, "aspirate")
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
+    pipetting_batches = self._plan_pipetting_batches(ops, use_channels)
 
     n = len(ops)
 
@@ -3422,11 +3454,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         containers=[op.resource for op in ops],
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
-        z_position_at_end_of_command=100,
       )
 
-      # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
-      minimum_traverse_height_at_beginning_of_a_command = 100
       logger.info(f"Detected liquid heights: {liquid_heights}")
     else:
       liquid_heights = [op.liquid_height or 0 for op in ops]
@@ -3479,65 +3508,81 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"Well bottom: {well_bottoms}, liquid height: {liquid_heights}, surface_following_distance: {surface_following_distance}, minimum_height: {minimum_height}"
       )
 
-    try:
+    aspirate_kwargs = {
+      "aspiration_type": [0 for _ in range(n)],
+      "aspiration_volumes": [round(vol * 10) for vol in volumes],
+      "lld_search_height": [round(lsh * 10) for lsh in lld_search_height],
+      "clot_detection_height": [round(cd * 10) for cd in clot_detection_height],
+      "liquid_surface_no_lld": [round(ls * 10) for ls in liquid_surfaces_no_lld],
+      "pull_out_distance_transport_air": [round(po * 10) for po in pull_out_distance_transport_air],
+      "second_section_height": [round(sh * 10) for sh in second_section_height],
+      "second_section_ratio": [round(sr * 10) for sr in second_section_ratio],
+      "minimum_height": [round(mh * 10) for mh in minimum_height],
+      "immersion_depth": [round(id_ * 10) for id_ in immersion_depth],
+      "immersion_depth_direction": immersion_depth_direction,
+      "surface_following_distance": [round(sfd * 10) for sfd in surface_following_distance],
+      "aspiration_speed": [round(fr * 10) for fr in flow_rates],
+      "transport_air_volume": [round(tav * 10) for tav in transport_air_volume],
+      "blow_out_air_volume": [round(boa * 10) for boa in blow_out_air_volumes],
+      "pre_wetting_volume": [round(pwv * 10) for pwv in pre_wetting_volume],
+      "lld_mode": [mode.value for mode in lld_mode],
+      "gamma_lld_sensitivity": gamma_lld_sensitivity,
+      "dp_lld_sensitivity": dp_lld_sensitivity,
+      "aspirate_position_above_z_touch_off": [
+        round(ap * 10) for ap in aspirate_position_above_z_touch_off
+      ],
+      "detection_height_difference_for_dual_lld": [
+        round(dh * 10) for dh in detection_height_difference_for_dual_lld
+      ],
+      "swap_speed": [round(ss * 10) for ss in swap_speed],
+      "settling_time": [round(st * 10) for st in settling_time],
+      "mix_volume": [round(hv * 10) for hv in mix_volume],
+      "mix_cycles": mix_cycles,
+      "mix_position_from_liquid_surface": [
+        round(hp * 10) for hp in mix_position_from_liquid_surface
+      ],
+      "mix_speed": [round(hs * 10) for hs in mix_speed],
+      "mix_surface_following_distance": [round(hsd * 10) for hsd in mix_surface_following_distance],
+      "limit_curve_index": limit_curve_index,
+      "use_2nd_section_aspiration": use_2nd_section_aspiration,
+      "retract_height_over_2nd_section_to_empty_tip": [
+        round(rh * 10) for rh in retract_height_over_2nd_section_to_empty_tip
+      ],
+      "dispensation_speed_during_emptying_tip": [
+        round(ds * 10) for ds in dispensation_speed_during_emptying_tip
+      ],
+      "dosing_drive_speed_during_2nd_section_search": [
+        round(ds * 10) for ds in dosing_drive_speed_during_2nd_section_search
+      ],
+      "z_drive_speed_during_2nd_section_search": [
+        round(zs * 10) for zs in z_drive_speed_during_2nd_section_search
+      ],
+      "cup_upper_edge": [round(cue * 10) for cue in cup_upper_edge],
+      "minimum_traverse_height_at_beginning_of_a_command": round(
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+      ),
+      "min_z_endpos": round((min_z_endpos or self._channel_traversal_height) * 10),
+    }
+
+    async def aspirate_batch(batch: ChannelBatch):
+      """Send one AS command for a legal batch from the full aspirate request."""
+      batch_ops = [ops[i] for i in batch.indices]
+      batch_use_channels = [use_channels[i] for i in batch.indices]
+      x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+        batch_ops, batch_use_channels
+      )
       return await self.aspirate_pip(
-        aspiration_type=[0 for _ in range(n)],
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
-        aspiration_volumes=[round(vol * 10) for vol in volumes],
-        lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
-        clot_detection_height=[round(cd * 10) for cd in clot_detection_height],
-        liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
-        pull_out_distance_transport_air=[round(po * 10) for po in pull_out_distance_transport_air],
-        second_section_height=[round(sh * 10) for sh in second_section_height],
-        second_section_ratio=[round(sr * 10) for sr in second_section_ratio],
-        minimum_height=[round(mh * 10) for mh in minimum_height],
-        immersion_depth=[round(id_ * 10) for id_ in immersion_depth],
-        immersion_depth_direction=immersion_depth_direction,
-        surface_following_distance=[round(sfd * 10) for sfd in surface_following_distance],
-        aspiration_speed=[round(fr * 10) for fr in flow_rates],
-        transport_air_volume=[round(tav * 10) for tav in transport_air_volume],
-        blow_out_air_volume=[round(boa * 10) for boa in blow_out_air_volumes],
-        pre_wetting_volume=[round(pwv * 10) for pwv in pre_wetting_volume],
-        lld_mode=[mode.value for mode in lld_mode],
-        gamma_lld_sensitivity=gamma_lld_sensitivity,
-        dp_lld_sensitivity=dp_lld_sensitivity,
-        aspirate_position_above_z_touch_off=[
-          round(ap * 10) for ap in aspirate_position_above_z_touch_off
-        ],
-        detection_height_difference_for_dual_lld=[
-          round(dh * 10) for dh in detection_height_difference_for_dual_lld
-        ],
-        swap_speed=[round(ss * 10) for ss in swap_speed],
-        settling_time=[round(st * 10) for st in settling_time],
-        mix_volume=[round(hv * 10) for hv in mix_volume],
-        mix_cycles=mix_cycles,
-        mix_position_from_liquid_surface=[
-          round(hp * 10) for hp in mix_position_from_liquid_surface
-        ],
-        mix_speed=[round(hs * 10) for hs in mix_speed],
-        mix_surface_following_distance=[round(hsd * 10) for hsd in mix_surface_following_distance],
-        limit_curve_index=limit_curve_index,
-        use_2nd_section_aspiration=use_2nd_section_aspiration,
-        retract_height_over_2nd_section_to_empty_tip=[
-          round(rh * 10) for rh in retract_height_over_2nd_section_to_empty_tip
-        ],
-        dispensation_speed_during_emptying_tip=[
-          round(ds * 10) for ds in dispensation_speed_during_emptying_tip
-        ],
-        dosing_drive_speed_during_2nd_section_search=[
-          round(ds * 10) for ds in dosing_drive_speed_during_2nd_section_search
-        ],
-        z_drive_speed_during_2nd_section_search=[
-          round(zs * 10) for zs in z_drive_speed_during_2nd_section_search
-        ],
-        cup_upper_edge=[round(cue * 10) for cue in cup_upper_edge],
-        minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-        ),
-        min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
+        **self._batch_kwargs(aspirate_kwargs, batch),
       )
+
+    try:
+      ret = None
+      for batch in pipetting_batches:
+        ret = await aspirate_batch(batch)
+      return ret
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
         raise plr_e from e
@@ -3639,6 +3684,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     self.ensure_can_reach_position(use_channels, ops, "dispense")
+    pipetting_batches = self._plan_pipetting_batches(ops, use_channels)
 
     n = len(ops)
 
@@ -3678,8 +3724,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         for i in range(len(ops))
       ]
     # # # delete # # #
-
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     if hamilton_liquid_classes is None:
       hamilton_liquid_classes = []
@@ -3784,11 +3828,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         containers=[op.resource for op in ops],
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
-        z_position_at_end_of_command=100,
       )
 
-      # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
-      minimum_traverse_height_at_beginning_of_a_command = 100
       logger.info(f"Detected liquid heights: {liquid_heights}")
     else:
       liquid_heights = [op.liquid_height or 0 for op in ops]
@@ -3826,51 +3867,66 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       wb + lh for wb, lh in zip(well_bottoms, liquid_heights)
     ]
 
-    try:
-      ret = await self.dispense_pip(
+    dispense_kwargs = {
+      "dispensing_mode": dispensing_modes,
+      "dispense_volumes": [round(vol * 10) for vol in volumes],
+      "lld_search_height": [round(lsh * 10) for lsh in lld_search_height],
+      "liquid_surface_no_lld": [round(ls * 10) for ls in liquid_surfaces_no_lld],
+      "pull_out_distance_transport_air": [round(po * 10) for po in pull_out_distance_transport_air],
+      "second_section_height": [round(sh * 10) for sh in second_section_height],
+      "second_section_ratio": [round(sr * 10) for sr in second_section_ratio],
+      "minimum_height": [round(mh * 10) for mh in minimum_height],
+      "immersion_depth": [round(id_ * 10) for id_ in immersion_depth],
+      "immersion_depth_direction": immersion_depth_direction,
+      "surface_following_distance": [round(sfd * 10) for sfd in surface_following_distance],
+      "dispense_speed": [round(fr * 10) for fr in flow_rates],
+      "cut_off_speed": [round(cs * 10) for cs in cut_off_speed],
+      "stop_back_volume": [round(sbv * 10) for sbv in stop_back_volume],
+      "transport_air_volume": [round(tav * 10) for tav in transport_air_volume],
+      "blow_out_air_volume": [round(boa * 10) for boa in blow_out_air_volumes],
+      "lld_mode": [mode.value for mode in lld_mode],
+      "dispense_position_above_z_touch_off": [
+        round(dp * 10) for dp in dispense_position_above_z_touch_off
+      ],
+      "gamma_lld_sensitivity": gamma_lld_sensitivity,
+      "dp_lld_sensitivity": dp_lld_sensitivity,
+      "swap_speed": [round(ss * 10) for ss in swap_speed],
+      "settling_time": [round(st * 10) for st in settling_time],
+      "mix_volume": [round(mv * 10) for mv in mix_volume],
+      "mix_cycles": mix_cycles,
+      "mix_position_from_liquid_surface": [
+        round(mp * 10) for mp in mix_position_from_liquid_surface
+      ],
+      "mix_speed": [round(ms * 10) for ms in mix_speed],
+      "mix_surface_following_distance": [
+        round(msfd * 10) for msfd in mix_surface_following_distance
+      ],
+      "limit_curve_index": limit_curve_index,
+      "minimum_traverse_height_at_beginning_of_a_command": round(
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+      ),
+      "min_z_endpos": round((min_z_endpos or self._channel_traversal_height) * 10),
+      "side_touch_off_distance": round(side_touch_off_distance * 10),
+    }
+
+    async def dispense_batch(batch: ChannelBatch):
+      """Send one DS command for a legal batch from the full dispense request."""
+      batch_ops = [ops[i] for i in batch.indices]
+      batch_use_channels = [use_channels[i] for i in batch.indices]
+      x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+        batch_ops, batch_use_channels
+      )
+      return await self.dispense_pip(
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
-        dispensing_mode=dispensing_modes,
-        dispense_volumes=[round(vol * 10) for vol in volumes],
-        lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
-        liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
-        pull_out_distance_transport_air=[round(po * 10) for po in pull_out_distance_transport_air],
-        second_section_height=[round(sh * 10) for sh in second_section_height],
-        second_section_ratio=[round(sr * 10) for sr in second_section_ratio],
-        minimum_height=[round(mh * 10) for mh in minimum_height],
-        immersion_depth=[round(id_ * 10) for id_ in immersion_depth],
-        immersion_depth_direction=immersion_depth_direction,
-        surface_following_distance=[round(sfd * 10) for sfd in surface_following_distance],
-        dispense_speed=[round(fr * 10) for fr in flow_rates],
-        cut_off_speed=[round(cs * 10) for cs in cut_off_speed],
-        stop_back_volume=[round(sbv * 10) for sbv in stop_back_volume],
-        transport_air_volume=[round(tav * 10) for tav in transport_air_volume],
-        blow_out_air_volume=[round(boa * 10) for boa in blow_out_air_volumes],
-        lld_mode=[mode.value for mode in lld_mode],
-        dispense_position_above_z_touch_off=[
-          round(dp * 10) for dp in dispense_position_above_z_touch_off
-        ],
-        gamma_lld_sensitivity=gamma_lld_sensitivity,
-        dp_lld_sensitivity=dp_lld_sensitivity,
-        swap_speed=[round(ss * 10) for ss in swap_speed],
-        settling_time=[round(st * 10) for st in settling_time],
-        mix_volume=[round(mv * 10) for mv in mix_volume],
-        mix_cycles=mix_cycles,
-        mix_position_from_liquid_surface=[
-          round(mp * 10) for mp in mix_position_from_liquid_surface
-        ],
-        mix_speed=[round(ms * 10) for ms in mix_speed],
-        mix_surface_following_distance=[
-          round(msfd * 10) for msfd in mix_surface_following_distance
-        ],
-        limit_curve_index=limit_curve_index,
-        minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-        ),
-        min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
-        side_touch_off_distance=round(side_touch_off_distance * 10),
+        **self._batch_kwargs(dispense_kwargs, batch),
       )
+
+    try:
+      ret = None
+      for batch in pipetting_batches:
+        ret = await dispense_batch(batch)
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
         raise plr_e from e

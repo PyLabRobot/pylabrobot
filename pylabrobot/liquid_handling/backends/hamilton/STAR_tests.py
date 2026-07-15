@@ -1035,6 +1035,57 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_aspirate_splits_tight_y_targets_at_18mm_spacing(self):
+    self.STAR._channels_minimum_y_spacing = [18.0] * 8
+    self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(3)})
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+
+    with no_volume_tracking():
+      await self.lh.aspirate(
+        self.plate["A1:C1"],
+        vols=[100, 50, 200],
+        disable_volume_correction=[True, True, True],
+      )
+
+    commands = [call.kwargs["cmd"] for call in self.STAR._write_and_read_command.call_args_list]
+    aspirate_commands = [cmd for cmd in commands if cmd.startswith("C0AS")]
+
+    self.assertEqual(len(aspirate_commands), 3)
+    self.assertIn("tm1 0&", aspirate_commands[0])
+    self.assertIn("yp1457 0000&", aspirate_commands[0])
+    self.assertIn("av01000 01000&", aspirate_commands[0])
+    self.assertIn("tm0 1 0&", aspirate_commands[1])
+    self.assertIn("yp0000 1367 0000&", aspirate_commands[1])
+    self.assertIn("av00500 00500 00500&", aspirate_commands[1])
+    self.assertIn("tm0 0 1 0&", aspirate_commands[2])
+    self.assertIn("yp0000 0000 1277 0000&", aspirate_commands[2])
+    self.assertIn("av02000 02000 02000 02000&", aspirate_commands[2])
+
+  async def test_aspirate_probe_liquid_height_does_not_request_low_end_z(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    well = self.plate.get_item("A1")
+
+    with (
+      no_volume_tracking(),
+      unittest.mock.patch.object(
+        self.STAR,
+        "probe_liquid_heights",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=[10.0],
+      ) as probe_liquid_heights,
+    ):
+      await self.lh.aspirate([well], vols=[100], probe_liquid_height=True)
+
+    self.assertNotIn("z_position_at_end_of_command", probe_liquid_heights.await_args.kwargs)
+    commands = [call.kwargs["cmd"] for call in self.STAR._write_and_read_command.call_args_list]
+    aspirate_commands = [cmd for cmd in commands if cmd.startswith("C0AS")]
+    self.assertEqual(len(aspirate_commands), 1)
+    self.assertIn("th2450", aspirate_commands[0])
+    self.assertNotIn("th1000", aspirate_commands[0])
+
   async def test_aspirate_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
     with no_volume_tracking():
@@ -1130,6 +1181,35 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         )
       ]
     )
+
+  async def test_dispense_splits_tight_y_targets_at_18mm_spacing(self):
+    self.STAR._channels_minimum_y_spacing = [18.0] * 8
+    self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(3)})
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+
+    with no_volume_tracking():
+      await self.lh.dispense(
+        self.plate["A1:C1"],
+        vols=[100, 50, 200],
+        jet=[True, True, True],
+        blow_out=[True, True, True],
+        disable_volume_correction=[True, True, True],
+      )
+
+    commands = [call.kwargs["cmd"] for call in self.STAR._write_and_read_command.call_args_list]
+    dispense_commands = [cmd for cmd in commands if cmd.startswith("C0DS")]
+
+    self.assertEqual(len(dispense_commands), 3)
+    self.assertIn("tm1 0&", dispense_commands[0])
+    self.assertIn("yp1457 0000&", dispense_commands[0])
+    self.assertIn("dv01000 01000&", dispense_commands[0])
+    self.assertIn("tm0 1 0&", dispense_commands[1])
+    self.assertIn("yp0000 1367 0000&", dispense_commands[1])
+    self.assertIn("dv00500 00500 00500&", dispense_commands[1])
+    self.assertIn("tm0 0 1 0&", dispense_commands[2])
+    self.assertIn("yp0000 0000 1277 0000&", dispense_commands[2])
+    self.assertIn("dv02000 02000 02000 02000&", dispense_commands[2])
 
   async def test_core_96_tip_pickup(self):
     await self.lh.pick_up_tips96(self.tip_rack)
