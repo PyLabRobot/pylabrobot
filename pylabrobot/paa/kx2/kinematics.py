@@ -10,7 +10,7 @@ a continuous-rotation drive with no winding, so J4 has no preferred sign
 either — `ik` returns one canonical value, `snap_to_current` then pulls
 it to whichever 360° wrap is closest to the current J4.
 
-Joint dict keys match the drive node-IDs and the `KX2ArmBackend.Axis` enum:
+Joint dict keys match the drive node-IDs and the `Axis` enum:
   1: shoulder [deg]
   2: Z [mm]
   3: elbow [mm] (radial extension)
@@ -44,7 +44,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from pylabrobot.capabilities.arms import kinematics as arm_kinematics
 from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.paa.kx2.config import Axis, GripperParams, KX2Config
-from pylabrobot.paa.kx2.driver import (
+from pylabrobot.paa.kx2.protocol import (
   JointMoveDirection,
   MotorMoveParam,
   MotorsMovePlan,
@@ -511,9 +511,9 @@ def plan_joint_move(
 # parallel through its own (v, a) profile, which gives a curvy tool-tip path.
 # `sample_linear_path` instead generates a *Cartesian*-linear path: the
 # gripper travels the straight line from start to end, sampled at fixed dt,
-# and IK at each sample yields the joint-space trajectory. The KX2ArmBackend
+# and IK at each sample yields the joint-space trajectory. The KX2
 # streams the result into the drive's interpolation buffer (PVT mode) when
-# `CartesianMoveParams(path='linear')` is requested.
+# `move_to_location(path='linear')` is requested.
 
 # Arm axes that show up in FK/IK and therefore have an entry in every
 # `LinearPathSample.joints`. Servo gripper and rail are not Cartesian-driven.

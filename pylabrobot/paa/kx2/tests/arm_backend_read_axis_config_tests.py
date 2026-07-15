@@ -1,4 +1,4 @@
-"""Unit tests for ``KX2ArmBackend._read_axis_config``.
+"""Unit tests for ``KX2._read_axis_config``.
 
 Covers the per-axis Elmo register read and its validation branches:
 
@@ -14,9 +14,22 @@ import asyncio
 import unittest
 from typing import Any, Dict, Tuple
 
-from pylabrobot.paa.kx2.arm_backend import KX2ArmBackend
 from pylabrobot.paa.kx2.config import Axis, AxisConfig
-from pylabrobot.paa.kx2.driver import CanError, JointMoveDirection
+from pylabrobot.paa.kx2.kx2 import KX2
+from pylabrobot.paa.kx2.protocol import CanError, JointMoveDirection
+
+
+def _attach_fake(backend, fake, *, rename=None):
+  """Bind the fake recorder's methods onto the KX2 instance, standing in for
+  the transport primitives the code under test calls. ``rename`` maps a fake
+  method name to the (possibly private) KX2 method name it replaces."""
+  rename = rename or {}
+  for name in dir(fake):
+    if name.startswith("__"):
+      continue
+    attr = getattr(fake, name)
+    if callable(attr):
+      setattr(backend, rename.get(name, name), attr)
 
 
 def _baseline_register_map() -> Dict[Tuple[str, int], Any]:
@@ -56,7 +69,7 @@ def _baseline_register_map() -> Dict[Tuple[str, int], Any]:
 
 
 class _FakeDriver:
-  """Minimal stand-in for KX2Driver; only resolves query_int / query_float
+  """Minimal stand-in for KX2; only resolves query_int / query_float
   against a (cmd, idx) -> value dict. Raises KeyError on unmapped reads so
   test misconfig surfaces loudly."""
 
@@ -73,10 +86,10 @@ class _FakeDriver:
     return float(self.reg[(cmd, idx)])
 
 
-def _build_backend(reg: Dict[Tuple[str, int], Any]) -> KX2ArmBackend:
-  """Bypass __init__ — _read_axis_config only touches self.driver."""
-  backend = KX2ArmBackend.__new__(KX2ArmBackend)
-  backend.driver = _FakeDriver(reg)  # type: ignore[assignment]
+def _build_backend(reg: Dict[Tuple[str, int], Any]) -> KX2:
+  """Bypass __init__ — _read_axis_config only touches the query primitives."""
+  backend = KX2.__new__(KX2)
+  _attach_fake(backend, _FakeDriver(reg))
   return backend
 
 

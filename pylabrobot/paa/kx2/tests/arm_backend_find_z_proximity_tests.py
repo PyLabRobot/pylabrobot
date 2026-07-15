@@ -1,4 +1,4 @@
-"""Unit tests for ``KX2ArmBackend.find_z_with_proximity_sensor``.
+"""Unit tests for ``KX2.find_z_with_proximity_sensor``.
 
 Covers the four interesting paths through the descent + IL-arm + cancel-on-trip
 state machine:
@@ -21,9 +21,22 @@ import asyncio
 import unittest
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
-from pylabrobot.paa.kx2.arm_backend import KX2ArmBackend
 from pylabrobot.paa.kx2.config import Axis
-from pylabrobot.paa.kx2.driver import CanError, _InputLogic
+from pylabrobot.paa.kx2.kx2 import KX2
+from pylabrobot.paa.kx2.protocol import CanError, _InputLogic
+
+
+def _attach_fake(backend, fake, *, rename=None):
+  """Bind the fake recorder's methods onto the KX2 instance, standing in for
+  the transport primitives the code under test calls. ``rename`` maps a fake
+  method name to the (possibly private) KX2 method name it replaces."""
+  rename = rename or {}
+  for name in dir(fake):
+    if name.startswith("__"):
+      continue
+    attr = getattr(fake, name)
+    if callable(attr):
+      setattr(backend, rename.get(name, name), attr)
 
 
 class _FakeDriver:
@@ -62,9 +75,9 @@ class _FakeDriver:
 
 class _FindZHarness(NamedTuple):
   """Bundle of test handles. Returning a typed tuple keeps mypy happy
-  (fake_driver is _FakeDriver, not KX2Driver) without polluting the
-  KX2ArmBackend instance with ad-hoc attributes."""
-  backend: KX2ArmBackend
+  (fake_driver is _FakeDriver, not KX2) without polluting the
+  KX2 instance with ad-hoc attributes."""
+  backend: KX2
   fake_driver: _FakeDriver
   move_calls: List[Dict[str, Any]]
 
@@ -77,7 +90,7 @@ def _build_harness(
   move_exception: Optional[Exception] = None,
   pre_position_completes: bool = False,
 ) -> _FindZHarness:
-  """Construct a KX2ArmBackend wired for find_z testing.
+  """Construct a KX2 wired for find_z testing.
 
   Args:
     proximity_script: Sequence of bools returned by ``read_proximity_sensor``;
@@ -94,9 +107,9 @@ def _build_harness(
       subsequent moves (the descent) follow ``move_behavior``. Without this,
       a ``long_sleep`` behavior would block on the awaited pre-position.
   """
-  backend = KX2ArmBackend.__new__(KX2ArmBackend)
+  backend = KX2.__new__(KX2)
   fake_driver = _FakeDriver()
-  backend.driver = fake_driver  # type: ignore[assignment]
+  _attach_fake(backend, fake_driver)
   backend._motion_lock = asyncio.Lock()
   backend._motion_owner = None
   backend._gripper_params = None  # type: ignore[assignment]  # not consumed by find_z
@@ -119,8 +132,15 @@ def _build_harness(
 
   move_calls: List[Dict[str, Any]] = []
 
-  async def _fake_move(cmd_pos: Dict[Axis, float], params: Any = None) -> None:
-    move_calls.append({"cmd_pos": dict(cmd_pos), "params": params})
+  async def _fake_move(
+    cmd_pos: Dict[Axis, float], *,
+    max_gripper_speed: Any = None, max_gripper_acceleration: Any = None,
+  ) -> None:
+    move_calls.append({
+      "cmd_pos": dict(cmd_pos),
+      "max_gripper_speed": max_gripper_speed,
+      "max_gripper_acceleration": max_gripper_acceleration,
+    })
     is_first = len(move_calls) == 1
     if pre_position_completes and is_first:
       return  # Pre-position always completes when this flag is set.
@@ -279,7 +299,7 @@ class FindZArgValidationTests(unittest.TestCase):
 
 
 class _FindGenericHarness(NamedTuple):
-  backend: KX2ArmBackend
+  backend: KX2
   fake_driver: _FakeDriver
   joint_move_calls: List[Dict[str, Any]]
   linear_move_calls: List[Dict[str, Any]]
@@ -298,9 +318,9 @@ def _build_generic_harness(
   from pylabrobot.capabilities.arms.standard import CartesianPose
   from pylabrobot.resources import Rotation
 
-  backend = KX2ArmBackend.__new__(KX2ArmBackend)
+  backend = KX2.__new__(KX2)
   fake_driver = _FakeDriver()
-  backend.driver = fake_driver  # type: ignore[assignment]
+  _attach_fake(backend, fake_driver)
   backend._motion_lock = asyncio.Lock()
   backend._motion_owner = None
   backend._gripper_params = None  # type: ignore[assignment]
@@ -325,11 +345,19 @@ def _build_generic_harness(
   joint_calls: List[Dict[str, Any]] = []
   linear_calls: List[Dict[str, Any]] = []
 
-  async def _fake_joint_move(cmd_pos, params=None):
-    joint_calls.append({"cmd_pos": dict(cmd_pos), "params": params})
+  async def _fake_joint_move(cmd_pos, *, max_gripper_speed=None, max_gripper_acceleration=None):
+    joint_calls.append({
+      "cmd_pos": dict(cmd_pos),
+      "max_gripper_speed": max_gripper_speed,
+      "max_gripper_acceleration": max_gripper_acceleration,
+    })
 
-  async def _fake_run_linear(target_pose, params):
-    linear_calls.append({"pose": target_pose, "params": params})
+  async def _fake_run_linear(target_pose, *, max_gripper_speed=None, max_gripper_acceleration=None):
+    linear_calls.append({
+      "pose": target_pose,
+      "max_gripper_speed": max_gripper_speed,
+      "max_gripper_acceleration": max_gripper_acceleration,
+    })
     if linear_behavior == "completes_immediately":
       return
     try:

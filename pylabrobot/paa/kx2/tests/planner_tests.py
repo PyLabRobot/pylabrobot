@@ -16,7 +16,7 @@ from typing import Optional
 
 from pylabrobot.paa.kx2 import kinematics
 from pylabrobot.paa.kx2.config import Axis, AxisConfig, GripperParams, KX2Config
-from pylabrobot.paa.kx2.driver import JointMoveDirection, MotorsMovePlan
+from pylabrobot.paa.kx2.protocol import JointMoveDirection, MotorsMovePlan
 
 
 def _axis(

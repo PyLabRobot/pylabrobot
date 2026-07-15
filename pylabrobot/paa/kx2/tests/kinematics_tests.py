@@ -4,7 +4,7 @@ import unittest
 from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.paa.kx2 import kinematics
 from pylabrobot.paa.kx2.config import Axis, AxisConfig, GripperParams, KX2Config
-from pylabrobot.paa.kx2.driver import JointMoveDirection
+from pylabrobot.paa.kx2.protocol import JointMoveDirection
 from pylabrobot.paa.kx2.kinematics import IKError
 from pylabrobot.resources import Coordinate, Rotation
 

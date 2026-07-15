@@ -1,15 +1,15 @@
 """Unit tests for the KX2 driver's EMCY (CANopen Emergency) handling.
 
 Covers the decoder table (parity with clscanmotor.cs:1070-1267) and the live
-``KX2Driver._dispatch_emcy`` path: state mutation, sticky-error fields,
+``KX2._dispatch_emcy`` path: state mutation, sticky-error fields,
 suppress-callback edge case, and user-callback invocation.
 """
 import struct
 import unittest
 
-from pylabrobot.paa.kx2.driver import (
+from pylabrobot.paa.kx2.kx2 import KX2
+from pylabrobot.paa.kx2.protocol import (
   EmcyFrame,
-  KX2Driver,
   _NodeEmcyState,
   _decode_emcy,
 )
@@ -83,7 +83,7 @@ class DecodeEmcyTests(unittest.TestCase):
 
 class DispatchEmcyTests(unittest.TestCase):
   def setUp(self):
-    self.driver = KX2Driver()
+    self.driver = KX2()
     # _dispatch_emcy normally runs on the asyncio loop after
     # call_soon_threadsafe; here we drive it synchronously since the method
     # itself is sync and doesn't touch the network.

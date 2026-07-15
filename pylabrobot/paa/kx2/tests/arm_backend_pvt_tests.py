@@ -1,6 +1,6 @@
-"""Unit tests for ``KX2ArmBackend._run_linear_path``.
+"""Unit tests for ``KX2._run_linear_path``.
 
-Exercises the IPM streaming runtime that backs ``CartesianMoveParams(path='linear')``:
+Exercises the IPM streaming runtime that backs ``move_to_location(path='linear')``:
 
 * Preload + begin_motion call ordering. Preload writes 8 frames into the
   drive's interpolation buffer *before* CW=0x1F is issued so the first sync
@@ -19,15 +19,16 @@ guard is initialised the same way the find_z tests do it (manual Lock +
 ``__new__``).
 """
 import asyncio
+import inspect
 import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.capabilities.arms.standard import CartesianPose
-from pylabrobot.paa.kx2.arm_backend import KX2ArmBackend
 from pylabrobot.paa.kx2.config import (
   Axis, AxisConfig, GripperParams, KX2Config,
 )
-from pylabrobot.paa.kx2.driver import JointMoveDirection
+from pylabrobot.paa.kx2.kx2 import KX2
+from pylabrobot.paa.kx2.protocol import JointMoveDirection
 from pylabrobot.resources import Coordinate, Rotation
 
 
@@ -122,13 +123,31 @@ class _FakeDriver:
     return 0
 
 
+def _attach_fake(backend, fake, *, rename=None):
+  """Bind the fake recorder's methods onto the KX2 instance, standing in for
+  the transport primitives the code under test calls. ``rename`` maps a fake
+  method name to the (possibly private) KX2 method name it replaces."""
+  rename = rename or {}
+  for name in dir(fake):
+    if name.startswith("__"):
+      continue
+    attr = getattr(fake, name)
+    if callable(attr):
+      setattr(backend, rename.get(name, name), attr)
+
+
 def _build_backend(
   fake_driver: _FakeDriver,
   *,
   current_joints: Optional[Dict[int, float]] = None,
-) -> KX2ArmBackend:
-  backend = KX2ArmBackend.__new__(KX2ArmBackend)
-  backend.driver = fake_driver  # type: ignore[assignment]
+) -> KX2:
+  backend = KX2.__new__(KX2)
+  # The fake's motor_get_current_position stands in for the low-level encoder
+  # read, which the merged class exposes as _motor_read_position_raw.
+  _attach_fake(
+    backend, fake_driver,
+    rename={"motor_get_current_position": "_motor_read_position_raw"},
+  )
   backend._motion_lock = asyncio.Lock()
   backend._motion_owner = None
   backend._config = _config()
@@ -164,12 +183,9 @@ class LinearPathHappyPath(unittest.TestCase):
     further per-frame sends in lockstep across the four arm axes."""
     fake = _FakeDriver()
     backend = _build_backend(fake)
-    params = KX2ArmBackend.CartesianMoveParams(
-      max_gripper_speed=20.0,
-      max_gripper_acceleration=200.0,
-      path="linear",
-    )
-    asyncio.run(backend._run_linear_path(_target_pose(), params))
+    asyncio.run(backend._run_linear_path(
+      _target_pose(), max_gripper_speed=20.0, max_gripper_acceleration=200.0,
+    ))
 
     # Find begin_motion in the call log
     begin_idx = next(
@@ -189,10 +205,9 @@ class LinearPathHappyPath(unittest.TestCase):
   def test_dt_set_to_8ms_default(self):
     fake = _FakeDriver()
     backend = _build_backend(fake)
-    params = KX2ArmBackend.CartesianMoveParams(
-      max_gripper_speed=20.0, max_gripper_acceleration=200.0, path="linear",
-    )
-    asyncio.run(backend._run_linear_path(_target_pose(), params))
+    asyncio.run(backend._run_linear_path(
+      _target_pose(), max_gripper_speed=20.0, max_gripper_acceleration=200.0,
+    ))
     dt_calls = [c for c in fake.calls if c[0] == "ipm_set_time_interval"]
     self.assertEqual(len(dt_calls), 1)
     self.assertEqual(dt_calls[0][1], (backend._PVT_DT_MS,))
@@ -202,10 +217,9 @@ class LinearPathHappyPath(unittest.TestCase):
     PPM so subsequent joint moves don't try to issue PPM triggers in IPM."""
     fake = _FakeDriver()
     backend = _build_backend(fake)
-    params = KX2ArmBackend.CartesianMoveParams(
-      max_gripper_speed=20.0, max_gripper_acceleration=200.0, path="linear",
-    )
-    asyncio.run(backend._run_linear_path(_target_pose(), params))
+    asyncio.run(backend._run_linear_path(
+      _target_pose(), max_gripper_speed=20.0, max_gripper_acceleration=200.0,
+    ))
     selects = [c[1] for c in fake.calls if c[0] == "ipm_select_mode"]
     self.assertEqual(selects[0], (True,))
     self.assertEqual(selects[-1], (False,))
@@ -219,10 +233,9 @@ class LinearPathHappyPath(unittest.TestCase):
     PVTBeginMotion(false) once streaming completes."""
     fake = _FakeDriver()
     backend = _build_backend(fake)
-    params = KX2ArmBackend.CartesianMoveParams(
-      max_gripper_speed=20.0, max_gripper_acceleration=200.0, path="linear",
-    )
-    asyncio.run(backend._run_linear_path(_target_pose(), params))
+    asyncio.run(backend._run_linear_path(
+      _target_pose(), max_gripper_speed=20.0, max_gripper_acceleration=200.0,
+    ))
     self.assertFalse([c for c in fake.calls if c[0] == "wait_for_moves_done"])
     self.assertFalse([c for c in fake.calls if c[0] == "ipm_wait_motion_complete"])
     stops = [c for c in fake.calls if c[0] == "ipm_stop"]
@@ -239,10 +252,9 @@ class LinearPathHappyPath(unittest.TestCase):
     succeed even when the drive rejected our points."""
     fake = _FakeDriver()
     backend = _build_backend(fake)
-    params = KX2ArmBackend.CartesianMoveParams(
-      max_gripper_speed=20.0, max_gripper_acceleration=200.0, path="linear",
-    )
-    asyncio.run(backend._run_linear_path(_target_pose(), params))
+    asyncio.run(backend._run_linear_path(
+      _target_pose(), max_gripper_speed=20.0, max_gripper_acceleration=200.0,
+    ))
     fault_checks = [c for c in fake.calls if c[0] == "ipm_check_queue_fault"]
     # At least one after preload, then one after each streamed send, plus
     # one after the wait — total ≥ 3.
@@ -257,11 +269,10 @@ class LinearPathCancellationCleanup(unittest.TestCase):
     fake = _FakeDriver()
     fake.cancel_after_sends = 12  # 8 preload + a few streamed
     backend = _build_backend(fake)
-    params = KX2ArmBackend.CartesianMoveParams(
-      max_gripper_speed=20.0, max_gripper_acceleration=200.0, path="linear",
-    )
     with self.assertRaises(asyncio.CancelledError):
-      asyncio.run(backend._run_linear_path(_target_pose(), params))
+      asyncio.run(backend._run_linear_path(
+        _target_pose(), max_gripper_speed=20.0, max_gripper_acceleration=200.0,
+      ))
 
     names = [c[0] for c in fake.calls]
     self.assertIn("ipm_stop", names)
@@ -275,30 +286,24 @@ class LinearPathValidation(unittest.TestCase):
     Surface a clear ValueError before any drive interaction."""
     fake = _FakeDriver()
     backend = _build_backend(fake)
-    params_no_speed = KX2ArmBackend.CartesianMoveParams(
-      max_gripper_speed=None,
-      max_gripper_acceleration=200.0,
-      path="linear",
-    )
     with self.assertRaises(ValueError):
-      asyncio.run(backend._run_linear_path(_target_pose(), params_no_speed))
+      asyncio.run(backend._run_linear_path(
+        _target_pose(), max_gripper_speed=None, max_gripper_acceleration=200.0,
+      ))
     self.assertEqual(len(fake.calls), 0)
 
-    params_no_accel = KX2ArmBackend.CartesianMoveParams(
-      max_gripper_speed=20.0,
-      max_gripper_acceleration=None,
-      path="linear",
-    )
     with self.assertRaises(ValueError):
-      asyncio.run(backend._run_linear_path(_target_pose(), params_no_accel))
+      asyncio.run(backend._run_linear_path(
+        _target_pose(), max_gripper_speed=20.0, max_gripper_acceleration=None,
+      ))
 
 
 class LinearPathDispatchDefault(unittest.TestCase):
   def test_default_path_is_joint(self):
-    """``CartesianMoveParams()`` defaults to joint-space planning. Verify
-    the field is unset (no surprise switch to linear)."""
-    p = KX2ArmBackend.CartesianMoveParams()
-    self.assertEqual(p.path, "joint")
+    """move_to_location defaults to joint-space planning (no surprise switch
+    to the linear IPM streamer)."""
+    default = inspect.signature(KX2.move_to_location).parameters["path"].default
+    self.assertEqual(default, "joint")
 
 
 if __name__ == "__main__":

@@ -13,9 +13,9 @@ import struct
 import unittest
 from unittest import mock
 
-from pylabrobot.paa.kx2.driver import (
+from pylabrobot.paa.kx2.kx2 import KX2
+from pylabrobot.paa.kx2.protocol import (
   EmcyFrame,
-  KX2Driver,
   _NodeEmcyState,
   _decode_emcy,
 )
@@ -71,9 +71,9 @@ class DispatchEmcyLogLevelTests(unittest.TestCase):
   don't drown ops logs while real faults stay loud."""
 
   def setUp(self):
-    self.driver = KX2Driver()
+    self.driver = KX2()
     self.driver._emcy[1] = _NodeEmcyState()
-    self.logger_name = "pylabrobot.paa.kx2.driver"
+    self.logger_name = "pylabrobot.paa.kx2.kx2"
 
   def _dispatch_at(self, payload: bytes):
     with self.assertLogs(self.logger_name, level=logging.DEBUG) as cm:

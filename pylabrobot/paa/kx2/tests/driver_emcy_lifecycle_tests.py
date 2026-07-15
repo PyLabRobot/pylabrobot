@@ -5,7 +5,7 @@ Covers the post-PR-880 fixes for:
 - ``stop()`` setting ``_loop = None`` before ``network.disconnect()`` so racing
   listener-thread ``_cb``s no-op at their guard.
 - ``setup()`` subscribing EMCY before sending the NMT start command.
-- ``KX2ArmBackend._on_emcy`` scheduling via the driver's captured loop, not the
+- ``KX2._on_emcy`` scheduling via the driver's captured loop, not the
   deprecated ``asyncio.get_event_loop()``.
 """
 import asyncio
@@ -14,11 +14,10 @@ import unittest
 from typing import List, Tuple
 from unittest import mock
 
-from pylabrobot.paa.kx2 import driver as driver_mod
-from pylabrobot.paa.kx2.arm_backend import KX2ArmBackend
-from pylabrobot.paa.kx2.driver import (
+from pylabrobot.paa.kx2 import kx2 as kx2_mod
+from pylabrobot.paa.kx2.kx2 import KX2
+from pylabrobot.paa.kx2.protocol import (
   EmcyFrame,
-  KX2Driver,
   _EMCY_COB_BASE,
   _NodeEmcyState,
 )
@@ -32,7 +31,7 @@ def _frame(
 
 class StopClearsCallbacksTests(unittest.TestCase):
   def test_stop_clears_emcy_callbacks(self):
-    drv = KX2Driver()
+    drv = KX2()
     drv.add_emcy_callback(lambda *args: None)
     drv.add_emcy_callback(lambda *args: None)
     self.assertEqual(len(drv._emcy_callbacks), 2)
@@ -48,7 +47,7 @@ class StopClearsCallbacksTests(unittest.TestCase):
     self.assertEqual(drv._emcy_callbacks, [])
 
   def test_stop_sets_loop_to_none(self):
-    drv = KX2Driver()
+    drv = KX2()
     drv._network = mock.MagicMock()
     loop = asyncio.new_event_loop()
     drv._loop = loop
@@ -61,7 +60,7 @@ class StopClearsCallbacksTests(unittest.TestCase):
   def test_stop_loop_cleared_before_disconnect(self):
     # If a listener-thread _cb fires during disconnect, _loop must already be
     # None so the cb's `if self._loop is None: return` guard fires.
-    drv = KX2Driver()
+    drv = KX2()
     network = mock.MagicMock()
     observed = {}
 
@@ -81,7 +80,7 @@ class StopClearsCallbacksTests(unittest.TestCase):
 
 class StaleCallbackAfterStopTests(unittest.TestCase):
   def test_stale_listener_cb_noops_after_stop(self):
-    drv = KX2Driver()
+    drv = KX2()
     cb = drv._make_emcy_callback(node_id=1)
 
     # Simulate setup having run, then stop() teardown.
@@ -155,7 +154,7 @@ class SetupOrdersEmcySubscribeBeforeNmtStartTests(unittest.TestCase):
       def send_message(self_inner, *a, **k):
         pass
 
-    drv = KX2Driver()
+    drv = KX2()
 
     # Short-circuit the parts of setup we don't need (PDO mapping, Elmo
     # vendor-object writes, ipm_select_mode). The fake's add_node returns a
@@ -164,15 +163,15 @@ class SetupOrdersEmcySubscribeBeforeNmtStartTests(unittest.TestCase):
     async def _noop(*a, **k):
       return None
 
-    with mock.patch.object(driver_mod.canopen, "Network", _FakeNetwork), \
-         mock.patch.object(driver_mod, "_HAS_CANOPEN", True), \
-         mock.patch.object(KX2Driver, "_can_tpdo_unmap", _noop), \
-         mock.patch.object(KX2Driver, "_tpdo_map", _noop), \
-         mock.patch.object(KX2Driver, "_rpdo_map", _noop), \
-         mock.patch.object(KX2Driver, "can_sdo_download_elmo_object", _noop), \
-         mock.patch.object(KX2Driver, "ipm_select_mode", _noop), \
+    with mock.patch.object(kx2_mod.canopen, "Network", _FakeNetwork), \
+         mock.patch.object(kx2_mod, "_HAS_CANOPEN", True), \
+         mock.patch.object(KX2, "_can_tpdo_unmap", _noop), \
+         mock.patch.object(KX2, "_tpdo_map", _noop), \
+         mock.patch.object(KX2, "_rpdo_map", _noop), \
+         mock.patch.object(KX2, "can_sdo_download_elmo_object", _noop), \
+         mock.patch.object(KX2, "ipm_select_mode", _noop), \
          mock.patch("asyncio.sleep", _noop):
-      asyncio.new_event_loop().run_until_complete(drv.setup())
+      asyncio.new_event_loop().run_until_complete(drv._bus_setup())
 
     # Find the index of the NMT 0x01 ("Start All Nodes") and the EMCY
     # subscribe calls — every EMCY subscribe must precede the start.
@@ -195,15 +194,14 @@ class SetupOrdersEmcySubscribeBeforeNmtStartTests(unittest.TestCase):
 
 class OnEmcyUsesDriverLoopTests(unittest.TestCase):
   def test_on_emcy_schedules_via_driver_loop(self):
-    drv = KX2Driver()
-    backend = KX2ArmBackend(driver=drv)
+    drv = KX2()
 
     fake_loop = mock.MagicMock()
     fake_loop.create_task = mock.MagicMock()
     drv._loop = fake_loop
 
     frame = EmcyFrame(0x5441, 0, 0, 0, 0)
-    backend._on_emcy(
+    drv._on_emcy(
       node_id=1, frame=frame, description="E-stop button was pressed",
       disable_motors=True,
     )
@@ -216,14 +214,13 @@ class OnEmcyUsesDriverLoopTests(unittest.TestCase):
     coro.close()
 
   def test_on_emcy_no_op_when_disable_motors_false(self):
-    drv = KX2Driver()
-    backend = KX2ArmBackend(driver=drv)
+    drv = KX2()
 
     fake_loop = mock.MagicMock()
     fake_loop.create_task = mock.MagicMock()
     drv._loop = fake_loop
 
-    backend._on_emcy(
+    drv._on_emcy(
       node_id=1, frame=EmcyFrame(0x8130, 0, 0, 0, 0),
       description="Heartbeat event", disable_motors=False,
     )

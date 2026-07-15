@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Dict, Literal, Optional
 
-from pylabrobot.paa.kx2.driver import JointMoveDirection
+from pylabrobot.paa.kx2.protocol import JointMoveDirection
 
 
 GripperFingerSide = Literal["barcode_reader", "proximity_sensor"]
@@ -37,8 +37,8 @@ class Axis(IntEnum):
   @property
   def is_linear(self) -> bool:
     """Axis travels in linear units (mm/s, mm/s^2). All others are rotary
-    (deg/s, deg/s^2). Used to pick the right speed/acceleration from the
-    linear/rotary split in JointMoveParams / CartesianMoveParams."""
+    (deg/s, deg/s^2). Used to pick the right units when applying the move
+    methods' max_gripper_speed / max_gripper_acceleration caps."""
     return self in (Axis.Z, Axis.RAIL, Axis.SERVO_GRIPPER)
 
 
@@ -70,7 +70,7 @@ class AxisConfig:
 @dataclass
 class GripperParams:
   """User-supplied gripper tooling — known at construction, never read
-  from the drives. Lives on :class:`KX2ArmBackend`
+  from the drives. Lives on :class:`KX2`
   (``self._gripper_params``) and is passed into kinematics alongside
   :class:`KX2Config`. Distinct from :class:`ServoGripperConfig`, which
   is drive-read motor calibration for the servo gripper itself.

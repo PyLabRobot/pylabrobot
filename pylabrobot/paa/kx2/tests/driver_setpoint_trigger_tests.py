@@ -1,6 +1,6 @@
 """Unit tests for the KX2 driver's CiA 402 PPM new-setpoint handshake.
 
-Covers ``KX2Driver._trigger_new_setpoint``: the four-step CW/SW dance
+Covers ``KX2._trigger_new_setpoint``: the four-step CW/SW dance
 (drop bit 4, wait bit 12 low, raise bit 4, wait bit 12 high) and its
 retry-on-missed-edge behavior. The drive's SW state is faked by setting
 ``self._statusword[nid]`` directly and signalling
@@ -11,7 +11,8 @@ import asyncio
 import unittest
 from typing import List, Tuple
 
-from pylabrobot.paa.kx2.driver import CanError, KX2Driver
+from pylabrobot.paa.kx2.kx2 import KX2
+from pylabrobot.paa.kx2.protocol import CanError
 
 
 SW_BIT_12 = 1 << 12
@@ -38,8 +39,8 @@ class _SwScript:
     return self.steps.pop(0)
 
 
-def _build_driver(nid: int, script: _SwScript) -> KX2Driver:
-  drv = KX2Driver()
+def _build_driver(nid: int, script: _SwScript) -> KX2:
+  drv = KX2()
   loop = asyncio.get_event_loop()
   drv._loop = loop
   drv._statusword = {nid: 0}
