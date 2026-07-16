@@ -51,10 +51,10 @@ def hamilton_tube_carrier_32_a00(name: str) -> TubeCarrier:
   1 track(T) wide.
 
   The 15 mm site pitch and centerline are inherited from the verified
-  insert-specific definition. The bare-hole diameter and tube-support Z have
-  not yet been independently measured and are retained as calibration values.
+  insert-specific definition. The bare-hole diameter and tube-support Z were
+  measured directly.
   """
-  calibration_hole_diameter = 10.8
+  hole_diameter = 13.4
   return TubeCarrier(
     name=name,
     size_x=22.5,  # 1 track
@@ -64,15 +64,14 @@ def hamilton_tube_carrier_32_a00(name: str) -> TubeCarrier:
       klass=ResourceHolder,
       locations=[
         Coordinate(
-          14.5 - calibration_hole_diameter / 2,
-          14.5 - calibration_hole_diameter / 2 + x * 15,
-          25.88,
+          14.5 - hole_diameter / 2,
+          14.5 - hole_diameter / 2 + x * 15,
+          50.2,
         )
         for x in range(32)
       ],
-      # Calibration values inherited from the insert-specific definition.
-      resource_size_x=calibration_hole_diameter,
-      resource_size_y=calibration_hole_diameter,
+      resource_size_x=hole_diameter,
+      resource_size_y=hole_diameter,
       name_prefix=name,
     ),
     model=hamilton_tube_carrier_32_a00.__name__,
