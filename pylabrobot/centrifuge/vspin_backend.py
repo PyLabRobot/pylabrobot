@@ -180,6 +180,46 @@ def _save_vspin_calibrations(device_id, remainder: int):
 
 
 FULL_ROTATION: int = 8000
+_KNOWN_VSPIN_STATUSES = {0x08, 0x09, 0x0B, 0x11, 0x13, 0x18, 0x19, 0x88, 0x89, 0x91, 0x99}
+
+_VSPIN_COMMAND_SET_ALIASES = {
+  "agilent": "agilent",
+  "old_firmware": "old_firmware",
+}
+
+_VSPIN_COMMANDS = {
+  "agilent": {
+    "open_door": bytes.fromhex("aa022600062e"),
+    "close_door": bytes.fromhex("aa022600042c"),
+    "lock_door": bytes.fromhex("aa0226000028"),
+    "unlock_door": bytes.fromhex("aa022600042c"),
+    "lock_bucket": bytes.fromhex("aa022600072f"),
+    "unlock_bucket": bytes.fromhex("aa022600062e"),
+  },
+  "old_firmware": {
+    "open_door": bytes.fromhex("aa022600072f"),
+    "close_door": bytes.fromhex("aa022600052d"),
+    "lock_door": bytes.fromhex("aa0226000028"),
+    "unlock_door": bytes.fromhex("aa022600042c"),
+    "lock_bucket": bytes.fromhex("aa0226000129"),
+    "unlock_bucket": bytes.fromhex("aa0226200048"),
+  },
+}
+
+
+def _normalize_vspin_command_set(command_set: str) -> str:
+  normalized = command_set.lower()
+  if normalized not in _VSPIN_COMMAND_SET_ALIASES:
+    raise ValueError("command_set must be 'agilent' or 'old_firmware'")
+  return _VSPIN_COMMAND_SET_ALIASES[normalized]
+
+
+def _with_vspin_checksum(cmd: bytes) -> bytes:
+  """Return ``cmd`` with the final VSpin checksum byte recomputed."""
+  if len(cmd) <= 2 or cmd[0] != 0xAA:
+    return cmd
+  payload = cmd[1:-1]
+  return b"\xaa" + payload + bytes([sum(payload) & 0xFF])
 
 
 bucket_1_not_set_error = RuntimeError(
@@ -193,11 +233,21 @@ class VSpinBackend(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
 
-  def __init__(self, device_id: Optional[str] = None):
+  def __init__(
+    self,
+    device_id: Optional[str] = None,
+    command_set: str = "agilent",
+  ):
     """
     Args:
-      device_id: The libftdi id for the centrifuge. Find using `python -m pylibftdi.examples.list_devices`
+      device_id: The libftdi id for the centrifuge.
+        Find using `python -m pylibftdi.examples.list_devices`.
+      command_set: VSpin firmware command set. ``"agilent"`` is the default
+        used by known Agilent units and some Velocity11 units. Use
+        ``"old_firmware"`` for older firmware that needs the legacy pneumatic
+        command bytes.
     """
+    self._command_set = _normalize_vspin_command_set(command_set)
     self.io = FTDI(human_readable_device_name="Agilent VSpin Centrifuge", device_id=device_id)
     self._bucket_1_remainder: Optional[int] = None
     # only attempt loading calibration if device_id is not None
@@ -320,6 +370,9 @@ class VSpinBackend(CentrifugeBackend):
     await self.configure_and_initialize()
     await self.io.stop()
 
+  def _get_command_bytes(self, name: str) -> bytes:
+    return _VSPIN_COMMANDS[self._command_set][name]
+
   class _StatusPositionTachometer(ctypes.LittleEndianStructure):
     _pack_ = 1
     _fields_ = [
@@ -331,6 +384,17 @@ class VSpinBackend(CentrifugeBackend):
       ("home_position", ctypes.c_uint32),
       ("checksum", ctypes.c_uint8),
     ]
+
+  @staticmethod
+  def _find_status_packet(resp: bytes) -> Optional[_StatusPositionTachometer]:
+    for start in range(max(0, len(resp) - 13)):
+      packet = resp[start : start + 14]
+      if len(packet) < 14 or packet[0] not in _KNOWN_VSPIN_STATUSES:
+        continue
+      if (sum(packet[:-1]) & 0xFF) != packet[-1]:
+        continue
+      return VSpinBackend._StatusPositionTachometer.from_buffer_copy(packet)
+    return None
 
   async def _get_positions_and_tachometer(self) -> _StatusPositionTachometer:
     """Returns 14 bytes
@@ -358,7 +422,10 @@ class VSpinBackend(CentrifugeBackend):
     resp = await self._send_command(bytes.fromhex("aa010e0f"))
     if len(resp) == 0:
       raise IOError("Empty status from centrifuge")
-    return VSpinBackend._StatusPositionTachometer.from_buffer_copy(resp)
+    status = self._find_status_packet(resp)
+    if status is None:
+      raise IOError(f"Invalid status from centrifuge: {resp.hex()}")
+    return status
 
   async def get_position(self) -> int:
     return (await self._get_positions_and_tachometer()).current_position  # type: ignore
@@ -421,7 +488,8 @@ class VSpinBackend(CentrifugeBackend):
     return data
 
   async def _send_command(self, cmd: bytes, read_timeout=0.2) -> bytes:
-    written = await self.io.write(bytes(cmd))
+    cmd = _with_vspin_checksum(bytes(cmd))
+    written = await self.io.write(cmd)
 
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
@@ -450,8 +518,7 @@ class VSpinBackend(CentrifugeBackend):
   async def open_door(self):
     if await self.get_door_open():
       return
-    # used to be:                           aa022600072f
-    await self._send_command(bytes.fromhex("aa022600062e"))  # same as unlock door
+    await self._send_command(self._get_command_bytes("open_door"))  # same as unlock door on new firmware
 
     # we can't tell when the door is fully open, so we just wait a bit
     await asyncio.sleep(4)
@@ -459,8 +526,7 @@ class VSpinBackend(CentrifugeBackend):
   async def close_door(self):
     if not (await self.get_door_open()):
       return
-    # used to be:                           aa022600052d
-    await self._send_command(bytes.fromhex("aa022600042c"))  # same as unlock door
+    await self._send_command(self._get_command_bytes("close_door"))  # same as unlock door on new firmware
     # we can't tell when the door is fully closed, so we just wait a bit
     await asyncio.sleep(2)
 
@@ -469,24 +535,22 @@ class VSpinBackend(CentrifugeBackend):
       raise RuntimeError("Cannot lock door while it is open.")
     if await self.get_door_locked():
       return
-    # used to be                            aa0226000129
-    await self._send_command(bytes.fromhex("aa0226000028"))
+    await self._send_command(self._get_command_bytes("lock_door"))
 
   async def unlock_door(self):
     if not await self.get_door_locked():
       return
-    # used to be                            aa022600052d
-    await self._send_command(bytes.fromhex("aa022600042c"))  # same as close door
+    await self._send_command(self._get_command_bytes("unlock_door"))  # same as close door
 
   async def lock_bucket(self):
     if await self.get_bucket_locked():
       return
-    await self._send_command(bytes.fromhex("aa022600072f"))
+    await self._send_command(self._get_command_bytes("lock_bucket"))
 
   async def unlock_bucket(self):
     if not await self.get_bucket_locked():
       return
-    await self._send_command(bytes.fromhex("aa022600062e"))  # same as open door
+    await self._send_command(self._get_command_bytes("unlock_bucket"))  # same as open door on new firmware
 
   async def go_to_bucket1(self):
     await self.go_to_position(await self.get_bucket_1_position())
@@ -499,9 +563,9 @@ class VSpinBackend(CentrifugeBackend):
     await self.lock_door()
 
     position_bytes = position.to_bytes(4, byteorder="little")
-    byte_string = bytes.fromhex("aa01d497") + position_bytes + bytes.fromhex("c3f52800d71a0000")
-    sum_byte = (sum(byte_string) - 0xAA) & 0xFF
-    byte_string += sum_byte.to_bytes(1, byteorder="little")
+    byte_string = _with_vspin_checksum(
+      bytes.fromhex("aa01d497") + position_bytes + bytes.fromhex("c3f52800d71a0000")
+    )
     await self._send_command(bytes.fromhex("aa0226000028"))
     await self._send_command(bytes.fromhex("aa0117021a"))
     await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
@@ -587,9 +651,9 @@ class VSpinBackend(CentrifugeBackend):
     rpm_b = int(rpm * 4473.925).to_bytes(4, byteorder="little")
     acceleration_b = int(9.15 * 100 * acceleration).to_bytes(4, byteorder="little")
 
-    byte_string = bytes.fromhex("aa01d497") + position_b + rpm_b + acceleration_b
-    checksum = (sum(byte_string) - 0xAA) & 0xFF
-    byte_string += checksum.to_bytes(1, byteorder="little")
+    byte_string = _with_vspin_checksum(
+      bytes.fromhex("aa01d497") + position_b + rpm_b + acceleration_b + b"\x00"
+    )
 
     await self._send_command(bytes.fromhex("aa0226000028"))
     await self._send_command(bytes.fromhex("aa0117021a"))
@@ -624,8 +688,9 @@ class VSpinBackend(CentrifugeBackend):
     # aa0194b6000000000a03000058: decel at 85
     # aa0194b61283000012010000f3: used in setup (30%)
     decc = int(9.15 * 100 * deceleration).to_bytes(2, byteorder="little")
-    decel_command = bytes.fromhex("aa0194b600000000") + decc + bytes.fromhex("0000")
-    decel_command += ((sum(decel_command) - 0xAA) & 0xFF).to_bytes(1, byteorder="little")
+    decel_command = _with_vspin_checksum(
+      bytes.fromhex("aa0194b600000000") + decc + bytes.fromhex("000000")
+    )
     await self._send_command(decel_command)
 
     await asyncio.sleep(2)
