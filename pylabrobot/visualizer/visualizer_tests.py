@@ -1,12 +1,11 @@
-import anyio
-import asyncio
 import json
-import time
 import unittest
 import unittest.mock
 import urllib.request
+from contextlib import asynccontextmanager
 from typing import Optional
 
+import anyio
 import pytest
 import websockets
 
@@ -16,12 +15,17 @@ from pylabrobot.resources import (
   Resource,
   cor_96_wellplate_360uL_Fb,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.visualizer import Visualizer
 from pylabrobot.visualizer.visualizer import (
   _build_method_registry,
   _sanitize_floats,
   _serialize_resource_tree,
 )
+
+# Guard the server-based tests against hangs. The visualizer only supports the asyncio backend
+# because `websockets` ships an asyncio-only server implementation.
+pytestmark = pytest.mark.timeout(60)
 
 
 class SanitizeFloatsTests(unittest.TestCase):
@@ -91,60 +95,68 @@ class VisualizerLiquidColorValidationTests(unittest.TestCase):
       Visualizer(r, open_browser=False, liquid_color="FFF")
 
 
-class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
-  """Tests for the setup and stop methods of the visualizer backend."""
+class TestVisualizerSetupStop(AnyioTestBase):
+  """Tests for the structured-concurrency lifecycle of the visualizer backend."""
 
-  @pytest.mark.timeout(20)
+  # The visualizer relies on `websockets`' asyncio-only server, so it cannot run on Trio.
+  _anyio_backends = ["asyncio"]
+
   async def test_setup_stop(self):
-    """Test that the thread is started and stopped correctly."""
+    """Test that the servers are started and stopped correctly, and can be recycled."""
 
     r = Resource(size_x=100, size_y=100, size_z=100, name="root")
     vis = Visualizer(r, open_browser=False)
 
     async def setup_stop_single():
-      await vis.setup()
-      self.assertIsNotNone(vis.loop)
-      # wait for the server to start
-      time.sleep(1)
-      await vis.stop()
+      async with vis:
+        self.assertIsNotNone(vis.loop)
+        self.assertTrue(vis.setup_finished)
+        # wait for the servers to start
+        await anyio.sleep(1)
       self.assertFalse(vis.has_connection())
+      self.assertFalse(vis.setup_finished)
 
     # setup and stop twice to ensure that everything is recycled correctly
     await setup_stop_single()
     await setup_stop_single()
 
 
-class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
+class TestVisualizerServer(AnyioTestBase):
   """Tests for servers (ws/fs)."""
 
-  async def asyncSetUp(self):
-    await super().asyncSetUp()
+  _anyio_backends = ["asyncio"]
+
+  @asynccontextmanager
+  async def lifespan(self, **kwargs):
     self.r = Resource(size_x=100, size_y=100, size_z=100, name="root")
     self.vis = Visualizer(self.r, open_browser=False)
-    await self.vis.setup()
+    async with self.vis:
+      ws_port = self.vis.ws_port  # port may change if port is already in use
+      self.uri = f"ws://localhost:{ws_port}"
+      async with websockets.connect(self.uri) as client:
+        self.client = client
+        yield
 
-    ws_port = self.vis.ws_port  # port may change if port is already in use
-    self.uri = f"ws://localhost:{ws_port}"
-    self.client = await websockets.connect(self.uri)
-
-  async def asyncTearDown(self):
-    await super().asyncTearDown()
-    await self.vis.stop()
-    await self.client.close()
-
-  def test_get_index_html(self):
+  async def test_get_index_html(self):
     """Test that the index.html file is returned."""
-    r = urllib.request.urlopen(f"http://localhost:{self.vis.fs_port}/", timeout=10)
-    self.assertEqual(r.status, 200)
-    self.assertIn(
-      r.headers["Content-Type"],
-      ["text/html", "text/html; charset=utf-8"],
-    )
 
-  def test_liquid_color_default_substituted(self):
+    # The file server's accept loop runs on this event loop, so the blocking HTTP request must be
+    # offloaded to a thread (otherwise it would block the loop and the request would never be
+    # served).
+    def fetch():
+      r = urllib.request.urlopen(f"http://localhost:{self.vis.fs_port}/", timeout=10)
+      return r.status, r.headers["Content-Type"]
+
+    status, content_type = await anyio.to_thread.run_sync(fetch)
+    self.assertEqual(status, 200)
+    self.assertIn(content_type, ["text/html", "text/html; charset=utf-8"])
+
+  async def test_liquid_color_default_substituted(self):
     """Test that the default liquid_color is substituted into the served HTML."""
     url = f"http://localhost:{self.vis.fs_port}/"
-    html = urllib.request.urlopen(url, timeout=10).read().decode()
+    html = await anyio.to_thread.run_sync(
+      lambda: urllib.request.urlopen(url, timeout=10).read().decode()
+    )
     self.assertNotIn("{{ liquid_color }}", html)
     self.assertIn('value="F39C12"', html)
 
@@ -177,36 +189,36 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(data["event"], "test")
 
 
-class VisualizerShowMachineToolsTests(unittest.IsolatedAsyncioTestCase):
+class TestVisualizerShowMachineTools(AnyioTestBase):
   """Tests for the show_machine_tools_at_start parameter."""
+
+  _anyio_backends = ["asyncio"]
 
   async def test_show_machine_tools_at_start_false(self):
     """When show_machine_tools_at_start=False, the show_machine_tools event should not be sent."""
     r = Resource(size_x=100, size_y=100, size_z=100, name="root")
     vis = Visualizer(r, open_browser=False, show_machine_tools_at_start=False)
     vis.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
-    await vis.setup()
+    async with vis:
+      # Simulate browser ready
+      await vis._send_resources_and_state()
 
-    # Simulate browser ready
-    await vis._send_resources_and_state()
-
-    # Check that show_machine_tools was never sent
-    for call in vis.send_command.call_args_list:  # type: ignore[attr-defined]
-      self.assertNotEqual(
-        call[1].get("event") if call[1] else call[0][0],
-        "show_machine_tools",
-        "show_machine_tools event should not be sent when show_machine_tools_at_start=False",
-      )
-
-    await vis.stop()
+      # Check that show_machine_tools was never sent
+      for call in vis.send_command.call_args_list:  # type: ignore[attr-defined]
+        self.assertNotEqual(
+          call[1].get("event") if call[1] else call[0][0],
+          "show_machine_tools",
+          "show_machine_tools event should not be sent when show_machine_tools_at_start=False",
+        )
 
 
-class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
+class TestVisualizerCommand(AnyioTestBase):
   """Tests for command sending using the visualizer backend."""
 
-  async def asyncSetUp(self):
-    await super().asyncSetUp()
-    self.maxDiff = None
+  _anyio_backends = ["asyncio"]
+
+  @asynccontextmanager
+  async def lifespan(self, **kwargs):
     self.r = Resource(size_x=100, size_y=100, size_z=100, name="root")
     self.vis = Visualizer(self.r, open_browser=False)
 
@@ -214,7 +226,8 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     self.send_command_mock = unittest.mock.AsyncMock()
     self.vis.send_command = self.send_command_mock  # type: ignore[method-assign]
 
-    await self.vis.setup()
+    async with self.vis:
+      yield
 
   async def _wait_for_event(self, event: str, data_key: Optional[str] = None, timeout: float = 5.0):
     """Wait until the most recent send_command call is ``event`` (optionally carrying

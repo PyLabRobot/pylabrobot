@@ -1,4 +1,3 @@
-import anyio
 import asyncio
 import functools
 import http.server
@@ -8,10 +7,13 @@ import logging
 import math
 import os
 import re
-import threading
-import time
 import webbrowser
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
+
+import anyio
+import sniffio
+from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
+from typing_extensions import override
 
 try:
   import websockets
@@ -24,6 +26,7 @@ except ImportError as e:
   _WEBSOCKETS_IMPORT_ERROR = e
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
+from pylabrobot.concurrency import AsyncExitStackWithShielding, AsyncResource, global_manager
 from pylabrobot.resources import Resource
 
 logger = logging.getLogger("pylabrobot")
@@ -97,7 +100,59 @@ def _sanitize_floats(obj):
   return obj
 
 
-class Visualizer:
+class _VisualizerHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+  """Serves the visualizer's static files.
+
+  ``index.html`` and the favicon are pre-rendered once at startup and cached on the owning
+  :class:`_VisualizerFileServer`, so serving them never touches the disk. Everything else
+  (``vis.js``, ``lib.js``, images, ...) is served from ``directory`` by the standard library.
+  Each request is handled on a worker thread (one ``handle_request`` per accept; see
+  :meth:`Visualizer._start_file_server`), so the blocking reads here never touch the event loop.
+  """
+
+  @override
+  def log_message(self, format: str, *args: Any) -> None:
+    pass
+
+  @override
+  def end_headers(self) -> None:
+    self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+    self.send_header("Pragma", "no-cache")
+    self.send_header("Expires", "0")
+    super().end_headers()
+
+  @override
+  def do_GET(self) -> None:
+    server = cast("_VisualizerFileServer", self.server)
+    if self.path == "/":
+      self._respond(server.index_html, "text/html")
+    elif self.path == "/favicon.png":
+      self._respond(server.favicon, "image/png")
+    else:
+      super().do_GET()
+
+  def _respond(self, payload: bytes, content_type: str) -> None:
+    self.send_response(200)
+    self.send_header("Content-type", content_type)
+    self.end_headers()
+    self.wfile.write(payload)
+
+
+class _VisualizerFileServer(http.server.HTTPServer):
+  """``HTTPServer`` that carries the visualizer's pre-rendered ``index.html`` and favicon bytes.
+
+  Templating/reading happens once at startup; :class:`_VisualizerHTTPRequestHandler` serves the
+  cached bytes for ``/`` and ``/favicon.png``.
+  """
+
+  def __init__(self, server_address: Tuple[str, int], directory: str):
+    self.index_html: bytes = b""
+    self.favicon: bytes = b""
+    handler = functools.partial(_VisualizerHTTPRequestHandler, directory=directory)
+    super().__init__(server_address, handler)
+
+
+class Visualizer(AsyncResource):
   """A class for visualizing resources and their states in a web browser.
 
   This class sets up a websocket server and a file server to serve a web page that visualizes the
@@ -105,10 +160,21 @@ class Visualizer:
   resources or their states change. Note that tip and volume tracking need to be enabled to see
   these in the visualizer.
 
+  The visualizer follows structured concurrency: its servers' lifetimes are bound to an
+  ``async with`` block (or the equivalent :meth:`.lifespan`). Because :mod:`websockets` only
+  ships an asyncio implementation, the visualizer must be run on the asyncio backend.
+
   Example:
     >>> from pylabrobot.visualizer import Visualizer
+    >>> async with Visualizer(deck) as visualizer:
+    ...   ...  # the visualizer is running for the duration of this block
+
+  The legacy :meth:`.setup`/:meth:`.stop` API is still available for interactive (notebook) use:
+
     >>> visualizer = Visualizer(deck)
     >>> await visualizer.setup()
+    >>> ...
+    >>> await visualizer.stop()
   """
 
   def __init__(
@@ -123,7 +189,7 @@ class Visualizer:
     show_machine_tools_at_start: bool = True,
     liquid_color: str = "F39C12",
   ):
-    """Create a new Visualizer. Use :meth:`.setup` to start the visualization.
+    """Create a new Visualizer. Use ``async with`` (or :meth:`.setup`) to start the visualization.
 
     Args:
       host: The hostname of the file and websocket server.
@@ -148,7 +214,6 @@ class Visualizer:
         f"Import error: {_WEBSOCKETS_IMPORT_ERROR}"
       )
 
-    self.setup_finished = False
     self._show_machine_tools_at_start = show_machine_tools_at_start
     color = liquid_color.strip().lstrip("#")
     if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
@@ -192,18 +257,23 @@ class Visualizer:
     # file server attributes
     self.fs_port = fs_port
     self.open_browser = open_browser
-
-    self._httpd: Optional[http.server.HTTPServer] = None
-    self._fst: Optional[threading.Thread] = None
+    self._httpd: Optional[_VisualizerFileServer] = None
 
     # websocket server attributes
     self.ws_port = ws_port
     self._id = 0
-
+    self._ws_server: Optional["websockets.asyncio.server.Server"] = None
     self._websocket: Optional["websockets.asyncio.server.ServerConnection"] = None
+
+    # The event loop the visualizer is running on. Captured in `_enter_lifespan` so that the
+    # synchronous resource-change callbacks (which may fire from any thread) can marshal work back
+    # onto it. `None` when the visualizer is not running.
     self._loop: Optional[asyncio.AbstractEventLoop] = None
-    self._t: Optional[threading.Thread] = None
-    self._stop_: Optional[asyncio.Future] = None
+
+    # Outbound browser messages from the (synchronous) resource callbacks are funnelled through
+    # this channel to a single task owned by the lifespan, instead of spawning a detached send task
+    # per event. `None` when the visualizer is not running.
+    self._outbox_send: Optional[MemoryObjectSendStream[Tuple[str, dict]]] = None
 
     self._pending_state_updates: Dict[str, dict] = {}
     self._flush_scheduled = False
@@ -216,6 +286,11 @@ class Visualizer:
     self._pending_response_ids: set = set()
 
   @property
+  def setup_finished(self) -> bool:
+    """Whether the visualizer is currently running."""
+    return getattr(self, "_active_lifespan", None) is not None
+
+  @property
   def websocket(
     self,
   ) -> "websockets.asyncio.server.ServerConnection":
@@ -226,24 +301,10 @@ class Visualizer:
 
   @property
   def loop(self) -> asyncio.AbstractEventLoop:
-    """The event loop."""
+    """The event loop the visualizer is running on."""
     if self._loop is None:
-      raise RuntimeError("Event loop has not been started.")
+      raise RuntimeError("The visualizer has not been started.")
     return self._loop
-
-  @property
-  def t(self) -> threading.Thread:
-    """The thread that runs the event loop."""
-    if self._t is None:
-      raise RuntimeError("Event loop has not been started.")
-    return self._t
-
-  @property
-  def stop_(self) -> asyncio.Future:
-    """The future that is set when the visualizer is stopped."""
-    if self._stop_ is None:
-      raise RuntimeError("Event loop has not been started.")
-    return self._stop_
 
   def _generate_id(self):
     """continuously generate unique ids 0 <= x < 10000."""
@@ -366,20 +427,6 @@ class Visualizer:
 
     return None
 
-  @property
-  def httpd(self) -> http.server.HTTPServer:
-    """The HTTP server."""
-    if self._httpd is None:
-      raise RuntimeError("The HTTP server has not been started yet.")
-    return self._httpd
-
-  @property
-  def fst(self) -> threading.Thread:
-    """The file server thread."""
-    if self._fst is None:
-      raise RuntimeError("The file server thread has not been started yet.")
-    return self._fst
-
   @staticmethod
   def _detect_source_filename() -> str:
     """Detect the filename of the calling script or notebook."""
@@ -469,55 +516,113 @@ class Visualizer:
 
     return ""
 
-  async def setup(self):
-    """Start the visualizer.
+  @override
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Start the visualizer's servers, bound to the lifetime of ``stack``.
 
-    Sets up the file and websocket servers. These will run in a separate thread.
+    Starts (1) the websocket server on the running asyncio event loop, (2) an outbox task that
+    serializes browser messages produced by the resource callbacks, and (3) the static file server
+    (a blocking ``http.server`` offloaded to a worker thread). All three are children of a single
+    task group and are torn down deterministically when the lifespan exits.
     """
 
-    if self.setup_finished:
-      raise RuntimeError("The visualizer has already been started.")
+    # `websockets` only ships an asyncio server, so the visualizer cannot run on Trio.
+    if (backend := sniffio.current_async_library()) != "asyncio":
+      raise RuntimeError(
+        "The visualizer only supports the asyncio backend, because `websockets` provides an "
+        f"asyncio-only server implementation (running under {backend!r})."
+      )
 
-    await self._run_ws_server()
-    self._run_file_server()
-    self.setup_finished = True
+    # Capture the running event loop so that the synchronous resource-change callbacks (which may
+    # fire from any thread) can marshal work back onto it.
+    self._loop = asyncio.get_running_loop()
+    stack.callback(self._clear_loop)
 
-  async def _run_ws_server(self):
-    """Start the websocket server.
+    tg = await stack.enter_async_context(anyio.create_task_group())
+    # Safety net: cancel any task still running at teardown (e.g. a send blocked on a stalled
+    # browser) so exiting the lifespan can never hang.
+    stack.callback(tg.cancel_scope.cancel)
 
-    Sets up the websocket server. This will run in a separate thread.
+    await self._start_ws_server(stack)
+    self._start_outbox(stack, tg)
+    await self._start_file_server(stack, tg)
+
+    if self.open_browser:
+      webbrowser.open(f"http://{self.host}:{self.fs_port}")
+
+  async def _start_ws_server(self, stack: AsyncExitStackWithShielding) -> None:
+    """Start the websocket server on the running event loop.
+
+    ``websockets.asyncio.server.serve`` is itself an async context manager: entering it starts the
+    server and exiting it closes the server and waits for all connection handlers to finish. We bind
+    that lifetime to ``stack`` so it is cleaned up as part of the lifespan.
     """
 
-    async def run_server():
-      self._stop_ = self.loop.create_future()
-      while True:
+    while True:
+      try:
+        server = websockets.asyncio.server.serve(self._socket_handler, self.host, self.ws_port)
+        self._ws_server = await stack.enter_async_context(server)
+        break
+      except OSError:
+        # If the port is in use, try the next port.
+        self.ws_port += 1
+
+    # Best-effort notify the browser that we are going away. Pushed after the server context so it
+    # runs *before* the server (and the connection) is closed during teardown. Shielded so the send
+    # can complete even while the lifespan is being cancelled.
+    stack.push_shielded_async_callback(self._notify_browser_stop)
+
+    print(f"Websocket server started at http://{self.host}:{self.ws_port}")
+
+  async def _notify_browser_stop(self) -> None:
+    """Tell a connected browser that the visualizer is stopping. Best-effort."""
+    if self.has_connection():
+      try:
+        await self.send_command("stop", wait_for_response=False)
+      except Exception:
+        # The connection may already be gone; stopping is best-effort.
+        pass
+
+  def _start_outbox(self, stack: AsyncExitStackWithShielding, tg: anyio.abc.TaskGroup) -> None:
+    """Start the task that serializes outbound browser messages.
+
+    The resource-change callbacks are synchronous and may run on any thread. Rather than spawning a
+    detached send task per event (an unstructured "go statement" whose errors would be silently
+    dropped), they enqueue onto this channel and a single task -- owned by the lifespan's task group
+    -- performs the sends in order. This keeps every concurrent send bound to the lifespan and lets
+    send failures be handled in one place.
+    """
+
+    send_stream, receive_stream = anyio.create_memory_object_stream[Tuple[str, dict]](math.inf)
+    self._outbox_send = send_stream
+    # Closing the send stream lets the worker drain and exit cleanly before the task group joins.
+    stack.callback(self._close_outbox)
+    tg.start_soon(self._outbox_worker, receive_stream)
+
+  async def _outbox_worker(
+    self, receive_stream: MemoryObjectReceiveStream[Tuple[str, dict]]
+  ) -> None:
+    """Drain the outbox channel, sending each queued event to the browser, in order."""
+    async with receive_stream:
+      async for event, data in receive_stream:
         try:
-          async with websockets.asyncio.server.serve(self._socket_handler, self.host, self.ws_port):
-            print(f"Websocket server started at http://{self.host}:{self.ws_port}")
-            lock.release()
-            await self.stop_
-            break
-        except asyncio.CancelledError:
-          pass
-        except OSError:
-          # If the port is in use, try the next port.
-          self.ws_port += 1
+          await self.send_command(event=event, data=data, wait_for_response=False)
+        except Exception:
+          # Tolerate a disconnected or slow browser; never tear down the visualizer over a send.
+          logger.exception("visualizer: failed to send %r event to browser", event)
 
-    def start_loop():
-      self.loop.run_until_complete(run_server())
+  async def _start_file_server(
+    self, stack: AsyncExitStackWithShielding, tg: anyio.abc.TaskGroup
+  ) -> None:
+    """Start a simple webserver to serve static files.
 
-    # Acquire a lock to prevent setup from returning until the server is running.
-    lock = threading.Lock()
-    lock.acquire()
-    self._loop = asyncio.new_event_loop()
-    self._t = threading.Thread(target=start_loop, daemon=True)
-    self.t.start()
-
-    while lock.locked():
-      time.sleep(0.001)
-
-  def _run_file_server(self):
-    """Start a simple webserver to serve static files."""
+    ``http.server`` is blocking, so rather than holding a ``serve_forever`` worker thread for the
+    whole lifespan, we drive it from an asyncio-native accept loop: the listening socket is made
+    non-blocking and, whenever it becomes readable, a single ``handle_request()`` is offloaded to a
+    worker thread via ``anyio.to_thread.run_sync``. No thread is held while the server is idle. The
+    loop runs in ``tg`` and is cancelled on teardown (see the ``cancel_scope.cancel`` net in
+    ``_enter_lifespan``), closing the socket in its ``finally``.
+    """
 
     dirname = os.path.dirname(__file__)
     path = os.path.join(dirname, ".")
@@ -526,120 +631,90 @@ class Visualizer:
         "Could not find Visualizer files. Please run from the root of the repository."
       )
 
-    def start_server(lock):
-      ws_port, fs_port, source_filename = self.ws_port, self.fs_port, self._source_filename
-      favicon_path = self._favicon_path
-      liquid_color = self._liquid_color
+    # Binding happens synchronously and fast; retry on the next port if this one is in use.
+    while True:
+      try:
+        self._httpd = _VisualizerFileServer((self.host, self.fs_port), path)
+        break
+      except OSError:
+        self.fs_port += 1
+    httpd = self._httpd
 
-      # try to start the server. If the port is in use, try with another port until it succeeds.
-      class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-        """A simple HTTP request handler that does not log requests."""
+    # Render index.html and read the favicon once (ports/options are fixed now), so requests for
+    # those paths are served from memory rather than re-reading the disk every time.
+    httpd.index_html = self._render_index_html(path)
+    with open(self._favicon_path, "rb") as f:
+      httpd.favicon = f.read()
 
-        def __init__(self, *args, **kwargs):
-          super().__init__(*args, directory=path, **kwargs)
+    # Make the listening socket non-blocking so we can await readability on the event loop; the
+    # `timeout` bounds how long a single `handle_request` may block its worker thread (e.g. on a
+    # spurious wakeup).
+    httpd.socket.setblocking(False)
+    httpd.timeout = 1.0
 
-        def log_message(self, format, *args):
-          pass
-
-        def end_headers(self):
-          self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-          self.send_header("Pragma", "no-cache")
-          self.send_header("Expires", "0")
-          super().end_headers()
-
-        def do_GET(self) -> None:
-          # rewrite some info in the index.html file on the fly,
-          # like a simple template engine
-          if self.path == "/":
-            with open(os.path.join(path, "index.html"), "r", encoding="utf-8") as f:
-              content = f.read()
-
-            content = content.replace("{{ ws_port }}", str(ws_port))
-            content = content.replace("{{ fs_port }}", str(fs_port))
-            content = content.replace("{{ source_filename }}", source_filename)
-            content = content.replace("{{ liquid_color }}", liquid_color)
-
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(content.encode("utf-8"))
-          elif self.path == "/favicon.png":
-            with open(favicon_path, "rb") as f:
-              data = f.read()
-            self.send_response(200)
-            self.send_header("Content-type", "image/png")
-            self.end_headers()
-            self.wfile.write(data)
-          else:
-            return super().do_GET()
-
-      while True:
-        try:
-          self._httpd = http.server.HTTPServer(
-            (self.host, self.fs_port),
-            QuietSimpleHTTPRequestHandler,
-          )
-          print(
-            f"File server started at http://{self.host}:{self.fs_port} . "
-            "Open this URL in your browser."
-          )
-          lock.release()
-          break
-        except OSError:
-          self.fs_port += 1
-
-      self.httpd.serve_forever()
-
-    lock = threading.Lock()
-    lock.acquire()
-    self._fst = threading.Thread(
-      name="visualizer_fs",
-      target=start_server,
-      args=(lock,),
-      daemon=True,
+    print(
+      f"File server started at http://{self.host}:{self.fs_port} . Open this URL in your browser."
     )
-    self.fst.start()
 
-    # Wait for the server to start before opening the browser so that we can get the correct port.
-    while lock.locked():
-      time.sleep(0.001)
+    serving = anyio.Event()
 
-    if self.open_browser:
-      webbrowser.open(f"http://{self.host}:{self.fs_port}")
+    async def accept_requests() -> None:
+      serving.set()
+      try:
+        while True:
+          await anyio.wait_readable(httpd.socket)
+          try:
+            await anyio.to_thread.run_sync(httpd.handle_request)
+          except Exception:
+            # One bad request must not tear down the server.
+            logger.exception("visualizer: error handling a file-server request")
+      finally:
+        httpd.server_close()
+        self._httpd = None
 
-  async def stop(self):
-    """Stop the visualizer.
+    tg.start_soon(accept_requests)
+    await serving.wait()
 
-    Raises:
-      RuntimeError: If the visualizer has not been started.
+  def _render_index_html(self, directory: str) -> bytes:
+    """Read ``index.html`` from ``directory`` and substitute the template placeholders."""
+    with open(os.path.join(directory, "index.html"), "r", encoding="utf-8") as f:
+      content = f.read()
+    content = (
+      content.replace("{{ ws_port }}", str(self.ws_port))
+      .replace("{{ fs_port }}", str(self.fs_port))
+      .replace("{{ source_filename }}", self._source_filename)
+      .replace("{{ liquid_color }}", self._liquid_color)
+    )
+    return content.encode("utf-8")
+
+  async def setup(self) -> None:
+    """Start the visualizer (legacy, interactive API).
+
+    Prefer structured concurrency (``async with visualizer:``). This method schedules the
+    visualizer's lifespan on a global task group so that it can be started and stopped from
+    separate calls (e.g. in a notebook). It is only supported on the asyncio backend.
     """
+    await global_manager.manage_context(self)
 
-    # -- file server --
-    # Stop the file server.
-    self.httpd.shutdown()
-    self.httpd.server_close()
+  async def stop(self) -> None:
+    """Stop the visualizer started with :meth:`.setup`."""
+    await global_manager.release_context(self)
 
-    # Clear all relevant attributes.
-    self._httpd = None
-    self._fst = None
-
-    # -- websocket --
-    if self.has_connection():
-      # send stop event to the browser
-      await self.send_command("stop", wait_for_response=False)
-
-      # must be thread safe, because event loop is running in a separate thread
-      self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
-
-    # Clear all relevant attributes.
+  def _clear_loop(self) -> None:
+    """Reset per-run state when the lifespan exits."""
     self.received.clear()
     self._pending_response_ids.clear()
     self._websocket = None
+    self._ws_server = None
     self._loop = None
-    self._t = None
-    self._stop_ = None
+    self._pending_state_updates.clear()
+    self._flush_scheduled = False
 
-    self.setup_finished = False
+  def _close_outbox(self) -> None:
+    """Close the outbox channel so the outbox worker drains and exits."""
+    if (send := self._outbox_send) is not None:
+      self._outbox_send = None
+      send.close()
 
   async def _send_resources_and_state(self):
     """Private method for sending the resource and state to the browser. This is called after the
@@ -673,6 +748,20 @@ class Visualizer:
     if self._show_machine_tools_at_start:
       await self.send_command("show_machine_tools", {}, wait_for_response=False)
 
+  def _emit(self, event: str, data: dict) -> None:
+    """Queue an outbound browser message from a (possibly off-loop-thread) resource callback."""
+    if (loop := self._loop) is None:
+      return  # The visualizer is not running; nothing to send.
+    loop.call_soon_threadsafe(self._enqueue_outbound, event, data)
+
+  def _enqueue_outbound(self, event: str, data: dict) -> None:
+    """Push a message onto the outbox channel. Must run on the event loop thread."""
+    if (send := self._outbox_send) is not None:
+      try:
+        send.send_nowait((event, data))
+      except (anyio.WouldBlock, anyio.ClosedResourceError):
+        logger.warning("visualizer: dropping %r event (outbox closed or full)", event)
+
   def _handle_resource_assigned_callback(self, resource: Resource) -> None:
     """Called when a resource is assigned to a resource already in the tree starting from the
     root resource. This method will send an event about the new resource"""
@@ -688,44 +777,41 @@ class Visualizer:
 
     register_state_update(resource)
 
-    # Send a `resource_assigned` event to the browser.
-    data = {
-      "resource": _serialize_resource_tree(resource),
-      "method_registry": _build_method_registry(resource),
-      "state": resource.serialize_all_state(),
-      "parent_name": (resource.parent.name if resource.parent else None),
-    }
-    fut = self.send_command(event="resource_assigned", data=data, wait_for_response=False)
-    asyncio.run_coroutine_threadsafe(fut, self.loop)
+    self._emit(
+      "resource_assigned",
+      {
+        "resource": _serialize_resource_tree(resource),
+        "method_registry": _build_method_registry(resource),
+        "state": resource.serialize_all_state(),
+        "parent_name": (resource.parent.name if resource.parent else None),
+      },
+    )
 
   def _handle_resource_unassigned_callback(self, resource: Resource) -> None:
     """Called when a resource is unassigned from a resource already in the tree starting from the
     root resource. This method will send an event about the removed resource"""
 
-    # Send a `resource_unassigned` event to the browser.
-    data = {"resource_name": resource.name}
-    fut = self.send_command(event="resource_unassigned", data=data, wait_for_response=False)
-    asyncio.run_coroutine_threadsafe(fut, self.loop)
+    self._emit("resource_unassigned", {"resource_name": resource.name})
 
   def _handle_state_update_callback(self, resource: Resource) -> None:
     """Called when the state of a resource is updated. Updates are batched so that
     rapid successive changes (e.g. 96-channel pickup) are sent as a single message."""
 
+    if (loop := self._loop) is None:
+      return  # The visualizer is not running; nothing to send.
     state = resource.serialize_state()
-    self.loop.call_soon_threadsafe(self._enqueue_state_update, resource.name, state)
+    loop.call_soon_threadsafe(self._enqueue_state_update, resource.name, state)
 
   def _enqueue_state_update(self, name: str, state: dict) -> None:
     """Enqueue a state update on the event loop thread and schedule a flush if needed."""
     self._pending_state_updates[name] = state
-    if not self._flush_scheduled:
+    if not self._flush_scheduled and self._loop is not None:
       self._flush_scheduled = True
-      self.loop.call_soon(self._flush_state_updates)
+      self._loop.call_soon(self._flush_state_updates)
 
   def _flush_state_updates(self) -> None:
     """Send all pending state updates as a single ``set_state`` event."""
-    data = self._pending_state_updates
-    self._pending_state_updates = {}
     self._flush_scheduled = False
-    if data:
-      fut = self.send_command(event="set_state", data=data, wait_for_response=False)
-      asyncio.ensure_future(fut)
+    if data := self._pending_state_updates:
+      self._pending_state_updates = {}
+      self._enqueue_outbound("set_state", data)
