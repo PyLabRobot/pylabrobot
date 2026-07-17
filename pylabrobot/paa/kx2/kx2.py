@@ -20,6 +20,7 @@ import asyncio
 import contextlib
 import logging
 import struct
+import sys
 import time
 import warnings
 from contextlib import asynccontextmanager
@@ -97,7 +98,7 @@ class KX2:
     self,
     has_rail: bool = False,
     has_servo_gripper: bool = True,
-    interface: str = "pcan",
+    interface: Optional[str] = None,
     channel: Optional[str] = None,
     bitrate: int = 500000,
     gripper_length: float = 0.0,
@@ -143,6 +144,10 @@ class KX2:
         "homing layer needs work — see KX2._arm_setup and "
         "servo_gripper_initialize."
       )
+    if interface is None:
+      interface = "socketcan" if sys.platform.startswith("linux") else "pcan"
+    if channel is None and interface == "socketcan":
+      channel = "can0"
     self._interface = interface
     self._channel = channel
     self._bitrate = bitrate
