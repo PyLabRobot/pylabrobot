@@ -28,10 +28,7 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from pylabrobot.capabilities.arms.standard import CartesianPose
 from pylabrobot.paa.kx2 import kinematics
-from pylabrobot.paa.kx2.barcode_reader import (
-  KX2BarcodeReaderBackend,
-  KX2BarcodeReaderDriver,
-)
+from pylabrobot.paa.kx2.barcode_reader import KX2BarcodeReader
 from pylabrobot.paa.kx2.config import (
   Axis,
   AxisConfig,
@@ -107,7 +104,7 @@ class KX2:
     gripper_z_offset: float = 0.0,
     gripper_finger_side: GripperFingerSide = "barcode_reader",
     barcode_port: Optional[str] = None,
-    barcode_baudrate: int = KX2BarcodeReaderDriver.default_baudrate,
+    barcode_baudrate: int = KX2BarcodeReader.default_baudrate,
   ) -> None:
     """
     Args:
@@ -228,13 +225,11 @@ class KX2:
     # --- optional onboard barcode reader (independent serial device) ---
     # The onboard barcode reader is a serial device on a separate USB-serial
     # port, entirely independent of the CAN bus that drives the motors. Wire it
-    # in only when a port is given; the standalone `KX2BarcodeReader` Device
+    # in only when a port is given; the standalone `KX2BarcodeReader` class
     # remains available for users who prefer to manage it as a sibling.
-    self._bcr_driver: Optional[KX2BarcodeReaderDriver] = None
-    self._bcr_backend: Optional[KX2BarcodeReaderBackend] = None
+    self._bcr: Optional[KX2BarcodeReader] = None
     if barcode_port is not None:
-      self._bcr_driver = KX2BarcodeReaderDriver(port=barcode_port, baudrate=barcode_baudrate)
-      self._bcr_backend = KX2BarcodeReaderBackend(self._bcr_driver)
+      self._bcr = KX2BarcodeReader(port=barcode_port, baudrate=barcode_baudrate)
 
     self._setup_finished = False
 
@@ -256,16 +251,15 @@ class KX2:
     # Bring the barcode reader up first (open port + version handshake) so a
     # bad reader aborts before we touch the CAN bus. It rides on a separate
     # serial port with no dependency on the drives.
-    if self._bcr_backend is not None:
-      await self._bcr_driver.setup()
-      await self._bcr_backend._on_setup()
+    if self._bcr is not None:
+      await self._bcr.setup()
     try:
       await self._bus_setup()
       await self._arm_setup()
     except BaseException:
-      if self._bcr_driver is not None:
+      if self._bcr is not None:
         try:
-          await self._bcr_driver.stop()
+          await self._bcr.stop()
         except Exception:
           logger.exception("KX2.setup cleanup: barcode reader stop failed; ignoring")
       raise
@@ -276,8 +270,8 @@ class KX2:
     try:
       await self._bus_stop()
     finally:
-      if self._bcr_driver is not None:
-        await self._bcr_driver.stop()
+      if self._bcr is not None:
+        await self._bcr.stop()
       self._setup_finished = False
 
   async def _arm_setup(self) -> None:
@@ -321,11 +315,11 @@ class KX2:
     ``None`` on a no-read). Raises if the KX2 was constructed without a
     ``barcode_port``.
     """
-    if self._bcr_backend is None:
+    if self._bcr is None:
       raise RuntimeError(
         "KX2 was constructed without barcode_port; no barcode reader configured."
       )
-    return await self._bcr_backend.scan_barcode(read_time)
+    return await self._bcr.scan_barcode(read_time)
 
   # --- reentrant motion guard ----------------------------------------------
 

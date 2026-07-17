@@ -2,7 +2,7 @@
 
 The KX2's onboard barcode reader is a plain RS-232 device wired to the
 controller PC — entirely independent of the CAN bus that drives the motors.
-Lives in its own `Device` class alongside :class:`KX2`.
+Lives in its own class alongside :class:`~pylabrobot.paa.kx2.kx2.KX2`.
 
 The unit shipped with KX2 systems we've inspected is a **Denso MDI-4050**
 (1D laser scanner) — confirmed via ``Z4``::
@@ -47,7 +47,7 @@ To re-enable / disable individual symbologies, use one of:
    layout is documented only in Denso's protocol manual; reverse-engineering
    from a ``Z4`` dump alone is fragile.
 
-Use :meth:`KX2BarcodeReaderDriver.dump_config` to read the current state.
+Use :meth:`KX2BarcodeReader.dump_config` to read the current state.
 
 ============================================================================
 USB-to-serial driver setup (macOS)
@@ -82,13 +82,6 @@ import logging
 import time
 from typing import Literal, Optional
 
-from pylabrobot.capabilities.barcode_scanning import BarcodeScanner
-from pylabrobot.capabilities.barcode_scanning.backend import (
-  BarcodeScannerBackend,
-  BarcodeScannerError,
-)
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
 
@@ -113,15 +106,44 @@ _CR = b"\r"
 _CMD_TERM = b"\r\n"
 
 
-class KX2BarcodeReaderDriver(Driver):
-  """Serial driver for the KX2's onboard Microscan-style barcode reader.
+class KX2BarcodeReaderError(Exception):
+  """A KX2 barcode-reader comms failure (port error or read timeout)."""
 
-  Factory defaults (per `KX2RobotControl.cs:1712–1741`): 9600 8N1, no flow
-  control. All commands are `ESC + <cmd ASCII> + CR`; all responses are
-  `<data> + CR`.
+
+class KX2BarcodeReader:
+  """PAA KX2 onboard barcode reader (Denso MDI-4050, Microscan-style serial).
+
+  A single class spanning the RS-232 transport and the read-cycle logic. It's a
+  plain serial device with no dependency on the CAN bus that drives the arm, so
+  it works even with the arm e-stopped. The :class:`~pylabrobot.paa.kx2.kx2.KX2`
+  owns one internally when constructed with a ``barcode_port``; construct this
+  directly to drive the reader on its own.
+
+  Factory defaults (per ``KX2RobotControl.cs:1712–1741``): 9600 8N1, no flow
+  control. All commands are ``ESC + <cmd ASCII> + CR + LF``; all responses are
+  ``<data> + CR``.
+
+  Args:
+    port: Serial device path. On macOS this is typically
+      ``/dev/tty.PL2303G-USBtoUART<n>`` (after the Prolific driver is
+      installed and approved — see module docstring). On Linux it's
+      usually ``/dev/ttyUSB<n>``.
+    baudrate: Serial baud rate; the reader's factory default is 9600.
+
+  Usage::
+
+      bcr = KX2BarcodeReader(port="/dev/tty.PL2303G-USBtoUART11240")
+      await bcr.setup()
+      barcode = await bcr.scan_barcode(read_time=8)
+      print(barcode.data)
+      await bcr.stop()
   """
 
   default_baudrate = 9600
+
+  # Wait bound when the caller doesn't specify a read_time. Long enough that any
+  # reasonable on-device read window (Y1..Y9) finishes inside it.
+  _DEFAULT_SCAN_WAIT = 10.0
 
   def __init__(self, port: str, baudrate: int = default_baudrate):
     if not _HAS_SERIAL:
@@ -129,7 +151,6 @@ class KX2BarcodeReaderDriver(Driver):
         "pyserial is not installed. Install with `pip install pylabrobot[serial]` "
         f"(import error: {_SERIAL_IMPORT_ERROR})"
       )
-    super().__init__()
     self.io = Serial(
       human_readable_device_name="KX2 Barcode Reader",
       port=port,
@@ -138,13 +159,28 @@ class KX2BarcodeReaderDriver(Driver):
       parity=pyserial.PARITY_NONE,
       stopbits=pyserial.STOPBITS_ONE,
       write_timeout=1,
-      timeout=0.1,  # short per-byte timeout; send_command handles the real deadline
+      timeout=0.1,  # short per-byte timeout; the read loop handles the real deadline
       rtscts=False,
     )
 
-  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
+  # --- lifecycle -----------------------------------------------------------
+
+  async def setup(self) -> None:
+    """Open the serial port, handshake, and arm for single-read scans.
+
+    The handshake is a version query (mirrors ``KX2RobotControl.cs:15617``); an
+    empty reply means the reader isn't answering, so raise rather than let the
+    first scan time out cryptically.
+    """
     await self.io.setup()
-    logger.info("[KX2 BCR %s] connected", self.io.port)
+    version = await self.get_software_version()
+    if not version:
+      raise KX2BarcodeReaderError(
+        "KX2 barcode reader: empty software-version response during handshake. "
+        "Verify port, baud rate, and that the reader is powered on."
+      )
+    logger.info("[KX2 BCR %s] connected, software version: %s", self.io.port, version)
+    await self.set_read_mode("single")
 
   async def stop(self) -> None:
     # Match the C# teardown: turn trigger off + restore default read time
@@ -154,10 +190,12 @@ class KX2BarcodeReaderDriver(Driver):
     await self.io.stop()
     logger.info("[KX2 BCR %s] disconnected", self.io.port)
 
+  # --- serial protocol -----------------------------------------------------
+
   async def _read_until_cr(self, timeout: float) -> str:
     """Read from the port until we see a CR, returning the decoded line.
 
-    Raises `BarcodeScannerError` on timeout.
+    Raises :class:`KX2BarcodeReaderError` on timeout.
     """
     deadline = time.monotonic() + timeout
     buf = bytearray()
@@ -171,7 +209,7 @@ class KX2BarcodeReaderDriver(Driver):
           return decoded
       else:
         await asyncio.sleep(0.01)
-    raise BarcodeScannerError(
+    raise KX2BarcodeReaderError(
       f"KX2 barcode reader: timeout waiting for CR after {timeout}s (buffered={bytes(buf)!r})"
     )
 
@@ -200,21 +238,14 @@ class KX2BarcodeReaderDriver(Driver):
     logger.debug("[KX2 BCR %s] %s -> %r", self.io.port, cmd, decoded)
     return decoded
 
-  async def read_decoded_barcode(self, timeout: float) -> str:
-    """Listen for an asynchronously-delivered decoded barcode line.
-
-    Used after firing `trigger(True)` — the reader emits the decoded data
-    followed by CR whenever it makes a successful read.
-    """
-    return await self._read_until_cr(timeout)
-
   # --- typed command helpers (names mirror the C# API) --------------------
 
   async def trigger(self, on: bool) -> None:
     await self.send_command("Z" if on else "Y")
 
   async def set_read_mode(self, mode: ReadMode) -> None:
-    """Maps to S0/S1/S2 on the wire."""
+    """Set the trigger mode: ``"single"`` (default), ``"multiple"``, or
+    ``"continuous"``. Maps to S0/S1/S2 on the wire."""
     code = {"single": "S0", "multiple": "S1", "continuous": "S2"}[mode]
     await self.send_command(code)
 
@@ -257,84 +288,32 @@ class KX2BarcodeReaderDriver(Driver):
         await asyncio.sleep(0.05)
     return buf.decode("ascii", errors="replace")
 
-
-class KX2BarcodeReaderBackend(BarcodeScannerBackend):
-  """Adapts :class:`KX2BarcodeReaderDriver` to the BarcodeScanner capability."""
-
-  # Wait bound when the caller doesn't specify a read_time. Long enough that
-  # any reasonable on-device read window (Y1..Y9) finishes inside it.
-  _DEFAULT_SCAN_WAIT = 10.0
-
-  def __init__(self, driver: KX2BarcodeReaderDriver):
-    super().__init__()
-    self.driver = driver
-
-  async def _on_setup(self, backend_params: Optional[BackendParams] = None) -> None:
-    # Handshake: version query (mirrors KX2RobotControl.cs:15617).
-    version = await self.driver.get_software_version()
-    if not version:
-      raise BarcodeScannerError(
-        "KX2 barcode reader: empty software-version response during handshake. "
-        "Verify port, baud rate, and that the reader is powered on."
-      )
-    logger.info("[KX2 BCR %s] software version: %s", self.driver.io.port, version)
-    await self.driver.set_read_mode("single")
+  # --- read cycle ----------------------------------------------------------
 
   async def scan_barcode(self, read_time: Optional[float] = None) -> Optional[Barcode]:
-    # Reader's Y-command only takes integer seconds 1..9 (YM=indefinite). When
-    # the caller specifies read_time, push it to the device first so the
-    # on-device window matches our wait bound. Otherwise leave whatever's
-    # currently configured and wait long enough for any in-range setting.
+    """Fire a read cycle and return the decoded :class:`~pylabrobot.resources.barcode.Barcode`,
+    or ``None`` on a no-read.
+
+    Args:
+      read_time: on-device read window in seconds. The reader's Y-command only
+        takes integer seconds 1..9 (YM=indefinite), so this is rounded and
+        pushed to the device so its window matches our wait bound. When
+        omitted, whatever window is currently configured stays, and we wait
+        long enough for any in-range setting.
+    """
     if read_time is not None:
       if read_time <= 0:
         raise ValueError("read_time must be > 0")
-      await self.driver.set_read_time(int(round(read_time)))
-    await self.driver.trigger(True)
+      await self.set_read_time(int(round(read_time)))
+    await self.trigger(True)
     timeout = (read_time + 1.0) if read_time is not None else self._DEFAULT_SCAN_WAIT
     try:
-      data = await self.driver.read_decoded_barcode(timeout=timeout)
-    except BarcodeScannerError:
-      # Driver raises on serial-read timeout. At this layer that's the
-      # "nothing decoded within the window" signal — return None instead of
-      # propagating. Real comms failures aren't reported via this path.
+      data = await self._read_until_cr(timeout=timeout)
+    except KX2BarcodeReaderError:
+      # Serial-read timeout here means "nothing decoded within the window" —
+      # a no-read, not a comms failure. Return None. (Port errors surface as
+      # different exceptions from self.io.)
       return None
     if not data:
       return None
     return Barcode(data=data, symbology="ANY 1D", position_on_resource="front")
-
-
-class KX2BarcodeReader(Device):
-  """PAA KX2 onboard barcode reader (Microscan-style serial device).
-
-  Args:
-    port: Serial device path. On macOS this is typically
-      ``/dev/tty.PL2303G-USBtoUART<n>`` (after the Prolific driver is
-      installed and approved — see module docstring). On Linux it's
-      usually ``/dev/ttyUSB<n>``.
-    baudrate: Serial baud rate; the reader's factory default is 9600.
-
-  Usage::
-
-      bcr = KX2BarcodeReader(port="/dev/tty.PL2303G-USBtoUART11240")
-      await bcr.setup()
-      barcode = await bcr.barcode_scanning.scan(read_time=8)
-      print(barcode.data)
-      await bcr.stop()
-  """
-
-  def __init__(
-    self,
-    port: str,
-    baudrate: int = KX2BarcodeReaderDriver.default_baudrate,
-  ):
-    driver = KX2BarcodeReaderDriver(port=port, baudrate=baudrate)
-    super().__init__(driver=driver)
-    self.driver: KX2BarcodeReaderDriver = driver
-    self._backend = KX2BarcodeReaderBackend(driver)
-    self.barcode_scanning = BarcodeScanner(backend=self._backend)
-    self._capabilities = [self.barcode_scanning]
-
-  async def set_read_mode(self, mode: ReadMode) -> None:
-    """Set the trigger mode: ``"single"`` (default), ``"multiple"``, or
-    ``"continuous"``."""
-    await self.driver.set_read_mode(mode)

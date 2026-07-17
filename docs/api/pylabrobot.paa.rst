@@ -15,7 +15,5 @@ KX2
 
     KX2
     KX2BarcodeReader
-    KX2BarcodeReaderDriver
-    KX2BarcodeReaderBackend
     KX2Config
     Axis
