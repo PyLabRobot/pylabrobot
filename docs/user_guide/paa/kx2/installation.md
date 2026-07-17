@@ -16,6 +16,15 @@ Drop `serial` if you don't have the barcode reader.
 
 The arm connects to the host over its USB-B port, which carries the CAN bus — no separate CAN adapter needed. Just plug the USB-B cable into the host. PLR speaks CANopen (CiA-301 + CiA-402 drive profile) over it via `python-can` (pulled in by the `canopen` extra).
 
+### On Linux
+
+Bring the interface up:
+
+```bash
+sudo ip link set can0 up type can bitrate 500000
+sudo ip link set can0 txqueuelen 1000
+```
+
 ## Barcode reader USB-to-serial driver (optional)
 
 The onboard barcode reader connects via a Prolific PL2303 USB-to-serial cable. Find the port it enumerates on with `python -m serial.tools.list_ports -v`.
