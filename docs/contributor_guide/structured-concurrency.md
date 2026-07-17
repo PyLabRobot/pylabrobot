@@ -25,9 +25,10 @@ All asynchronous resources (backends, decks, readers, etc.) must expose the `pyl
 Resources are usable **only** within the body of an `async with` block:
 
 ```python
-async with LHBackend() as backend:
-    await backend.aspirate(...)
-    # backend is guaranteed to be initialized here and cleaned up when exiting the block
+# `resource` is any AsyncResource (a backend, deck, reader, a LiquidHandler, ...)
+async with resource:
+    await resource.do_something(...)
+    # resource is guaranteed to be initialized here and cleaned up when exiting the block
 ```
 
 ### Implementing `AsyncResource`
@@ -36,15 +37,17 @@ When implementing a new resource, do not write `__aenter__` and `__aexit__` dire
 Most resources should use `_enter_lifespan(stack)` to register their setup and cleanup steps. We use `AsyncExitStackWithShielding` (a subclass of `AsyncExitStack` defined in `pylabrobot.concurrency`) which provides a helper for shielding async cleanups:
 
 1.  Inherit from `AsyncResource`.
-2.  Implement `async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:`.
+2.  Implement `async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:`, decorate it with `@override` (from `typing_extensions`), and call `await super()._enter_lifespan(stack)` first so the whole class chain is entered.
 3.  Register sync cleanup actions with the `stack` using `stack.callback(sync_func)`.
 4.  Register async cleanup actions with the `stack` using `stack.push_shielded_async_callback(async_func)`.
     *   *Note*: **Always** prefer `push_shielded_async_callback` over `push_async_callback` for cleanup to ensure it runs to completion even if the enclosing scope was cancelled (see [3h. Cancellation Shielding](#3h-cancellation-shielding-in-cleanup-actions)).
 5.  **No `_exit_lifespan` exists**: All cleanup must be registered dynamically with the stack during entry.
+6.  **Extra parameters must be keyword-only**: if `_enter_lifespan` needs arguments beyond `stack`, they must be keyword-only, because they are forwarded through `lifespan(**kwargs)`.
 
 Example:
 ```python
 class MyBackend(AsyncResource):
+    @override
     async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
         await super()._enter_lifespan(stack)
         await self._connect()
@@ -57,7 +60,8 @@ We use `pylabrobot.testing.concurrency.AnyioTestBase` for testing asynchronous c
 *   **Do not use** `unittest.IsolatedAsyncioTestCase` as it is incompatible with structured scopes.
 *   `AnyioTestBase` is *not* a `unittest.TestCase` to avoid triggering pytest's legacy compatibility modes.
 *   **Prefer `pytest` assertions**: Write normal Python `assert a == b` statements instead of using legacy `unittest` assertion helpers (like `self.assertEqual`). The helpers are only kept for backwards compatibility during migration.
-*   Test classes themselves act as `AsyncResource`s. Test setup and teardown should be implemented via `_enter_lifespan`.
+*   Test classes themselves act as `AsyncResource`s. Test setup and teardown should be implemented via `_enter_lifespan` (or a `lifespan` context manager), **not** `setUp`/`tearDown` (which raise).
+*   **Tests run under both `asyncio` and `trio`** by default, which enforces that your code is loop-agnostic. Pin an inherently asyncio-only component to a single backend with `_anyio_backends = ["asyncio"]` on the test class (e.g. anything built on `websockets`).
 
 ---
 
@@ -90,19 +94,22 @@ When writing new code or merging upstream changes, strictly adhere to the follow
 *   **Rule**: Do not use manual timeout loops (polling `time.time()` in a loop). Do not add `timeout` arguments to public APIs.
 *   **Rationale**: Anyio provides structured timeout context managers which are safer and more flexible. Adding `timeout` to every function clutters the API.
 *   **Resolution**:
-    *   Use `async with anyio.fail_after(timeout):` to bound operations.
+    *   Use `with anyio.fail_after(timeout):` to bound operations. Note that `fail_after` (and `move_on_after`) are *synchronous* context managers, so use plain `with`, not `async with`.
     *   Only use internal timeouts if the implementation requires specific hardware-level timeouts that the user cannot configure.
+    *   **Caveat**: `fail_after` does **not** interrupt a blocking call already running inside `anyio.to_thread.run_sync` — the worker thread is shielded by default. Wrapping `to_thread.run_sync` in `fail_after` will not bound wall-clock time unless you also pass `abandon_on_cancel=True`.
 
 ### 3d. No `asyncio`
-*   **Rule**: Do not import or use `asyncio` APIs directly (e.g., `asyncio.sleep`, `asyncio.create_task`, `unittest.AsyncMock`).
+*   **Rule**: Do not import or use `asyncio` APIs directly (e.g., `asyncio.sleep`, `asyncio.create_task`, `unittest.mock.AsyncMock`).
 *   **Rationale**: Code must remain loop-agnostic by using `anyio`.
 *   **Resolution**: Use `anyio` equivalents. Use `pylabrobot.testing.mock_io.MockIO` instead of `AsyncMock` to avoid deadlocks in mock reader loops.
+*   **Exception**: A few components are inherently `asyncio`-only (e.g. those built on `websockets`, or the legacy `global_manager`). These must guard their entry with a `sniffio.current_async_library()` check that raises on non-`asyncio` backends, rather than silently misbehaving.
 
 ### 3e. No `time.sleep` or `time.monotonic`
 *   **Rule**: Do not use blocking time functions.
 *   **Resolution**:
     *   Replace `time.sleep(t)` with `await anyio.sleep(t)`.
     *   Replace `time.monotonic()` or `time.time()` (for duration tracking) with `anyio.current_time()`.
+    *   **Exception**: Do not blindly convert *API-facing* `time.time()` calls (e.g. a wall-clock timestamp returned to the user) — that is a different clock. Only convert `time.*` calls used for internal duration tracking or sleeps.
 
 ### 3f. Avoid Background Threads
 *   **Rule**: Avoid long-running background threads. PLR concurrency should be I/O-bound and run on the async event loop.
