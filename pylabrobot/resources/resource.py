@@ -6,7 +6,8 @@ import json
 import logging
 import re
 import sys
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union, cast
+from collections.abc import Iterable, Mapping
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 from pylabrobot.events import coordinate_reference, emit_event, resource_reference
 from pylabrobot.serializer import SerializableMixin, deserialize, serialize
@@ -66,7 +67,20 @@ DidUnassignResourceCallback = Callable[["Resource"], None]
 ResourceDidUpdateState = Callable[[Dict[str, Any]], None]
 
 
-def _match_top_level_attribute(resource: "Resource", attr_name: str, matcher: Any) -> bool:
+def _match_top_level_attribute(resource: Resource, attr_name: str, matcher: Any) -> bool:
+  """Return whether ``resource``'s top-level attribute ``attr_name`` matches ``matcher``.
+
+  The interpretation of ``matcher`` depends on its kind:
+
+  - For ``attr_name == "type"``: a class (or tuple of classes) is matched with
+    ``isinstance``; a ``str`` is compared against the class name; an
+    ``re.Pattern`` is ``search``-ed against the class name; a callable receives
+    the *resource itself*. Anything else does not match.
+  - For any other attribute: an ``re.Pattern`` is ``search``-ed against
+    ``str(attr_val)``; a callable receives the *attribute value*; otherwise
+    equality is checked. Note the callable receives different arguments than in
+    the ``"type"`` case.
+  """
   if attr_name == "type":
     if inspect.isclass(matcher) or (
       isinstance(matcher, tuple) and all(inspect.isclass(c) for c in matcher)
@@ -88,12 +102,22 @@ def _match_top_level_attribute(resource: "Resource", attr_name: str, matcher: An
   return bool(attr_val == matcher)
 
 
-def _match_metadata_entry(resource: "Resource", key: str, expected: Any) -> bool:
+def _match_metadata_entry(resource: Resource, key: str, expected: Any) -> bool:
+  """Return whether ``resource``'s metadata entry ``key`` matches ``expected``.
+
+  If ``expected`` is callable it is treated as a *predicate* and called with
+  ``resource.metadata.get(key)`` (i.e. ``None`` when the key is absent).
+  Otherwise the key must be present and its value equal to ``expected``.
+
+  Consequence: a callable stored *as a metadata value* cannot be matched by
+  equality through this path -- it would itself be invoked as the predicate. To
+  match such a value by identity, pass a predicate explicitly, e.g.
+  ``lambda v: v is my_object``.
+  """
   val = resource.metadata.get(key)
   if callable(expected):
     return bool(expected(val))
   return key in resource.metadata and val == expected
-
 
 
 class Resource(SerializableMixin):
@@ -123,7 +147,7 @@ class Resource(SerializableMixin):
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
     preferred_pickup_location: Optional[Coordinate] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Mapping[str, Any] | None = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -135,7 +159,10 @@ class Resource(SerializableMixin):
     self.model = model
     self.barcode = barcode
     self.preferred_pickup_location = preferred_pickup_location
-    self.metadata: Dict[str, Any] = metadata.copy() if metadata is not None else {}
+    # Shallow copy: top-level keys are decoupled from the caller's mapping, but
+    # nested containers/objects remain shared. Deep-copy before passing in if you
+    # need full isolation of mutable metadata values.
+    self.metadata: dict[str, Any] = dict(metadata) if metadata is not None else {}
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
@@ -653,41 +680,64 @@ class Resource(SerializableMixin):
 
   def find_resources(
     self,
-    fn: Optional[Callable[["Resource"], bool]] = None,
+    fn: Callable[[Resource], bool] | None = None,
     *,
-    metadata: Optional[Dict[str, Any]] = None,
-    has_metadata: Optional[Union[str, Iterable[str]]] = None,
+    metadata: Mapping[str, Any] | None = None,
+    has_metadata: str | Iterable[str] | None = None,
     recursive: bool = True,
     **kwargs: Any,
-  ) -> List["Resource"]:
-    """Find resources matching top-level attributes, metadata criteria, and/or predicate functions.
+  ) -> list[Resource]:
+    """Find resources matching top-level attributes, metadata, and/or a predicate.
+
+    All supplied criteria must match (logical AND). The search always includes
+    ``self`` in addition to its children, so e.g. ``deck.find_resources()`` with
+    no criteria returns the deck itself plus every descendant.
 
     Args:
-      fn: Optional predicate function receiving a Resource and returning True if it matches.
-      metadata: Dict of metadata key-value pairs that must match. If value is callable,
-        it receives metadata.get(key). Otherwise, exact equality is checked.
-      has_metadata: Single key string or iterable of key strings that must be present in metadata.
-      recursive: If True, searches self and all descendants. If False, searches self and direct children.
-      **kwargs: Shorthand for top-level attributes ('name', 'type', 'model', 'category')
-        or metadata key-value pairs.
+      fn: Optional predicate receiving a Resource and returning True if it matches.
+      metadata: Metadata key-value pairs that must all match. If a value is
+        callable it is treated as a predicate receiving ``metadata.get(key)``
+        (``None`` when absent); otherwise the key must be present and equal.
+      has_metadata: A single key or iterable of keys that must be present in
+        metadata (values are not inspected).
+      recursive: If True, search self and all descendants. If False, search self
+        and direct children only.
+      **kwargs: Shorthand matchers. Keys in ('name', 'type', 'model', 'category')
+        match the corresponding top-level attribute; any other key is treated as
+        a metadata matcher (same semantics as ``metadata``). For ``type`` the
+        matcher may be a class or tuple of classes (``isinstance``), a string or
+        ``re.Pattern`` (matched against the class name), or a callable receiving
+        the resource. For the other attributes a callable receives the attribute
+        value, an ``re.Pattern`` is matched against ``str(value)``, and any other
+        value is compared for equality.
 
     Returns:
-      List of matching Resource instances.
+      List of matching Resource instances. ``self`` is considered first (so it
+      appears first if it matches), followed by its descendants in
+      ``get_all_children`` order (direct children before deeper descendants).
+
+    Note:
+      The reserved keys ('name', 'type', 'model', 'category') always refer to the
+      top-level attribute, so a metadata key of the same name is shadowed when
+      passed as a kwarg. Query such a metadata key via the explicit ``metadata=``
+      argument instead, e.g. ``find_resources(metadata={"type": "solvent"})``. A
+      misspelled reserved key is silently treated as a (usually absent) metadata
+      key and matches nothing.
     """
     candidates = [self] + (self.get_all_children() if recursive else self.children)
-    results: List[Resource] = []
+    results: list[Resource] = []
 
     reserved_keys = {"name", "type", "model", "category"}
 
     top_level_matchers = {k: v for k, v in kwargs.items() if k in reserved_keys}
     extra_metadata_matchers = {k: v for k, v in kwargs.items() if k not in reserved_keys}
 
-    combined_metadata_matchers: Dict[str, Any] = {}
+    combined_metadata_matchers: dict[str, Any] = {}
     if metadata is not None:
       combined_metadata_matchers.update(metadata)
     combined_metadata_matchers.update(extra_metadata_matchers)
 
-    has_keys: List[str] = []
+    has_keys: list[str] = []
     if isinstance(has_metadata, str):
       has_keys = [has_metadata]
     elif has_metadata is not None:
@@ -714,14 +764,19 @@ class Resource(SerializableMixin):
 
   def find_resource(
     self,
-    fn: Optional[Callable[["Resource"], bool]] = None,
+    fn: Callable[[Resource], bool] | None = None,
     *,
-    metadata: Optional[Dict[str, Any]] = None,
-    has_metadata: Optional[Union[str, Iterable[str]]] = None,
+    metadata: Mapping[str, Any] | None = None,
+    has_metadata: str | Iterable[str] | None = None,
     recursive: bool = True,
     **kwargs: Any,
-  ) -> Optional["Resource"]:
-    """Find the first matching resource, or None if not found."""
+  ) -> Resource | None:
+    """Find the first matching resource, or None if not found.
+
+    Accepts the same arguments as :meth:`find_resources` and returns its first
+    result (``self`` is checked first, so it may be returned), or ``None`` if
+    nothing matches.
+    """
     results = self.find_resources(
       fn=fn,
       metadata=metadata,
@@ -890,7 +945,12 @@ class Resource(SerializableMixin):
     subclass = find_subclass(data["type"], cls=Resource)
     if subclass is None:
       raise ValueError(f'Could not find subclass with name "{data["type"]}"')
-    assert issubclass(subclass, cls) or subclass.__name__ == cls.__name__  # handle module alias imports
+    # The name-equality fallback tolerates a class that is imported under two
+    # different module paths (e.g. `pylabrobot...Resource` and a vendored alias):
+    # the two class objects are distinct, so `issubclass` is False even though
+    # they are logically the same class. Note this is a name-only check, so two
+    # genuinely different classes that share a short name would also pass here.
+    assert issubclass(subclass, cls) or subclass.__name__ == cls.__name__
 
     for key in [
       "type",
@@ -911,7 +971,9 @@ class Resource(SerializableMixin):
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
     if metadata_data is not None:
-      resource.metadata = cast(Dict[str, Any], deserialize(metadata_data, allow_marshal=allow_marshal))
+      resource.metadata = cast(
+        dict[str, Any], deserialize(metadata_data, allow_marshal=allow_marshal)
+      )
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
