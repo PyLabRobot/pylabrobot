@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import inspect
 import itertools
 import json
 import logging
+import re
 import sys
-from typing import Any, Callable, Dict, List, Optional, Union, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union, cast
 
 from pylabrobot.events import coordinate_reference, emit_event, resource_reference
 from pylabrobot.serializer import SerializableMixin, deserialize, serialize
@@ -64,6 +66,36 @@ DidUnassignResourceCallback = Callable[["Resource"], None]
 ResourceDidUpdateState = Callable[[Dict[str, Any]], None]
 
 
+def _match_top_level_attribute(resource: "Resource", attr_name: str, matcher: Any) -> bool:
+  if attr_name == "type":
+    if inspect.isclass(matcher) or (
+      isinstance(matcher, tuple) and all(inspect.isclass(c) for c in matcher)
+    ):
+      return isinstance(resource, matcher)
+    if isinstance(matcher, str):
+      return resource.__class__.__name__ == matcher
+    if isinstance(matcher, re.Pattern):
+      return bool(matcher.search(resource.__class__.__name__))
+    if callable(matcher):
+      return bool(matcher(resource))
+    return False
+
+  attr_val = getattr(resource, attr_name, None)
+  if isinstance(matcher, re.Pattern):
+    return attr_val is not None and bool(matcher.search(str(attr_val)))
+  if callable(matcher):
+    return bool(matcher(attr_val))
+  return bool(attr_val == matcher)
+
+
+def _match_metadata_entry(resource: "Resource", key: str, expected: Any) -> bool:
+  val = resource.metadata.get(key)
+  if callable(expected):
+    return bool(expected(val))
+  return key in resource.metadata and val == expected
+
+
+
 class Resource(SerializableMixin):
   """Base class for deck resources.
 
@@ -91,6 +123,7 @@ class Resource(SerializableMixin):
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
     preferred_pickup_location: Optional[Coordinate] = None,
+    metadata: Optional[Dict[str, Any]] = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -102,6 +135,7 @@ class Resource(SerializableMixin):
     self.model = model
     self.barcode = barcode
     self.preferred_pickup_location = preferred_pickup_location
+    self.metadata: Dict[str, Any] = metadata.copy() if metadata is not None else {}
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
@@ -145,6 +179,8 @@ class Resource(SerializableMixin):
       data["barcode"] = self.barcode.serialize()
     if self.preferred_pickup_location is not None:
       data["preferred_pickup_location"] = serialize(self.preferred_pickup_location)
+    if self.metadata:
+      data["metadata"] = serialize(self.metadata)
     if self.children:
       data["children"] = [child.serialize() for child in self.children]
     if self.parent is not None:
@@ -177,6 +213,7 @@ class Resource(SerializableMixin):
       and self.location == other.location
       and self.category == other.category
       and self.children == other.children
+      and self.metadata == other.metadata
     )
 
   def __repr__(self) -> str:
@@ -614,6 +651,86 @@ class Resource(SerializableMixin):
 
     raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
 
+  def find_resources(
+    self,
+    fn: Optional[Callable[["Resource"], bool]] = None,
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+    has_metadata: Optional[Union[str, Iterable[str]]] = None,
+    recursive: bool = True,
+    **kwargs: Any,
+  ) -> List["Resource"]:
+    """Find resources matching top-level attributes, metadata criteria, and/or predicate functions.
+
+    Args:
+      fn: Optional predicate function receiving a Resource and returning True if it matches.
+      metadata: Dict of metadata key-value pairs that must match. If value is callable,
+        it receives metadata.get(key). Otherwise, exact equality is checked.
+      has_metadata: Single key string or iterable of key strings that must be present in metadata.
+      recursive: If True, searches self and all descendants. If False, searches self and direct children.
+      **kwargs: Shorthand for top-level attributes ('name', 'type', 'model', 'category')
+        or metadata key-value pairs.
+
+    Returns:
+      List of matching Resource instances.
+    """
+    candidates = [self] + (self.get_all_children() if recursive else self.children)
+    results: List[Resource] = []
+
+    reserved_keys = {"name", "type", "model", "category"}
+
+    top_level_matchers = {k: v for k, v in kwargs.items() if k in reserved_keys}
+    extra_metadata_matchers = {k: v for k, v in kwargs.items() if k not in reserved_keys}
+
+    combined_metadata_matchers: Dict[str, Any] = {}
+    if metadata is not None:
+      combined_metadata_matchers.update(metadata)
+    combined_metadata_matchers.update(extra_metadata_matchers)
+
+    has_keys: List[str] = []
+    if isinstance(has_metadata, str):
+      has_keys = [has_metadata]
+    elif has_metadata is not None:
+      has_keys = list(has_metadata)
+
+    for resource in candidates:
+      if any(k not in resource.metadata for k in has_keys):
+        continue
+
+      if any(not _match_top_level_attribute(resource, k, v) for k, v in top_level_matchers.items()):
+        continue
+
+      if any(
+        not _match_metadata_entry(resource, k, v) for k, v in combined_metadata_matchers.items()
+      ):
+        continue
+
+      if fn is not None and not fn(resource):
+        continue
+
+      results.append(resource)
+
+    return results
+
+  def find_resource(
+    self,
+    fn: Optional[Callable[["Resource"], bool]] = None,
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+    has_metadata: Optional[Union[str, Iterable[str]]] = None,
+    recursive: bool = True,
+    **kwargs: Any,
+  ) -> Optional["Resource"]:
+    """Find the first matching resource, or None if not found."""
+    results = self.find_resources(
+      fn=fn,
+      metadata=metadata,
+      has_metadata=has_metadata,
+      recursive=recursive,
+      **kwargs,
+    )
+    return results[0] if results else None
+
   def rotate(self, x: float = 0, y: float = 0, z: float = 0):
     """Rotate counter-clockwise by the given number of degrees."""
 
@@ -773,7 +890,7 @@ class Resource(SerializableMixin):
     subclass = find_subclass(data["type"], cls=Resource)
     if subclass is None:
       raise ValueError(f'Could not find subclass with name "{data["type"]}"')
-    assert issubclass(subclass, cls)  # mypy does not know the type after the None check...
+    assert issubclass(subclass, cls) or subclass.__name__ == cls.__name__  # handle module alias imports
 
     for key in [
       "type",
@@ -785,6 +902,7 @@ class Resource(SerializableMixin):
     rotation = data_copy.pop("rotation", None)
     barcode = data_copy.pop("barcode", None)
     preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
+    metadata_data = data_copy.pop("metadata", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
     if rotation is not None:
       resource.rotation = deserialize(rotation)  # not pretty, should be done in init.
@@ -792,6 +910,8 @@ class Resource(SerializableMixin):
       resource.barcode = Barcode(**barcode)
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
+    if metadata_data is not None:
+      resource.metadata = cast(Dict[str, Any], deserialize(metadata_data, allow_marshal=allow_marshal))
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
@@ -805,7 +925,7 @@ class Resource(SerializableMixin):
         raise ValueError(f"Child resource '{child.name}' has no location.")
       resource.assign_child_resource(child, location=location)
 
-    return resource
+    return cast(Self, resource)
 
   @classmethod
   def load_from_json_file(cls, json_file: str) -> Self:  # type: ignore

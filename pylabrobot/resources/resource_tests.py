@@ -708,3 +708,104 @@ class TestAssignChildByAnchor(unittest.TestCase):
     with self.assertRaises(ValueError) as context:
       self.parent.assign_child_by_anchor(child, parent_anchor="ccb", child_anchor="ccbb")
     self.assertIn("must be exactly 3 characters", str(context.exception))
+
+  def test_metadata_init_and_equality(self):
+    r1 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 1, "is_clean": True})
+    r2 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 1, "is_clean": True})
+    r3 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 2, "is_clean": True})
+
+    self.assertEqual(r1.metadata, {"a": 1, "is_clean": True})
+    self.assertEqual(r1, r2)
+    self.assertNotEqual(r1, r3)
+
+  def test_metadata_serialization_deserialization(self):
+    meta = {"string": "hello", "int": 42, "bool": False, "list": [1, 2, 3], "nested": {"k": "v"}}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized = r.serialize()
+    self.assertEqual(serialized["metadata"], meta)
+
+    deserialized = Resource.deserialize(serialized)
+    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized, r)
+
+  def test_find_resources_metadata(self):
+    import re
+    deck = Resource("deck", size_x=100, size_y=100, size_z=10)
+    plate = Resource(
+      "plate1",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      category="plate",
+      model="m1",
+      metadata={"liquid": "water", "concentration_mM": 100, "is_clean": True, "pH": 7.0},
+    )
+    well = Resource("well1", size_x=1, size_y=1, size_z=1)
+    trough = Resource(
+      "trough1",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      category="trough",
+      model="m2",
+      metadata={"liquid": "buffer", "concentration_mM": 50, "is_clean": False},
+    )
+    waste = Resource(
+      "waste1",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      category="waste",
+      metadata={"liquid": "water", "concentration_mM": 0},
+    )
+
+    deck.assign_child_resource(plate, location=Coordinate(0, 0, 0))
+    plate.assign_child_resource(well, location=Coordinate(0, 0, 0))
+    deck.assign_child_resource(trough, location=Coordinate(20, 0, 0))
+    deck.assign_child_resource(waste, location=Coordinate(40, 0, 0))
+
+    # Strict value equality
+    self.assertEqual(deck.find_resources(liquid="water"), [plate, waste])
+    self.assertEqual(deck.find_resources(is_clean=True), [plate])
+    self.assertEqual(deck.find_resources(is_clean=False), [trough])
+
+    # Key presence check via has_metadata
+    self.assertEqual(deck.find_resources(has_metadata="pH"), [plate])
+    self.assertEqual(
+      set(deck.find_resources(has_metadata=["liquid", "concentration_mM"])), {plate, trough, waste}
+    )
+
+    # Callable exception on metadata.get(key)
+    self.assertEqual(
+      deck.find_resources(concentration_mM=lambda v: v is not None and v > 20), [plate, trough]
+    )
+    self.assertEqual(deck.find_resources(pH=lambda v: v is not None and v == 7.0), [plate])
+    self.assertEqual(
+      set(deck.find_resources(pH=lambda v: v is None)), {deck, well, trough, waste}
+    )
+
+    # Top-level attribute reserved kwargs (name, type, model, category)
+    self.assertEqual(deck.find_resources(name="plate1"), [plate])
+    self.assertEqual(deck.find_resources(name=re.compile(r"^(plate|trough)")), [plate, trough])
+    self.assertEqual(deck.find_resources(category="plate"), [plate])
+    self.assertEqual(deck.find_resources(model="m2"), [trough])
+    self.assertEqual(
+      set(deck.find_resources(type=Resource)), {deck, plate, well, trough, waste}
+    )
+
+    # Custom predicate fn
+    self.assertEqual(
+      deck.find_resources(
+        fn=lambda r: r.get_size_x() == 10 and r.metadata.get("concentration_mM") == 100
+      ),
+      [plate],
+    )
+
+    # find_resource singular
+    self.assertEqual(deck.find_resource(name="trough1"), trough)
+    self.assertIsNone(deck.find_resource(name="nonexistent"))
+
+    # Non-recursive search
+    self.assertEqual(deck.find_resources(name="plate1", recursive=False), [plate])
+    self.assertEqual(deck.find_resources(name="well1", recursive=False), [])
+    self.assertEqual(deck.find_resources(name="well1", recursive=True), [well])
