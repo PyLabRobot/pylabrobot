@@ -14,6 +14,18 @@ This package contains APIs for working with centrifuges.
     centrifuge.Loader
 
 
+Factory functions
+-----------------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    access2.Access2
+    highres.microspin.MicroSpin
+
+
 Backends
 --------
 
@@ -40,4 +52,16 @@ Errors
     standard.LoaderNoPlateError
     standard.NotAtBucketError
     highres.microspin_backend.MicroSpinError
+    highres.microspin_backend.MicroSpinAbortedError
     highres.microspin_backend.MicroSpinProtocolError
+
+
+Testing utilities
+-----------------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    highres.mock_server.MicroSpinMockServer

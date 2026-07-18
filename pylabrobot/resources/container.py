@@ -4,12 +4,16 @@ from pylabrobot.serializer import serialize
 from pylabrobot.utils.interpolation import interpolate_1d
 
 from .coordinate import Coordinate
+from .lid import Liddable
 from .resource import Resource
 from .volume_tracker import VolumeTracker
 
 
-class Container(Resource):
-  """A container is an abstract base class for a resource that can hold liquid."""
+class Container(Liddable, Resource):
+  """A container is an abstract base class for a resource that can hold liquid.
+
+  Via the :class:`Liddable` mixin, a container (trough, tube, petri dish, well) can host a lid.
+  """
 
   def __init__(
     self,
@@ -79,6 +83,9 @@ class Container(Resource):
 
     self.max_volume = max_volume or (size_x * size_y * size_z)
     self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
+    # Notify state-update subscribers (e.g. the Visualizer) on volume changes; without this
+    # a bare Container like a Trough updates its volume internally but never broadcasts it.
+    self.tracker.register_callback(self._state_updated)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
     self.no_go_zones: List[Tuple[Coordinate, Coordinate]] = self._validate_no_go_zones(

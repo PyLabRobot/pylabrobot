@@ -61,7 +61,7 @@ class Socket(IOBase):
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding):
     await super()._enter_lifespan(stack)
     await self._connect()
-    stack.push_async_callback(self._disconnect)
+    stack.push_shielded_async_callback(self._disconnect, shield_timeout=5)
 
   async def _connect(self):
     raw_stream = await anyio.connect_tcp(self._host, self._port)

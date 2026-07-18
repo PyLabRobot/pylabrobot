@@ -92,6 +92,7 @@ tr > td:nth-child(5) { width: 15%; }
 |--------------|---------|-------------|--------|
 | Agilent | VSpin | Mostly | {doc}`PLR <01_material-handling/centrifuge/agilent_vspin>` / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
 | Agilent | VSpin Access2 Loader | Full | [PLR](01_material-handling/centrifuge/agilent_vspin.ipynb#loader) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
+| HighRes Biosolutions | MicroSpin | Mostly | {doc}`PLR <01_material-handling/centrifuge/highres_microspin>` / [OEM](https://highresbio.com/microspin/) |
 | Hettich | SBS 300 R | WIP | [OEM](https://www.hettweb.com/products/sbs300robotic/) |
 | Hettich | ROTANTA 460 Robotic | WIP | [OEM](https://www.hettichlab.com/) |
 | Hettich | Other Generation 2 robotic centrifuges | WIP | [OEM](https://www.hettichlab.com/) |

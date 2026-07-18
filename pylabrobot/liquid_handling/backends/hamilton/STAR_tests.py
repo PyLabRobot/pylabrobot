@@ -2,6 +2,7 @@
 
 import contextlib
 import copy
+import datetime
 import unittest
 import unittest.mock
 from typing import Literal, cast
@@ -9,7 +10,7 @@ from typing import Literal, cast
 from pylabrobot.arms.standard import CartesianCoords
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.standard import GripDirection, Pickup
+from pylabrobot.liquid_handling.standard import GripDirection, Mix, Pickup
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.chatterbox import PlateReaderChatterboxBackend
 from pylabrobot.resources import (
@@ -18,13 +19,13 @@ from pylabrobot.resources import (
   PLT_CAR_P3AC_A01,
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
-  AGenBio_1_troughplate_190000uL_Fl,
-  CellTreat_96_wellplate_350ul_Ub,
   Container,
   Coordinate,
-  Cor_96_wellplate_360ul_Fb,
   Lid,
   ResourceStack,
+  agenbio_1_troughplate_190mL_Fl,
+  celltreat_96_wellplate_350uL_Ub,
+  cor_96_wellplate_360uL_Fb,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
   no_volume_tracking,
@@ -41,6 +42,8 @@ from .STAR_backend import (
   HamiltonLiquidHandler,
   HamiltonNoTipError,
   HardwareError,
+  Head96Information,
+  PipChannelInformation,
   STARBackend,
   STARFirmwareError,
   UnknownHamiltonError,
@@ -153,6 +156,120 @@ def _any_write_and_read_command_call(cmd):
     read_timeout=unittest.mock.ANY,
     wait=unittest.mock.ANY,
   )
+
+
+def _make_head96_information(star):
+  """A representative installed-96-head record (2021 legacy) for command tests."""
+  fw = datetime.date(2021, 10, 22)
+  return Head96Information(
+    fw_version=fw,
+    x_offset=368.2,
+    supports_clot_monitoring_clld=False,
+    stop_disc_type="core_ii",
+    instrument_type="legacy",
+    head_type="96 head II",
+    z_range=star._head96_resolve_z_range("legacy"),
+  )
+
+
+def _stub_mix96_motion(star):
+  """Stub the 96-head primitives mix96 orchestrates so tests can assert the arguments it passes
+  without touching firmware. Tips present; iSWAP already parked via setUp."""
+  star._head96_information = _make_head96_information(star)
+  star.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
+  for method in (
+    "move_all_channels_in_z_safety",
+    "head96_move_to_z_safety",
+    "head96_move_z",
+    "head96_move_x",
+    "head96_move_y",
+    "head96_move_tool_z",
+    "head96_experimental_aspirate",
+    "head96_experimental_dispense",
+  ):
+    setattr(star, method, unittest.mock.AsyncMock())
+
+
+class TestPipChannelInformationParsing(unittest.TestCase):
+  """VW (pip channel hardware-configuration) response parsing.
+
+  Regression coverage for the IndexError on short-form VW replies
+  (e.g. ``vw0 0``) returned by some post-2016 firmwares.
+  """
+
+  def test_short_form_two_fields_does_not_raise(self):
+    """Short 2-field reply (the captured `vw0 0`) should parse to baseline defaults, not raise."""
+    result = STARBackend._parse_pip_channel_information("P1VWid0001vw0 0")
+    self.assertEqual(
+      result,
+      PipChannelInformation(
+        channel_type="ML_STAR",
+        head_type="ML_STAR",
+        stop_disc_type="core_i",
+        pressure_adc="Renesas_X9268",
+      ),
+    )
+
+  def test_full_form_four_fields(self):
+    """Full 4-field reply should parse each non-baseline code to its mapped value."""
+    result = STARBackend._parse_pip_channel_information("P1VWid0001vw1 1 1 1")
+    self.assertEqual(
+      result,
+      PipChannelInformation(
+        channel_type="ML_STAR_RPC",
+        head_type="ML_STAR_PLE",
+        stop_disc_type="core_ii",
+        pressure_adc="Analog_Devices_AD5263",
+      ),
+    )
+
+  def test_head_type_code_two_maps_to_rpc(self):
+    """head_type code `2` should map to ML_STAR_RPC (the otherwise-uncovered branch)."""
+    result = STARBackend._parse_pip_channel_information("P1VWid0001vw0 2 0 0")
+    self.assertEqual(result.head_type, "ML_STAR_RPC")
+
+  def test_three_fields_defaults_only_the_missing_trailing_field(self):
+    """Present tokens should be honored; only the absent trailing field should default.
+
+    stop_disc_type is present (-> core_ii); pressure_adc is absent (-> default Renesas).
+    """
+    result = STARBackend._parse_pip_channel_information("P1VWid0001vw1 1 1")
+    self.assertEqual(
+      result,
+      PipChannelInformation(
+        channel_type="ML_STAR_RPC",
+        head_type="ML_STAR_PLE",
+        stop_disc_type="core_ii",
+        pressure_adc="Renesas_X9268",
+      ),
+    )
+
+  def test_empty_field_list_raises_value_error(self):
+    """Zero fields should raise ValueError -- a malformed reply, distinct from a known short form."""
+    with self.assertRaises(ValueError):
+      STARBackend._parse_pip_channel_information("P1VWid0001vw")
+
+  def test_full_form_parity_across_all_combinations(self):
+    """Every 4-field reply should parse identically to the historical logic.
+
+    Only absent fields are newly defaulted; present fields are unchanged. `legacy`
+    below is the genuine pre-fix implementation, so this is a real parity oracle.
+    """
+    import itertools
+
+    def legacy(resp: str) -> PipChannelInformation:
+      hw = resp.split("vw")[-1].strip().split()
+      return PipChannelInformation(
+        channel_type="ML_STAR_RPC" if hw[0] == "1" else "ML_STAR",
+        head_type="ML_STAR_PLE" if hw[1] == "1" else "ML_STAR_RPC" if hw[1] == "2" else "ML_STAR",
+        stop_disc_type="core_i" if hw[2] == "0" else "core_ii",
+        pressure_adc="Analog_Devices_AD5263" if hw[3] == "1" else "Renesas_X9268",
+      )
+
+    for a, b, c, d in itertools.product(["0", "1", "2"], repeat=4):
+      resp = f"P1VWid0001vw{a} {b} {c} {d}"
+      with self.subTest(resp=resp):
+        self.assertEqual(STARBackend._parse_pip_channel_information(resp), legacy(resp))
 
 
 class TestiSWAPForwardKinematics(unittest.TestCase):
@@ -370,6 +487,103 @@ class TestChatterboxiSWAPSetup(AnyioTestBase):
         _ = cb.iswap_information
 
 
+class TestHead96DriveDefaults(AnyioTestBase):
+  """The Y/Z drive speed/acceleration defaults are read from the machine into mutable STARBackend
+  attributes at setup (and are user-overridable); the dispensing/squeezer factory facts stay on the
+  frozen Head96Information record."""
+
+  @staticmethod
+  def _make_cb() -> STARChatterboxBackend:
+    cb = STARChatterboxBackend()  # mocks a 2023 (2013+) head
+    cb.set_deck(STARLetDeck())
+    return cb
+
+  async def test_setup_seeds_yz_defaults_from_machine(self):
+    """setup seeds the mutable Y/Z defaults from the machine registers; dispensing/squeezer stay
+    on the frozen record with their 2013+ firmware values."""
+    cb = self._make_cb()
+    async with cb:
+      info = cb._head96_information
+      assert info is not None
+      # Y/Z defaults: read from the machine into mutable backend attributes.
+      self.assertAlmostEqual(cb.head96_y_drive_speed_default, 390.62, places=2)
+      self.assertAlmostEqual(cb.head96_y_drive_acceleration_default, 546.88, places=2)
+      self.assertEqual(cb.head96_z_drive_speed_default, 85.0)
+      self.assertEqual(cb.head96_z_drive_acceleration_default, 400.0)
+      # Dispensing/squeezer factory defaults still live on the frozen record.
+      self.assertEqual(info.dispensing_drive_speed_default, 261.1)
+      self.assertAlmostEqual(info.dispensing_drive_acceleration_default, 17406.84, places=2)
+      self.assertAlmostEqual(info.squeezer_drive_speed_default, 15.86, places=2)
+      self.assertAlmostEqual(info.squeezer_drive_acceleration_default, 62.6, places=2)
+
+  async def test_yz_default_is_user_overridable_and_range_checked(self):
+    """A machine-seeded Y/Z default can be reassigned; an out-of-range value is rejected."""
+    cb = self._make_cb()
+    async with cb:
+      cb.head96_y_drive_speed_default = 100.0
+      self.assertEqual(cb.head96_y_drive_speed_default, 100.0)
+      with self.assertRaises(ValueError):
+        cb.head96_y_drive_speed_default = 10_000.0  # outside y_speed_range
+
+
+class TestHead96CrashRecovery(AnyioTestBase):
+  """head96_move_stop_disk_z retracts the head to Z-safety on a firmware error then re-raises, and
+  the retract - which routes back through the same primitive - cannot recurse."""
+
+  async def _enter_lifespan(self, stack):
+    self.cb = STARChatterboxBackend()
+    self.cb.set_deck(STARLetDeck())
+    await stack.enter_async_context(self.cb)
+    assert self.cb._head96_information is not None
+    z_min, z_max = self.cb._head96_information.z_range
+    self.z_target = round((z_min + z_max) / 2, 1)
+    self.move_za = f"{self.cb._head96_z_drive_mm_to_increment(self.z_target):05}"
+    self.z_safety_za = f"{self.cb._head96_z_drive_mm_to_increment(z_max):05}"
+    self.cb.head96_request_z_speed = unittest.mock.AsyncMock(return_value=85.0)
+    self.cb.head96_request_z_acceleration = unittest.mock.AsyncMock(return_value=400.0)
+    self.cb._head96_set_z_speed = unittest.mock.AsyncMock()
+    self.cb._head96_set_z_acceleration = unittest.mock.AsyncMock()
+    self.cb.send_command = unittest.mock.AsyncMock()
+
+  def _crash(self, message):
+    return STARFirmwareError(
+      errors={
+        "CoRe 96 Head": UnknownHamiltonError(
+          message=message, trace_information=62, raw_response=message, raw_module="H0"
+        )
+      },
+      raw_response=message,
+    )
+
+  async def test_crash_retracts_to_z_safety_then_reraises(self):
+    """A ZA firmware error retracts the head to z_range[1] (a second ZA) before the original error
+    propagates."""
+    original = self._crash("z drive movement error")
+    # ZA #1 is the move (crashes); ZA #2 is the safety retract (succeeds).
+    self.cb.send_command.side_effect = [original, {}]
+
+    with self.assertRaises(STARFirmwareError) as ctx:
+      await self.cb.head96_move_stop_disk_z(self.z_target)
+
+    assert ctx.exception is original
+    za_targets = [call.kwargs["za"] for call in self.cb.send_command.await_args_list]
+    self.assertEqual(za_targets, [self.move_za, self.z_safety_za])
+
+  async def test_retract_that_also_crashes_does_not_recurse(self):
+    """If the safety retract itself errors, exactly two ZA moves are sent (no recursion) and the
+    ORIGINAL error re-raises, not the retract's."""
+    original = self._crash("original crash")
+    retract_err = self._crash("retract crash")
+    # ZA #1 (move) and ZA #2 (retract) both crash; the retract must not recurse into a third ZA.
+    self.cb.send_command.side_effect = [original, retract_err]
+
+    with self.assertRaises(STARFirmwareError) as ctx:
+      await self.cb.head96_move_stop_disk_z(self.z_target)
+
+    assert ctx.exception is original
+    self.assertEqual(self.cb.send_command.await_count, 2)
+
+
 class TestiSWAPYMaxBootstrap(AnyioTestBase):
   """`_iswap_rotation_drive_request_y_max` runs during setup, before
   `iswap_information` exists, so it must not read it (regression: it used to,
@@ -474,7 +688,7 @@ class TestSTARLiquidHandlerCommands(AnyioTestBase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
+    self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
     lid = Lid(
       name="plate_01_lid",
       size_x=self.plate.get_size_x(),
@@ -484,7 +698,7 @@ class TestSTARLiquidHandlerCommands(AnyioTestBase):
     )
     self.plate.assign_child_resource(lid)
     assert self.plate.lid is not None
-    self.plt_car[1] = self.other_plate = Cor_96_wellplate_360ul_Fb(name="plate_02")
+    self.plt_car[1] = self.other_plate = cor_96_wellplate_360uL_Fb(name="plate_02")
     lid = Lid(
       name="plate_02_lid",
       size_x=self.other_plate.get_size_x(),
@@ -793,6 +1007,41 @@ class TestSTARLiquidHandlerCommands(AnyioTestBase):
       ]
     )
 
+  async def test_aspirate_rejects_over_tip_capacity(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})  # 300 uL filter tip, max 360
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    well = self.plate.get_item("A1")
+    # pre-wetting peak (volume + pre_wetting) exceeds the tip max
+    well.tracker.set_volume(300)
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([well], vols=[100], pre_wetting_volume=[300])
+    # transport-air peak (volume + transport_air) exceeds the tip max
+    well.tracker.set_volume(300)
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([well], vols=[100], transport_air_volume=[300])
+
+  async def test_aspirate_capacity_ignores_blow_out(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})  # 300 uL filter tip, max 360
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    well = self.plate.get_item("A1")
+    well.tracker.set_volume(200)
+    # blow-out counts toward neither peak, so a large blow-out stays within capacity
+    await self.lh.aspirate([well], vols=[100], blow_out_air_volume=[300])
+
+  async def test_aspirate_capacity_boundary_is_exclusive(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})  # 300 uL filter tip, max 360
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    well = self.plate.get_item("A1")
+    # a peak exactly at the tip's maximal volume is allowed; just above it is rejected (>)
+    well.tracker.set_volume(400)
+    await self.lh.aspirate([well], vols=[360], disable_volume_correction=[True])
+    well.tracker.set_volume(400)
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([well], vols=[361], disable_volume_correction=[True])
+
   async def test_single_channel_aspiration_liquid_height(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     # TODO: Hamilton liquid classes
@@ -1007,6 +1256,250 @@ class TestSTARLiquidHandlerCommands(AnyioTestBase):
         ),
       ]
     )
+
+  async def test_head96_experimental_aspirate(self):
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    self.STAR._write_and_read_command.reset_mock()
+    await self.STAR.head96_experimental_aspirate(
+      volume=100,
+      minimum_height=230,
+      surface_following_distance=2,
+      flow_rate=50,
+      requires_tip=False,  # isolate the wire string from the tip-presence round-trip
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PAid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdj1da05170dv02585dc00000zd0400zh46000to000"
+        )
+      ]
+    )
+
+  async def test_head96_experimental_dispense(self):
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    self.STAR._write_and_read_command.reset_mock()
+    await self.STAR.head96_experimental_dispense(
+      volume=100,
+      minimum_height=230,
+      stop_back_volume=5,
+      surface_following_distance=2,
+      flow_rate=50,
+      stop_flow_rate=20,
+      requires_tip=False,  # isolate the wire string from the tip-presence round-trip
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PBid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdb05170dv02585dd0259ze0400zh46000du01034"
+        )
+      ]
+    )
+
+  async def test_head96_experimental_aspirate_requires_tip(self):
+    """requires_tip raises when the head reports no tips."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    with self.assertRaises(RuntimeError):
+      await self.STAR.head96_experimental_aspirate(volume=100, minimum_height=230)
+
+  async def test_head96_experimental_aspirate_default_flow_rate(self):
+    """Omitting flow_rate emits the head's default dispensing-drive speed (dv13500)."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    self.STAR._write_and_read_command.reset_mock()
+    await self.STAR.head96_experimental_aspirate(
+      volume=100, minimum_height=230, surface_following_distance=2, requires_tip=False
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PAid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdj1da05170dv13500dc00000zd0400zh46000to000"
+        )
+      ]
+    )
+
+  async def test_head96_experimental_dispense_default_flow_rates(self):
+    """Omitting flow_rate and stop_flow_rate emits the head default speed (dv13500) and a zero stop
+    speed (du00000), with the stop-back and surface-following defaults (dd0000 / ze0000)."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    self.STAR._write_and_read_command.reset_mock()
+    await self.STAR.head96_experimental_dispense(volume=100, minimum_height=230, requires_tip=False)
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PBid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdb05170dv13500dd0000ze0000zh46000du00000"
+        )
+      ]
+    )
+
+  async def test_head96_experimental_aspirate_volume_out_of_range_raises(self):
+    """A volume beyond the dispensing-drive range raises before any command is sent."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    with self.assertRaises(AssertionError):
+      await self.STAR.head96_experimental_aspirate(
+        volume=100000, minimum_height=230, requires_tip=False
+      )
+
+  async def test_head96_experimental_aspirate_tip_bottom_overhang(self):
+    """With a tip on, minimum_height is tip-bottom: zh = minimum_height + overhang."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
+    self.STAR.head96_request_stop_disk_z = unittest.mock.AsyncMock(return_value=332.0)
+    self.STAR.head96_request_position = unittest.mock.AsyncMock(
+      return_value=Coordinate(0, 0, 245.0)
+    )
+    self.STAR._write_and_read_command.reset_mock()
+    # overhang = 332 - 245 = 87; zh = (200 + 87) / 0.005 = 57400
+    await self.STAR.head96_experimental_aspirate(
+      volume=100, minimum_height=200, surface_following_distance=2
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PAid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdj1da05170dv13500dc00000zd0400zh57400to000"
+        )
+      ]
+    )
+
+  async def test_head96_experimental_aspirate_minimum_height_defaults_to_floor(self):
+    """Omitting minimum_height with no tip defaults to the firmware Z floor (z_range[0])."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    self.STAR._write_and_read_command.reset_mock()
+    # no tip -> overhang 0 -> minimum_height defaults to z_range[0] = 180.5 mm -> zh 36100
+    await self.STAR.head96_experimental_aspirate(volume=100, requires_tip=False)
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0PAid0001pmFFFFFFFFFFFFFFFFFFFFFFFFdj1da05170dv13500dc00000zd0000zh36100to000"
+        )
+      ]
+    )
+
+  async def test_head96_probe_z_using_clld_wire_string(self):
+    """The 2013+ ZL command assembles in the documented field order with the tip-overhang offset.
+
+    Guards the zc 5-digit width (6 caused firmware er32), the tip-bottom -> stop-disk mapping, the
+    zv/zw fields, and approach_speed=None -> head96_z_drive_speed_default. Returns the detected
+    surface as a tip-bottom position (stop disk minus overhang).
+    """
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._head96_z_drive_speed_default = 85.0
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
+    self.STAR.head96_request_last_lld_height = unittest.mock.AsyncMock(return_value=200.0)
+    self.STAR._write_and_read_command.reset_mock()
+    detected = await self.STAR.head96_probe_z_using_clld(
+      tip_len=50.0,  # overhang = 50 - 8 = 42 mm
+      lowest_immers_pos=140.0,
+      start_pos_search=250.0,
+      speed=10.0,
+      acceleration=300.0,
+      approach_speed=None,  # -> head96_z_drive_speed_default = 85.0
+      current_protection_limiter=15,
+      lld_sensor="any",
+      detection_edge=10,
+      detection_drop=2,
+      post_detection_dist=2.0,
+    )
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "H0ZLid0001zh36400zc58400zi0400zj1lm2gt0010gl0002zv17000zl02000zr060000zw15"
+        )
+      ]
+    )
+    self.assertEqual(detected, 158.0)  # 200.0 detected surface - 42 overhang
+
+  async def test_head96_probe_z_using_clld_requires_tip(self):
+    """cLLD raises if the head holds no tip, whether tip_len is measured or supplied."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._head96_z_drive_speed_default = 85.0
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=0)
+    with self.assertRaises(ValueError):
+      await self.STAR.head96_probe_z_using_clld()
+    with self.assertRaises(ValueError):
+      await self.STAR.head96_probe_z_using_clld(tip_len=50.0)
+
+  async def test_head96_probe_z_using_clld_retracts_on_firmware_error(self):
+    """A firmware error during the search retracts the head to Z-safety before re-raising."""
+    self.STAR._head96_information = _make_head96_information(self.STAR)
+    self.STAR._head96_z_drive_speed_default = 85.0
+    self.STAR.head96_request_tip_presence = unittest.mock.AsyncMock(return_value=1)
+    self.STAR.head96_move_to_z_safety = unittest.mock.AsyncMock()
+    self.STAR._write_and_read_command = unittest.mock.AsyncMock(
+      side_effect=STARFirmwareError(errors={}, raw_response="H0ZLid0001er32")
+    )
+    with self.assertRaises(STARFirmwareError):
+      await self.STAR.head96_probe_z_using_clld(tip_len=50.0)
+    self.STAR.head96_move_to_z_safety.assert_awaited_once()
+
+  async def test_mix96_floor_maps_to_minimum_height_with_offset(self):
+    """mix96 sends the resolved tip-bottom floor (well cavity_bottom + offset.z) as the
+    experimental command's minimum_height - guards offset.z reaching the floor."""
+    _stub_mix96_motion(self.STAR)
+    offset_z = 2.0
+    await self.STAR.mix96(
+      Mix(volume=50, repetitions=1, flow_rate=100),
+      resource=self.plate,
+      offset=Coordinate(0, 0, offset_z),
+    )
+    well = self.plate.get_item(0)
+    expected_floor = well.get_absolute_location(x="c", y="c", z="cavity_bottom").z + offset_z
+    self.assertEqual(
+      self.STAR.head96_experimental_aspirate.call_args.kwargs["minimum_height"], expected_floor
+    )
+
+  async def test_mix96_stroke_starts_surface_following_above_floor(self):
+    """The careful (swap_speed) descent lands at floor + surface_following_distance and that
+    distance reaches the aspirate, so the stroke spans [floor, floor+sf], never below floor."""
+    _stub_mix96_motion(self.STAR)
+    floor_z, sf = 100.0, 8.0
+    await self.STAR.mix96_at_coordinate(
+      Mix(volume=50, repetitions=1, flow_rate=100, surface_following_distance=sf),
+      a1_coordinate=Coordinate(500, 300, floor_z),
+      swap_speed=5.0,
+    )
+    # move_tool_z calls: [0] fast to swap-start, [1] careful to mix_start, [2] exit retract
+    careful_descent = self.STAR.head96_move_tool_z.call_args_list[1]
+    self.assertEqual(careful_descent.args[0], floor_z + sf)
+    self.assertEqual(careful_descent.kwargs["speed"], 5.0)
+    self.assertEqual(
+      self.STAR.head96_experimental_aspirate.call_args.kwargs["surface_following_distance"], sf
+    )
+
+  async def test_mix96_specified_traverse_heights_are_tip_bottom_moves(self):
+    """A specified minimum_traverse_height_start/end is a tip-bottom Z (head96_move_tool_z), like
+    the rest of the method; only the None default retracts to stop-disk Z safety. Guards against a
+    geometric (tip-bottom) traverse height being driven as a stop-disk position."""
+    _stub_mix96_motion(self.STAR)
+    start_z, end_z = 250.0, 240.0
+    await self.STAR.mix96_at_coordinate(
+      Mix(volume=50, repetitions=1, flow_rate=100),
+      a1_coordinate=Coordinate(500, 300, 100.0),
+      minimum_traverse_height_start=start_z,
+      minimum_traverse_height_end=end_z,
+    )
+    self.STAR.head96_move_to_z_safety.assert_not_called()
+    tool_z_targets = [call.args[0] for call in self.STAR.head96_move_tool_z.call_args_list]
+    self.assertEqual(tool_z_targets[0], start_z)  # first tool move is the start traverse
+    self.assertEqual(tool_z_targets[-1], end_z)  # last tool move is the end traverse
+
+  async def test_mix96_zero_blowout_skips_air_gap_calls(self):
+    """blowout_air_volume=0 issues no firmware aspirate/dispense for the air gap: every
+    experimental aspirate/dispense is a mix-cycle stroke (mix.volume), none a zero-volume blow-out."""
+    _stub_mix96_motion(self.STAR)
+    await self.STAR.mix96_at_coordinate(
+      Mix(volume=50, repetitions=1, flow_rate=100),
+      a1_coordinate=Coordinate(500, 300, 100.0),
+      blowout_air_volume=0.0,
+    )
+    asp_vols = [call.args[0] for call in self.STAR.head96_experimental_aspirate.call_args_list]
+    disp_vols = [call.args[0] for call in self.STAR.head96_experimental_dispense.call_args_list]
+    self.assertEqual(asp_vols, [50])  # one cycle aspirate, no blow-out aspirate
+    self.assertEqual(disp_vols, [50])  # one cycle dispense, no blow-out dispense
 
   async def test_core_96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.
@@ -1343,7 +1836,7 @@ class STARIswapMovementTests(AnyioTestBase):
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
 
     self.plt_car = PLT_CAR_L5MD_A00(name="plt_car")
-    self.plt_car[0] = self.plate = CellTreat_96_wellplate_350ul_Ub(name="plate", with_lid=True)
+    self.plt_car[0] = self.plate = celltreat_96_wellplate_350uL_Ub(name="plate", with_lid=True)
     self.deck.assign_child_resource(self.plt_car, rails=15)
 
     self.plt_car2 = PLT_CAR_P3AC_A01(name="plt_car2")
@@ -1426,10 +1919,10 @@ class STARIswapMovementTests(AnyioTestBase):
     )
 
   async def test_move_lid_across_rotated_resources(self):
-    self.plt_car2[0] = plate2 = CellTreat_96_wellplate_350ul_Ub(
+    self.plt_car2[0] = plate2 = celltreat_96_wellplate_350uL_Ub(
       name="plate2", with_lid=False
     ).rotated(z=270)
-    self.plt_car2[1] = plate3 = CellTreat_96_wellplate_350ul_Ub(
+    self.plt_car2[1] = plate3 = celltreat_96_wellplate_350uL_Ub(
       name="plate3", with_lid=False
     ).rotated(z=90)
 
@@ -1446,22 +1939,22 @@ class STARIswapMovementTests(AnyioTestBase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1142yd0zj2242zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
+          "C0PPid0001xs04829xd0yj1141yd0zj2242zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs02318xd0yj1644yd0zj1983zd0th2800te2800gr4go1308ga0gc0",
+          "C0PRid0002xs02317xd0yj1644yd0zj1983zd0th2800te2800gr4go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs02318xd0yj1644yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
+          "C0PPid0003xs02317xd0yj1644yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs02315xd0yj3104yd0zj1983zd0th2800te2800gr3go0885ga0gc0",
+          "C0PRid0004xs02317xd0yj3104yd0zj1983zd0th2800te2800gr3go0885ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0005xs02315xd0yj3104yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
+          "C0PPid0005xs02317xd0yj3104yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0006xs04829xd0yj1142yd0zj2242zd0th2800te2800gr4go0885ga0gc0",
+          "C0PRid0006xs04829xd0yj1141yd0zj2242zd0th2800te2800gr4go0885ga0gc0",
         ),
       ]
     )
@@ -1479,7 +1972,7 @@ class STARFoilTests(AnyioTestBase):
     self.deck.assign_child_resource(tip_carrier, rails=1)
 
     plt_carrier = PLT_CAR_L5AC_A00(name="plt_carrier")
-    plt_carrier[0] = self.plate = AGenBio_1_troughplate_190000uL_Fl(name="plate")
+    plt_carrier[0] = self.plate = agenbio_1_troughplate_190mL_Fl(name="plate")
     self.well = self.plate.get_well("A1")
     self.deck.assign_child_resource(plt_carrier, rails=10)
 
@@ -1923,7 +2416,7 @@ class STARTestBase(AnyioTestBase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
+    self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.STAR._num_channels = 8

@@ -10,10 +10,15 @@ The {class}`~pylabrobot.centrifuge.centrifuge.Centrifuge` class has a number of 
 - {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.unlock_door`: Unlock the centrifuge door.
 - {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.lock_bucket`: Lock centrifuge buckets.
 - {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.unlock_bucket`: Unlock centrifuge buckets.
-- {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket1`: Rotate to Bucket 1.
-- {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket2`: Rotate to Bucket 2.
-- {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.rotate_distance`: Rotate the buckets a specified distance (8000 = 360 degrees).
-- {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.start_spin_cycle`: Start centrifuge spin cycle.
+- {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket1`: Rotate/present Bucket 1.
+- {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket2`: Rotate/present Bucket 2.
+- {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.spin`: Start a centrifuge spin cycle.
+
+Some standalone door/lock and low-level rotation primitives are hardware-dependent. For example,
+the Agilent VSpin backend exposes {meth}`~pylabrobot.centrifuge.vspin_backend.VSpinBackend.go_to_position`
+for arbitrary bucket positioning during calibration (8000 ticks = 360 degrees), while the HighRes
+MicroSpin only exposes bucket presentation through `go_to_bucket1()` / `go_to_bucket2()` and manages
+door/lock operations automatically. See the hardware-specific guides below for details.
 
 PLR supports the following centrifuges:
 

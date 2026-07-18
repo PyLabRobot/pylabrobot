@@ -14,8 +14,10 @@ class Tip(SerializableMixin):
 
   Attributes:
     has_filter: whether the tip type has a filter
-    total_tip_length: total length of the tip, in in mm
-    maximal_volume: maximal volume of the tip, in ul
+    total_tip_length: total length of the tip, in mm
+    nominal_volume: rated working volume of the tip (what it is sold and named as), in uL.
+      Defaults to maximal_volume when not given.
+    maximal_volume: physical brim-full capacity of the tip, in uL
     fitting_depth: the overlap between the tip and the pipette, in mm
     name: optional identifier for this tip
   """
@@ -24,6 +26,7 @@ class Tip(SerializableMixin):
   total_tip_length: float
   maximal_volume: float
   fitting_depth: float
+  nominal_volume: Optional[float] = None
   name: Optional[str] = None
 
   def __post_init__(self):
@@ -35,6 +38,9 @@ class Tip(SerializableMixin):
         stacklevel=2,
       )
 
+    if self.nominal_volume is None:
+      self.nominal_volume = self.maximal_volume
+
     thing = self.name or "tip_tracker"
     self.tracker = VolumeTracker(thing=thing, max_volume=self.maximal_volume)
 
@@ -44,6 +50,7 @@ class Tip(SerializableMixin):
       "name": self.name,
       "total_tip_length": self.total_tip_length,
       "has_filter": self.has_filter,
+      "nominal_volume": self.nominal_volume,
       "maximal_volume": self.maximal_volume,
       "fitting_depth": self.fitting_depth,
     }
@@ -53,6 +60,7 @@ class Tip(SerializableMixin):
       (
         self.has_filter,
         self.total_tip_length,
+        self.nominal_volume,
         self.maximal_volume,
         self.fitting_depth,
       )
@@ -65,6 +73,7 @@ class Tip(SerializableMixin):
     return (
       self.has_filter == other.has_filter
       and self.total_tip_length == other.total_tip_length
+      and self.nominal_volume == other.nominal_volume
       and self.maximal_volume == other.maximal_volume
       and self.fitting_depth == other.fitting_depth
     )

@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import dataclasses
 import functools
+import math
 import sys
 import typing
 import warnings
@@ -21,11 +22,22 @@ class MachineConnectionClosedError(Exception):
 
 
 class AsyncExitStackWithShielding(contextlib.AsyncExitStack):
-  def push_shielded_async_callback(self, callback: typing.Callable, *args):
+  def push_shielded_async_callback(
+    self,
+    callback: typing.Callable,
+    *args,
+    shield_timeout: Optional[float] = None,
+  ):
     @functools.wraps(callback)
     async def shielded_callback(*args):
+      is_cancelled = anyio.current_effective_deadline() == -math.inf
+
       with anyio.CancelScope(shield=True):
-        await callback(*args)
+        if is_cancelled and shield_timeout is not None:
+          with anyio.move_on_after(shield_timeout):
+            await callback(*args)
+        else:
+          await callback(*args)
 
     self.push_async_callback(shielded_callback, *args)
 

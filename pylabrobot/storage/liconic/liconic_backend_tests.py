@@ -371,6 +371,24 @@ class TestInitialize(unittest.IsolatedAsyncioTestCase):
     self.backend._wait_ready.assert_awaited()
 
 
+class TestScanBarcode(unittest.IsolatedAsyncioTestCase):
+  """scan_barcode must wait for the z-lift to reach the read position (ST 1910)
+  before triggering the scan, otherwise the beam fires while the lift is still
+  travelling and reads a plate it passes en route, not the target."""
+
+  def setUp(self):
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend._racks = [liconic_rack_17mm_22("rack1")]
+    self.backend._send_command = AsyncMock(return_value="OK")
+    self.backend._wait_ready = AsyncMock()
+    self.backend.barcode_scanner = AsyncMock()
+
+  async def test_scan_barcode_waits_for_lift(self):
+    await self.backend.scan_barcode(self.backend._racks[0].sites[0])
+    self.backend._send_command.assert_any_call("ST 1910")
+    self.backend._wait_ready.assert_awaited()
+
+
 class TestSerialization(unittest.TestCase):
   def test_serialize_roundtrip(self):
     backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/ttyUSB0")

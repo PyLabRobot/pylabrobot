@@ -6,7 +6,7 @@ from pylabrobot.plate_reading.byonoy import (
   byonoy_a96a,
   byonoy_sbs_adapter,
 )
-from pylabrobot.resources import PLT_CAR_L5_DWP, CellVis_96_wellplate_350uL_Fb, Coordinate, STARDeck
+from pylabrobot.resources import PLT_CAR_L5_DWP, Coordinate, STARDeck, cellvis_96_wellplate_350uL_Fb
 
 
 class ByonoyResourceTests(unittest.IsolatedAsyncioTestCase):
@@ -20,7 +20,7 @@ class ByonoyResourceTests(unittest.IsolatedAsyncioTestCase):
     self.plate_carrier[1] = self.adapter
     self.deck.assign_child_resource(self.plate_carrier, rails=28)
     self.adapter.assign_child_resource(self.reader)
-    self.plate_carrier[2] = self.plate = CellVis_96_wellplate_350uL_Fb(name="plate")
+    self.plate_carrier[2] = self.plate = cellvis_96_wellplate_350uL_Fb(name="plate")
 
   async def test_move_illumination_unit_to_reader(self):
     # move illumination unit to deck

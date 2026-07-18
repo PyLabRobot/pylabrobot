@@ -61,6 +61,7 @@ from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
   GripDirection,
+  Mix,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
   MultiHeadDispenseContainer,
@@ -104,6 +105,7 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
+from pylabrobot.resources.tip_tracker import does_tip_tracking
 from pylabrobot.resources.trash import Trash
 
 T = TypeVar("T")
@@ -884,7 +886,34 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       53: "Robotic channel task busy",
     }
   elif module_identifier == "I0":  # autoload
-    table = {36: "Hamilton will not run while the hood is open"}
+    table = {
+      0: "No error",
+      20: "No communication to EEPROM",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      35: "Voltages outside permitted range",
+      # generic firmware meaning of 36 is "Stop during execution of command"
+      36: "Hamilton will not run while the hood is open",
+      40: "No parallel processes permitted",
+      50: "Scanner X-drive: init position not found",
+      51: "Scanner X-drive: stepper motor not initialized",
+      52: "Scanner X-drive: movement error (step loss)",
+      55: "Scanner rotation drive: drive blocked",
+      60: "Carrier Y-drive: init position not found",
+      61: "Carrier Y-drive: stepper motor not initialized",
+      62: "Carrier Y-drive: movement error (step loss)",
+      65: "Carrier Z-drive: init position not found",
+      66: "Carrier Z-drive: stepper motor not initialized",
+      67: "Carrier Z-drive: movement error (step loss)",
+      70: "Barcode scanner: communication error",
+      75: "Loading indicator (LED): communication error",
+      80: "Identification barcode not readable",
+      81: "No carrier present",
+      82: "No carrier loaded",
+      83: "Loading tray is occupied",
+      84: "Data for free definable carrier not correct",
+    }
   elif module_identifier in [
     "PX",
     "P1",
@@ -960,7 +989,14 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
     }
   elif module_identifier == "H0":  # Core 96 head
     table = {
+      0: "No error",
       20: "No communication to EEPROM",
+      # 21 is the current-firmware transfer-check error; older firmware reports 20
+      21: "No communication to digital potentiometer",
+      25: "Flash EPROM data incorrect",
+      26: "Flash EPROM cannot be programmed",
+      27: "Flash EPROM cannot be erased",
+      28: "Flash EPROM checksum error",
       30: "Unknown command",
       31: "Unknown parameter",
       32: "Parameter out of range",
@@ -990,8 +1026,21 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       75: "No tip picked up",
       76: "Tip already picked up",
       81: "Clot detected",
+      82: "TADM measurement out of lower limit curve",
+      83: "TADM measurement out of upper limit curve",
+      84: "Not enough memory for TADM measurement",
+      90: "Limit curve not resettable",
+      91: "Limit curve not programmable",
+      92: "Limit curve not found",
+      93: "Limit curve data incorrect",
+      94: "Not enough memory for limit curve",
+      95: "Invalid limit curve index",
+      96: "Limit curve already stored",
     }
   elif module_identifier == "R0":  # iswap
+    # These messages are iSWAP-specific. The internal plate gripper (IPG) also
+    # reports as module R0 but numbers its drives differently, so for an IPG the
+    # codes from 55 up map to different drives than the ones listed here.
     table = {
       20: "No communication to EEPROM",
       30: "Unknown command",
@@ -1030,6 +1079,39 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       94: "Plate not found",
       96: "Plate not available",
       97: "Unexpected object found",
+    }
+  elif module_identifier == "X0":  # X-drives
+    table = {
+      0: "No error",
+      20: "Transmission error (I2C bus or EEPROM)",
+      25: "Flash EPROM data incorrect",
+      26: "Flash EPROM cannot be programmed",
+      27: "Flash EPROM cannot be erased",
+      28: "Flash EPROM checksum error",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      35: "Voltages outside permitted range",
+      # older firmware reports 36 as an emergency-stop / cover-open event
+      36: "Stop during execution of command",
+      40: "No parallel processes permitted (X drive 1)",
+      41: "No parallel processes permitted (X drive 2)",
+      42: "No parallel processes permitted (reserve drive)",
+      50: "X drive 1: initialization failed",
+      51: "X drive 1: drive not initialized",
+      52: "X drive 1: movement error (drive blocked or lag too high)",
+      53: "X drive 1: position error (drive displaced)",
+      54: "X drive 1: dispense-on-fly error",
+      55: "X drive 1: positioning-to-dispense-on-fly error",
+      70: "X drive 2: initialization failed",
+      71: "X drive 2: drive not initialized",
+      72: "X drive 2: movement error (drive blocked or lag too high)",
+      73: "X drive 2: position error (drive displaced)",
+      74: "X drive 2: dispense-on-fly error",
+      75: "X drive 2: positioning-to-dispense-on-fly error",
+      80: "Reserve drive: initialization failed",
+      81: "Reserve drive: drive not initialized",
+      82: "Reserve drive: movement error (drive blocked or lag too high)",
     }
 
   if table is not None and trace_information in table:
@@ -1307,7 +1389,7 @@ class PipChannelInformation:
   pressure_adc: PressureADC
 
 
-@dataclass
+@dataclass(frozen=True, eq=False)
 class Head96Information:
   """Information about the installed 96-head."""
 
@@ -1316,13 +1398,109 @@ class Head96Information:
   HeadType = Literal["Low volume head", "High volume head", "96 head II", "96 head TADM", "unknown"]
 
   fw_version: datetime.date
+  x_offset: float
+  """Deck X distance from the X-arm carriage center to head channel A1 (mm), read from
+  master EEPROM at setup. Mirrors iSWAPInformation.rotation_drive_x_offset."""
   supports_clot_monitoring_clld: bool
   stop_disc_type: StopDiscType
   instrument_type: InstrumentType
   head_type: HeadType
 
+  # === Firmware/variant-derived limits. z_range is set at setup because its max is a hardware
+  # probe; the Y and dispensing-drive windows are pure functions of fw_version (and the encoder
+  # resolutions below), so they are exposed as properties rather than stored. ===
+  z_range: Tuple[float, float]
+  """Z-drive position window (mm); FM-STAR extends it. Set at setup: the min is variant-derived,
+  the max is read from a hardware probe."""
 
-@dataclass
+  z_speed_range: Tuple[float, float] = (0.25, 100.0)
+  """Z-drive speed window (mm/s); unchanged across the 2008/2013/2025 firmware, unlike the
+  version-resolved `y_speed_range`."""
+  z_acceleration_range: Tuple[float, float] = (25.0, 500.0)
+  """Z-drive acceleration window (mm/s2); unchanged across the 2008/2013/2025 firmware (the
+  pre-2010 encoding differs, the physical range does not)."""
+
+  # === Encoder resolutions (defaulted device facts). Y/Z are unchanged across firmware; the
+  # dispensing/squeezer resolutions are the 2013+ generation values (2008-era heads differ). ===
+  z_drive_mm_per_increment: float = 0.005
+  y_drive_mm_per_increment: float = 0.015625
+  dispensing_drive_mm_per_increment: float = 0.001025641026
+  dispensing_drive_uL_per_increment: float = 0.019340933
+  squeezer_drive_mm_per_increment: float = 0.0002086672009
+
+  # === Firmware/variant-derived area-of-operation windows (standard units). Pure functions of
+  # fw_version and the encoder resolutions above, so they are computed on access. ===
+  @property
+  def y_range(self) -> Tuple[float, float]:
+    """Y-drive position window (mm); 2013 firmware shifted it from the 2008 range."""
+    min_inc, max_inc = (6000, 36000) if self.fw_version.year >= 2010 else (7000, 36200)
+    return (
+      round(min_inc * self.y_drive_mm_per_increment, 2),
+      round(max_inc * self.y_drive_mm_per_increment, 2),
+    )
+
+  @property
+  def y_speed_range(self) -> Tuple[float, float]:
+    """Y-drive speed window (mm/s). The pre-2021 max (390.625 = the firmware default, 25000 inc) is
+    an empirical, deck-tested cap; per firmware version the maxima are 312.5 (2008) and 625 (2013+).
+    Verify on a pre-2021 head before raising it."""
+    return (0.78125, 390.625 if self.fw_version.year <= 2021 else 625.0)
+
+  @property
+  def y_acceleration_range(self) -> Tuple[float, float]:
+    """Y-drive acceleration window (mm/s2). The min (5000 inc) is constant; the max rose from 32000
+    inc (2008) to 50000 inc (2013+), so it tracks firmware like the Y range / speed."""
+    max_inc = 50000 if self.fw_version.year >= 2010 else 32000
+    return (
+      round(5000 * self.y_drive_mm_per_increment, 2),
+      round(max_inc * self.y_drive_mm_per_increment, 2),
+    )
+
+  @property
+  def dispensing_drive_range(self) -> Tuple[float, float]:
+    """Aspirate/dispense piston volume window (uL); applies to both aspirate and dispense. 2013
+    firmware widened the max from 62130 inc."""
+    max_inc = 64350 if self.fw_version.year >= 2010 else 62130
+    return (0.0, round(max_inc * self.dispensing_drive_uL_per_increment, 2))
+
+  @property
+  def dispensing_drive_speed_range(self) -> Tuple[float, float]:
+    """Dispensing-drive speed window (uL/s); 2013 firmware widened the max from 52000 inc."""
+    min_inc = 5  # firmware dv minimum (00005 increments/second)
+    max_inc = 55000 if self.fw_version.year >= 2010 else 52000
+    return (
+      round(min_inc * self.dispensing_drive_uL_per_increment, 2),
+      round(max_inc * self.dispensing_drive_uL_per_increment, 2),
+    )
+
+  # === Per-drive factory default speed / acceleration (standard units). The Y/Z-drive defaults are
+  # deliberately not kept here: STARBackend reads them from the machine at setup into mutable
+  # attributes (head96_{y,z}_drive_{speed,acceleration}_default) so a run can override them. ===
+  @property
+  def dispensing_drive_speed_default(self) -> float:
+    """Dispensing-drive default speed (uL/s); constant across firmware."""
+    return 261.1
+
+  @property
+  def dispensing_drive_acceleration_default(self) -> float:
+    """Dispensing-drive default acceleration (uL/s2); 2013 firmware raised it."""
+    increments = 900000 if self.fw_version.year >= 2010 else 150000
+    return round(increments * self.dispensing_drive_uL_per_increment, 2)
+
+  @property
+  def squeezer_drive_speed_default(self) -> float:
+    """Squeezer-drive default speed (mm/s); 2013 firmware raised it."""
+    increments = 76000 if self.fw_version.year >= 2010 else 16000
+    return round(increments * self.squeezer_drive_mm_per_increment, 2)
+
+  @property
+  def squeezer_drive_acceleration_default(self) -> float:
+    """Squeezer-drive default acceleration (mm/s2); 2013 firmware raised it."""
+    increments = 300000 if self.fw_version.year >= 2010 else 100000
+    return round(increments * self.squeezer_drive_mm_per_increment, 2)
+
+
+@dataclass(frozen=True, eq=False)
 class iSWAPInformation:
   """Device parameters for the installed iSWAP, loaded or resolved at setup.
 
@@ -1500,6 +1678,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # `set_up_iswap` from firmware/EEPROM. See `iswap_information` property
     # for guarded access. None pre-setup; immutable post-setup.
     self._iswap_information: Optional[iSWAPInformation] = None
+    # Mutable 96-head Y/Z drive speed/acceleration defaults, seeded from the machine's registers at
+    # setup and overridable via the @property setters (range-checked). None until setup() loads them;
+    # a move uses the current default when no explicit value is passed.
+    self._head96_y_drive_speed_default: Optional[float] = None
+    self._head96_y_drive_acceleration_default: Optional[float] = None
+    self._head96_z_drive_speed_default: Optional[float] = None
+    self._head96_z_drive_acceleration_default: Optional[float] = None
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -1695,16 +1880,48 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"(channel {channel} firmware date: {pip_fw.isoformat()})."
       )
     resp: str = await self.send_command(STARBackend.channel_id(channel), "VW")
+    return self._parse_pip_channel_information(resp)
+
+  @staticmethod
+  def _parse_pip_channel_information(resp: str) -> PipChannelInformation:
+    """Parse a VW (pip channel hardware-configuration) firmware response.
+
+    The number of fields in a VW reply varies by firmware. The full form is
+    4 fields (channel_type, head_type, stop_disc_type, pressure_adc), but some
+    firmwares -- including post-2016 ones that pass the year gate in
+    `_pip_channel_request_configuration` -- return a 2-field short form such as
+    ``vw0 0``. Missing trailing fields fall back to their baseline ("code 0")
+    value rather than raising, since the cached information is descriptive
+    metadata and is not consulted by pipetting logic. This is distinct from the
+    firmware-year gate in `_pip_channel_request_configuration`, which decides
+    whether VW is queried at all.
+
+    Behavior for fields that ARE present is identical to the historical parser;
+    only absent fields are newly defaulted. A reply with zero fields is treated
+    as a malformed/communication failure and raises, so it is distinguishable
+    from a known short layout.
+
+    Args:
+      resp: Raw VW firmware response (e.g. ``"P1VWid0001vw0 0"``).
+
+    Returns:
+      Parsed `PipChannelInformation`.
+
+    Raises:
+      ValueError: If the response contains no hardware-configuration fields.
+    """
     hw_tokens = resp.split("vw")[-1].strip().split()
+    if not hw_tokens:
+      raise ValueError(f"Unparsable VW (pip channel configuration) response: {resp!r}")
+
+    def tok(i: int) -> Optional[str]:
+      return hw_tokens[i] if i < len(hw_tokens) else None
+
     return PipChannelInformation(
-      channel_type="ML_STAR_RPC" if hw_tokens[0] == "1" else "ML_STAR",
-      head_type="ML_STAR_PLE"
-      if hw_tokens[1] == "1"
-      else "ML_STAR_RPC"
-      if hw_tokens[1] == "2"
-      else "ML_STAR",
-      stop_disc_type="core_i" if hw_tokens[2] == "0" else "core_ii",
-      pressure_adc="Analog_Devices_AD5263" if hw_tokens[3] == "1" else "Renesas_X9268",
+      channel_type="ML_STAR_RPC" if tok(0) == "1" else "ML_STAR",
+      head_type="ML_STAR_PLE" if tok(1) == "1" else "ML_STAR_RPC" if tok(1) == "2" else "ML_STAR",
+      stop_disc_type="core_i" if tok(2) in ("0", None) else "core_ii",
+      pressure_adc="Analog_Devices_AD5263" if tok(3) == "1" else "Renesas_X9268",
     )
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
@@ -1869,13 +2086,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # so if we skip pre_initialize, we need to raise the channels ourselves
       await self.move_all_channels_in_z_safety()
       if self.extended_conf.left_x_drive.core_96_head_installed:
-        await self.move_core_96_to_safe_position()
+        # raise the 96-head to Z-safety before the iSWAP (shared left X-drive) moves in set_up_iswap.
+        # head96_move_to_z_safety can't be used yet: Head96Information is built in set_up_core96_head.
+        await self._head96_probe_z_max()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
 
     async def set_up_pip():
-      if (not initialized or any(tip_presences)) and not skip_pip:
+      if skip_pip:
+        # Skip pip-channel I/O; the __init__ defaults stand in.
+        # TODO: does not yet gate request_tip_presence or instrument-init moves.
+        return
+      if not initialized or any(tip_presences):
         await self.initialize_pip()
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
@@ -1945,13 +2168,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         configuration_96head = await self._head96_request_configuration()
         head96_type = await self.head96_request_type()
 
+        instrument_type: Head96Information.InstrumentType = (
+          "legacy" if configuration_96head[2] == "0" else "FM-STAR"
+        )
         self._head96_information = Head96Information(
           fw_version=fw_version,
+          x_offset=await self._head96_request_x_offset(),
           supports_clot_monitoring_clld=bool(int(configuration_96head[0])),
           stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
-          instrument_type="legacy" if configuration_96head[2] == "0" else "FM-STAR",
+          instrument_type=instrument_type,
           head_type=head96_type,
+          # probing safe max z position also acts a safety retraction of the head96 on every setup call
+          z_range=(
+            self._head96_resolve_z_range(instrument_type)[0],
+            await self._head96_probe_z_max(),
+          ),
         )
+        # Seed the mutable Y/Z drive speed/acceleration defaults from the machine's current
+        # registers; a run can override them via the head96_*_drive_*_default setters afterwards.
+        self._head96_y_drive_speed_default = await self.head96_request_y_speed()
+        self._head96_y_drive_acceleration_default = await self.head96_request_y_acceleration()
+        self._head96_z_drive_speed_default = await self.head96_request_z_speed()
+        self._head96_z_drive_acceleration_default = await self.head96_request_z_acceleration()
 
     async def set_up_arm_modules():
       await set_up_pip()
@@ -2688,12 +2926,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def probe_liquid_volumes(
     self,
     containers: List[Container],
-    use_channels: List[int],
+    use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: LLDMode = LLDMode.GAMMA,
+    lld_mode: Union[LLDMode, List[LLDMode], None] = None,
     search_speed: float = 10.0,
-    n_replicates: int = 3,
+    n_replicates: int = 1,
+    # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
+    min_traverse_height_at_beginning_of_command: Optional[float] = None,
+    min_traverse_height_during_command: Optional[float] = None,
     z_position_at_end_of_command: Optional[float] = None,
+    x_grouping_tolerance: Optional[float] = None,
     # Deprecated
     move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
@@ -2705,13 +2947,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       containers: List of Container objects to probe, one per channel. All must support height-to-volume conversion via compute_volume_from_height().
-      use_channels: Channel indices to use for probing (0-indexed).
+      use_channels: Channel indices to use for probing (0-indexed). None (default) uses channels [0, 1, ..., len(containers)-1].
       resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts. Defaults to container centers.
-      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.  Defaults to capacitive.
+      lld_mode: Detection mode. Either a single ``LLDMode`` applied to all containers
+        (deprecated, removed in v1b1) or a list of ``LLDMode``s (one per container). ``None``
+        (default) applies GAMMA (capacitive cLLD) to all containers.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
-      n_replicates: Number of measurements per channel. Default 3.
+      n_replicates: Number of measurements per channel. Default 1.
+      min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
+        channels to before the first batch. Must clear all deck obstacles since channels
+        travel laterally at this height. None (default) uses full Z safety.
+      min_traverse_height_during_command: Absolute Z height (mm) to move involved channels to
+        between batches. None (default) uses full Z safety.
       z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
         probing. None (default) uses full Z safety.
+      x_grouping_tolerance: Containers within this X distance (mm) are grouped and probed
+        together. Defaults to ``_x_grouping_tolerance_mm`` (0.1 mm).
       move_to_z_safety_after: Deprecated. Use ``z_position_at_end_of_command`` instead.
 
     Returns:
@@ -2747,7 +2998,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_mode=lld_mode,
       search_speed=search_speed,
       n_replicates=n_replicates,
+      min_traverse_height_at_beginning_of_command=min_traverse_height_at_beginning_of_command,
+      min_traverse_height_during_command=min_traverse_height_during_command,
       z_position_at_end_of_command=z_position_at_end_of_command,
+      x_grouping_tolerance=x_grouping_tolerance,
     )
 
     return [
@@ -3239,6 +3493,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(
         f"surface_following_distance would result in a height that goes below the minimum_height. "
         f"Well bottom: {well_bottoms}, liquid height: {liquid_heights}, surface_following_distance: {surface_following_distance}, minimum_height: {minimum_height}"
+      )
+
+    # A tip fills to one of two transient peaks that never coexist: volume + pre_wetting
+    # (pre-wet over-aspiration) and volume + transport_air (air gap drawn above the liquid);
+    # blow-out air counts toward neither.
+    over_capacity = []
+    for i, op in enumerate(ops):
+      for label, extra in (
+        ("pre-wetting", pre_wetting_volume[i]),
+        ("transport-air", transport_air_volume[i]),
+      ):
+        peak = volumes[i] + extra
+        if peak > op.tip.maximal_volume:
+          over_capacity.append((i, label, peak, op.tip.maximal_volume))
+    if over_capacity:
+      raise ValueError(
+        "Aspiration would exceed tip capacity: "
+        + "; ".join(
+          f"channel {i} {label} peak {peak:.1f} uL > tip maximal volume {tip_max:.1f} uL"
+          for i, label, peak, tip_max in over_capacity
+        )
       )
 
     try:
@@ -5468,6 +5743,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="AF", x_offset=x_offset)
 
+  async def _head96_request_x_offset(self) -> float:
+    """Read the X-offset i.e. X-arm carriage center <-> CoRe 96 head channel A1, in mm.
+
+    Stored in the master EEPROM as parameter `kf` (set via the AF command), read with the
+    generic master-EEPROM read RA - mirroring the iSWAP rotation-drive x-offset (`kg`).
+    Required for deriving the head's X-arm carriage X from a target A1 X. Cached on the
+    backend as `head96_information.x_offset` during setup.
+    """
+    if not self.extended_conf.left_x_drive.core_96_head_installed:
+      raise RuntimeError("96-head is not installed")
+    # 4-digit field: the head96 offset is ~10x the iSWAP's (~368 mm vs ~34 mm), so it exceeds
+    # 3 digits in 0.1 mm units - "kf###" silently truncates 3684 -> 368.
+    resp = await self.send_command(module="C0", command="RA", ra="kf", fmt="kf####")
+    return cast(int, resp["kf"]) / 10.0
+
   async def set_x_offset_x_axis_core_nano_pipettor_head(self, x_offset: int):
     """Set X-offset X-axis <-> CoRe 96 head
 
@@ -7588,14 +7878,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def _head96_request_configuration(self) -> List[str]:
     """Request the 96-head configuration (raw) using the QU command.
 
-    The instrument returns a sequence of positional tokens. This method returns
-    those tokens without decoding them, but the following indices are currently
-    understood:
+    The instrument returns ten blank-separated decimal values. This method returns
+    them as a list of strings, undecoded; the list indices currently understood are:
 
         - index 0: clot_monitoring_with_clld
         - index 1: stop_disc_type (codes: 0=core_i, 1=core_ii)
         - index 2: instrument_type (codes: 0=legacy, 1=FM-STAR)
-        - indices 3..9: reservable positions (positions 4..10)
+        - indices 3..9: reserve
+
+    Index 1 (stop_disc_type) is populated on firmware at least back to 2021 (a 2021-10-22
+    build reports core_ii). Whether index 2 (instrument_type) is reliably populated on
+    every build, or on some falls back to reserve (read back as 0 -> legacy), is unverified;
+    confirm on an FM-STAR head before relying on it to unlock the FM-STAR z-range extension.
 
     Returns:
       Raw positional tokens extracted from the QU response (the portion after the last ``"au"`` marker).
@@ -7613,6 +7907,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
     resp = await self.send_command(module="H0", command="QG", fmt="qg#")
     return type_map.get(resp["qg"], "unknown")
+
+  def _head96_resolve_z_range(self, instrument_type: str) -> Tuple[float, float]:
+    """Z-drive position window (mm); FM-STAR extends it (za/zb/zh all share this range)."""
+    min_inc, max_inc = (24200, 76200) if instrument_type == "FM-STAR" else (36100, 68500)
+    return (
+      self._head96_z_drive_increment_to_mm(min_inc),
+      self._head96_z_drive_increment_to_mm(max_inc),
+    )
 
   # -------------- 3.10.1 Initialization --------------
 
@@ -7706,22 +8008,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.2 96-Head Movements --------------
 
-  # Conversion factors for 96-Head (mm per increment)
-  _head96_z_drive_mm_per_increment = 0.005
-  _head96_y_drive_mm_per_increment = 0.015625
-  _head96_dispensing_drive_mm_per_increment = 0.001025641026
-  _head96_dispensing_drive_uL_per_increment = 0.019340933
-  _head96_squeezer_drive_mm_per_increment = 0.0002086672009
-
-  # Z-axis conversions
-
-  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
-    """Convert mm to Z-axis hardware increments for 96-head."""
-    return round(value_mm / self._head96_z_drive_mm_per_increment)
-
-  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
-    """Convert Z-axis hardware increments to mm for 96-head."""
-    return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
+  # Conversion factors for 96-Head: owned by Head96Information now (encoder resolutions); aliased
+  # here for backwards compatibility.
+  _head96_z_drive_mm_per_increment = Head96Information.z_drive_mm_per_increment
+  _head96_y_drive_mm_per_increment = Head96Information.y_drive_mm_per_increment
+  _head96_dispensing_drive_mm_per_increment = Head96Information.dispensing_drive_mm_per_increment
+  _head96_dispensing_drive_uL_per_increment = Head96Information.dispensing_drive_uL_per_increment
+  _head96_squeezer_drive_mm_per_increment = Head96Information.squeezer_drive_mm_per_increment
 
   # Y-axis conversions
 
@@ -7732,6 +8025,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _head96_y_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert Y-axis hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_y_drive_mm_per_increment, 2)
+
+  # Z-axis conversions
+
+  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to Z-axis hardware increments for 96-head."""
+    return round(value_mm / self._head96_z_drive_mm_per_increment)
+
+  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert Z-axis hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
 
   # Dispensing drive conversions (mm and uL)
 
@@ -7773,6 +8076,209 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Convert squeezer drive hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_squeezer_drive_mm_per_increment, 2)
 
+  # Default drive speed/acceleration a move uses when the caller passes none. Each getter returns the
+  # user override if one was set, otherwise the firmware-resolved Head96Information factory default;
+  # the setter range-checks against Head96Information so a user can set their own default safely. A
+  # move does not persist these to the drive - it snapshots the live register and restores it after.
+
+  @property
+  def head96_y_drive_speed_default(self) -> float:
+    """Default 96-head Y-drive speed (mm/s) used when a Y move is called without an explicit speed.
+
+    Seeded from the machine at setup; assign your own and it is validated against `y_speed_range`
+    before taking effect. A move does not persist this to the drive: it snapshots the live register
+    and restores it afterwards.
+    """
+    assert self._head96_y_drive_speed_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
+    return self._head96_y_drive_speed_default
+
+  @head96_y_drive_speed_default.setter
+  def head96_y_drive_speed_default(self, value: float):
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    lo, hi = self._head96_information.y_speed_range
+    if not lo <= value <= hi:
+      raise ValueError(f"speed must be between {lo} and {hi} mm/sec")
+    self._head96_y_drive_speed_default = value
+
+  @property
+  def head96_y_drive_acceleration_default(self) -> float:
+    """Default 96-head Y-drive acceleration (mm/s2) used when a Y move is called without one.
+
+    Seeded from the machine at setup; assign your own and it is validated against
+    `y_acceleration_range` before taking effect. A move does not persist this to the drive: it
+    snapshots the live register and restores it afterwards.
+    """
+    assert self._head96_y_drive_acceleration_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
+    return self._head96_y_drive_acceleration_default
+
+  @head96_y_drive_acceleration_default.setter
+  def head96_y_drive_acceleration_default(self, value: float):
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    lo, hi = self._head96_information.y_acceleration_range
+    if not lo <= value <= hi:
+      raise ValueError(f"acceleration must be between {lo} and {hi} mm/sec**2")
+    self._head96_y_drive_acceleration_default = value
+
+  @property
+  def head96_z_drive_speed_default(self) -> float:
+    """Default 96-head Z-drive speed (mm/s) used when a Z move is called without an explicit speed.
+
+    Seeded from the machine at setup; assign your own and it is validated against `z_speed_range`
+    before taking effect. A move does not persist this to the drive: it snapshots the live register
+    and restores it afterwards.
+    """
+    assert self._head96_z_drive_speed_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
+    return self._head96_z_drive_speed_default
+
+  @head96_z_drive_speed_default.setter
+  def head96_z_drive_speed_default(self, value: float):
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    lo, hi = self._head96_information.z_speed_range
+    if not lo <= value <= hi:
+      raise ValueError(f"speed must be between {lo} and {hi} mm/sec")
+    self._head96_z_drive_speed_default = value
+
+  @property
+  def head96_z_drive_acceleration_default(self) -> float:
+    """Default 96-head Z-drive acceleration (mm/s2) used when a Z move is called without one.
+
+    Seeded from the machine at setup; assign your own and it is validated against
+    `z_acceleration_range` before taking effect. A move does not persist this to the drive: it
+    snapshots the live register and restores it afterwards.
+    """
+    assert self._head96_z_drive_acceleration_default is not None, (
+      "96-head defaults not loaded; run setup()"
+    )
+    return self._head96_z_drive_acceleration_default
+
+  @head96_z_drive_acceleration_default.setter
+  def head96_z_drive_acceleration_default(self, value: float):
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    lo, hi = self._head96_information.z_acceleration_range
+    if not lo <= value <= hi:
+      raise ValueError(f"acceleration must be between {lo} and {hi} mm/sec**2")
+    self._head96_z_drive_acceleration_default = value
+
+  async def head96_request_y_speed(self) -> float:
+    """Request the persistent 96-head Y-drive speed (mm/s), via H0 RA (read parameter yv).
+
+    The read counterpart of `_head96_set_y_speed`.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="yv", fmt="yv#####")
+    return self._head96_y_drive_increment_to_mm(resp["yv"])
+
+  async def head96_request_y_acceleration(self) -> float:
+    """Request the persistent 96-head Y-drive acceleration (mm/s^2), via H0 RA (read parameter yr).
+
+    The read counterpart of `_head96_set_y_acceleration`.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="yr", fmt="yr#####")
+    return self._head96_y_drive_increment_to_mm(resp["yr"])
+
+  async def head96_request_z_speed(self) -> float:
+    """Request the persistent 96-head Z-drive speed (mm/s), via H0 RA (read parameter zv).
+
+    The read counterpart of `_head96_set_z_speed`.
+    """
+    resp = await self.send_command(module="H0", command="RA", ra="zv", fmt="zv#####")
+    return self._head96_z_drive_increment_to_mm(resp["zv"])
+
+  async def head96_request_z_acceleration(self) -> float:
+    """Request the persistent 96-head Z-drive acceleration (mm/s^2), via H0 RA (read parameter zr).
+
+    The read counterpart of `_head96_set_z_acceleration`; undoes the firmware-version acceleration
+    scaling that the setter (and `head96_move_stop_disk_z`) applies.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    resp = await self.send_command(module="H0", command="RA", ra="zr", fmt="zr######")
+    acceleration_multiplier = 1 if self._head96_information.fw_version.year >= 2010 else 0.001
+    return self._head96_z_drive_increment_to_mm(round(resp["zr"] / acceleration_multiplier))
+
+  @_requires_head96
+  async def _head96_set_y_speed(self, speed: float):
+    """Set the persistent 96-head Y-drive speed (mm/s) on the device without moving.
+
+    On-device write for troubleshooting or specialized use, not day-to-day - set
+    `head96_y_drive_speed_default` for routine control. Subsequent Y moves that don't pass their own
+    speed - including the C0-level 96-head commands - inherit this until it is changed or the drive
+    re-initialises.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    y_speed_min, y_speed_max = self._head96_information.y_speed_range
+    assert y_speed_min <= speed <= y_speed_max, (
+      f"speed must be between {y_speed_min} and {y_speed_max} mm/sec"
+    )
+    return await self.send_command(
+      module="H0", command="AA", yv=f"{self._head96_y_drive_mm_to_increment(speed):05}"
+    )
+
+  @_requires_head96
+  async def _head96_set_y_acceleration(self, acceleration: float):
+    """Set the persistent 96-head Y-drive acceleration (mm/s^2) on the device without moving.
+
+    On-device write for troubleshooting or specialized use, not day-to-day - set
+    `head96_y_drive_acceleration_default` for routine control.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    y_accel_min, y_accel_max = self._head96_information.y_acceleration_range
+    assert y_accel_min <= acceleration <= y_accel_max, (
+      f"acceleration must be between {y_accel_min} and {y_accel_max} mm/sec**2"
+    )
+    return await self.send_command(
+      module="H0", command="AA", yr=f"{self._head96_y_drive_mm_to_increment(acceleration):05}"
+    )
+
+  @_requires_head96
+  async def _head96_set_z_speed(self, speed: float):
+    """Set the persistent 96-head Z-drive speed (mm/s) on the device without moving.
+
+    On-device write for troubleshooting or specialized use, not day-to-day - set
+    `head96_z_drive_speed_default` for routine control.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    z_speed_min, z_speed_max = self._head96_information.z_speed_range
+    assert z_speed_min <= speed <= z_speed_max, (
+      f"speed must be between {z_speed_min} and {z_speed_max} mm/sec"
+    )
+    return await self.send_command(
+      module="H0", command="AA", zv=f"{self._head96_z_drive_mm_to_increment(speed):05}"
+    )
+
+  @_requires_head96
+  async def _head96_set_z_acceleration(self, acceleration: float):
+    """Set the persistent 96-head Z-drive acceleration (mm/s^2) on the device without moving.
+
+    On-device write for troubleshooting or specialized use, not day-to-day - set
+    `head96_z_drive_acceleration_default` for routine control. Applies the same firmware-version
+    acceleration scaling as `head96_move_stop_disk_z` (pre-2010 x0.001).
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
+    assert z_accel_min <= acceleration <= z_accel_max, (
+      f"acceleration must be between {z_accel_min} and {z_accel_max} mm/sec**2"
+    )
+    acceleration_multiplier = 1 if self._head96_information.fw_version.year >= 2010 else 0.001
+    acceleration_increment = round(
+      self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
+    )
+    return await self.send_command(module="H0", command="AA", zr=f"{acceleration_increment:06}")
+
   # Movement commands
 
   async def move_core_96_to_safe_position(self):
@@ -7786,9 +8292,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.head96_move_to_z_safety()
 
   @_requires_head96
-  async def head96_move_to_z_safety(self):
-    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
-    return await self.send_command(module="C0", command="EV")
+  async def head96_move_to_z_safety(
+    self, speed: Optional[float] = None, acceleration: Optional[float] = None
+  ):
+    """Move the 96-head up to its Z-safety height: the top of the firmware/variant Z window
+    (the max of Head96Information.z_range), not a hardcoded value. speed and acceleration forward
+    to the underlying stop-disk move (None uses the head defaults)."""
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+    z_max = self._head96_information.z_range[1]
+    return await self.head96_move_stop_disk_z(
+      z_max, speed=speed, acceleration=acceleration, retract_on_crash=False
+    )
 
   @_requires_head96
   async def head96_park(
@@ -7802,42 +8318,67 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="H0", command="MO")
 
   @_requires_head96
-  async def head96_move_x(self, x: float):
-    """Move the 96-head to a specified X-axis coordinate.
+  async def head96_move_x(
+    self,
+    x: float,
+    acceleration_level: int = 3,
+    current_protection_limiter: int = 7,
+  ):
+    """Move the 96-head to a target channel-A1 X coordinate via the direct X-arm drive.
 
-    Note: Unlike head96_move_y and head96_move_z, the X-axis movement does not have
-    dedicated speed/acceleration parameters - it uses the EM command which moves
-    all axes together.
+    Drives the X-arm carriage to ``x + head96_information.x_offset`` so channel A1 lands at
+    ``x``: A1 sits left of (below) the carriage center, so deck-A1 = carriage - offset and the
+    carriage target is therefore ``x + offset`` (inverse of the iSWAP rotation-drive derivation,
+    ``iswap_rotation_drive_request_x``).
+    Unlike the legacy EM coordinate move (all axes together, no per-axis motion control), this
+    is the single-axis X-arm drive command and exposes acceleration and current control, like
+    ``head96_move_y`` / ``head96_move_stop_disk_z``.
 
     Args:
-      x: Target X coordinate in mm. Valid range: [-271.0, 974.0]
-
-    Returns:
-      Response from the hardware command.
+      x: Target A1 X coordinate in mm. Valid range [x_min, 974.0]; x_min is 0.0 with a left
+        side panel installed, else -271.0.
+      acceleration_level: X-arm acceleration index (1-5). Default 3.
+      current_protection_limiter: X-arm motor current limit (0-7). Default 7.
 
     Raises:
-      RuntimeError: If 96-head is not installed.
+      RuntimeError: If the 96-head is not installed.
+      ValueError: If the target A1 X is outside the legal 96-head X range.
     """
-    current_pos = await self.head96_request_position()
-    return await self.head96_move_to_coordinate(
-      Coordinate(x, current_pos.y, current_pos.z),
-      minimum_height_at_beginning_of_a_command=current_pos.z - 10,
+    x_min = self.HEAD96_X_MIN_WITH_LEFT_SIDE_PANEL if self.left_side_panel_installed else -271.0
+    if not (x_min <= x <= 974.0):
+      raise ValueError(f"96-head A1 x={x} out of range [{x_min}, 974.0]")
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    carriage_x = x + self._head96_information.x_offset
+    return await self.experimental_x_arm_move(
+      carriage_x,
+      acceleration_level=acceleration_level,
+      current_protection_limiter=current_protection_limiter,
     )
 
   @_requires_head96
   async def head96_move_y(
     self,
     y: float,
-    speed: float = 300.0,
-    acceleration: float = 300.0,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
   ):
     """Move the 96-head to a specified Y-axis coordinate.
 
+    A YA move writes its speed/acceleration into the drive's volatile register, where later moves
+    would inherit them. This command snapshots whatever speed/acceleration are on the robot before
+    it runs and restores them afterwards, so it leaves the persistent machine state untouched (the
+    restore is skipped when the move's value already matches what was there).
+
     Args:
       y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
-      speed: Movement speed in mm/sec. Valid range: [0.78125, 390.625 or 625.0]. Default: 300.0
-      acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 781.25]. Default: 300.0
+      speed: Movement speed in mm/sec; None uses `head96_y_drive_speed_default`. The valid range is
+        firmware-dependent (resolved into `Head96Information.y_speed_range`): [0.78125, 390.625]
+        pre-2021, [0.78125, 625.0] on 2021+ firmware.
+      acceleration: Movement acceleration in mm/sec**2; None uses
+        `head96_y_drive_acceleration_default`. The valid range is firmware-dependent (resolved into
+        `Head96Information.y_acceleration_range`): [78.125, 500.0] pre-2010, [78.125, 781.25] on
+        2013+ firmware.
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
 
     Returns:
@@ -7848,32 +8389,37 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       AssertionError: If firmware info missing or parameters out of range.
 
     Note:
-      Maximum speed varies by firmware version:
-      - Pre-2021: 390.625 mm/sec (25,000 increments)
-      - 2021+: 625.0 mm/sec (40,000 increments)
-      The exact firmware version introducing this change is undocumented.
+      The maxima rose across firmware generations, and the speed and acceleration cutoffs differ:
+
+      - Speed: 390.625 mm/sec pre-2021 (25,000 increments), 625.0 mm/sec on 2021+ (40,000
+        increments). The exact firmware version introducing this change is undocumented.
+      - Acceleration: 500.0 mm/sec**2 pre-2010 (32,000 increments), 781.25 mm/sec**2 on 2013+
+        (50,000 increments).
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
     )
 
-    fw_version = self._head96_information.fw_version
+    if speed is None:
+      speed = self.head96_y_drive_speed_default
+    if acceleration is None:
+      acceleration = self.head96_y_drive_acceleration_default
 
-    # Determine speed limit based on firmware version
-    # Pre-2021 firmware appears to have lower speed capability or safety limits
-    # TODO: Verify exact firmware version and investigate the reason for this change
-    y_speed_upper_limit = 390.625 if fw_version.year <= 2021 else 625.0  # mm/sec
+    fw_version = self._head96_information.fw_version
+    y_min, y_max = self._head96_information.y_range
+    y_speed_min, y_speed_max = self._head96_information.y_speed_range
+    y_accel_min, y_accel_max = self._head96_information.y_acceleration_range
 
     # Validate parameters before hardware communication
-    assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
-    assert 0.78125 <= speed <= y_speed_upper_limit, (
-      f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware version {fw_version}. "
-      f"Your firmware version: {self._head96_information.fw_version}. "
+    assert y_min <= y <= y_max, f"y must be between {y_min} and {y_max} mm"
+    assert y_speed_min <= speed <= y_speed_max, (
+      f"speed must be between {y_speed_min} and {y_speed_max} mm/sec for firmware version {fw_version}. "
+      f"Your firmware version: {fw_version}. "
       "If this limit seems incorrect, please test cautiously with an empty deck and report "
       "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
     )
-    assert 78.125 <= acceleration <= 781.25, (
-      "acceleration must be between 78.125 and 781.25 mm/sec**2"
+    assert y_accel_min <= acceleration <= y_accel_max, (
+      f"acceleration must be between {y_accel_min} and {y_accel_max} mm/sec**2"
     )
     assert isinstance(current_protection_limiter, int) and (
       0 <= current_protection_limiter <= 15
@@ -7884,32 +8430,89 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     speed_increment = self._head96_y_drive_mm_to_increment(speed)
     acceleration_increment = self._head96_y_drive_mm_to_increment(acceleration)
 
-    resp = await self.send_command(
-      module="H0",
-      command="YA",
-      ya=f"{y_increment:05}",
-      yv=f"{speed_increment:05}",
-      yr=f"{acceleration_increment:05}",
-      yw=f"{current_protection_limiter:02}",
-    )
+    # Snapshot what is on the robot now (read from the device, not a tracked default, so an external
+    # AA edit is preserved) so the move can restore it afterwards and leave the register untouched.
+    prev_speed = await self.head96_request_y_speed()
+    prev_acceleration = await self.head96_request_y_acceleration()
+    prev_speed_increment = self._head96_y_drive_mm_to_increment(prev_speed)
+    prev_acceleration_increment = self._head96_y_drive_mm_to_increment(prev_acceleration)
 
-    return resp
+    try:
+      return await self.send_command(
+        module="H0",
+        command="YA",
+        ya=f"{y_increment:05}",
+        yv=f"{speed_increment:05}",
+        yr=f"{acceleration_increment:05}",
+        yw=f"{current_protection_limiter:02}",
+      )
+    finally:
+      # Restore the pre-command register values, skipping the AA write where the move's value
+      # already matched what was there (compared in increments, the unit actually stored).
+      with anyio.CancelScope(shield=True):
+        if speed_increment != prev_speed_increment:
+          await self._head96_set_y_speed(prev_speed)
+        if acceleration_increment != prev_acceleration_increment:
+          await self._head96_set_y_acceleration(prev_acceleration)
 
   @_requires_head96
   async def head96_move_z(
     self,
     z: float,
-    speed: float = 80.0,
-    acceleration: float = 300.0,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
     current_protection_limiter: int = 15,
   ):
-    """Move the 96-head to a specified Z-axis coordinate.
+    """Move the 96-head Z drive (stop disk) to an absolute Z position in mm.
+
+    .. deprecated::
+      Use `head96_move_stop_disk_z` for moves without a tip attached (stop disk) or
+      `head96_move_tool_z` when a tip is attached (tip end).
+    """
+    warnings.warn(
+      "head96_move_z is deprecated and will be removed in v1. Use head96_move_stop_disk_z() for "
+      "moves without a tip attached or head96_move_tool_z() when a tip is attached.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_stop_disk_z(
+      z,
+      speed=speed,
+      acceleration=acceleration,
+      current_protection_limiter=current_protection_limiter,
+    )
+
+  @_requires_head96
+  async def head96_move_stop_disk_z(
+    self,
+    z: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+    current_protection_limiter: int = 15,
+    retract_on_crash: bool = True,
+  ):
+    """Move the 96-head z-drive (stop disk) to an absolute Z position in mm.
+
+    Stop-disk reference, mirroring the single-channel `move_channel_stop_disk_z`: use this for moves
+    without a tip; for the tip end with a tip on, use `head96_move_tool_z`.
+
+    A ZA move writes its speed/acceleration into the drive's volatile register, where later
+    moves (and C0-level commands) would inherit them. This command snapshots whatever
+    speed/acceleration are on the robot before it runs and restores them afterwards, so it
+    leaves the persistent machine state untouched (the restore is skipped when the move's value
+    already matches what was there). On any firmware error during the move (e.g. the head crashing
+    into something) the head retracts to Z-safety before the error is re-raised.
 
     Args:
-      z: Target Z coordinate in mm. Valid range: [180.5, 342.5]
-      speed: Movement speed in mm/sec. Valid range: [0.25, 100.0]. Default: 80.0
-      acceleration: Movement acceleration in mm/sec^2. Valid range: [25.0, 500.0]. Default: 300.0
+      z: Target stop-disk Z in mm. Valid range: Head96Information.z_range (180.5-342.5 mm; FM-STAR
+        extends it).
+      speed: Movement speed in mm/sec, [0.25, 100.0]; None uses `head96_z_drive_speed_default`
+        (seeded to 85 mm/s; constant for the Z drive, not version-resolved like the Y-drive default).
+      acceleration: Movement acceleration in mm/sec^2, [25.0, 500.0]; None uses
+        `head96_z_drive_acceleration_default` (seeded to 400 mm/s^2; likewise constant for the Z drive).
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
+      retract_on_crash: If True (default), retract to Z-safety on any firmware error (e.g. a crash)
+        before re-raising. head96_move_to_z_safety passes False so its own retract cannot recurse.
 
     Returns:
       Response from the hardware command.
@@ -7919,19 +8522,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       AssertionError: If firmware info missing or parameters out of range.
 
     Note:
-      Firmware versions from 2021+ use 1:1 acceleration scaling, while pre-2021 versions
-      use 100x scaling. Both maintain a 100,000 increment upper limit.
+      Firmware versions from 2021+ use 1:1 acceleration scaling, while pre-2021 versions use 100x
+      scaling. Both maintain a 100,000 increment upper limit.
     """
     assert self._head96_information is not None, (
       "requires 96-head firmware version information for safe operation"
     )
+    if speed is None:
+      speed = self.head96_z_drive_speed_default
+    if acceleration is None:
+      acceleration = self.head96_z_drive_acceleration_default
 
     fw_version = self._head96_information.fw_version
 
-    # Validate parameters before hardware communication
-    assert 180.5 <= z <= 342.5, "z must be between 180.5 and 342.5 mm"
-    assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
-    assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
+    # Validate parameters before hardware communication. The Z window is firmware/variant-adaptive
+    # (FM-STAR extends it), so read it from Head96Information rather than hardcoding the legacy range.
+    z_min, z_max = self._head96_information.z_range
+    z_speed_min, z_speed_max = self._head96_information.z_speed_range
+    z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
+    assert z_min <= z <= z_max, f"z must be between {z_min} and {z_max} mm"
+    assert z_speed_min <= speed <= z_speed_max, (
+      f"speed must be between {z_speed_min} and {z_speed_max} mm/sec"
+    )
+    assert z_accel_min <= acceleration <= z_accel_max, (
+      f"acceleration must be between {z_accel_min} and {z_accel_max} mm/sec**2"
+    )
     assert isinstance(current_protection_limiter, int) and (
       0 <= current_protection_limiter <= 15
     ), "current_protection_limiter must be an integer between 0 and 15"
@@ -7949,16 +8564,303 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
     )
 
-    resp = await self.send_command(
-      module="H0",
-      command="ZA",
-      za=f"{z_increment:05}",
-      zv=f"{speed_increment:05}",
-      zr=f"{acceleration_increment:06}",
-      zw=f"{current_protection_limiter:02}",
+    # Snapshot what is on the robot now (read from the device, not a tracked default, so an external
+    # AA edit is preserved) so the move can restore it afterwards and leave the register untouched.
+    prev_speed = await self.head96_request_z_speed()
+    prev_acceleration = await self.head96_request_z_acceleration()
+    prev_speed_increment = self._head96_z_drive_mm_to_increment(prev_speed)
+    prev_acceleration_increment = round(
+      self._head96_z_drive_mm_to_increment(prev_acceleration) * acceleration_multiplier
     )
 
-    return resp
+    try:
+      return await self.send_command(
+        module="H0",
+        command="ZA",
+        za=f"{z_increment:05}",
+        zv=f"{speed_increment:05}",
+        zr=f"{acceleration_increment:06}",
+        zw=f"{current_protection_limiter:02}",
+      )
+    except STARFirmwareError:
+      # Any firmware error here (most importantly a Z-drive crash) can leave the head against an
+      # obstacle, so retract to Z-safety before re-raising. head96_move_to_z_safety calls back into
+      # this method with retract_on_crash=False, so the retract cannot recurse into recovery.
+      if retract_on_crash:
+        try:
+          # retract slowly (quarter of max speed) - the head may be in liquid after a crash
+          await self.head96_move_to_z_safety(speed=self._head96_information.z_speed_range[1] * 0.25)
+        except STARFirmwareError:
+          pass  # retract failed too; surface the original error below
+      raise
+    finally:
+      # Restore the pre-command register values, skipping the AA write where the move's value
+      # already matched what was there (compared in increments, the unit actually stored).
+      with anyio.CancelScope(shield=True):
+        if speed_increment != prev_speed_increment:
+          await self._head96_set_z_speed(prev_speed)
+        if acceleration_increment != prev_acceleration_increment:
+          await self._head96_set_z_acceleration(prev_acceleration)
+
+  async def head96_request_tip_length(self) -> float:
+    """Measures the length of the tips on the 96-head; the head's counterpart of
+    `request_tip_len_on_channel`. Raises if no tips are present.
+
+    Returns:
+      The measured tip length in millimeters.
+
+    Raises:
+      RuntimeError: If the 96-head holds no tips.
+    """
+    if not await self.head96_request_tip_presence():
+      raise RuntimeError("96-head has no tips (firmware reports none)")
+    stop_disk = await self.head96_request_stop_disk_z()
+    tip_bottom = (await self.head96_request_position()).z
+    return round(stop_disk - (tip_bottom - STARBackend.DEFAULT_TIP_FITTING_DEPTH), 1)
+
+  @_requires_head96
+  async def head96_move_tool_z(self, z: float, speed: Optional[float] = None):
+    """Move the 96-head tip bottom to an absolute Z position in mm.
+
+    Requires tips. `head96_move_stop_disk_z` references the stop disk, so this reads the tip overhang
+    (stop disk minus tip bottom, measured move-free from `head96_request_stop_disk_z` vs
+    `head96_request_position`) and offsets the move so the tip end lands on `z`. Mirrors the
+    single-channel `move_channel_tool_z`: a tip-presence guard plus a tip-space range check.
+
+    Args:
+      z: Target tip-bottom Z in mm.
+      speed: Movement speed in mm/sec; None uses the head default.
+
+    Raises:
+      ValueError: if the 96-head holds no tips, or `z` is outside the reachable tip-bottom window.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+
+    if not await self.head96_request_tip_presence():
+      raise ValueError(
+        "96-head has no tips (firmware reports none); use head96_move_stop_disk_z for Z moves "
+        "without a tip attached."
+      )
+
+    tip_overhang = await self.head96_request_tip_length() - STARBackend.DEFAULT_TIP_FITTING_DEPTH
+
+    # The move is in stop-disk space over z_range, so the reachable tip-bottom window is z_range
+    # shifted down by the overhang, floored at the deck surface. Validate in tip-bottom terms.
+    z_min, z_max = self._head96_information.z_range
+    deck = STARBackend.MINIMUM_CHANNEL_Z_POSITION
+    if not (max(z_min - tip_overhang, deck) <= z <= z_max - tip_overhang):
+      raise ValueError(
+        f"tip-bottom z={z} mm out of reach "
+        f"[{round(max(z_min - tip_overhang, deck), 1)}, {round(z_max - tip_overhang, 1)}] mm "
+        f"for overhang {round(tip_overhang, 1)} mm"
+      )
+
+    return await self.head96_move_stop_disk_z(z + tip_overhang, speed=speed)
+
+  @need_iswap_parked
+  @_requires_head96
+  async def head96_probe_z_using_clld(
+    self,
+    start_pos_search: Optional[float] = None,
+    tip_len: Optional[float] = None,
+    lowest_immers_pos: Optional[float] = None,
+    approach_speed: Optional[float] = None,
+    speed: float = 10.0,
+    acceleration: float = 300.0,
+    lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    post_detection_dist: float = 2.0,
+    current_protection_limiter: int = 15,
+    move_to_z_safety_after: bool = False,
+  ) -> float:
+    """Probe the liquid-surface Z-height with the 96-head's capacitive LLD (cLLD).
+
+    Runs a downward cLLD search on the 96-head stop-disk Z drive (H0 ZL), stopping at the detected
+    surface, and returns the tip-bottom (= liquid-surface) Z-height. The 96-head counterpart of the
+    single-channel cLLD probe; `lld_sensor` is head-specific (the head has two cLLD sensors, a
+    channel has one).
+
+    Positions are tip-bottom referenced like `head96_move_tool_z`: the tip overhang (stop disk minus
+    tip bottom, a rigid constant for the mounted tip) maps them to the firmware's stop-disk zh / zc,
+    and the deck floor caps the deepest immersion. The head should be at Z-safety before calling -
+    `start_pos_search` defaults to the top and the firmware brings the head there before searching.
+    cLLD needs a conductive path, so tips must be loaded.
+
+    The ZL wire format changed between the 2008 and 2013 firmware command sets, so the parameters are
+    formatted per the head's reported firmware date. `lld_sensor` other than "any" requires 2013+
+    firmware, since the 2008 ZL has no sensor-selection field.
+
+    Args:
+      tip_len: mounted tip length in mm, used to map tip-bottom positions to the stop disk. None
+        (default) measures it via `head96_request_tip_length`.
+      lowest_immers_pos: lowest tip-bottom the search may reach in mm; None is the deepest safe value.
+      start_pos_search: tip-bottom position the search starts from in mm; None is the highest safe.
+      speed: cLLD search speed in mm/sec.
+      acceleration: search acceleration in mm/sec**2.
+      approach_speed: fast descent speed in mm/sec for the upper section, before the slow search.
+        None uses `head96_z_drive_speed_default`.
+      current_protection_limiter: motor current limit (hardware units; 0-15 on 2013+, 0-7 on 2008).
+      lld_sensor: which head cLLD sensor(s) trigger detection.
+      detection_edge: edge steepness threshold for cLLD detection (0-1023).
+      detection_drop: offset applied after cLLD edge detection (0-1023).
+      post_detection_dist: signed distance to move after detection in mm; positive moves up / out of
+        liquid, negative moves down / deeper.
+      move_to_z_safety_after: if True, retract the head to Z-safety after reading the height.
+
+    Returns:
+      The detected liquid-surface Z-height as a tip-bottom position in mm.
+
+    Raises:
+      ValueError: if the head holds no tips, the chosen sensor's corner channel(s) hold no tip (when
+        tip tracking is on), a parameter is out of range, or `lld_sensor` other than "any" is
+        requested on pre-2013 firmware.
+    """
+    assert self._head96_information is not None, (
+      "requires 96-head firmware version information for safe operation"
+    )
+
+    lld_sensor_map = {"G11 or H12": 0, "A1 or B2": 1, "any": 2, "all": 3}
+    if lld_sensor not in lld_sensor_map:
+      raise ValueError(f"lld_sensor must be one of {list(lld_sensor_map)}, is {lld_sensor!r}")
+
+    z_speed_min, z_speed_max = self._head96_information.z_speed_range
+    z_accel_min, z_accel_max = self._head96_information.z_acceleration_range
+
+    if approach_speed is None:
+      approach_speed = self.head96_z_drive_speed_default
+    if not z_speed_min <= approach_speed <= z_speed_max:
+      raise ValueError(
+        f"approach_speed must be between {z_speed_min} - {z_speed_max} mm/sec, is {approach_speed}"
+      )
+    if not z_speed_min <= speed <= z_speed_max:
+      raise ValueError(f"speed must be between {z_speed_min} - {z_speed_max} mm/sec, is {speed}")
+    if not z_accel_min <= acceleration <= z_accel_max:
+      raise ValueError(
+        f"acceleration must be between {z_accel_min} - {z_accel_max} mm/sec**2, is {acceleration}"
+      )
+    if not 0 <= detection_edge <= 1023:
+      raise ValueError(f"detection_edge must be between 0 - 1023, is {detection_edge}")
+    if not 0 <= detection_drop <= 1023:
+      raise ValueError(f"detection_drop must be between 0 - 1023, is {detection_drop}")
+
+    # First guard (firmware, always verifiable): some channel must hold a tip for the conductive path.
+    if not await self.head96_request_tip_presence():
+      raise ValueError("96-head cLLD requires tips loaded (conductive path); none detected")
+
+    # When tip tracking is on, also require a tip on the corner channel(s) that feed the chosen
+    # sensor - the firmware guard above only confirms *some* channel does. cLLD sensor 0 reads
+    # G11(86)/H12(95), sensor 1 reads A1(0)/B2(9) (column-major head96 indices).
+    if does_tip_tracking() and self.head96 is not None:
+      sensor_0 = self.head96[86].has_tip or self.head96[95].has_tip
+      sensor_1 = self.head96[0].has_tip or self.head96[9].has_tip
+      sensor_ready = {
+        "G11 or H12": sensor_0,
+        "A1 or B2": sensor_1,
+        "any": sensor_0 or sensor_1,
+        "all": sensor_0 and sensor_1,
+      }[lld_sensor]
+      if not sensor_ready:
+        raise ValueError(
+          f"lld_sensor={lld_sensor!r}: the tip tracker reports no tip on the corner channel(s) "
+          "that feed it"
+        )
+
+    # Tip length: measure unless the caller supplied it.
+    if tip_len is None:
+      tip_len = await self.head96_request_tip_length()
+    tip_overhang = tip_len - STARBackend.DEFAULT_TIP_FITTING_DEPTH
+
+    # Reachable tip-bottom window: z_range shifted down by the overhang, floored at the deck.
+    z_min, z_max = self._head96_information.z_range
+    deck = STARBackend.MINIMUM_CHANNEL_Z_POSITION
+    height_min = max(z_min - tip_overhang, deck)
+    height_max = z_max - tip_overhang
+
+    if lowest_immers_pos is None:
+      lowest_immers_pos = height_min
+    if start_pos_search is None:
+      start_pos_search = height_max
+    if not (height_min <= lowest_immers_pos <= height_max):
+      raise ValueError(
+        f"lowest_immers_pos={lowest_immers_pos} mm out of reach "
+        f"[{round(height_min, 1)}, {round(height_max, 1)}] mm (tip-bottom)"
+      )
+    if not (height_min <= start_pos_search <= height_max):
+      raise ValueError(
+        f"start_pos_search={start_pos_search} mm out of reach "
+        f"[{round(height_min, 1)}, {round(height_max, 1)}] mm (tip-bottom)"
+      )
+
+    # lm and the raw 6-digit zr arrived with the 2013 firmware; pre-2013 has no lm and scales zr.
+    uses_2013_structure = self._head96_information.fw_version >= datetime.date(2013, 1, 1)
+    if not uses_2013_structure and lld_sensor != "any":
+      raise ValueError(
+        f"lld_sensor={lld_sensor!r} requires 2013+ firmware; the 2008 command set has no "
+        "sensor-selection field"
+      )
+
+    # zw (current protection limiter) range narrows on pre-2013 firmware.
+    zw_max = 15 if uses_2013_structure else 7
+    if not 0 <= current_protection_limiter <= zw_max:
+      raise ValueError(
+        f"current_protection_limiter must be between 0 - {zw_max}, is {current_protection_limiter}"
+      )
+
+    # Back to stop-disk space (zh / zc) via the overhang.
+    lowest_immers_pos_increments = self._head96_z_drive_mm_to_increment(
+      lowest_immers_pos + tip_overhang
+    )
+    start_pos_search_increments = self._head96_z_drive_mm_to_increment(
+      start_pos_search + tip_overhang
+    )
+    approach_speed_increments = self._head96_z_drive_mm_to_increment(approach_speed)
+    speed_increments = self._head96_z_drive_mm_to_increment(speed)
+    acceleration_increments = self._head96_z_drive_mm_to_increment(acceleration)
+
+    # Signed post-detection move -> direction (zj) and magnitude (zi).
+    post_detection_direction = 1 if post_detection_dist >= 0 else 0
+    post_detection_dist_increments = self._head96_z_drive_mm_to_increment(abs(post_detection_dist))
+    if not 0 <= post_detection_dist_increments <= 9999:
+      raise ValueError(
+        f"abs(post_detection_dist) must be <= "
+        f"{self._head96_z_drive_increment_to_mm(9999)} mm, is {abs(post_detection_dist)}"
+      )
+
+    lm_field = {"lm": str(lld_sensor_map[lld_sensor])} if uses_2013_structure else {}
+    if uses_2013_structure:
+      zr_field = f"{acceleration_increments:06}"  # raw [increment/second**2]
+      zw_field = f"{current_protection_limiter:02}"
+    else:
+      zr_field = f"{acceleration_increments // 1000:03}"  # [1000 increment/second**2]
+      zw_field = f"{current_protection_limiter:01}"
+    zl_params: Dict[str, Any] = {
+      "zh": f"{lowest_immers_pos_increments:05}",  # lowest immersion position [increment]
+      "zc": f"{start_pos_search_increments:05}",  # start position of LLD search [increment]
+      "zi": f"{post_detection_dist_increments:04}",  # immersion depth after LLD [increment]
+      "zj": f"{post_detection_direction}",  # direction of immersion depth (0 down, 1 up)
+      **lm_field,  # which cLLD sensor(s) trigger detection (2013+ only)
+      "gt": f"{detection_edge:04}",  # edge steepness at cLLD detection
+      "gl": f"{detection_drop:04}",  # offset after cLLD edge detection
+      "zv": f"{approach_speed_increments:05}",  # upper-section (fast approach) speed
+      "zl": f"{speed_increments:05}",  # cLLD search speed
+      "zr": zr_field,  # acceleration
+      "zw": zw_field,  # current protection limiter
+    }
+    try:
+      await self.send_command(module="H0", command="ZL", **zl_params)
+    except STARFirmwareError:
+      await self.head96_move_to_z_safety()
+      raise
+
+    # RH returns the latched detected surface (stop-disk frame), unaffected by the post-detection
+    # move; map it to tip-bottom. TODO(hardware): confirm the RH response format against a capture.
+    detected_tip_bottom = round(await self.head96_request_last_lld_height() - tip_overhang, 2)
+    if move_to_z_safety_after:
+      await self.head96_move_to_z_safety()
+    return detected_tip_bottom
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
@@ -8065,6 +8967,388 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
+
+  @_requires_head96
+  async def head96_experimental_aspirate(
+    self,
+    volume: float,
+    flow_rate: Optional[float] = None,
+    minimum_height: Optional[float] = None,
+    surface_following_distance: float = 0.0,
+    requires_tip: bool = True,
+  ):
+    """Aspirate on the 96-head with surface following (the firmware drives Z and the dispensing drive
+    in parallel).
+
+    The direct, full-control counterpart to `aspirate96`: it takes the height / surface-following /
+    flow directly rather than a resource and liquid class, and computes no positions. Acts on the whole
+    head (rigid - no per-channel selection). Values are given in human units and converted to firmware
+    increments. This is a basic, thin command: it does not settle after aspirating (settling is a
+    separate basic command).
+
+    Args:
+      volume: The piston (dispensing-drive) volume to aspirate per channel, uL; raw, not liquid-class
+        corrected.
+      flow_rate: The dispensing-drive speed, uL/s; None uses the head's default speed.
+      minimum_height: The lowest the tip end (tip-bottom) descends to, mm - the end of the stroke.
+        None defaults to the deepest safe target: the deck floor with a tip on, or the firmware Z
+        floor with none on (no tip overhang, so this is the stop-disk position directly).
+      surface_following_distance: The Z travel during aspiration, mm; 0 keeps the head in place so it
+        cannot drive into the container bottom.
+      requires_tip: If True, raise if the head holds no tips; if False, allow aspirating air.
+
+    Raises:
+      RuntimeError: If 96-head is not installed, or requires_tip and the head holds no tips.
+      AssertionError: If firmware info missing or a parameter is out of range.
+    """
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    info = self._head96_information
+    vol_min, vol_max = info.dispensing_drive_range
+    flow_min, flow_max = info.dispensing_drive_speed_range
+    z_min, z_max = info.z_range
+    surface_following_max = self._head96_z_drive_increment_to_mm(9999)
+    if flow_rate is None:
+      flow_rate = info.dispensing_drive_speed_default
+
+    assert vol_min <= volume <= vol_max, f"volume must be between {vol_min} and {vol_max} uL"
+    assert flow_min <= flow_rate <= flow_max, (
+      f"flow_rate must be between {flow_min} and {flow_max} uL/s"
+    )
+    assert 0 <= surface_following_distance <= surface_following_max, (
+      f"surface_following_distance must be between 0 and {surface_following_max} mm"
+    )
+
+    has_tips = bool(await self.head96_request_tip_presence())
+    if requires_tip and not has_tips:
+      raise RuntimeError(
+        "96-head has no tips (firmware reports none); pick up tips before aspirating"
+      )
+
+    # minimum_height is a tip-bottom height: the tip overhang (stop disk - tip bottom) converts it to
+    # the firmware stop-disk zh, and the deck floor caps how deep it may go. With no tip there is no
+    # overhang, so minimum_height is the stop-disk position directly and is guarded against z_min.
+    overhang = 0.0
+    if has_tips:
+      overhang = await self.head96_request_tip_length() - STARBackend.DEFAULT_TIP_FITTING_DEPTH
+    height_min = max(z_min - overhang, STARBackend.MINIMUM_CHANNEL_Z_POSITION)
+    height_max = z_max - overhang
+    if minimum_height is None:
+      minimum_height = height_min
+    assert height_min <= minimum_height <= height_max, (
+      f"minimum_height must be between {height_min} and {height_max} mm"
+    )
+
+    volume_increment = self._head96_dispensing_drive_uL_to_increment(volume)
+    flow_rate_increment = self._head96_dispensing_drive_uL_to_increment(flow_rate)
+    surface_following_increment = self._head96_z_drive_mm_to_increment(surface_following_distance)
+    zh_increment = self._head96_z_drive_mm_to_increment(minimum_height + overhang)
+    return await self.send_command(
+      module="H0",
+      command="PA",
+      pm="F" * 24,  # all 96 channels; the rigid head has no per-channel selection
+      dj="1",  # minimum_height enforcement always on; the resolved minimum_height is the floor
+      da=f"{volume_increment:05}",
+      dv=f"{flow_rate_increment:05}",
+      dc="00000",  # pre-wetting off; its interaction with surface following is unverified
+      zd=f"{surface_following_increment:04}",
+      zh=f"{zh_increment:05}",
+      to="000",  # settling_time not exposed here (firmware allows it); it is its own basic command
+    )
+
+  @_requires_head96
+  async def head96_experimental_dispense(
+    self,
+    volume: float,
+    flow_rate: Optional[float] = None,
+    minimum_height: Optional[float] = None,
+    stop_back_volume: float = 0.0,
+    surface_following_distance: float = 0.0,
+    stop_flow_rate: Optional[float] = None,
+    requires_tip: bool = True,
+  ):
+    """Dispense on the 96-head with surface following (the firmware drives Z and the dispensing drive
+    in parallel).
+
+    The direct, full-control counterpart to `dispense96`. Acts on the whole head (rigid). This is a
+    basic, thin command: it does not settle after dispensing (settling is a separate basic command).
+
+    Args:
+      volume: The piston (dispensing-drive) volume to dispense per channel, uL; raw, not liquid-class
+        corrected.
+      flow_rate: The dispensing-drive speed, uL/s; None uses the head's default speed.
+      minimum_height: The lowest the tip end (tip-bottom) descends to, mm - the end of the stroke.
+        None defaults to the deepest safe target: the deck floor with a tip on, or the firmware Z
+        floor with none on (no tip overhang, so this is the stop-disk position directly).
+      stop_back_volume: The volume drawn back at the end to stop dripping, uL.
+      surface_following_distance: The Z travel during dispense, mm.
+      stop_flow_rate: The dispensing-drive stop speed, uL/s; None uses the firmware default (0).
+      requires_tip: If True, raise if the head holds no tips; if False, allow dispensing air.
+
+    Raises:
+      RuntimeError: If 96-head is not installed, or requires_tip and the head holds no tips.
+      AssertionError: If firmware info missing or a parameter is out of range.
+    """
+    assert self._head96_information is not None, "96-head information not loaded; run setup()"
+    info = self._head96_information
+    vol_min, vol_max = info.dispensing_drive_range
+    flow_min, flow_max = info.dispensing_drive_speed_range
+    z_min, z_max = info.z_range
+    surface_following_max = self._head96_z_drive_increment_to_mm(9999)
+    stop_back_max = self._head96_dispensing_drive_increment_to_uL(9999)
+    if flow_rate is None:
+      flow_rate = info.dispensing_drive_speed_default
+    if stop_flow_rate is None:
+      stop_flow_rate = 0.0  # firmware stop-speed default
+
+    assert vol_min <= volume <= vol_max, f"volume must be between {vol_min} and {vol_max} uL"
+    assert flow_min <= flow_rate <= flow_max, (
+      f"flow_rate must be between {flow_min} and {flow_max} uL/s"
+    )
+    assert 0 <= stop_back_volume <= stop_back_max, (
+      f"stop_back_volume must be between 0 and {stop_back_max} uL"
+    )
+    assert 0 <= surface_following_distance <= surface_following_max, (
+      f"surface_following_distance must be between 0 and {surface_following_max} mm"
+    )
+    assert 0 <= stop_flow_rate <= flow_max, f"stop_flow_rate must be between 0 and {flow_max} uL/s"
+
+    has_tips = bool(await self.head96_request_tip_presence())
+    if requires_tip and not has_tips:
+      raise RuntimeError(
+        "96-head has no tips (firmware reports none); pick up tips before dispensing"
+      )
+
+    # minimum_height is a tip-bottom height: the tip overhang (stop disk - tip bottom) converts it to
+    # the firmware stop-disk zh, and the deck floor caps how deep it may go. With no tip there is no
+    # overhang, so minimum_height is the stop-disk position directly and is guarded against z_min.
+    overhang = 0.0
+    if has_tips:
+      overhang = await self.head96_request_tip_length() - STARBackend.DEFAULT_TIP_FITTING_DEPTH
+    height_min = max(z_min - overhang, STARBackend.MINIMUM_CHANNEL_Z_POSITION)
+    height_max = z_max - overhang
+    if minimum_height is None:
+      minimum_height = height_min
+    assert height_min <= minimum_height <= height_max, (
+      f"minimum_height must be between {height_min} and {height_max} mm"
+    )
+
+    volume_increment = self._head96_dispensing_drive_uL_to_increment(volume)
+    flow_rate_increment = self._head96_dispensing_drive_uL_to_increment(flow_rate)
+    stop_back_increment = self._head96_dispensing_drive_uL_to_increment(stop_back_volume)
+    surface_following_increment = self._head96_z_drive_mm_to_increment(surface_following_distance)
+    zh_increment = self._head96_z_drive_mm_to_increment(minimum_height + overhang)
+    stop_flow_rate_increment = self._head96_dispensing_drive_uL_to_increment(stop_flow_rate)
+    return await self.send_command(
+      module="H0",
+      command="PB",
+      pm="F" * 24,  # all 96 channels; the rigid head has no per-channel selection
+      db=f"{volume_increment:05}",
+      dv=f"{flow_rate_increment:05}",
+      dd=f"{stop_back_increment:04}",
+      ze=f"{surface_following_increment:04}",
+      zh=f"{zh_increment:05}",
+      du=f"{stop_flow_rate_increment:05}",
+    )
+
+  @_requires_head96
+  @need_iswap_parked
+  async def mix96(
+    self,
+    mix: Mix,
+    resource: Union[Plate, Container, List[Well]],
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_start: Optional[float] = None,
+    blowout_air_volume: float = 5.0,
+    lld_mode: Optional[LLDMode] = None,
+    descent_speed: float = 80.0,
+    swap_speed: float = 5.0,
+    settling_time: float = 0.0,
+    minimum_traverse_height_end: Optional[float] = None,
+  ):
+    """Mix in place with the 96-head over a resource (aspirate96-style target).
+
+    Thin convenience wrapper over :meth:`mix96_at_coordinate`: resolves the channel-A1 deck
+    target (and the container top, used for the swap-start clearance) from ``resource`` like
+    ``aspirate96`` does, applies ``offset``, and delegates. See that method for the mixing
+    behaviour and the meaning of the remaining arguments.
+
+    Args:
+      mix: volume, repetitions, flow_rate and optional surface_following_distance.
+      resource: aspirate96-style target - a Plate (head A1 over well A1), a Container, or a list
+        of Wells.
+      offset: added to the resolved channel-A1 target position.
+      minimum_traverse_height_start: absolute tip-bottom Z before the X/Y move; None uses full Z
+        safety.
+      blowout_air_volume: air gap taken above the well before descent and expelled above it on
+        exit, to clear the tips of residual on the way out; 0 skips both.
+      lld_mode: liquid-level-detection mode; only ``LLDMode.OFF`` is supported (the default).
+      descent_speed: speed for the fast descent down to just above the well.
+      swap_speed: speed from there into the well to the target Z.
+      settling_time: seconds to wait after the last cycle, before retracting out of the well.
+      minimum_traverse_height_end: absolute tip-bottom Z after mixing; None uses full Z safety.
+    """
+    anchor: Container
+    if isinstance(resource, Plate):
+      anchor = resource.get_item(0)  # head A1 over well A1 (as aspirate96 resolves it)
+    elif isinstance(resource, list):
+      anchor = resource[0]
+    else:
+      anchor = resource
+    a1 = anchor.get_absolute_location(x="c", y="c", z="cavity_bottom") + offset
+    z_top = anchor.get_absolute_location(x="c", y="c", z="top").z
+
+    return await self.mix96_at_coordinate(
+      mix,
+      a1_coordinate=a1,
+      z_top=z_top,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      blowout_air_volume=blowout_air_volume,
+      lld_mode=lld_mode,
+      descent_speed=descent_speed,
+      swap_speed=swap_speed,
+      settling_time=settling_time,
+      minimum_traverse_height_end=minimum_traverse_height_end,
+    )
+
+  async def mix96_at_coordinate(
+    self,
+    mix: Mix,
+    a1_coordinate: Coordinate,
+    z_top: Optional[float] = None,
+    minimum_traverse_height_start: Optional[float] = None,
+    blowout_air_volume: float = 5.0,
+    lld_mode: Optional[LLDMode] = None,
+    descent_speed: float = 80.0,
+    swap_speed: float = 5.0,
+    settling_time: float = 0.0,
+    minimum_traverse_height_end: Optional[float] = None,
+  ):
+    """Position the 96-head over an explicit channel-A1 deck coordinate and mix in place.
+
+    Raises the single channels to safe Z, then moves X/Y over the target and descends into the
+    well, then runs ``mix.repetitions`` symmetric aspirate / dispense cycles: each aspirate
+    follows the surface down by ``surface_following_distance`` and each dispense follows it
+    back up, so the tip oscillates without drifting. Returns to a traverse height when done.
+
+    Z targets are in tip-bottom space (the target Z is where the tip end goes, not the stop
+    disk). For a resource-relative target, use :meth:`mix96`.
+
+    Args:
+      mix: volume, repetitions, flow_rate and optional surface_following_distance.
+      a1_coordinate: explicit channel-A1 deck target (tip-bottom space).
+      z_top: container top Z used for the swap-start clearance above the well; None descends
+        straight to just above the mix start.
+      minimum_traverse_height_start: absolute tip-bottom Z before the X/Y move; None uses full Z
+        safety.
+      blowout_air_volume: air gap taken above the well before descent and expelled above it on
+        exit, to clear the tips of residual on the way out; 0 skips both.
+      lld_mode: liquid-level-detection mode; only ``LLDMode.OFF`` is supported (the default).
+      descent_speed: speed for the fast descent down to just above the well.
+      swap_speed: speed from there into the well to the target Z.
+      settling_time: seconds to wait after the last cycle, before retracting out of the well.
+      minimum_traverse_height_end: absolute tip-bottom Z after mixing; None uses full Z safety.
+
+    Raises:
+      ValueError: if ``lld_mode`` is not ``LLDMode.OFF`` or ``settling_time`` < 0.
+      RuntimeError: if the 96-head holds no tips.
+    """
+    lld_mode = lld_mode if lld_mode is not None else self.LLDMode.OFF
+    if lld_mode is not self.LLDMode.OFF:
+      raise ValueError("mix96 currently supports only LLDMode.OFF")
+
+    if settling_time < 0:
+      raise ValueError("settling_time must be >= 0")
+
+    if await self.head96_request_tip_presence() == 0:
+      raise RuntimeError("96-head has no tips (firmware reports none); pick up tips first")
+
+    # H0 direct-drive moves don't raise the single channels (the C0 core-96 commands do so at
+    # firmware level), so do it explicitly before the X/Y traverse.
+    await self.move_all_channels_in_z_safety()
+
+    a1 = a1_coordinate
+
+    # traverse to start height; None retracts to full (stop-disk) Z safety, a value is the
+    # tip-bottom height the rest of the method works in
+    if minimum_traverse_height_start is None:
+      await self.head96_move_to_z_safety()
+    else:
+      await self.head96_move_tool_z(minimum_traverse_height_start, speed=descent_speed)
+
+    # move X, Y; X acceleration_level=1 below y=200 mm, the low-Y zone where the head is
+    # cantilevered forward off the X-drive and wobbles most
+    # TODO: replace head96_move_y with a primitive Y move to enable parallelised addressing of
+    # the X and Y drives. Its speed/acceleration request+set round-trip currently blocks
+    # parallelisation of the Y drive: the second read is trapped behind the in-flight X move on
+    # the single connection, so the Y move only starts once X has finished.
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(
+        self.head96_move_x, a1.x, 1 if a1.y <= 200.0 else 3
+      )
+      tg.start_soon(self.head96_move_y, a1.y)
+
+    # the tip oscillates between the floor (a1.z) and mix_start (floor + sf), starting at
+    # mix_start so the first aspirate can follow the surface down without hitting the bottom.
+    sf = 0.0 if mix.surface_following_distance is None else mix.surface_following_distance
+    mix_floor = a1.z
+    mix_start = a1.z + sf
+
+    # 2-stage Z descent in tip-bottom space: descent_speed to the swap-start height just above
+    # the well, aspirate blowout_air_volume, then swap_speed down to mix_start; move_tool_z lands
+    # the tip end each move.
+    z_clearance = 5.0
+    swap_start_z = (z_top if z_top is not None else mix_start) + z_clearance
+    await self.head96_move_tool_z(swap_start_z, speed=descent_speed)
+    if blowout_air_volume:
+      await self.head96_experimental_aspirate(
+        blowout_air_volume,
+        flow_rate=mix.flow_rate,
+        minimum_height=mix_floor,
+        surface_following_distance=0,
+        requires_tip=False,
+      )
+    await self.head96_move_tool_z(mix_start, speed=swap_speed)
+
+    # symmetric mix cycles (no per-cycle drift): each aspirate follows the surface down by sf
+    # to the floor, each dispense back up to mix_start. minimum_height is the tip-bottom floor;
+    # the experimental commands convert it to the stop-disk reference.
+    for _ in range(mix.repetitions):
+      await self.head96_experimental_aspirate(
+        mix.volume,
+        flow_rate=mix.flow_rate,
+        minimum_height=mix_floor,
+        surface_following_distance=sf,
+        requires_tip=False,
+      )
+      await self.head96_experimental_dispense(
+        mix.volume,
+        flow_rate=mix.flow_rate,
+        minimum_height=mix_floor,
+        surface_following_distance=sf,
+        requires_tip=False,
+      )
+
+    # settle in place (tip still in the liquid) after the last cycle
+    if settling_time:
+      await anyio.sleep(settling_time)
+
+    # careful exit at swap_speed back up to the swap-start height (mirrors the descent), before
+    # the fast traverse out
+    await self.head96_move_tool_z(swap_start_z, speed=swap_speed)
+
+    if blowout_air_volume:
+      await self.head96_experimental_dispense(
+        blowout_air_volume,
+        flow_rate=mix.flow_rate,
+        requires_tip=False,
+      )
+
+    # traverse to end height; None retracts to full (stop-disk) Z safety, a value is the
+    # tip-bottom height the rest of the method works in
+    if minimum_traverse_height_end is None:
+      await self.head96_move_to_z_safety()
+    else:
+      await self.head96_move_tool_z(minimum_traverse_height_end, speed=descent_speed)
 
   # # # Granular commands # # #
 
@@ -8802,7 +10086,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       DeprecationWarning,
       stacklevel=2,
     )
-    return await self.head96_move_z(z_position)
+    return await self.head96_move_stop_disk_z(z_position)
 
   async def move_96head_to_coordinate(
     self,
@@ -8890,6 +10174,43 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     x_coordinate = x_coordinate if resp["xd"] == 0 else -x_coordinate
 
     return Coordinate(x=x_coordinate, y=y_coordinate, z=z_coordinate)
+
+  @_requires_head96
+  async def head96_request_stop_disk_z(self) -> float:
+    """Request the 96-head z-drive (stop-disk) position in mm.
+
+    Unlike `head96_request_position` (whose z is the tip bottom when a tip is mounted), this is the
+    raw z-drive position - the stop disk - regardless of tip state.
+
+    Returns:
+      Stop-disk Z position in mm.
+    """
+    resp = await self.send_command(module="H0", command="RZ", fmt="rz##### (n)")
+    return self._head96_z_drive_increment_to_mm(resp["rz"][1])  # [0] = FW counter, [1] = HW counter
+
+  async def head96_request_last_lld_height(self) -> float:
+    """Request the liquid-surface position the last 96-head cLLD search found, in mm (H0 RH).
+
+    Unlike `head96_request_stop_disk_z` (the head's current position), this is the latched surface
+    the last `ZL` search detected, so it is unaffected by any post-detection move - the head
+    counterpart of the channel `request_pip_height_last_lld`.
+
+    Returns:
+      Detected liquid-surface Z position (stop-disk frame) in mm.
+    """
+    resp = await self.send_command(module="H0", command="RH", fmt="rh#####")
+    return self._head96_z_drive_increment_to_mm(resp["rh"])
+
+  async def _head96_probe_z_max(self) -> float:
+    """Probe the reachable Z top (mm) for this unit: drive to the firmware Z-safety height (C0 EV)
+    and read the stop disk there. The generic command-range max can exceed what this unit actually
+    reaches, so the top is read off the hardware.
+
+    Doubles as the firmware Z-safety retract (the EV), so it can stand in for an explicit safe-z
+    move. Needs no Head96Information, so it is usable before that record exists.
+    """
+    await self.send_command(module="C0", command="EV", read_timeout=20)
+    return await self.head96_request_stop_disk_z()
 
   async def request_core_96_head_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
@@ -13625,8 +14946,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     try:
       yield
     finally:
-      await self.send_command("R0", "AA", wv=original_wv)
-      await self.send_command("R0", "AA", tv=original_tv)
+      with anyio.CancelScope(shield=True):
+        await self.send_command("R0", "AA", wv=original_wv)
+        await self.send_command("R0", "AA", tv=original_tv)
 
   # HamiltonHeaterShakerInterface
 
