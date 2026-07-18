@@ -191,6 +191,17 @@ Barcode Scanning
     BarcodeScanner
     BarcodeScannerBackend
 
+.. currentmodule:: pylabrobot.capabilities.barcode_scanning.serial
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    SerialBarcodeScanner
+    SerialBarcodeScannerDriver
+    SerialBarcodeScannerBackend
+
 
 Microscopy
 ----------
