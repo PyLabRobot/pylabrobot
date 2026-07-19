@@ -8,6 +8,10 @@ pyhamilton/LAY-BACKUP
 .ipynb_checkpoints
 *.egg-info
 *.log
+keyser-testing/Tecan Manuals/
+keyser-testing/evoware-usb-capture-*/
+keyser-testing/evoware-pktmon-capture-*/
+keyser-testing/*.pdf
 build/lib
 
 myenv

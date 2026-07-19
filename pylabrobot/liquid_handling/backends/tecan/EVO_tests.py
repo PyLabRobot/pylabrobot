@@ -429,6 +429,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
         call(module="C1", command="SFR", params=[2000, 600]),
         call(module="C1", command="SGG", params=[100, 75, None]),
         call(module="C1", command="AGR", params=[754]),
+        call(module="C1", command="RPG", params=[0]),
         call(module="C1", command="RPZ", params=[5]),
         call(module="C1", command="STW", params=[1, 0, 0, 0, 135, 0]),
         call(module="C1", command="STW", params=[2, 0, 0, 0, 53, 0]),
