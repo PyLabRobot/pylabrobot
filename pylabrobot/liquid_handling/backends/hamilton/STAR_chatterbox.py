@@ -331,9 +331,6 @@ class STARChatterboxBackend(STARBackend):
   async def move_channel_y(self, channel: int, y: float):
     logger.info("moving channel %s to y: %s", channel, y)
 
-  async def move_channel_x(self, channel: int, x: float):
-    logger.info("moving channel %s to x: %s", channel, x)
-
   async def move_all_channels_in_z_safety(self):
     logger.info("moving all channels to z safety")
 

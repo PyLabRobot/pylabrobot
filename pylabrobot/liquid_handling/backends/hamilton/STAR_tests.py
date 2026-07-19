@@ -5,6 +5,7 @@ import copy
 import datetime
 import unittest
 import unittest.mock
+from dataclasses import replace
 from typing import Literal, cast
 
 from pylabrobot.arms.standard import CartesianCoords
@@ -32,7 +33,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
-from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.resources.hamilton import STARDeck, STARLetDeck, hamilton_96_tiprack_300uL_filter
 
 from .STAR_backend import (
   CommandSyntaxError,
@@ -1955,7 +1956,17 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
 
     self.star._num_channels = 8
     self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
-    self.star._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    # setup() is mocked out below, so seed the left X-drive geometry it would normally
+    # resolve; the foil ops move channels in X, which is now bounds-checked against x_range.
+    self.star._extended_conf = replace(
+      _DEFAULT_EXTENDED_CONFIGURATION,
+      left_x_drive=replace(
+        _DEFAULT_EXTENDED_CONFIGURATION.left_x_drive,
+        width=370.0,
+        x_range=(95.0, 1337.5),
+        workspace_range=(-323.2, 1337.5),
+      ),
+    )
     self.star.setup = unittest.mock.AsyncMock()
     self.star._core_parked = True
     self.star._iswap_parked = True
@@ -2616,6 +2627,27 @@ class TestXArmGeometry(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(single.reference_point, "right")
 
 
+class TestXArmReachByDeck(unittest.IsolatedAsyncioTestCase):
+  """A STAR reaches farther in X than a STARLet: an X past the STARLet's right edge
+  is reachable on a STAR but rejected on a STARLet."""
+
+  async def test_x_past_starlet_edge_reachable_on_star_only(self):
+    star = LiquidHandler(STARChatterboxBackend(), deck=STARDeck())
+    await star.setup()
+    starlet = LiquidHandler(STARChatterboxBackend(), deck=STARLetDeck())
+    await starlet.setup()
+
+    star_range = star.backend.extended_conf.left_x_drive.x_range
+    starlet_range = starlet.backend.extended_conf.left_x_drive.x_range
+    assert star_range is not None and starlet_range is not None
+    self.assertGreater(star_range[1], starlet_range[1])
+
+    x = (starlet_range[1] + star_range[1]) / 2  # past the STARLet edge, within STAR reach
+    star.backend._check_x_arm_reachable(x)  # reachable on STAR: no raise
+    with self.assertRaises(ValueError):
+      starlet.backend._check_x_arm_reachable(x)
+
+
 class TestXArmRangeQueries(unittest.IsolatedAsyncioTestCase):
   """RU/UA parse the firmware replies observed on real machines."""
 
@@ -2632,3 +2664,47 @@ class TestXArmRangeQueries(unittest.IsolatedAsyncioTestCase):
     self.star.send_command.return_value = "C0UAid0001er00/00ua5952 0000 -03232 +15172 +30000 +30000"
     wraps = await self.star.request_working_envelopes_per_arm()
     self.assertEqual(wraps, {"left": (595.2, (-323.2, 1517.2)), "right": (0.0, (3000.0, 3000.0))})
+
+
+class TestXArmRangeEnforcement(unittest.IsolatedAsyncioTestCase):
+  """move_channel_x / experimental_x_arm_move reject targets outside the arm's x_range."""
+
+  def setUp(self):
+    self.star = STARBackend()
+    # setup() normally resolves this from firmware; seed the left X-drive geometry so the
+    # reachability checks have a range to enforce against, without needing a deck-mounted
+    # arm or tracker.
+    self.star._extended_conf = replace(
+      _DEFAULT_EXTENDED_CONFIGURATION,
+      left_x_drive=replace(
+        _DEFAULT_EXTENDED_CONFIGURATION.left_x_drive,
+        width=370.0,
+        x_range=(95.0, 1337.5),
+        workspace_range=(-323.2, 1337.5),
+      ),
+    )
+    self.star.send_command = unittest.mock.AsyncMock(return_value={})
+
+  async def test_experimental_x_arm_move_rejects_out_of_range(self):
+    # x_range is (95.0, 1337.5): both ends reject, and no wire command is sent.
+    for x in (94.0, 1400.0):
+      with self.assertRaises(ValueError):
+        await self.star.experimental_x_arm_move(x)
+    self.star.send_command.assert_not_awaited()
+
+  async def test_experimental_x_arm_move_in_range_sends_command(self):
+    # A target inside x_range passes the guard and reaches the wire unchanged.
+    await self.star.experimental_x_arm_move(500.0)
+    self.star.send_command.assert_awaited_once_with(
+      module="X0", command="XP", la="05000", lr="3", lw="7"
+    )
+
+  async def test_move_channel_x_rejects_out_of_range(self):
+    with self.assertRaises(ValueError):
+      await self.star.move_channel_x(0, 1400.0)
+    self.star.send_command.assert_not_awaited()
+
+  async def test_rejects_target_on_absent_right_arm(self):
+    # The default single-arm STAR has no right X-arm, so a right-arm target is rejected.
+    with self.assertRaises(ValueError):
+      self.star._check_x_arm_reachable(400.0, "right")
