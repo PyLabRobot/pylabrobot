@@ -3,7 +3,7 @@ import datetime
 import logging
 import warnings
 from contextlib import asynccontextmanager
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
@@ -16,6 +16,7 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   iSWAPInformation,
 )
 from pylabrobot.resources.container import Container
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
 from pylabrobot.resources.tip_tracker import does_tip_tracking
 from pylabrobot.resources.well import Well
 
@@ -38,6 +39,11 @@ _DEFAULT_EXTENDED_CONFIGURATION = ExtendedConfiguration(
   min_iswap_collision_free_position=350.0,
   max_iswap_collision_free_position=600.0,
 )
+
+# Minimal left-drive X position of a dual-rail arm. Validated against real hardware;
+# the single-rail minimum is not yet known (#822). Only the chatterbox needs this
+# literal - a physical STAR reports its own value from the drive-range query.
+_DUAL_RAIL_LEFT_X_MIN = 95.0
 
 # Hamilton factory defaults. Per-machine EEPROM calibration will differ
 # slightly (e.g., L1=137.8, L2=137.7, STRAIGHT=-45.01 on one tested machine);
@@ -190,6 +196,10 @@ class STARChatterboxBackend(STARBackend):
     else:
       self._iswap_information = None
 
+    # Fuse the (mocked) configuration and X-drive replies into X-arm information,
+    # mirroring STARBackend.setup.
+    await self._build_x_arm_information()
+
   async def stop(self):
     await LiquidHandlerBackend.stop(self)
     self._setup_done = False
@@ -225,6 +235,29 @@ class STARChatterboxBackend(STARBackend):
   async def request_extended_configuration(self) -> ExtendedConfiguration:
     assert self._extended_conf is not None
     return self._extended_conf
+
+  def _simulated_x_reach_max(self) -> float:
+    """Rightmost reachable X (mm) in simulation, from the deck's reachable range."""
+    deck = self._deck
+    if isinstance(deck, HamiltonDeck):
+      return deck.rails_to_location(deck.num_rails).x
+    if deck is not None:
+      return deck.get_size_x()
+    return 1338.0  # nominal STAR reach
+
+  async def request_maximal_ranges_of_x_drives(self) -> Dict[str, Tuple[float, float]]:
+    x_range = (_DUAL_RAIL_LEFT_X_MIN, self._simulated_x_reach_max())
+    return {"left": x_range, "right": x_range}
+
+  async def request_working_envelopes_per_arm(
+    self,
+  ) -> Dict[str, Tuple[float, Tuple[float, float]]]:
+    workspace = (-323.2, self._simulated_x_reach_max())
+    left = (595.2, workspace)  # wrap, workspace
+    # A wrap of 0 signals "arm not installed" (per the base method's contract), so an
+    # absent right drive reports 0 rather than mirroring the left arm.
+    right = (595.2, workspace) if self.extended_conf.right_x_drive.is_present else (0.0, (0.0, 0.0))
+    return {"left": left, "right": right}
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
 

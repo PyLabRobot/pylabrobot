@@ -2583,3 +2583,55 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(result), 2)
     self.assertAlmostEqual(result[0], 0 - well_a.get_absolute_location("c", "c", "cavity_bottom").z)
     self.assertAlmostEqual(result[1], 0 - well_b.get_absolute_location("c", "c", "cavity_bottom").z)
+
+
+class TestXArmInformation(unittest.IsolatedAsyncioTestCase):
+  """setup() fuses QM/RU/UA firmware into XArmInformation."""
+
+  async def asyncSetUp(self):
+    self.lh = LiquidHandler(STARChatterboxBackend(), deck=STARLetDeck())
+    await self.lh.setup()
+
+  async def test_single_left_arm(self):
+    info = self.lh.backend.x_arm_information
+    self.assertEqual(info.number_x_arms, 1)
+    self.assertIsNone(info.right)
+
+  async def test_left_arm_fields(self):
+    left = self.lh.backend.x_arm_information.left
+    assert left is not None
+    self.assertEqual(left.position, "left")
+    self.assertEqual(left.reference_point, "center")  # QM width -> model_and_reference -> slot
+    # x_range comes from RU, workspace_range from UA: fusion routes the two firmware
+    # sources into distinct slots (the part not covered by the parse/branch unit tests).
+    self.assertEqual(left.x_range[0], 95.0)
+    self.assertEqual(left.workspace_range[0], -323.2)
+
+  def test_model_and_reference_by_width(self):
+    self.assertEqual(
+      STARBackend._x_arm_model_and_reference(370.0),
+      ("hamilton_legacy_star_dual_rail_arm", "center"),
+    )
+    # 246.0 is an illustrative <300 width; no single-rail dump exists yet to measure one.
+    self.assertEqual(
+      STARBackend._x_arm_model_and_reference(246.0),
+      ("hamilton_legacy_star_single_right_rail_arm", "right"),
+    )
+
+
+class TestXArmRangeQueries(unittest.IsolatedAsyncioTestCase):
+  """RU/UA parse the firmware replies observed on real machines."""
+
+  def setUp(self):
+    self.star = STARBackend()
+    self.star.send_command = unittest.mock.AsyncMock()
+
+  async def test_maximal_ranges_of_x_drives(self):
+    self.star.send_command.return_value = "C0RUid0002er00/00ru00950 13402 30000 30000"
+    ranges = await self.star.request_maximal_ranges_of_x_drives()
+    self.assertEqual(ranges, {"left": (95.0, 1340.2), "right": (3000.0, 3000.0)})
+
+  async def test_working_envelopes_per_arm(self):
+    self.star.send_command.return_value = "C0UAid0001er00/00ua5952 0000 -03232 +15172 +30000 +30000"
+    wraps = await self.star.request_working_envelopes_per_arm()
+    self.assertEqual(wraps, {"left": (595.2, (-323.2, 1517.2)), "right": (0.0, (3000.0, 3000.0))})
