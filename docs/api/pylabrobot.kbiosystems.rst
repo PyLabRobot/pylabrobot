@@ -3,13 +3,13 @@
 pylabrobot.kbiosystems package
 ==============================
 
-.. currentmodule:: pylabrobot.kbiosystems.eseal
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    KBiosystemsESeal
-    ESealStatus
+    KBiosystemsUltrasealEPRO
+    UltrasealEPROStatus
     KBiosystemsError

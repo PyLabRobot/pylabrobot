@@ -3,5 +3,5 @@
 ```{toctree}
 :maxdepth: 1
 
-eseal/hello-world
+ultraseal-epro/hello-world
 ```

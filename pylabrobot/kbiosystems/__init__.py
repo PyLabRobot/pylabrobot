@@ -1,5 +1,5 @@
-from .eseal import (
-  ESealStatus,
+from .ultraseal_epro import (
   KBiosystemsError,
-  KBiosystemsESeal,
+  KBiosystemsUltrasealEPRO,
+  UltrasealEPROStatus,
 )

@@ -9,7 +9,7 @@ from pylabrobot.io.serial import Serial
 logger = logging.getLogger(__name__)
 
 
-class ESealStatus(enum.IntFlag):
+class UltrasealEPROStatus(enum.IntFlag):
   """Status byte returned by the ``?`` command (two hex digits).
 
   ``Ready`` (0x00) is the all-clear value; any other bit is a condition that
@@ -29,17 +29,17 @@ class ESealStatus(enum.IntFlag):
 
 # Text for each status bit, used to describe a not-ready condition.
 STATUS_MESSAGES = {
-  ESealStatus.NoFoil: "No foil detected.",
-  ESealStatus.Error: "Error",
-  ESealStatus.Busy: (
+  UltrasealEPROStatus.NoFoil: "No foil detected.",
+  UltrasealEPROStatus.Error: "Error",
+  UltrasealEPROStatus.Busy: (
     "Device not ready. Make sure instrument is initialized, film loaded, door "
     "closed, tray out, and control software is on main menu"
   ),
-  ESealStatus.NotAtSealTemperature: "Waiting for seal temperature",
-  ESealStatus.PlateNotPresent: "No plate detected.",
-  ESealStatus.NotInitialised: "Sealer not initialized.",
-  ESealStatus.ForceSensorActivated: "Force sensor activated.",
-  ESealStatus.ParkMode: "Park mode.",
+  UltrasealEPROStatus.NotAtSealTemperature: "Waiting for seal temperature",
+  UltrasealEPROStatus.PlateNotPresent: "No plate detected.",
+  UltrasealEPROStatus.NotInitialised: "Sealer not initialized.",
+  UltrasealEPROStatus.ForceSensorActivated: "Force sensor activated.",
+  UltrasealEPROStatus.ParkMode: "Park mode.",
 }
 
 # Error codes returned by the ``E`` command (two decimal digits).
@@ -68,13 +68,13 @@ MAX_FOIL_LENGTH = 128
 
 
 class KBiosystemsError(Exception):
-  """Exceptions raised by a KBiosystems eSeal heat sealer."""
+  """Exceptions raised by a KBiosystems Ultraseal ePRO heat sealer."""
 
   def __init__(
     self,
     title: str,
     message: Optional[str] = None,
-    status: Optional[ESealStatus] = None,
+    status: Optional[UltrasealEPROStatus] = None,
     error_code: Optional[int] = None,
   ) -> None:
     self.title = title
@@ -86,8 +86,8 @@ class KBiosystemsError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class KBiosystemsESeal:
-  """KBiosystems eSeal heat sealer.
+class KBiosystemsUltrasealEPRO:
+  """KBiosystems Ultraseal ePRO heat sealer.
 
   Serial settings:
     9600 baud, 8 data bits, no parity, 1 stop bit, no handshake, "\\r"
@@ -97,7 +97,7 @@ class KBiosystemsESeal:
   of its reply, so the leading command characters are stripped before the reply
   is read (e.g. ``A160`` -> ``A160ok`` -> ``ok``; ``?`` -> ``?3f`` -> ``3f``). A
   reply containing ``syntax`` means the command was rejected.
-    ?            read status byte, two hex digits (see ESealStatus)
+    ?            read status byte, two hex digits (see UltrasealEPROStatus)
     E            read error code, two decimal digits (see DEVICE_ERRORS)
     S            seal the plate; replies ok or err
     I            initialize/home; replies ok or err
@@ -131,7 +131,7 @@ class KBiosystemsESeal:
     self.offline_temperature = offline_temperature
     self.firmware_version: Optional[str] = None
     self.io = Serial(
-      human_readable_device_name="KBiosystems eSeal Heat Sealer",
+      human_readable_device_name="KBiosystems Ultraseal ePRO Heat Sealer",
       port=port,
       baudrate=9600,
       bytesize=8,
@@ -142,7 +142,7 @@ class KBiosystemsESeal:
 
   async def setup(self) -> None:
     logger.warning(
-      "KBiosystemsESeal has NOT been tested against hardware in PyLabRobot. "
+      "KBiosystemsUltrasealEPRO has NOT been tested against hardware in PyLabRobot. "
       "Please make a PR to remove this message if you have verified it on your hardware."
     )
     await self.io.setup()
@@ -150,20 +150,20 @@ class KBiosystemsESeal:
     await asyncio.sleep(self.settle_time)
     await self.io.reset_input_buffer()
     await self.wait_for_idle(
-      ESealStatus.NoFoil
-      | ESealStatus.NotAtSealTemperature
-      | ESealStatus.ForceSensorActivated
-      | ESealStatus.ParkMode
+      UltrasealEPROStatus.NoFoil
+      | UltrasealEPROStatus.NotAtSealTemperature
+      | UltrasealEPROStatus.ForceSensorActivated
+      | UltrasealEPROStatus.ParkMode
     )
     self.firmware_version = await self.request_firmware_version()
     await self.set_temperature(self.preheating_temperature)
-    logger.info("[eSeal %s] connected: firmware=%s", self.io.port, self.firmware_version)
+    logger.info("[Ultraseal ePRO %s] connected: firmware=%s", self.io.port, self.firmware_version)
 
   async def stop(self) -> None:
     try:
       await self.set_temperature(self.offline_temperature)
     except (KBiosystemsError, TimeoutError) as e:
-      logger.warning("[eSeal %s] could not set offline temperature: %s", self.io.port, e)
+      logger.warning("[Ultraseal ePRO %s] could not set offline temperature: %s", self.io.port, e)
     await self.io.stop()
 
   # === Command layer ===
@@ -214,11 +214,11 @@ class KBiosystemsESeal:
 
   # === State ===
 
-  async def request_status(self) -> ESealStatus:
+  async def request_status(self) -> UltrasealEPROStatus:
     """Read the status byte (``?``)."""
     reply = await self.send_command("?")
     try:
-      return ESealStatus(int(reply, 16))
+      return UltrasealEPROStatus(int(reply, 16))
     except ValueError as e:
       raise KBiosystemsError(title="Unexpected status reply", message=repr(reply)) from e
 
@@ -230,15 +230,17 @@ class KBiosystemsESeal:
     except ValueError as e:
       raise KBiosystemsError(title="Unexpected error reply", message=repr(reply)) from e
 
-  async def wait_for_idle(self, ignore_mask: ESealStatus = ESealStatus.Ready) -> ESealStatus:
+  async def wait_for_idle(
+    self, ignore_mask: UltrasealEPROStatus = UltrasealEPROStatus.Ready
+  ) -> UltrasealEPROStatus:
     """Wait until the device is Ready, tolerating the bits set in ``ignore_mask``.
 
     Raises KBiosystemsError if any bit outside ``ignore_mask`` is set; if the
     Error bit is set, the error code and text are attached.
     """
     status = await self.request_status()
-    while status != ESealStatus.Ready:
-      if status & ESealStatus.Busy:
+    while status != UltrasealEPROStatus.Ready:
+      if status & UltrasealEPROStatus.Busy:
         await asyncio.sleep(0.5)
         status = await self._wait_for_busy_cleared()
         continue
@@ -246,16 +248,17 @@ class KBiosystemsESeal:
       # While heating, the device also reports Busy; ignore it alongside
       # NotAtSealTemperature so waiting for temperature does not raise.
       if (
-        ignore_mask & ESealStatus.NotAtSealTemperature and status & ESealStatus.NotAtSealTemperature
+        ignore_mask & UltrasealEPROStatus.NotAtSealTemperature
+        and status & UltrasealEPROStatus.NotAtSealTemperature
       ):
-        ignore_mask = ignore_mask | ESealStatus.Busy
+        ignore_mask = ignore_mask | UltrasealEPROStatus.Busy
 
       remaining = status & ~ignore_mask
-      if remaining == ESealStatus.Ready:
+      if remaining == UltrasealEPROStatus.Ready:
         break
 
       description = ", ".join(m for bit, m in STATUS_MESSAGES.items() if remaining & bit)
-      if remaining & ESealStatus.Error:
+      if remaining & UltrasealEPROStatus.Error:
         code = await self.request_error_code()
         raise KBiosystemsError(
           title=f"Sealer error: {description}",
@@ -266,10 +269,10 @@ class KBiosystemsESeal:
       raise KBiosystemsError(title=f"Sealer not ready: {description}", status=remaining)
     return status
 
-  async def _wait_for_busy_cleared(self, timeout: float = 60.0) -> ESealStatus:
+  async def _wait_for_busy_cleared(self, timeout: float = 60.0) -> UltrasealEPROStatus:
     start = time.time()
     status = await self.request_status()
-    while status & ESealStatus.Busy:
+    while status & UltrasealEPROStatus.Busy:
       if time.time() - start > timeout:
         raise KBiosystemsError(title="Timeout while waiting for busy flag to clear")
       await asyncio.sleep(0.5)
@@ -279,7 +282,7 @@ class KBiosystemsESeal:
   async def wait_for_sealing_temperature(self, timeout: float = 300.0) -> None:
     """Block until the heater reaches the setpoint (NotAtSealTemperature clears)."""
     start = time.time()
-    while await self.request_status() & ESealStatus.NotAtSealTemperature:
+    while await self.request_status() & UltrasealEPROStatus.NotAtSealTemperature:
       if time.time() - start > timeout:
         raise TimeoutError("Timeout while waiting for sealing temperature.")
       await asyncio.sleep(5.0)
@@ -371,7 +374,7 @@ class KBiosystemsESeal:
     """Initialize/home the sealer (``I``)."""
     command = "I"
     if self._check(await self.send_command(command), {"ok", "err"}, command) != "ok":
-      raise KBiosystemsError(title="Initializing the eSeal failed")
+      raise KBiosystemsError(title="Initializing the Ultraseal ePRO failed")
 
   # === Operations ===
 
@@ -402,9 +405,13 @@ class KBiosystemsESeal:
       idle_temperature: temperature to hold after sealing (5..199).
       eco_mode: enable eco mode after sealing.
     """
-    logger.info("[eSeal %s] sealing at %d C for %.1fs", self.io.port, temperature, duration)
+    logger.info(
+      "[Ultraseal ePRO %s] sealing at %d C for %.1fs", self.io.port, temperature, duration
+    )
     ignore = (
-      ESealStatus.NotAtSealTemperature | ESealStatus.ForceSensorActivated | ESealStatus.ParkMode
+      UltrasealEPROStatus.NotAtSealTemperature
+      | UltrasealEPROStatus.ForceSensorActivated
+      | UltrasealEPROStatus.ParkMode
     )
 
     # Eco mode is disabled while sealing and restored afterwards if requested.
