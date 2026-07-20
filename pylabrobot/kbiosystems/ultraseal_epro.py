@@ -149,6 +149,9 @@ class KBiosystemsUltrasealEPRO:
     # The device drops characters for a few seconds after the port opens.
     await asyncio.sleep(self.settle_time)
     await self.io.reset_input_buffer()
+    # Initialize/home the sealer (``I``).
+    if self._check(await self.send_command("I"), {"ok", "err"}, "I") != "ok":
+      raise KBiosystemsError(title="Initializing the Ultraseal ePRO failed")
     await self.wait_for_idle(
       UltrasealEPROStatus.NoFoil
       | UltrasealEPROStatus.NotAtSealTemperature
@@ -369,12 +372,6 @@ class KBiosystemsUltrasealEPRO:
   async def request_firmware_version(self) -> str:
     """Read the firmware version (``V``)."""
     return await self.send_command("V")
-
-  async def initialize(self) -> None:
-    """Initialize/home the sealer (``I``)."""
-    command = "I"
-    if self._check(await self.send_command(command), {"ok", "err"}, command) != "ok":
-      raise KBiosystemsError(title="Initializing the Ultraseal ePRO failed")
 
   # === Operations ===
 
