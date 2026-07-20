@@ -3,7 +3,7 @@ import unittest
 import unittest.mock
 import urllib.request
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Tuple
 
 import anyio
 import pytest
@@ -101,8 +101,8 @@ class TestVisualizerSetupStop(AnyioTestBase):
   # The visualizer relies on `websockets`' asyncio-only server, so it cannot run on Trio.
   _anyio_backends = ["asyncio"]
 
-  async def test_setup_stop(self):
-    """Test that the servers are started and stopped correctly, and can be recycled."""
+  async def test_async_with_recycles_lifecycle(self):
+    """The servers start and stop correctly under ``async with``, and can be recycled."""
 
     r = Resource(size_x=100, size_y=100, size_z=100, name="root")
     vis = Visualizer(r, open_browser=False)
@@ -119,6 +119,32 @@ class TestVisualizerSetupStop(AnyioTestBase):
     # setup and stop twice to ensure that everything is recycled correctly
     await setup_stop_single()
     await setup_stop_single()
+
+  async def test_setup_stop(self):
+    """The legacy ``setup()``/``stop()`` API drives the lifespan via the global manager."""
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(r, open_browser=False)
+
+    with pytest.warns(DeprecationWarning):
+      await vis.setup()
+    self.assertTrue(vis.setup_finished)
+
+    await vis.stop()
+    self.assertFalse(vis.setup_finished)
+
+  async def test_non_asyncio_backend_rejected(self):
+    """The visualizer only supports asyncio and rejects other backends with a clear error."""
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(r, open_browser=False)
+    # Simulate a non-asyncio backend. Match the guard's own message so the test fails (not passes on
+    # a coincidental downstream RuntimeError) if the guard is ever removed.
+    with unittest.mock.patch(
+      "pylabrobot.visualizer.visualizer.sniffio.current_async_library",
+      return_value="trio",
+    ):
+      with self.assertRaisesRegex(RuntimeError, "only supports the asyncio backend"):
+        async with vis:
+          pass
 
 
 class TestVisualizerServer(AnyioTestBase):
@@ -251,16 +277,64 @@ class TestVisualizerCommand(AnyioTestBase):
     child = Resource(size_x=100, size_y=100, size_z=100, name="child")
     self.r.assign_child_resource(child, location=Coordinate(0, 0, 0))
     await self._wait_for_event("resource_assigned")
-    self.send_command_mock.assert_called_once_with(
-      event="resource_assigned",
-      data={
-        "resource": _serialize_resource_tree(child),
-        "method_registry": _build_method_registry(child),
-        "state": child.serialize_all_state(),
-        "parent_name": "root",
+    # Assert on the resource_assigned call specifically, rather than "exactly one call ever": the
+    # latter is brittle if assignment ever also emits an initial state update.
+    assigned = [
+      c
+      for c in self.send_command_mock.call_args_list
+      if c.kwargs.get("event") == "resource_assigned"
+    ]
+    self.assertEqual(len(assigned), 1)
+    self.assertEqual(
+      assigned[0].kwargs,
+      {
+        "event": "resource_assigned",
+        "data": {
+          "resource": _serialize_resource_tree(child),
+          "method_registry": _build_method_registry(child),
+          "state": child.serialize_all_state(),
+          "parent_name": "root",
+        },
+        "wait_for_response": False,
       },
-      wait_for_response=False,
     )
+
+  async def test_outbox_survives_send_failure(self):
+    """A failed send in the outbox worker is logged and does not stop later events or teardown."""
+
+    # Fail the first resource_assigned send; a later one must still be delivered, proving the single
+    # outbox worker caught the failure and kept going (a detached send-per-event would instead drop
+    # the failure as an unhandled task exception).
+    state = {"assign_sends": 0}
+
+    async def flaky(*args, **kwargs):
+      if kwargs.get("event") == "resource_assigned":
+        state["assign_sends"] += 1
+        if state["assign_sends"] == 1:
+          raise RuntimeError("simulated send failure")
+
+    self.send_command_mock.side_effect = flaky
+
+    first = Resource(size_x=10, size_y=10, size_z=10, name="first")
+    self.r.assign_child_resource(first, location=Coordinate(0, 0, 0))
+    second = Resource(size_x=10, size_y=10, size_z=10, name="second")
+    self.r.assign_child_resource(second, location=Coordinate(0, 0, 0))
+
+    def second_delivered() -> bool:
+      return any(
+        c.kwargs.get("event") == "resource_assigned"
+        and c.kwargs["data"]["resource"]["name"] == "second"
+        for c in self.send_command_mock.call_args_list
+      )
+
+    with anyio.move_on_after(5.0):
+      while not second_delivered():
+        await anyio.sleep(0.01)
+
+    # The worker caught the first failure and delivered the later event. If the worker's try/except
+    # were removed, the raised error would propagate out of the lifespan task group and make the
+    # enclosing `async with vis` teardown raise, failing this test either way.
+    self.assertTrue(second_delivered())
 
   async def test_resource_unassigned(self):
     """Test that the unassign_child_resource method sends the correct event."""
@@ -288,3 +362,25 @@ class TestVisualizerCommand(AnyioTestBase):
       call_args["data"]["plate_01_well_H12"]["volume"],
       500,
     )
+
+
+class TestVisualizerOutboxBounded(unittest.TestCase):
+  """The outbox channel is bounded, so a stalled browser drops events instead of growing memory."""
+
+  def test_enqueue_outbound_drops_newest_when_full(self):
+    """When the buffer is full (worker not draining), the newest event is dropped with a warning."""
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(r, open_browser=False)
+
+    # A size-1 buffer whose receiver never drains: the first event is buffered, the next overflows.
+    # (`_receive` is kept referenced so the stream is not treated as closed, exercising the
+    # buffer-full path rather than the closed-stream path.)
+    send, _receive = anyio.create_memory_object_stream[Tuple[str, dict]](1)
+    vis._outbox_send = send
+
+    vis._enqueue_outbound("set_state", {"a": 1})  # fits in the buffer, no warning
+
+    with unittest.mock.patch("pylabrobot.visualizer.visualizer.logger") as mock_logger:
+      vis._enqueue_outbound("resource_assigned", {"b": 2})  # overflow -> dropped + warning
+
+    mock_logger.warning.assert_called_once()

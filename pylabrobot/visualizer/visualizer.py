@@ -100,6 +100,25 @@ def _sanitize_floats(obj):
   return obj
 
 
+# Per-request bound (seconds) on the static file server's blocking reads/writes. It runs on a worker
+# thread, so this bounds only that thread, never the event loop. Setting a handler timeout also puts
+# the accepted connection socket into a defined timeout mode via ``StreamRequestHandler.setup`` --
+# without it the accepted socket would inherit the listening socket's non-blocking flag on macOS/BSD
+# and the handler's blocking reads could raise ``BlockingIOError`` (CPython ``socket.accept`` only
+# forces blocking when the listener has a truthy timeout, and a non-blocking listener's is ``0.0``).
+# It also bounds a slow or partial client so it cannot wedge the single-threaded accept loop.
+_FILE_SERVER_REQUEST_TIMEOUT_S = 10.0
+
+# Bound (seconds) on the best-effort "stop" notification sent to the browser during teardown.
+_NOTIFY_STOP_TIMEOUT_S = 5.0
+
+# Maximum number of browser messages buffered while the single outbox worker drains them. A healthy
+# browser keeps this near-empty; the cap bounds memory if the browser stalls. On overflow the newest
+# event is dropped with a warning (a dropped event leaves the view stale until a browser next
+# connects and sends ``ready``, which resyncs it in full).
+_OUTBOX_MAX_BUFFER = 10_000
+
+
 class _VisualizerHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
   """Serves the visualizer's static files.
 
@@ -109,6 +128,10 @@ class _VisualizerHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
   Each request is handled on a worker thread (one ``handle_request`` per accept; see
   :meth:`Visualizer._start_file_server`), so the blocking reads here never touch the event loop.
   """
+
+  # Bound each request's blocking reads/writes and reset the accepted socket to a defined mode; see
+  # ``_FILE_SERVER_REQUEST_TIMEOUT_S``.
+  timeout = _FILE_SERVER_REQUEST_TIMEOUT_S
 
   @override
   def log_message(self, format: str, *args: Any) -> None:
@@ -539,8 +562,11 @@ class Visualizer(AsyncResource):
     stack.callback(self._clear_loop)
 
     tg = await stack.enter_async_context(anyio.create_task_group())
-    # Safety net: cancel any task still running at teardown (e.g. a send blocked on a stalled
-    # browser) so exiting the lifespan can never hang.
+    # Safety net: cancel the task group's children (the outbox worker and the file-server accept
+    # loop) at teardown so the task-group join does not wait on them. The other teardown steps that
+    # could otherwise block are separately bounded: the file-server request is abandoned on
+    # cancellation (see `_start_file_server`) and the browser "stop" notification is time-bounded
+    # (see `_notify_browser_stop`).
     stack.callback(tg.cancel_scope.cancel)
 
     await self._start_ws_server(stack)
@@ -575,10 +601,17 @@ class Visualizer(AsyncResource):
     print(f"Websocket server started at http://{self.host}:{self.ws_port}")
 
   async def _notify_browser_stop(self) -> None:
-    """Tell a connected browser that the visualizer is stopping. Best-effort."""
+    """Tell a connected browser that the visualizer is stopping. Best-effort and time-bounded.
+
+    This runs shielded during teardown (see :meth:`_start_ws_server`), so it must bound itself:
+    against a stalled-but-open browser ``websocket.send`` can await write-buffer drain, and the
+    shield would otherwise let that block teardown. ``move_on_after`` caps the wait on both clean and
+    cancelled exits.
+    """
     if self.has_connection():
       try:
-        await self.send_command("stop", wait_for_response=False)
+        with anyio.move_on_after(_NOTIFY_STOP_TIMEOUT_S):
+          await self.send_command("stop", wait_for_response=False)
       except Exception:
         # The connection may already be gone; stopping is best-effort.
         pass
@@ -590,10 +623,15 @@ class Visualizer(AsyncResource):
     detached send task per event (an unstructured "go statement" whose errors would be silently
     dropped), they enqueue onto this channel and a single task -- owned by the lifespan's task group
     -- performs the sends in order. This keeps every concurrent send bound to the lifespan and lets
-    send failures be handled in one place.
+    send failures be handled in one place. The channel is bounded (``_OUTBOX_MAX_BUFFER``): if the
+    browser stalls so the worker cannot drain it, enqueuing drops the newest event with a warning
+    rather than growing without bound (a dropped event leaves the view stale until a browser next
+    connects and sends ``ready``, which resyncs it in full).
     """
 
-    send_stream, receive_stream = anyio.create_memory_object_stream[Tuple[str, dict]](math.inf)
+    send_stream, receive_stream = anyio.create_memory_object_stream[Tuple[str, dict]](
+      _OUTBOX_MAX_BUFFER
+    )
     self._outbox_send = send_stream
     # Closing the send stream lets the worker drain and exit cleanly before the task group joins.
     stack.callback(self._close_outbox)
@@ -646,11 +684,13 @@ class Visualizer(AsyncResource):
     with open(self._favicon_path, "rb") as f:
       httpd.favicon = f.read()
 
-    # Make the listening socket non-blocking so we can await readability on the event loop; the
-    # `timeout` bounds how long a single `handle_request` may block its worker thread (e.g. on a
-    # spurious wakeup).
+    # Make the listening socket non-blocking so the accept loop can await its readability on the
+    # event loop; `handle_request` is only ever called once the socket is readable, so its accept
+    # never blocks. The per-request read bound lives on the handler
+    # (`_VisualizerHTTPRequestHandler.timeout`), not here: once the listening socket is non-blocking
+    # its `gettimeout()` is 0.0, which would win `min(gettimeout(), server.timeout)` and make any
+    # `HTTPServer.timeout` inert.
     httpd.socket.setblocking(False)
-    httpd.timeout = 1.0
 
     print(
       f"File server started at http://{self.host}:{self.fs_port} . Open this URL in your browser."
@@ -664,7 +704,10 @@ class Visualizer(AsyncResource):
         while True:
           await anyio.wait_readable(httpd.socket)
           try:
-            await anyio.to_thread.run_sync(httpd.handle_request)
+            # `abandon_on_cancel=True`: on teardown cancellation we must not wait for an in-flight
+            # request to finish on the worker thread (the handler's own `timeout` bounds it); the
+            # accept loop returns immediately so the task-group join can complete.
+            await anyio.to_thread.run_sync(httpd.handle_request, abandon_on_cancel=True)
           except Exception:
             # One bad request must not tear down the server.
             logger.exception("visualizer: error handling a file-server request")
@@ -759,7 +802,7 @@ class Visualizer(AsyncResource):
     if (send := self._outbox_send) is not None:
       try:
         send.send_nowait((event, data))
-      except (anyio.WouldBlock, anyio.ClosedResourceError):
+      except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
         logger.warning("visualizer: dropping %r event (outbox closed or full)", event)
 
   def _handle_resource_assigned_callback(self, resource: Resource) -> None:
