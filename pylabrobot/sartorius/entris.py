@@ -42,19 +42,20 @@ class SartoriusError(Exception):
 class SartoriusEntris2:
   """Sartorius Entris II balance.
 
+  Interface spec: https://www.sartorius.hr/media/dypfvdsn/entris-ii-technical-note-en-sartorius.pdf
+  (archived: https://archive.vn/NU6DW)
+
   Serial settings:
     9600 baud, 8 data bits, ODD parity, 1 stop bit, no handshake, "\\r\\n"
     terminator.
 
-  Commands (SBI print protocol):
-    <ESC>P     print current weight value
-    <ESC>T     tare
-    <ESC>x1_   query balance model
-    <ESC>x2_   query serial number
-    The trailing "_" in x1_/x2_ is a literal underscore.
-
-  ESC prefix: the SBI prefix is the ESC control byte 0x1B (b"\\x1bP"). Sent as
-  0x1B by default; ``esc_literal=True`` sends the literal ASCII text "ESC ".
+  Commands (SBI control commands, format "<Esc> <char> CR LF"):
+    <Esc>P     print current weight value
+    <Esc>T     zero/tare
+    <Esc>x1_   query balance model
+    <Esc>x2_   query serial number
+    The trailing "_" in x1_/x2_ is a literal underscore. <Esc> is the escape
+    control byte 0x1B; per the spec it is optional, and CR LF terminates.
 
   Not verified: has NOT been tested against hardware in PyLabRobot. A warning
   is emitted at setup.
@@ -65,10 +66,8 @@ class SartoriusEntris2:
     port: Optional[str] = None,
     vid: int = 0x0403,
     pid: int = 0x6001,
-    esc_literal: bool = False,
     tare_settle_s: float = 2.0,
   ):
-    self.esc_literal = esc_literal
     self.tare_settle_s = tare_settle_s
     self.serial_number: Optional[str] = None
     self.io = Serial(
@@ -105,9 +104,8 @@ class SartoriusEntris2:
   # === Command layer ===
 
   def _frame(self, token: str) -> bytes:
-    """Build the on-wire bytes for a command token."""
-    prefix = "ESC " if self.esc_literal else ESC
-    return (prefix + token + "\r\n").encode("ascii")
+    """Build the on-wire bytes for a command token: <Esc> <token> CR LF."""
+    return (ESC + token + "\r\n").encode("ascii")
 
   async def send_command(self, token: str, timeout: int = 15, read_reply: bool = True) -> str:
     """Send a command token and return the trimmed, de-spaced reply.
