@@ -1,5 +1,7 @@
 from typing import cast
 
+import anyio
+
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.temperature_controlling.backend import (
   TemperatureControllerBackend,
@@ -44,15 +46,19 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
     return {**super().serialize(), "opentrons_id": self.opentrons_id}
 
   async def set_temperature(self, temperature: float):
-    ot_api.modules.temperature_module_set_temperature(
-      celsius=temperature, module_id=self.opentrons_id
+    await anyio.to_thread.run_sync(
+      lambda: ot_api.modules.temperature_module_set_temperature(
+        celsius=temperature, module_id=self.opentrons_id
+      )
     )
 
   async def deactivate(self):
-    ot_api.modules.temperature_module_deactivate(module_id=self.opentrons_id)
+    await anyio.to_thread.run_sync(
+      lambda: ot_api.modules.temperature_module_deactivate(module_id=self.opentrons_id)
+    )
 
   async def get_current_temperature(self) -> float:
-    modules = ot_api.modules.list_connected_modules()
+    modules = await anyio.to_thread.run_sync(ot_api.modules.list_connected_modules)
     for module in modules:
       if module["id"] == self.opentrons_id:
         return cast(float, module["data"]["currentTemperature"])
