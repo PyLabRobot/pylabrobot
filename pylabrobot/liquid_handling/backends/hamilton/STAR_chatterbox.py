@@ -45,6 +45,13 @@ _DEFAULT_EXTENDED_CONFIGURATION = ExtendedConfiguration(
 # literal - a physical STAR reports its own value from the drive-range query.
 _DUAL_RAIL_LEFT_X_MIN = 95.0
 
+# Simulated left X-arm resting x (mm), reported in place of a position read before any
+# tracked move. Small enough to sit within reach of any STAR deck. The right arm's rest
+# is derived from the deck instead (see _simulated_right_x_arm_home), since its reach
+# differs sharply between a STARlet (~800 mm) and a STAR (~1340 mm) and the two arms
+# must not overlap.
+_SIM_LEFT_X_ARM_HOME = 362.9
+
 # Hamilton factory defaults. Per-machine EEPROM calibration will differ
 # slightly (e.g., L1=137.8, L2=137.7, STRAIGHT=-45.01 on one tested machine);
 # these defaults are accurate enough for simulation but not for
@@ -196,6 +203,8 @@ class STARChatterboxBackend(STARBackend):
     else:
       self._iswap_information = None
 
+    await self._setup_x_arms()
+
   async def stop(self):
     await LiquidHandlerBackend.stop(self)
     self._setup_done = False
@@ -284,6 +293,30 @@ class STARChatterboxBackend(STARBackend):
     right_installed = self.extended_conf.right_x_drive is not None
     right = (595.2, workspace) if right_installed else (0.0, (0.0, 0.0))
     return {"left": left, "right": right}
+
+  async def request_left_x_arm_position(self) -> float:
+    # No hardware to read: report the tracked carriage position, or a resting
+    # home before any tracked move has committed one.
+    tracker = self.left_x_arm_tracker
+    x = tracker.get_x() if tracker is not None and tracker.is_known else _SIM_LEFT_X_ARM_HOME
+    if tracker is not None and not tracker.is_disabled:
+      tracker.set_x(x)
+    return x
+
+  async def request_right_x_arm_position(self) -> float:
+    tracker = self.right_x_arm_tracker
+    if tracker is None:
+      raise RuntimeError("Right X-arm is not installed.")
+    x = tracker.get_x() if tracker.is_known else self._simulated_right_x_arm_home()
+    if not tracker.is_disabled:
+      tracker.set_x(x)
+    return x
+
+  def _simulated_right_x_arm_home(self) -> float:
+    """Rightmost on-deck resting x for the right X-arm in simulation, derived from the
+    deck's reachable range so it is valid for the deck in use and clear of the left
+    arm's rest. Positions the arm so its right edge sits at the far reachable x."""
+    return self._simulated_x_reach_max() - self.extended_conf.right_x_arm_width / 2
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
 

@@ -12,11 +12,16 @@ from pylabrobot.resources.hamilton.tip_creators import hamilton_teaching_needle_
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.trash import Trash
+from pylabrobot.resources.x_arm import XArm
 
 logger = logging.getLogger("pylabrobot")
 
 
 _RAILS_WIDTH = 22.5  # space between rails (mm)
+
+# The deck-owned X-arm resource spans the deck height; z places it above the deck.
+_X_ARM_Z = 248.0
+_X_ARM_SIZE_Z = 140.0
 
 STARLET_NUM_RAILS = 32
 STARLET_SIZE_X = 1005
@@ -542,6 +547,38 @@ class HamiltonSTARDeck(HamiltonDeck):
       "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
       "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }
+
+  def get_or_create_x_arm(
+    self, name: str, width: float, model: str, reference_point: Literal["center", "right"]
+  ) -> XArm:
+    """Get (or create, once) the deck-owned X-arm resource for `name`.
+
+    The X-arm is a full-deck-height :class:`~pylabrobot.resources.x_arm.XArm` that owns
+    an ``XArmTracker``; the Visualizer draws it at the tracker's x. The deck owns it:
+    created as a child the first time and reused thereafter, so repeated ``setup()``
+    calls don't duplicate it. It is assigned at a nominal x - the backend drives its
+    tracker and the Visualizer positions it from that.
+
+    Args:
+      name: unique resource name, e.g. ``"left_x_arm"``.
+      width: arm width in mm (the firmware-reported value).
+      model: the arm variant, e.g. ``"hamilton_legacy_star_dual_rail_arm"``.
+      reference_point: where the tracked x refers to along the width.
+    """
+    if self.has_resource(name):
+      return cast(XArm, self.get_resource(name))
+    x_arm = XArm(
+      name=name,
+      size_x=width,
+      size_y=self.get_size_y(),
+      size_z=_X_ARM_SIZE_Z,
+      reference_point=reference_point,
+      model=model,
+    )
+    self.assign_child_resource(
+      x_arm, location=Coordinate(0.0, 0.0, _X_ARM_Z), ignore_collision=True
+    )
+    return x_arm
 
   def rails_to_location(self, rails: int) -> Coordinate:
     x = 100.0 + (rails - 1) * _RAILS_WIDTH

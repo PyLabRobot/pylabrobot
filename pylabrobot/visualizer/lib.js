@@ -3017,6 +3017,120 @@ function fillArmPanel(panel, armState) {
   }
 }
 
+class XArm extends Resource {
+  // Visual model of an X-arm carriage: a translucent dark-grey full-deck-height frame
+  // (a rectangle with a rectangular hole) with a cyan reference line at the tracked x.
+  // The X-arm owns an XArmTracker (like TipSpot owns a TipTracker); its serialized
+  // tracker x drives the position - the group's left edge is placed at tracked_x minus
+  // the reference offset (the arm centre, or the right edge for a single-rail arm), so
+  // the frame is drawn as a normal resource (local [0, size_x]) and its bounding box
+  // and selection highlight stay aligned. The x glides on update so moves read as motion.
+  draggable = false;
+  canDelete = false;
+
+  constructor(resourceData, parent = undefined) {
+    super(resourceData, parent);
+    this.reference_point = resourceData.reference_point || "center";
+  }
+
+  // Local x of the firmware reference within the frame (also the reference line's x).
+  get referenceOffset() {
+    return this.reference_point === "center" ? this.size_x / 2 : this.size_x;
+  }
+
+  drawMainShape() {
+    const w = this.size_x;
+    const h = this.size_y;
+    const insetX = 95; // mm from each x border to the hole
+    const insetY = 20; // mm from each y border to the hole
+    const innerW = w - 2 * insetX;
+    const innerH = h - 2 * insetY;
+
+    const g = new Konva.Group();
+    // Reference line at the exact firmware x (local = referenceOffset), so it always
+    // marks the tracked x. Added first so the frame draws on top of it, visible only
+    // through the hole.
+    g.add(
+      new Konva.Line({
+        points: [this.referenceOffset, 0, this.referenceOffset, h],
+        stroke: "rgba(0, 229, 255, 0.7)",
+        strokeWidth: 2,
+        listening: false,
+      })
+    );
+    g.add(
+      new Konva.Shape({
+        sceneFunc: (ctx, shape) => {
+          ctx.beginPath();
+          ctx.rect(0, 0, w, h); // outer, clockwise
+          if (innerW > 0 && innerH > 0) {
+            // inner rectangle wound counter-clockwise to punch a see-through hole
+            const l = insetX;
+            const r = w - insetX;
+            const t = insetY;
+            const b = h - insetY;
+            ctx.moveTo(l, t);
+            ctx.lineTo(l, b);
+            ctx.lineTo(r, b);
+            ctx.lineTo(r, t);
+            ctx.closePath();
+          }
+          ctx.fillStrokeShape(shape);
+        },
+        fill: "rgba(64, 64, 64, 0.5)",
+        stroke: "rgba(64, 64, 64, 0.3)",
+        strokeWidth: 3,
+        listening: false,
+      })
+    );
+    return g;
+  }
+
+  setState(state) {
+    super.setState(state); // rotation
+    if (this.group === undefined) {
+      return;
+    }
+    // Position from the owned tracker's x. Hidden until a position is known; the
+    // group's left edge sits at tracked_x - referenceOffset. The x glides so moves
+    // read as motion rather than teleports (the tracker only has commanded targets,
+    // so this is purely cosmetic interpolation).
+    const trackerState = state && state.tracker;
+    const x = trackerState ? trackerState.x : null;
+    if (x === null || x === undefined) {
+      this.group.visible(false);
+      return;
+    }
+    this.group.visible(true);
+    const leftEdge = x - this.referenceOffset;
+    const reduce =
+      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      this.group.x(leftEdge);
+    } else {
+      if (this._xTween) {
+        this._xTween.destroy();
+      }
+      this._xTween = new Konva.Tween({
+        node: this.group,
+        x: leftEdge,
+        duration: 0.2,
+        easing: Konva.Easings.EaseInOut,
+      });
+      this._xTween.play();
+    }
+  }
+
+  destroy() {
+    // Stop any in-flight glide so it can't drive updates against the destroyed node.
+    if (this._xTween) {
+      this._xTween.destroy();
+      this._xTween = undefined;
+    }
+    super.destroy();
+  }
+}
+
 class LiquidHandler extends Resource {
   constructor(resource) {
     super(resource);
@@ -3174,6 +3288,8 @@ function classForResourceType(type, category) {
     case "container":
     case "trough":
       return Container;
+    case "x_arm":
+      return XArm;
     default:
       return Resource;
   }

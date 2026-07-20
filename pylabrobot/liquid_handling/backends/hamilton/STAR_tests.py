@@ -33,7 +33,13 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
-from pylabrobot.resources.hamilton import STARDeck, STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.resources.hamilton import (
+  HamiltonSTARDeck,
+  STARDeck,
+  STARLetDeck,
+  hamilton_96_tiprack_300uL_filter,
+)
+from pylabrobot.resources.x_arm import XArm
 
 from .STAR_backend import (
   CommandSyntaxError,
@@ -2708,3 +2714,167 @@ class TestXArmRangeEnforcement(unittest.IsolatedAsyncioTestCase):
     # The default single-arm STAR has no right X-arm, so a right-arm target is rejected.
     with self.assertRaises(ValueError):
       self.star._check_x_arm_reachable(400.0, "right")
+
+
+class TestXArmPositionTracking(unittest.IsolatedAsyncioTestCase):
+  """The lowest-level X-arm move and position-query commands feed the deck X-arms'
+  X-arm trackers; no other commands update them."""
+
+  def setUp(self):
+    self.star = STARBackend()
+    self.deck = STARLetDeck()
+    self.star.set_deck(self.deck)
+    # X-arms (which own the trackers) are created by setup(); create the left one
+    # directly here so the low-level commands can be exercised with a mocked wire.
+    self.deck.get_or_create_x_arm(
+      "left_x_arm", 370.0, "hamilton_legacy_star_dual_rail_arm", "center"
+    )
+    # setup() normally resolves the X-drive geometry from firmware; seed it so the
+    # reachability checks (move_channel_x / experimental_x_arm_move) have a range.
+    self.star._extended_conf = replace(
+      _DEFAULT_EXTENDED_CONFIGURATION,
+      left_x_drive=self._x_drive(_DEFAULT_EXTENDED_CONFIGURATION.left_x_drive),
+    )
+    self.star.send_command = unittest.mock.AsyncMock(return_value={})
+
+  @staticmethod
+  def _x_drive(base):
+    return replace(base, width=370.0, x_range=(95.0, 1337.5), workspace_range=(-323.2, 1337.5))
+
+  def _add_right_x_arm(self):
+    self.deck.get_or_create_x_arm(
+      "right_x_arm", 370.0, "hamilton_legacy_star_dual_rail_arm", "center"
+    )
+    conf = self.star._extended_conf
+    assert conf is not None
+    self.star._extended_conf = replace(conf, right_x_drive=self._x_drive(DriveConfiguration()))
+
+  async def test_position_unknown_before_first_tracked_command(self):
+    self.assertEqual(self.star.get_x_arm_position(), (None, None))
+
+  async def test_experimental_x_arm_move_updates_tracker(self):
+    await self.star.experimental_x_arm_move(500.0)
+    self.star.send_command.assert_awaited_once_with(
+      module="X0", command="XP", la="05000", lr="3", lw="7"
+    )
+    self.assertEqual(self.star.get_x_arm_position(), (500.0, None))
+
+  async def test_position_left_x_arm_updates_tracker(self):
+    await self.star.position_left_x_arm_(12345)
+    self.star.send_command.assert_awaited_once_with(module="C0", command="JX", xs="12345")
+    self.assertEqual(self.star.get_x_arm_position(), (1234.5, None))
+
+  async def test_request_left_x_arm_position_updates_tracker(self):
+    self.star.send_command.return_value = {"rx": 6789}
+    x = await self.star.request_left_x_arm_position()
+    self.assertEqual(x, 678.9)
+    self.assertEqual(self.star.get_x_arm_position(), (678.9, None))
+
+  async def test_position_right_x_arm_updates_right_tracker(self):
+    self._add_right_x_arm()
+    await self.star.position_left_x_arm_(5000)
+    await self.star.position_right_x_arm_(11111)
+    self.star.send_command.assert_awaited_with(module="C0", command="JS", xs="11111")
+    self.assertEqual(self.star.get_x_arm_position(), (500.0, 1111.1))
+
+  async def test_request_right_x_arm_position_updates_right_tracker(self):
+    self._add_right_x_arm()
+    self.star.send_command.return_value = {"rx": 9876}
+    x = await self.star.request_right_x_arm_position()
+    self.assertEqual(x, 987.6)
+    assert self.star.right_x_arm_tracker is not None
+    self.assertEqual(self.star.right_x_arm_tracker.get_x(), 987.6)
+
+  async def test_right_arm_command_without_right_x_arm_is_a_noop(self):
+    # No right X-arm: the command still sends, tracking is skipped.
+    await self.star.position_right_x_arm_(11111)
+    self.star.send_command.assert_awaited_with(module="C0", command="JS", xs="11111")
+    self.assertIsNone(self.star.right_x_arm_tracker)
+
+  async def test_right_unknown_reported_as_none(self):
+    await self.star.position_left_x_arm_(5000)
+    self.assertEqual(self.star.get_x_arm_position(), (500.0, None))
+
+  async def test_failed_move_invalidates_position(self):
+    await self.star.experimental_x_arm_move(500.0)
+    self.star.send_command.side_effect = TimeoutError()
+    with self.assertRaises(TimeoutError):
+      await self.star.experimental_x_arm_move(600.0)
+    assert self.star.left_x_arm_tracker is not None
+    self.assertFalse(self.star.left_x_arm_tracker.is_known)
+
+  async def test_disabled_tracker_is_not_updated(self):
+    assert self.star.left_x_arm_tracker is not None
+    self.star.left_x_arm_tracker.disable()
+    await self.star.experimental_x_arm_move(500.0)
+    self.star.left_x_arm_tracker.enable()
+    self.assertFalse(self.star.left_x_arm_tracker.is_known)
+
+
+class TestXArmPresence(unittest.IsolatedAsyncioTestCase):
+  """setup() creates a deck X-arm (and thus a tracker) per present arm."""
+
+  async def _setup_deck(self, right_present: bool) -> HamiltonSTARDeck:
+    conf = copy.deepcopy(_DEFAULT_EXTENDED_CONFIGURATION)
+    if right_present:
+      conf.right_x_drive = DriveConfiguration(iswap_installed=True)
+    deck = STARLetDeck()
+    lh = LiquidHandler(STARChatterboxBackend(extended_configuration=conf), deck=deck)
+    await lh.setup()
+    return deck
+
+  async def test_left_only_config_creates_only_left_x_arm(self):
+    deck = await self._setup_deck(right_present=False)
+    x_arms = [c.name for c in deck.children if c.category == "x_arm"]
+    self.assertEqual(x_arms, ["left_x_arm"])
+
+  async def test_right_present_creates_both_x_arms(self):
+    deck = await self._setup_deck(right_present=True)
+    x_arms = sorted(c.name for c in deck.children if c.category == "x_arm")
+    self.assertEqual(x_arms, ["left_x_arm", "right_x_arm"])
+
+
+class TestXArmVisualizerXArms(unittest.IsolatedAsyncioTestCase):
+  """The deck owns an X-arm per present arm; the X-arm owns the tracker and
+  reports it as state, so the backend drives it and the Visualizer reads it."""
+
+  async def asyncSetUp(self):
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(STARChatterboxBackend(), deck=self.deck)
+    await self.lh.setup()
+
+  async def test_left_only_creates_one_x_arm(self):
+    x_arms = [c.name for c in self.deck.children if c.category == "x_arm"]
+    self.assertEqual(x_arms, ["left_x_arm"])
+
+  async def test_x_arm_dimensions_and_geometry(self):
+    x_arm = self.deck.get_resource("left_x_arm")
+    self.assertEqual(x_arm.get_size_x(), self.lh.backend.extended_conf.left_x_arm_width)
+    self.assertEqual(x_arm.get_size_y(), self.deck.get_size_y())
+    self.assertEqual(x_arm.get_size_z(), 140.0)
+    self.assertEqual(x_arm.category, "x_arm")
+    self.assertEqual(x_arm.model, "hamilton_legacy_star_dual_rail_arm")
+    assert x_arm.location is not None
+    self.assertEqual(x_arm.location.z, 248.0)
+
+  async def test_x_arm_owns_a_tracker_reported_as_state(self):
+    x_arm = self.deck.get_resource("left_x_arm")
+    self.assertIsInstance(x_arm, XArm)
+    self.assertIn("tracker", x_arm.serialize_state())
+
+  async def test_seeded_at_home_not_zero(self):
+    # The arm must not start at x=0 (border-crash region); it seeds from a position read.
+    self.assertGreater(self.lh.backend.get_x_arm_position()[0], 0.0)
+
+  async def test_tracked_move_updates_x_arm_tracker(self):
+    await self.lh.backend.experimental_x_arm_move(500.0)
+    x_arm = self.deck.get_resource("left_x_arm")
+    self.assertEqual(x_arm.tracker.get_x(), 500.0)
+    self.assertEqual(self.lh.backend.get_x_arm_position()[0], 500.0)
+
+  async def test_resetup_reuses_x_arm(self):
+    # Regression: re-setup must not crash or duplicate the deck-owned x_arm.
+    await self.lh.stop()
+    await self.lh.setup()
+    x_arms = [c.name for c in self.deck.children if c.category == "x_arm"]
+    self.assertEqual(x_arms, ["left_x_arm"])
