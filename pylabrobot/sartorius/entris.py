@@ -51,7 +51,8 @@ class SartoriusEntris2:
 
   Commands (SBI control commands, format "<Esc> <char> CR LF"):
     <Esc>P     print current weight value
-    <Esc>T     zero/tare
+    <Esc>T     tare (Zero/Tara command)
+    <Esc>V     zero (Key ZERO)
     <Esc>x1_   query balance model
     <Esc>x2_   query serial number
     The trailing "_" in x1_/x2_ is a literal underscore. <Esc> is the escape
@@ -182,12 +183,10 @@ class SartoriusEntris2:
     logger.info("[Sartorius %s] tared", self.serial_number)
 
   async def zero(self) -> None:
-    """Zero the balance.
-
-    The Entris II SBI print protocol exposes only tare (<ESC>T); there is no
-    distinct zero command, so this delegates to tare().
-    """
-    await self.tare()
+    """Zero the balance (<Esc>V, Key ZERO)."""
+    await self.send_command("V", read_reply=False)
+    await asyncio.sleep(self.tare_settle_s)
+    logger.info("[Sartorius %s] zeroed", self.serial_number)
 
   async def get_model(self) -> str:
     """Query the balance model string (<ESC>x1_)."""
