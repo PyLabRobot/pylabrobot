@@ -36,6 +36,7 @@ from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL
 
 from .STAR_backend import (
   CommandSyntaxError,
+  DriveConfiguration,
   HamiltonNoTipError,
   HardwareError,
   Head96Information,
@@ -2583,3 +2584,51 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(result), 2)
     self.assertAlmostEqual(result[0], 0 - well_a.get_absolute_location("c", "c", "cavity_bottom").z)
     self.assertAlmostEqual(result[1], 0 - well_b.get_absolute_location("c", "c", "cavity_bottom").z)
+
+
+class TestXArmGeometry(unittest.IsolatedAsyncioTestCase):
+  """setup() resolves QM/RU/UA firmware onto the X-drive DriveConfigurations."""
+
+  async def asyncSetUp(self):
+    self.lh = LiquidHandler(STARChatterboxBackend(), deck=STARLetDeck())
+    await self.lh.setup()
+
+  async def test_single_left_arm(self):
+    self.assertIsNotNone(self.lh.backend.extended_conf.left_x_drive.workspace_range)
+    self.assertIsNone(self.lh.backend.extended_conf.right_x_drive)
+
+  async def test_left_arm_fields(self):
+    left = self.lh.backend.extended_conf.left_x_drive
+    self.assertEqual(left.reference_point, "center")  # QM width -> center rail
+    # x_range comes from RU, workspace_range from UA: request_extended_configuration routes
+    # the two firmware sources into distinct slots (not covered by the parse/branch tests).
+    assert left.x_range is not None and left.workspace_range is not None
+    self.assertEqual(left.x_range[0], 95.0)
+    self.assertEqual(left.workspace_range[0], -323.2)
+
+  def test_model_and_reference_by_width(self):
+    dual = DriveConfiguration(width=370.0)
+    self.assertEqual(dual.model, "hamilton_legacy_star_dual_rail_arm")
+    self.assertEqual(dual.reference_point, "center")
+    # 246.0 is an illustrative <300 width; no single-rail dump exists yet to measure one.
+    single = DriveConfiguration(width=246.0)
+    self.assertEqual(single.model, "hamilton_legacy_star_single_right_rail_arm")
+    self.assertEqual(single.reference_point, "right")
+
+
+class TestXArmRangeQueries(unittest.IsolatedAsyncioTestCase):
+  """RU/UA parse the firmware replies observed on real machines."""
+
+  def setUp(self):
+    self.star = STARBackend()
+    self.star.send_command = unittest.mock.AsyncMock()
+
+  async def test_maximal_ranges_of_x_drives(self):
+    self.star.send_command.return_value = "C0RUid0002er00/00ru00950 13402 30000 30000"
+    ranges = await self.star.request_maximal_ranges_of_x_drives()
+    self.assertEqual(ranges, {"left": (95.0, 1340.2), "right": (3000.0, 3000.0)})
+
+  async def test_working_envelopes_per_arm(self):
+    self.star.send_command.return_value = "C0UAid0001er00/00ua5952 0000 -03232 +15172 +30000 +30000"
+    wraps = await self.star.request_working_envelopes_per_arm()
+    self.assertEqual(wraps, {"left": (595.2, (-323.2, 1517.2)), "right": (0.0, (3000.0, 3000.0))})
