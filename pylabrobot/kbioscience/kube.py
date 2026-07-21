@@ -117,8 +117,10 @@ class KBioscienceKUBE:
     F            read current heater temperature, three digits
     V            read firmware version
     @            read product name / model description
-    <empty>      protocol probe; a unit replying ``ALPS300`` speaks the older,
-                 incompatible protocol and is rejected at setup
+    <empty>      protocol probe; a unit replying ``ALPS300`` speaks the older
+                 ALPS protocol and is rejected at setup. Use
+                 ``pylabrobot.thermo_fisher.alps.ThermoScientificALPS300`` for a
+                 unit running that protocol.
 
   Not verified: has NOT been tested against hardware in PyLabRobot. A warning
   is emitted at setup.
@@ -160,13 +162,16 @@ class KBioscienceKUBE:
     await asyncio.sleep(self.settle_time)
     await self.io.reset_input_buffer()
     # A unit that answers the empty-command probe with "ALPS300" speaks the
-    # older protocol this driver does not support.
+    # older ALPS protocol; pylabrobot.thermo_fisher.alps.ThermoScientificALPS300
+    # handles that protocol.
     if await self._is_alps300():
       raise KBioscienceError(
         title="Incompatible communication protocol",
         message=(
-          "Please uncheck ALPS Compatibility from instrument software menu "
-          "[Menu->Supervisor options->Remote control settings->ALPS Compatibility]"
+          "This unit is running the ALPS protocol. Either use "
+          "ThermoScientificALPS300, or uncheck ALPS Compatibility from the "
+          "instrument software menu [Menu->Supervisor options->Remote control "
+          "settings->ALPS Compatibility]."
         ),
       )
     await self.wait_for_idle(
