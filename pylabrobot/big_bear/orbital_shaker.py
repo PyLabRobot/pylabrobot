@@ -1,9 +1,10 @@
 import asyncio
-import enum
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from pylabrobot.io.serial import Serial
+
+Sequence = Literal["CW", "CCW"]
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +21,6 @@ MIN_ACCELERATION = 1
 MAX_ACCELERATION = 10
 MIN_SHAKERS = 1
 MAX_SHAKERS = 16
-
-
-class OrbitalShakerSequence(enum.IntEnum):
-  """Rotation direction of a shake."""
-
-  CW = 1
-  CCW = 2
 
 
 class BigBearError(Exception):
@@ -181,9 +175,11 @@ class BigBearOrbitalShaker:
     await self._send(f"{address}?A{acceleration}")
     await self._read_reply()
 
-  async def _set_sequence(self, device_id: int, sequence: OrbitalShakerSequence) -> None:
+  async def _set_sequence(self, device_id: int, sequence: Sequence) -> None:
+    if sequence not in ("CW", "CCW"):
+      raise ValueError('sequence must be "CW" or "CCW"')
     address = self._address(device_id)
-    direction = "+" if sequence is OrbitalShakerSequence.CW else "-"
+    direction = "+" if sequence == "CW" else "-"
     await self._send(f"{address}{direction}")
     await self._send(f"{address}?{direction}")
     await self._read_reply()
@@ -194,7 +190,7 @@ class BigBearOrbitalShaker:
     self,
     rpm: int,
     acceleration: int = 1,
-    sequence: OrbitalShakerSequence = OrbitalShakerSequence.CW,
+    sequence: Sequence = "CW",
     device_id: int = 1,
   ) -> None:
     """Set the parameters for a nest and start it shaking.
@@ -202,7 +198,7 @@ class BigBearOrbitalShaker:
     Args:
       rpm: shaking speed (60..3570).
       acceleration: acceleration on the device's 1..10 scale.
-      sequence: rotation direction (clockwise or counter-clockwise).
+      sequence: rotation direction, "CW" (clockwise) or "CCW" (counter-clockwise).
       device_id: nest to address (1..num_shakers).
     """
     self._validate_device_id(device_id)

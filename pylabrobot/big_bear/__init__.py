@@ -1,5 +1,1 @@
-from .orbital_shaker import (
-  BigBearError,
-  BigBearOrbitalShaker,
-  OrbitalShakerSequence,
-)
+from .orbital_shaker import BigBearError, BigBearOrbitalShaker

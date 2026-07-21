@@ -11,5 +11,4 @@ pylabrobot.big_bear package
   :recursive:
 
     BigBearOrbitalShaker
-    OrbitalShakerSequence
     BigBearError
