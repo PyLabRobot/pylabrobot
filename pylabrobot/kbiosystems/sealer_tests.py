@@ -176,6 +176,10 @@ class TestSharedBase(unittest.TestCase):
     self.assertTrue(issubclass(KBiosystemsUltrasealEPRO, KBiosystemsSealer))
     self.assertTrue(issubclass(KBiosystemsUltrasealXTPro, KBiosystemsSealer))
 
+  def test_base_is_abstract(self):
+    with self.assertRaises(TypeError):
+      KBiosystemsSealer(port="FAKE")  # setup/seal are abstract
+
   def test_shared_low_status_bits(self):
     # The state machine in the base relies on these being identical.
     for bit in ("Ready", "NoFoil", "Error", "Busy", "NotAtSealTemperature", "PlateNotPresent"):

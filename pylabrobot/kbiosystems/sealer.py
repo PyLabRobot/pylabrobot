@@ -1,3 +1,4 @@
+import abc
 import asyncio
 import enum
 import logging
@@ -28,7 +29,7 @@ class KBiosystemsError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class KBiosystemsSealer:
+class KBiosystemsSealer(abc.ABC):
   """Shared base for KBiosystems serial heat sealers (Ultraseal ePRO / XT Pro).
 
   Every model speaks the same ASCII-over-RS-232 core: a command is written with
@@ -88,6 +89,16 @@ class KBiosystemsSealer:
       stopbits=1,
       timeout=0.2,
     )
+
+  # === Subclass contract ===
+
+  @abc.abstractmethod
+  async def setup(self) -> None:
+    """Open the connection and bring the sealer to a ready, pre-heated state."""
+
+  @abc.abstractmethod
+  async def seal(self, temperature: int, duration: float) -> None:
+    """Seal a plate at the given sealing temperature (C) and duration (s)."""
 
   async def _open(self) -> None:
     """Open the port, wait out the post-open settling, and clear the buffer.
