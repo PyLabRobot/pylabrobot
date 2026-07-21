@@ -167,9 +167,15 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
       await device.recap()
 
   async def test_reset_ignored_is_not_fatal(self):
-    device = self._make([[ACK, "zOK", "CommandIgnore"], status("StatusOK")])
+    # Precheck OK, z is a no-op (CommandIgnore) at idle, postcheck OK.
+    device = self._make([status("StatusOK"), [ACK, "zOK", "CommandIgnore"], status("StatusOK")])
     await device.reset()
-    self.assertEqual(device.io.written, ["z", "a"])  # type: ignore[attr-defined]
+    self.assertEqual(device.io.written, ["a", "z", "a"])  # type: ignore[attr-defined]
+
+  async def test_reset_refused_when_errored(self):
+    device = self._make([status("StatusError")])
+    with self.assertRaises(FluidXError):
+      await device.reset()
 
 
 if __name__ == "__main__":

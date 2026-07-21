@@ -54,6 +54,10 @@ ERROR_MESSAGES = {
     "Device was not able to reach the home position. The device is in an error state. "
     "Restart the device."
   ),
+  "CannotReset": (
+    "Cannot send the reset command to the device. The device is in an error state. "
+    "Reset the device and try again."
+  ),
   "ResetNotSuccesful": (
     "Reset did not complete. The device is in an error state. Reset the device and try again."
   ),
@@ -360,9 +364,10 @@ class FluidXIntelliXcap96:
     Args:
       settle_time: time in seconds to wait after the reset command.
     """
+    if "ERROR" in (await self.request_status()).upper():
+      raise _fault("CannotReset")
     await self._command(RESET)
     await asyncio.sleep(settle_time)
-    status = (await self.request_status()).upper()
-    if "ERROR" in status:
-      raise _fault("ResetNotSuccesful", status)
+    if "ERROR" in (await self.request_status()).upper():
+      raise _fault("ResetNotSuccesful")
     logger.info("[IntelliXcap96 %s] reset complete", self.io.port)
