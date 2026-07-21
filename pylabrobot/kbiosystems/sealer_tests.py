@@ -6,8 +6,10 @@ from pylabrobot.kbiosystems import (
   KBiosystemsError,
   KBiosystemsSealer,
   KBiosystemsUltrasealEPRO,
+  KBiosystemsUltrasealPRO,
   KBiosystemsUltrasealXTPro,
   UltrasealEPROStatus,
+  UltrasealPROStatus,
   UltrasealXTProStatus,
 )
 
@@ -171,10 +173,56 @@ class TestUltrasealXTPro(KBiosystemsSealerTestBase):
     self.assertEqual(ctx.exception.message, "Low air pressure.")
 
 
+class TestUltrasealPRO(KBiosystemsSealerTestBase):
+  def _make(self, responses: Dict[str, str]) -> KBiosystemsUltrasealPRO:
+    sealer = KBiosystemsUltrasealPRO(port="FAKE")
+    sealer.io = FakeSealerSerial(responses)  # type: ignore[assignment]
+    return sealer
+
+  async def test_setup_sequence(self):
+    sealer = self._make({"?": "00", "A100": "ok"})
+    await sealer.setup()
+    self.assertEqual(sealer.io.written, ["?", "A100"])  # type: ignore[attr-defined]
+
+  async def test_seal_wire_bytes(self):
+    sealer = self._make({"?": "00", "B30": "ok", "A180": "ok", "A100": "ok", "S": "ok"})
+    await sealer.seal(temperature=180, duration=3.0)
+    written = sealer.io.written  # type: ignore[attr-defined]
+    for expected in ["B30", "A180", "S", "A100"]:
+      self.assertIn(expected, written)
+    # The Ultraseal PRO has no foil/force/distance/eco or shuttle commands.
+    self.assertFalse(
+      any(
+        w.startswith(("L=", "DO=", "PS=", "FS=", "ECO_")) or w in ("P", "U", "R") for w in written
+      )
+    )
+
+  async def test_park_mode_is_bit_7(self):
+    # The Ultraseal PRO reports Park Mode at 0x80 (bit 6 is spare) - unlike the
+    # XT Pro, where Park Mode is 0x40. Decoding either byte must not raise.
+    sealer = self._make({"?": "80"})
+    self.assertEqual(await sealer.request_status(), UltrasealPROStatus.ParkMode)
+    sealer = self._make({"?": "40"})
+    self.assertEqual(await sealer.request_status(), UltrasealPROStatus.Spare)
+
+  async def test_status_decode_lowair(self):
+    sealer = self._make({"?": "24"})
+    status = await sealer.request_status()
+    self.assertEqual(status, UltrasealPROStatus.LowAir | UltrasealPROStatus.Busy)
+
+  async def test_error_status_raises_with_code(self):
+    sealer = self._make({"?": "02", "E": "09"})
+    with self.assertRaises(KBiosystemsError) as ctx:
+      await sealer.wait_for_idle()
+    self.assertEqual(ctx.exception.error_code, 9)
+    self.assertEqual(ctx.exception.message, "The sealer is overheating.")
+
+
 class TestSharedBase(unittest.TestCase):
   def test_both_drivers_subclass_base(self):
     self.assertTrue(issubclass(KBiosystemsUltrasealEPRO, KBiosystemsSealer))
     self.assertTrue(issubclass(KBiosystemsUltrasealXTPro, KBiosystemsSealer))
+    self.assertTrue(issubclass(KBiosystemsUltrasealPRO, KBiosystemsSealer))
 
   def test_base_is_abstract(self):
     with self.assertRaises(TypeError):
@@ -185,6 +233,9 @@ class TestSharedBase(unittest.TestCase):
     for bit in ("Ready", "NoFoil", "Error", "Busy", "NotAtSealTemperature", "PlateNotPresent"):
       self.assertEqual(
         int(getattr(UltrasealEPROStatus, bit)), int(getattr(UltrasealXTProStatus, bit))
+      )
+      self.assertEqual(
+        int(getattr(UltrasealEPROStatus, bit)), int(getattr(UltrasealPROStatus, bit))
       )
 
 

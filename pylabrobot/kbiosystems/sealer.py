@@ -101,16 +101,7 @@ class KBiosystemsSealer(abc.ABC):
     """Seal a plate at the given sealing temperature (C) and duration (s)."""
 
   async def _open(self) -> None:
-    """Open the port, wait out the post-open settling, and clear the buffer.
-
-    Emits the not-tested warning: no KBiosystems sealer driver has been verified
-    against hardware in PyLabRobot yet.
-    """
-    logger.warning(
-      "%s has NOT been tested against hardware in PyLabRobot. Please make a PR "
-      "to remove this message if you have verified it on your hardware.",
-      type(self).__name__,
-    )
+    """Open the port, wait out the post-open settling, and clear the buffer."""
     await self.io.setup()
     # The device drops characters for a few seconds after the port opens.
     await asyncio.sleep(self.settle_time)
