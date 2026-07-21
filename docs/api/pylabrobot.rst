@@ -39,6 +39,7 @@ Manufacturers
     pylabrobot.byonoy
     pylabrobot.hamilton
     pylabrobot.inheco
+    pylabrobot.kbioscience
     pylabrobot.kbiosystems
     pylabrobot.liconic
     pylabrobot.mettler_toledo
