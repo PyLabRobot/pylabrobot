@@ -29,6 +29,39 @@ READY = "k"
 
 COMMAND_IGNORE = "CommandIgnore"
 
+# Fault descriptions as reported by the instrument firmware.
+ERROR_MESSAGES = {
+  "StatusNotOK": (
+    "Status is not ok. The device is in an error state. Check whether the plate is already "
+    "decapped (if so, recap and initialize again); otherwise clear the error on the device and "
+    "cycle the power."
+  ),
+  "NeedToRecap": "Decap operation is already done. Select the recap operation on the device.",
+  "NeedToDecap": "Recap operation is already executed.",
+  "DecapWasNotSuccesful": (
+    "Decapping was not successful. Fix the error on the device manually and check whether any "
+    "tubes are still on the head."
+  ),
+  "RecapWasNotSuccesful": "Recapping was not successful. Fix the error on the device manually.",
+  "StoreWasNotSuccesful": "Storing was not successful. Fix the error on the device manually.",
+  "OpenTrayWasNotSuccesful": (
+    "Opening the tray was not successful. Fix the error on the device manually."
+  ),
+  "CloseTrayWasNotSuccesful": (
+    "Closing the tray was not successful. Fix the error on the device manually."
+  ),
+  "HomeNotSuccesful": (
+    "Device was not able to reach the home position. The device is in an error state. "
+    "Restart the device."
+  ),
+  "ResetNotSuccesful": (
+    "Reset did not complete. The device is in an error state. Reset the device and try again."
+  ),
+  "CannotGoInStandbyMode": "Cannot go to standby mode. Check the errors on the device.",
+  "CommandIgnore": "Command was ignored by the device.",
+  "NoAck": "Device did not acknowledge the command.",
+}
+
 
 class FluidXError(Exception):
   """Exceptions raised by a FluidX IntelliXcap 96 decapper."""
@@ -39,6 +72,11 @@ class FluidXError(Exception):
 
   def __str__(self) -> str:
     return f"{self.title}: {self.message}" if self.message else self.title
+
+
+def _fault(key: str, detail: Optional[str] = None) -> FluidXError:
+  """Build a FluidXError carrying the firmware's own description for ``key``."""
+  return FluidXError(title=ERROR_MESSAGES.get(key, key), message=detail)
 
 
 class FluidXIntelliXcap96:
@@ -135,7 +173,7 @@ class FluidXIntelliXcap96:
         ),
       )
     if "ERROR" in up:
-      raise FluidXError(title="Decapper reports an error", message=status)
+      raise _fault("StatusNotOK", status)
     logger.info("[IntelliXcap96 %s] connected: %s", self.io.port, status)
 
   async def stop(self) -> None:
@@ -185,24 +223,23 @@ class FluidXIntelliXcap96:
 
   def _require_accepted(self, command: str, frames: List[str], name: str) -> None:
     """Raise unless the device acked and echoed the command without ignoring it."""
-    if ACK not in frames:
-      raise FluidXError(title=f"{name} was not acknowledged", message=repr(frames))
+    if ACK not in frames or f"{command}OK" not in frames:
+      raise _fault("NoAck", f"{name}: {frames!r}")
     if any(COMMAND_IGNORE in f for f in frames):
-      raise FluidXError(
-        title=f"{name} was ignored",
-        message="The device is already in that state or is not ready.",
-      )
-    if f"{command}OK" not in frames:
-      raise FluidXError(title=f"{name} was not accepted", message=repr(frames))
+      raise _fault("CommandIgnore", f"{name}: device already in that state or not ready")
 
-  async def _wait_for_idle(self, timeout: float, name: str) -> None:
-    """Poll status until it returns to StatusOK, raising on an error or timeout."""
+  async def _wait_for_idle(self, timeout: float, name: str, fail_key: str) -> None:
+    """Poll status until it returns to StatusOK, raising on an error or timeout.
+
+    ``fail_key`` names the firmware error message to raise if the status word
+    reports an error while waiting.
+    """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     while loop.time() < deadline:
       frames = await self._command(STATUS)
       if any("ERROR" in f.upper() for f in frames):
-        raise FluidXError(title=f"{name} failed", message=repr(frames))
+        raise _fault(fail_key, f"{name}: {frames!r}")
       status = self._status_frame(frames)
       if status is not None and "OK" in status.upper():
         return
@@ -229,21 +266,21 @@ class FluidXIntelliXcap96:
     """Open the loading tray."""
     frames = await self._command(OPEN_TRAY)
     self._require_accepted(OPEN_TRAY, frames, "Opening the tray")
-    await self._wait_for_idle(timeout, "Opening the tray")
+    await self._wait_for_idle(timeout, "Opening the tray", "OpenTrayWasNotSuccesful")
     logger.info("[IntelliXcap96 %s] tray open", self.io.port)
 
   async def close_tray(self, timeout: float = 15.0) -> None:
     """Close the loading tray."""
     frames = await self._command(CLOSE_TRAY)
     self._require_accepted(CLOSE_TRAY, frames, "Closing the tray")
-    await self._wait_for_idle(timeout, "Closing the tray")
+    await self._wait_for_idle(timeout, "Closing the tray", "CloseTrayWasNotSuccesful")
     logger.info("[IntelliXcap96 %s] tray closed", self.io.port)
 
   async def home(self, timeout: float = 30.0) -> None:
     """Home all axes."""
     frames = await self._command(HOME_ALL)
     self._require_accepted(HOME_ALL, frames, "Homing")
-    await self._wait_for_idle(timeout, "Homing")
+    await self._wait_for_idle(timeout, "Homing", "HomeNotSuccesful")
     logger.info("[IntelliXcap96 %s] homed", self.io.port)
 
   async def decap(self, timeout: float = 60.0) -> None:
@@ -254,15 +291,12 @@ class FluidXIntelliXcap96:
     """
     status = (await self.request_status()).upper()
     if "RECAP" in status:
-      raise FluidXError(
-        title="Already decapped",
-        message="Caps are held; recap before decapping again.",
-      )
+      raise _fault("NeedToRecap")
     if "ERROR" in status:
-      raise FluidXError(title="Decapper is not ready", message=status)
+      raise _fault("StatusNotOK", status)
     frames = await self._command(DECAP_START)
     self._require_accepted(DECAP_START, frames, "Decapping")
-    await self._wait_for_idle(timeout, "Decapping")
+    await self._wait_for_idle(timeout, "Decapping", "DecapWasNotSuccesful")
     logger.info("[IntelliXcap96 %s] decap complete", self.io.port)
 
   async def recap(self, timeout: float = 60.0) -> None:
@@ -273,15 +307,12 @@ class FluidXIntelliXcap96:
     """
     status = (await self.request_status()).upper()
     if "DECAP" in status:
-      raise FluidXError(
-        title="Nothing to recap",
-        message="No caps are held; decap first.",
-      )
+      raise _fault("NeedToDecap")
     if "ERROR" in status:
-      raise FluidXError(title="Decapper is not ready", message=status)
+      raise _fault("StatusNotOK", status)
     frames = await self._command(RECAP_START)
     self._require_accepted(RECAP_START, frames, "Recapping")
-    await self._wait_for_idle(timeout, "Recapping")
+    await self._wait_for_idle(timeout, "Recapping", "RecapWasNotSuccesful")
     logger.info("[IntelliXcap96 %s] recap complete", self.io.port)
 
   async def waste(self, timeout: float = 60.0) -> None:
@@ -292,10 +323,10 @@ class FluidXIntelliXcap96:
     """
     status = (await self.request_status()).upper()
     if "ERROR" in status:
-      raise FluidXError(title="Decapper is not ready", message=status)
+      raise _fault("StatusNotOK", status)
     frames = await self._command(WASTE)
     self._require_accepted(WASTE, frames, "Wasting caps")
-    await self._wait_for_idle(timeout, "Wasting caps")
+    await self._wait_for_idle(timeout, "Wasting caps", "StoreWasNotSuccesful")
     logger.info("[IntelliXcap96 %s] waste complete", self.io.port)
 
   async def standby(self, timeout: float = 15.0) -> None:
@@ -309,7 +340,7 @@ class FluidXIntelliXcap96:
         logger.info("[IntelliXcap96 %s] standby", self.io.port)
         return
       await asyncio.sleep(self.poll_interval)
-    raise FluidXError(title="Entering standby timed out")
+    raise _fault("CannotGoInStandbyMode", "standby timed out")
 
   async def ready(self, timeout: float = 30.0) -> None:
     """Wake the decapper from standby if it is asleep."""
@@ -317,7 +348,7 @@ class FluidXIntelliXcap96:
       return
     frames = await self._command(READY)
     self._require_accepted(READY, frames, "Waking from standby")
-    await self._wait_for_idle(timeout, "Waking from standby")
+    await self._wait_for_idle(timeout, "Waking from standby", "StatusNotOK")
     logger.info("[IntelliXcap96 %s] ready", self.io.port)
 
   async def reset(self, settle_time: float = 5.0) -> None:
@@ -333,5 +364,5 @@ class FluidXIntelliXcap96:
     await asyncio.sleep(settle_time)
     status = (await self.request_status()).upper()
     if "ERROR" in status:
-      raise FluidXError(title="Reset did not clear the error", message=status)
+      raise _fault("ResetNotSuccesful", status)
     logger.info("[IntelliXcap96 %s] reset complete", self.io.port)
