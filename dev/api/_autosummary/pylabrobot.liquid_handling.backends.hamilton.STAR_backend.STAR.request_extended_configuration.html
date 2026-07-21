@@ -589,9 +589,12 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_extended_configuration">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">STAR.</span></span><span class="sig-name descname"><span class="pre">request_extended_configuration</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ExtendedConfiguration</span></span></span><a class="headerlink" href="#pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STAR.request_extended_configuration" title="Link to this definition">#</a></dt>
-<dd><p>Request extended configuration (QM command).</p>
+<dd><p>Request extended configuration (QM command) with X-arm geometry resolved.</p>
 <p>Returns the full instrument configuration matching the AK
-(Set Instrument Configuration) [SFCO.0026] parameter set.</p>
+(Set Instrument Configuration) [SFCO.0026] parameter set. Each installed X-drive’s
+geometry (width, travel range, workspace range) is resolved from the X-drive range
+(RU) and working-envelope (UA) queries; <code class="code docutils literal notranslate"><span class="pre">right_x_drive</span></code> is None when no second arm
+is installed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><em>ExtendedConfiguration</em></p>

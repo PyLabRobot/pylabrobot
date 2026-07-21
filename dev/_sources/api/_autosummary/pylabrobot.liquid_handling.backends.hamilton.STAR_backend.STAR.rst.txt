@@ -331,7 +331,6 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.request_presence_of_carriers_on_deck
       ~STAR.request_presence_of_carriers_on_loading_tray
       ~STAR.request_presence_of_single_carrier_on_loading_tray
-      ~STAR.request_present_wrap_size_of_installed_arms
       ~STAR.request_probe_z_position
       ~STAR.request_pump_settings
       ~STAR.request_right_x_arm_last_collision_type
@@ -346,6 +345,7 @@ pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR
       ~STAR.request_tip_presence_in_core_96_head
       ~STAR.request_verification_data
       ~STAR.request_volume_in_tip
+      ~STAR.request_working_envelopes_per_arm
       ~STAR.request_x_pos_channel_n
       ~STAR.request_xl_channel_validation_status
       ~STAR.request_y_pos_channel_n
