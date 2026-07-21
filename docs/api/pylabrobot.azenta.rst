@@ -45,3 +45,17 @@ XPeel Peeler
 
 .. autoclass:: pylabrobot.azenta.xpeel.XPeelPeelerBackend.PeelParams
    :members:
+
+
+FluidX IntelliXcap 96
+---------------------
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    FluidXIntelliXcap96
+    FluidXError
