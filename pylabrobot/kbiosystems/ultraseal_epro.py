@@ -114,6 +114,10 @@ class KBiosystemsUltrasealEPRO(KBiosystemsSealer):
     self.firmware_version: Optional[str] = None
 
   async def setup(self) -> None:
+    logger.warning(
+      "KBiosystemsUltrasealEPRO has NOT been tested against hardware in PyLabRobot. "
+      "Please make a PR to remove this message if you have verified it on your hardware."
+    )
     await self._open()
     # Initialize/home the sealer (``I``).
     if self._check(await self.send_command("I"), {"ok", "err"}, "I") != "ok":

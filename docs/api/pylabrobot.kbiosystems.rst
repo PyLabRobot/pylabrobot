@@ -23,6 +23,16 @@ pylabrobot.kbiosystems package
     KBiosystemsUltrasealEPRO
     UltrasealEPROStatus
 
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_pro
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    KBiosystemsUltrasealPRO
+    UltrasealPROStatus
+
 .. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
 
 .. autosummary::

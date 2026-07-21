@@ -106,6 +106,10 @@ class KBiosystemsUltrasealXTPro(KBiosystemsSealer):
     )
 
   async def setup(self) -> None:
+    logger.warning(
+      "KBiosystemsUltrasealXTPro has NOT been tested against hardware in PyLabRobot. "
+      "Please make a PR to remove this message if you have verified it on your hardware."
+    )
     await self._open()
     await self.wait_for_idle(
       UltrasealXTProStatus.NoFoil
