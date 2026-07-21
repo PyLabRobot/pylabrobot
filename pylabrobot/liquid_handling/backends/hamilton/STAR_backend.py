@@ -1233,9 +1233,15 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
 
 @dataclass
 class DriveConfiguration:
-  """Configuration for an X drive (left or right).
+  """Configuration and geometry for an X drive (left or right).
 
-  Combines byte 1 (xl/xr) and byte 2 (xn/xo) into a single object.
+  The installed-module bits combine byte 1 (xl/xr) and byte 2 (xn/xo). The arm
+  geometry - width, travel range, workspace range - comes from the X-drive range (RU)
+  and working-envelope (UA) queries, so it is None on a drive built from the module
+  bits alone (e.g. a simulated configuration) and populated when
+  `request_extended_configuration` builds the drive. `model` and `reference_point`
+  follow from `width`.
+
   Note: the installed modules on left and right drives must be different.
   """
 
@@ -1249,10 +1255,27 @@ class DriveConfiguration:
   imaging_channel_installed: bool = False
   robotic_channel_installed: bool = False
 
+  width: Optional[float] = None
+  """Arm width (mm), from the machine configuration."""
+  x_range: Optional[Tuple[float, float]] = None
+  """Drive travel `(min, max)` in mm."""
+  workspace_range: Optional[Tuple[float, float]] = None
+  """Reachable X workspace `(min, max)` in mm."""
+
   @property
-  def is_present(self) -> bool:
-    """Whether this X-drive carries any module, i.e. the X-arm exists."""
-    return any(vars(self).values())
+  def model(self) -> str:
+    """Arm variant derived from `width`: wide arms span both rails, narrow arms one."""
+    assert self.width is not None, "arm geometry not resolved"
+    if self.width > 300:
+      return "hamilton_legacy_star_dual_rail_arm"
+    return "hamilton_legacy_star_single_right_rail_arm"
+
+  @property
+  def reference_point(self) -> Literal["center", "right"]:
+    """Where along the arm's width the tracked X refers to: the arm center for a
+    dual-rail arm, the right edge for a single-rail arm."""
+    assert self.width is not None, "arm geometry not resolved"
+    return "center" if self.width > 300 else "right"
 
 
 @dataclass
@@ -1349,8 +1372,8 @@ class ExtendedConfiguration:
   """Tip waste X-position [mm] (xw). Default: 1340.0."""
   left_x_drive: DriveConfiguration = field(default_factory=DriveConfiguration)
   """Left X drive configuration (xl + xn)."""
-  right_x_drive: DriveConfiguration = field(default_factory=DriveConfiguration)
-  """Right X drive configuration (xr + xo)."""
+  right_x_drive: Optional[DriveConfiguration] = None
+  """Right X drive configuration (xr + xo), or None when no right arm is installed."""
   min_iswap_collision_free_position: float = 350.0
   """Minimal iSWAP collision free position for direct X access [mm] (xm). Default: 350.0."""
   max_iswap_collision_free_position: float = 1140.0
@@ -1375,56 +1398,6 @@ class ExtendedConfiguration:
   """Left arm minimal Y position [mm] (yu). Default: 6.0."""
   right_arm_min_y_position: float = 6.0
   """Right arm minimal Y position [mm] (yx). Default: 6.0."""
-
-
-@dataclass(frozen=True, eq=False)
-class XArmInformation:
-  """The machine's X-arm layout, resolved once at setup.
-
-  The top-level per-machine X-arm record: one `SingleXArmInformation` per installed
-  arm, keyed by the rail it sits on. A STAR carries an arm on the `left` rail; an
-  optional second arm on the `right` rail makes `right` non-None (so `number_x_arms`
-  is 1 or 2). Built by `STARBackend._build_x_arm_information` from the machine
-  configuration and the X-drive queries, and immutable thereafter. This is the
-  reference frame the arm-mounted modules - pipetting channels, the 96-head, the
-  iSWAP - are positioned against.
-  """
-
-  left: Optional["SingleXArmInformation"] = None
-  right: Optional["SingleXArmInformation"] = None
-
-  @property
-  def number_x_arms(self) -> int:
-    """Number of installed X-arms."""
-    return sum(arm is not None for arm in (self.left, self.right))
-
-
-@dataclass(frozen=True, eq=False)
-class SingleXArmInformation:
-  """One installed X-arm's configuration information, resolved at setup from firmware.
-
-  Populated by `STARBackend._build_x_arm_information` from the machine configuration
-  (width) and the X-drive range and working-envelope queries. Immutable post-setup.
-  """
-
-  position: Literal["left", "right"]
-  """Which rail this arm is on."""
-
-  width: float
-  """Arm width (mm), from the machine configuration."""
-
-  model: str
-  """Arm variant, derived from `width` (wide arms span both rails, narrow arms one)."""
-
-  reference_point: Literal["center", "right"]
-  """Where along the arm's width the tracked X refers to: the arm centre for a
-  dual-rail arm, the right edge for a single-rail arm."""
-
-  x_range: Tuple[float, float]
-  """Drive travel `(min, max)` in mm."""
-
-  workspace_range: Tuple[float, float]
-  """Reachable X workspace `(min, max)` in mm."""
 
 
 @dataclass
@@ -1719,8 +1692,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self.left_side_panel_installed = left_side_panel_installed
     self._machine_conf: Optional[MachineConfiguration] = None
-    # X-arm configuration information (widths, models, ranges) resolved from firmware at setup.
-    self._x_arm_information: Optional[XArmInformation] = None
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
@@ -2255,8 +2226,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
     # the core grippers.
     self._core_parked = True
-
-    await self._build_x_arm_information()
 
     self._setup_done = True
 
@@ -6091,10 +6060,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def request_extended_configuration(self) -> ExtendedConfiguration:
-    """Request extended configuration (QM command).
+    """Request extended configuration (QM command) with X-arm geometry resolved.
 
     Returns the full instrument configuration matching the AK
-    (Set Instrument Configuration) [SFCO.0026] parameter set.
+    (Set Instrument Configuration) [SFCO.0026] parameter set. Each installed X-drive's
+    geometry (width, travel range, workspace range) is resolved from the X-drive range
+    (RU) and working-envelope (UA) queries; `right_x_drive` is None when no second arm
+    is installed.
     """
 
     resp = await self.send_command(
@@ -6104,7 +6076,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + "ys###kl###km###ym####yu####yx####",
     )
 
-    def _parse_drive(byte1: int, byte2: int) -> DriveConfiguration:
+    ranges = await self.request_maximal_ranges_of_x_drives()
+    wraps = await self.request_working_envelopes_per_arm()
+
+    def _build_drive(
+      byte1: int, byte2: int, side: Literal["left", "right"], width: float
+    ) -> Optional[DriveConfiguration]:
+      wrap, workspace_range = wraps[side]
+      if wrap == 0:  # arm not installed
+        return None
       return DriveConfiguration(
         pip_installed=bool(byte1 & (1 << 0)),
         iswap_installed=bool(byte1 & (1 << 1)),
@@ -6115,7 +6095,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         tube_gripper_installed=bool(byte1 & (1 << 6)),
         imaging_channel_installed=bool(byte1 & (1 << 7)),
         robotic_channel_installed=bool(byte2 & (1 << 0)),
+        width=width,
+        x_range=ranges[side],
+        workspace_range=workspace_range,
       )
+
+    left_x_drive = _build_drive(resp["xl"], resp["xn"], "left", resp["xu"] / 10)
+    assert left_x_drive is not None, "STAR must have a left X-arm"
 
     ka = resp["ka"]
     return ExtendedConfiguration(
@@ -6146,8 +6132,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       instrument_size_slots=resp["xt"],
       auto_load_size_slots=resp["xa"],
       tip_waste_x_position=resp["xw"] / 10,
-      left_x_drive=_parse_drive(resp["xl"], resp["xn"]),
-      right_x_drive=_parse_drive(resp["xr"], resp["xo"]),
+      left_x_drive=left_x_drive,
+      right_x_drive=_build_drive(resp["xr"], resp["xo"], "right", resp["xv"] / 10),
       min_iswap_collision_free_position=resp["xm"] / 10,
       max_iswap_collision_free_position=resp["xx"] / 10,
       left_x_arm_width=resp["xu"] / 10,
@@ -6326,55 +6312,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     resp_dmm = await self.send_command(module="C0", command="QX", fmt="rx#####")
     return cast(float, resp_dmm["rx"]) / 10
-
-  @property
-  def x_arm_information(self) -> XArmInformation:
-    """The machine's X-arm configuration information, resolved at setup (widths, models, ranges)."""
-    if self._x_arm_information is None:
-      raise RuntimeError("X-arm information not loaded; forgot to call `setup`?")
-    return self._x_arm_information
-
-  @staticmethod
-  def _x_arm_model_and_reference(width: float) -> Tuple[str, Literal["center", "right"]]:
-    """Arm variant and reference point for a given arm width.
-
-    Wide arms span both rails and reference their centre; narrow arms sit on a single
-    (right) rail and reference their right edge.
-    """
-    if width > 300:
-      return "hamilton_legacy_star_dual_rail_arm", "center"
-    return "hamilton_legacy_star_single_right_rail_arm", "right"
-
-  async def _build_x_arm_information(self) -> None:
-    """Resolve the machine's X-arm configuration information from firmware and cache it.
-
-    Fuses the machine configuration (widths), the X-drive travel ranges, and the arm
-    working-envelope query into an `XArmInformation` - one `SingleXArmInformation` per
-    installed arm. Called by setup() once the configuration is loaded.
-    """
-    ranges = await self.request_maximal_ranges_of_x_drives()
-    wraps = await self.request_working_envelopes_per_arm()
-    widths = {
-      "left": self.extended_conf.left_x_arm_width,
-      "right": self.extended_conf.right_x_arm_width,
-    }
-    drives = {"left": self.extended_conf.left_x_drive, "right": self.extended_conf.right_x_drive}
-
-    def build(position: Literal["left", "right"]) -> Optional[SingleXArmInformation]:
-      if not drives[position].is_present:
-        return None
-      model, reference_point = self._x_arm_model_and_reference(widths[position])
-      _wrap, workspace_range = wraps[position]
-      return SingleXArmInformation(
-        position=position,
-        width=widths[position],
-        model=model,
-        reference_point=reference_point,
-        x_range=ranges[position],
-        workspace_range=workspace_range,
-      )
-
-    self._x_arm_information = XArmInformation(left=build("left"), right=build("right"))
 
   async def request_maximal_ranges_of_x_drives(self) -> Dict[str, Tuple[float, float]]:
     """Request the maximal travel range of each X drive.

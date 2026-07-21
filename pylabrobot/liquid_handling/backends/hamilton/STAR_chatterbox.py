@@ -3,6 +3,7 @@ import datetime
 import logging
 import warnings
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
@@ -196,10 +197,6 @@ class STARChatterboxBackend(STARBackend):
     else:
       self._iswap_information = None
 
-    # Fuse the (mocked) configuration and X-drive replies into X-arm information,
-    # mirroring STARBackend.setup.
-    await self._build_x_arm_information()
-
   async def stop(self):
     await LiquidHandlerBackend.stop(self)
     self._setup_done = False
@@ -233,8 +230,35 @@ class STARChatterboxBackend(STARBackend):
     return self._machine_configuration
 
   async def request_extended_configuration(self) -> ExtendedConfiguration:
-    assert self._extended_conf is not None
-    return self._extended_conf
+    """Return the configured extended configuration with X-arm geometry resolved.
+
+    Mirrors STARBackend.request_extended_configuration: fills each installed drive's
+    geometry from the mocked X-drive range/envelope replies. A right drive that was not
+    configured (None) stays None.
+    """
+    conf = self._extended_conf
+    assert conf is not None
+    ranges = await self.request_maximal_ranges_of_x_drives()
+    wraps = await self.request_working_envelopes_per_arm()
+
+    def _with_geometry(
+      drive: Optional[DriveConfiguration], side: str, width: float
+    ) -> Optional[DriveConfiguration]:
+      if drive is None:
+        return None
+      wrap, workspace_range = wraps[side]
+      if wrap == 0:  # arm not installed
+        return None
+      return replace(drive, width=width, x_range=ranges[side], workspace_range=workspace_range)
+
+    left_x_drive = _with_geometry(conf.left_x_drive, "left", conf.left_x_arm_width)
+    assert left_x_drive is not None, "STAR must have a left X-arm"
+
+    return replace(
+      conf,
+      left_x_drive=left_x_drive,
+      right_x_drive=_with_geometry(conf.right_x_drive, "right", conf.right_x_arm_width),
+    )
 
   def _simulated_x_reach_max(self) -> float:
     """Rightmost reachable X (mm) in simulation, from the deck's reachable range."""
@@ -254,9 +278,9 @@ class STARChatterboxBackend(STARBackend):
   ) -> Dict[str, Tuple[float, Tuple[float, float]]]:
     workspace = (-323.2, self._simulated_x_reach_max())
     left = (595.2, workspace)  # wrap, workspace
-    # A wrap of 0 signals "arm not installed" (per the base method's contract), so an
-    # absent right drive reports 0 rather than mirroring the left arm.
-    right = (595.2, workspace) if self.extended_conf.right_x_drive.is_present else (0.0, (0.0, 0.0))
+    # A wrap of 0 signals "arm not installed" (per the base method's contract).
+    right_installed = self.extended_conf.right_x_drive is not None
+    right = (595.2, workspace) if right_installed else (0.0, (0.0, 0.0))
     return {"left": left, "right": right}
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #

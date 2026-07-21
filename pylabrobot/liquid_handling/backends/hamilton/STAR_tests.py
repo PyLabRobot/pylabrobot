@@ -36,6 +36,7 @@ from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL
 
 from .STAR_backend import (
   CommandSyntaxError,
+  DriveConfiguration,
   HamiltonNoTipError,
   HardwareError,
   Head96Information,
@@ -2585,38 +2586,34 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(result[1], 0 - well_b.get_absolute_location("c", "c", "cavity_bottom").z)
 
 
-class TestXArmInformation(unittest.IsolatedAsyncioTestCase):
-  """setup() fuses QM/RU/UA firmware into XArmInformation."""
+class TestXArmGeometry(unittest.IsolatedAsyncioTestCase):
+  """setup() resolves QM/RU/UA firmware onto the X-drive DriveConfigurations."""
 
   async def asyncSetUp(self):
     self.lh = LiquidHandler(STARChatterboxBackend(), deck=STARLetDeck())
     await self.lh.setup()
 
   async def test_single_left_arm(self):
-    info = self.lh.backend.x_arm_information
-    self.assertEqual(info.number_x_arms, 1)
-    self.assertIsNone(info.right)
+    self.assertIsNotNone(self.lh.backend.extended_conf.left_x_drive.workspace_range)
+    self.assertIsNone(self.lh.backend.extended_conf.right_x_drive)
 
   async def test_left_arm_fields(self):
-    left = self.lh.backend.x_arm_information.left
-    assert left is not None
-    self.assertEqual(left.position, "left")
-    self.assertEqual(left.reference_point, "center")  # QM width -> model_and_reference -> slot
-    # x_range comes from RU, workspace_range from UA: fusion routes the two firmware
-    # sources into distinct slots (the part not covered by the parse/branch unit tests).
+    left = self.lh.backend.extended_conf.left_x_drive
+    self.assertEqual(left.reference_point, "center")  # QM width -> center rail
+    # x_range comes from RU, workspace_range from UA: request_extended_configuration routes
+    # the two firmware sources into distinct slots (not covered by the parse/branch tests).
+    assert left.x_range is not None and left.workspace_range is not None
     self.assertEqual(left.x_range[0], 95.0)
     self.assertEqual(left.workspace_range[0], -323.2)
 
   def test_model_and_reference_by_width(self):
-    self.assertEqual(
-      STARBackend._x_arm_model_and_reference(370.0),
-      ("hamilton_legacy_star_dual_rail_arm", "center"),
-    )
+    dual = DriveConfiguration(width=370.0)
+    self.assertEqual(dual.model, "hamilton_legacy_star_dual_rail_arm")
+    self.assertEqual(dual.reference_point, "center")
     # 246.0 is an illustrative <300 width; no single-rail dump exists yet to measure one.
-    self.assertEqual(
-      STARBackend._x_arm_model_and_reference(246.0),
-      ("hamilton_legacy_star_single_right_rail_arm", "right"),
-    )
+    single = DriveConfiguration(width=246.0)
+    self.assertEqual(single.model, "hamilton_legacy_star_single_right_rail_arm")
+    self.assertEqual(single.reference_point, "right")
 
 
 class TestXArmRangeQueries(unittest.IsolatedAsyncioTestCase):
