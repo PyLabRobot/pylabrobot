@@ -2855,7 +2855,7 @@ class TestXArmVisualizerXArms(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(x_arm.category, "x_arm")
     self.assertEqual(x_arm.model, "hamilton_legacy_star_dual_rail_arm")
     assert x_arm.location is not None
-    self.assertEqual(x_arm.location.z, 248.0)
+    self.assertEqual(x_arm.location.z, 334.7)  # channel stop-disk safe Z
 
   async def test_x_arm_owns_a_tracker_reported_as_state(self):
     x_arm = self.deck.get_resource("left_x_arm")
