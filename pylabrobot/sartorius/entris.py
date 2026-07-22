@@ -170,8 +170,8 @@ class SartoriusEntris2:
 
   # === Public API ===
 
-  async def read_weight(self) -> float:
-    """Read the current weight in grams (<ESC>P)."""
+  async def measure_weight(self) -> float:
+    """Measure the current weight in grams (<ESC>P)."""
     weight = self._parse_weight(await self.send_command("P"))
     logger.info("[Sartorius %s] weight read: weight_g=%s", self.serial_number, weight)
     return weight
