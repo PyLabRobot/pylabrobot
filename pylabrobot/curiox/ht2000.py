@@ -1,7 +1,6 @@
 import asyncio
-import enum
 import logging
-from typing import Literal, Optional
+from typing import Literal, Optional, Tuple
 
 from pylabrobot.io.serial import Serial
 
@@ -66,27 +65,15 @@ DEVICE_ERRORS = {
 }
 
 
-class HT2000Status(enum.Enum):
-  """Instrument status, decoded from the status digit of a reply."""
+# Instrument status, decoded from the status digit of a reply.
+HT2000Status = Literal["ready", "busy", "error", "stopped"]
+STATUS_BY_DIGIT: Tuple[HT2000Status, ...] = ("ready", "busy", "error", "stopped")
 
-  READY = 0
-  BUSY = 1
-  ERROR = 2
-  STOPPED = 3
+# Operating mode of the instrument.
+HT2000Mode = Literal["operation", "service"]
 
-
-class HT2000Mode(enum.Enum):
-  """Operating mode of the instrument."""
-
-  OPERATION = 0
-  SERVICE = 1
-
-
-class TrayPosition(enum.Enum):
-  """Plate-tray position."""
-
-  IN = 0
-  OUT = 1
+# Plate-tray position.
+TrayPosition = Literal["in", "out"]
 
 
 # Fluidics prime routine, mapped to its command code.
@@ -128,8 +115,8 @@ class StatusReport:
 
   def __repr__(self) -> str:
     return (
-      f"StatusReport(mode={self.mode.name}, status={self.status.name}, "
-      f"error={self.error!r}, tray_position={self.tray_position.name}, "
+      f"StatusReport(mode={self.mode!r}, status={self.status!r}, "
+      f"error={self.error!r}, tray_position={self.tray_position!r}, "
       f"spill_tray_active={self.spill_tray_active}, tray_loaded={self.tray_loaded})"
     )
 
@@ -209,9 +196,9 @@ class CurioxHT2000:
     )
     await self.io.setup()
     status, _mode, error = await self.ping()
-    if status is HT2000Status.ERROR:
+    if status == "error":
       raise CurioxHT2000Error(title="HT2000 reported an error on connect", message=error)
-    logger.info("[HT2000 %s] connected: status=%s", self.io.port, status.name)
+    logger.info("[HT2000 %s] connected: status=%s", self.io.port, status)
 
   async def stop(self) -> None:
     """Close the serial connection."""
@@ -246,14 +233,18 @@ class CurioxHT2000:
 
   @staticmethod
   def _decode_status(digit: int) -> HT2000Status:
-    return HT2000Status(digit - ord("0"))
+    return STATUS_BY_DIGIT[digit - ord("0")]
+
+  @staticmethod
+  def _decode_mode(byte: int) -> HT2000Mode:
+    return "operation" if byte == ord("0") else "service"
 
   async def _send_and_ack(self, payload: str) -> None:
     """Send a command and consume its acknowledgement, raising on an error status."""
     await self._send_command(payload)
     reply = await self._read_exact(ACK_REPLY_LENGTH)
     status = self._decode_status(reply[ACK_STATUS_OFFSET])
-    if status is HT2000Status.ERROR:
+    if status == "error":
       raise CurioxHT2000Error(title=f"Command {payload} was rejected")
 
   # === Status ===
@@ -262,10 +253,10 @@ class CurioxHT2000:
     """Poll status. Returns ``(status, mode, error)``; error is a code string or None."""
     await self._send_command(Command.PING)
     reply = await self._read_exact(PING_REPLY_LENGTH)
-    mode = HT2000Mode.OPERATION if reply[8] == ord("0") else HT2000Mode.SERVICE
+    mode = self._decode_mode(reply[8])
     status = self._decode_status(reply[PING_STATUS_OFFSET])
     error = None
-    if status is HT2000Status.ERROR:
+    if status == "error":
       code = reply[10:12].decode("ascii", errors="replace")
       error = DEVICE_ERRORS.get(code, code)
     return status, mode, error
@@ -274,17 +265,17 @@ class CurioxHT2000:
     """Read the full status report (mode, status, tray state)."""
     await self._send_command(Command.ENQUIRE_REPORT)
     reply = await self._read_exact(REPORT_REPLY_LENGTH)
-    mode = HT2000Mode.OPERATION if reply[8] == ord("0") else HT2000Mode.SERVICE
+    mode = self._decode_mode(reply[8])
     status = self._decode_status(reply[REPORT_STATUS_OFFSET])
     error = None
-    if status is HT2000Status.ERROR:
+    if status == "error":
       code = reply[10:12].decode("ascii", errors="replace")
       error = DEVICE_ERRORS.get(code, code)
     return StatusReport(
       mode=mode,
       status=status,
       error=error,
-      tray_position=TrayPosition.IN if reply[12] == ord("0") else TrayPosition.OUT,
+      tray_position="in" if reply[12] == ord("0") else "out",
       spill_tray_active=reply[13] != ord("0"),
       tray_loaded=reply[14] != ord("0"),
     )
@@ -298,25 +289,25 @@ class CurioxHT2000:
 
   async def move_tray_out(self) -> None:
     """Move the tray out. Idempotent: a no-op if it is already out."""
-    await self._move_tray(TrayPosition.OUT)
+    await self._move_tray("out")
 
   async def move_tray_in(self) -> None:
     """Move the tray in. Idempotent: a no-op if it is already in."""
-    await self._move_tray(TrayPosition.IN)
+    await self._move_tray("in")
 
   async def _toggle_tray(self) -> None:
     """Move the tray to the opposite position (the raw, non-idempotent primitive)."""
     await self._send_and_ack(Command.TOGGLE_TRAY)
 
   async def _move_tray(self, target: TrayPosition) -> None:
-    if (await self.enquire_report()).tray_position is target:
+    if (await self.enquire_report()).tray_position == target:
       return
     await self._toggle_tray()
     reached = (await self.enquire_report()).tray_position
-    if reached is not target:
+    if reached != target:
       raise CurioxHT2000Error(
         title="Tray did not reach the target position",
-        message=f"wanted {target.name}, got {reached.name}",
+        message=f"wanted {target}, got {reached}",
       )
 
   async def drain_aspirator(self) -> None:
@@ -383,7 +374,7 @@ class CurioxHT2000:
         raising a timeout.
     """
     _status, mode, _error = await self.ping()
-    if mode is HT2000Mode.SERVICE:
+    if mode == "service":
       await self._send_and_ack(Command.SWITCH_MODE)
       await asyncio.sleep(self.mode_switch_settle)
 
@@ -406,20 +397,18 @@ class CurioxHT2000:
     started = False
     while loop.time() < deadline:
       report = await self.enquire_report()
-      if report.status is HT2000Status.STOPPED:
+      if report.status == "stopped":
         raise CurioxHT2000Error(title="HT2000 stopped during wash")
       if not report.tray_loaded:
         raise CurioxHT2000Error(title="No plate on the tray")
-      if report.status is HT2000Status.ERROR:
+      if report.status == "error":
         raise CurioxHT2000Error(title="HT2000 error during wash", message=report.error)
       running = (
-        report.mode is HT2000Mode.OPERATION
-        and report.status is HT2000Status.BUSY
-        and report.tray_position is TrayPosition.OUT
+        report.mode == "operation" and report.status == "busy" and report.tray_position == "out"
       )
       if running:
         started = True
-      elif started and report.status is HT2000Status.READY:
+      elif started and report.status == "ready":
         return
       await asyncio.sleep(self.poll_interval)
     raise CurioxHT2000Error(title="Timed out waiting for the wash to complete")

@@ -2,12 +2,7 @@ import unittest
 from typing import List
 from unittest.mock import patch
 
-from pylabrobot.curiox.ht2000 import (
-  CurioxHT2000,
-  HT2000Mode,
-  HT2000Status,
-  TrayPosition,
-)
+from pylabrobot.curiox.ht2000 import CurioxHT2000
 
 
 def ping_reply(mode: str = "0", status: str = "0", error: str = "00") -> bytes:
@@ -102,15 +97,15 @@ class HT2000ProtocolTests(unittest.IsolatedAsyncioTestCase):
     device = make_device([ping_reply(mode="0", status="0")])
     await device.io.setup()
     status, mode, error = await device.ping()
-    self.assertEqual(status, HT2000Status.READY)
-    self.assertEqual(mode, HT2000Mode.OPERATION)
+    self.assertEqual(status, "ready")
+    self.assertEqual(mode, "operation")
     self.assertIsNone(error)
 
   async def test_ping_error_decodes_code(self):
     device = make_device([ping_reply(status="2", error="01")])
     await device.io.setup()
     status, _mode, error = await device.ping()
-    self.assertEqual(status, HT2000Status.ERROR)
+    self.assertEqual(status, "error")
     self.assertEqual(error, "No plate.")
 
   async def test_wash_uploads_parameters_and_runs(self):
@@ -208,7 +203,7 @@ class HT2000ProtocolTests(unittest.IsolatedAsyncioTestCase):
     device = make_device([report_reply(status="1", tray_out=False, loaded=True)])
     await device.io.setup()
     report = await device.enquire_report()
-    self.assertEqual(report.tray_position, TrayPosition.IN)
+    self.assertEqual(report.tray_position, "in")
     self.assertTrue(report.tray_loaded)
 
   def test_wash_parameter_validation(self):

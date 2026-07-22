@@ -12,7 +12,4 @@ pylabrobot.curiox package
 
     CurioxHT2000
     CurioxHT2000Error
-    HT2000Status
-    HT2000Mode
-    TrayPosition
     StatusReport
