@@ -300,9 +300,28 @@ class CurioxHT2000:
     await self._send_and_ack(Command.RECOVER_HOME)
     logger.info("[HT2000 %s] homed", self.io.port)
 
-  async def toggle_tray(self) -> None:
-    """Move the tray in or out."""
+  async def move_tray_out(self) -> None:
+    """Move the tray out. Idempotent: a no-op if it is already out."""
+    await self._move_tray(TrayPosition.OUT)
+
+  async def move_tray_in(self) -> None:
+    """Move the tray in. Idempotent: a no-op if it is already in."""
+    await self._move_tray(TrayPosition.IN)
+
+  async def _toggle_tray(self) -> None:
+    """Move the tray to the opposite position (the raw, non-idempotent primitive)."""
     await self._send_and_ack(Command.TOGGLE_TRAY)
+
+  async def _move_tray(self, target: TrayPosition) -> None:
+    if (await self.enquire_report()).tray_position is target:
+      return
+    await self._toggle_tray()
+    reached = (await self.enquire_report()).tray_position
+    if reached is not target:
+      raise CurioxHT2000Error(
+        title="Tray did not reach the target position",
+        message=f"wanted {target.name}, got {reached.name}",
+      )
 
   async def drain_aspirator(self) -> None:
     """Drain the aspirator."""

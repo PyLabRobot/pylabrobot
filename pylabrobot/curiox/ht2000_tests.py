@@ -160,6 +160,50 @@ class HT2000ProtocolTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(Exception):
       await device.wash()
 
+  async def test_move_tray_out_when_already_out_is_noop(self):
+    device = make_device([report_reply(tray_out=True, loaded=True)])
+    await device.io.setup()
+    await device.move_tray_out()
+    # Only the status read; no toggle command issued.
+    self.assertEqual(len(device.io.written), 1)
+
+  async def test_move_tray_out_toggles_when_in(self):
+    device = make_device(
+      [
+        report_reply(tray_out=False, loaded=True),  # currently in
+        ack_reply(),  # toggle
+        report_reply(tray_out=True, loaded=True),  # confirm out
+      ]
+    )
+    await device.io.setup()
+    await device.move_tray_out()
+    # read + toggle + confirm read.
+    self.assertEqual(len(device.io.written), 3)
+
+  async def test_move_tray_in_toggles_when_out(self):
+    device = make_device(
+      [
+        report_reply(tray_out=True, loaded=True),  # currently out
+        ack_reply(),  # toggle
+        report_reply(tray_out=False, loaded=True),  # confirm in
+      ]
+    )
+    await device.io.setup()
+    await device.move_tray_in()
+    self.assertEqual(len(device.io.written), 3)
+
+  async def test_move_tray_raises_if_position_not_reached(self):
+    device = make_device(
+      [
+        report_reply(tray_out=False, loaded=True),  # currently in
+        ack_reply(),  # toggle
+        report_reply(tray_out=False, loaded=True),  # still in -> failed
+      ]
+    )
+    await device.io.setup()
+    with self.assertRaises(Exception):
+      await device.move_tray_out()
+
   async def test_enquire_report_decodes_tray(self):
     device = make_device([report_reply(status="1", tray_out=False, loaded=True)])
     await device.io.setup()
