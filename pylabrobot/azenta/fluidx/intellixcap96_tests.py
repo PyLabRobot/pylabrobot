@@ -66,8 +66,8 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     patcher.start()
     self.addCleanup(patcher.stop)
 
-  def _make(self, script: List[List[str]]) -> FluidXIntelliXcap96:
-    device = FluidXIntelliXcap96(port="FAKE")
+  def _make(self, script: List[List[str]], auto_recover: bool = True) -> FluidXIntelliXcap96:
+    device = FluidXIntelliXcap96(port="FAKE", auto_recover=auto_recover)
     device.io = FakeXcapSerial(script)  # type: ignore[assignment]
     return device
 
@@ -94,23 +94,27 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
   async def test_open_tray_moves_then_idle(self):
     device = self._make(
       [
+        status("StatusOK"),  # _ensure_ready: not in error
         [ACK, "fOK"],  # f accepted
         status("StatusBUSY"),  # still moving
         status("StatusOK"),  # settled
       ]
     )
     await device.open_tray()
-    self.assertEqual(device.io.written, ["f", "a", "a"])  # type: ignore[attr-defined]
+    self.assertEqual(device.io.written, ["a", "f", "a", "a"])  # type: ignore[attr-defined]
 
-  async def test_open_tray_ignored_raises(self):
-    device = self._make([[ACK, "fOK", "CommandIgnore"]])
-    with self.assertRaises(FluidXError):
-      await device.open_tray()
+  async def test_open_tray_already_open_is_noop(self):
+    # CommandIgnore = tray already open = success; no status wait afterwards.
+    device = self._make([status("StatusOK"), [ACK, "fOK", "CommandIgnore"]])
+    await device.open_tray()
+    self.assertEqual(device.io.written, ["a", "f"])  # type: ignore[attr-defined]
 
   async def test_close_tray_moves_then_idle(self):
-    device = self._make([[ACK, "gOK"], status("StatusBUSY"), status("StatusOK")])
+    device = self._make(
+      [status("StatusOK"), [ACK, "gOK"], status("StatusBUSY"), status("StatusOK")]
+    )
     await device.close_tray()
-    self.assertEqual(device.io.written, ["g", "a", "a"])  # type: ignore[attr-defined]
+    self.assertEqual(device.io.written, ["a", "g", "a", "a"])  # type: ignore[attr-defined]
 
   async def test_home_moves_then_idle(self):
     device = self._make([[ACK, "ZOK"], status("StatusBUSY"), status("StatusOK")])
@@ -176,6 +180,31 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     device = self._make([status("StatusError")])
     with self.assertRaises(FluidXError):
       await device.reset()
+
+  async def test_operation_auto_recovers_from_latched_error(self):
+    device = self._make(
+      [
+        status("StatusError"),  # _ensure_ready: latched in error
+        [ACK, "ZOK"],  # recovery home accepted
+        status("StatusBUSY"),  # homing
+        status("StatusOK"),  # homed
+        status("StatusOK"),  # _ensure_ready re-check: clear
+        [ACK, "fOK"],  # open accepted
+        status("StatusBUSY"),
+        status("StatusOK"),
+      ]
+    )
+    await device.open_tray()
+    self.assertEqual(
+      device.io.written,  # type: ignore[attr-defined]
+      ["a", "Z", "a", "a", "a", "f", "a", "a"],
+    )
+
+  async def test_latched_error_raises_when_auto_recover_disabled(self):
+    device = self._make([status("StatusError")], auto_recover=False)
+    with self.assertRaises(FluidXError):
+      await device.open_tray()
+    self.assertEqual(device.io.written, ["a"])  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":

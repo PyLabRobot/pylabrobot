@@ -114,9 +114,14 @@ class FluidXIntelliXcap96:
   command answers with ``CommandIgnore``. Motions complete when the status word
   returns from ``StatusBUSY`` to ``StatusOK``.
 
-  Verified against hardware: connection, status, tray open/close, home, and
-  standby/ready. Decap, recap, and waste engage the cap head and are NOT yet
-  hardware-verified; a warning is emitted at setup.
+  A fault latches the device in ``StatusError`` (e.g. running a decap with no
+  rack loaded). This is cleared only by homing -- the reset command is ignored.
+  With ``auto_recover`` enabled (the default), an operation issued while the
+  device is latched in error homes to recover and then proceeds.
+
+  Verified against hardware: connection, status, tray open/close, home,
+  standby/ready, and the decap error/recovery path. Decap, recap, and waste on a
+  loaded rack are NOT yet hardware-verified; a warning is emitted at setup.
   """
 
   def __init__(
@@ -126,6 +131,8 @@ class FluidXIntelliXcap96:
     command_delay: float = 0.3,
     frame_gap: float = 0.5,
     poll_interval: float = 1.0,
+    auto_recover: bool = True,
+    recover_timeout: float = 30.0,
   ) -> None:
     """
     Args:
@@ -135,10 +142,17 @@ class FluidXIntelliXcap96:
       frame_gap: how long to wait for another reply frame before concluding the
         reply is complete.
       poll_interval: pause between status polls while a motion runs.
+      auto_recover: when an operation finds the device latched in StatusError,
+        home it to clear the error and continue. A latched error is only cleared
+        by homing (reset is a no-op on this firmware). Disable to make a latched
+        error raise instead.
+      recover_timeout: timeout in seconds for the recovery home.
     """
     self.command_delay = command_delay
     self.frame_gap = frame_gap
     self.poll_interval = poll_interval
+    self.auto_recover = auto_recover
+    self.recover_timeout = recover_timeout
     self.io = Serial(
       human_readable_device_name="FluidX IntelliXcap 96",
       port=port,
@@ -225,12 +239,23 @@ class FluidXIntelliXcap96:
   def _status_frame(frames: List[str]) -> Optional[str]:
     return next((f for f in frames if f.upper().startswith("STATUS")), None)
 
-  def _require_accepted(self, command: str, frames: List[str], name: str) -> None:
-    """Raise unless the device acked and echoed the command without ignoring it."""
+  def _require_accepted(
+    self, command: str, frames: List[str], name: str, idempotent: bool = False
+  ) -> bool:
+    """Check a command's reply. Return True if it started a motion.
+
+    Raises if the device did not ack and echo the command. A ``CommandIgnore``
+    reply means the command was a no-op (the device is already in the requested
+    state): for an ``idempotent`` command that is success and returns False (no
+    motion to wait for); otherwise it is raised.
+    """
     if ACK not in frames or f"{command}OK" not in frames:
       raise _fault("NoAck", f"{name}: {frames!r}")
     if any(COMMAND_IGNORE in f for f in frames):
+      if idempotent:
+        return False
       raise _fault("CommandIgnore", f"{name}: device already in that state or not ready")
+    return True
 
   async def _wait_for_idle(self, timeout: float, name: str, fail_key: str) -> None:
     """Poll status until it returns to StatusOK, raising on an error or timeout.
@@ -268,23 +293,52 @@ class FluidXIntelliXcap96:
 
   async def open_tray(self, timeout: float = 15.0) -> None:
     """Open the loading tray."""
+    await self._ensure_ready()
     frames = await self._command(OPEN_TRAY)
-    self._require_accepted(OPEN_TRAY, frames, "Opening the tray")
-    await self._wait_for_idle(timeout, "Opening the tray", "OpenTrayWasNotSuccesful")
+    if self._require_accepted(OPEN_TRAY, frames, "Opening the tray", idempotent=True):
+      await self._wait_for_idle(timeout, "Opening the tray", "OpenTrayWasNotSuccesful")
     logger.info("[IntelliXcap96 %s] tray open", self.io.port)
 
   async def close_tray(self, timeout: float = 15.0) -> None:
     """Close the loading tray."""
+    await self._ensure_ready()
     frames = await self._command(CLOSE_TRAY)
-    self._require_accepted(CLOSE_TRAY, frames, "Closing the tray")
-    await self._wait_for_idle(timeout, "Closing the tray", "CloseTrayWasNotSuccesful")
+    if self._require_accepted(CLOSE_TRAY, frames, "Closing the tray", idempotent=True):
+      await self._wait_for_idle(timeout, "Closing the tray", "CloseTrayWasNotSuccesful")
     logger.info("[IntelliXcap96 %s] tray closed", self.io.port)
 
-  async def home(self, timeout: float = 30.0) -> None:
-    """Home all axes."""
+  async def _home_sequence(self, timeout: float, name: str) -> None:
+    """Send the home command and wait for it to finish. Also clears a latched error."""
     frames = await self._command(HOME_ALL)
-    self._require_accepted(HOME_ALL, frames, "Homing")
-    await self._wait_for_idle(timeout, "Homing", "HomeNotSuccesful")
+    self._require_accepted(HOME_ALL, frames, name)
+    await self._wait_for_idle(timeout, name, "HomeNotSuccesful")
+
+  async def _ensure_ready(self) -> str:
+    """Return the current status, first clearing a latched error by homing.
+
+    A ``StatusError`` is only cleared by homing (the reset command is ignored on
+    this firmware). With ``auto_recover`` enabled, an operation that finds the
+    device latched in error homes to recover and then proceeds; otherwise the
+    latched error is raised.
+    """
+    status = await self.request_status()
+    if "ERROR" not in status.upper():
+      return status
+    if not self.auto_recover:
+      raise _fault("StatusNotOK", status)
+    logger.warning(
+      "[IntelliXcap96 %s] latched in StatusError; homing to recover before continuing.",
+      self.io.port,
+    )
+    await self._home_sequence(self.recover_timeout, "Homing (error recovery)")
+    status = await self.request_status()
+    if "ERROR" in status.upper():
+      raise _fault("StatusNotOK", "error persisted after recovery home")
+    return status
+
+  async def home(self, timeout: float = 30.0) -> None:
+    """Home all axes. Also clears a latched StatusError."""
+    await self._home_sequence(timeout, "Homing")
     logger.info("[IntelliXcap96 %s] homed", self.io.port)
 
   async def decap(self, timeout: float = 60.0) -> None:
@@ -293,11 +347,9 @@ class FluidXIntelliXcap96:
     Args:
       timeout: maximum time in seconds to wait for the stroke to finish.
     """
-    status = (await self.request_status()).upper()
+    status = (await self._ensure_ready()).upper()
     if "RECAP" in status:
       raise _fault("NeedToRecap")
-    if "ERROR" in status:
-      raise _fault("StatusNotOK", status)
     frames = await self._command(DECAP_START)
     self._require_accepted(DECAP_START, frames, "Decapping")
     await self._wait_for_idle(timeout, "Decapping", "DecapWasNotSuccesful")
@@ -309,11 +361,9 @@ class FluidXIntelliXcap96:
     Args:
       timeout: maximum time in seconds to wait for the stroke to finish.
     """
-    status = (await self.request_status()).upper()
+    status = (await self._ensure_ready()).upper()
     if "DECAP" in status:
       raise _fault("NeedToDecap")
-    if "ERROR" in status:
-      raise _fault("StatusNotOK", status)
     frames = await self._command(RECAP_START)
     self._require_accepted(RECAP_START, frames, "Recapping")
     await self._wait_for_idle(timeout, "Recapping", "RecapWasNotSuccesful")
@@ -325,9 +375,7 @@ class FluidXIntelliXcap96:
     Args:
       timeout: maximum time in seconds to wait for the stroke to finish.
     """
-    status = (await self.request_status()).upper()
-    if "ERROR" in status:
-      raise _fault("StatusNotOK", status)
+    await self._ensure_ready()
     frames = await self._command(WASTE)
     self._require_accepted(WASTE, frames, "Wasting caps")
     await self._wait_for_idle(timeout, "Wasting caps", "StoreWasNotSuccesful")
@@ -358,8 +406,10 @@ class FluidXIntelliXcap96:
   async def reset(self, settle_time: float = 5.0) -> None:
     """Reset the device and wait for it to settle.
 
-    A reset is a no-op when the device is already idle (the firmware answers
-    ``CommandIgnore``); it clears a recoverable error state.
+    The reset command is a no-op on this firmware (it answers ``CommandIgnore``)
+    and does not clear a latched error. Use :meth:`home` to recover from a
+    ``StatusError``; operations do this automatically when ``auto_recover`` is
+    enabled.
 
     Args:
       settle_time: time in seconds to wait after the reset command.
