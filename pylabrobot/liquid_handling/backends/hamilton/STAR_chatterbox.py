@@ -304,11 +304,17 @@ class STARChatterboxBackend(STARBackend):
     return x
 
   async def request_right_x_arm_position(self) -> float:
-    tracker = self.right_x_arm_tracker
-    if tracker is None:
+    # Installed-ness is a config fact, not whether the tracker exists yet: setup reads the
+    # home to seat the arm before its tracker is created (mirrors request_left).
+    if self.extended_conf.right_x_drive is None:
       raise RuntimeError("Right X-arm is not installed.")
-    x = tracker.get_x() if tracker.is_known else self._simulated_right_x_arm_home()
-    if not tracker.is_disabled:
+    tracker = self.right_x_arm_tracker
+    x = (
+      tracker.get_x()
+      if tracker is not None and tracker.is_known
+      else self._simulated_right_x_arm_home()
+    )
+    if tracker is not None and not tracker.is_disabled:
       tracker.set_x(x)
     return x
 

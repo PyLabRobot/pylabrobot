@@ -2359,8 +2359,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         continue
       if arm.width is None:
         raise RuntimeError(f"{position} X-arm geometry not resolved")
-      deck.get_or_create_x_arm(f"{position}_x_arm", arm.width, arm.model, arm.reference_point)
-      await queries[position]()
+      x = await queries[position]()  # read the arm's current x before seating the resource
+      x_arm = deck.get_or_create_x_arm(
+        f"{position}_x_arm", x, arm.width, arm.model, arm.reference_point
+      )
+      x_arm.tracker.set_x(x)  # seed the tracker now that the arm (and its tracker) exists
 
   def _check_x_arm_reachable(self, x: float, position: Literal["left", "right"] = "left") -> None:
     """Raise if x (mm) is outside the X-drive's travel range (``x_range``).

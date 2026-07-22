@@ -2727,7 +2727,7 @@ class TestXArmPositionTracking(unittest.IsolatedAsyncioTestCase):
     # X-arms (which own the trackers) are created by setup(); create the left one
     # directly here so the low-level commands can be exercised with a mocked wire.
     self.deck.get_or_create_x_arm(
-      "left_x_arm", 370.0, "hamilton_legacy_star_dual_rail_arm", "center"
+      "left_x_arm", 362.9, 370.0, "hamilton_legacy_star_dual_rail_arm", "center"
     )
     # setup() normally resolves the X-drive geometry from firmware; seed it so the
     # reachability checks (move_channel_x / experimental_x_arm_move) have a range.
@@ -2743,7 +2743,7 @@ class TestXArmPositionTracking(unittest.IsolatedAsyncioTestCase):
 
   def _add_right_x_arm(self):
     self.deck.get_or_create_x_arm(
-      "right_x_arm", 370.0, "hamilton_legacy_star_dual_rail_arm", "center"
+      "right_x_arm", 800.0, 370.0, "hamilton_legacy_star_dual_rail_arm", "center"
     )
     conf = self.star._extended_conf
     assert conf is not None

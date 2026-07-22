@@ -560,18 +560,24 @@ class HamiltonSTARDeck(HamiltonDeck):
     }
 
   def get_or_create_x_arm(
-    self, name: str, width: float, model: str, reference_point: Literal["center", "right"]
+    self,
+    name: str,
+    x: float,
+    width: float,
+    model: str,
+    reference_point: Literal["center", "right"],
   ) -> XArm:
     """Get (or create, once) the deck-owned X-arm resource for `name`.
 
     The X-arm is a full-deck-height :class:`~pylabrobot.resources.x_arm.XArm` that owns
     an ``XArmTracker``; the Visualizer draws it at the tracker's x. The deck owns it:
     created as a child the first time and reused thereafter, so repeated ``setup()``
-    calls don't duplicate it. It is assigned at a nominal x - the backend drives its
-    tracker and the Visualizer positions it from that.
+    calls don't duplicate it. It is seated so its reference point sits at the arm's
+    current x; the tracker then drives the live position and the Visualizer follows it.
 
     Args:
       name: unique resource name, e.g. ``"left_x_arm"``.
+      x: the arm's current x (mm); the reference point is seated here.
       width: arm width in mm (the firmware-reported value).
       model: the arm variant, e.g. ``"hamilton_legacy_star_dual_rail_arm"``.
       reference_point: where the tracked x refers to along the width.
@@ -586,9 +592,12 @@ class HamiltonSTARDeck(HamiltonDeck):
       reference_point=reference_point,
       model=model,
     )
-    self.assign_child_resource(
-      x_arm, location=Coordinate(0.0, 0.0, _X_ARM_Z), ignore_collision=True
-    )
+    # Seat the frame so its reference point (the arm centre for a dual-rail arm, the right
+    # edge for a single-rail arm) lands at the arm's current x. Distinct per-arm homes keep
+    # the two arms from overlapping, so no collision override is needed; the z-separated,
+    # above-deck box also clears the carriers beneath it.
+    reference_offset = width / 2 if reference_point == "center" else width
+    self.assign_child_resource(x_arm, location=Coordinate(x - reference_offset, 0.0, _X_ARM_Z))
     return x_arm
 
   def rails_to_location(self, rails: int) -> Coordinate:
