@@ -15,5 +15,4 @@ pylabrobot.curiox package
     HT2000Status
     HT2000Mode
     TrayPosition
-    PrimeMode
     StatusReport

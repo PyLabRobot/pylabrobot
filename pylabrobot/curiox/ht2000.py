@@ -1,7 +1,7 @@
 import asyncio
 import enum
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from pylabrobot.io.serial import Serial
 
@@ -89,13 +89,9 @@ class TrayPosition(enum.Enum):
   OUT = 1
 
 
-class PrimeMode(enum.Enum):
-  """Fluidics prime routine, mapped to its command code."""
-
-  STANDARD = "221"
-  HEAD = "222"
-  PUMP = "223"
-  SHORT = "224"
+# Fluidics prime routine, mapped to its command code.
+PrimeMode = Literal["standard", "head", "pump", "short"]
+PRIME_COMMANDS = {"standard": "221", "head": "222", "pump": "223", "short": "224"}
 
 
 class Command:
@@ -150,11 +146,11 @@ class CurioxHT2000Error(Exception):
 
 
 class CurioxHT2000:
-  """Curiox HT2000 plate-wash station.
+  """Curiox Laminar Wash HT2000 system.
 
-  A benchtop washer for Curiox DropArray plates. Commands are ASCII payloads
-  wrapped in a fixed binary frame; replies are fixed-length and carry a status
-  digit (0 ready, 1 busy, 2 error, 3 stopped).
+  A benchtop Laminar Wash station for Curiox DropArray plates. Commands are
+  ASCII payloads wrapped in a fixed binary frame; replies are fixed-length and
+  carry a status digit (0 ready, 1 busy, 2 error, 3 stopped).
 
   Serial settings:
     115200 baud, 8 data bits, no parity, 1 stop bit, no handshake.
@@ -331,11 +327,17 @@ class CurioxHT2000:
     """Drain the spill tray."""
     await self._send_and_ack(Command.DRAIN_SPILL_TRAY)
 
-  async def prime(self, mode: PrimeMode = PrimeMode.STANDARD) -> None:
-    """Run a fluidics prime routine and wait for it to settle."""
-    await self._send_and_ack(mode.value)
+  async def prime(self, mode: PrimeMode = "standard") -> None:
+    """Run a fluidics prime routine and wait for it to settle.
+
+    Args:
+      mode: prime routine, one of "standard", "head", "pump", or "short".
+    """
+    if mode not in PRIME_COMMANDS:
+      raise ValueError(f"mode must be one of {sorted(PRIME_COMMANDS)}")
+    await self._send_and_ack(PRIME_COMMANDS[mode])
     await asyncio.sleep(self.prime_settle)
-    logger.info("[HT2000 %s] primed (%s)", self.io.port, mode.name)
+    logger.info("[HT2000 %s] primed (%s)", self.io.port, mode)
 
   async def _set_wash_parameters(
     self, wash_number: int, initial_volume: int, flow_rate: int, channel: int
