@@ -271,7 +271,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       ],
     }
 
-    data = self._ot.labware.define(lw)
+    data = await anyio.to_thread.run_sync(lambda: self._ot.labware.define(lw))
     namespace, definition, version = data["data"]["definitionUri"].split("/")
 
     # assign labware to robot
@@ -284,13 +284,18 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     slot = deck.get_slot(tip_rack)
     assert slot is not None, "tip rack must be on deck"
 
-    self._ot.labware.add(
-      load_name=definition,
-      namespace=namespace,
-      ot_location=slot,
-      version=version,
-      labware_id=labware_uuid,
-      display_name=self.get_ot_name(tip_rack.name),
+    # Resolve the name on the loop thread (get_ot_name mutates shared state); the
+    # offloaded lambda should only perform the ot_api I/O.
+    display_name = self.get_ot_name(tip_rack.name)
+    await anyio.to_thread.run_sync(
+      lambda: self._ot.labware.add(
+        load_name=definition,
+        namespace=namespace,
+        ot_location=slot,
+        version=version,
+        labware_id=labware_uuid,
+        display_name=display_name,
+      )
     )
 
     self._tip_racks[tip_rack.name] = slot
