@@ -36,6 +36,7 @@ big_bear/index
 bmg_labtech/index
 brooks/index
 byonoy/index
+curiox/index
 hamilton/index
 inheco/index
 kbioscience/index
