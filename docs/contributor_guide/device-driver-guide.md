@@ -42,7 +42,6 @@ Sections (markdown cell then code cell): (1) title + property table + untested-w
 
 Cell rules:
 - **One concept per code cell.** If a physical action happens between steps, that's two cells: `move_tray_out()` → place plate → `move_tray_in()`. Every code cell gets a preceding markdown cell.
-- **Use the idempotent public API** in examples, never a raw toggle.
 - **Notebook JSON:** edit with a notebook-aware tool (plain-text replace is blocked on `.ipynb`); code cells `execution_count: null`, empty `outputs`; `nbformat: 4`, `nbformat_minor: 5`; every cell has an `id`; validate it parses.
 
 ## 5. Verify & ship
