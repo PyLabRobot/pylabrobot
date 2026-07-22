@@ -45,6 +45,7 @@ liconic/index
 mettler_toledo/index
 molecular_devices/index
 opentrons/index
+paa/index
 qinstruments/index
 sartorius/index
 thermo_fisher/index
