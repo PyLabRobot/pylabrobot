@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets", "anyio", "sniffio"]
+dependencies = ["typing_extensions", "websockets", "anyio>=4.7", "sniffio"]
 
 [project.optional-dependencies]
 serial = ["pyserial"]
