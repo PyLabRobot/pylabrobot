@@ -593,7 +593,8 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>x</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target X coordinate in mm. Must be between 90.0 and 1350.0.</p></li>
+<li><p><strong>x</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target X coordinate in mm. Must be within the arm’s reachable X range
+(see the X-drive’s <code class="code docutils literal notranslate"><span class="pre">x_range</span></code>).</p></li>
 <li><p><strong>acceleration_level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Acceleration index (hardware units), 1-5. Default 3.</p></li>
 <li><p><strong>current_protection_limiter</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Motor current limit (hardware units), 0-7. Default 7.</p></li>
 </ul>
