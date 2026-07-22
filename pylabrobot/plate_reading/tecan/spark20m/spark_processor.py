@@ -21,6 +21,12 @@ def _parse_raw_data(raw_results: List[bytes]) -> Dict[int, Any]:
 
 
 def _identify_sequences(parsed_data: Dict[Any, Any]) -> Tuple[Optional[Any], List[Any]]:
+  """Identify reference (calibration) and measurement sequences.
+
+  The calibration sequence is typically grouped (containing dark + bright reference
+  blocks).  However, partial-well scans may emit calibration as standalone blocks
+  with DARK keys in their ``rd_md_pairs``.  We check for both patterns.
+  """
   ref_seq_key: Optional[Any] = None
   meas_seq_keys: List[Any] = []
 
@@ -30,7 +36,15 @@ def _identify_sequences(parsed_data: Dict[Any, Any]) -> Tuple[Optional[Any], Lis
       if item.get("type") == "grouped":
         ref_seq_key = key
       elif item.get("type") == "standalone":
-        meas_seq_keys.append(key)
+        # Check if this standalone block is actually calibration data
+        # (dark/reference) by looking for DARK keys in rd_md_pairs.
+        block = item.get("block", {})
+        pairs = block.get("rd_md_pairs", [])
+        has_dark = any("DARK" in k for pair in pairs[:1] for k in pair)
+        if has_dark and ref_seq_key is None:
+          ref_seq_key = key
+        else:
+          meas_seq_keys.append(key)
 
   meas_seq_keys.sort()
   return ref_seq_key, meas_seq_keys
@@ -97,10 +111,31 @@ def _extract_fluo_calibration(
 ) -> Optional[Tuple[float, float, float]]:
   """Extract fluorescence calibration values (signal_dark, ref_dark, k_val).
 
+  Handles both grouped calibration (dark + reference in ``blocks``) and
+  standalone calibration where dark and reference are separate items in the
+  sequence list (emitted by partial-well scans).
+
   Returns None on failure.
   """
-  cal_seq_data = parsed_data[ref_seq_key][0]
-  dark_block = cal_seq_data["blocks"][DARK_BLOCK_INDEX]
+  cal_items = parsed_data[ref_seq_key]
+  cal_first = cal_items[0]
+
+  # Grouped: blocks list inside a single grouped item
+  if cal_first.get("type") == "grouped" and "blocks" in cal_first:
+    dark_block = cal_first["blocks"][DARK_BLOCK_INDEX]
+    ref_block = cal_first["blocks"][REFERENCE_BLOCK_INDEX]
+  elif cal_first.get("type") == "standalone":
+    # Standalone calibration: dark is item [0], reference is item [1]
+    dark_block = cal_first.get("block", cal_first)
+    if len(cal_items) > 1:
+      ref_item = cal_items[1]
+      ref_block = ref_item.get("block", ref_item)
+    else:
+      logger.error("Standalone calibration has only dark block, no reference block.")
+      return None
+  else:
+    logger.error(f"Unexpected calibration structure: {cal_first.get('type')}")
+    return None
 
   if not any("DARK" in t for t in dark_block.get("header_types", [])):
     logger.error("Dark block does not look like Dark calibration.")
@@ -124,8 +159,7 @@ def _extract_fluo_calibration(
   signal_dark = statistics.mean(signal_dark_values)
   ref_dark = statistics.mean(ref_dark_values)
 
-  # Extract bright reference values
-  ref_block = cal_seq_data["blocks"][REFERENCE_BLOCK_INDEX]
+  # Extract bright reference values (ref_block assigned above)
   ref_bright_values: List[float] = []
   for pair in ref_block["rd_md_pairs"]:
     rd_key = next((k for k in pair if "U16RD" in k), None)
@@ -275,32 +309,53 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
     final_results_list: List[List[float]] = []
     for seq_id in meas_seq_keys:
       meas_seq_data = parsed_data[seq_id][0]
-      measurements = meas_seq_data["block"]["measurements"]
+      block = meas_seq_data.get("block", meas_seq_data)
+      structure = block.get("structure_type", "")
+
       rfu_row: List[float] = []
 
-      for measurement in measurements:
-        inner_loops = measurement["inner_loops"]
-
+      if structure == "single_mult":
+        # Partial-well scan: single well per block with N reads as rd_md_pairs
+        pairs = block.get("rd_md_pairs", [])
         raw_signal_values = []
         raw_ref_signal_values = []
-        for loop in inner_loops:
-          md_key = next((k for k in loop if "U16MD" in k), None)
-          rd_key = next((k for k in loop if "U16RD" in k), None)
+        for pair in pairs:
+          md_key = next((k for k in pair if "U16MD" in k), None)
+          rd_key = next((k for k in pair if "U16RD" in k), None)
           if md_key and rd_key:
-            raw_signal_values.append(loop[md_key])
-            raw_ref_signal_values.append(loop[rd_key])
-
-        if not raw_signal_values or not raw_ref_signal_values:
-          logger.warning("Skipping measurement due to missing data.")
+            raw_signal_values.append(pair[md_key])
+            raw_ref_signal_values.append(pair[rd_key])
+        if raw_signal_values and raw_ref_signal_values:
+          raw_signal = statistics.mean(raw_signal_values)
+          raw_ref_signal = statistics.mean(raw_ref_signal_values)
+          rfu = _safe_div(raw_signal - signal_dark, raw_ref_signal - ref_dark) * k_val
+          rfu_row.append(rfu)
+        else:
           rfu_row.append(float("nan"))
-          continue
+      else:
+        # Normal multi-well: nested_mult with measurements → inner_loops
+        measurements = block.get("measurements", [])
+        for measurement in measurements:
+          inner_loops = measurement.get("inner_loops", [])
 
-        raw_signal = statistics.mean(raw_signal_values)
-        raw_ref_signal = statistics.mean(raw_ref_signal_values)
+          raw_signal_values = []
+          raw_ref_signal_values = []
+          for loop in inner_loops:
+            md_key = next((k for k in loop if "U16MD" in k), None)
+            rd_key = next((k for k in loop if "U16RD" in k), None)
+            if md_key and rd_key:
+              raw_signal_values.append(loop[md_key])
+              raw_ref_signal_values.append(loop[rd_key])
 
-        # RFU Calculation
-        rfu = _safe_div(raw_signal - signal_dark, raw_ref_signal - ref_dark) * k_val
-        rfu_row.append(rfu)
+          if not raw_signal_values or not raw_ref_signal_values:
+            logger.warning("Skipping measurement due to missing data.")
+            rfu_row.append(float("nan"))
+            continue
+
+          raw_signal = statistics.mean(raw_signal_values)
+          raw_ref_signal = statistics.mean(raw_ref_signal_values)
+          rfu = _safe_div(raw_signal - signal_dark, raw_ref_signal - ref_dark) * k_val
+          rfu_row.append(rfu)
 
       final_results_list.append(rfu_row)
 
@@ -376,44 +431,51 @@ def process_absorbance_spectrum(raw_results: List[bytes]) -> Dict[float, List[Li
         rd_dark, md_dark = _get_dark_for_wl(dark_by_wl, wl)
         ref_ratios[wl] = _safe_div(avg_md_ref - md_dark, avg_rd_ref - rd_dark)
 
-    # Process each measurement sequence
+    # Process each measurement sequence — iterate ALL standalone blocks
+    # per sequence, not just [0].  Multi-well spectrum scans produce
+    # multiple standalone blocks per sequence key.
     wavelength_data: Dict[float, List[float]] = {}
+    total_standalone = 0
 
     for seq_key in meas_seq_keys:
-      meas_block_entry = parsed_data[seq_key][0]
-      if meas_block_entry.get("type") != "standalone":
-        continue
-
-      block = meas_block_entry.get("block", meas_block_entry)
-      for wl, pairs in _extract_measurement_pairs(block):
-        ref_ratio = ref_ratios.get(wl)
-        if ref_ratio is None and ref_ratios:
-          closest_wl = min(ref_ratios.keys(), key=lambda x: abs(x - wl))
-          ref_ratio = ref_ratios[closest_wl]
-        if ref_ratio is None:
-          wavelength_data.setdefault(wl, []).append(float("nan"))
+      for meas_block_entry in parsed_data[seq_key]:
+        if meas_block_entry.get("type") != "standalone":
           continue
+        total_standalone += 1
 
-        rd_dark, md_dark = _get_dark_for_wl(dark_by_wl, wl)
+        block = meas_block_entry.get("block", meas_block_entry)
+        for wl, pairs in _extract_measurement_pairs(block):
+          ref_ratio = ref_ratios.get(wl)
+          if ref_ratio is None and ref_ratios:
+            closest_wl = min(ref_ratios.keys(), key=lambda x: abs(x - wl))
+            ref_ratio = ref_ratios[closest_wl]
+          if ref_ratio is None:
+            wavelength_data.setdefault(wl, []).append(float("nan"))
+            continue
 
-        ratios = []
-        for pair in pairs:
-          md_key = _find_key(pair, "U16MD", exclude=["DARK", "GAIN"])
-          rd_key = _find_key(pair, "U16RD", exclude=["DARK", "GAIN"])
-          if md_key and rd_key:
-            sample_ratio = _safe_div(pair[md_key] - md_dark, pair[rd_key] - rd_dark)
-            ratios.append(_safe_div(sample_ratio, ref_ratio))
+          rd_dark, md_dark = _get_dark_for_wl(dark_by_wl, wl)
 
-        valid_ratios = [r for r in ratios if not math.isnan(r)]
-        if valid_ratios:
-          avg_ratio = statistics.mean(valid_ratios)
-          od = -math.log10(avg_ratio) if avg_ratio > 0 else float("nan")
-        else:
-          od = float("nan")
+          ratios = []
+          for pair in pairs:
+            md_key = _find_key(pair, "U16MD", exclude=["DARK", "GAIN"])
+            rd_key = _find_key(pair, "U16RD", exclude=["DARK", "GAIN"])
+            if md_key and rd_key:
+              sample_ratio = _safe_div(pair[md_key] - md_dark, pair[rd_key] - rd_dark)
+              ratios.append(_safe_div(sample_ratio, ref_ratio))
 
-        wavelength_data.setdefault(wl, []).append(od)
+          valid_ratios = [r for r in ratios if not math.isnan(r)]
+          if valid_ratios:
+            avg_ratio = statistics.mean(valid_ratios)
+            od = -math.log10(avg_ratio) if avg_ratio > 0 else float("nan")
+          else:
+            od = float("nan")
 
-    return _reshape_to_rows(wavelength_data, len(meas_seq_keys))
+          wavelength_data.setdefault(wl, []).append(od)
+
+    # Use actual standalone count for reshaping, not len(meas_seq_keys)
+    # which undercounts when multiple blocks exist per sequence.
+    num_rows = max(total_standalone, 1)
+    return _reshape_to_rows(wavelength_data, num_rows)
 
   except Exception as e:
     logger.error(f"Error during absorbance spectrum calculation: {e}", exc_info=True)

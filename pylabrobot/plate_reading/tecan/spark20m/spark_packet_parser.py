@@ -465,7 +465,28 @@ class SparkParser:
       else:
         logger.info(f"Processing standalone header in seq {seq_num}")
         block = MeasurementBlock(header_packet, data_packets)
-        results.append({"type": "standalone", "block": block.parse()})
+        parsed = block.parse()
+        results.append({"type": "standalone", "block": parsed})
+
+        # For spectrum scans the firmware packs multiple wells sequentially
+        # under a single TDCL header.  Detect this by checking for wavelength
+        # tags (x10U16RWL) in the first parsed block, then continue consuming
+        # remaining data packets as additional standalone blocks.
+        has_wl = any(
+          "WL" in k
+          for pair in parsed.get("rd_md_pairs", [])[:1]
+          for k in pair
+        )
+        if has_wl:
+          while data_packets:
+            try:
+              extra_block = MeasurementBlock(header_packet, data_packets)
+              extra_parsed = extra_block.parse()
+              if extra_parsed.get("parsing_error"):
+                break
+              results.append({"type": "standalone", "block": extra_parsed})
+            except Exception:
+              break
         header_idx += 1
     return results
 
