@@ -363,10 +363,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     offset_z += op.tip.total_tip_length
 
+    # Resolve names on the loop thread (get_ot_name mutates self._plr_name_to_load_name
+    # and may call uuid4); the offloaded lambda should only perform the ot_api I/O.
+    labware_id = self.get_ot_name(tip_rack.name)
+    well_name = self.get_ot_name(op.resource.name)
     await anyio.to_thread.run_sync(
       lambda: self._ot.lh.pick_up_tip(
-        labware_id=self.get_ot_name(tip_rack.name),
-        well_name=self.get_ot_name(op.resource.name),
+        labware_id=labware_id,
+        well_name=well_name,
         pipette_id=pipette_id,
         offset_x=offset_x,
         offset_y=offset_y,
@@ -414,10 +418,11 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       )
       await anyio.to_thread.run_sync(lambda: self._ot.lh.drop_tip_in_place(pipette_id=pipette_id))
     else:
+      well_name = self.get_ot_name(op.resource.name)
       await anyio.to_thread.run_sync(
         lambda: self._ot.lh.drop_tip(
           labware_id,
-          well_name=self.get_ot_name(op.resource.name),
+          well_name=well_name,
           pipette_id=pipette_id,
           offset_x=offset_x,
           offset_y=offset_y,
@@ -662,7 +667,10 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   async def list_connected_modules(self) -> List[dict]:
     """List all connected temperature modules."""
-    return cast(List[dict], self._ot.modules.list_connected_modules())
+    return cast(
+      List[dict],
+      await anyio.to_thread.run_sync(self._ot.modules.list_connected_modules),
+    )
 
   def _pipette_id_for_channel(self, channel: int) -> str:
     pipettes = []
@@ -674,12 +682,12 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       raise NoChannelError(f"Channel {channel} not available on this OT-2 setup.")
     return pipettes[channel]
 
-  def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
+  async def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     """Return the pipette id and current coordinate for a given channel."""
 
     pipette_id = self._pipette_id_for_channel(channel)
     try:
-      res = self._ot.lh.save_position(pipette_id=pipette_id)
+      res = await anyio.to_thread.run_sync(lambda: self._ot.lh.save_position(pipette_id=pipette_id))
       pos = res["data"]["result"]["position"]
       current = Coordinate(pos["x"], pos["y"], pos["z"])
     except Exception as exc:  # noqa: BLE001
@@ -695,7 +703,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def move_channel_x(self, channel: int, x: float):
     """Move a channel to an absolute x coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=x, y=current.y, z=current.z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
@@ -704,7 +712,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def move_channel_y(self, channel: int, y: float):
     """Move a channel to an absolute y coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=current.x, y=y, z=current.z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
@@ -713,7 +721,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def move_channel_z(self, channel: int, z: float):
     """Move a channel to an absolute z coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=current.x, y=current.y, z=z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id

@@ -111,7 +111,7 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
   async def home(self):
     logger.info("Homing (simulated).")
 
-  def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
+  async def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     pipette_id = self._pipette_id_for_channel(channel)
     return pipette_id, self._positions.get(pipette_id, Coordinate.zero())
 
