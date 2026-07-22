@@ -54,16 +54,8 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Get the current block temperature zones in °C."""
 
   @abstractmethod
-  async def get_block_target_temperature(self) -> List[float]:
-    """Get the block target temperature zones in °C. May raise RuntimeError if no target is set."""
-
-  @abstractmethod
   async def get_lid_current_temperature(self) -> List[float]:
     """Get the current lid temperature zones in °C."""
-
-  @abstractmethod
-  async def get_lid_target_temperature(self) -> List[float]:
-    """Get the lid target temperature zones in °C. May raise RuntimeError if no target is set."""
 
   @abstractmethod
   async def get_lid_open(self) -> bool:
@@ -86,13 +78,5 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Get the zero-based index of the current cycle."""
 
   @abstractmethod
-  async def get_total_cycle_count(self) -> int:
-    """Get the total cycle count."""
-
-  @abstractmethod
   async def get_current_step_index(self) -> int:
     """Get the zero-based index of the current step within the cycle."""
-
-  @abstractmethod
-  async def get_total_step_count(self) -> int:
-    """Get the total number of steps in the current cycle."""

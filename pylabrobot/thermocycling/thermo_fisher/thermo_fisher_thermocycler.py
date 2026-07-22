@@ -1036,19 +1036,3 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
 
   async def get_lid_status(self, *args, **kwargs) -> LidStatus:
     raise NotImplementedError
-
-  async def get_lid_target_temperature(self, *args, **kwargs):
-    # deprecated
-    raise NotImplementedError
-
-  async def get_total_cycle_count(self, *args, **kwargs):
-    # deprecated
-    raise NotImplementedError
-
-  async def get_total_step_count(self, *args, **kwargs):
-    # deprecated
-    raise NotImplementedError
-
-  async def get_block_target_temperature(self, *args, **kwargs):
-    # deprecated
-    raise NotImplementedError

@@ -48,6 +48,11 @@ class Thermocycler(ResourceHolder, Machine):
     )
     Machine.__init__(self, backend=backend)
     self.backend: ThermocyclerBackend = backend
+    self._block_target_temperature: Optional[List[float]] = None
+    self._lid_target_temperature: Optional[List[float]] = None
+    self._current_protocol: Optional[Protocol] = None
+    self._total_cycle_count: int = 0
+    self._total_step_count: int = 0
 
   async def open_lid(self, **backend_kwargs):
     return await self.backend.open_lid(**backend_kwargs)
@@ -61,6 +66,7 @@ class Thermocycler(ResourceHolder, Machine):
     Args:
       temperature: List of target temperatures in °C for multiple zones.
     """
+    self._block_target_temperature = list(temperature)
     return await self.backend.set_block_temperature(temperature, **backend_kwargs)
 
   async def set_lid_temperature(self, temperature: List[float], **backend_kwargs):
@@ -69,6 +75,7 @@ class Thermocycler(ResourceHolder, Machine):
     Args:
       temperature: List of target temperatures in °C for multiple zones.
     """
+    self._lid_target_temperature = list(temperature)
     return await self.backend.set_lid_temperature(temperature, **backend_kwargs)
 
   async def deactivate_block(self, **backend_kwargs):
@@ -95,6 +102,11 @@ class Thermocycler(ResourceHolder, Machine):
             f"All steps must have the same number of temperatures. "
             f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
           )
+
+    self._current_protocol = protocol
+    self._block_target_temperature = list(protocol.stages[0].steps[0].temperature)
+    self._total_cycle_count = sum(stage.repeats for stage in protocol.stages)
+    self._total_step_count = sum(len(stage.steps) * stage.repeats for stage in protocol.stages)
 
     return await self.backend.run_protocol(protocol, block_max_volume, **backend_kwargs)
 
@@ -180,7 +192,9 @@ class Thermocycler(ResourceHolder, Machine):
 
   async def get_block_target_temperature(self, **backend_kwargs) -> List[float]:
     """Get the block's target temperature(s) (°C)."""
-    return await self.backend.get_block_target_temperature(**backend_kwargs)
+    if self._block_target_temperature is None:
+      raise RuntimeError("Block target temperature is not set.")
+    return self._block_target_temperature
 
   async def get_lid_current_temperature(self, **backend_kwargs) -> List[float]:
     """Get the current lid temperature(s) (°C)."""
@@ -188,7 +202,9 @@ class Thermocycler(ResourceHolder, Machine):
 
   async def get_lid_target_temperature(self, **backend_kwargs) -> List[float]:
     """Get the lid's target temperature(s) (°C), if supported."""
-    return await self.backend.get_lid_target_temperature(**backend_kwargs)
+    if self._lid_target_temperature is None:
+      raise RuntimeError("Lid target temperature is not set.")
+    return self._lid_target_temperature
 
   async def get_lid_open(self, **backend_kwargs) -> bool:
     """Return ``True`` if the lid is open."""
@@ -212,15 +228,15 @@ class Thermocycler(ResourceHolder, Machine):
 
   async def get_total_cycle_count(self, **backend_kwargs) -> int:
     """Get the total number of cycles."""
-    return await self.backend.get_total_cycle_count(**backend_kwargs)
+    return self._total_cycle_count
 
   async def get_current_step_index(self, **backend_kwargs) -> int:
     """Get the one-based index of the current step."""
     return await self.backend.get_current_step_index(**backend_kwargs)
 
   async def get_total_step_count(self, **backend_kwargs) -> int:
-    """Get the total number of steps in the current cycle."""
-    return await self.backend.get_total_step_count(**backend_kwargs)
+    """Get the total number of steps in the current protocol."""
+    return self._total_step_count
 
   async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5, **backend_kwargs):
     """Wait until block temp reaches target ± tolerance for all zones."""
@@ -234,22 +250,23 @@ class Thermocycler(ResourceHolder, Machine):
     raise TimeoutError("Block temperature timeout.")
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
-    """Wait until the lid temperature reaches target ± ``tolerance`` or the lid temperature status is idle/holding at target."""
+    """Wait until the lid temperature reaches target ± ``tolerance`` or the lid status indicates it is ready."""
     try:
       targets = await self.get_lid_target_temperature(**backend_kwargs)
     except RuntimeError:
       targets = None
+
     start = time.time()
     while time.time() - start < timeout:
+      status = await self.get_lid_status(**backend_kwargs)
+      if status in [LidStatus.IDLE, LidStatus.HOLDING_AT_TARGET, "idle", "holding at target"]:
+        return
+
       if targets is not None:
         currents = await self.get_lid_current_temperature(**backend_kwargs)
         if all(abs(current - target) < tolerance for current, target in zip(currents, targets)):
           return
-      else:
-        # If no target temperature, check status
-        status = await self.get_lid_status(**backend_kwargs)
-        if status in ["idle", "holding at target"]:
-          return
+
       await asyncio.sleep(1)
     raise TimeoutError("Lid temperature timeout.")
 
@@ -261,15 +278,22 @@ class Thermocycler(ResourceHolder, Machine):
     step = await self.get_current_step_index(**backend_kwargs)
     total_steps = await self.get_total_step_count(**backend_kwargs)
 
-    # if still holding in a step, it's running
+    # If still holding in a step, it is running.
     if hold and hold > 0:
       return True
-    # if haven't reached last cycle (zero-based indexing)
-    if cycle < total_cycles - 1:
+
+    # Some backends report the completed step count after finishing.
+    if total_steps and step >= total_steps:
+      return False
+
+    # If we have not reached the last cycle, it is running.
+    if total_cycles and cycle < total_cycles - 1:
       return True
-    # last cycle but not last step (zero-based indexing)
-    if cycle == total_cycles - 1 and step < total_steps - 1:
+
+    # Last cycle but not last step.
+    if total_steps and cycle == total_cycles - 1 and step < total_steps - 1:
       return True
+
     return False
 
   async def wait_for_profile_completion(self, poll_interval: float = 60.0, **backend_kwargs):

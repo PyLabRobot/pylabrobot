@@ -151,32 +151,16 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
   async def get_current_cycle_index(self) -> int:
     return 1
 
-  async def get_total_cycle_count(self) -> int:
-    return 1
-
   async def get_current_step_index(self) -> int:
     # If the profile is "running", it means the simulation hasn't happened yet.
     # The moment get_hold_time is called, it will complete instantly.
     return self._state.total_steps if not self._state.is_profile_running else 1
 
-  async def get_total_step_count(self) -> int:
-    return self._state.total_steps
-
   async def get_block_current_temperature(self) -> List[float]:
     return self._state.block_temp
 
-  async def get_block_target_temperature(self) -> List[float]:
-    if self._state.block_target is None:
-      raise RuntimeError("Block target temperature is not set. Is a cycle running?")
-    return self._state.block_target
-
   async def get_lid_current_temperature(self) -> List[float]:
     return self._state.lid_temp
-
-  async def get_lid_target_temperature(self) -> List[float]:
-    if self._state.lid_target is None:
-      raise RuntimeError("Lid target temperature is not set. Is a cycle running?")
-    return self._state.lid_target
 
   async def get_lid_open(self) -> bool:
     return self._state.lid_open

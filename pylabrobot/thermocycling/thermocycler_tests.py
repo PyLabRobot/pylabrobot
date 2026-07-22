@@ -24,17 +24,13 @@ def mock_backend() -> MagicMock:
   mock.deactivate_lid = AsyncMock()
   mock.run_protocol = AsyncMock()
   mock.get_block_current_temperature = AsyncMock(return_value=[25.0])
-  mock.get_block_target_temperature = AsyncMock(return_value=None)
   mock.get_lid_current_temperature = AsyncMock(return_value=[25.0])
-  mock.get_lid_target_temperature = AsyncMock(return_value=None)
   mock.get_lid_open = AsyncMock(return_value=False)
   mock.get_lid_temperature_status = AsyncMock(return_value="idle")
   mock.get_block_status = AsyncMock(return_value="idle")
   mock.get_hold_time = AsyncMock(return_value=0.0)
   mock.get_current_cycle_index = AsyncMock(return_value=0)
-  mock.get_total_cycle_count = AsyncMock(return_value=0)
   mock.get_current_step_index = AsyncMock(return_value=0)
-  mock.get_total_step_count = AsyncMock(return_value=0)
   return mock
 
 
@@ -132,9 +128,9 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
     for hold, cycle, total_cycles, step, total_steps, expected in test_cases:
       self.tc.backend.get_hold_time.return_value = hold  # type: ignore
       self.tc.backend.get_current_cycle_index.return_value = cycle  # type: ignore
-      self.tc.backend.get_total_cycle_count.return_value = total_cycles  # type: ignore
+      self.tc._total_cycle_count = total_cycles
       self.tc.backend.get_current_step_index.return_value = step  # type: ignore
-      self.tc.backend.get_total_step_count.return_value = total_steps  # type: ignore
+      self.tc._total_step_count = total_steps
       print(f"Testing with hold={hold}, cycle={cycle}, total_cycles={total_cycles}, ")
       assert await self.tc.is_profile_running() is expected
 

@@ -184,9 +184,6 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
     temps = await self.get_sensor_data()
     return [temps.get("Mount", 0.0)]
 
-  async def get_block_target_temperature(self) -> List[float]:
-    raise NotImplementedError()
-
   async def get_block_status(self) -> BlockStatus:
     raise NotImplementedError()
 
@@ -207,9 +204,6 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
   async def get_lid_current_temperature(self) -> List[float]:
     temps = await self.get_sensor_data()
     return [temps.get("Lid", 0.0)]
-
-  async def get_lid_target_temperature(self) -> List[float]:
-    raise NotImplementedError()
 
   # -------------------------------------------------------------------------
   # Protocol
@@ -382,11 +376,5 @@ class ExperimentalODTCBackend(ThermocyclerBackend):
   async def get_current_cycle_index(self) -> int:
     raise NotImplementedError()
 
-  async def get_total_cycle_count(self) -> int:
-    raise NotImplementedError()
-
   async def get_current_step_index(self) -> int:
-    raise NotImplementedError()
-
-  async def get_total_step_count(self) -> int:
     raise NotImplementedError()
