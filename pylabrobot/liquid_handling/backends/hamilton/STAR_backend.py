@@ -1743,6 +1743,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self, ops: Sequence[PipettingOp], use_channels: List[int]
   ) -> Tuple[List[int], List[int], List[bool]]:
     x_positions, y_positions, channels_involved = super()._ops_to_fw_positions(ops, use_channels)
+    # TODO: also bound each involved channel's x against the arm's resolved x_range here,
+    # raising once with every non-compliant (channel, x) pair. Extends the primitive guard
+    # in `_check_x_arm_reachable` to the high-level pipetting ops that route through here.
     if self.left_side_panel_installed:
       min_x = round(self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL * 10)
       for x, involved in zip(x_positions, channels_involved):
@@ -2264,13 +2267,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move the X-arm to an absolute X position with specified acceleration.
 
     Args:
-      x: Target X coordinate in mm. Must be between 90.0 and 1350.0.
+      x: Target X coordinate in mm. Must be within the arm's reachable X range
+        (see the X-drive's `x_range`).
       acceleration_level: Acceleration index (hardware units), 1-5. Default 3.
       current_protection_limiter: Motor current limit (hardware units), 0-7. Default 7.
     """
 
-    if not (90.0 <= x <= 1350.0):
-      raise ValueError(f"x must be between 90.0 and 1350.0 mm, is {x}")
+    self._check_x_arm_reachable(x)
     if not (1 <= acceleration_level <= 5):
       raise ValueError(f"acceleration_level must be between 1 and 5, is {acceleration_level}")
     if not (0 <= current_protection_limiter <= 7):
@@ -2285,6 +2288,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lr=str(acceleration_level),
       lw=str(current_protection_limiter),
     )
+
+  def _check_x_arm_reachable(self, x: float, position: Literal["left", "right"] = "left") -> None:
+    """Raise if x (mm) is outside the X-drive's travel range (``x_range``).
+
+    ``x`` is the arm's position at its reference point (its center for a dual-rail arm, the
+    right edge for a single-rail arm), so the bound is that point's travel range ``x_range``.
+
+    Args:
+      x: Target X coordinate in mm.
+      position: Which X-arm the move drives. Defaults to the left (main) arm.
+
+    Reading ``extended_conf`` already raises if setup() has not run.
+
+    Raises:
+      RuntimeError: If the installed arm's geometry was not resolved.
+      ValueError: If no such arm is installed, or x is outside its ``x_range``.
+    """
+    arm = (
+      self.extended_conf.left_x_drive if position == "left" else self.extended_conf.right_x_drive
+    )
+    if arm is None:
+      raise ValueError(f"No {position} X-arm is installed.")
+    if arm.x_range is None:
+      raise RuntimeError(f"{position} X-arm geometry not resolved")
+    x_min, x_max = arm.x_range
+    if not x_min <= x <= x_max:
+      drives = (self.extended_conf.left_x_drive, self.extended_conf.right_x_drive)
+      label = f"{position} X-arm" if sum(d is not None for d in drives) > 1 else "X-arm"
+      raise ValueError(f"{label} x={x}mm is outside its drive travel range [{x_min}, {x_max}].")
 
   # # # # Single-Channel Pipette Commands # # # #
 
@@ -5131,6 +5163,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"PIP channel x={x}mm is below the minimum {self.PIP_X_MIN_WITH_LEFT_SIDE_PANEL}mm "
         f"(left side panel is installed)"
       )
+    self._check_x_arm_reachable(x)
     await self.position_left_x_arm_(round(x * 10))
 
   @need_iswap_parked
