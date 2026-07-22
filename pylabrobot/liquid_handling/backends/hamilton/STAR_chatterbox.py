@@ -17,7 +17,6 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   iSWAPInformation,
 )
 from pylabrobot.resources.container import Container
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
 from pylabrobot.resources.tip_tracker import does_tip_tracking
 from pylabrobot.resources.well import Well
 
@@ -261,10 +260,13 @@ class STARChatterboxBackend(STARBackend):
     )
 
   def _simulated_x_reach_max(self) -> float:
-    """Rightmost reachable X (mm) in simulation, from the deck's reachable range."""
+    """Rightmost reachable X (mm) in simulation, from the deck's width.
+
+    The hardware backend reads the true drive travel from the RU query; here there is no
+    machine, so the deck's own width is the closest bound that covers every on-deck
+    position without under-reporting reach (a per-rail estimate clips the deck's right edge).
+    """
     deck = self._deck
-    if isinstance(deck, HamiltonDeck):
-      return deck.rails_to_location(deck.num_rails).x
     if deck is not None:
       return deck.get_size_x()
     return 1338.0  # nominal STAR reach
