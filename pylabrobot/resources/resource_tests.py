@@ -2,6 +2,7 @@ import math
 import re
 import unittest
 import unittest.mock
+from typing import Any
 
 from . import resource as resource_module
 from .barcode import Barcode
@@ -774,7 +775,7 @@ class TestResourceMetadata(unittest.TestCase):
   def test_metadata_shallow_copy_semantics(self):
     # metadata.copy() decouples top-level keys from the caller's dict, but nested
     # containers are shared. This pins the documented shallow-copy behavior.
-    original = {"top": "v", "nested": [1, 2]}
+    original: dict[str, Any] = {"top": "v", "nested": [1, 2]}
     r = Resource("r", size_x=1, size_y=1, size_z=1, metadata=original)
 
     original["top"] = "changed"
@@ -785,6 +786,57 @@ class TestResourceMetadata(unittest.TestCase):
 
   def test_metadata_serialization_deserialization(self):
     meta = {"string": "hello", "int": 42, "bool": False, "list": [1, 2, 3], "nested": {"k": "v"}}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized = r.serialize()
+    self.assertEqual(serialized["metadata"], meta)
+
+    deserialized = Resource.deserialize(serialized)
+    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized, r)
+
+  def test_metadata_serialize_copy_isolation(self):
+    meta = {"key": "val", "nested": [1, 2]}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized = r.serialize()
+    serialized["metadata"]["key"] = "modified"
+    self.assertEqual(r.metadata["key"], "val")
+
+  def test_metadata_copy_isolation(self):
+    meta = {"key": "val"}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    r_copy = r.copy()
+    r_copy.metadata["key"] = "modified"
+    self.assertEqual(r.metadata["key"], "val")
+
+  def test_metadata_black_box_roundtrip_tighter(self):
+    class CustomObj:
+      def __init__(self, value: int):
+        self.value = value
+
+      def __eq__(self, other: Any) -> bool:
+        return isinstance(other, CustomObj) and self.value == other.value
+
+    custom_obj = CustomObj(42)
+    meta: Dict[str, Any] = {
+      "custom_obj": custom_obj,
+      "tuple": (1, 2, 3),
+      "none": None,
+      "nested_dict": {"inner_custom": CustomObj(99)},
+    }
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized = r.serialize()
+    self.assertEqual(serialized["metadata"], meta)
+
+    deserialized = Resource.deserialize(serialized)
+    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized, r)
+
+    r_copy = r.copy()
+    self.assertEqual(r_copy.metadata, meta)
+    self.assertEqual(r_copy, r)
+
+  def test_metadata_type_key_serialization_deserialization(self):
+    meta = {"type": "reagent", "nested": {"type": "custom_type"}}
     r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
     serialized = r.serialize()
     self.assertEqual(serialized["metadata"], meta)
@@ -818,8 +870,8 @@ class TestResourceMetadata(unittest.TestCase):
     with unittest.mock.patch.object(
       resource_module, "find_subclass", return_value=_AliasProbeSibling
     ):
-      restored = _AliasProbe.deserialize(data)
-    self.assertIsInstance(restored, _AliasProbeSibling)
+      with self.assertRaises(AssertionError):
+        _AliasProbe.deserialize(data)
 
   def test_deserialize_rejects_class_with_different_name(self):
     class _RejectProbe(Resource):
@@ -836,10 +888,10 @@ class TestResourceMetadata(unittest.TestCase):
   def test_find_resources_metadata(self):
     deck, plate, well, trough, waste = self._sample_tree()
 
-    # Strict value equality
-    self.assertEqual(deck.find_resources(liquid="water"), [plate, waste])
-    self.assertEqual(deck.find_resources(is_clean=True), [plate])
-    self.assertEqual(deck.find_resources(is_clean=False), [trough])
+    # Strict value equality via metadata=
+    self.assertEqual(deck.find_resources(metadata={"liquid": "water"}), [plate, waste])
+    self.assertEqual(deck.find_resources(metadata={"is_clean": True}), [plate])
+    self.assertEqual(deck.find_resources(metadata={"is_clean": False}), [trough])
 
     # Key presence check via has_metadata
     self.assertEqual(deck.find_resources(has_metadata="pH"), [plate])
@@ -849,12 +901,17 @@ class TestResourceMetadata(unittest.TestCase):
 
     # Callable predicate on metadata.get(key)
     self.assertEqual(
-      deck.find_resources(concentration_mM=lambda v: v is not None and v > 20), [plate, trough]
+      deck.find_resources(metadata={"concentration_mM": lambda v: v is not None and v > 20}),
+      [plate, trough],
     )
-    self.assertEqual(deck.find_resources(pH=lambda v: v is not None and v == 7.0), [plate])
-    self.assertEqual(set(deck.find_resources(pH=lambda v: v is None)), {deck, well, trough, waste})
+    self.assertEqual(
+      deck.find_resources(metadata={"pH": lambda v: v is not None and v == 7.0}), [plate]
+    )
+    self.assertEqual(
+      set(deck.find_resources(metadata={"pH": lambda v: v is None})), {deck, well, trough, waste}
+    )
 
-    # Top-level attribute reserved kwargs (name, type, model, category)
+    # Top-level attribute matchers (name, type, model, category)
     self.assertEqual(deck.find_resources(name="plate1"), [plate])
     self.assertEqual(deck.find_resources(name=re.compile(r"^(plate|trough)")), [plate, trough])
     self.assertEqual(deck.find_resources(category="plate"), [plate])
@@ -878,29 +935,6 @@ class TestResourceMetadata(unittest.TestCase):
     self.assertEqual(deck.find_resources(name="well1", recursive=False), [])
     self.assertEqual(deck.find_resources(name="well1", recursive=True), [well])
 
-  def test_find_resources_via_metadata_dict_param(self):
-    deck, plate, _well, trough, waste = self._sample_tree()
-    # The explicit metadata= dict behaves like the kwargs shorthand.
-    self.assertEqual(deck.find_resources(metadata={"liquid": "water"}), [plate, waste])
-    self.assertEqual(
-      deck.find_resources(metadata={"concentration_mM": lambda v: v is not None and v > 20}),
-      [plate, trough],
-    )
-    # metadata= dict and kwargs shorthand are AND-combined.
-    self.assertEqual(deck.find_resources(metadata={"liquid": "water"}, is_clean=True), [plate])
-
-  def test_find_resources_reserved_key_shadowing_and_escape_hatch(self):
-    # A metadata key named like a reserved attribute is shadowed when passed as a
-    # kwarg, but reachable via the explicit metadata= dict.
-    deck = Resource("deck", size_x=10, size_y=10, size_z=10)
-    child = Resource("child", size_x=1, size_y=1, size_z=1, metadata={"model": "special"})
-    deck.assign_child_resource(child, location=Coordinate(0, 0, 0))
-
-    # kwarg model= matches the top-level attribute (None here), not metadata.
-    self.assertEqual(deck.find_resources(model="special"), [])
-    # explicit metadata= reaches the metadata key.
-    self.assertEqual(deck.find_resources(metadata={"model": "special"}), [child])
-
   def test_find_resources_type_matcher_variants(self):
     # Unusual class names avoid polluting the global Resource subclass registry.
     class _TypeAlpha(Resource):
@@ -919,13 +953,15 @@ class TestResourceMetadata(unittest.TestCase):
     self.assertEqual(
       deck.find_resources(type=(_TypeAlpha, _TypeBeta)), [alpha, beta]
     )  # tuple of classes
-    self.assertEqual(deck.find_resources(type="_TypeBeta"), [beta])  # class name string
     self.assertEqual(
-      deck.find_resources(type=re.compile(r"^_TypeA")), [alpha]
+      deck.find_resources(type=_TypeBeta.__name__), [beta]
+    )  # class name string
+    self.assertEqual(
+      deck.find_resources(type=re.compile(r"_TypeA")), [alpha]
     )  # regex on class name
     self.assertEqual(
-      deck.find_resources(type=lambda r: isinstance(r, _TypeBeta)), [beta]
-    )  # callable receives the resource
+      deck.find_resources(type=lambda k: issubclass(k, _TypeBeta)), [beta]
+    )  # callable receives the resource class
 
   def test_find_resources_attribute_callable_receives_attribute_value(self):
     deck, plate, well, trough, waste = self._sample_tree()
@@ -940,7 +976,7 @@ class TestResourceMetadata(unittest.TestCase):
     result = deck.find_resources(
       fn=lambda r: r.get_size_x() == 10,
       has_metadata="is_clean",
-      liquid="water",
+      metadata={"liquid": "water"},
       category="plate",
     )
     self.assertEqual(result, [plate])
@@ -958,15 +994,15 @@ class TestResourceMetadata(unittest.TestCase):
 
     # cb=handler runs handler(metadata.get("cb")); for child that is
     # handler(handler) -> truthy, so it "matches" -- the documented footgun.
-    self.assertEqual(deck.find_resources(cb=handler), [child])
+    self.assertEqual(deck.find_resources(metadata={"cb": handler}), [child])
     # Identity match via an explicit predicate is the correct approach.
-    self.assertEqual(deck.find_resources(cb=lambda v: v is handler), [child])
+    self.assertEqual(deck.find_resources(metadata={"cb": lambda v: v is handler}), [child])
 
   def test_find_resource_returns_first_match_or_self(self):
     deck, plate, _well, _trough, waste = self._sample_tree()
     # Two resources match; the first encountered (self is checked first) is returned.
-    self.assertEqual(deck.find_resources(liquid="water"), [plate, waste])
-    self.assertEqual(deck.find_resource(liquid="water"), plate)
+    self.assertEqual(deck.find_resources(metadata={"liquid": "water"}), [plate, waste])
+    self.assertEqual(deck.find_resource(metadata={"liquid": "water"}), plate)
     # The search includes self, so an unfiltered/self-matching query can return it.
     self.assertIs(deck.find_resource(type=Resource), deck)
     self.assertIsNone(deck.find_resource(name="does-not-exist"))

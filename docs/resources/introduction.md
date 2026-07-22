@@ -44,7 +44,8 @@ plate = Resource(
     size_x=127.76,
     size_y=85.48,
     size_z=14.5,
-    metadata={"solvent": "water", "batch_id": "B2026-07", "is_sterilized": True}
+    metadata={"solvent": "water", "batch_id": "B2026-07", "is_sterilized": True},
+    model="vendor_plate_96_Vb",
 )
 ```
 
@@ -56,20 +57,21 @@ You can query resources in a deck or resource tree using `find_resources` and `f
 
 ```python
 # Find all resources with solvent="water"
-water_plates = deck.find_resources(solvent="water")
+water_plates = deck.find_resources(metadata={"solvent": "water"})
 
 # Check metadata key presence
 sterilized_items = deck.find_resources(has_metadata="is_sterilized")
 
 # Use predicate functions for metadata values (receives metadata.get(key), e.g. None if key is missing)
-incubated = deck.find_resources(temperature=lambda t: t is not None and t >= 37.0)
+incubated = deck.find_resources(metadata={"temperature": lambda t: t is not None and t >= 37.0})
 
 # Filter by top-level attributes (name, type, model, category)
+import re
 from pylabrobot.resources import Plate
-plates = deck.find_resources(type=Plate, category="plate")
+plates = deck.find_resources(type=Plate, model=re.compile(r"vendor_"))
 
 # Find the first matching resource
-first_sterile = deck.find_resource(is_sterilized=True)
+first_sterile = deck.find_resource(metadata={"is_sterilized": True})
 ```
 
 ## Saving and loading resources

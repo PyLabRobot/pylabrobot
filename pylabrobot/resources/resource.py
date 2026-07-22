@@ -7,7 +7,7 @@ import logging
 import re
 import sys
 from collections.abc import Iterable, Mapping
-from typing import Any, Callable, Dict, List, Optional, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot.events import coordinate_reference, emit_event, resource_reference
 from pylabrobot.serializer import SerializableMixin, deserialize, serialize
@@ -66,34 +66,47 @@ WillUnassignResourceCallback = Callable[["Resource"], None]
 DidUnassignResourceCallback = Callable[["Resource"], None]
 ResourceDidUpdateState = Callable[[Dict[str, Any]], None]
 
+StrAttrMatcher = Union[re.Pattern, Callable[[Any], bool], str]
+TypeMatcher = Union[type, Tuple[type, ...], StrAttrMatcher]
 
-def _match_top_level_attribute(resource: Resource, attr_name: str, matcher: Any) -> bool:
+
+def _match_type(resource: Resource, matcher: TypeMatcher) -> bool:
+  """Return whether ``resource``'s type matches ``matcher``.
+
+  The interpretation of ``matcher`` depends on its type:
+  - a class (or tuple of classes) is matched with
+    ``isinstance``;
+  - a ``str`` is compared against the class name;
+  - a ``re.Pattern`` is ``search``-ed against the class name;
+  - a callable receives the *resource type*.
+
+  Any other matchers raise a TypeError
+  """
+  if inspect.isclass(matcher) or (
+    isinstance(matcher, tuple) and all(inspect.isclass(c) for c in matcher)
+  ):
+    return isinstance(resource, matcher)
+  klass = type(resource)
+  if isinstance(matcher, str):
+    return klass.__name__ == matcher
+  if isinstance(matcher, re.Pattern):
+    return bool(matcher.search(klass.__name__))
+  if callable(matcher):
+    return bool(matcher(klass))
+  raise TypeError(f"Unexpected type matcher of type {type(matcher).__qualname__}")
+
+
+def _match_top_level_attribute(resource: Resource, attr_name: str, matcher: StrAttrMatcher) -> bool:
   """Return whether ``resource``'s top-level attribute ``attr_name`` matches ``matcher``.
 
-  The interpretation of ``matcher`` depends on its kind:
+  The interpretation of ``matcher`` depends on its type:
 
-  - For ``attr_name == "type"``: a class (or tuple of classes) is matched with
-    ``isinstance``; a ``str`` is compared against the class name; an
-    ``re.Pattern`` is ``search``-ed against the class name; a callable receives
-    the *resource itself*. Anything else does not match.
-  - For any other attribute: an ``re.Pattern`` is ``search``-ed against
-    ``str(attr_val)``; a callable receives the *attribute value*; otherwise
-    equality is checked. Note the callable receives different arguments than in
-    the ``"type"`` case.
+  - ``re.Pattern`` is ``search``-ed against ``str(attr_val)``;
+  - a callable receives the *attribute value*;
+  - otherwise equality is checked.
+
+  Note the callable receives different arguments than for `_match_type`.
   """
-  if attr_name == "type":
-    if inspect.isclass(matcher) or (
-      isinstance(matcher, tuple) and all(inspect.isclass(c) for c in matcher)
-    ):
-      return isinstance(resource, matcher)
-    if isinstance(matcher, str):
-      return resource.__class__.__name__ == matcher
-    if isinstance(matcher, re.Pattern):
-      return bool(matcher.search(resource.__class__.__name__))
-    if callable(matcher):
-      return bool(matcher(resource))
-    return False
-
   attr_val = getattr(resource, attr_name, None)
   if isinstance(matcher, re.Pattern):
     return attr_val is not None and bool(matcher.search(str(attr_val)))
@@ -134,6 +147,8 @@ class Resource(SerializableMixin):
     barcode: The barcode of the resource (optional).
     preferred_pickup_location: The location where the center of the gripper should be when picking
       up this resource, relative to the resource's origin (optional).
+    metadata: Free-form metadata. Treated as black box during serialisation.
+      To make standard JSON serialisation work, only add JSON-compatible metadata.
   """
 
   def __init__(
@@ -147,7 +162,7 @@ class Resource(SerializableMixin):
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
     preferred_pickup_location: Optional[Coordinate] = None,
-    metadata: Mapping[str, Any] | None = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -162,7 +177,7 @@ class Resource(SerializableMixin):
     # Shallow copy: top-level keys are decoupled from the caller's mapping, but
     # nested containers/objects remain shared. Deep-copy before passing in if you
     # need full isolation of mutable metadata values.
-    self.metadata: dict[str, Any] = dict(metadata) if metadata is not None else {}
+    self.metadata: Dict[str, Any] = dict(metadata) if metadata is not None else {}
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
@@ -207,7 +222,7 @@ class Resource(SerializableMixin):
     if self.preferred_pickup_location is not None:
       data["preferred_pickup_location"] = serialize(self.preferred_pickup_location)
     if self.metadata:
-      data["metadata"] = serialize(self.metadata)
+      data["metadata"] = self.metadata.copy()
     if self.children:
       data["children"] = [child.serialize() for child in self.children]
     if self.parent is not None:
@@ -680,13 +695,16 @@ class Resource(SerializableMixin):
 
   def find_resources(
     self,
-    fn: Callable[[Resource], bool] | None = None,
+    fn: Optional[Callable[[Resource], bool]] = None,
     *,
-    metadata: Mapping[str, Any] | None = None,
-    has_metadata: str | Iterable[str] | None = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+    has_metadata: Optional[Union[str, Iterable[str]]] = None,
     recursive: bool = True,
-    **kwargs: Any,
-  ) -> list[Resource]:
+    name: Optional[StrAttrMatcher] = None,
+    type: Optional[TypeMatcher] = None,
+    model: Optional[StrAttrMatcher] = None,
+    category: Optional[StrAttrMatcher] = None,
+  ) -> List[Resource]:
     """Find resources matching top-level attributes, metadata, and/or a predicate.
 
     All supplied criteria must match (logical AND). The search always includes
@@ -702,57 +720,52 @@ class Resource(SerializableMixin):
         metadata (values are not inspected).
       recursive: If True, search self and all descendants. If False, search self
         and direct children only.
-      **kwargs: Shorthand matchers. Keys in ('name', 'type', 'model', 'category')
-        match the corresponding top-level attribute; any other key is treated as
-        a metadata matcher (same semantics as ``metadata``). For ``type`` the
-        matcher may be a class or tuple of classes (``isinstance``), a string or
-        ``re.Pattern`` (matched against the class name), or a callable receiving
-        the resource. For the other attributes a callable receives the attribute
-        value, an ``re.Pattern`` is matched against ``str(value)``, and any other
-        value is compared for equality.
+      name: Matches the resource name. Can be a string, regex or callable.
+      type: Matches the resource type. Can be a type or tuple of types, which are
+        matched using ``isinstance``, a string or regex, which are
+        matched against the type names, or a callable which receives ``type(resource)``.
+      model: Matches the resource model. Can be a string, regex or callable.
+      category: Matches the resource category. Can be a string, regex or callable.
 
     Returns:
       List of matching Resource instances. ``self`` is considered first (so it
       appears first if it matches), followed by its descendants in
       ``get_all_children`` order (direct children before deeper descendants).
-
-    Note:
-      The reserved keys ('name', 'type', 'model', 'category') always refer to the
-      top-level attribute, so a metadata key of the same name is shadowed when
-      passed as a kwarg. Query such a metadata key via the explicit ``metadata=``
-      argument instead, e.g. ``find_resources(metadata={"type": "solvent"})``. A
-      misspelled reserved key is silently treated as a (usually absent) metadata
-      key and matches nothing.
     """
     candidates = [self] + (self.get_all_children() if recursive else self.children)
-    results: list[Resource] = []
+    results: List[Resource] = []
 
-    reserved_keys = {"name", "type", "model", "category"}
-
-    top_level_matchers = {k: v for k, v in kwargs.items() if k in reserved_keys}
-    extra_metadata_matchers = {k: v for k, v in kwargs.items() if k not in reserved_keys}
-
-    combined_metadata_matchers: dict[str, Any] = {}
-    if metadata is not None:
-      combined_metadata_matchers.update(metadata)
-    combined_metadata_matchers.update(extra_metadata_matchers)
-
-    has_keys: list[str] = []
+    has_keys: List[str] = []
     if isinstance(has_metadata, str):
       has_keys = [has_metadata]
     elif has_metadata is not None:
       has_keys = list(has_metadata)
 
+    top_level_attr_matchers = {
+      k: v
+      for k, v in dict(
+        name=name,
+        model=model,
+        category=category,
+      ).items()
+      if v is not None
+    }
+
     for resource in candidates:
       if any(k not in resource.metadata for k in has_keys):
         continue
 
-      if any(not _match_top_level_attribute(resource, k, v) for k, v in top_level_matchers.items()):
+      if any(
+        not _match_top_level_attribute(resource, k, v) for k, v in top_level_attr_matchers.items()
+      ):
         continue
 
-      if any(
-        not _match_metadata_entry(resource, k, v) for k, v in combined_metadata_matchers.items()
+      if metadata is not None and any(
+        not _match_metadata_entry(resource, k, v) for k, v in metadata.items()
       ):
+        continue
+
+      if type is not None and not _match_type(resource, type):
         continue
 
       if fn is not None and not fn(resource):
@@ -764,13 +777,16 @@ class Resource(SerializableMixin):
 
   def find_resource(
     self,
-    fn: Callable[[Resource], bool] | None = None,
+    fn: Optional[Callable[[Resource], bool]] = None,
     *,
-    metadata: Mapping[str, Any] | None = None,
-    has_metadata: str | Iterable[str] | None = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+    has_metadata: Optional[Union[str, Iterable[str]]] = None,
     recursive: bool = True,
-    **kwargs: Any,
-  ) -> Resource | None:
+    name: Optional[StrAttrMatcher] = None,
+    type: Optional[TypeMatcher] = None,
+    model: Optional[StrAttrMatcher] = None,
+    category: Optional[StrAttrMatcher] = None,
+  ) -> Optional[Resource]:
     """Find the first matching resource, or None if not found.
 
     Accepts the same arguments as :meth:`find_resources` and returns its first
@@ -782,7 +798,10 @@ class Resource(SerializableMixin):
       metadata=metadata,
       has_metadata=has_metadata,
       recursive=recursive,
-      **kwargs,
+      name=name,
+      type=type,
+      model=model,
+      category=category,
     )
     return results[0] if results else None
 
@@ -945,12 +964,7 @@ class Resource(SerializableMixin):
     subclass = find_subclass(data["type"], cls=Resource)
     if subclass is None:
       raise ValueError(f'Could not find subclass with name "{data["type"]}"')
-    # The name-equality fallback tolerates a class that is imported under two
-    # different module paths (e.g. `pylabrobot...Resource` and a vendored alias):
-    # the two class objects are distinct, so `issubclass` is False even though
-    # they are logically the same class. Note this is a name-only check, so two
-    # genuinely different classes that share a short name would also pass here.
-    assert issubclass(subclass, cls) or subclass.__name__ == cls.__name__
+    assert issubclass(subclass, cls)
 
     for key in [
       "type",
@@ -962,7 +976,7 @@ class Resource(SerializableMixin):
     rotation = data_copy.pop("rotation", None)
     barcode = data_copy.pop("barcode", None)
     preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
-    metadata_data = data_copy.pop("metadata", None)
+    metadata_data = data_copy.pop("metadata", {})
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
     if rotation is not None:
       resource.rotation = deserialize(rotation)  # not pretty, should be done in init.
@@ -971,10 +985,7 @@ class Resource(SerializableMixin):
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
     if metadata_data is not None:
-      resource.metadata = cast(
-        dict[str, Any], deserialize(metadata_data, allow_marshal=allow_marshal)
-      )
-
+      resource.metadata = metadata_data
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
       if child_cls is None:
