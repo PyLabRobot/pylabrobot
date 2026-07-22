@@ -17,7 +17,7 @@ Keep it small and idiomatic to PyLabRobot.
 - **One file, one plain class.** The old Driver/Backend split and capability machinery are deprecated — don't use them. Instead write a single plain class whose public methods are the device's operations, talking to hardware through a `pylabrobot.io` transport. Path `pylabrobot/<vendor>/<device>.py`, re-exported from `__init__.py`. Promote to a `<device>/` package only when it genuinely helps — a distinct subsystem, the protocol/framing layer, or a large command table — not by reflex.
 - **Stay OS-agnostic:** no OS-specific libraries or DLLs. Running on Windows, Mac, and Linux is what keeps experiments portable and reproducible.
 - **Async `setup()` / `stop()`** plus public operation methods, over PyLabRobot's transport primitives (`pylabrobot.io.serial.Serial`, etc.) — never the OS directly.
-- **Modes as `Literal[...]`, not enums.** A `Literal["standard", "head", "pump"]` argument plus an internal dict mapping to wire codes reads better at the call site than an enum import.
+- **Prefer string `Literal[...]` over enums**, especially anything user-facing. A `Literal["standard", "head", "pump"]` argument plus an internal dict mapping to wire codes reads better at the call site than an enum import. `IntEnum` is fine in narrow internal cases (e.g. a fixed set of wire/register codes never exposed to callers).
 - **API docs:** add `docs/api/pylabrobot.<vendor>.rst` plus a line in `docs/api/pylabrobot.rst`.
 
 ### Idempotent public API
