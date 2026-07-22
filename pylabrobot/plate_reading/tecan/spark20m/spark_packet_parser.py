@@ -472,11 +472,7 @@ class SparkParser:
         # under a single TDCL header.  Detect this by checking for wavelength
         # tags (x10U16RWL) in the first parsed block, then continue consuming
         # remaining data packets as additional standalone blocks.
-        has_wl = any(
-          "WL" in k
-          for pair in parsed.get("rd_md_pairs", [])[:1]
-          for k in pair
-        )
+        has_wl = any("WL" in k for pair in parsed.get("rd_md_pairs", [])[:1] for k in pair)
         if has_wl:
           while data_packets:
             try:
