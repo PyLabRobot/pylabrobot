@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 _OT_NAMESPACE = "opentrons"
 _OT_VERSION = 1
 
-# Flex-managed positioning flow-rate defaults (uL/s), copied verbatim from
-# titronic plr_v4/flex/head8_backend.py.
+# Flex-managed positioning flow-rate defaults (uL/s).
 _DEFAULT_ASPIRATE_FLOW_RATE = 35.0
 _DEFAULT_DISPENSE_FLOW_RATE = 57.0
 
@@ -168,9 +167,8 @@ class OpentronsFlex(OpentronsRobot):
   ) -> Optional[dict]:
     """Build the Flex ``wellLocation`` param from an offset and/or liquid height.
 
-    Mirrors titronic ``head8_backend._aspirate_flex``/``_dispense_flex``, which sets
-    ``offset.z`` from ``liquid_height`` (origin "bottom" per ``FlexDriver.aspirate``/
-    ``dispense``); extended here to also honor an explicit x/y/z offset.
+    Merges an explicit x/y/z offset with ``liquid_height`` (added to z); the
+    origin is always ``"bottom"``. Returns ``None`` if neither is given.
     """
     offset = None
     if offsets is not None and offsets[0] is not None:
