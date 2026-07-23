@@ -15,11 +15,13 @@ the adjacent slot's airspace and could hit tall labware.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.trash import Trash
-
 
 # OT-2 slot number → Flex slot identifier mapping
 _OT2_TO_FLEX = {
@@ -72,18 +74,25 @@ STAGING_LOCATIONS: Dict[str, Dict[str, float]] = {
 SLOT_WIDTH = 128.0  # x dimension
 SLOT_DEPTH = 86.0  # y dimension
 
+# Overall deck footprint (mm), including the frame around the slot grid.
+_DECK_SIZE_X = 855.0
+_DECK_SIZE_Y = 582.0
+
 # Default clearance Z when no operation height is provided.
 # Conservative estimate — measured at 51.3mm on real hardware
 # (tip at bottom of flat well plate, A1 nozzle to deck surface).
 _DEFAULT_CLEARANCE_Z = 50.0
 
 
-class FlexDeck:
+class FlexDeck(Deck):
   """Opentrons Flex deck — 16 slots with placement and collision detection.
 
-  Standalone class (no PLR Deck dependency). Manages which resources
-  are placed at which slots, provides coordinate lookups, and checks
-  collision clearance for single-nozzle operations.
+  Each slot (the 12 standard A1–D3 slots plus the 4 staging slots A4–D4)
+  is modeled as a :class:`ResourceHolder` child assigned into this deck's
+  resource tree, so labware placed at a slot is properly parented —
+  ``resource.parent`` walks up through the slot holder to this deck, and
+  ``get_absolute_location()`` works through the standard PLR mechanism.
+  Labware is placed into a slot's holder with :meth:`assign_child_at_slot`.
 
   Example::
 
@@ -98,24 +107,22 @@ class FlexDeck:
     with_trash_bin: bool = True,
     name: str = "flex_deck",
   ) -> None:
-    self.name = name
-    self._slots: Dict[str, Optional[Any]] = {}
-    for slot_id in list(SLOT_LOCATIONS) + list(STAGING_LOCATIONS):
-      self._slots[slot_id] = None
+    super().__init__(size_x=_DECK_SIZE_X, size_y=_DECK_SIZE_Y, size_z=0.0, name=name)
 
-    if with_trash_bin:
-      trash = Trash(
-        name="trash",
+    self._slot_holders: Dict[str, ResourceHolder] = {}
+    for slot_id, loc in {**SLOT_LOCATIONS, **STAGING_LOCATIONS}.items():
+      holder = ResourceHolder(
+        name=f"{self.name}_slot_{slot_id}",
         size_x=SLOT_WIDTH,
         size_y=SLOT_DEPTH,
-        size_z=82.0,
+        size_z=0,
       )
-      trash.location = Coordinate(
-        x=SLOT_LOCATIONS["A3"]["x"],
-        y=SLOT_LOCATIONS["A3"]["y"],
-        z=SLOT_LOCATIONS["A3"]["z"],
-      )
-      self._slots["A3"] = trash
+      self._slot_holders[slot_id] = holder
+      super().assign_child_resource(holder, location=Coordinate(x=loc["x"], y=loc["y"], z=loc["z"]))
+
+    if with_trash_bin:
+      trash = Trash(name="trash", size_x=SLOT_WIDTH, size_y=SLOT_DEPTH, size_z=82.0)
+      self.assign_child_at_slot(trash, "A3")
 
   # --- Slot Validation ---
 
@@ -158,7 +165,7 @@ class FlexDeck:
       return STAGING_LOCATIONS[slot]
     raise ValueError(f"Unknown slot '{slot}'.")
 
-  def assign_child_at_slot(self, resource: Any, slot: str) -> None:
+  def assign_child_at_slot(self, resource: Resource, slot: str) -> None:
     """Place a resource at a named slot.
 
     Args:
@@ -169,42 +176,36 @@ class FlexDeck:
         ValueError: If slot is invalid or already occupied.
     """
     slot = self._validate_slot(slot)
-    current = self._slots.get(slot)
-    if current is not None:
-      name = getattr(current, "name", str(current))
+    holder = self._slot_holders[slot]
+    if holder.resource is not None:
+      name = getattr(holder.resource, "name", str(holder.resource))
       raise ValueError(f"Slot {slot} is already occupied by '{name}'.")
-    self._slots[slot] = resource
-
-    # Set the resource's location so PLR's get_absolute_location()
-    # works through the standard resource tree
-    loc = self.get_slot_location(slot)
-    resource.location = Coordinate(x=loc["x"], y=loc["y"], z=loc["z"])
+    holder.assign_child_resource(resource)
 
   def unassign_child_at_slot(self, slot: str) -> None:
     """Remove a resource from a slot."""
     slot = self._validate_slot(slot)
-    resource = self._slots.get(slot)
-    if resource is not None:
-      resource.location = None
-    self._slots[slot] = None
+    holder = self._slot_holders[slot]
+    if holder.resource is not None:
+      holder.unassign_child_resource(holder.resource)
 
-  def get_slot(self, resource: Any) -> Optional[str]:
+  def get_slot(self, resource: Resource) -> Optional[str]:
     """Get the slot identifier for a placed resource, or None."""
-    for slot_id, slot_resource in self._slots.items():
-      if slot_resource is resource:
+    for slot_id, holder in self._slot_holders.items():
+      if holder.resource is resource:
         return slot_id
     return None
 
-  def get_resource_at_slot(self, slot: str) -> Optional[Any]:
+  def get_resource_at_slot(self, slot: str) -> Optional[Resource]:
     """Return the resource placed at a slot, or None."""
     slot = self._validate_slot(slot)
-    return self._slots.get(slot)
+    return self._slot_holders[slot].resource
 
   def get_trash_area(self) -> Trash:
     """Return the trash resource (default at A3)."""
-    for slot_id, resource in self._slots.items():
-      if isinstance(resource, Trash):
-        return resource
+    for holder in self._slot_holders.values():
+      if isinstance(holder.resource, Trash):
+        return holder.resource
     raise ValueError("No trash area configured on this deck.")
 
   # --- OT-2 Conversion ---
@@ -269,7 +270,7 @@ class FlexDeck:
     else:
       return  # Other nozzle configs — skip for now
 
-    resource = self._slots.get(danger_slot)
+    resource = self._slot_holders[danger_slot].resource
     if resource is None:
       return  # Slot empty, safe
 
@@ -307,7 +308,7 @@ class FlexDeck:
   def check_deck_clearance(self, slot: str, operation: str = "move") -> None:
     """Verify a slot has labware for an operation that requires it."""
     slot = self._validate_slot(slot)
-    resource = self._slots.get(slot)
+    resource = self._slot_holders[slot].resource
     if resource is None and operation in ("pick_up_tips", "aspirate", "dispense"):
       raise ValueError(
         f"Cannot {operation} at slot {slot}: no labware assigned. "
@@ -334,7 +335,7 @@ class FlexDeck:
     """
 
     def _slot_label(slot_id: str) -> str:
-      resource = self._slots.get(slot_id)
+      resource = self._slot_holders[slot_id].resource
       if resource is None:
         if slot_id.endswith("4"):
           return "(staging)"
@@ -345,7 +346,11 @@ class FlexDeck:
       return name
 
     sep = "+----------+----------+----------+----------+"
-    lines = ["Flex Deck (855mm x 582mm)", "", sep]
+    lines = [
+      f"Flex Deck ({self.get_absolute_size_x():g}mm x {self.get_absolute_size_y():g}mm)",
+      "",
+      sep,
+    ]
 
     for row_letter in "ABCD":
       row_ids = [f"| {row_letter}{col}       " for col in "1234"]
