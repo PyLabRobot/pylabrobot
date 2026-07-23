@@ -93,7 +93,7 @@ class OpentronsFlex(OpentronsRobot):
         "origin": "top",
         "offset": {"x": offset.x, "y": offset.y, "z": offset.z},
       }
-    await self.execute_command("pickUpTip", params)
+    await self._execute_command("pickUpTip", params)
     for ch, spot in zip(use_channels, tip_spots):
       tip = spot.get_tip()
       if does_tip_tracking():
@@ -111,7 +111,7 @@ class OpentronsFlex(OpentronsRobot):
     pipette = self._require_pipette()
     target = tip_spots[0]
     if isinstance(target, Trash) or isinstance(target.parent, Trash):
-      await self.execute_command(
+      await self._execute_command(
         "moveToAddressableAreaForDropTip",
         {
           "pipetteId": pipette.pipette_id,
@@ -119,7 +119,7 @@ class OpentronsFlex(OpentronsRobot):
           "alternateDropLocation": True,
         },
       )
-      await self.execute_command("dropTipInPlace", {"pipetteId": pipette.pipette_id})
+      await self._execute_command("dropTipInPlace", {"pipetteId": pipette.pipette_id})
     else:
       rack = self._require_itemized_parent(target)
       labware_id = await self._ensure_labware_loaded(rack)
@@ -135,7 +135,7 @@ class OpentronsFlex(OpentronsRobot):
           "origin": "top",
           "offset": {"x": offset.x, "y": offset.y, "z": offset.z},
         }
-      await self.execute_command("dropTip", params)
+      await self._execute_command("dropTip", params)
     for ch, spot in zip(use_channels, tip_spots):
       tip = self._channel_tips[ch]
       if (
@@ -174,7 +174,7 @@ class OpentronsFlex(OpentronsRobot):
     well_location = self._well_location(offsets, liquid_height)
     if well_location is not None:
       params["wellLocation"] = well_location
-    await self.execute_command("aspirate", params)
+    await self._execute_command("aspirate", params)
     if does_volume_tracking():
       for well, vol in zip(resources, vols):
         well.tracker.remove_liquid(vol)
@@ -206,7 +206,7 @@ class OpentronsFlex(OpentronsRobot):
     well_location = self._well_location(offsets, liquid_height)
     if well_location is not None:
       params["wellLocation"] = well_location
-    await self.execute_command("dispense", params)
+    await self._execute_command("dispense", params)
     if does_volume_tracking():
       for well, vol in zip(resources, vols):
         well.tracker.add_liquid(vol)
@@ -249,7 +249,7 @@ class OpentronsFlex(OpentronsRobot):
     load_name = self._ot_load_name(resource)
     labware_id = uuid.uuid4().hex[:12]
 
-    result = await self.execute_command(
+    result = await self._execute_command(
       "loadLabware",
       {
         "loadName": load_name,

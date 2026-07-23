@@ -37,6 +37,10 @@ class OpentronsRobot(abc.ABC):
 
   Owns the httpx transport, the run/command protocol, and instrument discovery.
   Subclasses implement the liquid-handling ops and any model-specific setup.
+
+  Transport is an httpx AsyncClient held on the instance; PyLabRobot has no
+  pylabrobot.io HTTP transport yet, so the HTTP client lives here rather than
+  behind a pylabrobot.io primitive.
   """
 
   def __init__(self, host: str, port: int = 31950) -> None:
@@ -155,7 +159,7 @@ class OpentronsRobot(abc.ABC):
 
   # --- Command Execution ---
 
-  async def execute_command(
+  async def _execute_command(
     self,
     command_type: str,
     params: Dict[str, Any],
@@ -246,22 +250,6 @@ class OpentronsRobot(abc.ABC):
       )
     return pipettes
 
-  def check_gripper(self, instruments_data: Dict[str, Any]) -> bool:
-    """Check if a gripper is attached."""
-    for instrument in instruments_data.get("data", []):
-      if instrument.get("instrumentType") == "gripper":
-        return True
-    return False
-
-  async def get_modules(self) -> List[Dict[str, Any]]:
-    """Query connected modules via GET /modules.
-
-    Returns the module data dict for each USB-connected module. Passive
-    hardware (magnetic block, waste chute) is not discoverable.
-    """
-    data = await self._get("/modules")
-    return cast(List[Dict[str, Any]], data.get("data", []))
-
   # --- Pipette Loading ---
 
   async def _load_pipette(self, pipette_name: str, mount: str) -> str:
@@ -271,7 +259,7 @@ class OpentronsRobot(abc.ABC):
     commands (pickUpTip, aspirateInPlace, moveToCoordinates, etc.).
     Must be called after _create_run().
     """
-    result = await self.execute_command(
+    result = await self._execute_command(
       "loadPipette",
       {"pipetteName": pipette_name, "mount": mount},
       wait=True,
@@ -289,34 +277,7 @@ class OpentronsRobot(abc.ABC):
 
   async def home(self) -> Dict[str, Any]:
     """Home all axes. The gantry moves to the rear-left-top."""
-    return await self.execute_command("home", {})
-
-  # --- Movement Commands ---
-
-  async def move_to_coordinates(
-    self,
-    pipette_id: str,
-    x: float,
-    y: float,
-    z: float,
-    minimum_z_height: Optional[float] = None,
-    speed: Optional[float] = None,
-  ) -> Dict[str, Any]:
-    """Move a pipette to absolute deck coordinates.
-
-    The robot automatically arcs to a safe Z height before lateral
-    movement (unless forceDirect=True, which we never set).
-    The minimumZHeight parameter raises the arc if needed.
-    """
-    params: Dict[str, Any] = {
-      "pipetteId": pipette_id,
-      "coordinates": {"x": x, "y": y, "z": z},
-    }
-    if minimum_z_height is not None:
-      params["minimumZHeight"] = minimum_z_height
-    if speed is not None:
-      params["speed"] = speed
-    return await self.execute_command("moveToCoordinates", params)
+    return await self._execute_command("home", {})
 
   async def _discover_pipette(self) -> PipetteInfo:
     data = await self._get_instruments()
