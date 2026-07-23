@@ -214,7 +214,7 @@ class OpentronsRobot(abc.ABC):
       elif status == "failed":
         error = cmd_data.get("error", {})
         raise RuntimeError(
-          f"Opentrons command '{command_type}' failed: " f"{error.get('detail', error)}"
+          f"Opentrons command '{command_type}' failed: {error.get('detail', error)}"
         )
       await asyncio.sleep(0.2)
 
