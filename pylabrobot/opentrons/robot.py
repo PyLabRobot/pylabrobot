@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, cast
 
 try:
   import httpx
+
   _HAS_HTTPX = True
 except ImportError:
   _HAS_HTTPX = False
@@ -86,8 +87,11 @@ class OpentronsRobot(abc.ABC):
     robot_name = health.get("name", "unknown")
     logger.info(
       "Connected to robot '%s' at %s:%s (API %s, model: %s)",
-      robot_name, self.host, self.port,
-      self.api_version, self.robot_model,
+      robot_name,
+      self.host,
+      self.port,
+      self.api_version,
+      self.robot_model,
     )
 
   async def _disconnect(self) -> None:
@@ -206,14 +210,11 @@ class OpentronsRobot(abc.ABC):
       elif status == "failed":
         error = cmd_data.get("error", {})
         raise RuntimeError(
-          f"Opentrons command '{command_type}' failed: "
-          f"{error.get('detail', error)}"
+          f"Opentrons command '{command_type}' failed: " f"{error.get('detail', error)}"
         )
       await asyncio.sleep(0.2)
 
-    raise RuntimeError(
-      f"Opentrons command '{command_type}' timed out after {timeout}s"
-    )
+    raise RuntimeError(f"Opentrons command '{command_type}' timed out after {timeout}s")
 
   # --- Instrument Discovery ---
 
@@ -278,7 +279,9 @@ class OpentronsRobot(abc.ABC):
     pipette_id: str = result.get("result", {}).get("pipetteId", "")
     logger.info(
       "Loaded pipette %s on %s mount -> ID: %s",
-      pipette_name, mount, pipette_id,
+      pipette_name,
+      mount,
+      pipette_id,
     )
     return pipette_id
 

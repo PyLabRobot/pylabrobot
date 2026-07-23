@@ -58,9 +58,9 @@ class OpentronsFlex(OpentronsRobot):
   def _require_itemized_parent(item: Resource) -> ItemizedResource:
     """Return ``item.parent``, asserted to be an addressable-by-name container."""
     parent = item.parent
-    assert isinstance(parent, ItemizedResource), (
-      f"'{item.name}' has no itemized parent resource (rack/plate)."
-    )
+    assert isinstance(
+      parent, ItemizedResource
+    ), f"'{item.name}' has no itemized parent resource (rack/plate)."
     return parent
 
   async def pick_up_tips(
@@ -81,7 +81,10 @@ class OpentronsFlex(OpentronsRobot):
     }
     if offsets is not None and offsets[0] is not None:
       offset = offsets[0]
-      params["wellLocation"] = {"origin": "top", "offset": {"x": offset.x, "y": offset.y, "z": offset.z}}
+      params["wellLocation"] = {
+        "origin": "top",
+        "offset": {"x": offset.x, "y": offset.y, "z": offset.z},
+      }
     await self.execute_command("pickUpTip", params)
     for ch, spot in zip(use_channels, tip_spots):
       tip = spot.get_tip()
@@ -99,11 +102,14 @@ class OpentronsFlex(OpentronsRobot):
     pipette = self._require_pipette()
     target = tip_spots[0]
     if isinstance(target, Trash) or isinstance(target.parent, Trash):
-      await self.execute_command("moveToAddressableAreaForDropTip", {
-        "pipetteId": pipette.pipette_id,
-        "addressableAreaName": "movableTrashA3",
-        "alternateDropLocation": True,
-      })
+      await self.execute_command(
+        "moveToAddressableAreaForDropTip",
+        {
+          "pipetteId": pipette.pipette_id,
+          "addressableAreaName": "movableTrashA3",
+          "alternateDropLocation": True,
+        },
+      )
       await self.execute_command("dropTipInPlace", {"pipetteId": pipette.pipette_id})
     else:
       rack = self._require_itemized_parent(target)
@@ -116,7 +122,10 @@ class OpentronsFlex(OpentronsRobot):
       }
       if offsets is not None and offsets[0] is not None:
         offset = offsets[0]
-        params["wellLocation"] = {"origin": "top", "offset": {"x": offset.x, "y": offset.y, "z": offset.z}}
+        params["wellLocation"] = {
+          "origin": "top",
+          "offset": {"x": offset.x, "y": offset.y, "z": offset.z},
+        }
       await self.execute_command("dropTip", params)
     for ch, spot in zip(use_channels, tip_spots):
       tip = self._channel_tips[ch]
@@ -224,20 +233,26 @@ class OpentronsFlex(OpentronsRobot):
     load_name = self._ot_load_name(resource)
     labware_id = uuid.uuid4().hex[:12]
 
-    result = await self.execute_command("loadLabware", {
-      "loadName": load_name,
-      "location": {"slotName": slot},
-      "namespace": _OT_NAMESPACE,
-      "version": _OT_VERSION,
-      "labwareId": labware_id,
-      "displayName": name,
-    })
+    result = await self.execute_command(
+      "loadLabware",
+      {
+        "loadName": load_name,
+        "location": {"slotName": slot},
+        "namespace": _OT_NAMESPACE,
+        "version": _OT_VERSION,
+        "labwareId": labware_id,
+        "displayName": name,
+      },
+    )
     labware_id = cast(str, result.get("result", {}).get("labwareId", labware_id))
 
     self._loaded_labware[name] = labware_id
     logger.info(
       "Loaded labware '%s' at slot %s -> ID: %s (OT: %s)",
-      name, slot, labware_id, load_name,
+      name,
+      slot,
+      labware_id,
+      load_name,
     )
     return labware_id
 
