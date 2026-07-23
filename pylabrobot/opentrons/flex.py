@@ -1,15 +1,20 @@
 import logging
 import uuid
-from typing import List, Optional
+from typing import List, Literal, Optional, Sequence
 
 from pylabrobot.opentrons.robot import OpentronsError, OpentronsRobot
-from pylabrobot.resources import Coordinate, TipSpot, Trash
+from pylabrobot.resources import Container, Coordinate, TipSpot, Trash
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 
 logger = logging.getLogger(__name__)
 
 _OT_NAMESPACE = "opentrons"
 _OT_VERSION = 1
+
+# Flex-managed positioning flow-rate defaults (uL/s), copied verbatim from
+# titronic plr_v4/flex/head8_backend.py.
+_DEFAULT_ASPIRATE_FLOW_RATE = 35.0
+_DEFAULT_DISPENSE_FLOW_RATE = 57.0
 
 _TIP_RACK_MAP = {
   "flex_96_tiprack_50ul": "opentrons_flex_96_tiprack_50ul",
@@ -97,6 +102,86 @@ class OpentronsFlex(OpentronsRobot):
         spot.tracker.add_tip(tip)
         spot.tracker.commit()
       self._channel_tips[ch] = None
+
+  async def aspirate(
+    self,
+    resources: Sequence[Container],
+    vols: List[float],
+    use_channels: Optional[List[int]] = None,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
+    spread: Literal["wide", "tight", "custom"] = "wide",
+  ) -> None:
+    labware_id = await self._ensure_labware_loaded(resources[0].parent)
+    well_name = resources[0].parent.get_child_identifier(resources[0])
+    flow_rate = (flow_rates[0] if flow_rates else None) or _DEFAULT_ASPIRATE_FLOW_RATE
+    params = {
+      "pipetteId": self.pipette.pipette_id,
+      "labwareId": labware_id,
+      "wellName": well_name,
+      "volume": vols[0],
+      "flowRate": flow_rate,
+    }
+    well_location = self._well_location(offsets, liquid_height)
+    if well_location is not None:
+      params["wellLocation"] = well_location
+    await self.execute_command("aspirate", params)
+    for well, vol in zip(resources, vols):
+      well.tracker.remove_liquid(vol)
+      well.tracker.commit()
+
+  async def dispense(
+    self,
+    resources: Sequence[Container],
+    vols: List[float],
+    use_channels: Optional[List[int]] = None,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
+    spread: Literal["wide", "tight", "custom"] = "wide",
+  ) -> None:
+    labware_id = await self._ensure_labware_loaded(resources[0].parent)
+    well_name = resources[0].parent.get_child_identifier(resources[0])
+    flow_rate = (flow_rates[0] if flow_rates else None) or _DEFAULT_DISPENSE_FLOW_RATE
+    params = {
+      "pipetteId": self.pipette.pipette_id,
+      "labwareId": labware_id,
+      "wellName": well_name,
+      "volume": vols[0],
+      "flowRate": flow_rate,
+    }
+    well_location = self._well_location(offsets, liquid_height)
+    if well_location is not None:
+      params["wellLocation"] = well_location
+    await self.execute_command("dispense", params)
+    for well, vol in zip(resources, vols):
+      well.tracker.add_liquid(vol)
+      well.tracker.commit()
+
+  @staticmethod
+  def _well_location(
+    offsets: Optional[List[Optional[Coordinate]]],
+    liquid_height: Optional[List[Optional[float]]],
+  ) -> Optional[dict]:
+    """Build the Flex ``wellLocation`` param from an offset and/or liquid height.
+
+    Mirrors titronic ``head8_backend._aspirate_flex``/``_dispense_flex``, which sets
+    ``offset.z`` from ``liquid_height`` (origin "bottom" per ``FlexDriver.aspirate``/
+    ``dispense``); extended here to also honor an explicit x/y/z offset.
+    """
+    offset = None
+    if offsets is not None and offsets[0] is not None:
+      o = offsets[0]
+      offset = {"x": o.x, "y": o.y, "z": o.z}
+    if liquid_height is not None and liquid_height[0] is not None:
+      offset = offset or {"x": 0, "y": 0, "z": 0}
+      offset["z"] += liquid_height[0]
+    if offset is None:
+      return None
+    return {"origin": "bottom", "offset": offset}
 
   async def _ensure_labware_loaded(self, resource) -> str:
     """Load labware into the Flex run if not already loaded."""
