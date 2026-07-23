@@ -3080,7 +3080,10 @@ class XArm extends Resource {
         fill: "rgba(64, 64, 64, 0.5)",
         stroke: "rgba(64, 64, 64, 0.3)",
         strokeWidth: 3,
-        listening: false,
+        // The solid frame occludes what is under it, so it captures clicks; its hit region
+        // follows the fill above, which excludes the punched hole, so resources seen through
+        // the hole stay clickable. (The reference line stays non-listening.)
+        listening: true,
       })
     );
     return g;
