@@ -18,7 +18,6 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
-
 # --- Standard 96-well positions (9mm pitch, from Opentrons JSON) ---
 
 # A1 at (14.38, 74.38), rows go down in Y, columns go right in X.
