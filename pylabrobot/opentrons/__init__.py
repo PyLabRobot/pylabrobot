@@ -5,3 +5,5 @@ from .temperature_module import (
   OpentronsTemperatureModuleUSBTemperatureBackend,
   OpentronsTemperatureModuleV2,
 )
+from pylabrobot.opentrons.robot import OpentronsError, OpentronsRobot, PipetteInfo
+from pylabrobot.opentrons.flex import OpentronsFlex
