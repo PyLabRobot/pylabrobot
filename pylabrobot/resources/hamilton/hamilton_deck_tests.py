@@ -1,7 +1,7 @@
 import textwrap
 import unittest
 
-from pylabrobot.resources import TipRack
+from pylabrobot.resources import Coordinate, Resource, TipRack
 from pylabrobot.resources.corning import (
   cor_96_wellplate_360uL_Fb,
 )
@@ -108,3 +108,29 @@ class HamiltonDeckTests(unittest.TestCase):
         "careful when grabbing this resource.",
       ],
     )
+
+  def test_resource_above_deck_plane_does_not_block(self):
+    """A resource whose z-box sits entirely above another (e.g. the X-arm gantry over a
+    carrier) does not occupy its footprint, so placement beneath it is allowed."""
+    deck = STARLetDeck()
+    low = Resource(name="low", size_x=100, size_y=100, size_z=50)
+    high = Resource(name="high", size_x=100, size_y=100, size_z=50)
+    deck.assign_child_resource(low, location=Coordinate(300, 100, 100))
+    deck.assign_child_resource(high, location=Coordinate(300, 100, 200))  # z-box [200,250] > low
+    self.assertIn("high", {c.name for c in deck.children})
+
+  def test_same_footprint_overlapping_z_raises(self):
+    deck = STARLetDeck()
+    a = Resource(name="a", size_x=100, size_y=100, size_z=100)
+    b = Resource(name="b", size_x=100, size_y=100, size_z=100)
+    deck.assign_child_resource(a, location=Coordinate(300, 100, 100))  # z-box [100,200]
+    with self.assertRaises(ValueError):
+      deck.assign_child_resource(b, location=Coordinate(300, 100, 150))  # z-box [150,250] overlaps
+
+  def test_flush_z_faces_do_not_collide(self):
+    deck = STARLetDeck()
+    a = Resource(name="a", size_x=100, size_y=100, size_z=50)
+    b = Resource(name="b", size_x=100, size_y=100, size_z=50)
+    deck.assign_child_resource(a, location=Coordinate(300, 100, 100))  # top at 150
+    deck.assign_child_resource(b, location=Coordinate(300, 100, 150))  # rests flush on a
+    self.assertIn("b", {c.name for c in deck.children})

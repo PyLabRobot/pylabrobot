@@ -80,10 +80,23 @@ function setState(allStates) {
   }
 }
 
+// The X-arm is physically the highest resource on the deck, so its translucent frame
+// should overlay the labware it spans. 2D draw order is scene-graph order, not z, so a
+// resource added after the arm lands on top of it; re-float the arm after any event that
+// adds resources to keep it drawn above them.
+function raiseXArmsToTop() {
+  for (const r of Object.values(resources)) {
+    if (r && r.category === "x_arm" && r.group) {
+      r.group.moveToTop();
+    }
+  }
+}
+
 async function processCentralEvent(event, data) {
   switch (event) {
     case "set_root_resource":
       setRootResource(data);
+      raiseXArmsToTop();
       break;
 
     case "resource_assigned":
@@ -94,6 +107,7 @@ async function processCentralEvent(event, data) {
       addResourceToTree(resource);
       // Cache the newly-assigned plate/tip rack (or the owner it landed in).
       cacheResourceGroup(getCacheOwner(resource));
+      raiseXArmsToTop();
       break;
 
     case "resource_unassigned":

@@ -12,11 +12,19 @@ from pylabrobot.resources.hamilton.tip_creators import hamilton_teaching_needle_
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.trash import Trash
+from pylabrobot.resources.x_arm import XArm
 
 logger = logging.getLogger("pylabrobot")
 
 
 _RAILS_WIDTH = 22.5  # space between rails (mm)
+
+# The deck-owned X-arm resource spans the deck height; z places it above the deck.
+# The X-arm rides at the channel stop-disk safe Z (matches
+# STARBackend.MAXIMUM_CHANNEL_Z_POSITION): the arm is level with the raised stop disks so it
+# clears them during X travel. Kept as a literal to avoid a resources -> backend import.
+_X_ARM_Z = 334.7
+_X_ARM_SIZE_Z = 140.0
 
 STARLET_NUM_RAILS = 32
 STARLET_SIZE_X = 1005
@@ -188,24 +196,32 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         for og_resource in self.children:
           og_x = cast(Coordinate, og_resource.location).x
           og_y = cast(Coordinate, og_resource.location).y
+          og_z = cast(Coordinate, og_resource.location).z
 
-          # A resource is not allowed to overlap with another resource. Resources overlap when a
-          # corner of one resource is inside the boundaries of another resource.
-          if any(
+          # A resource is not allowed to overlap with another resource. Resources overlap when
+          # their bounding boxes intersect on all three axes. The z axis is included so a resource
+          # above the deck plane (e.g. the X-arm gantry) does not block placement beneath it.
+          x_overlap = any(
             [
               og_x <= resource_location.x < og_x + og_resource.get_absolute_size_x(),
               og_x
               < resource_location.x + resource.get_absolute_size_x()
               < og_x + og_resource.get_absolute_size_x(),
             ]
-          ) and any(
+          )
+          y_overlap = any(
             [
               og_y <= resource_location.y < og_y + og_resource.get_absolute_size_y(),
               og_y
               < resource_location.y + resource.get_absolute_size_y()
               < og_y + og_resource.get_absolute_size_y(),
             ]
-          ):
+          )
+          z_overlap = (
+            og_z < resource_location.z + resource.get_absolute_size_z()
+            and resource_location.z < og_z + og_resource.get_absolute_size_z()
+          )
+          if x_overlap and y_overlap and z_overlap:
             raise ValueError(
               f"Location {resource_location} is already occupied by resource '{og_resource.name}'."
             )
@@ -542,6 +558,47 @@ class HamiltonSTARDeck(HamiltonDeck):
       "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
       "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }
+
+  def get_or_create_x_arm(
+    self,
+    name: str,
+    x: float,
+    width: float,
+    model: str,
+    reference_point: Literal["center", "right"],
+  ) -> XArm:
+    """Get (or create, once) the deck-owned X-arm resource for `name`.
+
+    The X-arm is a full-deck-height :class:`~pylabrobot.resources.x_arm.XArm` that owns
+    an ``XArmTracker``; the Visualizer draws it at the tracker's x. The deck owns it:
+    created as a child the first time and reused thereafter, so repeated ``setup()``
+    calls don't duplicate it. It is seated so its reference point sits at the arm's
+    current x; the tracker then drives the live position and the Visualizer follows it.
+
+    Args:
+      name: unique resource name, e.g. ``"left_x_arm"``.
+      x: the arm's current x (mm); the reference point is seated here.
+      width: arm width in mm (the firmware-reported value).
+      model: the arm variant, e.g. ``"hamilton_legacy_star_dual_rail_arm"``.
+      reference_point: where the tracked x refers to along the width.
+    """
+    if self.has_resource(name):
+      return cast(XArm, self.get_resource(name))
+    x_arm = XArm(
+      name=name,
+      size_x=width,
+      size_y=self.get_size_y(),
+      size_z=_X_ARM_SIZE_Z,
+      reference_point=reference_point,
+      model=model,
+    )
+    # Seat the frame so its reference point (the arm centre for a dual-rail arm, the right
+    # edge for a single-rail arm) lands at the arm's current x. Distinct per-arm homes keep
+    # the two arms from overlapping, so no collision override is needed; the z-separated,
+    # above-deck box also clears the carriers beneath it.
+    reference_offset = width / 2 if reference_point == "center" else width
+    self.assign_child_resource(x_arm, location=Coordinate(x - reference_offset, 0.0, _X_ARM_Z))
+    return x_arm
 
   def rails_to_location(self, rails: int) -> Coordinate:
     x = 100.0 + (rails - 1) * _RAILS_WIDTH
