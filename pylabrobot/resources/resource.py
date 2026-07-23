@@ -985,7 +985,9 @@ class Resource(SerializableMixin):
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
     if metadata_data is not None:
-      resource.metadata = metadata_data
+      if not isinstance(metadata_data, dict):
+        raise TypeError(f"Expected metadata to be a dict, got {type(metadata_data).__name__}")
+      resource.metadata = metadata_data.copy()
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
       if child_cls is None:

@@ -1,8 +1,9 @@
+import json
 import math
 import re
 import unittest
 import unittest.mock
-from typing import Any
+from typing import Any, Dict
 
 from . import resource as resource_module
 from .barcode import Barcode
@@ -845,6 +846,15 @@ class TestResourceMetadata(unittest.TestCase):
     self.assertEqual(deserialized.metadata, meta)
     self.assertEqual(deserialized, r)
 
+  def test_metadata_json_roundtrip(self):
+    meta = {"type": "reagent", "nested": {"type": "custom_type"}, "count": 42}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized_json = json.dumps(r.serialize())
+    deserialized = Resource.deserialize(json.loads(serialized_json))
+    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized, r)
+    self.assertIsNot(deserialized.metadata, meta)
+
   def test_deserialize_without_metadata_key_is_backward_compatible(self):
     # Resources serialized before metadata existed have no "metadata" key.
     data = Resource("r", size_x=1, size_y=1, size_z=1).serialize()
@@ -852,10 +862,16 @@ class TestResourceMetadata(unittest.TestCase):
     restored = Resource.deserialize(data)
     self.assertEqual(restored.metadata, {})
 
+  def test_deserialize_non_dict_metadata_raises(self):
+    data = Resource("r", size_x=1, size_y=1, size_z=1).serialize()
+    data["metadata"] = ["not", "a", "dict"]
+    with self.assertRaises(TypeError):
+      Resource.deserialize(data)
+
   def test_deserialize_same_named_class_via_module_alias(self):
     # Simulate a class imported under two module paths: find_subclass returns a
     # same-named class that is NOT a subclass of the cls deserialize was called
-    # on. issubclass() is False, but the name-equality fallback accepts it.
+    # on. issubclass() is False, so deserialization is rejected.
     # (Unusual class names avoid polluting the global Resource subclass registry
     # under a common name.)
     class _AliasProbe(Resource):
@@ -953,9 +969,7 @@ class TestResourceMetadata(unittest.TestCase):
     self.assertEqual(
       deck.find_resources(type=(_TypeAlpha, _TypeBeta)), [alpha, beta]
     )  # tuple of classes
-    self.assertEqual(
-      deck.find_resources(type=_TypeBeta.__name__), [beta]
-    )  # class name string
+    self.assertEqual(deck.find_resources(type=_TypeBeta.__name__), [beta])  # class name string
     self.assertEqual(
       deck.find_resources(type=re.compile(r"_TypeA")), [alpha]
     )  # regex on class name
