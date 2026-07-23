@@ -3,7 +3,15 @@ import uuid
 from typing import Any, Dict, List, Literal, Optional, Sequence, cast
 
 from pylabrobot.opentrons.robot import OpentronsError, OpentronsRobot, PipetteInfo
-from pylabrobot.resources import Container, Coordinate, Resource, TipSpot, Trash
+from pylabrobot.resources import (
+  Container,
+  Coordinate,
+  Resource,
+  TipSpot,
+  Trash,
+  does_tip_tracking,
+  does_volume_tracking,
+)
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.tip import Tip
@@ -88,8 +96,9 @@ class OpentronsFlex(OpentronsRobot):
     await self.execute_command("pickUpTip", params)
     for ch, spot in zip(use_channels, tip_spots):
       tip = spot.get_tip()
-      spot.tracker.remove_tip()
-      spot.tracker.commit()
+      if does_tip_tracking():
+        spot.tracker.remove_tip()
+        spot.tracker.commit()
       self._channel_tips[ch] = tip
 
   async def drop_tips(
@@ -129,7 +138,12 @@ class OpentronsFlex(OpentronsRobot):
       await self.execute_command("dropTip", params)
     for ch, spot in zip(use_channels, tip_spots):
       tip = self._channel_tips[ch]
-      if tip is not None and not isinstance(spot, Trash) and not isinstance(spot.parent, Trash):
+      if (
+        does_tip_tracking()
+        and tip is not None
+        and not isinstance(spot, Trash)
+        and not isinstance(spot.parent, Trash)
+      ):
         spot.tracker.add_tip(tip)
         spot.tracker.commit()
       self._channel_tips[ch] = None
@@ -161,9 +175,10 @@ class OpentronsFlex(OpentronsRobot):
     if well_location is not None:
       params["wellLocation"] = well_location
     await self.execute_command("aspirate", params)
-    for well, vol in zip(resources, vols):
-      well.tracker.remove_liquid(vol)
-      well.tracker.commit()
+    if does_volume_tracking():
+      for well, vol in zip(resources, vols):
+        well.tracker.remove_liquid(vol)
+        well.tracker.commit()
 
   async def dispense(
     self,
@@ -192,9 +207,10 @@ class OpentronsFlex(OpentronsRobot):
     if well_location is not None:
       params["wellLocation"] = well_location
     await self.execute_command("dispense", params)
-    for well, vol in zip(resources, vols):
-      well.tracker.add_liquid(vol)
-      well.tracker.commit()
+    if does_volume_tracking():
+      for well, vol in zip(resources, vols):
+        well.tracker.add_liquid(vol)
+        well.tracker.commit()
 
   @staticmethod
   def _well_location(
