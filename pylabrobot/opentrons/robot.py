@@ -3,7 +3,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 try:
   import httpx
@@ -103,21 +103,21 @@ class OpentronsRobot(abc.ABC):
     assert self._client is not None, "Not connected. Call connect() first."
     response = await self._client.get(path)
     response.raise_for_status()
-    return response.json()
+    return cast(Dict[str, Any], response.json())
 
   async def _post(self, path: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """HTTP POST, return parsed JSON."""
     assert self._client is not None, "Not connected. Call connect() first."
     response = await self._client.post(path, json=data or {})
     response.raise_for_status()
-    return response.json()
+    return cast(Dict[str, Any], response.json())
 
   async def _delete(self, path: str) -> Dict[str, Any]:
     """HTTP DELETE, return parsed JSON."""
     assert self._client is not None, "Not connected. Call connect() first."
     response = await self._client.delete(path)
     response.raise_for_status()
-    return response.json()
+    return cast(Dict[str, Any], response.json())
 
   # --- Run Management ---
 
@@ -128,9 +128,10 @@ class OpentronsRobot(abc.ABC):
     interactively, which is how PLR controls the robot.
     """
     result = await self._post("/runs", {"data": {}})
-    self.run_id = result["data"]["id"]
+    run_id = cast(str, result["data"]["id"])
+    self.run_id = run_id
     logger.info("Created run %s", self.run_id)
-    return self.run_id
+    return run_id
 
   async def _cancel_run(self) -> None:
     """Cancel the current run. Safe to call if no run is active."""
@@ -185,7 +186,7 @@ class OpentronsRobot(abc.ABC):
       }
     }
     result = await self._post(f"/runs/{self.run_id}/commands", payload)
-    cmd_data = result.get("data", {})
+    cmd_data: Dict[str, Any] = result.get("data", {})
 
     if not wait:
       return cmd_data
@@ -258,7 +259,7 @@ class OpentronsRobot(abc.ABC):
     hardware (magnetic block, waste chute) is not discoverable.
     """
     data = await self._get("/modules")
-    return data.get("data", [])
+    return cast(List[Dict[str, Any]], data.get("data", []))
 
   # --- Pipette Loading ---
 
@@ -274,7 +275,7 @@ class OpentronsRobot(abc.ABC):
       {"pipetteName": pipette_name, "mount": mount},
       wait=True,
     )
-    pipette_id = result.get("result", {}).get("pipetteId", "")
+    pipette_id: str = result.get("result", {}).get("pipetteId", "")
     logger.info(
       "Loaded pipette %s on %s mount -> ID: %s",
       pipette_name, mount, pipette_id,

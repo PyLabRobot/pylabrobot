@@ -1,10 +1,12 @@
 import logging
 import uuid
-from typing import List, Literal, Optional, Sequence
+from typing import Any, Dict, List, Literal, Optional, Sequence, cast
 
-from pylabrobot.opentrons.robot import OpentronsError, OpentronsRobot
-from pylabrobot.resources import Container, Coordinate, TipSpot, Trash
+from pylabrobot.opentrons.robot import OpentronsError, OpentronsRobot, PipetteInfo
+from pylabrobot.resources import Container, Coordinate, Resource, TipSpot, Trash
+from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
+from pylabrobot.resources.tip import Tip
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +40,28 @@ class OpentronsFlex(OpentronsRobot):
   def __init__(self, deck: FlexDeck, host: str, port: int = 31950) -> None:
     super().__init__(host=host, port=port)
     self.deck = deck
-    self._loaded_labware: dict = {}
-    self._channel_tips: List[Optional[object]] = [None] * 8
+    self._loaded_labware: Dict[str, str] = {}
+    self._channel_tips: List[Optional[Tip]] = [None] * 8
 
   async def _model_setup(self) -> None:
     await self.home()
+
+  def _require_pipette(self) -> PipetteInfo:
+    """Return ``self.pipette``, narrowed to non-``None`` for mypy and callers.
+
+    Raises if ``setup()`` (which discovers and loads the pipette) hasn't run.
+    """
+    assert self.pipette is not None, "No pipette loaded. Call setup() first."
+    return self.pipette
+
+  @staticmethod
+  def _require_itemized_parent(item: Resource) -> ItemizedResource:
+    """Return ``item.parent``, asserted to be an addressable-by-name container."""
+    parent = item.parent
+    assert isinstance(parent, ItemizedResource), (
+      f"'{item.name}' has no itemized parent resource (rack/plate)."
+    )
+    return parent
 
   async def pick_up_tips(
     self,
@@ -51,10 +70,12 @@ class OpentronsFlex(OpentronsRobot):
     offsets: Optional[List[Coordinate]] = None,
   ) -> None:
     use_channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
-    labware_id = await self._ensure_labware_loaded(tip_spots[0].parent)
-    well_name = tip_spots[0].parent.get_child_identifier(tip_spots[0])
-    params = {
-      "pipetteId": self.pipette.pipette_id,
+    pipette = self._require_pipette()
+    rack = self._require_itemized_parent(tip_spots[0])
+    labware_id = await self._ensure_labware_loaded(rack)
+    well_name = rack.get_child_identifier(tip_spots[0])
+    params: Dict[str, Any] = {
+      "pipetteId": pipette.pipette_id,
       "labwareId": labware_id,
       "wellName": well_name,
     }
@@ -75,19 +96,21 @@ class OpentronsFlex(OpentronsRobot):
     offsets: Optional[List[Coordinate]] = None,
   ) -> None:
     use_channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
+    pipette = self._require_pipette()
     target = tip_spots[0]
     if isinstance(target, Trash) or isinstance(target.parent, Trash):
       await self.execute_command("moveToAddressableAreaForDropTip", {
-        "pipetteId": self.pipette.pipette_id,
+        "pipetteId": pipette.pipette_id,
         "addressableAreaName": "movableTrashA3",
         "alternateDropLocation": True,
       })
-      await self.execute_command("dropTipInPlace", {"pipetteId": self.pipette.pipette_id})
+      await self.execute_command("dropTipInPlace", {"pipetteId": pipette.pipette_id})
     else:
-      labware_id = await self._ensure_labware_loaded(target.parent)
-      well_name = target.parent.get_child_identifier(target)
-      params = {
-        "pipetteId": self.pipette.pipette_id,
+      rack = self._require_itemized_parent(target)
+      labware_id = await self._ensure_labware_loaded(rack)
+      well_name = rack.get_child_identifier(target)
+      params: Dict[str, Any] = {
+        "pipetteId": pipette.pipette_id,
         "labwareId": labware_id,
         "wellName": well_name,
       }
@@ -113,11 +136,13 @@ class OpentronsFlex(OpentronsRobot):
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
   ) -> None:
-    labware_id = await self._ensure_labware_loaded(resources[0].parent)
-    well_name = resources[0].parent.get_child_identifier(resources[0])
+    pipette = self._require_pipette()
+    parent = self._require_itemized_parent(resources[0])
+    labware_id = await self._ensure_labware_loaded(parent)
+    well_name = parent.get_child_identifier(resources[0])
     flow_rate = (flow_rates[0] if flow_rates else None) or _DEFAULT_ASPIRATE_FLOW_RATE
-    params = {
-      "pipetteId": self.pipette.pipette_id,
+    params: Dict[str, Any] = {
+      "pipetteId": pipette.pipette_id,
       "labwareId": labware_id,
       "wellName": well_name,
       "volume": vols[0],
@@ -142,11 +167,13 @@ class OpentronsFlex(OpentronsRobot):
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
   ) -> None:
-    labware_id = await self._ensure_labware_loaded(resources[0].parent)
-    well_name = resources[0].parent.get_child_identifier(resources[0])
+    pipette = self._require_pipette()
+    parent = self._require_itemized_parent(resources[0])
+    labware_id = await self._ensure_labware_loaded(parent)
+    well_name = parent.get_child_identifier(resources[0])
     flow_rate = (flow_rates[0] if flow_rates else None) or _DEFAULT_DISPENSE_FLOW_RATE
-    params = {
-      "pipetteId": self.pipette.pipette_id,
+    params: Dict[str, Any] = {
+      "pipetteId": pipette.pipette_id,
       "labwareId": labware_id,
       "wellName": well_name,
       "volume": vols[0],
@@ -181,7 +208,7 @@ class OpentronsFlex(OpentronsRobot):
       return None
     return {"origin": "bottom", "offset": offset}
 
-  async def _ensure_labware_loaded(self, resource) -> str:
+  async def _ensure_labware_loaded(self, resource: Resource) -> str:
     """Load labware into the Flex run if not already loaded."""
     name = getattr(resource, "name", str(resource))
     if name in self._loaded_labware:
@@ -205,7 +232,7 @@ class OpentronsFlex(OpentronsRobot):
       "labwareId": labware_id,
       "displayName": name,
     })
-    labware_id = result.get("result", {}).get("labwareId", labware_id)
+    labware_id = cast(str, result.get("result", {}).get("labwareId", labware_id))
 
     self._loaded_labware[name] = labware_id
     logger.info(
@@ -215,10 +242,10 @@ class OpentronsFlex(OpentronsRobot):
     return labware_id
 
   @staticmethod
-  def _ot_load_name(resource) -> str:
+  def _ot_load_name(resource: Resource) -> str:
     """Resolve a PLR resource to its Opentrons labware load name."""
     if hasattr(resource, "ot_load_name"):
-      return resource.ot_load_name
+      return cast(str, resource.ot_load_name)
 
     name_lower = getattr(resource, "name", "").lower()
 
