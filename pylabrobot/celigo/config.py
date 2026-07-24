@@ -11,13 +11,15 @@ This module mirrors that schema as nested dataclasses. Two ways to obtain a conf
 * Construct :class:`CeligoHardwareConfig` (and its members) directly — for users who
   want to specify everything in code, or override individual values after loading.
 
-The backend accepts ``config: Optional[CeligoHardwareConfig]`` and falls back to
+The :class:`~pylabrobot.celigo.Celigo` class accepts
+``config: Optional[CeligoHardwareConfig]`` and falls back to
 :meth:`~CeligoHardwareConfig.from_install` when ``None`` is given.
 """
 
 from __future__ import annotations
 
 import os
+import math
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, fields
 from typing import Any, ClassVar, Dict, List, Optional, TypeVar
@@ -35,7 +37,10 @@ def _coerce(text: Optional[str], typ: type) -> Any:
     return None
   text = text.strip()
   if typ is bool:
-    return text.lower() == "true"
+    normalized = text.lower()
+    if normalized not in ("true", "false"):
+      raise ValueError(f"Invalid boolean value {text!r}")
+    return normalized == "true"
   if typ is int:
     # tolerate values written as floats ("256.0")
     return int(float(text)) if text else 0
@@ -236,6 +241,51 @@ class GalvoConfig(_FromXmlMixin):
   }
 
 
+@dataclass(frozen=True)
+class GalvoMagnificationCalibration:
+  """Imaging center and frame span for one objective magnification."""
+
+  center_voltage: float
+  frame_size_volts: float
+
+
+@dataclass(frozen=True)
+class GalvoAxisOpticalCalibration:
+  """Optical-center calibration for one galvo axis from LEAP calibration XML."""
+
+  magnifications: Dict[int, GalvoMagnificationCalibration]
+  logical_filter_offsets: Dict[int, float]
+  laser_center_voltage: float = 0.0
+  uv_laser_center_voltage: float = 0.0
+
+
+@dataclass(frozen=True)
+class GalvoOpticalCalibration:
+  """X/Y imaging-center calibration from ``leaphardwarecalibration.config``."""
+
+  x: GalvoAxisOpticalCalibration
+  y: GalvoAxisOpticalCalibration
+  source_path: Optional[str] = None
+
+
+@dataclass
+class ExternalCameraControlConfig(_FromXmlMixin):
+  """Camera trigger/status-line configuration from ``ExternalCameraControl``."""
+
+  config_version: int = 0
+  enabled: bool = False
+  invert_busy: bool = False
+  invert_integration: bool = False
+  extra: Dict[str, str] = field(default_factory=dict)
+
+  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
+    "ConfigVersion": ("config_version", int),
+    "Enabled": ("enabled", bool),
+    "InvertBusy": ("invert_busy", bool),
+    "InvertIntegration": ("invert_integration", bool),
+  }
+
+
 @dataclass
 class FilterMapEntry(_FromXmlMixin):
   """One physical<->logical filter position mapping (``FilterMap``)."""
@@ -251,19 +301,14 @@ class FilterMapEntry(_FromXmlMixin):
 
 
 @dataclass
-class FilterWheelConfig(_FromXmlMixin):
+class FilterWheelConfig(AxisConfig):
   """A discrete rotary filter wheel (``DichroicFilterWheel`` and friends)."""
 
-  motion_name: str = ""
-  config_version: int = 0
   number_of_filters: int = 0
-  number_of_encoder_tick_per_rev: int = 0
   filter_map: List[FilterMapEntry] = field(default_factory=list)
-  extra: Dict[str, str] = field(default_factory=dict)
 
   _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "MotionName": ("motion_name", str),
-    "ConfigVersion": ("config_version", int),
+    **AxisConfig._FIELD_MAP,
     "NumberOfFilters": ("number_of_filters", int),
     "NumberOfEncoderTickPerRev": ("number_of_encoder_tick_per_rev", int),
   }
@@ -337,7 +382,7 @@ class CeligoHardwareConfig:
   """Root hardware config, parsed from ``USBIOHardwareConfig.config``.
 
   Either load it from the Celigo install (:meth:`from_install` / :meth:`from_xml`) or
-  build it directly in code and pass it to the backend.
+  build it directly in code and pass it to :class:`~pylabrobot.celigo.Celigo`.
   """
 
   x_axis: Optional[AxisConfig] = None
@@ -345,7 +390,16 @@ class CeligoHardwareConfig:
   z_axis: Optional[AxisConfig] = None
   x_galvo: Optional[GalvoConfig] = None
   y_galvo: Optional[GalvoConfig] = None
+  external_camera_control: Optional[ExternalCameraControlConfig] = None
+  beam_expander: Optional[AxisConfig] = None
+  camera_filter_wheel: Optional[FilterWheelConfig] = None
   dichroic_filter_wheel: Optional[FilterWheelConfig] = None
+  door: Optional[AxisConfig] = None
+  excitation_filter_wheel: Optional[FilterWheelConfig] = None
+  excitation_nd_filter_wheel: Optional[FilterWheelConfig] = None
+  laser_attenuator: Optional[AxisConfig] = None
+  laser_nd_filter_wheel: Optional[FilterWheelConfig] = None
+  magnification_changer: Optional[FilterWheelConfig] = None
   io: Optional[IOConfig] = None
   source_path: Optional[str] = None
 
@@ -390,8 +444,26 @@ class CeligoHardwareConfig:
         cfg.x_galvo = GalvoConfig.from_element(child)
       elif name == "YGalvo":
         cfg.y_galvo = GalvoConfig.from_element(child)
+      elif name == "ExternalCameraControl":
+        cfg.external_camera_control = ExternalCameraControlConfig.from_element(child)
+      elif name == "BeamExpander":
+        cfg.beam_expander = AxisConfig.from_element(child)
+      elif name == "CameraFilterWheel":
+        cfg.camera_filter_wheel = FilterWheelConfig.from_element(child)
       elif name == "DichroicFilterWheel":
         cfg.dichroic_filter_wheel = FilterWheelConfig.from_element(child)
+      elif name == "Door":
+        cfg.door = AxisConfig.from_element(child)
+      elif name == "ExcitationFilterWheel":
+        cfg.excitation_filter_wheel = FilterWheelConfig.from_element(child)
+      elif name == "ExcitationNDFilterWheel":
+        cfg.excitation_nd_filter_wheel = FilterWheelConfig.from_element(child)
+      elif name == "LaserAttenuator":
+        cfg.laser_attenuator = AxisConfig.from_element(child)
+      elif name == "LaserNDFilterWheel":
+        cfg.laser_nd_filter_wheel = FilterWheelConfig.from_element(child)
+      elif name == "MagChanger":
+        cfg.magnification_changer = FilterWheelConfig.from_element(child)
       elif name == "IOConfiguration":
         cfg.io = IOConfig.from_element(child)
     return cfg
@@ -425,18 +497,51 @@ class CeligoHardwareConfig:
     if env:
       roots.append(env)
     for root in roots:
-      # direct file
-      if os.path.isfile(root) and os.path.basename(root) == filename:
-        return root
+      # A direct config path also establishes the directory for companion files.
+      if os.path.isfile(root):
+        if os.path.basename(root).lower() == filename.lower():
+          return root
+        root = os.path.dirname(root)
       # a ConfigFiles dir, or an install root containing one
       direct = os.path.join(root, filename)
       if os.path.isfile(direct):
         return direct
+      if os.path.isdir(root):
+        match = next((name for name in os.listdir(root) if name.lower() == filename.lower()), None)
+        if match is not None:
+          return os.path.join(root, match)
       for sub in cls._CONFIG_SUBDIRS:
         candidate = os.path.join(root, sub, filename)
         if os.path.isfile(candidate):
           return candidate
+        directory = os.path.join(root, sub)
+        if os.path.isdir(directory):
+          match = next(
+            (name for name in os.listdir(directory) if name.lower() == filename.lower()), None
+          )
+          if match is not None:
+            return os.path.join(directory, match)
     return None
+
+  @classmethod
+  def locate_config_file(cls, install_dir: Optional[str], filename: str) -> str:
+    """Locate a named companion file in the same places as the hardware config.
+
+    For example::
+
+      path = CeligoHardwareConfig.locate_config_file(
+        config_root, "HardwareDefaultConfig.xml"
+      )
+
+    ``config_root`` may be ``None`` when ``CELIGO_INSTALL_DIR`` is set.
+    """
+    path = cls._locate_config_file(install_dir, filename)
+    if path is None:
+      raise FileNotFoundError(
+        f"Could not find {filename}. Pass install_dir= pointing at the Celigo install "
+        "root or its ConfigFiles directory, or set CELIGO_INSTALL_DIR."
+      )
+    return path
 
 
 @dataclass
@@ -479,18 +584,178 @@ def load_channels(path: str) -> List[ChannelDescriptor]:
   return channels
 
 
+@dataclass(frozen=True)
+class IlluminationChannelConfig:
+  """Hardware recipe for one image channel from ``leaphardwarecalibration.config``."""
+
+  name: str
+  display_name: str
+  logical_filter: int
+  bit_value: Optional[int]
+  intensity_percent: float
+  lighting_io_name: str
+  strobe: bool
+  z_offset_to_brightfield_mm: float = 0.0
+  mm_per_pixel_x_correction_to_brightfield: float = 1.0
+  mm_per_pixel_y_correction_to_brightfield: float = 1.0
+
+
+def _magnification_voltage_tag(magnification: int) -> str:
+  if magnification not in (3, 5, 10, 20):
+    raise ValueError("magnification must be one of 3, 5, 10, or 20")
+  return f"VoltageMag{magnification}X"
+
+
+def _channel_name(display_name: str) -> str:
+  normalized = display_name.strip().lower().replace("-", " ")
+  if normalized.startswith("brightfield"):
+    return "brightfield"
+  if normalized.startswith("far red"):
+    return "far_red"
+  for name in ("green", "red", "blue"):
+    if normalized.startswith(name):
+      return name
+  return normalized.replace(" ", "_")
+
+
+def load_illumination_channels(
+  path: str, magnification: int = 10
+) -> Dict[str, IlluminationChannelConfig]:
+  """Load brightfield and fluorescence hardware recipes from LEAP calibration XML."""
+  voltage_tag = _magnification_voltage_tag(magnification)
+  root = ET.parse(path).getroot()
+  channels: Dict[str, IlluminationChannelConfig] = {}
+
+  for element in root.iter():
+    element_name = _localname(element.tag)
+    if element_name not in ("BFVoltageCal", "FLLight"):
+      continue
+    scalars = _all_leaf_scalars(element)
+    display_name = "Brightfield" if element_name == "BFVoltageCal" else scalars.get("Name", "")
+    name = _channel_name(display_name)
+    if not name:
+      continue
+    required = {"LogicalFilter", voltage_tag}
+    if element_name == "FLLight":
+      required.update({"Name", "BitValue"})
+    missing = sorted(required - scalars.keys())
+    if missing:
+      raise ValueError(f"Channel {display_name or element_name} is missing {', '.join(missing)}")
+    logical_filter = int(scalars["LogicalFilter"])
+    intensity = float(scalars[voltage_tag])
+    bit_value = None if element_name == "BFVoltageCal" else int(scalars["BitValue"])
+    z_offset = float(scalars.get("CalibratedZOffsetToBFMM", "0"))
+    x_correction = float(scalars.get("CalibratedMMPerPixelXCorrectionToBF", "1"))
+    y_correction = float(scalars.get("CalibratedMMPerPixelYCorrectionToBF", "1"))
+    if logical_filter < 0 or not math.isfinite(intensity) or not 0 <= intensity <= 100:
+      raise ValueError(f"Channel {display_name} has invalid filter/intensity calibration")
+    if bit_value is not None and not 0 <= bit_value <= 3:
+      raise ValueError(f"Channel {display_name} has invalid selector BitValue {bit_value}")
+    if not math.isfinite(z_offset) or any(
+      not math.isfinite(value) or value <= 0 for value in (x_correction, y_correction)
+    ):
+      raise ValueError(f"Channel {display_name} has invalid spatial calibration")
+    channels[name] = IlluminationChannelConfig(
+      name=name,
+      display_name=display_name,
+      logical_filter=logical_filter,
+      bit_value=bit_value,
+      intensity_percent=intensity,
+      lighting_io_name=(
+        "eBrightFieldIntensity" if element_name == "BFVoltageCal" else "eFluorescentIntensity"
+      ),
+      strobe=element_name == "FLLight",
+      z_offset_to_brightfield_mm=z_offset,
+      mm_per_pixel_x_correction_to_brightfield=x_correction,
+      mm_per_pixel_y_correction_to_brightfield=y_correction,
+    )
+  return channels
+
+
+def _load_galvo_axis_optical_calibration(element: ET.Element) -> GalvoAxisOpticalCalibration:
+  magnifications: Dict[int, GalvoMagnificationCalibration] = {}
+  logical_filter_offsets: Dict[int, float] = {}
+  laser_center_voltage = 0.0
+  uv_laser_center_voltage = 0.0
+  for child in element:
+    name = _localname(child.tag)
+    if name.startswith("ImageCenter") and name.endswith("X"):
+      try:
+        magnification = int(name[len("ImageCenter") : -1])
+      except ValueError:
+        continue
+      values = _all_leaf_scalars(child)
+      if "CenterVoltage" not in values or "FrameSizeVolts" not in values:
+        raise ValueError(f"{name} is missing center/frame calibration")
+      magnifications[magnification] = GalvoMagnificationCalibration(
+        center_voltage=float(values["CenterVoltage"]),
+        frame_size_volts=float(values["FrameSizeVolts"]),
+      )
+    elif name == "LogicalFilterCenterVoltageOffset":
+      values = _all_leaf_scalars(child)
+      if "LogicalNumber" in values and "CenterVoltageOffset" in values:
+        logical_filter_offsets[int(values["LogicalNumber"])] = float(values["CenterVoltageOffset"])
+    elif name == "LaserCenterVoltage" and child.text:
+      laser_center_voltage = float(child.text)
+    elif name == "UVLaserCenterVoltage" and child.text:
+      uv_laser_center_voltage = float(child.text)
+  return GalvoAxisOpticalCalibration(
+    magnifications=magnifications,
+    logical_filter_offsets=logical_filter_offsets,
+    laser_center_voltage=laser_center_voltage,
+    uv_laser_center_voltage=uv_laser_center_voltage,
+  )
+
+
+def load_galvo_optical_calibration(path: str) -> GalvoOpticalCalibration:
+  """Load galvo centers, frame spans, and filter offsets from LEAP calibration XML."""
+  root = ET.parse(path).getroot()
+  axes: Dict[str, GalvoAxisOpticalCalibration] = {}
+  for element in root.iter():
+    name = _localname(element.tag)
+    if name in ("XGalvo", "YGalvo"):
+      axes[name] = _load_galvo_axis_optical_calibration(element)
+  missing = [name for name in ("XGalvo", "YGalvo") if name not in axes]
+  if missing:
+    raise ValueError(f"Missing galvo optical calibration section(s): {', '.join(missing)}")
+  for name, axis in axes.items():
+    if not axis.magnifications:
+      raise ValueError(f"{name} has no imaging-center calibration")
+    for magnification, values in axis.magnifications.items():
+      if (
+        not math.isfinite(values.center_voltage)
+        or not math.isfinite(values.frame_size_volts)
+        or values.frame_size_volts <= 0
+      ):
+        raise ValueError(f"{name} {magnification}X calibration is invalid")
+    if any(
+      not math.isfinite(value)
+      for value in (
+        *axis.logical_filter_offsets.values(),
+        axis.laser_center_voltage,
+        axis.uv_laser_center_voltage,
+      )
+    ):
+      raise ValueError(f"{name} contains a non-finite center calibration")
+  return GalvoOpticalCalibration(
+    x=axes["XGalvo"],
+    y=axes["YGalvo"],
+    source_path=os.path.abspath(path),
+  )
+
+
 @dataclass
-class Calibrated2DCubicTransform:
-  """A 2D cubic coordinate transform (``Calibrated2DCubicTranformation``).
+class Calibrated2DPolynomialTransform:
+  """A 2D quadratic or cubic coordinate transform.
 
   Each named polynomial term maps to an ``(x_coeff, y_coeff)`` pair. ``forward`` and
-  ``reverse`` hold the two directions (e.g. position<->galvo volts). The exact way these
-  terms are combined is documented alongside the transforms module; here we just load
-  the coefficients faithfully.
+  ``reverse`` hold the two directions (galvo volts->mm and mm->galvo volts).
   """
 
   forward: Dict[str, "tuple[float, float]"] = field(default_factory=dict)
   reverse: Dict[str, "tuple[float, float]"] = field(default_factory=dict)
+  order: int = 3
+  successful: Optional[bool] = None
   source_path: Optional[str] = None
 
   @staticmethod
@@ -509,21 +774,80 @@ class Calibrated2DCubicTransform:
     return terms
 
   @classmethod
-  def from_xml(cls, path: str) -> "Calibrated2DCubicTransform":
-    root = ET.parse(path).getroot()
-    obj = cls(source_path=os.path.abspath(path))
-    for el in root.iter():
+  def from_element(cls, element: ET.Element) -> "Calibrated2DPolynomialTransform":
+    type_name = _localname(element.tag).lower()
+    obj = cls(order=2 if "quadratic" in type_name else 3)
+    for el in element:
       name = _localname(el.tag)
       if name == "Forward":
         obj.forward = cls._terms(el)
       elif name == "Reverse":
         obj.reverse = cls._terms(el)
+      elif name == "LastGalvoCalSuccessful" and el.text:
+        obj.successful = bool(_coerce(el.text, bool))
+    return obj
+
+  @classmethod
+  def from_xml(cls, path: str) -> "Calibrated2DPolynomialTransform":
+    root = ET.parse(path).getroot()
+    transform = next(
+      (
+        el
+        for el in root.iter()
+        if "transformation" in _localname(el.tag).lower()
+        or "tranformation" in _localname(el.tag).lower()
+      ),
+      root,
+    )
+    obj = cls.from_element(transform)
+    obj.source_path = os.path.abspath(path)
     return obj
 
 
-def load_galvo_calibration(path: str) -> Calibrated2DCubicTransform:
-  """Parse ``GalvoCalibrationConfig.xml`` into a :class:`Calibrated2DCubicTransform`."""
-  return Calibrated2DCubicTransform.from_xml(path)
+@dataclass
+class Calibrated2DCubicTransform(Calibrated2DPolynomialTransform):
+  """Backward-compatible name for a cubic 2D calibration transform."""
+
+  order: int = 3
+
+
+def load_galvo_calibrations(path: str) -> Dict[int, Calibrated2DPolynomialTransform]:
+  """Load every per-logical-filter galvo transform in a calibration file."""
+  root = ET.parse(path).getroot()
+  calibrations: Dict[int, Calibrated2DPolynomialTransform] = {}
+  for setting in root.iter():
+    if _localname(setting.tag) != "setting":
+      continue
+    key = setting.attrib.get("key", "")
+    prefix = "GalvoCalibrationConfig_"
+    if not key.startswith(prefix):
+      continue
+    try:
+      logical_filter = int(key[len(prefix) :])
+    except ValueError:
+      continue
+    transform_el = next(iter(setting), None)
+    if transform_el is None:
+      continue
+    transform = Calibrated2DPolynomialTransform.from_element(transform_el)
+    transform.source_path = os.path.abspath(path)
+    calibrations[logical_filter] = transform
+  return calibrations
+
+
+def load_galvo_calibration(
+  path: str, logical_filter: Optional[int] = None
+) -> Calibrated2DPolynomialTransform:
+  """Load one galvo transform, defaulting to the first configured logical filter."""
+  calibrations = load_galvo_calibrations(path)
+  if not calibrations:
+    return Calibrated2DPolynomialTransform.from_xml(path)
+  if logical_filter is None:
+    logical_filter = min(calibrations)
+  try:
+    return calibrations[logical_filter]
+  except KeyError as exc:
+    raise KeyError(f"No galvo calibration for logical filter {logical_filter}") from exc
 
 
 @dataclass

@@ -2,7 +2,7 @@
 
 Ties the coordinate systems (:mod:`pylabrobot.celigo.coordinates`) and per-axis
 encoder math (:mod:`pylabrobot.celigo.transforms`) together to answer the practical
-questions the backend asks:
+questions the device asks:
 
 * where (in stage mm / encoder ticks) is the center of well ``(row, col)``?
 * within a stage position, what galvo FOV grid covers the scan area?
@@ -29,6 +29,7 @@ from pylabrobot.celigo.config import (
 )
 from pylabrobot.celigo.coordinates import CoordinateSystems
 from pylabrobot.celigo.transforms import mm_to_encoder_ticks
+from pylabrobot.resources.plate import Plate
 
 Vec = Tuple[float, float]
 
@@ -64,7 +65,7 @@ def load_navigation(path: str) -> NavigationConfig:
 
 
 @dataclass(frozen=True)
-class PlateGeometry:
+class _PlateGeometry:
   """SBS microplate geometry, in plate(sample) mm relative to the plate corner.
 
   ``a1_x_mm`` / ``a1_y_mm`` are the A1 well-center offset from the corner the Celigo
@@ -79,43 +80,75 @@ class PlateGeometry:
   pitch_x_mm: float
   pitch_y_mm: float
 
-  def well_center_sample_mm(self, row: int, col: int) -> Vec:
-    """Sample(plate) mm of the center of well ``(row, col)`` (0-indexed)."""
-    if not (0 <= row < self.num_rows and 0 <= col < self.num_cols):
-      raise ValueError(f"Well ({row},{col}) out of range for {self.name}")
-    return (self.a1_x_mm + col * self.pitch_x_mm, self.a1_y_mm + row * self.pitch_y_mm)
-
-  @staticmethod
-  def well_name(row: int, col: int) -> str:
-    return f"{chr(ord('A') + row)}{col + 1}"
-
-  @staticmethod
-  def parse_well(name: str) -> "Tuple[int, int]":
-    name = name.strip().upper()
-    return ord(name[0]) - ord("A"), int(name[1:]) - 1
-
-
-# Standard SBS 96-well (e.g. Corning 3603): A1 center 14.38/11.24 mm from corner, 9 mm pitch.
-CORNING_3603_96 = PlateGeometry(
+# Exact installed NEX Corning 3603 profile values (instance origin + nonzero grid start).
+_CORNING_3603_96 = _PlateGeometry(
   name="Corning 3603 96-well",
   num_rows=8,
   num_cols=12,
-  a1_x_mm=14.38,
-  a1_y_mm=11.24,
-  pitch_x_mm=9.0,
-  pitch_y_mm=9.0,
+  a1_x_mm=14.196530815027272,
+  a1_y_mm=11.113591166551164,
+  pitch_x_mm=9.023312301578526,
+  pitch_y_mm=9.012954100880759,
 )
 
 
-def well_to_stage_mm(plate: PlateGeometry, well: str, coords: CoordinateSystems) -> Vec:
+# The PLR resource describes the nominal physical plate. These small corrections are
+# instrument/profile registration values that belong to the Celigo integration, not in
+# the user's plate definition.
+_CELIGO_GEOMETRY_BY_PLR_MODEL = {
+  "Cor_96_wellplate_360ul_Fb": _CORNING_3603_96,
+}
+
+
+def _well_center_sample_mm(plate: Plate, well: str) -> Vec:
+  """Return a PLR well center in the Celigo's top-left plate coordinate frame."""
+  if not isinstance(plate, Plate):
+    raise TypeError("plate must be a PyLabRobot Plate")
+  try:
+    item = plate.get_well(well.strip().upper())
+  except (IndexError, ValueError) as exc:
+    raise ValueError(f"Well {well!r} does not exist on plate {plate.name!r}") from exc
+  if item.location is None:
+    raise ValueError(f"Well {well!r} on plate {plate.name!r} has no location")
+  sample_x = item.location.x + item.get_size_x() / 2
+  sample_y = plate.get_size_y() - (item.location.y + item.get_size_y() / 2)
+
+  registered = _CELIGO_GEOMETRY_BY_PLR_MODEL.get(plate.model or "")
+  if registered is None:
+    return sample_x, sample_y
+  if (plate.num_items_y, plate.num_items_x) != (registered.num_rows, registered.num_cols):
+    raise ValueError(
+      f"Plate model {plate.model!r} has an unexpected "
+      f"{plate.num_items_y}x{plate.num_items_x} well grid"
+    )
+
+  a1 = plate.get_well("A1")
+  a2 = plate.get_well("A2")
+  b1 = plate.get_well("B1")
+  if a1.location is None or a2.location is None or b1.location is None:
+    raise ValueError(f"Plate model {plate.model!r} has incomplete registration wells")
+  nominal_a1_x = a1.location.x + a1.get_size_x() / 2
+  nominal_a1_y = plate.get_size_y() - (a1.location.y + a1.get_size_y() / 2)
+  nominal_pitch_x = a2.location.x - a1.location.x
+  nominal_pitch_y = a1.location.y - b1.location.y
+  if nominal_pitch_x == 0 or nominal_pitch_y == 0:
+    raise ValueError(f"Plate model {plate.model!r} has invalid well pitch")
+  return (
+    registered.a1_x_mm
+    + (sample_x - nominal_a1_x) * registered.pitch_x_mm / nominal_pitch_x,
+    registered.a1_y_mm
+    + (sample_y - nominal_a1_y) * registered.pitch_y_mm / nominal_pitch_y,
+  )
+
+
+def well_to_stage_mm(plate: Plate, well: str, coords: CoordinateSystems) -> Vec:
   """Stage mm for the center of a named well (e.g. ``"A1"``)."""
-  row, col = plate.parse_well(well)
-  sx, sy = plate.well_center_sample_mm(row, col)
+  sx, sy = _well_center_sample_mm(plate, well)
   return coords.sample_mm_to_stage_mm(sx, sy)
 
 
 def well_to_encoder_ticks(
-  plate: PlateGeometry,
+  plate: Plate,
   well: str,
   coords: CoordinateSystems,
   x_axis: AxisConfig,

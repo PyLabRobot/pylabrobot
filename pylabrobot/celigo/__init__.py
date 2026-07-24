@@ -1,69 +1,88 @@
-"""Native (Windows-free) driver for the Nexcelom/Cyntellect Celigo image cytometer.
+"""Control for the Nexcelom/Cyntellect Celigo image cytometer.
 
-Layers (low -> high):
+The :class:`~pylabrobot.celigo.celigo.Celigo` class drives the instrument's FTDI USB-IO
+controller board: stage/Z/filter motion, drawer open/close, illumination channels
+(brightfield + fluorescence), galvo steering, and the board's digital/analog IO and
+barcode reader.
 
-* :mod:`~pylabrobot.celigo.packets` — FTDI USB-IO wire protocol (framing, opcodes).
-* :mod:`~pylabrobot.celigo.transport` — :class:`FtdiTransport` (pyftdi).
-* :mod:`~pylabrobot.celigo.controller` — :class:`CeligoController` board commands.
-* :mod:`~pylabrobot.celigo.ezstepper` — AllMotion EZStepper motor command strings.
-* :mod:`~pylabrobot.celigo.config` — typed loaders for the ``ConfigFiles`` XML.
-* :mod:`~pylabrobot.celigo.transforms` — encoder-tick and galvo DAC math.
-* :mod:`~pylabrobot.celigo.coordinates` — pixel<->sample-mm<->stage-mm affine frames.
-* :mod:`~pylabrobot.celigo.navigation` — plate/well navigation + galvo FOV grid.
+The :mod:`~pylabrobot.celigo.config`, :mod:`~pylabrobot.celigo.coordinates`,
+:mod:`~pylabrobot.celigo.transforms` and :mod:`~pylabrobot.celigo.navigation` modules hold
+the configuration and plate/well navigation math used by the device.
 """
 
+from pylabrobot.celigo.camera import CameraError, CameraFrame, CeligoCamera
+from pylabrobot.celigo.celigo import (
+  AcquisitionResult,
+  Celigo,
+  CeligoError,
+  ControllerStatus,
+  DiagnosticReport,
+  FocusResult,
+  ShootingStatus,
+)
 from pylabrobot.celigo.config import (
   AxisConfig,
   Calibrated2DCubicTransform,
+  Calibrated2DPolynomialTransform,
   CalibrationConfig,
   CeligoHardwareConfig,
   ChannelDescriptor,
+  ExternalCameraControlConfig,
   GalvoConfig,
+  GalvoAxisOpticalCalibration,
+  GalvoMagnificationCalibration,
+  GalvoOpticalCalibration,
   HardwareDefaultConfig,
+  IlluminationChannelConfig,
   load_calibration,
   load_channels,
   load_galvo_calibration,
+  load_galvo_calibrations,
+  load_galvo_optical_calibration,
   load_hardware_defaults,
-)
-from pylabrobot.celigo.controller import (
-  CeligoController,
-  ControllerStatus,
-  GalvoType,
+  load_illumination_channels,
 )
 from pylabrobot.celigo.coordinates import CoordinateSystems
 from pylabrobot.celigo.navigation import (
-  CORNING_3603_96,
   NavigationConfig,
-  PlateGeometry,
   load_navigation,
   well_to_encoder_ticks,
   well_to_stage_mm,
 )
-from pylabrobot.celigo.packets import IO_CTLR_CMDS, USBIOError
-from pylabrobot.celigo.transport import FtdiTransport
 
 __all__ = [
+  "Celigo",
+  "CeligoError",
+  "AcquisitionResult",
   "AxisConfig",
   "Calibrated2DCubicTransform",
+  "Calibrated2DPolynomialTransform",
   "CalibrationConfig",
-  "CeligoController",
+  "CameraError",
+  "CameraFrame",
+  "CeligoCamera",
   "CeligoHardwareConfig",
   "ChannelDescriptor",
   "ControllerStatus",
   "CoordinateSystems",
-  "CORNING_3603_96",
-  "FtdiTransport",
+  "DiagnosticReport",
+  "ExternalCameraControlConfig",
+  "FocusResult",
   "GalvoConfig",
-  "GalvoType",
+  "GalvoAxisOpticalCalibration",
+  "GalvoMagnificationCalibration",
+  "GalvoOpticalCalibration",
   "HardwareDefaultConfig",
-  "IO_CTLR_CMDS",
+  "IlluminationChannelConfig",
   "NavigationConfig",
-  "PlateGeometry",
-  "USBIOError",
+  "ShootingStatus",
   "load_calibration",
   "load_channels",
   "load_galvo_calibration",
+  "load_galvo_calibrations",
+  "load_galvo_optical_calibration",
   "load_hardware_defaults",
+  "load_illumination_channels",
   "load_navigation",
   "well_to_encoder_ticks",
   "well_to_stage_mm",

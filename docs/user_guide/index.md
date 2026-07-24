@@ -35,6 +35,7 @@ azenta/index
 bmg_labtech/index
 brooks/index
 byonoy/index
+celigo/index
 hamilton/index
 inheco/index
 liconic/index

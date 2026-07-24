@@ -5,28 +5,40 @@ The instrument chains 2D frames:
     image pixels -> sample(plate) mm -> stage mm -> encoder ticks      (stage path)
     galvo mm -> galvo volts -> DAC counts                              (galvo FOV path)
 
-This module currently implements the two config-driven, hardware-facing ends that the
-backend needs first:
+This module implements the config-driven, hardware-facing transforms used by the
+device:
 
 * **encoder ticks <-> stage mm** (per axis), and
 * **galvo mm <-> galvo volts <-> DAC** (per-optical-filter 2D cubic polynomial).
 
-The pixel<->mm and sample<->stage affine frames (rotation + scale + shear) are specified
-in the spec doc and will be added with a ``CalibrationConfig.xml`` loader.
+The pixel<->mm and sample<->stage affine frames (rotation + scale + shear) are provided
+by :mod:`pylabrobot.celigo.coordinates` from ``CalibrationConfig.xml``.
 
-.. note::
-   The galvo calibration's ``Forward`` terms evaluate galvo-volts -> mm
-   (their linear term ~= 1.3 mm/V) and ``Reverse`` terms evaluate
-   mm -> galvo-volts (linear term ~= 1/1.3 V/mm). The Forward/Reverse assignment is
-   unverified.
+The vendor implementation's ``ApplyScale`` path uses ``Forward`` for galvo volts ->
+millimetres, while ``RemoveScale`` uses ``Reverse`` for millimetres -> galvo volts.
 """
 
 from __future__ import annotations
 
 from typing import Dict, Tuple
 
-from pylabrobot.celigo.config import AxisConfig, Calibrated2DCubicTransform
-from pylabrobot.celigo.controller import dac_units_to_volts, volts_to_dac_units
+from pylabrobot.celigo.config import AxisConfig, Calibrated2DPolynomialTransform
+
+# 16-bit galvo DAC: clamp to +/-10 V, map about the midpoint at 3276.75 counts/V.
+_GALVO_DAC_ZERO_VOLTS = 32767.5
+_GALVO_DAC_PER_VOLT = 3276.75
+
+
+def volts_to_dac_units(volts: float) -> int:
+  """16-bit galvo DAC: clamp to +/-10 V then map about the midpoint."""
+  clamped = max(-10.0, min(volts, 10.0))
+  return int(min(65535.0, max(0.0, round(clamped * _GALVO_DAC_PER_VOLT + _GALVO_DAC_ZERO_VOLTS))))
+
+
+def dac_units_to_volts(dac: int) -> float:
+  """Inverse of :func:`volts_to_dac_units`."""
+  return (dac - _GALVO_DAC_ZERO_VOLTS) / _GALVO_DAC_PER_VOLT
+
 
 # term name -> exponents (px, py) of the monomial vx**px * vy**py
 _CUBIC_MONOMIALS: Dict[str, Tuple[int, int]] = {
@@ -43,10 +55,10 @@ _CUBIC_MONOMIALS: Dict[str, Tuple[int, int]] = {
 }
 
 
-def evaluate_cubic_2d(
+def evaluate_polynomial_2d(
   terms: Dict[str, "Tuple[float, float]"], vx: float, vy: float
 ) -> Tuple[float, float]:
-  """Evaluate a 2D cubic polynomial transform at ``(vx, vy)``.
+  """Evaluate a 2D quadratic/cubic polynomial transform at ``(vx, vy)``.
 
   ``terms`` maps each named coefficient (see :data:`_CUBIC_MONOMIALS`) to its
   ``(x_output, y_output)`` contribution. Returns ``(out_x, out_y)``.
@@ -64,22 +76,25 @@ def evaluate_cubic_2d(
   return out_x, out_y
 
 
+evaluate_cubic_2d = evaluate_polynomial_2d
+
+
 def galvo_volts_to_mm(
-  transform: Calibrated2DCubicTransform, x_volts: float, y_volts: float
+  transform: Calibrated2DPolynomialTransform, x_volts: float, y_volts: float
 ) -> Tuple[float, float]:
   """Galvo volts -> deflection mm (``Forward`` polynomial)."""
-  return evaluate_cubic_2d(transform.forward, x_volts, y_volts)
+  return evaluate_polynomial_2d(transform.forward, x_volts, y_volts)
 
 
 def galvo_mm_to_volts(
-  transform: Calibrated2DCubicTransform, x_mm: float, y_mm: float
+  transform: Calibrated2DPolynomialTransform, x_mm: float, y_mm: float
 ) -> Tuple[float, float]:
   """Galvo deflection mm -> volts (``Reverse`` polynomial)."""
-  return evaluate_cubic_2d(transform.reverse, x_mm, y_mm)
+  return evaluate_polynomial_2d(transform.reverse, x_mm, y_mm)
 
 
 def galvo_mm_to_dac(
-  transform: Calibrated2DCubicTransform, x_mm: float, y_mm: float
+  transform: Calibrated2DPolynomialTransform, x_mm: float, y_mm: float
 ) -> Tuple[int, int]:
   """Galvo deflection mm -> (x_dac, y_dac) 16-bit counts ready for ``MOVE_GALVOS``."""
   x_volts, y_volts = galvo_mm_to_volts(transform, x_mm, y_mm)
@@ -87,7 +102,7 @@ def galvo_mm_to_dac(
 
 
 def galvo_dac_to_mm(
-  transform: Calibrated2DCubicTransform, x_dac: int, y_dac: int
+  transform: Calibrated2DPolynomialTransform, x_dac: int, y_dac: int
 ) -> Tuple[float, float]:
   """Inverse of :func:`galvo_mm_to_dac`."""
   return galvo_volts_to_mm(transform, dac_units_to_volts(x_dac), dac_units_to_volts(y_dac))

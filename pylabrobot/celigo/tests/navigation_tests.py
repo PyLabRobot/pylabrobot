@@ -5,15 +5,16 @@ import unittest
 from pylabrobot.celigo.config import AxisConfig, CalibrationConfig, HardwareDefaultConfig
 from pylabrobot.celigo.coordinates import CoordinateSystems
 from pylabrobot.celigo.navigation import (
-  CORNING_3603_96,
   NavigationConfig,
-  PlateGeometry,
   effective_fov_mm,
   fovs_per_for,
   galvo_fov_offsets_mm,
   well_to_encoder_ticks,
   well_to_stage_mm,
 )
+from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.tecan.plates import DeepWell_Greiner_1536_Well
+from pylabrobot.resources.vwr.plates import VWR_1_troughplate_195000uL_Ub
 
 
 def _coords():
@@ -32,52 +33,92 @@ def _coords():
   return calib, hw, CoordinateSystems.from_config(calib, hw)
 
 
-class TestPlateGeometry(unittest.TestCase):
-  def test_well_names_and_parse(self):
-    self.assertEqual(PlateGeometry.well_name(0, 0), "A1")
-    self.assertEqual(PlateGeometry.well_name(7, 11), "H12")
-    self.assertEqual(PlateGeometry.parse_well("H12"), (7, 11))
+class TestPlateNavigation(unittest.TestCase):
+  def test_plr_corning_3603_uses_internal_celigo_registration(self):
+    _, _, cs = _coords()
+    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    a1 = well_to_stage_mm(plate, "A1", cs)
+    a2 = well_to_stage_mm(plate, "A2", cs)
+    b1 = well_to_stage_mm(plate, "B1", cs)
+    self.assertAlmostEqual(a1[0], 16.355530815027272)
+    self.assertAlmostEqual(a1[1], 14.605591166551164)
+    self.assertAlmostEqual(a2[0] - a1[0], 9.023312301578526)
+    self.assertAlmostEqual(b1[1] - a1[1], 9.012954100880759)
 
-  def test_well_center_pitch(self):
-    a1 = CORNING_3603_96.well_center_sample_mm(0, 0)
-    a2 = CORNING_3603_96.well_center_sample_mm(0, 1)
-    b1 = CORNING_3603_96.well_center_sample_mm(1, 0)
-    self.assertAlmostEqual(a2[0] - a1[0], 9.0)  # column pitch
-    self.assertAlmostEqual(b1[1] - a1[1], 9.0)  # row pitch
+  def test_unregistered_plr_plate_uses_nominal_well_geometry(self):
+    _, _, cs = _coords()
+    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    plate.model = "unregistered_test_plate"
+    a1 = well_to_stage_mm(plate, "A1", cs)
+    a2 = well_to_stage_mm(plate, "A2", cs)
+    b1 = well_to_stage_mm(plate, "B1", cs)
+    self.assertAlmostEqual(a1[0], 16.459)
+    self.assertAlmostEqual(a1[1], 14.772)
+    self.assertAlmostEqual(a2[0] - a1[0], 9.0)
+    self.assertAlmostEqual(b1[1] - a1[1], 9.0)
 
   def test_out_of_range(self):
+    _, _, cs = _coords()
+    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
     with self.assertRaises(ValueError):
-      CORNING_3603_96.well_center_sample_mm(8, 0)
+      well_to_stage_mm(plate, "I1", cs)
+
+  def test_single_well_plate_uses_its_actual_well_center(self):
+    _, _, cs = _coords()
+    plate = VWR_1_troughplate_195000uL_Ub(name="reservoir")
+    x, y = well_to_stage_mm(plate, "A1", cs)
+    well = plate.get_well("A1")
+    location = well.location
+    self.assertIsNotNone(location)
+    assert location is not None
+    self.assertAlmostEqual(x, location.x + well.get_size_x() / 2 + 2.159)
+    self.assertAlmostEqual(
+      y,
+      plate.get_size_y() - (location.y + well.get_size_y() / 2) + 3.492,
+    )
+
+  def test_well_names_beyond_z_use_plr_lookup(self):
+    _, _, cs = _coords()
+    plate = DeepWell_Greiner_1536_Well(name="plate")
+    aa1 = well_to_stage_mm(plate, "AA1", cs)
+    well = plate.get_well("AA1")
+    location = well.location
+    self.assertIsNotNone(location)
+    assert location is not None
+    self.assertAlmostEqual(aa1[0], location.x + well.get_size_x() / 2 + 2.159)
 
 
 class TestWellToStage(unittest.TestCase):
   def test_a1_stage_position(self):
     _, _, cs = _coords()
-    x, y = well_to_stage_mm(CORNING_3603_96, "A1", cs)
+    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    x, y = well_to_stage_mm(plate, "A1", cs)
     # this config has no calibrated corner offset, so stage = sample + default corner:
-    # (14.38 + 2.159, 11.24 + 3.492)
-    self.assertAlmostEqual(x, 16.539, places=2)
-    self.assertAlmostEqual(y, 14.732, places=2)
+    # Exact installed CPR A1 center plus the configured sample-to-stage corner.
+    self.assertAlmostEqual(x, 16.355530815027272)
+    self.assertAlmostEqual(y, 14.605591166551164)
 
   def test_adjacent_wells_differ_by_pitch(self):
     _, _, cs = _coords()
-    a1 = well_to_stage_mm(CORNING_3603_96, "A1", cs)
-    a2 = well_to_stage_mm(CORNING_3603_96, "A2", cs)
-    b1 = well_to_stage_mm(CORNING_3603_96, "B1", cs)
-    self.assertAlmostEqual(a2[0] - a1[0], 9.0, places=2)
-    self.assertAlmostEqual(b1[1] - a1[1], 9.0, places=2)
+    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    a1 = well_to_stage_mm(plate, "A1", cs)
+    a2 = well_to_stage_mm(plate, "A2", cs)
+    b1 = well_to_stage_mm(plate, "B1", cs)
+    self.assertAlmostEqual(a2[0] - a1[0], 9.023312301578526)
+    self.assertAlmostEqual(b1[1] - a1[1], 9.012954100880759)
 
   def test_encoder_ticks(self):
     _, _, cs = _coords()
+    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
     xax = AxisConfig(motion_name="X", mm_per_encoder_tick=0.0127, home_offset=-18.0)
     yax = AxisConfig(
       motion_name="Y", mm_per_encoder_tick=0.0127, home_offset=71.75, invert_axis_direction=True
     )
-    xt, yt = well_to_encoder_ticks(CORNING_3603_96, "A1", cs, xax, yax)
+    xt, yt = well_to_encoder_ticks(plate, "A1", cs, xax, yax)
     self.assertIsInstance(xt, int)
     self.assertIsInstance(yt, int)
     # consistent with the mm->ticks formula
-    sx, sy = well_to_stage_mm(CORNING_3603_96, "A1", cs)
+    sx, sy = well_to_stage_mm(plate, "A1", cs)
     self.assertEqual(xt, round((sx - 18.0) / 0.0127))
 
 
