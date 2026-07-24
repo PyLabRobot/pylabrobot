@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import List, Optional
+import re
+from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.io.serial import Serial
 
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 # with an ACK frame (a lone 0x06), a command-echo frame ("<cmd>OK"), and then a
 # result frame (a "Status..." word, or "CommandIgnore" when the command is a
 # no-op or refused). Motions run asynchronously: the status word is "StatusBUSY"
-# while moving and returns to "StatusOK" when done.
+# while moving, then changes to the operation-specific terminal state.
 STX = b"\x02"
 ETX = b"\x03"
 ACK = "\x06"
@@ -62,17 +63,146 @@ ERROR_MESSAGES = {
     "Reset did not complete. The device is in an error state. Reset the device and try again."
   ),
   "CannotGoInStandbyMode": "Cannot go to standby mode. Check the errors on the device.",
+  "StatusManual": (
+    "The device is in manual recovery mode. Inspect the rack and cap head, then complete the "
+    "appropriate recovery from the instrument touchscreen before sending another motion command."
+  ),
   "CommandIgnore": "Command was ignored by the device.",
   "NoAck": "Device did not acknowledge the command.",
 }
+
+# Legacy serial firmware generally reports only a generic frame such as
+# "DecapERROR", but some firmware may include a numeric error code in a reply.
+#
+# Source: Azenta IntelliXcap User Manual, part 319430 Rev. E, pp. 88-91:
+# https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf
+ERROR_CODE_MESSAGES: Dict[int, str] = {
+  100: (
+    "M1 top switch not detected during homing sequence. Could get overwritten by other error "
+    "codes within higher level sequencing logic, so it is most likely during startup."
+  ),
+  101: "M2 initial homing failure. Likely to override other M1 homing error codes.",
+  102: "M1 top switch stuck closed during homing sequence.",
+  103: "M1 top switch second trigger not detected during homing sequence.",
+  104: "M4 homing error: top switch not detected.",
+  105: (
+    "M3 top switch not detected during homing sequence. Could get overwritten by other error "
+    "codes within higher level sequencing logic, so it is most likely during startup."
+  ),
+  106: "M3 stop switch stuck closed during homing sequence.",
+  107: "M3 top switch second trigger not detected during homing sequence.",
+  108: "M3 initial homing failure. Likely to override other M3 homing error codes.",
+  109: (
+    "M2 top switch not detected during homing sequence. Could get overwritten by other error "
+    "codes within higher level sequencing logic, so it is most likely during startup."
+  ),
+  110: "M2 top switch stuck closed during homing sequence.",
+  111: "M2 top switch second trigger not detected during homing sequence.",
+  112: "Door close failure.",
+  113: (
+    "M1 moved to M1_SAFETY_LOW_POS (S33): no light curtain trigger was detected while "
+    "scanning for caps."
+  ),
+  114: "Invalid tube height detected.",
+  115: "Door open failure.",
+  116: "Door close failure at start of sequence.",
+  117: (
+    "M1 moved to M1_SAFETY_LOW_POS (S33): no light curtain trigger was detected while "
+    "scanning for caps."
+  ),
+  118: "Invalid tube height detected.",
+  119: "Open door failure.",
+  120: "Open door failure on entry to manual mode.",
+  121: "Door close failure.",
+  122: "M3 limit switch timeout on cartridge eject.",
+  123: "Door open failure at end of cartridge eject sequence.",
+  124: "Door close failure at end of cartridge eject sequence.",
+  125: "M1 failed to reach the waste position within S4 during the auto-waste sequence.",
+  133: "M1 homing error.",
+  134: "Open door failure.",
+  135: ("Cap detected at valid height. This may be an informational device-state code."),
+  136: "Maximum decap attempts exceeded (S46).",
+  137: "Maximum recap attempts exceeded (S45).",
+  138: (
+    "M3 bottom switch closed while the motor was still moving; extended-stage lead-screw "
+    "protection activated."
+  ),
+  139: "Open tray failure; no cartridge detected after initial homing.",
+  140: (
+    "Cartridge-ejected notification; or the door should be up but the top switch was not detected."
+  ),
+  141: "The door should be down but the bottom switch was not detected.",
+  142: "Unexpected object on tray during cartridge eject.",
+  143: "Cartridge not detected during cartridge load sequence.",
+  144: (
+    "Cartridge detection height incorrect during cartridge load sequence: detected height "
+    "was less than S73 - S59."
+  ),
+  145: "Light curtain calibration max retries exceeded.",
+  146: "Light curtain calibration max retries exceeded.",
+  147: "Light curtain calibration max retries exceeded.",
+  148: "Tray open failure.",
+  150: "M3 homing error during auto-waste sequence.",
+  151: "Tray close failure.",
+  152: "Tube detected after decap retry; caps were screwed back on.",
+  153: "Close tray failure; M3 homing error.",
+  154: "Close tray failure.",
+  155: "Open door failure.",
+  156: "M1 homing error.",
+  157: "M2 homing error.",
+  158: "M3 homing error.",
+  159: "M2 homing error.",
+  160: "Door close failure at end of sequence; tray open failure.",
+  161: "M4 homing error.",
+  164: "Tray open failure.",
+  165: "Sequence-state error; the same firmware logic may report error 167.",
+  166: "M2 homing error during tray decap-quit.",
+  167: "Door-open or tray-close failure during decap-quit.",
+  200: "Light curtain communications failure: no Modbus data received.",
+  201: "Light curtain signal failure; check wiring between controller and light curtain.",
+  202: (
+    "Conflicting limit switches: top and bottom switches both appear closed. This usually "
+    "indicates a power-supply failure or a faulty switch."
+  ),
+  238: "Emergency stop engaged or motor voltage low.",
+}
+
+
+def get_error_message(code: int) -> str:
+  """Return the documented meaning of an IntelliXcap error code.
+
+  Some codes have multiple meanings because their interpretation depends on
+  the firmware sequence that reported them.
+  """
+  message = ERROR_CODE_MESSAGES.get(code)
+  if message is None:
+    return "Unknown IntelliXcap error code."
+  return message
 
 
 class FluidXError(Exception):
   """Exceptions raised by a FluidX IntelliXcap 96 decapper."""
 
-  def __init__(self, title: str, message: Optional[str] = None) -> None:
+  def __init__(
+    self,
+    title: str,
+    message: Optional[str] = None,
+    error_code: Optional[int] = None,
+  ) -> None:
     self.title = title
     self.message = message
+    self.error_code = error_code
+
+  @classmethod
+  def from_error_code(cls, code: int, detail: Optional[str] = None) -> "FluidXError":
+    """Build an exception from a numeric IntelliXcap error code."""
+    meaning = get_error_message(code)
+    message = f"{meaning} {detail}" if detail else meaning
+    return cls(
+      title=f"IntelliXcap error {code}",
+      message=message,
+      error_code=code,
+    )
 
   def __str__(self) -> str:
     return f"{self.title}: {self.message}" if self.message else self.title
@@ -83,24 +213,43 @@ def _fault(key: str, detail: Optional[str] = None) -> FluidXError:
   return FluidXError(title=ERROR_MESSAGES.get(key, key), message=detail)
 
 
+def _error_code(frames: List[str]) -> Optional[int]:
+  """Extract a known three-digit error code from serial reply frames."""
+  for frame in frames:
+    for value in re.findall(r"(?<!\d)(\d{3})(?!\d)", frame):
+      code = int(value)
+      if code in ERROR_CODE_MESSAGES:
+        return code
+  return None
+
+
 class FluidXIntelliXcap96:
   """FluidX IntelliXcap 96 automated screw-cap decapper.
 
   A benchtop instrument that decaps and recaps a 96-format rack of screw-cap
   tubes in a single stroke. It holds one nest; a plate mover loads the rack, the
   decapper unscrews all 96 caps (``decap``), holds them, and screws them back on
-  (``recap``). Held caps can also be dropped to the waste bin (``waste``), and
-  the loading tray opened and closed.
+  (``recap``). Held caps can also be released into a separately positioned cap
+  carrier (``waste``), and the loading tray opened and closed. ``waste`` does
+  not verify that a carrier is present: remove the tube rack and position the
+  correct carrier before using it. If the rack is left beneath the head, the
+  released caps can fall back onto the tubes without being properly recapped.
 
   Serial settings:
     9600 baud, 8 data bits, no parity, 1 stop bit, no handshake. Replies are
     framed between STX (0x02) and ETX (0x03).
 
+  Tube type and volume are not sent over the serial protocol. The installed
+  IntelliCartridge and its firmware profile define the supported tube/cap
+  geometry and motion settings. Fit and configure the cartridge specified for
+  the exact tube family; volume alone (for example, 0.5 mL) is not sufficient
+  to select a compatible cartridge.
+
   Single-character commands, each written followed by ETX:
     a   request status
     h   start decapping
     i   start recapping
-    b   drop held caps to waste
+    b   release held caps into a separately positioned carrier
     f   open the tray
     g   close the tray
     Z   home all axes
@@ -120,8 +269,12 @@ class FluidXIntelliXcap96:
   device is latched in error homes to recover and then proceeds.
 
   Verified against hardware: connection, status, tray open/close, home,
-  standby/ready, and the decap error/recovery path. Decap, recap, and waste on a
-  loaded rack are NOT yet hardware-verified; a warning is emitted at setup.
+  standby/ready, the decap error/recovery path, and decap/recap with a loaded
+  0.5 mL rack, including release of held caps with ``waste``.
+
+  See the Azenta IntelliXcap user manual for the required carrier and physical
+  setup:
+  https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf
   """
 
   def __init__(
@@ -164,11 +317,6 @@ class FluidXIntelliXcap96:
     )
 
   async def setup(self) -> None:
-    logger.warning(
-      "FluidXIntelliXcap96: connection, status, tray, home, and standby/ready are "
-      "hardware-verified, but decap, recap, and waste are NOT yet verified in PyLabRobot. "
-      "Please make a PR to remove this message once you have verified them on your hardware."
-    )
     await self.io.setup()
     status = await self.request_status()
     up = status.upper()
@@ -190,6 +338,8 @@ class FluidXIntelliXcap96:
           "E-STOP; also check the safety guard/hood and interlocks, then retry."
         ),
       )
+    if "MANUAL" in up:
+      raise _fault("StatusManual", status)
     if "ERROR" in up:
       raise _fault("StatusNotOK", status)
     logger.info("[IntelliXcap96 %s] connected: %s", self.io.port, status)
@@ -257,23 +407,41 @@ class FluidXIntelliXcap96:
       raise _fault("CommandIgnore", f"{name}: device already in that state or not ready")
     return True
 
-  async def _wait_for_idle(self, timeout: float, name: str, fail_key: str) -> None:
-    """Poll status until it returns to StatusOK, raising on an error or timeout.
+  async def _wait_for_idle(
+    self,
+    timeout: float,
+    name: str,
+    fail_key: str,
+    terminal_statuses: Tuple[str, ...] = ("StatusOK",),
+  ) -> None:
+    """Poll status until it reaches an expected idle state.
 
     ``fail_key`` names the firmware error message to raise if the status word
-    reports an error while waiting.
+    reports an error while waiting. ``terminal_statuses`` accounts for
+    operation state retained while the instrument is idle: hardware reports
+    ``StatusRECAP`` after decapping and after tray motion with caps held.
     """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
+    expected = {status.upper() for status in terminal_statuses}
     while loop.time() < deadline:
       frames = await self._command(STATUS)
       if any("ERROR" in f.upper() for f in frames):
-        raise _fault(fail_key, f"{name}: {frames!r}")
+        code = _error_code(frames)
+        if code is not None:
+          raise FluidXError.from_error_code(code, detail=f"{name}: {frames!r}")
+        raise _fault(
+          fail_key,
+          f"{name}: {frames!r}. Check the instrument error log for the numeric error code.",
+        )
       status = self._status_frame(frames)
-      if status is not None and "OK" in status.upper():
+      if status is not None and status.upper() in expected:
         return
       await asyncio.sleep(self.poll_interval)
-    raise FluidXError(title=f"{name} timed out", message=f"not idle within {timeout}s")
+    raise FluidXError(
+      title=f"{name} timed out",
+      message=f"did not reach {terminal_statuses!r} within {timeout}s",
+    )
 
   # === Status ===
 
@@ -296,7 +464,12 @@ class FluidXIntelliXcap96:
     await self._ensure_ready()
     frames = await self._command(OPEN_TRAY)
     if self._require_accepted(OPEN_TRAY, frames, "Opening the tray", idempotent=True):
-      await self._wait_for_idle(timeout, "Opening the tray", "OpenTrayWasNotSuccesful")
+      await self._wait_for_idle(
+        timeout,
+        "Opening the tray",
+        "OpenTrayWasNotSuccesful",
+        ("StatusOK", "StatusRECAP", "StatusDECAP"),
+      )
     logger.info("[IntelliXcap96 %s] tray open", self.io.port)
 
   async def close_tray(self, timeout: float = 15.0) -> None:
@@ -304,7 +477,12 @@ class FluidXIntelliXcap96:
     await self._ensure_ready()
     frames = await self._command(CLOSE_TRAY)
     if self._require_accepted(CLOSE_TRAY, frames, "Closing the tray", idempotent=True):
-      await self._wait_for_idle(timeout, "Closing the tray", "CloseTrayWasNotSuccesful")
+      await self._wait_for_idle(
+        timeout,
+        "Closing the tray",
+        "CloseTrayWasNotSuccesful",
+        ("StatusOK", "StatusRECAP", "StatusDECAP"),
+      )
     logger.info("[IntelliXcap96 %s] tray closed", self.io.port)
 
   async def _home_sequence(self, timeout: float, name: str) -> None:
@@ -322,7 +500,10 @@ class FluidXIntelliXcap96:
     latched error is raised.
     """
     status = await self.request_status()
-    if "ERROR" not in status.upper():
+    up = status.upper()
+    if "MANUAL" in up:
+      raise _fault("StatusManual", status)
+    if "ERROR" not in up:
       return status
     if not self.auto_recover:
       raise _fault("StatusNotOK", status)
@@ -335,6 +516,31 @@ class FluidXIntelliXcap96:
     if "ERROR" in status.upper():
       raise _fault("StatusNotOK", "error persisted after recovery home")
     return status
+
+  async def reset_error(self, timeout: Optional[float] = None) -> None:
+    """Recover from ``StatusError`` or ``StatusMANUAL`` by homing all axes.
+
+    The firmware reset command does not clear these states. Hardware testing
+    confirmed that the home-all command transitions ``StatusMANUAL`` through
+    ``StatusBUSY`` to ``StatusOK``. Call this only after inspecting the rack and
+    cap head and confirming that axis motion is safe.
+
+    This method is a no-op when the instrument is not in an error or manual
+    recovery state.
+
+    Args:
+      timeout: maximum recovery time in seconds. Defaults to
+        ``recover_timeout`` configured on this instance.
+    """
+    status = await self.request_status()
+    up = status.upper()
+    if "ERROR" not in up and "MANUAL" not in up:
+      return
+    await self._home_sequence(
+      self.recover_timeout if timeout is None else timeout,
+      "Resetting error",
+    )
+    logger.info("[IntelliXcap96 %s] error reset by homing", self.io.port)
 
   async def home(self, timeout: float = 30.0) -> None:
     """Home all axes. Also clears a latched StatusError."""
@@ -352,7 +558,12 @@ class FluidXIntelliXcap96:
       raise _fault("NeedToRecap")
     frames = await self._command(DECAP_START)
     self._require_accepted(DECAP_START, frames, "Decapping")
-    await self._wait_for_idle(timeout, "Decapping", "DecapWasNotSuccesful")
+    await self._wait_for_idle(
+      timeout,
+      "Decapping",
+      "DecapWasNotSuccesful",
+      ("StatusRECAP",),
+    )
     logger.info("[IntelliXcap96 %s] decap complete", self.io.port)
 
   async def recap(self, timeout: float = 60.0) -> None:
@@ -362,23 +573,45 @@ class FluidXIntelliXcap96:
       timeout: maximum time in seconds to wait for the stroke to finish.
     """
     status = (await self._ensure_ready()).upper()
-    if "DECAP" in status:
+    if "RECAP" not in status:
       raise _fault("NeedToDecap")
     frames = await self._command(RECAP_START)
     self._require_accepted(RECAP_START, frames, "Recapping")
-    await self._wait_for_idle(timeout, "Recapping", "RecapWasNotSuccesful")
+    await self._wait_for_idle(
+      timeout,
+      "Recapping",
+      "RecapWasNotSuccesful",
+      ("StatusOK", "StatusDECAP"),
+    )
     logger.info("[IntelliXcap96 %s] recap complete", self.io.port)
 
   async def waste(self, timeout: float = 60.0) -> None:
-    """Drop the currently held caps into the waste bin.
+    """Release the currently held caps into a separately positioned cap carrier.
+
+    This is irreversible. Before calling, remove the sample-tube rack and
+    position the correct cap carrier/collection vessel as specified in the
+    Azenta IntelliXcap user manual. The instrument does not detect or verify the
+    carrier. If the tube rack remains beneath the head, released caps can fall
+    back onto the tube openings and look recapped even though they may not be
+    threaded or torqued.
+
+    User manual:
+    https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf
 
     Args:
       timeout: maximum time in seconds to wait for the stroke to finish.
     """
-    await self._ensure_ready()
+    status = (await self._ensure_ready()).upper()
+    if "RECAP" not in status:
+      raise _fault("NeedToDecap", "waste requires caps held after decapping")
     frames = await self._command(WASTE)
     self._require_accepted(WASTE, frames, "Wasting caps")
-    await self._wait_for_idle(timeout, "Wasting caps", "StoreWasNotSuccesful")
+    await self._wait_for_idle(
+      timeout,
+      "Wasting caps",
+      "StoreWasNotSuccesful",
+      ("StatusOK", "StatusDECAP"),
+    )
     logger.info("[IntelliXcap96 %s] waste complete", self.io.port)
 
   async def standby(self, timeout: float = 15.0) -> None:

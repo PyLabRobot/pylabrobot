@@ -59,3 +59,4 @@ FluidX IntelliXcap 96
 
     FluidXIntelliXcap96
     FluidXError
+    get_error_message
