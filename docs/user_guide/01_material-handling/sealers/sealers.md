@@ -3,13 +3,17 @@
 ## Installation
 
 ```bash
-pip install pylabrobot[serial]
+pip install "pylabrobot[serial]"
 ```
 
 In automated wet lab workflows, **microplate sealers** are essential for preserving sample integrity.
 They prevent **evaporation**, **cross-contamination**, and **spillage**, especially during heating, shaking, storage, or robotic transport.
 
 PyLabRobot supports integration with various sealer machines, allowing you to programmatically seal plates as part of your automation workflows.
+
+Supported serial sealers include:
+
+- Agilent PlateLoc through `pylabrobot.agilent.PlateLoc`
 
 ---
 

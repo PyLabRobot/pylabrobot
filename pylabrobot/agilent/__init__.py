@@ -12,4 +12,13 @@ from .biotek import (
   SynergyH1,
   SynergyH1Backend,
 )
+from .plateloc import (
+  PlateLoc,
+  PlateLocDriver,
+  PlateLocError,
+  PlateLocSealer,
+  PlateLocSealerBackend,
+  PlateLocSerialProfile,
+  PlateLocStatus,
+)
 from .vspin import Access2, Access2Driver, VSpin, VSpinCentrifugeBackend, VSpinDriver
