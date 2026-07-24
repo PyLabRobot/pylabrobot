@@ -372,8 +372,8 @@ class FluidXIntelliXcap96:
       buf += byte
     return buf.decode("ascii", errors="replace")
 
-  async def _command(self, command: str) -> List[str]:
-    """Send a command and collect every reply frame until the reply goes quiet."""
+  async def send_command(self, command: str) -> List[str]:
+    """Send a raw command and collect every reply frame until the reply goes quiet."""
     await self._send(command)
     frames: List[str] = []
     with self.io.temporary_timeout(self.frame_gap):
@@ -425,7 +425,7 @@ class FluidXIntelliXcap96:
     deadline = loop.time() + timeout
     expected = {status.upper() for status in terminal_statuses}
     while loop.time() < deadline:
-      frames = await self._command(STATUS)
+      frames = await self.send_command(STATUS)
       if any("ERROR" in f.upper() for f in frames):
         code = _error_code(frames)
         if code is not None:
@@ -447,22 +447,18 @@ class FluidXIntelliXcap96:
 
   async def request_status(self) -> str:
     """Poll the device and return its status word (e.g. ``StatusOK``)."""
-    frames = await self._command(STATUS)
+    frames = await self.send_command(STATUS)
     status = self._status_frame(frames)
     if status is None:
       raise FluidXError(title="No status reply", message=repr(frames))
     return status
-
-  async def send_command(self, command: str) -> List[str]:
-    """Send a raw single command and return its reply frames. Escape hatch."""
-    return await self._command(command)
 
   # === Operations ===
 
   async def open_tray(self, timeout: float = 15.0) -> None:
     """Open the loading tray."""
     await self._ensure_ready()
-    frames = await self._command(OPEN_TRAY)
+    frames = await self.send_command(OPEN_TRAY)
     if self._require_accepted(OPEN_TRAY, frames, "Opening the tray", idempotent=True):
       await self._wait_for_idle(
         timeout,
@@ -475,7 +471,7 @@ class FluidXIntelliXcap96:
   async def close_tray(self, timeout: float = 15.0) -> None:
     """Close the loading tray."""
     await self._ensure_ready()
-    frames = await self._command(CLOSE_TRAY)
+    frames = await self.send_command(CLOSE_TRAY)
     if self._require_accepted(CLOSE_TRAY, frames, "Closing the tray", idempotent=True):
       await self._wait_for_idle(
         timeout,
@@ -487,7 +483,7 @@ class FluidXIntelliXcap96:
 
   async def _home_sequence(self, timeout: float, name: str) -> None:
     """Send the home command and wait for it to finish. Also clears a latched error."""
-    frames = await self._command(HOME_ALL)
+    frames = await self.send_command(HOME_ALL)
     self._require_accepted(HOME_ALL, frames, name)
     await self._wait_for_idle(timeout, name, "HomeNotSuccesful")
 
@@ -556,7 +552,7 @@ class FluidXIntelliXcap96:
     status = (await self._ensure_ready()).upper()
     if "RECAP" in status:
       raise _fault("NeedToRecap")
-    frames = await self._command(DECAP_START)
+    frames = await self.send_command(DECAP_START)
     self._require_accepted(DECAP_START, frames, "Decapping")
     await self._wait_for_idle(
       timeout,
@@ -575,7 +571,7 @@ class FluidXIntelliXcap96:
     status = (await self._ensure_ready()).upper()
     if "RECAP" not in status:
       raise _fault("NeedToDecap")
-    frames = await self._command(RECAP_START)
+    frames = await self.send_command(RECAP_START)
     self._require_accepted(RECAP_START, frames, "Recapping")
     await self._wait_for_idle(
       timeout,
@@ -604,7 +600,7 @@ class FluidXIntelliXcap96:
     status = (await self._ensure_ready()).upper()
     if "RECAP" not in status:
       raise _fault("NeedToDecap", "waste requires caps held after decapping")
-    frames = await self._command(WASTE)
+    frames = await self.send_command(WASTE)
     self._require_accepted(WASTE, frames, "Wasting caps")
     await self._wait_for_idle(
       timeout,
@@ -616,7 +612,7 @@ class FluidXIntelliXcap96:
 
   async def standby(self, timeout: float = 15.0) -> None:
     """Put the decapper into standby (sleep) mode."""
-    frames = await self._command(STANDBY)
+    frames = await self.send_command(STANDBY)
     self._require_accepted(STANDBY, frames, "Entering standby")
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
@@ -631,7 +627,7 @@ class FluidXIntelliXcap96:
     """Wake the decapper from standby if it is asleep."""
     if "SLEEP" not in (await self.request_status()).upper():
       return
-    frames = await self._command(READY)
+    frames = await self.send_command(READY)
     self._require_accepted(READY, frames, "Waking from standby")
     await self._wait_for_idle(timeout, "Waking from standby", "StatusNotOK")
     logger.info("[IntelliXcap96 %s] ready", self.io.port)
@@ -649,7 +645,7 @@ class FluidXIntelliXcap96:
     """
     if "ERROR" in (await self.request_status()).upper():
       raise _fault("CannotReset")
-    await self._command(RESET)
+    await self.send_command(RESET)
     await asyncio.sleep(settle_time)
     if "ERROR" in (await self.request_status()).upper():
       raise _fault("ResetNotSuccesful")
