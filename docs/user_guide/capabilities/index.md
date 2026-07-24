@@ -48,6 +48,7 @@ shaking
 fan-control
 humidity-control
 centrifuging
+cell-sorting
 sealing
 peeling
 tilting
