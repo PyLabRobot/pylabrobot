@@ -59,4 +59,9 @@ FluidX IntelliXcap 96
 
     FluidXIntelliXcap96
     FluidXError
+    ExtendedStatus
+    CartridgeProfile
+    CartridgeInfo
+    FirmwareVersions
     get_error_message
+    is_recoverable_error
