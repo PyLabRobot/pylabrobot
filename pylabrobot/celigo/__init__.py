@@ -3,87 +3,113 @@
 The :class:`~pylabrobot.celigo.celigo.Celigo` class drives the instrument's FTDI USB-IO
 controller board: stage/Z/filter motion, drawer open/close, illumination channels
 (brightfield + fluorescence), galvo steering, and the board's digital/analog IO and
-barcode reader.
+barcode reader. Its :class:`~pylabrobot.celigo.laser.Laser` component owns laser
+communication and firing operations, while :class:`~pylabrobot.celigo.galvo.Galvo`
+owns galvo positioning and calibration.
 
-The :mod:`~pylabrobot.celigo.config`, :mod:`~pylabrobot.celigo.coordinates`,
-:mod:`~pylabrobot.celigo.transforms` and :mod:`~pylabrobot.celigo.navigation` modules hold
-the configuration and plate/well navigation math used by the device.
+The :mod:`~pylabrobot.celigo.config`, :mod:`~pylabrobot.celigo.coordinates`, and
+:mod:`~pylabrobot.celigo.navigation` modules hold the configuration and plate/well
+navigation math used by the device.
 """
 
 from pylabrobot.celigo.camera import CameraError, CameraFrame, CeligoCamera
 from pylabrobot.celigo.celigo import (
   AcquisitionResult,
   Celigo,
-  CeligoError,
+  ControllerInfo,
   ControllerStatus,
-  DiagnosticReport,
+  DetectedMotorAddress,
   FocusResult,
-  ShootingStatus,
+  SelfTestReport,
 )
 from pylabrobot.celigo.config import (
+  AnalogInputConfig,
   AxisConfig,
-  Calibrated2DCubicTransform,
   Calibrated2DPolynomialTransform,
   CalibrationConfig,
+  CeligoConfig,
   CeligoHardwareConfig,
   ChannelDescriptor,
+  DigitalIOConfig,
   ExternalCameraControlConfig,
-  GalvoConfig,
+  FilterMapEntry,
+  FilterWheelConfig,
   GalvoAxisOpticalCalibration,
+  GalvoConfig,
   GalvoMagnificationCalibration,
   GalvoOpticalCalibration,
   HardwareDefaultConfig,
   IlluminationChannelConfig,
-  load_calibration,
-  load_channels,
-  load_galvo_calibration,
+  IOConfig,
+  LightingIOConfig,
+  LinearAxisConfig,
+  NavigationConfig,
+  load_channel_descriptors,
   load_galvo_calibrations,
   load_galvo_optical_calibration,
-  load_hardware_defaults,
   load_illumination_channels,
 )
 from pylabrobot.celigo.coordinates import CoordinateSystems
-from pylabrobot.celigo.navigation import (
-  NavigationConfig,
-  load_navigation,
-  well_to_encoder_ticks,
-  well_to_stage_mm,
+from pylabrobot.celigo.errors import CeligoError
+from pylabrobot.celigo.galvo import Galvo, GalvoControllerStatus
+from pylabrobot.celigo.laser import Laser, ShootingStatus
+from pylabrobot.celigo.motion import (
+  Axis,
+  FilterWheel,
+  LinearAxis,
+  MagnificationChanger,
+  MotorController,
+  StepperMotor,
 )
+from pylabrobot.celigo.navigation import well_to_stage_mm
 
 __all__ = [
-  "Celigo",
-  "CeligoError",
   "AcquisitionResult",
+  "AnalogInputConfig",
+  "Axis",
   "AxisConfig",
-  "Calibrated2DCubicTransform",
   "Calibrated2DPolynomialTransform",
   "CalibrationConfig",
   "CameraError",
   "CameraFrame",
+  "Celigo",
   "CeligoCamera",
+  "CeligoConfig",
+  "CeligoError",
   "CeligoHardwareConfig",
   "ChannelDescriptor",
+  "ControllerInfo",
   "ControllerStatus",
+  "DetectedMotorAddress",
   "CoordinateSystems",
-  "DiagnosticReport",
+  "DigitalIOConfig",
   "ExternalCameraControlConfig",
+  "FilterMapEntry",
   "FocusResult",
-  "GalvoConfig",
+  "FilterWheel",
+  "FilterWheelConfig",
+  "Galvo",
   "GalvoAxisOpticalCalibration",
+  "GalvoConfig",
+  "GalvoControllerStatus",
   "GalvoMagnificationCalibration",
   "GalvoOpticalCalibration",
   "HardwareDefaultConfig",
   "IlluminationChannelConfig",
+  "IOConfig",
+  "Laser",
+  "LinearAxis",
+  "LinearAxisConfig",
+  "LightingIOConfig",
+  "MagnificationChanger",
+  "MotorController",
   "NavigationConfig",
+  "SelfTestReport",
   "ShootingStatus",
-  "load_calibration",
-  "load_channels",
-  "load_galvo_calibration",
+  "StepperMotor",
+  "load_channel_descriptors",
   "load_galvo_calibrations",
   "load_galvo_optical_calibration",
-  "load_hardware_defaults",
   "load_illumination_channels",
-  "load_navigation",
-  "well_to_encoder_ticks",
   "well_to_stage_mm",
 ]

@@ -1,10 +1,9 @@
 """Plate / well navigation for the Celigo.
 
-Ties the coordinate systems (:mod:`pylabrobot.celigo.coordinates`) and per-axis
-encoder math (:mod:`pylabrobot.celigo.transforms`) together to answer the practical
-questions the device asks:
+Uses the coordinate systems from :mod:`pylabrobot.celigo.coordinates` to answer the
+practical navigation questions the device asks:
 
-* where (in stage mm / encoder ticks) is the center of well ``(row, col)``?
+* where in stage millimeters is the center of well ``(row, col)``?
 * within a stage position, what galvo FOV grid covers the scan area?
 
 The stage makes a coarse move to a Field-Of-Reference (FOR); the galvo sweeps a
@@ -16,52 +15,15 @@ must step. Effective FOV = frame size minus overlap; FOVs per FOR per axis =
 from __future__ import annotations
 
 import math
-import os
-import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
-from typing import ClassVar, Dict, List, Tuple
+from dataclasses import dataclass
+from typing import List, Tuple
 
 from pylabrobot.celigo.config import (
-  AxisConfig,
   CalibrationConfig,
-  _all_leaf_scalars,
-  _FromXmlMixin,
+  NavigationConfig,
 )
-from pylabrobot.celigo.coordinates import CoordinateSystems
-from pylabrobot.celigo.transforms import mm_to_encoder_ticks
+from pylabrobot.celigo.coordinates import Coordinate2D, CoordinateSystems
 from pylabrobot.resources.plate import Plate
-
-Vec = Tuple[float, float]
-
-
-@dataclass
-class NavigationConfig(_FromXmlMixin):
-  """Galvo reach + frame overlap (``NavigationConfig.xml``)."""
-
-  frame_overlap_x_mm: float = 0.0
-  frame_overlap_y_mm: float = 0.0
-  max_galvo_deflection_x_mm: float = 0.0
-  max_galvo_deflection_y_mm: float = 0.0
-  source_path: "str | None" = None
-  extra: Dict[str, str] = field(default_factory=dict)
-
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "FrameOverlapXMM": ("frame_overlap_x_mm", float),
-    "FrameOverlapYMM": ("frame_overlap_y_mm", float),
-    "MaxGalvoDeflectionXMM": ("max_galvo_deflection_x_mm", float),
-    "MaxGalvoDeflectionYMM": ("max_galvo_deflection_y_mm", float),
-  }
-
-  @classmethod
-  def from_xml(cls, path: str) -> "NavigationConfig":
-    obj = cls.from_scalars(_all_leaf_scalars(ET.parse(path).getroot()))
-    obj.source_path = os.path.abspath(path)
-    return obj
-
-
-def load_navigation(path: str) -> NavigationConfig:
-  """Parse ``NavigationConfig.xml`` into a :class:`NavigationConfig`."""
-  return NavigationConfig.from_xml(path)
 
 
 @dataclass(frozen=True)
@@ -79,6 +41,7 @@ class _PlateGeometry:
   a1_y_mm: float
   pitch_x_mm: float
   pitch_y_mm: float
+
 
 # Exact installed NEX Corning 3603 profile values (instance origin + nonzero grid start).
 _CORNING_3603_96 = _PlateGeometry(
@@ -100,7 +63,7 @@ _CELIGO_GEOMETRY_BY_PLR_MODEL = {
 }
 
 
-def _well_center_sample_mm(plate: Plate, well: str) -> Vec:
+def _well_center_sample_mm(plate: Plate, well: str) -> Coordinate2D:
   """Return a PLR well center in the Celigo's top-left plate coordinate frame."""
   if not isinstance(plate, Plate):
     raise TypeError("plate must be a PyLabRobot Plate")
@@ -134,63 +97,77 @@ def _well_center_sample_mm(plate: Plate, well: str) -> Vec:
   if nominal_pitch_x == 0 or nominal_pitch_y == 0:
     raise ValueError(f"Plate model {plate.model!r} has invalid well pitch")
   return (
-    registered.a1_x_mm
-    + (sample_x - nominal_a1_x) * registered.pitch_x_mm / nominal_pitch_x,
-    registered.a1_y_mm
-    + (sample_y - nominal_a1_y) * registered.pitch_y_mm / nominal_pitch_y,
+    registered.a1_x_mm + (sample_x - nominal_a1_x) * registered.pitch_x_mm / nominal_pitch_x,
+    registered.a1_y_mm + (sample_y - nominal_a1_y) * registered.pitch_y_mm / nominal_pitch_y,
   )
 
 
-def well_to_stage_mm(plate: Plate, well: str, coords: CoordinateSystems) -> Vec:
-  """Stage mm for the center of a named well (e.g. ``"A1"``)."""
-  sx, sy = _well_center_sample_mm(plate, well)
-  return coords.sample_mm_to_stage_mm(sx, sy)
-
-
-def well_to_encoder_ticks(
+def well_to_stage_mm(
   plate: Plate,
   well: str,
-  coords: CoordinateSystems,
-  x_axis: AxisConfig,
-  y_axis: AxisConfig,
-) -> "Tuple[int, int]":
-  """(x_ticks, y_ticks) EZStepper targets for the center of a named well."""
-  stage_x, stage_y = well_to_stage_mm(plate, well, coords)
-  return mm_to_encoder_ticks(stage_x, x_axis), mm_to_encoder_ticks(stage_y, y_axis)
+  coordinate_systems: CoordinateSystems,
+) -> Coordinate2D:
+  """Stage mm for the center of a named well (e.g. ``"A1"``)."""
+  sample_x_mm, sample_y_mm = _well_center_sample_mm(plate, well)
+  return coordinate_systems.sample_mm_to_stage_mm(sample_x_mm, sample_y_mm)
 
 
-def effective_fov_mm(calibration: CalibrationConfig, nav: NavigationConfig) -> Vec:
+def effective_fov_mm(
+  calibration: CalibrationConfig,
+  navigation: NavigationConfig,
+) -> Coordinate2D:
   """Frame size minus overlap, per axis (``EffectiveFOVMM``)."""
   frame_x = calibration.image_width_pixels * calibration.microns_per_pixel_x / 1000.0
   frame_y = calibration.image_height_pixels * calibration.microns_per_pixel_y / 1000.0
   return (
-    frame_x - 2 * nav.frame_overlap_x_mm,
-    frame_y - 2 * nav.frame_overlap_y_mm,
+    frame_x - 2 * navigation.frame_overlap_x_mm,
+    frame_y - 2 * navigation.frame_overlap_y_mm,
   )
 
 
-def fovs_per_for(calibration: CalibrationConfig, nav: NavigationConfig) -> "Tuple[int, int]":
+def fields_of_view_per_field_of_reference(
+  calibration: CalibrationConfig,
+  navigation: NavigationConfig,
+) -> "Tuple[int, int]":
   """How many FOVs fit per FOR per axis within the galvo's reach."""
-  eff_x, eff_y = effective_fov_mm(calibration, nav)
-  nx = int(math.floor(2 * nav.max_galvo_deflection_x_mm / eff_x)) if eff_x > 0 else 1
-  ny = int(math.floor(2 * nav.max_galvo_deflection_y_mm / eff_y)) if eff_y > 0 else 1
-  return max(1, nx), max(1, ny)
+  effective_x_mm, effective_y_mm = effective_fov_mm(calibration, navigation)
+  columns = (
+    math.floor(2 * navigation.max_galvo_deflection_x_mm / effective_x_mm)
+    if effective_x_mm > 0
+    else 1
+  )
+  rows = (
+    math.floor(2 * navigation.max_galvo_deflection_y_mm / effective_y_mm)
+    if effective_y_mm > 0
+    else 1
+  )
+  return max(1, columns), max(1, rows)
 
 
-def galvo_fov_offsets_mm(calibration: CalibrationConfig, nav: NavigationConfig) -> List[Vec]:
+def galvo_field_of_view_offsets_mm(
+  calibration: CalibrationConfig,
+  navigation: NavigationConfig,
+) -> List[Coordinate2D]:
   """Galvo FOV-center offsets (mm, relative to FOR center) in serpentine order.
 
-  These feed :func:`pylabrobot.celigo.transforms.galvo_mm_to_dac` to produce the galvo
-  command for each FOV imaged at one stage position.
+  :meth:`pylabrobot.celigo.galvo.Galvo.voltages_for_offset` combines each offset with
+  the calibrated imaging center and logical-filter correction.
   """
-  nx, ny = fovs_per_for(calibration, nav)
-  eff_x, eff_y = effective_fov_mm(calibration, nav)
+  columns, rows = fields_of_view_per_field_of_reference(calibration, navigation)
+  effective_x_mm, effective_y_mm = effective_fov_mm(calibration, navigation)
   # center the grid about (0, 0)
-  x0 = -(nx - 1) / 2.0
-  y0 = -(ny - 1) / 2.0
-  offsets: List[Vec] = []
-  for j in range(ny):
-    cols = range(nx) if j % 2 == 0 else range(nx - 1, -1, -1)  # serpentine
-    for i in cols:
-      offsets.append(((x0 + i) * eff_x, (y0 + j) * eff_y))
+  first_column = -(columns - 1) / 2.0
+  first_row = -(rows - 1) / 2.0
+  offsets: List[Coordinate2D] = []
+  for row in range(rows):
+    column_indices = range(columns) if row % 2 == 0 else range(columns - 1, -1, -1)
+    offsets.extend(
+      (
+        (
+          (first_column + column) * effective_x_mm,
+          (first_row + row) * effective_y_mm,
+        )
+        for column in column_indices
+      )
+    )
   return offsets

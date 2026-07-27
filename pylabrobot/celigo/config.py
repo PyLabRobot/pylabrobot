@@ -6,47 +6,68 @@ source of truth for axis tuning, galvo/filter-wheel setup, and the analog/digita
 
 This module mirrors that schema as nested dataclasses. Two ways to obtain a config:
 
-* :meth:`CeligoHardwareConfig.from_install` — the default: locate and parse the Celigo
-  ``ConfigFiles`` directory. Returns a fully-populated config object.
-* Construct :class:`CeligoHardwareConfig` (and its members) directly — for users who
-  want to specify everything in code, or override individual values after loading.
+* :meth:`CeligoConfig.from_install` — locate the Celigo ``ConfigFiles`` directory once
+  and load the complete per-instrument configuration.
+* Construct :class:`CeligoConfig` and its typed subobjects directly — for users who want
+  to specify everything in code, or override individual values after loading.
 
-The :class:`~pylabrobot.celigo.Celigo` class accepts
-``config: Optional[CeligoHardwareConfig]`` and falls back to
-:meth:`~CeligoHardwareConfig.from_install` when ``None`` is given.
+The :class:`~pylabrobot.celigo.Celigo` constructor accepts a complete
+:class:`CeligoConfig`, or loads one with :meth:`CeligoConfig.from_install`.
 """
 
 from __future__ import annotations
 
-import os
 import math
+import os
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field, fields
-from typing import Any, ClassVar, Dict, List, Optional, TypeVar
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
-_T = TypeVar("_T", bound="_FromXmlMixin")
+_HARDWARE_CONFIG_FILENAME = "USBIOHardwareConfig.config"
+_CONFIG_SUBDIRECTORIES = (
+  "",
+  "ConfigFiles",
+  os.path.join("Celigo", "ConfigFiles"),
+  os.path.join("Nexcelom Bioscience", "Celigo", "ConfigFiles"),
+  os.path.join("Nexcelom", "Celigo", "ConfigFiles"),
+  os.path.join("Cyntellect", "Celigo", "ConfigFiles"),
+)
 
 
-def _localname(tag: str) -> str:
+def _locate_hardware_config_file(install_dir: Optional[str]) -> Optional[str]:
+  """Locate the one hardware file that establishes the complete config directory."""
+  roots = [install_dir] if install_dir is not None else []
+  environment_root = os.environ.get("CELIGO_INSTALL_DIR")
+  if environment_root:
+    roots.append(environment_root)
+  for root in roots:
+    if os.path.isfile(root):
+      if os.path.basename(root).lower() == _HARDWARE_CONFIG_FILENAME.lower():
+        return root
+      root = os.path.dirname(root)
+    for subdirectory in _CONFIG_SUBDIRECTORIES:
+      directory = os.path.join(root, subdirectory)
+      exact_path = os.path.join(directory, _HARDWARE_CONFIG_FILENAME)
+      if os.path.isfile(exact_path):
+        return exact_path
+      if not os.path.isdir(directory):
+        continue
+      case_insensitive_match = next(
+        (
+          filename
+          for filename in os.listdir(directory)
+          if filename.lower() == _HARDWARE_CONFIG_FILENAME.lower()
+        ),
+        None,
+      )
+      if case_insensitive_match is not None:
+        return os.path.join(directory, case_insensitive_match)
+  return None
+
+
+def _xml_local_name(tag: str) -> str:
   """Strip the ``{namespace}`` prefix ElementTree prepends to tags."""
   return tag.rsplit("}", 1)[-1]
-
-
-def _coerce(text: Optional[str], typ: type) -> Any:
-  if text is None:
-    return None
-  text = text.strip()
-  if typ is bool:
-    normalized = text.lower()
-    if normalized not in ("true", "false"):
-      raise ValueError(f"Invalid boolean value {text!r}")
-    return normalized == "true"
-  if typ is int:
-    # tolerate values written as floats ("256.0")
-    return int(float(text)) if text else 0
-  if typ is float:
-    return float(text) if text else 0.0
-  return text
 
 
 def _leaf_scalars(element: ET.Element) -> Dict[str, str]:
@@ -54,7 +75,7 @@ def _leaf_scalars(element: ET.Element) -> Dict[str, str]:
   out: Dict[str, str] = {}
   for child in element:
     if len(child) == 0 and child.text is not None and child.text.strip():
-      out[_localname(child.tag)] = child.text.strip()
+      out[_xml_local_name(child.tag)] = child.text.strip()
   return out
 
 
@@ -68,177 +89,348 @@ def _all_leaf_scalars(root: ET.Element) -> Dict[str, str]:
   out: Dict[str, str] = {}
   for el in root.iter():
     if len(el) == 0 and el.text is not None and el.text.strip():
-      out[_localname(el.tag)] = el.text.strip()
+      out[_xml_local_name(el.tag)] = el.text.strip()
   return out
 
 
-class _FromXmlMixin:
-  """Build a dataclass from an XML element using a ``{XmlTag: (attr, type)}`` map."""
+class _XmlScalars:
+  """Typed, explicit access to one XML object's leaf values."""
 
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]]
+  def __init__(self, scalars: Dict[str, str]) -> None:
+    self._scalars = scalars
+    self._recognized_tags: set[str] = set()
 
-  @classmethod
-  def from_element(cls: type[_T], element: ET.Element) -> _T:
-    return cls.from_scalars(_leaf_scalars(element))
+  def text(self, *tags: str) -> str:
+    self._recognized_tags.update(tags)
+    for tag in tags:
+      value = self._scalars.get(tag)
+      if value is not None and value.strip():
+        return value.strip()
+    raise ValueError(f"Configuration is missing required field {tags[0]}")
 
-  @classmethod
-  def from_scalars(cls: type[_T], scalars: Dict[str, str]) -> _T:
-    kwargs: Dict[str, Any] = {}
-    known_attrs = {f.name for f in fields(cls)}  # type: ignore[arg-type]
-    extra: Dict[str, str] = {}
-    for tag, value in scalars.items():
-      mapping = cls._FIELD_MAP.get(tag)
-      if mapping is None:
-        extra[tag] = value
-        continue
-      attr, typ = mapping
-      kwargs[attr] = _coerce(value, typ)
-    if "extra" in known_attrs:
-      kwargs["extra"] = extra
-    return cls(**kwargs)  # type: ignore[call-arg]
+  def integer(self, *tags: str) -> int:
+    # Vendor files sometimes serialize integral settings as ``256.0``.
+    value = float(self.text(*tags))
+    if not math.isfinite(value) or not value.is_integer():
+      raise ValueError(f"Configuration field {tags[0]} must be an integer")
+    return int(value)
+
+  def integer_or(self, tag: str, fallback: int) -> int:
+    self._recognized_tags.add(tag)
+    value = self._scalars.get(tag)
+    if value is None:
+      return fallback
+    parsed = float(value)
+    if not math.isfinite(parsed) or not parsed.is_integer():
+      raise ValueError(f"Configuration field {tag} must be an integer")
+    return int(parsed)
+
+  def floating(self, *tags: str) -> float:
+    return float(self.text(*tags))
+
+  def boolean(self, *tags: str) -> bool:
+    value = self.text(*tags)
+    normalized = value.lower()
+    if normalized not in ("true", "false"):
+      raise ValueError(f"Invalid boolean value {value!r}")
+    return normalized == "true"
+
+  def unrecognized(self) -> Dict[str, str]:
+    return {tag: value for tag, value in self._scalars.items() if tag not in self._recognized_tags}
 
 
-@dataclass
-class AxisConfig(_FromXmlMixin):
-  """A single motion axis (``SingleAxisConfigBase`` — X, Y, or Z stage motor)."""
+@dataclass(frozen=True, kw_only=True)
+class _AxisXmlValues:
+  motion_name: str
+  config_version: int
+  motor_type: int
+  comm_index: int
+  controller_index: int
+  axis_index: int
+  enabled: bool
+  max_velocity: float
+  max_acceleration: float
+  max_deceleration: float
+  max_s_acceleration: int
+  moderate_acceleration: float
+  minimum_acceleration: float
+  moderate_s_acceleration: int
+  minimum_s_acceleration: int
+  s_curve_support: bool
+  home_type: str
+  homing_velocity: float
+  index_velocity: float
+  homing_short_move: int
+  home_offset: float
+  positive_limit: bool
+  negative_limit: bool
+  limit_polarity: int
+  invert_axis_direction: bool
+  default_positive_direction: bool
+  moving_current_percentage: int
+  holding_current_percentage: int
+  loading_current_percentage: int
+  moving_overload_limit: int
+  mode_enable_limits: bool
+  mode_enable_step_and_direction: bool
+  mode_enable_position_correction: bool
+  mode_enable_motor_slave_to_encoder: bool
+  course_position_error_window: int
+  fine_position_error_window: int
+  gain: int
+  encoder_to_motor_tick_ratio: float
+  backlash_compensation: int
+  motor_response_time: int
 
-  motion_name: str = ""
-  config_version: int = 0
-  motor_type: int = 0
-  comm_index: int = 0
-  controller_index: int = 0
-  axis_index: int = 0
-  enabled: bool = True
+
+def _read_axis_values(reader: _XmlScalars, limit_polarity: int) -> _AxisXmlValues:
+  return _AxisXmlValues(
+    motion_name=reader.text("MotionName"),
+    config_version=reader.integer("ConfigVersion"),
+    motor_type=reader.integer("MotorType"),
+    comm_index=reader.integer("CommIndex"),
+    controller_index=reader.integer("ControllerIndex"),
+    axis_index=reader.integer("AxisIndex"),
+    enabled=reader.boolean("Enabled"),
+    max_velocity=reader.floating("MaxVelocity"),
+    max_acceleration=reader.floating("MaxAcceleration"),
+    max_deceleration=reader.floating("MaxDeceleration"),
+    max_s_acceleration=reader.integer("MaxSAcceleration"),
+    moderate_acceleration=reader.floating(
+      "ModerateAccleration",
+      "ModerateAcceleration",
+    ),
+    minimum_acceleration=reader.floating("MinimumAcceleration"),
+    moderate_s_acceleration=reader.integer("ModerateSAcceleration"),
+    minimum_s_acceleration=reader.integer("MinimumSAcceleration"),
+    s_curve_support=reader.boolean("SCurveSupport"),
+    home_type=reader.text("HomeType"),
+    homing_velocity=reader.floating("HomingVelocity"),
+    index_velocity=reader.floating("IndexVelocity"),
+    homing_short_move=reader.integer("HomingShortMove"),
+    home_offset=reader.floating("HomeOffset"),
+    positive_limit=reader.boolean("PositiveLimit"),
+    negative_limit=reader.boolean("NegativeLimit"),
+    limit_polarity=limit_polarity,
+    invert_axis_direction=reader.boolean("InvertAxisDirection"),
+    default_positive_direction=reader.boolean("DefaultPositiveDirection"),
+    moving_current_percentage=reader.integer("MovingCurrentPercentage"),
+    holding_current_percentage=reader.integer("HoldingCurrentPercentage"),
+    loading_current_percentage=reader.integer("LoadingCurrentPercentage"),
+    moving_overload_limit=reader.integer("MovingOverloadLimit"),
+    mode_enable_limits=reader.boolean("Mode_EnableLimits"),
+    mode_enable_step_and_direction=reader.boolean("Mode_EnableStepAndDirection"),
+    mode_enable_position_correction=reader.boolean("Mode_EnablePositionCorrection"),
+    mode_enable_motor_slave_to_encoder=reader.boolean("Mode_EnableMotorSlaveToEncoder"),
+    course_position_error_window=reader.integer("CoursePositionErrorWindow"),
+    fine_position_error_window=reader.integer("FinePositionErrorWindow"),
+    gain=reader.integer("Gain"),
+    encoder_to_motor_tick_ratio=reader.floating("EncoderToMotorTickRatio"),
+    backlash_compensation=reader.integer("BacklashCompensation"),
+    motor_response_time=reader.integer("MotorResponseTime"),
+  )
+
+
+@dataclass(kw_only=True)
+class AxisConfig:
+  """Configuration shared by encoder-controlled motors."""
+
+  motion_name: str
+  config_version: int
+  motor_type: int
+  comm_index: int
+  controller_index: int
+  axis_index: int
+  enabled: bool
 
   # velocity / acceleration profile
-  max_velocity: float = 0.0
-  max_acceleration: float = 0.0
-  max_deceleration: float = 0.0
-  max_s_acceleration: int = 0
-  moderate_acceleration: float = 0.0
-  minimum_acceleration: float = 0.0
-  moderate_s_acceleration: int = 0
-  minimum_s_acceleration: int = 0
-  s_curve_support: bool = False
+  max_velocity: float
+  max_acceleration: float
+  max_deceleration: float
+  max_s_acceleration: int
+  moderate_acceleration: float
+  minimum_acceleration: float
+  moderate_s_acceleration: int
+  minimum_s_acceleration: int
+  s_curve_support: bool
 
   # homing
-  home_type: str = ""
-  homing_velocity: float = 0.0
-  index_velocity: float = 0.0
-  homing_short_move: int = 0
-  home_offset: float = 0.0
+  home_type: str
+  homing_velocity: float
+  index_velocity: float
+  homing_short_move: int
+  home_offset: float
 
   # limits / direction
-  positive_limit: bool = False
-  negative_limit: bool = False
-  limit_polarity: int = 0
-  invert_axis_direction: bool = False
-  default_positive_direction: bool = False
-  min_position: float = 0.0
-  max_position: float = 0.0
+  positive_limit: bool
+  negative_limit: bool
+  limit_polarity: int
+  invert_axis_direction: bool
+  default_positive_direction: bool
 
   # motor currents (percent)
-  moving_current_percentage: int = 0
-  holding_current_percentage: int = 0
-  loading_current_percentage: int = 0
-  maximum_allowed_current_percentage: int = 0
-  moving_overload_limit: int = 0
+  moving_current_percentage: int
+  holding_current_percentage: int
+  loading_current_percentage: int
+  moving_overload_limit: int
 
   # closed-loop / encoder / position correction
-  mode_enable_limits: bool = False
-  mode_enable_step_and_direction: bool = False
-  mode_enable_position_correction: bool = False
-  mode_enable_motor_slave_to_encoder: bool = False
-  course_position_error_window: int = 0
-  fine_position_error_window: int = 0
-  gain: int = 0
-  encoder_to_motor_tick_ratio: float = 0.0
-  backlash_compensation: int = 0
-  motor_response_time: int = 0
-  mm_per_encoder_tick: float = 0.0
-  number_of_encoder_tick_per_rev: int = 0
+  mode_enable_limits: bool
+  mode_enable_step_and_direction: bool
+  mode_enable_position_correction: bool
+  mode_enable_motor_slave_to_encoder: bool
+  course_position_error_window: int
+  fine_position_error_window: int
+  gain: int
+  encoder_to_motor_tick_ratio: float
+  backlash_compensation: int
+  motor_response_time: int
 
-  extra: Dict[str, str] = field(default_factory=dict)
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "MotionName": ("motion_name", str),
-    "ConfigVersion": ("config_version", int),
-    "MotorType": ("motor_type", int),
-    "CommIndex": ("comm_index", int),
-    "ControllerIndex": ("controller_index", int),
-    "AxisIndex": ("axis_index", int),
-    "Enabled": ("enabled", bool),
-    "MaxVelocity": ("max_velocity", float),
-    "MaxAcceleration": ("max_acceleration", float),
-    "MaxDeceleration": ("max_deceleration", float),
-    "MaxSAcceleration": ("max_s_acceleration", int),
-    "ModerateAccleration": ("moderate_acceleration", float),  # (XML tag is spelled this way)
-    "ModerateAcceleration": ("moderate_acceleration", float),
-    "MinimumAcceleration": ("minimum_acceleration", float),
-    "ModerateSAcceleration": ("moderate_s_acceleration", int),
-    "MinimumSAcceleration": ("minimum_s_acceleration", int),
-    "SCurveSupport": ("s_curve_support", bool),
-    "HomeType": ("home_type", str),
-    "HomingVelocity": ("homing_velocity", float),
-    "IndexVelocity": ("index_velocity", float),
-    "HomingShortMove": ("homing_short_move", int),
-    "HomeOffset": ("home_offset", float),
-    "PositiveLimit": ("positive_limit", bool),
-    "NegativeLimit": ("negative_limit", bool),
-    "LimitPolarity": ("limit_polarity", int),
-    "InvertAxisDirection": ("invert_axis_direction", bool),
-    "DefaultPositiveDirection": ("default_positive_direction", bool),
-    "MinPosition": ("min_position", float),
-    "MaxPosition": ("max_position", float),
-    "MovingCurrentPercentage": ("moving_current_percentage", int),
-    "HoldingCurrentPercentage": ("holding_current_percentage", int),
-    "LoadingCurrentPercentage": ("loading_current_percentage", int),
-    "MaximumAllowedCurrentPercentage": ("maximum_allowed_current_percentage", int),
-    "MovingOverloadLimit": ("moving_overload_limit", int),
-    "Mode_EnableLimits": ("mode_enable_limits", bool),
-    "Mode_EnableStepAndDirection": ("mode_enable_step_and_direction", bool),
-    "Mode_EnablePositionCorrection": ("mode_enable_position_correction", bool),
-    "Mode_EnableMotorSlaveToEncoder": ("mode_enable_motor_slave_to_encoder", bool),
-    "CoursePositionErrorWindow": ("course_position_error_window", int),
-    "FinePositionErrorWindow": ("fine_position_error_window", int),
-    "Gain": ("gain", int),
-    "EncoderToMotorTickRatio": ("encoder_to_motor_tick_ratio", float),
-    "BacklashCompensation": ("backlash_compensation", int),
-    "MotorResponseTime": ("motor_response_time", int),
-    "MMPerEncoderTick": ("mm_per_encoder_tick", float),
-    "NumberOfEncoderTickPerRev": ("number_of_encoder_tick_per_rev", int),
-  }
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "AxisConfig":
+    reader = _XmlScalars(_leaf_scalars(element))
+    values = _read_axis_values(reader, reader.integer("LimitPolarity"))
+    return cls(
+      motion_name=values.motion_name,
+      config_version=values.config_version,
+      motor_type=values.motor_type,
+      comm_index=values.comm_index,
+      controller_index=values.controller_index,
+      axis_index=values.axis_index,
+      enabled=values.enabled,
+      max_velocity=values.max_velocity,
+      max_acceleration=values.max_acceleration,
+      max_deceleration=values.max_deceleration,
+      max_s_acceleration=values.max_s_acceleration,
+      moderate_acceleration=values.moderate_acceleration,
+      minimum_acceleration=values.minimum_acceleration,
+      moderate_s_acceleration=values.moderate_s_acceleration,
+      minimum_s_acceleration=values.minimum_s_acceleration,
+      s_curve_support=values.s_curve_support,
+      home_type=values.home_type,
+      homing_velocity=values.homing_velocity,
+      index_velocity=values.index_velocity,
+      homing_short_move=values.homing_short_move,
+      home_offset=values.home_offset,
+      positive_limit=values.positive_limit,
+      negative_limit=values.negative_limit,
+      limit_polarity=values.limit_polarity,
+      invert_axis_direction=values.invert_axis_direction,
+      default_positive_direction=values.default_positive_direction,
+      moving_current_percentage=values.moving_current_percentage,
+      holding_current_percentage=values.holding_current_percentage,
+      loading_current_percentage=values.loading_current_percentage,
+      moving_overload_limit=values.moving_overload_limit,
+      mode_enable_limits=values.mode_enable_limits,
+      mode_enable_step_and_direction=values.mode_enable_step_and_direction,
+      mode_enable_position_correction=values.mode_enable_position_correction,
+      mode_enable_motor_slave_to_encoder=values.mode_enable_motor_slave_to_encoder,
+      course_position_error_window=values.course_position_error_window,
+      fine_position_error_window=values.fine_position_error_window,
+      gain=values.gain,
+      encoder_to_motor_tick_ratio=values.encoder_to_motor_tick_ratio,
+      backlash_compensation=values.backlash_compensation,
+      motor_response_time=values.motor_response_time,
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-@dataclass
-class GalvoConfig(_FromXmlMixin):
+@dataclass(kw_only=True)
+class LinearAxisConfig(AxisConfig):
+  """A linear X, Y, or Z motor with millimeter position bounds."""
+
+  min_position: float
+  max_position: float
+  mm_per_encoder_tick: float
+
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "LinearAxisConfig":
+    reader = _XmlScalars(_leaf_scalars(element))
+    # Linear-axis vendor files commonly omit LimitPolarity; their fixed polarity is 0.
+    values = _read_axis_values(reader, reader.integer_or("LimitPolarity", 0))
+    return cls(
+      motion_name=values.motion_name,
+      config_version=values.config_version,
+      motor_type=values.motor_type,
+      comm_index=values.comm_index,
+      controller_index=values.controller_index,
+      axis_index=values.axis_index,
+      enabled=values.enabled,
+      max_velocity=values.max_velocity,
+      max_acceleration=values.max_acceleration,
+      max_deceleration=values.max_deceleration,
+      max_s_acceleration=values.max_s_acceleration,
+      moderate_acceleration=values.moderate_acceleration,
+      minimum_acceleration=values.minimum_acceleration,
+      moderate_s_acceleration=values.moderate_s_acceleration,
+      minimum_s_acceleration=values.minimum_s_acceleration,
+      s_curve_support=values.s_curve_support,
+      home_type=values.home_type,
+      homing_velocity=values.homing_velocity,
+      index_velocity=values.index_velocity,
+      homing_short_move=values.homing_short_move,
+      home_offset=values.home_offset,
+      positive_limit=values.positive_limit,
+      negative_limit=values.negative_limit,
+      limit_polarity=values.limit_polarity,
+      invert_axis_direction=values.invert_axis_direction,
+      default_positive_direction=values.default_positive_direction,
+      moving_current_percentage=values.moving_current_percentage,
+      holding_current_percentage=values.holding_current_percentage,
+      loading_current_percentage=values.loading_current_percentage,
+      moving_overload_limit=values.moving_overload_limit,
+      mode_enable_limits=values.mode_enable_limits,
+      mode_enable_step_and_direction=values.mode_enable_step_and_direction,
+      mode_enable_position_correction=values.mode_enable_position_correction,
+      mode_enable_motor_slave_to_encoder=values.mode_enable_motor_slave_to_encoder,
+      course_position_error_window=values.course_position_error_window,
+      fine_position_error_window=values.fine_position_error_window,
+      gain=values.gain,
+      encoder_to_motor_tick_ratio=values.encoder_to_motor_tick_ratio,
+      backlash_compensation=values.backlash_compensation,
+      motor_response_time=values.motor_response_time,
+      min_position=reader.floating("MinPosition"),
+      max_position=reader.floating("MaxPosition"),
+      mm_per_encoder_tick=reader.floating("MMPerEncoderTick"),
+      unrecognized_fields=reader.unrecognized(),
+    )
+
+
+@dataclass(kw_only=True)
+class GalvoConfig:
   """A galvanometer scan axis (``XGalvo`` / ``YGalvo``).
 
   Note: galvo sections carry no ``MotionName``; they are voltage-driven DAC axes.
   """
 
-  config_version: int = 0
-  controller_index: int = 0
-  position_error_window: int = 0
-  velocity_error_window: int = 0
-  big_move_delay_ms: int = 0
-  min_voltage: float = 0.0
-  max_voltage: float = 0.0
-  invert_voltage: bool = False
-  enabled: bool = True
-  extra: Dict[str, str] = field(default_factory=dict)
+  config_version: int
+  controller_index: int
+  position_error_window: int
+  velocity_error_window: int
+  big_move_delay_ms: int
+  min_voltage: float
+  max_voltage: float
+  invert_voltage: bool
+  enabled: bool
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "ConfigVersion": ("config_version", int),
-    "ControllerIndex": ("controller_index", int),
-    "PositionErrorWindow": ("position_error_window", int),
-    "VelocityErrorWindow": ("velocity_error_window", int),
-    "BigMoveDelayMS": ("big_move_delay_ms", int),
-    "MinVoltage": ("min_voltage", float),
-    "MaxVoltage": ("max_voltage", float),
-    "InvertVoltage": ("invert_voltage", bool),
-    "Enabled": ("enabled", bool),
-  }
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "GalvoConfig":
+    reader = _XmlScalars(_leaf_scalars(element))
+    return cls(
+      config_version=reader.integer("ConfigVersion"),
+      controller_index=reader.integer("ControllerIndex"),
+      position_error_window=reader.integer("PositionErrorWindow"),
+      velocity_error_window=reader.integer("VelocityErrorWindow"),
+      big_move_delay_ms=reader.integer("BigMoveDelayMS"),
+      min_voltage=reader.floating("MinVoltage"),
+      max_voltage=reader.floating("MaxVoltage"),
+      invert_voltage=reader.boolean("InvertVoltage"),
+      enabled=reader.boolean("Enabled"),
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
 @dataclass(frozen=True)
@@ -255,8 +447,8 @@ class GalvoAxisOpticalCalibration:
 
   magnifications: Dict[int, GalvoMagnificationCalibration]
   logical_filter_offsets: Dict[int, float]
-  laser_center_voltage: float = 0.0
-  uv_laser_center_voltage: float = 0.0
+  laser_center_voltage: float
+  uv_laser_center_voltage: float
 
 
 @dataclass(frozen=True)
@@ -268,126 +460,233 @@ class GalvoOpticalCalibration:
   source_path: Optional[str] = None
 
 
-@dataclass
-class ExternalCameraControlConfig(_FromXmlMixin):
+@dataclass(kw_only=True)
+class ExternalCameraControlConfig:
   """Camera trigger/status-line configuration from ``ExternalCameraControl``."""
 
-  config_version: int = 0
-  enabled: bool = False
-  invert_busy: bool = False
-  invert_integration: bool = False
-  extra: Dict[str, str] = field(default_factory=dict)
+  config_version: int
+  enabled: bool
+  invert_busy: bool
+  invert_integration: bool
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "ConfigVersion": ("config_version", int),
-    "Enabled": ("enabled", bool),
-    "InvertBusy": ("invert_busy", bool),
-    "InvertIntegration": ("invert_integration", bool),
-  }
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "ExternalCameraControlConfig":
+    reader = _XmlScalars(_leaf_scalars(element))
+    return cls(
+      config_version=reader.integer("ConfigVersion"),
+      enabled=reader.boolean("Enabled"),
+      invert_busy=reader.boolean("InvertBusy"),
+      invert_integration=reader.boolean("InvertIntegration"),
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-@dataclass
-class FilterMapEntry(_FromXmlMixin):
+@dataclass(kw_only=True)
+class FilterMapEntry:
   """One physical<->logical filter position mapping (``FilterMap``)."""
 
-  logical_number: int = 0
-  physical_number: int = 0
-  extra: Dict[str, str] = field(default_factory=dict)
+  logical_number: int
+  physical_number: int
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "LogicalNumber": ("logical_number", int),
-    "PhysicalNumber": ("physical_number", int),
-  }
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "FilterMapEntry":
+    reader = _XmlScalars(_leaf_scalars(element))
+    return cls(
+      logical_number=reader.integer("LogicalNumber"),
+      physical_number=reader.integer("PhysicalNumber"),
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class FilterWheelConfig(AxisConfig):
   """A discrete rotary filter wheel (``DichroicFilterWheel`` and friends)."""
 
-  number_of_filters: int = 0
-  filter_map: List[FilterMapEntry] = field(default_factory=list)
-
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    **AxisConfig._FIELD_MAP,
-    "NumberOfFilters": ("number_of_filters", int),
-    "NumberOfEncoderTickPerRev": ("number_of_encoder_tick_per_rev", int),
-  }
+  number_of_encoder_tick_per_rev: int
+  number_of_filters: int
+  filter_map: List[FilterMapEntry]
 
   @classmethod
   def from_element(cls, element: ET.Element) -> "FilterWheelConfig":
-    obj = super().from_element(element)  # type: ignore[assignment]
-    for child in element:
-      if _localname(child.tag) == "FilterMap":
-        obj.filter_map.append(FilterMapEntry.from_element(child))
-    return obj
+    reader = _XmlScalars(_leaf_scalars(element))
+    values = _read_axis_values(reader, reader.integer("LimitPolarity"))
+    return cls(
+      motion_name=values.motion_name,
+      config_version=values.config_version,
+      motor_type=values.motor_type,
+      comm_index=values.comm_index,
+      controller_index=values.controller_index,
+      axis_index=values.axis_index,
+      enabled=values.enabled,
+      max_velocity=values.max_velocity,
+      max_acceleration=values.max_acceleration,
+      max_deceleration=values.max_deceleration,
+      max_s_acceleration=values.max_s_acceleration,
+      moderate_acceleration=values.moderate_acceleration,
+      minimum_acceleration=values.minimum_acceleration,
+      moderate_s_acceleration=values.moderate_s_acceleration,
+      minimum_s_acceleration=values.minimum_s_acceleration,
+      s_curve_support=values.s_curve_support,
+      home_type=values.home_type,
+      homing_velocity=values.homing_velocity,
+      index_velocity=values.index_velocity,
+      homing_short_move=values.homing_short_move,
+      home_offset=values.home_offset,
+      positive_limit=values.positive_limit,
+      negative_limit=values.negative_limit,
+      limit_polarity=values.limit_polarity,
+      invert_axis_direction=values.invert_axis_direction,
+      default_positive_direction=values.default_positive_direction,
+      moving_current_percentage=values.moving_current_percentage,
+      holding_current_percentage=values.holding_current_percentage,
+      loading_current_percentage=values.loading_current_percentage,
+      moving_overload_limit=values.moving_overload_limit,
+      mode_enable_limits=values.mode_enable_limits,
+      mode_enable_step_and_direction=values.mode_enable_step_and_direction,
+      mode_enable_position_correction=values.mode_enable_position_correction,
+      mode_enable_motor_slave_to_encoder=values.mode_enable_motor_slave_to_encoder,
+      course_position_error_window=values.course_position_error_window,
+      fine_position_error_window=values.fine_position_error_window,
+      gain=values.gain,
+      encoder_to_motor_tick_ratio=values.encoder_to_motor_tick_ratio,
+      backlash_compensation=values.backlash_compensation,
+      motor_response_time=values.motor_response_time,
+      number_of_encoder_tick_per_rev=reader.integer("NumberOfEncoderTickPerRev"),
+      number_of_filters=reader.integer("NumberOfFilters"),
+      filter_map=[
+        FilterMapEntry.from_element(child)
+        for child in element
+        if _xml_local_name(child.tag) == "FilterMap"
+      ],
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-@dataclass
-class IOChannelConfig(_FromXmlMixin):
-  """An analog-in/analog-out/digital/lighting IO point in ``IOConfiguration``."""
+@dataclass(kw_only=True)
+class AnalogInputConfig:
+  """One analog input from ``IOConfiguration``."""
 
-  io_name: str = ""
-  io_type: str = ""
-  channel: int = 0
-  bit_index: int = 0
-  logical_number: int = 0
-  physical_number: int = 0
-  min_voltage: float = 0.0
-  max_voltage: float = 0.0
-  invert: bool = False
-  invert_voltage: bool = False
-  extra: Dict[str, str] = field(default_factory=dict)
+  config_version: int
+  controller_index: int
+  channel: int
+  enabled: bool
+  invert: bool
+  io_name: str
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "IOName": ("io_name", str),
-    "IOType": ("io_type", str),
-    "Channel": ("channel", int),
-    "BitIndex": ("bit_index", int),
-    "LogicalNumber": ("logical_number", int),
-    "PhysicalNumber": ("physical_number", int),
-    "MinVoltage": ("min_voltage", float),
-    "MaxVoltage": ("max_voltage", float),
-    "Invert": ("invert", bool),
-    "InvertVoltage": ("invert_voltage", bool),
-  }
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "AnalogInputConfig":
+    reader = _XmlScalars(_leaf_scalars(element))
+    return cls(
+      config_version=reader.integer("ConfigVersion"),
+      controller_index=reader.integer("ControllerIndex"),
+      channel=reader.integer("Channel"),
+      enabled=reader.boolean("Enabled"),
+      invert=reader.boolean("Invert"),
+      io_name=reader.text("IOName"),
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-@dataclass
+@dataclass(kw_only=True)
+class DigitalIOConfig:
+  """One digital input or output from ``IOConfiguration``."""
+
+  config_version: int
+  io_type: str
+  bit_index: int
+  invert: bool
+  enabled: bool
+  io_name: str
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
+
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "DigitalIOConfig":
+    reader = _XmlScalars(_leaf_scalars(element))
+    return cls(
+      config_version=reader.integer("ConfigVersion"),
+      io_type=reader.text("IOType"),
+      bit_index=reader.integer("BitIndex"),
+      invert=reader.boolean("Invert"),
+      enabled=reader.boolean("Enabled"),
+      io_name=reader.text("IOName"),
+      unrecognized_fields=reader.unrecognized(),
+    )
+
+
+@dataclass(kw_only=True)
+class LightingIOConfig:
+  """One analog lighting output from ``IOConfiguration``."""
+
+  config_version: int
+  controller_index: int
+  channel: int
+  enabled: bool
+  invert: bool
+  io_name: str
+  min_voltage: float
+  max_voltage: float
+  delay_ms: int
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
+
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "LightingIOConfig":
+    reader = _XmlScalars(_leaf_scalars(element))
+    return cls(
+      config_version=reader.integer("ConfigVersion"),
+      controller_index=reader.integer("ControllerIndex"),
+      channel=reader.integer("Channel"),
+      enabled=reader.boolean("Enabled"),
+      invert=reader.boolean("Invert"),
+      io_name=reader.text("IOName"),
+      min_voltage=reader.floating("MinVoltage"),
+      max_voltage=reader.floating("MaxVoltage"),
+      delay_ms=reader.integer("DelayMS"),
+      unrecognized_fields=reader.unrecognized(),
+    )
+
+
+@dataclass(kw_only=True)
 class IOConfig:
   """The board IO map: analog ins, digital IOs and lighting IOs."""
 
-  analog_ins: List[IOChannelConfig] = field(default_factory=list)
-  digital_ios: List[IOChannelConfig] = field(default_factory=list)
-  lighting_ios: List[IOChannelConfig] = field(default_factory=list)
-
-  # XML container tag -> attribute that collects its repeated children.
-  _LIST_TAGS: ClassVar[Dict[str, str]] = {
-    "AnalogIns": "analog_ins",
-    "DigitalIOs": "digital_ios",
-    "LightingIOs": "lighting_ios",
-  }
+  analog_ins: List[AnalogInputConfig]
+  digital_ios: List[DigitalIOConfig]
+  lighting_ios: List[LightingIOConfig]
 
   @classmethod
   def from_element(cls, element: ET.Element) -> "IOConfig":
-    obj = cls()
+    analog_inputs: List[AnalogInputConfig] = []
+    digital_ios: List[DigitalIOConfig] = []
+    lighting_ios: List[LightingIOConfig] = []
     for child in element:
-      attr = cls._LIST_TAGS.get(_localname(child.tag))
-      if attr is not None:
-        getattr(obj, attr).append(IOChannelConfig.from_element(child))
-    return obj
+      collection_name = _xml_local_name(child.tag)
+      if collection_name == "AnalogIns":
+        analog_inputs.append(AnalogInputConfig.from_element(child))
+      elif collection_name == "DigitalIOs":
+        digital_ios.append(DigitalIOConfig.from_element(child))
+      elif collection_name == "LightingIOs":
+        lighting_ios.append(LightingIOConfig.from_element(child))
+    return cls(
+      analog_ins=analog_inputs,
+      digital_ios=digital_ios,
+      lighting_ios=lighting_ios,
+    )
 
 
 @dataclass
 class CeligoHardwareConfig:
   """Root hardware config, parsed from ``USBIOHardwareConfig.config``.
 
-  Either load it from the Celigo install (:meth:`from_install` / :meth:`from_xml`) or
-  build it directly in code and pass it to :class:`~pylabrobot.celigo.Celigo`.
+  Parse an explicit file with :meth:`from_xml`, or construct it directly as one
+  subobject of :class:`CeligoConfig`.
   """
 
-  x_axis: Optional[AxisConfig] = None
-  y_axis: Optional[AxisConfig] = None
-  z_axis: Optional[AxisConfig] = None
+  x_axis: Optional[LinearAxisConfig] = None
+  y_axis: Optional[LinearAxisConfig] = None
+  z_axis: Optional[LinearAxisConfig] = None
   x_galvo: Optional[GalvoConfig] = None
   y_galvo: Optional[GalvoConfig] = None
   external_camera_control: Optional[ExternalCameraControlConfig] = None
@@ -403,14 +702,6 @@ class CeligoHardwareConfig:
   io: Optional[IOConfig] = None
   source_path: Optional[str] = None
 
-  # Default locations to search under an install root for the ConfigFiles dir.
-  _CONFIG_SUBDIRS: ClassVar["tuple[str, ...]"] = (
-    "ConfigFiles",
-    os.path.join("Celigo", "ConfigFiles"),
-    os.path.join("Nexcelom Bioscience", "Celigo", "ConfigFiles"),
-  )
-  _HARDWARE_FILE: ClassVar[str] = "USBIOHardwareConfig.config"
-
   @staticmethod
   def _inner_root(tree_root: ET.Element) -> ET.Element:
     """Descend through the .NET ``xmlSerializerSection`` envelope to the config body.
@@ -419,9 +710,8 @@ class CeligoHardwareConfig:
     ``USBIOConfigurationFile``). Tolerates the file being given with or without the
     ``<configuration>`` / ``<xmlSerializerSection>`` wrapper.
     """
-    candidates = [tree_root] + list(tree_root.iter())
-    for el in candidates:
-      child_tags = {_localname(c.tag) for c in el}
+    for el in tree_root.iter():
+      child_tags = {_xml_local_name(c.tag) for c in el}
       if "XAxis" in child_tags or "YAxis" in child_tags:
         return el
     return tree_root
@@ -431,142 +721,71 @@ class CeligoHardwareConfig:
     """Parse a ``USBIOHardwareConfig.config`` file into a config object."""
     root = ET.parse(path).getroot()
     body = cls._inner_root(root)
-    cfg = cls(source_path=os.path.abspath(path))
+    hardware_config = cls(source_path=os.path.abspath(path))
     for child in body:
-      name = _localname(child.tag)
+      name = _xml_local_name(child.tag)
       if name == "XAxis":
-        cfg.x_axis = AxisConfig.from_element(child)
+        hardware_config.x_axis = LinearAxisConfig.from_element(child)
       elif name == "YAxis":
-        cfg.y_axis = AxisConfig.from_element(child)
+        hardware_config.y_axis = LinearAxisConfig.from_element(child)
       elif name == "ZSingleAxis":
-        cfg.z_axis = AxisConfig.from_element(child)
+        hardware_config.z_axis = LinearAxisConfig.from_element(child)
       elif name == "XGalvo":
-        cfg.x_galvo = GalvoConfig.from_element(child)
+        hardware_config.x_galvo = GalvoConfig.from_element(child)
       elif name == "YGalvo":
-        cfg.y_galvo = GalvoConfig.from_element(child)
+        hardware_config.y_galvo = GalvoConfig.from_element(child)
       elif name == "ExternalCameraControl":
-        cfg.external_camera_control = ExternalCameraControlConfig.from_element(child)
+        hardware_config.external_camera_control = ExternalCameraControlConfig.from_element(child)
       elif name == "BeamExpander":
-        cfg.beam_expander = AxisConfig.from_element(child)
+        hardware_config.beam_expander = AxisConfig.from_element(child)
       elif name == "CameraFilterWheel":
-        cfg.camera_filter_wheel = FilterWheelConfig.from_element(child)
+        hardware_config.camera_filter_wheel = FilterWheelConfig.from_element(child)
       elif name == "DichroicFilterWheel":
-        cfg.dichroic_filter_wheel = FilterWheelConfig.from_element(child)
+        hardware_config.dichroic_filter_wheel = FilterWheelConfig.from_element(child)
       elif name == "Door":
-        cfg.door = AxisConfig.from_element(child)
+        hardware_config.door = AxisConfig.from_element(child)
       elif name == "ExcitationFilterWheel":
-        cfg.excitation_filter_wheel = FilterWheelConfig.from_element(child)
+        hardware_config.excitation_filter_wheel = FilterWheelConfig.from_element(child)
       elif name == "ExcitationNDFilterWheel":
-        cfg.excitation_nd_filter_wheel = FilterWheelConfig.from_element(child)
+        hardware_config.excitation_nd_filter_wheel = FilterWheelConfig.from_element(child)
       elif name == "LaserAttenuator":
-        cfg.laser_attenuator = AxisConfig.from_element(child)
+        hardware_config.laser_attenuator = AxisConfig.from_element(child)
       elif name == "LaserNDFilterWheel":
-        cfg.laser_nd_filter_wheel = FilterWheelConfig.from_element(child)
+        hardware_config.laser_nd_filter_wheel = FilterWheelConfig.from_element(child)
       elif name == "MagChanger":
-        cfg.magnification_changer = FilterWheelConfig.from_element(child)
+        hardware_config.magnification_changer = FilterWheelConfig.from_element(child)
       elif name == "IOConfiguration":
-        cfg.io = IOConfig.from_element(child)
-    return cfg
-
-  @classmethod
-  def from_install(cls, install_dir: Optional[str] = None) -> "CeligoHardwareConfig":
-    """Locate and parse the Celigo hardware config (the default loading path).
-
-    ``install_dir`` may point at the install root, a ``ConfigFiles`` directory, or be
-    omitted to use the ``CELIGO_INSTALL_DIR`` environment variable. Raises
-    :class:`FileNotFoundError` if the config file cannot be found.
-    """
-    path = cls._locate_hardware_file(install_dir)
-    if path is None:
-      raise FileNotFoundError(
-        f"Could not find {cls._HARDWARE_FILE}. Pass install_dir= pointing at the "
-        "Celigo install root or its ConfigFiles directory, or set CELIGO_INSTALL_DIR."
-      )
-    return cls.from_xml(path)
-
-  @classmethod
-  def _locate_hardware_file(cls, install_dir: Optional[str]) -> Optional[str]:
-    return cls._locate_config_file(install_dir, cls._HARDWARE_FILE)
-
-  @classmethod
-  def _locate_config_file(cls, install_dir: Optional[str], filename: str) -> Optional[str]:
-    roots: List[str] = []
-    if install_dir is not None:
-      roots.append(install_dir)
-    env = os.environ.get("CELIGO_INSTALL_DIR")
-    if env:
-      roots.append(env)
-    for root in roots:
-      # A direct config path also establishes the directory for companion files.
-      if os.path.isfile(root):
-        if os.path.basename(root).lower() == filename.lower():
-          return root
-        root = os.path.dirname(root)
-      # a ConfigFiles dir, or an install root containing one
-      direct = os.path.join(root, filename)
-      if os.path.isfile(direct):
-        return direct
-      if os.path.isdir(root):
-        match = next((name for name in os.listdir(root) if name.lower() == filename.lower()), None)
-        if match is not None:
-          return os.path.join(root, match)
-      for sub in cls._CONFIG_SUBDIRS:
-        candidate = os.path.join(root, sub, filename)
-        if os.path.isfile(candidate):
-          return candidate
-        directory = os.path.join(root, sub)
-        if os.path.isdir(directory):
-          match = next(
-            (name for name in os.listdir(directory) if name.lower() == filename.lower()), None
-          )
-          if match is not None:
-            return os.path.join(directory, match)
-    return None
-
-  @classmethod
-  def locate_config_file(cls, install_dir: Optional[str], filename: str) -> str:
-    """Locate a named companion file in the same places as the hardware config.
-
-    For example::
-
-      path = CeligoHardwareConfig.locate_config_file(
-        config_root, "HardwareDefaultConfig.xml"
-      )
-
-    ``config_root`` may be ``None`` when ``CELIGO_INSTALL_DIR`` is set.
-    """
-    path = cls._locate_config_file(install_dir, filename)
-    if path is None:
-      raise FileNotFoundError(
-        f"Could not find {filename}. Pass install_dir= pointing at the Celigo install "
-        "root or its ConfigFiles directory, or set CELIGO_INSTALL_DIR."
-      )
-    return path
+        hardware_config.io = IOConfig.from_element(child)
+    return hardware_config
 
 
-@dataclass
-class ChannelDescriptor(_FromXmlMixin):
+@dataclass(kw_only=True)
+class ChannelDescriptor:
   """An imaging channel from ``ChannelConfig.xml`` (Default / HWAF / fluorescence)."""
 
-  name: str = ""
-  fixed_type: str = ""
-  description: str = ""
-  guid: str = ""
-  calibration_index: int = 0
-  channel_key: str = ""
-  extra: Dict[str, str] = field(default_factory=dict)
+  name: str
+  fixed_type: str
+  description: str
+  guid: str
+  calibration_index: int
+  channel_key: str
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "Name": ("name", str),
-    "FixedType": ("fixed_type", str),
-    "Description": ("description", str),
-    "ChannelDescGUID": ("guid", str),
-    "CalibrationIndex": ("calibration_index", int),
-    "GetChanDescKey": ("channel_key", str),
-  }
+  @classmethod
+  def from_element(cls, element: ET.Element) -> "ChannelDescriptor":
+    reader = _XmlScalars(_leaf_scalars(element))
+    return cls(
+      name=reader.text("Name"),
+      fixed_type=reader.text("FixedType"),
+      description=reader.text("Description"),
+      guid=reader.text("ChannelDescGUID"),
+      calibration_index=reader.integer("CalibrationIndex"),
+      channel_key=reader.text("GetChanDescKey"),
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-def load_channels(path: str) -> List[ChannelDescriptor]:
+def load_channel_descriptors(path: str) -> List[ChannelDescriptor]:
   """Parse ``ChannelConfig.xml`` into a list of :class:`ChannelDescriptor`.
 
   Collects channel descriptors from the XML, deduplicating by GUID and preserving order.
@@ -575,7 +794,7 @@ def load_channels(path: str) -> List[ChannelDescriptor]:
   channels: List[ChannelDescriptor] = []
   seen: set = set()
   for el in root.iter():
-    if _localname(el.tag) == "ChannelDescriptor":
+    if _xml_local_name(el.tag) == "ChannelDescriptor":
       ch = ChannelDescriptor.from_element(el)
       if ch.guid and ch.guid in seen:
         continue
@@ -595,9 +814,9 @@ class IlluminationChannelConfig:
   intensity_percent: float
   lighting_io_name: str
   strobe: bool
-  z_offset_to_brightfield_mm: float = 0.0
-  mm_per_pixel_x_correction_to_brightfield: float = 1.0
-  mm_per_pixel_y_correction_to_brightfield: float = 1.0
+  z_offset_to_brightfield_mm: float
+  mm_per_pixel_x_correction_to_brightfield: float
+  mm_per_pixel_y_correction_to_brightfield: float
 
 
 def _magnification_voltage_tag(magnification: int) -> str:
@@ -606,7 +825,7 @@ def _magnification_voltage_tag(magnification: int) -> str:
   return f"VoltageMag{magnification}X"
 
 
-def _channel_name(display_name: str) -> str:
+def _normalize_illumination_channel_name(display_name: str) -> str:
   normalized = display_name.strip().lower().replace("-", " ")
   if normalized.startswith("brightfield"):
     return "brightfield"
@@ -618,21 +837,20 @@ def _channel_name(display_name: str) -> str:
   return normalized.replace(" ", "_")
 
 
-def load_illumination_channels(
-  path: str, magnification: int = 10
+def _load_illumination_channels(
+  root: ET.Element,
+  magnification: int,
 ) -> Dict[str, IlluminationChannelConfig]:
-  """Load brightfield and fluorescence hardware recipes from LEAP calibration XML."""
   voltage_tag = _magnification_voltage_tag(magnification)
-  root = ET.parse(path).getroot()
   channels: Dict[str, IlluminationChannelConfig] = {}
 
   for element in root.iter():
-    element_name = _localname(element.tag)
+    element_name = _xml_local_name(element.tag)
     if element_name not in ("BFVoltageCal", "FLLight"):
       continue
     scalars = _all_leaf_scalars(element)
     display_name = "Brightfield" if element_name == "BFVoltageCal" else scalars.get("Name", "")
-    name = _channel_name(display_name)
+    name = _normalize_illumination_channel_name(display_name)
     if not name:
       continue
     required = {"LogicalFilter", voltage_tag}
@@ -672,13 +890,37 @@ def load_illumination_channels(
   return channels
 
 
+def load_illumination_channels(
+  path: str, magnification: int = 10
+) -> Dict[str, IlluminationChannelConfig]:
+  """Load one magnification's illumination recipes from LEAP calibration XML."""
+  return _load_illumination_channels(ET.parse(path).getroot(), magnification)
+
+
+def _load_all_illumination_channels(
+  root: ET.Element,
+) -> Dict[int, Dict[str, IlluminationChannelConfig]]:
+  magnifications = {
+    int(tag[len("VoltageMag") : -1])
+    for element in root.iter()
+    for tag in (_xml_local_name(element.tag),)
+    if tag.startswith("VoltageMag") and tag.endswith("X") and tag[len("VoltageMag") : -1].isdigit()
+  }
+  if not magnifications:
+    raise ValueError("LEAP calibration contains no magnification-specific channel voltages")
+  return {
+    magnification: _load_illumination_channels(root, magnification)
+    for magnification in sorted(magnifications)
+  }
+
+
 def _load_galvo_axis_optical_calibration(element: ET.Element) -> GalvoAxisOpticalCalibration:
   magnifications: Dict[int, GalvoMagnificationCalibration] = {}
   logical_filter_offsets: Dict[int, float] = {}
-  laser_center_voltage = 0.0
-  uv_laser_center_voltage = 0.0
+  laser_center_voltage: Optional[float] = None
+  uv_laser_center_voltage: Optional[float] = None
   for child in element:
-    name = _localname(child.tag)
+    name = _xml_local_name(child.tag)
     if name.startswith("ImageCenter") and name.endswith("X"):
       try:
         magnification = int(name[len("ImageCenter") : -1])
@@ -699,6 +941,16 @@ def _load_galvo_axis_optical_calibration(element: ET.Element) -> GalvoAxisOptica
       laser_center_voltage = float(child.text)
     elif name == "UVLaserCenterVoltage" and child.text:
       uv_laser_center_voltage = float(child.text)
+  if laser_center_voltage is None or uv_laser_center_voltage is None:
+    missing_centers = [
+      name
+      for name, value in (
+        ("LaserCenterVoltage", laser_center_voltage),
+        ("UVLaserCenterVoltage", uv_laser_center_voltage),
+      )
+      if value is None
+    ]
+    raise ValueError(f"{_xml_local_name(element.tag)} is missing {', '.join(missing_centers)}")
   return GalvoAxisOpticalCalibration(
     magnifications=magnifications,
     logical_filter_offsets=logical_filter_offsets,
@@ -707,12 +959,13 @@ def _load_galvo_axis_optical_calibration(element: ET.Element) -> GalvoAxisOptica
   )
 
 
-def load_galvo_optical_calibration(path: str) -> GalvoOpticalCalibration:
-  """Load galvo centers, frame spans, and filter offsets from LEAP calibration XML."""
-  root = ET.parse(path).getroot()
+def _load_galvo_optical_calibration(
+  root: ET.Element,
+  source_path: Optional[str] = None,
+) -> GalvoOpticalCalibration:
   axes: Dict[str, GalvoAxisOpticalCalibration] = {}
   for element in root.iter():
-    name = _localname(element.tag)
+    name = _xml_local_name(element.tag)
     if name in ("XGalvo", "YGalvo"):
       axes[name] = _load_galvo_axis_optical_calibration(element)
   missing = [name for name in ("XGalvo", "YGalvo") if name not in axes]
@@ -740,8 +993,13 @@ def load_galvo_optical_calibration(path: str) -> GalvoOpticalCalibration:
   return GalvoOpticalCalibration(
     x=axes["XGalvo"],
     y=axes["YGalvo"],
-    source_path=os.path.abspath(path),
+    source_path=os.path.abspath(source_path) if source_path is not None else None,
   )
+
+
+def load_galvo_optical_calibration(path: str) -> GalvoOpticalCalibration:
+  """Load galvo centers, frame spans, and filter offsets from LEAP calibration XML."""
+  return _load_galvo_optical_calibration(ET.parse(path).getroot(), source_path=path)
 
 
 @dataclass
@@ -752,20 +1010,20 @@ class Calibrated2DPolynomialTransform:
   ``reverse`` hold the two directions (galvo volts->mm and mm->galvo volts).
   """
 
-  forward: Dict[str, "tuple[float, float]"] = field(default_factory=dict)
-  reverse: Dict[str, "tuple[float, float]"] = field(default_factory=dict)
-  order: int = 3
+  forward: Dict[str, "tuple[float, float]"]
+  reverse: Dict[str, "tuple[float, float]"]
+  order: int
   successful: Optional[bool] = None
   source_path: Optional[str] = None
 
   @staticmethod
-  def _terms(direction_el: ET.Element) -> Dict[str, "tuple[float, float]"]:
+  def _terms(direction_element: ET.Element) -> Dict[str, "tuple[float, float]"]:
     terms: Dict[str, "tuple[float, float]"] = {}
-    for term in direction_el:
-      name = _localname(term.tag)
+    for term in direction_element:
+      name = _xml_local_name(term.tag)
       x = y = 0.0
       for comp in term:
-        cn = _localname(comp.tag)
+        cn = _xml_local_name(comp.tag)
         if cn == "X":
           x = float(comp.text) if comp.text else 0.0
         elif cn == "Y":
@@ -775,17 +1033,26 @@ class Calibrated2DPolynomialTransform:
 
   @classmethod
   def from_element(cls, element: ET.Element) -> "Calibrated2DPolynomialTransform":
-    type_name = _localname(element.tag).lower()
-    obj = cls(order=2 if "quadratic" in type_name else 3)
+    type_name = _xml_local_name(element.tag).lower()
+    forward: Optional[Dict[str, "tuple[float, float]"]] = None
+    reverse: Optional[Dict[str, "tuple[float, float]"]] = None
+    successful: Optional[bool] = None
     for el in element:
-      name = _localname(el.tag)
+      name = _xml_local_name(el.tag)
       if name == "Forward":
-        obj.forward = cls._terms(el)
+        forward = cls._terms(el)
       elif name == "Reverse":
-        obj.reverse = cls._terms(el)
+        reverse = cls._terms(el)
       elif name == "LastGalvoCalSuccessful" and el.text:
-        obj.successful = bool(_coerce(el.text, bool))
-    return obj
+        successful = _XmlScalars({"value": el.text}).boolean("value")
+    if forward is None or reverse is None:
+      raise ValueError("Galvo transformation requires Forward and Reverse coefficients")
+    return cls(
+      forward=forward,
+      reverse=reverse,
+      order=2 if "quadratic" in type_name else 3,
+      successful=successful,
+    )
 
   @classmethod
   def from_xml(cls, path: str) -> "Calibrated2DPolynomialTransform":
@@ -794,8 +1061,8 @@ class Calibrated2DPolynomialTransform:
       (
         el
         for el in root.iter()
-        if "transformation" in _localname(el.tag).lower()
-        or "tranformation" in _localname(el.tag).lower()
+        if "transformation" in _xml_local_name(el.tag).lower()
+        or "tranformation" in _xml_local_name(el.tag).lower()
       ),
       root,
     )
@@ -804,19 +1071,12 @@ class Calibrated2DPolynomialTransform:
     return obj
 
 
-@dataclass
-class Calibrated2DCubicTransform(Calibrated2DPolynomialTransform):
-  """Backward-compatible name for a cubic 2D calibration transform."""
-
-  order: int = 3
-
-
 def load_galvo_calibrations(path: str) -> Dict[int, Calibrated2DPolynomialTransform]:
   """Load every per-logical-filter galvo transform in a calibration file."""
   root = ET.parse(path).getroot()
   calibrations: Dict[int, Calibrated2DPolynomialTransform] = {}
   for setting in root.iter():
-    if _localname(setting.tag) != "setting":
+    if _xml_local_name(setting.tag) != "setting":
       continue
     key = setting.attrib.get("key", "")
     prefix = "GalvoCalibrationConfig_"
@@ -835,116 +1095,211 @@ def load_galvo_calibrations(path: str) -> Dict[int, Calibrated2DPolynomialTransf
   return calibrations
 
 
-def load_galvo_calibration(
-  path: str, logical_filter: Optional[int] = None
-) -> Calibrated2DPolynomialTransform:
-  """Load one galvo transform, defaulting to the first configured logical filter."""
-  calibrations = load_galvo_calibrations(path)
-  if not calibrations:
-    return Calibrated2DPolynomialTransform.from_xml(path)
-  if logical_filter is None:
-    logical_filter = min(calibrations)
-  try:
-    return calibrations[logical_filter]
-  except KeyError as exc:
-    raise KeyError(f"No galvo calibration for logical filter {logical_filter}") from exc
-
-
-@dataclass
-class CalibrationConfig(_FromXmlMixin):
+@dataclass(kw_only=True)
+class CalibrationConfig:
   """Per-machine optical/stage calibration (``CalibrationConfig.xml``).
 
   Feeds the pixel<->mm and sample-mm<->stage-mm affine transforms (see
   :mod:`pylabrobot.celigo.coordinates`).
   """
 
-  microns_per_pixel_x: float = 1.0
-  microns_per_pixel_y: float = 1.0
-  image_width_pixels: int = 2048
-  image_height_pixels: int = 2048
-  image_to_stage_theta_radians: float = 0.0
-  galvo_to_stage_theta_radians: float = 0.0
-  calibrated_plate_corner_x: float = 0.0
-  calibrated_plate_corner_y: float = 0.0
-  calibrated_plate_to_stage_theta_radians: float = 0.0
-  stage_x_scale: float = 1.0
-  stage_y_scale: float = 1.0
-  stage_shear: float = 0.0
-  stage_x_shear_offset: float = 0.0
-  stage_y_shear_offset: float = 0.0
-  calibrated_z_position: float = 0.0
-  calibrated_z_glass_plate_delta: float = 0.0
-  z_plane_x_coeff: float = 0.0
-  z_plane_y_coeff: float = 0.0
+  microns_per_pixel_x: float
+  microns_per_pixel_y: float
+  image_width_pixels: int
+  image_height_pixels: int
+  image_to_stage_theta_radians: float
+  galvo_to_stage_theta_radians: float
+  calibrated_plate_corner_x: float
+  calibrated_plate_corner_y: float
+  calibrated_plate_to_stage_theta_radians: float
+  stage_x_scale: float
+  stage_y_scale: float
+  stage_shear: float
+  stage_x_shear_offset: float
+  stage_y_shear_offset: float
+  calibrated_z_position: float
+  calibrated_z_glass_plate_delta: float
+  z_plane_x_coeff: float
+  z_plane_y_coeff: float
   source_path: Optional[str] = None
-  extra: Dict[str, str] = field(default_factory=dict)
-
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "MicronsPerPixelX": ("microns_per_pixel_x", float),
-    "MicronsPerPixelY": ("microns_per_pixel_y", float),
-    "ImageWidthPixels": ("image_width_pixels", int),
-    "ImageHeightPixels": ("image_height_pixels", int),
-    "ImageToStageThetaRadians": ("image_to_stage_theta_radians", float),
-    "GalvoToStageThetaRadians": ("galvo_to_stage_theta_radians", float),
-    "CalibratedPlateCornerX": ("calibrated_plate_corner_x", float),
-    "CalibratedPlateCornerY": ("calibrated_plate_corner_y", float),
-    "CalibratedPlateToStageThetaRadians": ("calibrated_plate_to_stage_theta_radians", float),
-    "StageXScale": ("stage_x_scale", float),
-    "StageYScale": ("stage_y_scale", float),
-    "StageShear": ("stage_shear", float),
-    "StageXShearOffset": ("stage_x_shear_offset", float),
-    "StageYShearOffset": ("stage_y_shear_offset", float),
-    "CalibratedZPosition": ("calibrated_z_position", float),
-    "CalibratedZGlassPlateDelta": ("calibrated_z_glass_plate_delta", float),
-    "ZPlaneXCoeff": ("z_plane_x_coeff", float),
-    "ZPlaneYCoeff": ("z_plane_y_coeff", float),
-  }
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
   @classmethod
   def from_xml(cls, path: str) -> "CalibrationConfig":
-    root = ET.parse(path).getroot()
-    obj = cls.from_scalars(_all_leaf_scalars(root))
-    obj.source_path = os.path.abspath(path)
-    return obj
+    reader = _XmlScalars(_all_leaf_scalars(ET.parse(path).getroot()))
+    return cls(
+      microns_per_pixel_x=reader.floating("MicronsPerPixelX"),
+      microns_per_pixel_y=reader.floating("MicronsPerPixelY"),
+      image_width_pixels=reader.integer("ImageWidthPixels"),
+      image_height_pixels=reader.integer("ImageHeightPixels"),
+      image_to_stage_theta_radians=reader.floating("ImageToStageThetaRadians"),
+      galvo_to_stage_theta_radians=reader.floating("GalvoToStageThetaRadians"),
+      calibrated_plate_corner_x=reader.floating("CalibratedPlateCornerX"),
+      calibrated_plate_corner_y=reader.floating("CalibratedPlateCornerY"),
+      calibrated_plate_to_stage_theta_radians=reader.floating("CalibratedPlateToStageThetaRadians"),
+      stage_x_scale=reader.floating("StageXScale"),
+      stage_y_scale=reader.floating("StageYScale"),
+      stage_shear=reader.floating("StageShear"),
+      stage_x_shear_offset=reader.floating("StageXShearOffset"),
+      stage_y_shear_offset=reader.floating("StageYShearOffset"),
+      calibrated_z_position=reader.floating("CalibratedZPosition"),
+      calibrated_z_glass_plate_delta=reader.floating("CalibratedZGlassPlateDelta"),
+      z_plane_x_coeff=reader.floating("ZPlaneXCoeff"),
+      z_plane_y_coeff=reader.floating("ZPlaneYCoeff"),
+      source_path=os.path.abspath(path),
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-@dataclass
-class HardwareDefaultConfig(_FromXmlMixin):
+@dataclass(kw_only=True)
+class HardwareDefaultConfig:
   """Instrument defaults (``HardwareDefaultConfig.xml``): plate corner, FOV, galvo MM/V."""
 
-  default_calibrated_z: float = 0.0
-  default_plate_x_corner_stage_coordinate: float = 0.0
-  default_plate_y_corner_stage_coordinate: float = 0.0
-  default_x_field_of_view_mm: float = 0.0
-  default_y_field_of_view_mm: float = 0.0
-  default_x_galvo_mm_per_volt: float = 0.0
-  default_y_galvo_mm_per_volt: float = 0.0
+  default_calibrated_z: float
+  default_plate_x_corner_stage_coordinate: float
+  default_plate_y_corner_stage_coordinate: float
+  default_x_field_of_view_mm: float
+  default_y_field_of_view_mm: float
+  default_x_galvo_mm_per_volt: float
+  default_y_galvo_mm_per_volt: float
   source_path: Optional[str] = None
-  extra: Dict[str, str] = field(default_factory=dict)
-
-  _FIELD_MAP: ClassVar[Dict[str, "tuple[str, type]"]] = {
-    "DefaultCalibratedZ": ("default_calibrated_z", float),
-    "DefaultPlateXCornerStageCoordinate": ("default_plate_x_corner_stage_coordinate", float),
-    "DefaultPlateYCornerStageCoordinate": ("default_plate_y_corner_stage_coordinate", float),
-    "DefaultXFieldOfViewMM": ("default_x_field_of_view_mm", float),
-    "DefaultYFieldOfViewMM": ("default_y_field_of_view_mm", float),
-    "DefaultXGalvoMMPerVolt": ("default_x_galvo_mm_per_volt", float),
-    "DefaultYGalvoMMPerVolt": ("default_y_galvo_mm_per_volt", float),
-  }
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
   @classmethod
   def from_xml(cls, path: str) -> "HardwareDefaultConfig":
-    root = ET.parse(path).getroot()
-    obj = cls.from_scalars(_all_leaf_scalars(root))
-    obj.source_path = os.path.abspath(path)
-    return obj
+    reader = _XmlScalars(_all_leaf_scalars(ET.parse(path).getroot()))
+    return cls(
+      default_calibrated_z=reader.floating("DefaultCalibratedZ"),
+      default_plate_x_corner_stage_coordinate=reader.floating("DefaultPlateXCornerStageCoordinate"),
+      default_plate_y_corner_stage_coordinate=reader.floating("DefaultPlateYCornerStageCoordinate"),
+      default_x_field_of_view_mm=reader.floating("DefaultXFieldOfViewMM"),
+      default_y_field_of_view_mm=reader.floating("DefaultYFieldOfViewMM"),
+      default_x_galvo_mm_per_volt=reader.floating("DefaultXGalvoMMPerVolt"),
+      default_y_galvo_mm_per_volt=reader.floating("DefaultYGalvoMMPerVolt"),
+      source_path=os.path.abspath(path),
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-def load_calibration(path: str) -> CalibrationConfig:
-  """Parse ``CalibrationConfig.xml`` into a :class:`CalibrationConfig`."""
-  return CalibrationConfig.from_xml(path)
+@dataclass(kw_only=True)
+class NavigationConfig:
+  """Galvo reach and frame overlap from ``NavigationConfig.xml``."""
+
+  frame_overlap_x_mm: float
+  frame_overlap_y_mm: float
+  max_galvo_deflection_x_mm: float
+  max_galvo_deflection_y_mm: float
+  source_path: Optional[str] = None
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
+
+  @classmethod
+  def from_xml(cls, path: str) -> "NavigationConfig":
+    reader = _XmlScalars(_all_leaf_scalars(ET.parse(path).getroot()))
+    return cls(
+      frame_overlap_x_mm=reader.floating("FrameOverlapXMM"),
+      frame_overlap_y_mm=reader.floating("FrameOverlapYMM"),
+      max_galvo_deflection_x_mm=reader.floating("MaxGalvoDeflectionXMM"),
+      max_galvo_deflection_y_mm=reader.floating("MaxGalvoDeflectionYMM"),
+      source_path=os.path.abspath(path),
+      unrecognized_fields=reader.unrecognized(),
+    )
 
 
-def load_hardware_defaults(path: str) -> HardwareDefaultConfig:
-  """Parse ``HardwareDefaultConfig.xml`` into a :class:`HardwareDefaultConfig`."""
-  return HardwareDefaultConfig.from_xml(path)
+@dataclass
+class CeligoConfig:
+  """All parsed configuration for one Celigo instrument.
+
+  :meth:`from_install` locates the hardware file once, indexes its directory once, and
+  loads every required companion configuration into explicit subobjects. Illumination
+  recipes for every magnification present in the vendor file are loaded up front.
+  """
+
+  hardware: CeligoHardwareConfig
+  channel_descriptors: List[ChannelDescriptor]
+  channels_by_magnification: Dict[int, Dict[str, IlluminationChannelConfig]]
+  calibration: CalibrationConfig
+  hardware_defaults: HardwareDefaultConfig
+  galvo_calibrations: Dict[int, Calibrated2DPolynomialTransform]
+  galvo_optical_calibration: GalvoOpticalCalibration
+  navigation: NavigationConfig
+  magnification: int = 3
+
+  def __post_init__(self) -> None:
+    if self.magnification not in (3, 5, 10, 20):
+      raise ValueError("magnification must be one of 3, 5, 10, or 20")
+    if self.magnification not in self.channels_by_magnification:
+      raise ValueError(f"No illumination-channel calibration is loaded for {self.magnification}X")
+
+  @property
+  def channels(self) -> Dict[str, IlluminationChannelConfig]:
+    """Illumination recipes for the active magnification."""
+    try:
+      return self.channels_by_magnification[self.magnification]
+    except KeyError as exc:
+      raise ValueError(
+        f"No illumination-channel calibration is loaded for {self.magnification}X"
+      ) from exc
+
+  @classmethod
+  def from_install(
+    cls,
+    install_dir: Optional[str] = None,
+    magnification: int = 3,
+  ) -> "CeligoConfig":
+    """Load the complete configuration set used to initialize :class:`Celigo`.
+
+    ``install_dir`` may be the Celigo installation root, its ``ConfigFiles`` directory,
+    or the path to ``USBIOHardwareConfig.config``. When it is omitted, the loader checks
+    ``CELIGO_INSTALL_DIR`` and the standard Windows installation locations.
+
+    .. code-block:: python
+
+       config = CeligoConfig.from_install("/path/to/Celigo/ConfigFiles")
+       celigo = Celigo(config=config)
+    """
+    if magnification not in (3, 5, 10, 20):
+      raise ValueError("magnification must be one of 3, 5, 10, or 20")
+    hardware_path = _locate_hardware_config_file(install_dir)
+    if hardware_path is None:
+      raise FileNotFoundError(
+        f"Could not find {_HARDWARE_CONFIG_FILENAME}. Pass install_dir= pointing "
+        "at the Celigo install root or its ConfigFiles directory, or set "
+        "CELIGO_INSTALL_DIR."
+      )
+    config_directory = os.path.dirname(os.path.abspath(hardware_path))
+    files_by_name = {
+      filename.lower(): os.path.join(config_directory, filename)
+      for filename in os.listdir(config_directory)
+      if os.path.isfile(os.path.join(config_directory, filename))
+    }
+
+    def require_companion_file(filename: str) -> str:
+      path = files_by_name.get(filename.lower())
+      if path is None:
+        raise FileNotFoundError(
+          f"Required Celigo configuration file {filename} is missing from {config_directory}"
+        )
+      return path
+
+    illumination_calibration_path = require_companion_file("leaphardwarecalibration.config")
+    channel_config_path = require_companion_file("ChannelConfig.xml")
+    calibration_path = require_companion_file("CalibrationConfig.xml")
+    hardware_defaults_path = require_companion_file("HardwareDefaultConfig.xml")
+    galvo_calibration_path = require_companion_file("GalvoCalibrationConfig.xml")
+    navigation_path = require_companion_file("NavigationConfig.xml")
+    illumination_root = ET.parse(illumination_calibration_path).getroot()
+
+    return cls(
+      hardware=CeligoHardwareConfig.from_xml(hardware_path),
+      channel_descriptors=load_channel_descriptors(channel_config_path),
+      channels_by_magnification=_load_all_illumination_channels(illumination_root),
+      calibration=CalibrationConfig.from_xml(calibration_path),
+      hardware_defaults=HardwareDefaultConfig.from_xml(hardware_defaults_path),
+      galvo_calibrations=load_galvo_calibrations(galvo_calibration_path),
+      galvo_optical_calibration=_load_galvo_optical_calibration(
+        illumination_root,
+        source_path=illumination_calibration_path,
+      ),
+      navigation=NavigationConfig.from_xml(navigation_path),
+      magnification=magnification,
+    )

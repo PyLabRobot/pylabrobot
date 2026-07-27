@@ -1,17 +1,19 @@
 # Celigo
 
-A direct PyLabRobot driver for the Nexcelom/Cyntellect Celigo image cytometer. The
-public API is one plain `Celigo` class; it talks to the FTDI USB-IO controller without
-requiring the Celigo application.
+A direct PyLabRobot driver for the Nexcelom/Cyntellect Celigo image cytometer. `Celigo`
+is the main entry point and owns its camera, galvo, and laser components. It talks to
+the FTDI USB-IO controller without requiring the Celigo application.
 
 ## Package
 
 | Module | Responsibility |
 |---|---|
-| `celigo.py` | Device lifecycle, FTDI protocol, motion, illumination, acquisition, autofocus, laser safety, and diagnostics |
+| `celigo.py` | Device lifecycle, FTDI protocol, illumination, acquisition, autofocus, and diagnostics |
+| `motion.py` | Stepper motors, linear axes, filter wheels, homing, and encoder motion |
 | `camera.py` | Async Lumenera SDK capture and dependency-free raw image frames |
+| `galvo.py` | Galvo positioning, calibration, status, and calibrated voltage conversion |
+| `laser.py` | Guarded laser UART commands, firing, galvo targeting, and laser optics |
 | `config.py` | Typed loaders for the vendor hardware, optical calibration, and channel configuration |
-| `transforms.py` | Encoder-tick, stage-mm, galvo-voltage, and DAC conversions |
 | `coordinates.py` | Pixel, sample-mm, and stage-mm coordinate frames |
 | `navigation.py` | Plate/well navigation and galvo FOV planning |
 
@@ -22,38 +24,40 @@ configuration. Selecting a logical filter requires a known filter-wheel home pos
 ## Usage
 
 ```python
-from pylabrobot.celigo import Celigo, CeligoHardwareConfig
+from pylabrobot.celigo import Celigo, CeligoConfig
 from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 
+config = CeligoConfig.from_install("/path/to/Celigo/ConfigFiles")
 cel = Celigo(
-  install_dir="/path/to/Celigo/ConfigFiles",
+  config=config,
   usb_address="3-2",  # optional USB bus/port path when more than one FTDI is attached
   lucam_sdk="/path/to/liblucamapi.so",  # optional when discoverable or set in the environment
 )
 cel.plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
 await cel.setup()
 try:
-  status = await cel.request_status()
+  status = await cel.request_controller_status()
   if status.busy:
-    await cel.wait_for_ready()
+    await cel.wait_for_controller_ready()
 
-  # Home Z first for vertical clearance, then establish X/Y encoder datums.
-  for axis in ("z", "x", "y"):
-    await cel.home(axis)
-  await cel.home_filter_accurate()
+  await cel.home_imaging_axes()  # Z, X, Y, then the dichroic filter
   result = await cel.acquire("A1", "green", autofocus="image")
   result.frame.save_pgm("A1-green.pgm")
 finally:
   await cel.stop()
 ```
 
-`Celigo.move()` and `Celigo.move_z()` take millimeters; encoder conversion is internal.
-For example, `await cel.move_z(5.0)` moves the focus axis to 5.0 mm. The Corning 3603 resource's
-Celigo-specific registration correction is applied internally by model name.
+Linear-axis movement is expressed in millimeters; encoder conversion is internal. For
+example, `await cel.z_axis.move_to(5.0)` moves the focus axis to 5.0 mm. Use
+`cel.x_axis`, `cel.y_axis`, and `cel.z_axis` for axis-specific homing, position reads,
+and movement. The Corning 3603 resource's Celigo-specific registration correction is
+applied internally by model name.
 
-For an already-homed filter wheel, use `set_filter_home_position(ticks)` instead of
-homing it again. Set `LUCAM_SDK_LIBRARY` or pass `lucam_sdk=...` to `Celigo` if the
-Lumenera SDK library is not discoverable by the operating system.
+Filter wheels are components too: use `cel.dichroic_filter.move_to(logical_position)`,
+`cel.camera_filter.move_to(logical_position)`, or their `home()` methods. A wheel must
+be homed before its first logical-position move. Set `LUCAM_SDK_LIBRARY` or pass
+`lucam_sdk=...` to `Celigo` if the Lumenera SDK library is not discoverable by the
+operating system.
 
 The default objective is 3X, matching the vendor startup sequence. Galvo imaging
 centers, per-filter offsets, voltage inversion/bounds, channel Z offsets, and channel
@@ -70,36 +74,67 @@ calibrated acquisition still fails closed on any mismatch. Camera SDK calls are
 serialized and time-bounded; after a timeout the camera remains poisoned until a
 deferred close completes.
 
-Machine-read commands use the `request_*` prefix. `request_status()` returns a
+Machine-read commands use the `request_*` prefix. `request_controller_status()` returns a
 `ControllerStatus` dataclass with named fields such as `busy`, `error`,
 `interlock_open`, and `controller_failed`, plus the original `raw_flags` and
 `extended_status` values.
 
-Targeted firing uses the selected laser's calibrated X/Y center unless `center_volts=`
-is supplied explicitly. Normal `stop()` best-effort aborts controller work and clears
-all four analog and twelve digital outputs before closing FTDI.
+Galvo operations live on the owned `cel.galvo` component:
+
+```python
+await cel.galvo.home()
+await cel.galvo.move_single("x", logical_voltage=1.5, timeout=6.0)  # volts, seconds
+status = await cel.galvo.request_controller_status()
+```
+
+Laser operations live on the owned `cel.laser` component:
+
+```python
+config = CeligoConfig.from_install(config_root)
+cel = Celigo(config=config, allow_laser=True)
+await cel.setup()
+await cel.laser.send_command("...")
+response = await cel.laser.request_uart_response()
+await cel.laser.fire(laser_index=0, shots=1, delay=0.01)  # seconds
+```
+
+Targeted firing through `cel.laser.fire_targets()` uses the selected laser's calibrated
+X/Y center unless `center_voltages=` is supplied explicitly. Normal `stop()` best-effort
+aborts controller work and clears all four analog and twelve digital outputs before
+closing FTDI.
 
 `usb_address` uses the Linux USB topology form `<bus>-<port>[.<port>...]`; omit it when
 the Celigo FTDI is uniquely identifiable by `device_id` or is the only matching FTDI.
 
-`Celigo` loads `HardwareDefaultConfig.xml` whenever `hardware_defaults` is not supplied,
-including when the config root comes only from `CELIGO_INSTALL_DIR`. A user who wants
-the resolved path or to load the file explicitly can say:
+`CeligoConfig` is one complete per-instrument configuration and is required by `Celigo`.
+Load it with `CeligoConfig.from_install(config_root)`, then pass it to the constructor.
+The loader accepts the Celigo install root, its `ConfigFiles` directory, or the hardware
+configuration file itself. When its argument is omitted it checks `CELIGO_INSTALL_DIR`
+and the standard Windows installation locations. It indexes the configuration directory
+once and requires all companion calibration files:
 
 ```python
-hardware_defaults_path = CeligoHardwareConfig.locate_config_file(
-  config_root, "HardwareDefaultConfig.xml"
-)
+from pylabrobot.celigo import CeligoConfig
+
+config = CeligoConfig.from_install(config_root)
+config.hardware_defaults.default_calibrated_z += 0.01
+cel = Celigo(config=config)
 ```
 
-`config_root` may be `None` when `CELIGO_INSTALL_DIR` is set.
+Individual mechanisms inside `config.hardware` remain optional because instrument builds
+can omit them; the top-level hardware, optical/stage calibration, illumination,
+hardware-default, galvo-calibration, and navigation configuration objects are required.
 
-Live hardware verification currently covers controller startup, native XYZ/filter
-homing, drawer open/close, galvo calibration/centering, brightfield output, native camera
-ROI, and calibrated camera capture. It does not yet cover fluorescence imaging,
-autofocus on a real sample, triggered acquisition, or laser firing. Laser operations are disabled unless
-`allow_laser=True`, and should only be enabled after independently establishing a safe
-instrument state.
+Live hardware verification covers controller startup/status/self-test, native XYZ/filter
+homing, drawer open/close, galvo calibration/centering, native and calibrated camera
+capture, machine auto-exposure, image autofocus, camera-trigger diagnostics, all five
+configured illumination channels, and a 16-FOV galvo scan.
+The fluorescence paths were exercised without a fluorescent reference sample, so their
+output switching, filter movement, and acquisition are verified but signal quality is
+not characterized. Laser firing has not been exercised and remains blocked by the
+instrument's asserted generic interlock. `cel.laser` is disabled unless the `Celigo`
+constructor receives `allow_laser=True`, and should only be enabled after independently
+establishing a safe instrument state.
 
 ## Tests
 

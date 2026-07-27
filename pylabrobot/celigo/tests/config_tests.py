@@ -3,57 +3,115 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from pylabrobot.celigo.config import (
-  AxisConfig,
+  CeligoConfig,
   CeligoHardwareConfig,
-  load_galvo_calibration,
+  load_galvo_calibrations,
   load_galvo_optical_calibration,
   load_illumination_channels,
 )
-from pylabrobot.celigo.tests.helpers import require
+from pylabrobot.celigo.tests.helpers import make_linear_axis_config, require
 
 # A trimmed but structurally faithful USBIOHardwareConfig.config.
-SAMPLE_XML = """<?xml version="1.0" encoding="utf-8"?>
+COMMON_MOTOR_XML = """
+        <ConfigVersion>1001</ConfigVersion>
+        <MotorType>0</MotorType>
+        <CommIndex>1</CommIndex>
+        <ControllerIndex>0</ControllerIndex>
+        <Enabled>true</Enabled>
+        <MaxVelocity>45</MaxVelocity>
+        <MaxAcceleration>45</MaxAcceleration>
+        <MaxDeceleration>45</MaxDeceleration>
+        <MaxSAcceleration>0</MaxSAcceleration>
+        <ModerateAccleration>20</ModerateAccleration>
+        <MinimumAcceleration>10</MinimumAcceleration>
+        <ModerateSAcceleration>0</ModerateSAcceleration>
+        <MinimumSAcceleration>0</MinimumSAcceleration>
+        <SCurveSupport>false</SCurveSupport>
+        <HomeType>Normal_Accurate</HomeType>
+        <HomingVelocity>20</HomingVelocity>
+        <IndexVelocity>10</IndexVelocity>
+        <HomingShortMove>100</HomingShortMove>
+        <HomeOffset>0</HomeOffset>
+        <PositiveLimit>true</PositiveLimit>
+        <NegativeLimit>true</NegativeLimit>
+        <InvertAxisDirection>false</InvertAxisDirection>
+        <DefaultPositiveDirection>true</DefaultPositiveDirection>
+        <MovingCurrentPercentage>65</MovingCurrentPercentage>
+        <HoldingCurrentPercentage>20</HoldingCurrentPercentage>
+        <LoadingCurrentPercentage>55</LoadingCurrentPercentage>
+        <MovingOverloadLimit>500</MovingOverloadLimit>
+        <Mode_EnableLimits>true</Mode_EnableLimits>
+        <Mode_EnableStepAndDirection>false</Mode_EnableStepAndDirection>
+        <Mode_EnablePositionCorrection>true</Mode_EnablePositionCorrection>
+        <Mode_EnableMotorSlaveToEncoder>false</Mode_EnableMotorSlaveToEncoder>
+        <CoursePositionErrorWindow>100</CoursePositionErrorWindow>
+        <FinePositionErrorWindow>10</FinePositionErrorWindow>
+        <Gain>1</Gain>
+        <EncoderToMotorTickRatio>256</EncoderToMotorTickRatio>
+        <BacklashCompensation>0</BacklashCompensation>
+        <MotorResponseTime>1</MotorResponseTime>
+"""
+
+SAMPLE_XML = f"""<?xml version="1.0" encoding="utf-8"?>
 <USBIOHardwareConfig>
   <xmlSerializerSection type="Cyntellect.Hardware.Instrument.USBIOConfig.USBIOConfigurationFile, Instrument.USBIOConfig">
     <USBIOConfigurationFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <XAxis xmlns="Cyntellect.com/USBIOConfig.xsd">
-        <ConfigVersion>1001</ConfigVersion>
-        <ControllerIndex>0</ControllerIndex>
-        <MaxVelocity>45</MaxVelocity>
+        {COMMON_MOTOR_XML}
         <MotionName>X Axis</MotionName>
-        <MotorType>0</MotorType>
-        <CommIndex>1</CommIndex>
-        <Enabled>true</Enabled>
         <AxisIndex>1</AxisIndex>
-        <HomeType>Normal_Accurate</HomeType>
         <HomeOffset>-18</HomeOffset>
-        <MovingCurrentPercentage>65</MovingCurrentPercentage>
-        <Mode_EnablePositionCorrection>true</Mode_EnablePositionCorrection>
-        <EncoderToMotorTickRatio>256</EncoderToMotorTickRatio>
+        <MinPosition>0</MinPosition>
+        <MaxPosition>100</MaxPosition>
+        <MMPerEncoderTick>0.0127</MMPerEncoderTick>
         <SomeUnknownField>123</SomeUnknownField>
       </XAxis>
       <YAxis xmlns="Cyntellect.com/USBIOConfig.xsd">
+        {COMMON_MOTOR_XML}
         <MotionName>Y Axis</MotionName>
         <AxisIndex>2</AxisIndex>
-        <Enabled>true</Enabled>
+        <MinPosition>0</MinPosition>
+        <MaxPosition>100</MaxPosition>
+        <MMPerEncoderTick>0.0127</MMPerEncoderTick>
       </YAxis>
       <ZSingleAxis xmlns="Cyntellect.com/USBIOConfig.xsd">
+        {COMMON_MOTOR_XML}
         <MotionName>Z Axis</MotionName>
+        <AxisIndex>3</AxisIndex>
         <MinPosition>0</MinPosition>
         <MaxPosition>14.5</MaxPosition>
+        <MMPerEncoderTick>0.001</MMPerEncoderTick>
       </ZSingleAxis>
       <DichroicFilterWheel xmlns="Cyntellect.com/USBIOConfig.xsd">
+        {COMMON_MOTOR_XML}
         <MotionName>Dichroic</MotionName>
+        <AxisIndex>4</AxisIndex>
+        <LimitPolarity>0</LimitPolarity>
+        <NumberOfEncoderTickPerRev>6000</NumberOfEncoderTickPerRev>
         <NumberOfFilters>6</NumberOfFilters>
         <FilterMap><LogicalNumber>1</LogicalNumber><PhysicalNumber>3</PhysicalNumber></FilterMap>
         <FilterMap><LogicalNumber>2</LogicalNumber><PhysicalNumber>5</PhysicalNumber></FilterMap>
       </DichroicFilterWheel>
       <IOConfiguration xmlns="Cyntellect.com/USBIOConfig.xsd">
-        <LightingIOs><IOName>Brightfield</IOName><Channel>0</Channel><MaxVoltage>5</MaxVoltage></LightingIOs>
-        <LightingIOs><IOName>Green 483/536</IOName><Channel>1</Channel><MaxVoltage>5</MaxVoltage></LightingIOs>
-        <AnalogIns><IOName>HWAF</IOName><Channel>2</Channel></AnalogIns>
+        <LightingIOs>
+          <ConfigVersion>1000</ConfigVersion><ControllerIndex>0</ControllerIndex>
+          <Channel>0</Channel><Enabled>true</Enabled><Invert>false</Invert>
+          <IOName>Brightfield</IOName><MinVoltage>0</MinVoltage><MaxVoltage>5</MaxVoltage>
+          <DelayMS>0</DelayMS>
+        </LightingIOs>
+        <LightingIOs>
+          <ConfigVersion>1000</ConfigVersion><ControllerIndex>0</ControllerIndex>
+          <Channel>1</Channel><Enabled>true</Enabled><Invert>false</Invert>
+          <IOName>Green 483/536</IOName><MinVoltage>0</MinVoltage><MaxVoltage>5</MaxVoltage>
+          <DelayMS>0</DelayMS>
+        </LightingIOs>
+        <AnalogIns>
+          <ConfigVersion>1000</ConfigVersion><ControllerIndex>0</ControllerIndex>
+          <Channel>2</Channel><Enabled>true</Enabled><Invert>false</Invert><IOName>HWAF</IOName>
+        </AnalogIns>
       </IOConfiguration>
     </USBIOConfigurationFile>
   </xmlSerializerSection>
@@ -91,7 +149,7 @@ class TestConfigFromXml(unittest.TestCase):
 
   def test_unknown_field_kept_in_extra(self):
     cfg = CeligoHardwareConfig.from_xml(self.path)
-    self.assertEqual(require(cfg.x_axis).extra.get("SomeUnknownField"), "123")
+    self.assertEqual(require(cfg.x_axis).unrecognized_fields.get("SomeUnknownField"), "123")
 
   def test_z_axis_positions(self):
     cfg = CeligoHardwareConfig.from_xml(self.path)
@@ -118,39 +176,10 @@ class TestConfigFromXml(unittest.TestCase):
     self.assertEqual(cfg.source_path, os.path.abspath(self.path))
 
 
-class TestFromInstall(unittest.TestCase):
-  def test_companion_lookup_accepts_exact_hardware_file_path_and_case(self):
-    with tempfile.TemporaryDirectory() as root:
-      hardware = os.path.join(root, "USBIOHardwareConfig.config")
-      companion = os.path.join(root, "hardwaredefaultconfig.XML")
-      with open(hardware, "w") as output:
-        output.write(SAMPLE_XML)
-      with open(companion, "w") as output:
-        output.write("<HardwareDefaultConfig />")
-      self.assertEqual(
-        CeligoHardwareConfig.locate_config_file(hardware, "HardwareDefaultConfig.xml"),
-        companion,
-      )
-
-  def test_locates_via_configfiles_subdir(self):
-    with tempfile.TemporaryDirectory() as root:
-      cfgdir = os.path.join(root, "ConfigFiles")
-      os.makedirs(cfgdir)
-      with open(os.path.join(cfgdir, "USBIOHardwareConfig.config"), "w") as f:
-        f.write(SAMPLE_XML)
-      cfg = CeligoHardwareConfig.from_install(install_dir=root)
-      self.assertEqual(require(cfg.x_axis).motion_name, "X Axis")
-
-  def test_missing_raises(self):
-    with tempfile.TemporaryDirectory() as root:
-      with self.assertRaises(FileNotFoundError):
-        CeligoHardwareConfig.from_install(install_dir=root)
-
-
 class TestDirectConstruction(unittest.TestCase):
   def test_user_can_build_in_code(self):
     cfg = CeligoHardwareConfig(
-      x_axis=AxisConfig(motion_name="X", axis_index=1, max_velocity=50.0),
+      x_axis=make_linear_axis_config(motion_name="X", axis_index=1, max_velocity=50.0),
     )
     self.assertEqual(require(cfg.x_axis).max_velocity, 50.0)
     self.assertIsNone(cfg.y_axis)
@@ -178,28 +207,70 @@ GALVO_CAL_XML = """<?xml version="1.0"?>
 ILLUMINATION_XML = """<?xml version="1.0"?>
 <LEAPHardwareCalibrationConfig>
   <XGalvo>
+    <LaserCenterVoltage>1.6</LaserCenterVoltage>
+    <UVLaserCenterVoltage>0.2</UVLaserCenterVoltage>
     <ImageCenter3X><CenterVoltage>5</CenterVoltage><FrameSizeVolts>6.5</FrameSizeVolts></ImageCenter3X>
     <LogicalFilterCenterVoltageOffset><LogicalNumber>2</LogicalNumber><CenterVoltageOffset>0.2</CenterVoltageOffset></LogicalFilterCenterVoltageOffset>
   </XGalvo>
   <YGalvo>
+    <LaserCenterVoltage>1.5</LaserCenterVoltage>
+    <UVLaserCenterVoltage>0.1</UVLaserCenterVoltage>
     <ImageCenter3X><CenterVoltage>4.9</CenterVoltage><FrameSizeVolts>6.4</FrameSizeVolts></ImageCenter3X>
   </YGalvo>
-  <BFVoltageCal><LogicalFilter>1</LogicalFilter><VoltageMag10X>80</VoltageMag10X></BFVoltageCal>
+  <BFVoltageCal><LogicalFilter>1</LogicalFilter><VoltageMag3X>70</VoltageMag3X><VoltageMag10X>80</VoltageMag10X></BFVoltageCal>
   <MultiVariableFLVoltageCal>
     <FLLight>
       <LogicalFilter>2</LogicalFilter><Name>Green 483/536</Name><BitValue>1</BitValue>
-      <Intensity><VoltageMag10X>80</VoltageMag10X></Intensity>
+      <Intensity><VoltageMag3X>70</VoltageMag3X><VoltageMag10X>80</VoltageMag10X></Intensity>
       <CalibratedZOffsetToBFMM>0.12</CalibratedZOffsetToBFMM>
       <CalibratedMMPerPixelXCorrectionToBF>1.01</CalibratedMMPerPixelXCorrectionToBF>
       <CalibratedMMPerPixelYCorrectionToBF>0.99</CalibratedMMPerPixelYCorrectionToBF>
     </FLLight>
     <FLLight>
       <LogicalFilter>4</LogicalFilter><Name>Blue 377/447</Name><BitValue>0</BitValue>
-      <Intensity><VoltageMag10X>35</VoltageMag10X></Intensity>
+      <Intensity><VoltageMag3X>30</VoltageMag3X><VoltageMag10X>35</VoltageMag10X></Intensity>
     </FLLight>
   </MultiVariableFLVoltageCal>
 </LEAPHardwareCalibrationConfig>
 """
+
+CALIBRATION_XML = """<CalibrationConfig>
+  <MicronsPerPixelX>1</MicronsPerPixelX>
+  <MicronsPerPixelY>1</MicronsPerPixelY>
+  <ImageWidthPixels>2048</ImageWidthPixels>
+  <ImageHeightPixels>2048</ImageHeightPixels>
+  <ImageToStageThetaRadians>0</ImageToStageThetaRadians>
+  <GalvoToStageThetaRadians>0</GalvoToStageThetaRadians>
+  <CalibratedPlateCornerX>0</CalibratedPlateCornerX>
+  <CalibratedPlateCornerY>0</CalibratedPlateCornerY>
+  <CalibratedPlateToStageThetaRadians>0</CalibratedPlateToStageThetaRadians>
+  <StageXScale>1</StageXScale>
+  <StageYScale>1</StageYScale>
+  <StageShear>0</StageShear>
+  <StageXShearOffset>0</StageXShearOffset>
+  <StageYShearOffset>0</StageYShearOffset>
+  <CalibratedZPosition>0</CalibratedZPosition>
+  <CalibratedZGlassPlateDelta>0</CalibratedZGlassPlateDelta>
+  <ZPlaneXCoeff>0</ZPlaneXCoeff>
+  <ZPlaneYCoeff>0</ZPlaneYCoeff>
+</CalibrationConfig>"""
+
+HARDWARE_DEFAULT_XML = """<HardwareDefaultConfig>
+  <DefaultCalibratedZ>0</DefaultCalibratedZ>
+  <DefaultPlateXCornerStageCoordinate>0</DefaultPlateXCornerStageCoordinate>
+  <DefaultPlateYCornerStageCoordinate>0</DefaultPlateYCornerStageCoordinate>
+  <DefaultXFieldOfViewMM>0</DefaultXFieldOfViewMM>
+  <DefaultYFieldOfViewMM>0</DefaultYFieldOfViewMM>
+  <DefaultXGalvoMMPerVolt>0</DefaultXGalvoMMPerVolt>
+  <DefaultYGalvoMMPerVolt>0</DefaultYGalvoMMPerVolt>
+</HardwareDefaultConfig>"""
+
+NAVIGATION_XML = """<NavigationConfig>
+  <FrameOverlapXMM>0</FrameOverlapXMM>
+  <FrameOverlapYMM>0</FrameOverlapYMM>
+  <MaxGalvoDeflectionXMM>0</MaxGalvoDeflectionXMM>
+  <MaxGalvoDeflectionYMM>0</MaxGalvoDeflectionYMM>
+</NavigationConfig>"""
 
 
 def _write(xml: str) -> str:
@@ -215,12 +286,20 @@ class TestExtraLoaders(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, "Invalid boolean"):
       CeligoHardwareConfig.from_xml(_write(malformed))
 
+  def test_fractional_integer_field_is_rejected(self):
+    malformed = SAMPLE_XML.replace("<AxisIndex>1</AxisIndex>", "<AxisIndex>1.5</AxisIndex>", 1)
+    with self.assertRaisesRegex(ValueError, "AxisIndex must be an integer"):
+      CeligoHardwareConfig.from_xml(_write(malformed))
+
   def test_galvo_voltage_fields(self):
     xml = SAMPLE_XML.replace(
       "</USBIOConfigurationFile>",
       '<XGalvo xmlns="Cyntellect.com/USBIOConfig.xsd">'
+      "<ConfigVersion>1000</ConfigVersion><ControllerIndex>0</ControllerIndex>"
       "<MaxVoltage>10</MaxVoltage><MinVoltage>0</MinVoltage>"
       "<InvertVoltage>true</InvertVoltage><PositionErrorWindow>20</PositionErrorWindow>"
+      "<VelocityErrorWindow>20</VelocityErrorWindow><BigMoveDelayMS>0</BigMoveDelayMS>"
+      "<Enabled>true</Enabled>"
       "</XGalvo></USBIOConfigurationFile>",
     )
     cfg = CeligoHardwareConfig.from_xml(_write(xml))
@@ -230,7 +309,7 @@ class TestExtraLoaders(unittest.TestCase):
     self.assertEqual(x_galvo.position_error_window, 20)
 
   def test_galvo_calibration_terms(self):
-    cal = load_galvo_calibration(_write(GALVO_CAL_XML))
+    cal = load_galvo_calibrations(_write(GALVO_CAL_XML))[1]
     self.assertAlmostEqual(cal.forward["LinearXTerm"][0], 1.3)
     self.assertAlmostEqual(cal.forward["LinearXTerm"][1], -0.004)
     self.assertAlmostEqual(cal.forward["OffsetTerm"][1], 0.2)
@@ -255,6 +334,71 @@ class TestExtraLoaders(unittest.TestCase):
     malformed = ILLUMINATION_XML.replace("<CenterVoltage>5</CenterVoltage>", "", 1)
     with self.assertRaisesRegex(ValueError, "missing center/frame"):
       load_galvo_optical_calibration(_write(malformed))
+
+
+class TestAggregateConfig(unittest.TestCase):
+  def _write_complete_config(self, directory: str) -> str:
+    files = {
+      "USBIOHardwareConfig.config": SAMPLE_XML,
+      "leaphardwarecalibration.config": ILLUMINATION_XML,
+      "ChannelConfig.xml": "<configuration />",
+      "CalibrationConfig.xml": CALIBRATION_XML,
+      "HardwareDefaultConfig.xml": HARDWARE_DEFAULT_XML,
+      "GalvoCalibrationConfig.xml": "<configuration />",
+      "NavigationConfig.xml": NAVIGATION_XML,
+    }
+    for filename, content in files.items():
+      with open(os.path.join(directory, filename), "w") as output:
+        output.write(content)
+    return os.path.join(directory, "USBIOHardwareConfig.config")
+
+  def test_loads_complete_config_after_indexing_directory_once(self):
+    with tempfile.TemporaryDirectory() as directory:
+      hardware_path = self._write_complete_config(directory)
+      with patch(
+        "pylabrobot.celigo.config.os.listdir",
+        wraps=os.listdir,
+      ) as list_directory:
+        config = CeligoConfig.from_install(hardware_path, magnification=10)
+
+    list_directory.assert_called_once_with(directory)
+    self.assertEqual(config.magnification, 10)
+    self.assertEqual(config.hardware.source_path, hardware_path)
+    self.assertEqual(set(config.channels), {"brightfield", "green", "blue"})
+    self.assertEqual(set(config.channels_by_magnification), {3, 10})
+    self.assertEqual(config.navigation.frame_overlap_x_mm, 0.0)
+
+  def test_locates_complete_config_via_configfiles_subdirectory(self):
+    with tempfile.TemporaryDirectory() as install_root:
+      config_directory = os.path.join(install_root, "ConfigFiles")
+      os.makedirs(config_directory)
+      self._write_complete_config(config_directory)
+      config = CeligoConfig.from_install(install_root)
+
+    self.assertEqual(config.magnification, 3)
+    self.assertEqual(require(config.hardware.x_axis).motion_name, "X Axis")
+
+  def test_magnification_channels_are_memory_resident_after_load(self):
+    with tempfile.TemporaryDirectory() as directory:
+      hardware_path = self._write_complete_config(directory)
+      config = CeligoConfig.from_install(hardware_path, magnification=10)
+
+    config.magnification = 3
+    self.assertEqual(config.channels["brightfield"].intensity_percent, 70)
+
+  def test_missing_hardware_file_raises(self):
+    with (
+      tempfile.TemporaryDirectory() as install_root,
+      self.assertRaises(FileNotFoundError),
+    ):
+      CeligoConfig.from_install(install_root)
+
+  def test_missing_companion_file_fails_during_load(self):
+    with tempfile.TemporaryDirectory() as directory:
+      hardware_path = self._write_complete_config(directory)
+      os.remove(os.path.join(directory, "NavigationConfig.xml"))
+      with self.assertRaisesRegex(FileNotFoundError, "NavigationConfig.xml"):
+        CeligoConfig.from_install(hardware_path)
 
 
 if __name__ == "__main__":

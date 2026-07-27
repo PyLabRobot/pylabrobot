@@ -8,10 +8,12 @@ import unittest
 from pylabrobot.celigo.config import (
   CalibrationConfig,
   HardwareDefaultConfig,
-  load_calibration,
-  load_hardware_defaults,
 )
 from pylabrobot.celigo.coordinates import CoordinateSystems
+from pylabrobot.celigo.tests.helpers import (
+  make_calibration_config,
+  make_hardware_default_config,
+)
 
 CALIB_XML = """<?xml version="1.0"?>
 <configuration>
@@ -23,6 +25,7 @@ CALIB_XML = """<?xml version="1.0"?>
         <ImageWidthPixels>2048</ImageWidthPixels>
         <ImageHeightPixels>2048</ImageHeightPixels>
         <ImageToStageThetaRadians>0</ImageToStageThetaRadians>
+        <GalvoToStageThetaRadians>0</GalvoToStageThetaRadians>
         <CalibratedPlateCornerX>-0.0798</CalibratedPlateCornerX>
         <CalibratedPlateCornerY>-0.0361</CalibratedPlateCornerY>
         <CalibratedPlateToStageThetaRadians>2.566e-06</CalibratedPlateToStageThetaRadians>
@@ -32,6 +35,9 @@ CALIB_XML = """<?xml version="1.0"?>
         <StageXShearOffset>2.05e-3</StageXShearOffset>
         <StageYShearOffset>-1.10e-4</StageYShearOffset>
         <CalibratedZPosition>2.5654</CalibratedZPosition>
+        <CalibratedZGlassPlateDelta>0</CalibratedZGlassPlateDelta>
+        <ZPlaneXCoeff>0</ZPlaneXCoeff>
+        <ZPlaneYCoeff>0</ZPlaneYCoeff>
       </CalibrationParameters>
     </setting>
   </section>
@@ -47,7 +53,9 @@ HW_XML = """<?xml version="1.0"?>
         <DefaultPlateXCornerStageCoordinate>2.159</DefaultPlateXCornerStageCoordinate>
         <DefaultPlateYCornerStageCoordinate>3.492</DefaultPlateYCornerStageCoordinate>
         <DefaultXFieldOfViewMM>2.15</DefaultXFieldOfViewMM>
+        <DefaultYFieldOfViewMM>2.15</DefaultYFieldOfViewMM>
         <DefaultXGalvoMMPerVolt>1.3</DefaultXGalvoMMPerVolt>
+        <DefaultYGalvoMMPerVolt>1.3</DefaultYGalvoMMPerVolt>
       </HardwareDefaultParameters>
     </setting>
   </section>
@@ -64,7 +72,7 @@ def _write(xml: str) -> str:
 
 class TestCalibrationLoaders(unittest.TestCase):
   def test_calibration_fields(self):
-    c = load_calibration(_write(CALIB_XML))
+    c = CalibrationConfig.from_xml(_write(CALIB_XML))
     self.assertAlmostEqual(c.microns_per_pixel_x, 1.05456)
     self.assertEqual(c.image_width_pixels, 2048)
     self.assertAlmostEqual(c.stage_x_scale, 0.99972)
@@ -72,7 +80,7 @@ class TestCalibrationLoaders(unittest.TestCase):
     self.assertAlmostEqual(c.calibrated_z_position, 2.5654)
 
   def test_hardware_defaults(self):
-    h = load_hardware_defaults(_write(HW_XML))
+    h = HardwareDefaultConfig.from_xml(_write(HW_XML))
     self.assertAlmostEqual(h.default_plate_x_corner_stage_coordinate, 2.159)
     self.assertAlmostEqual(h.default_x_galvo_mm_per_volt, 1.3)
 
@@ -81,7 +89,7 @@ class TestAffineIdentityCase(unittest.TestCase):
   """With unit scaling and zero rotation/shear, the math is easy to reason about."""
 
   def setUp(self):
-    self.calib = CalibrationConfig(
+    self.calib = make_calibration_config(
       microns_per_pixel_x=1.0,
       microns_per_pixel_y=1.0,  # -> 1000 px/mm
       image_width_pixels=2048,
@@ -96,7 +104,7 @@ class TestAffineIdentityCase(unittest.TestCase):
       stage_x_shear_offset=0.0,
       stage_y_shear_offset=0.0,
     )
-    self.hw = HardwareDefaultConfig(
+    self.hw = make_hardware_default_config(
       default_plate_x_corner_stage_coordinate=0.0,
       default_plate_y_corner_stage_coordinate=0.0,
     )
@@ -116,7 +124,7 @@ class TestAffineIdentityCase(unittest.TestCase):
   def test_sample_origin_maps_to_plate_corner(self):
     cs = CoordinateSystems.from_config(
       self.calib,
-      HardwareDefaultConfig(
+      make_hardware_default_config(
         default_plate_x_corner_stage_coordinate=2.159,
         default_plate_y_corner_stage_coordinate=3.492,
       ),
@@ -130,8 +138,8 @@ class TestAffineRoundTrips(unittest.TestCase):
   """Real-ish calibration values; forward/inverse must round-trip."""
 
   def setUp(self):
-    self.calib = load_calibration(_write(CALIB_XML))
-    self.hw = load_hardware_defaults(_write(HW_XML))
+    self.calib = CalibrationConfig.from_xml(_write(CALIB_XML))
+    self.hw = HardwareDefaultConfig.from_xml(_write(HW_XML))
     self.cs = CoordinateSystems.from_config(self.calib, self.hw)
 
   def test_sample_stage_roundtrip(self):
@@ -162,7 +170,7 @@ class TestAffineRoundTrips(unittest.TestCase):
 
 class TestRotation(unittest.TestCase):
   def test_90_degree_rotation(self):
-    calib = CalibrationConfig(
+    calib = make_calibration_config(
       microns_per_pixel_x=1.0,
       microns_per_pixel_y=1.0,
       image_width_pixels=2048,
@@ -171,7 +179,7 @@ class TestRotation(unittest.TestCase):
       stage_x_scale=1.0,
       stage_y_scale=1.0,
     )
-    hw = HardwareDefaultConfig()
+    hw = make_hardware_default_config()
     cs = CoordinateSystems.from_config(calib, hw)
     # sample (1,0) under +90deg plate->stage: GetBaseCoord uses R^-1; for theta=pi/2
     # R^-1 = [[0,-1],[1,0]] so (1,0) -> (0,1).

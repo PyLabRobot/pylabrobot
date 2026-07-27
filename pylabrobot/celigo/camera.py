@@ -314,24 +314,43 @@ class LumeneraCamera:
           f"LUCAM_SDK_LIBRARY. Tried: {'; '.join(errors)}"
         )
     lib = self._lib
-    # Test doubles may be plain Python objects whose callables do not expose ctypes attrs.
-    signatures = {
-      "LucamCameraOpen": (ctypes.c_void_p, [ctypes.c_uint32]),
-      "LucamCameraClose": (ctypes.c_int, [ctypes.c_void_p]),
-      "LucamStreamVideoControl": (
+
+    # Bind signatures to the same attribute-resolved function objects used below.
+    # ``ctypes.CDLL.__getitem__`` creates a distinct object, so configuring
+    # ``lib[name]`` would leave ``lib.LucamCameraOpen`` with its unsafe default
+    # 32-bit return type and truncate 64-bit camera handles.
+    def set_signature(function: Any, restype: Any, argtypes: list[Any]) -> None:
+      try:
+        function.restype = restype
+        function.argtypes = argtypes
+      except AttributeError:
+        return
+
+    try:
+      set_signature(lib.LucamCameraOpen, ctypes.c_void_p, [ctypes.c_uint32])
+      set_signature(lib.LucamCameraClose, ctypes.c_int, [ctypes.c_void_p])
+      set_signature(
+        lib.LucamStreamVideoControl,
         ctypes.c_int,
         [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p],
-      ),
-      "LucamGetFormat": (
+      )
+      set_signature(
+        lib.LucamGetFormat,
         ctypes.c_int,
         [ctypes.c_void_p, ctypes.POINTER(_LucamFrameFormat), ctypes.POINTER(ctypes.c_float)],
-      ),
-      "LucamSetFormat": (
+      )
+      set_signature(
+        lib.LucamSetFormat,
         ctypes.c_int,
         [ctypes.c_void_p, ctypes.POINTER(_LucamFrameFormat), ctypes.c_float],
-      ),
-      "LucamTakeVideo": (ctypes.c_int, [ctypes.c_void_p, ctypes.c_int32, ctypes.c_void_p]),
-      "LucamGetProperty": (
+      )
+      set_signature(
+        lib.LucamTakeVideo,
+        ctypes.c_int,
+        [ctypes.c_void_p, ctypes.c_int32, ctypes.c_void_p],
+      )
+      set_signature(
+        lib.LucamGetProperty,
         ctypes.c_int,
         [
           ctypes.c_void_p,
@@ -339,25 +358,22 @@ class LumeneraCamera:
           ctypes.POINTER(ctypes.c_float),
           ctypes.POINTER(ctypes.c_int32),
         ],
-      ),
-      "LucamSetProperty": (
+      )
+      set_signature(
+        lib.LucamSetProperty,
         ctypes.c_int,
         [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_float, ctypes.c_int32],
-      ),
-      "LucamGetLastErrorForCamera": (ctypes.c_uint32, [ctypes.c_void_p]),
-    }
-    for name, (restype, argtypes) in signatures.items():
-      function = getattr(lib, name, None)
-      if function is None:
-        raise CameraError(f"Lumenera SDK does not export {name}")
-      try:
-        function.restype = restype
-        function.argtypes = argtypes
-      except AttributeError:
-        pass
+      )
+      set_signature(
+        lib.LucamGetLastErrorForCamera,
+        ctypes.c_uint32,
+        [ctypes.c_void_p],
+      )
+    except AttributeError as exc:
+      raise CameraError(f"Lumenera SDK does not export {exc.name}") from exc
     return lib
 
-  def _last_error(self) -> int:
+  def _request_last_sdk_error_code(self) -> int:
     if self._lib is None or self._handle is None:
       return 0
     return int(self._lib.LucamGetLastErrorForCamera(self._handle))
@@ -367,9 +383,11 @@ class LumeneraCamera:
       raise CameraError("Lumenera SDK is not loaded; call setup() first")
     return self._lib
 
-  def _check(self, result: Any, operation: str) -> None:
-    if not result:
-      raise CameraError(f"{operation} failed (Lumenera error {self._last_error()})")
+  def _raise_if_sdk_call_failed(self, sdk_result: Any, operation: str) -> None:
+    if not sdk_result:
+      raise CameraError(
+        f"{operation} failed (Lumenera error {self._request_last_sdk_error_code()})"
+      )
 
   def _setup_sync(self) -> None:
     lib = self._load_library()
@@ -378,19 +396,19 @@ class LumeneraCamera:
       raise CameraError("LucamCameraOpen failed")
     self._handle = handle
     try:
-      self._check(
+      self._raise_if_sdk_call_failed(
         lib.LucamStreamVideoControl(handle, _START_STREAMING, None), "start camera stream"
       )
       self._streaming = True
       frame_format = _LucamFrameFormat()
       frame_rate = ctypes.c_float()
-      self._check(
+      self._raise_if_sdk_call_failed(
         lib.LucamGetFormat(handle, ctypes.byref(frame_format), ctypes.byref(frame_rate)),
         "read camera format",
       )
-      self._store_frame_format(frame_format, float(frame_rate.value))
-      self.exposure_ms = self._get_property_sync(LUCAM_PROP_EXPOSURE)
-      self.gain = self._get_property_sync(LUCAM_PROP_GAIN)
+      self._update_frame_format_state(frame_format, float(frame_rate.value))
+      self.exposure_ms = self._request_property_value_sync(LUCAM_PROP_EXPOSURE)
+      self.gain = self._request_property_value_sync(LUCAM_PROP_GAIN)
     except Exception:
       self._stop_sync()
       raise
@@ -407,7 +425,7 @@ class LumeneraCamera:
             self._executor = None
           raise
 
-  def _store_frame_format(self, frame_format: _LucamFrameFormat, frame_rate: float) -> None:
+  def _update_frame_format_state(self, frame_format: _LucamFrameFormat, frame_rate: float) -> None:
     if frame_format.pixel_format not in (LUCAM_PF_8, LUCAM_PF_16):
       raise CameraError(
         f"Unsupported Lumenera pixel format {frame_format.pixel_format}; "
@@ -435,7 +453,7 @@ class LumeneraCamera:
     lib = self._require_library()
     current = _LucamFrameFormat()
     frame_rate = ctypes.c_float()
-    self._check(
+    self._raise_if_sdk_call_failed(
       lib.LucamGetFormat(handle, ctypes.byref(current), ctypes.byref(frame_rate)),
       "read camera format",
     )
@@ -449,14 +467,10 @@ class LumeneraCamera:
         f"{current.width // subsample_x}x{current.height // subsample_y}"
       )
     target_x = (
-      int(current.x_offset + (current.width - raw_width) // 2)
-      if x_offset is None
-      else x_offset
+      int(current.x_offset + (current.width - raw_width) // 2) if x_offset is None else x_offset
     )
     target_y = (
-      int(current.y_offset + (current.height - raw_height) // 2)
-      if y_offset is None
-      else y_offset
+      int(current.y_offset + (current.height - raw_height) // 2) if y_offset is None else y_offset
     )
     if target_x < 0 or target_y < 0:
       raise ValueError("camera offsets must be non-negative")
@@ -473,30 +487,30 @@ class LumeneraCamera:
     )
     was_streaming = self._streaming
     if was_streaming:
-      self._check(
+      self._raise_if_sdk_call_failed(
         lib.LucamStreamVideoControl(handle, _STOP_STREAMING, None),
         "stop camera stream for format change",
       )
       self._streaming = False
     try:
-      self._check(
+      self._raise_if_sdk_call_failed(
         lib.LucamSetFormat(handle, ctypes.byref(target), ctypes.c_float(frame_rate.value)),
         "set camera format",
       )
       actual = _LucamFrameFormat()
       actual_rate = ctypes.c_float()
-      self._check(
+      self._raise_if_sdk_call_failed(
         lib.LucamGetFormat(handle, ctypes.byref(actual), ctypes.byref(actual_rate)),
         "read back camera format",
       )
-      self._store_frame_format(actual, float(actual_rate.value))
+      self._update_frame_format_state(actual, float(actual_rate.value))
       if (self.width, self.height) != (width, height):
         raise CameraError(
           f"Lumenera accepted {self.width}x{self.height}, not requested {width}x{height}"
         )
     finally:
       if was_streaming:
-        self._check(
+        self._raise_if_sdk_call_failed(
           lib.LucamStreamVideoControl(handle, _START_STREAMING, None),
           "restart camera stream after format change",
         )
@@ -543,29 +557,29 @@ class LumeneraCamera:
       raise CameraError("Camera is not open; call setup() first")
     return self._handle
 
-  def _get_property_sync(self, property_id: int) -> float:
+  def _request_property_value_sync(self, property_id: int) -> float:
     handle = self._require_handle()
     lib = self._require_library()
     value = ctypes.c_float()
     flags = ctypes.c_int32()
-    self._check(
+    self._raise_if_sdk_call_failed(
       lib.LucamGetProperty(handle, property_id, ctypes.byref(value), ctypes.byref(flags)),
       f"read camera property {property_id}",
     )
     return float(value.value)
 
-  async def request_property(self, property_id: int) -> float:
+  async def request_property_value(self, property_id: int) -> float:
     async with self._lock:
-      return await self._run_blocking(self._get_property_sync, property_id)
+      return await self._run_blocking(self._request_property_value_sync, property_id)
 
-  def _set_property_sync(self, property_id: int, value: float) -> float:
+  def _set_property_sync(self, property_id: int, property_value: float) -> float:
     handle = self._require_handle()
     lib = self._require_library()
-    self._check(
-      lib.LucamSetProperty(handle, property_id, ctypes.c_float(value), 0),
+    self._raise_if_sdk_call_failed(
+      lib.LucamSetProperty(handle, property_id, ctypes.c_float(property_value), 0),
       f"set camera property {property_id}",
     )
-    return self._get_property_sync(property_id)
+    return self._request_property_value_sync(property_id)
 
   async def set_exposure(self, exposure_ms: float) -> float:
     if exposure_ms <= 0:
@@ -592,7 +606,7 @@ class LumeneraCamera:
       raise CameraError(f"Invalid capture geometry {self.width}x{self.height}")
     buffer = ctypes.create_string_buffer(byte_count)
     for _ in range(flush_frames + 1):
-      self._check(lib.LucamTakeVideo(handle, 1, buffer), "capture camera frame")
+      self._raise_if_sdk_call_failed(lib.LucamTakeVideo(handle, 1, buffer), "capture camera frame")
       if flush_frames:
         time.sleep(max(0.001, self.exposure_ms / 1000.0))
     return CameraFrame(

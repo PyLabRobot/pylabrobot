@@ -23,90 +23,138 @@ from typing import Optional, Tuple
 
 from pylabrobot.celigo.config import CalibrationConfig, HardwareDefaultConfig
 
-Vec = Tuple[float, float]
+Coordinate2D = Tuple[float, float]
+Matrix2x2 = Tuple[float, float, float, float]
 
 
-class _Frame:
+class _CoordinateFrame:
   """A rotated frame relative to an optional base frame."""
 
-  def __init__(self, ref_point: Vec, theta: float, base: Optional["_Frame"]):
-    self.base = base
-    # refPoint is expressed in base units; if chained, the base removes its scale first.
-    ref = base.remove_scale(ref_point) if base is not None else ref_point
-    self.ref_point = ref
+  def __init__(
+    self,
+    reference_point: Coordinate2D,
+    rotation_radians: float,
+    parent: Optional["_CoordinateFrame"],
+  ):
+    self.parent = parent
+    # The reference point is expressed in parent units. Remove the parent's scale before
+    # chaining coordinate transforms.
+    unscaled_reference = (
+      parent.to_unscaled_coordinates(reference_point) if parent is not None else reference_point
+    )
+    self.reference_point = unscaled_reference
 
-    if theta == 0.0:
-      self._rot = (1.0, 0.0, 0.0, 1.0)
-      self._rot_inv = (1.0, 0.0, 0.0, 1.0)
+    if rotation_radians == 0.0:
+      self._rotation_from_parent: Matrix2x2 = (1.0, 0.0, 0.0, 1.0)
+      self._rotation_to_parent: Matrix2x2 = (1.0, 0.0, 0.0, 1.0)
     else:
-      c, s = math.cos(theta), math.sin(theta)
-      self._rot = (c, s, -s, c)  # R
-      self._rot_inv = (c, -s, s, c)  # R^-1
+      cosine = math.cos(rotation_radians)
+      sine = math.sin(rotation_radians)
+      self._rotation_from_parent = (cosine, sine, -sine, cosine)
+      self._rotation_to_parent = (cosine, -sine, sine, cosine)
 
-    if base is None:
-      self._ref_inv_cumulative = ref
-      self._rot_inv_cumulative = self._rot_inv
+    if parent is None:
+      self._cumulative_root_offset = unscaled_reference
+      self._cumulative_rotation_to_root = self._rotation_to_parent
     else:
-      self._ref_inv_cumulative = _add(
-        base._ref_inv_cumulative, _matvec(base._rot_inv_cumulative, ref)
+      self._cumulative_root_offset = _add(
+        parent._cumulative_root_offset,
+        _transform_coordinate(
+          parent._cumulative_rotation_to_root,
+          unscaled_reference,
+        ),
       )
-      self._rot_inv_cumulative = _matmul(self._rot_inv, base._rot_inv_cumulative)
+      self._cumulative_rotation_to_root = _multiply_matrices(
+        self._rotation_to_parent,
+        parent._cumulative_rotation_to_root,
+      )
 
   # subclasses override these (identity here)
-  def remove_scale(self, v: Vec) -> Vec:
-    return v
+  def to_unscaled_coordinates(self, coordinate: Coordinate2D) -> Coordinate2D:
+    return coordinate
 
-  def apply_scale(self, v: Vec) -> Vec:
-    return v
+  def from_unscaled_coordinates(self, coordinate: Coordinate2D) -> Coordinate2D:
+    return coordinate
 
-  def get_base_coord(self, local: Vec) -> Vec:
-    v = self.remove_scale(local)
-    base_coord = _add(_matvec(self._rot_inv, v), self.ref_point)
-    if self.base is not None:
-      base_coord = self.base.apply_scale(base_coord)
-    return base_coord
+  def to_parent_coordinates(self, local: Coordinate2D) -> Coordinate2D:
+    unscaled_local = self.to_unscaled_coordinates(local)
+    parent_coordinate = _add(
+      _transform_coordinate(self._rotation_to_parent, unscaled_local),
+      self.reference_point,
+    )
+    if self.parent is not None:
+      parent_coordinate = self.parent.from_unscaled_coordinates(parent_coordinate)
+    return parent_coordinate
 
-  def get_local_coord(self, base_coord: Vec) -> Vec:
-    b = self.base.remove_scale(base_coord) if self.base is not None else base_coord
-    local = _matvec(self._rot, _sub(b, self.ref_point))
-    return self.apply_scale(local)
+  def from_parent_coordinates(self, parent_coordinate: Coordinate2D) -> Coordinate2D:
+    unscaled_parent = (
+      self.parent.to_unscaled_coordinates(parent_coordinate)
+      if self.parent is not None
+      else parent_coordinate
+    )
+    local = _transform_coordinate(
+      self._rotation_from_parent,
+      _subtract(unscaled_parent, self.reference_point),
+    )
+    return self.from_unscaled_coordinates(local)
 
-  def get_lowest_base_coord(self, local: Vec) -> Vec:
-    v = self.remove_scale(local)
-    return _add(_matvec(self._rot_inv_cumulative, v), self._ref_inv_cumulative)
+  def to_root_coordinates(self, local: Coordinate2D) -> Coordinate2D:
+    unscaled_local = self.to_unscaled_coordinates(local)
+    return _add(
+      _transform_coordinate(self._cumulative_rotation_to_root, unscaled_local),
+      self._cumulative_root_offset,
+    )
 
 
-class _ScaledFrame(_Frame):
+class _ScaledCoordinateFrame(_CoordinateFrame):
   """A frame with linear scale and offset applied (e.g., pixel <-> mm)."""
 
-  def __init__(self, units: Vec, offset: Vec, ref_point: Vec, theta: float, base):
+  def __init__(
+    self,
+    units: Coordinate2D,
+    offset: Coordinate2D,
+    reference_point: Coordinate2D,
+    rotation_radians: float,
+    parent: Optional[_CoordinateFrame],
+  ):
     self._units = units
     self._offset = offset
-    super().__init__(ref_point, theta, base)
+    super().__init__(reference_point, rotation_radians, parent)
 
-  def apply_scale(self, v: Vec) -> Vec:
-    return _add(_hadamard(v, self._units), self._offset)
+  def from_unscaled_coordinates(self, coordinate: Coordinate2D) -> Coordinate2D:
+    return _add(_multiply_coordinates(coordinate, self._units), self._offset)
 
-  def remove_scale(self, v: Vec) -> Vec:
-    return _hdiv(_sub(v, self._offset), self._units)
+  def to_unscaled_coordinates(self, coordinate: Coordinate2D) -> Coordinate2D:
+    return _divide_coordinates(_subtract(coordinate, self._offset), self._units)
 
 
-class _ScaledShearFrame(_Frame):
+class _ScaledShearCoordinateFrame(_CoordinateFrame):
   """A frame with scale, offset, and X-shear applied (e.g., sample <-> stage)."""
 
-  def __init__(self, units: Vec, offset: Vec, shear: float, ref_point: Vec, theta: float, base):
+  def __init__(
+    self,
+    units: Coordinate2D,
+    offset: Coordinate2D,
+    shear: float,
+    reference_point: Coordinate2D,
+    rotation_radians: float,
+    parent: Optional[_CoordinateFrame],
+  ):
     self._units = units
     self._offset = offset
     self._shear = shear
-    super().__init__(ref_point, theta, base)
+    super().__init__(reference_point, rotation_radians, parent)
 
-  def apply_scale(self, v: Vec) -> Vec:
-    w = _add(_hadamard(v, self._units), self._offset)
-    return _add(w, (w[1] * self._shear, 0.0))
+  def from_unscaled_coordinates(self, coordinate: Coordinate2D) -> Coordinate2D:
+    scaled = _add(_multiply_coordinates(coordinate, self._units), self._offset)
+    return _add(scaled, (scaled[1] * self._shear, 0.0))
 
-  def remove_scale(self, v: Vec) -> Vec:
-    sheared = (v[1] * self._shear, 0.0)
-    return _hdiv(_sub(_sub(v, sheared), self._offset), self._units)
+  def to_unscaled_coordinates(self, coordinate: Coordinate2D) -> Coordinate2D:
+    shear_offset = (coordinate[1] * self._shear, 0.0)
+    return _divide_coordinates(
+      _subtract(_subtract(coordinate, shear_offset), self._offset),
+      self._units,
+    )
 
 
 class CoordinateSystems:
@@ -117,7 +165,7 @@ class CoordinateSystems:
   conversions.
   """
 
-  def __init__(self, sample_to_stage: _Frame, image_to_stage: _Frame):
+  def __init__(self, sample_to_stage: _CoordinateFrame, image_to_stage: _CoordinateFrame):
     self._sample_to_stage = sample_to_stage
     self._image_to_stage = image_to_stage
 
@@ -126,7 +174,7 @@ class CoordinateSystems:
     cls,
     calibration: CalibrationConfig,
     hardware_defaults: HardwareDefaultConfig,
-    reference_point_mm: Vec = (0.0, 0.0),
+    reference_point_mm: Coordinate2D = (0.0, 0.0),
     binning_divisor: float = 1.0,
   ) -> "CoordinateSystems":
     plate_corner = (
@@ -135,13 +183,13 @@ class CoordinateSystems:
       calibration.calibrated_plate_corner_y
       + hardware_defaults.default_plate_y_corner_stage_coordinate,
     )
-    sample_to_stage = _ScaledShearFrame(
+    sample_to_stage = _ScaledShearCoordinateFrame(
       units=(calibration.stage_x_scale, calibration.stage_y_scale),
       offset=(calibration.stage_x_shear_offset, calibration.stage_y_shear_offset),
       shear=calibration.stage_shear,
-      ref_point=plate_corner,
-      theta=calibration.calibrated_plate_to_stage_theta_radians,
-      base=None,
+      reference_point=plate_corner,
+      rotation_radians=calibration.calibrated_plate_to_stage_theta_radians,
+      parent=None,
     )
     pixels_per_mm = (
       1000.0 / calibration.microns_per_pixel_x / binning_divisor,
@@ -151,62 +199,63 @@ class CoordinateSystems:
       calibration.image_width_pixels / 2.0,
       calibration.image_height_pixels / 2.0,
     )
-    image_to_stage = _ScaledFrame(
+    image_to_stage = _ScaledCoordinateFrame(
       units=pixels_per_mm,
       offset=center_pixel,
-      ref_point=reference_point_mm,
-      theta=calibration.image_to_stage_theta_radians,
-      base=sample_to_stage,
+      reference_point=reference_point_mm,
+      rotation_radians=calibration.image_to_stage_theta_radians,
+      parent=sample_to_stage,
     )
     return cls(sample_to_stage, image_to_stage)
 
   # coordinate conversion API ------------------------------------------------
 
-  def sample_mm_to_stage_mm(self, x: float, y: float) -> Vec:
-    return self._sample_to_stage.get_base_coord((x, y))
+  def sample_mm_to_stage_mm(self, x: float, y: float) -> Coordinate2D:
+    return self._sample_to_stage.to_parent_coordinates((x, y))
 
-  def stage_mm_to_sample_mm(self, x: float, y: float) -> Vec:
-    return self._sample_to_stage.get_local_coord((x, y))
+  def stage_mm_to_sample_mm(self, x: float, y: float) -> Coordinate2D:
+    return self._sample_to_stage.from_parent_coordinates((x, y))
 
-  def image_pixel_to_sample_mm(self, px: float, py: float) -> Vec:
-    return self._image_to_stage.get_base_coord((px, py))
+  def image_pixel_to_sample_mm(self, px: float, py: float) -> Coordinate2D:
+    return self._image_to_stage.to_parent_coordinates((px, py))
 
-  def image_pixel_to_stage_mm(self, px: float, py: float) -> Vec:
-    return self._image_to_stage.get_lowest_base_coord((px, py))
+  def image_pixel_to_stage_mm(self, px: float, py: float) -> Coordinate2D:
+    return self._image_to_stage.to_root_coordinates((px, py))
 
-  def sample_mm_to_image_pixel(self, x: float, y: float) -> Vec:
-    return self._image_to_stage.get_local_coord((x, y))
+  def sample_mm_to_image_pixel(self, x: float, y: float) -> Coordinate2D:
+    return self._image_to_stage.from_parent_coordinates((x, y))
 
 
 # -- tiny vector / 2x2-matrix helpers (matrices as (a, b, c, d) = [[a,b],[c,d]]) --
 
 
-def _add(u: Vec, v: Vec) -> Vec:
-  return (u[0] + v[0], u[1] + v[1])
+def _add(left: Coordinate2D, right: Coordinate2D) -> Coordinate2D:
+  return (left[0] + right[0], left[1] + right[1])
 
 
-def _sub(u: Vec, v: Vec) -> Vec:
-  return (u[0] - v[0], u[1] - v[1])
+def _subtract(left: Coordinate2D, right: Coordinate2D) -> Coordinate2D:
+  return (left[0] - right[0], left[1] - right[1])
 
 
-def _hadamard(u: Vec, v: Vec) -> Vec:
-  return (u[0] * v[0], u[1] * v[1])
+def _multiply_coordinates(left: Coordinate2D, right: Coordinate2D) -> Coordinate2D:
+  return (left[0] * right[0], left[1] * right[1])
 
 
-def _hdiv(u: Vec, v: Vec) -> Vec:
-  return (u[0] / v[0], u[1] / v[1])
+def _divide_coordinates(numerator: Coordinate2D, denominator: Coordinate2D) -> Coordinate2D:
+  return (numerator[0] / denominator[0], numerator[1] / denominator[1])
 
 
-def _matvec(m: "Tuple[float, float, float, float]", v: Vec) -> Vec:
-  return (m[0] * v[0] + m[1] * v[1], m[2] * v[0] + m[3] * v[1])
-
-
-def _matmul(
-  m: "Tuple[float, float, float, float]", n: "Tuple[float, float, float, float]"
-) -> "Tuple[float, float, float, float]":
+def _transform_coordinate(matrix: Matrix2x2, coordinate: Coordinate2D) -> Coordinate2D:
   return (
-    m[0] * n[0] + m[1] * n[2],
-    m[0] * n[1] + m[1] * n[3],
-    m[2] * n[0] + m[3] * n[2],
-    m[2] * n[1] + m[3] * n[3],
+    matrix[0] * coordinate[0] + matrix[1] * coordinate[1],
+    matrix[2] * coordinate[0] + matrix[3] * coordinate[1],
+  )
+
+
+def _multiply_matrices(left: Matrix2x2, right: Matrix2x2) -> Matrix2x2:
+  return (
+    left[0] * right[0] + left[1] * right[2],
+    left[0] * right[1] + left[1] * right[3],
+    left[2] * right[0] + left[3] * right[2],
+    left[2] * right[1] + left[3] * right[3],
   )
