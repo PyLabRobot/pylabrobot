@@ -68,6 +68,7 @@ ERROR_MESSAGES = {
   ),
   "NeedToRecap": "Decap operation is already done. Select the recap operation on the device.",
   "NeedToDecap": "Recap operation is already executed.",
+  "CapsOnPins": "Caps are held on the pins. Recap or waste them first.",
   "DecapWasNotSuccesful": (
     "Decapping was not successful. Fix the error on the device manually and check whether any "
     "tubes are still on the head."
@@ -99,17 +100,15 @@ ERROR_MESSAGES = {
   "EjectCapsWasNotSuccesful": "Ejecting the held caps was not successful.",
   "HeadUpWasNotSuccesful": "Homing the cap head was not successful.",
   "SafetyDoorWasNotSuccesful": "Operating the safety door was not successful.",
-  "RetryDecapWasNotSuccesful": (
-    "The forced decap retry was not successful. This command requires light curtain error "
-    "detection to be off."
-  ),
+  "RetryDecapWasNotSuccesful": "The forced decap retry was not successful.",
   "CannotGoInStandbyMode": "Cannot go to standby mode. Check the errors on the device.",
   "NotInManualMode": (
     "This command is only available while the device is in manual recovery mode (StatusMANUAL)."
   ),
   "StatusManual": (
-    "The device is in manual recovery mode. Inspect the rack and cap head, then complete the "
-    "appropriate recovery from the instrument touchscreen before sending another motion command."
+    "The device is in manual recovery mode. Inspect the rack and cap head, confirm that axis "
+    "motion is safe, then recover with reset_error(), or with head_up(), eject_caps() or "
+    "initialize_keeping_caps_on_pins(), before sending another motion command."
   ),
   "CommandIgnore": "Command was ignored by the device.",
   "NoAck": "Device did not acknowledge the command.",
@@ -216,10 +215,13 @@ ERROR_CODE_MESSAGES: Dict[int, str] = {
   238: "Emergency stop engaged or motor voltage low.",
 }
 
-# Codes that leave the instrument in StatusERROR, which homing clears. Every
-# other code leaves it in StatusMANUAL, which halts the instrument until an
-# operator has inspected it. Decap reports 113/114, recap 117/118, cartridge
-# eject 142, and cartridge load 143/144.
+# Codes the command list pins to StatusERROR, which homing clears, rather than
+# to StatusMANUAL, which halts the instrument until an operator has inspected
+# it: decap reports 113/114, recap 117/118, cartridge eject 142, and cartridge
+# load 143/144. The command list states this only for those four commands, and
+# it is inconsistent elsewhere (the tray and standby entries name StatusMANUAL
+# in their state rows but StatusERROR in their comments), so a code outside this
+# set is not proof that the instrument halted.
 RECOVERABLE_ERROR_CODES: FrozenSet[int] = frozenset({113, 114, 117, 118, 142, 143, 144})
 
 
@@ -236,11 +238,15 @@ def get_error_message(code: int) -> str:
 
 
 def is_recoverable_error(code: int) -> bool:
-  """Whether an error code leaves the instrument in StatusERROR rather than StatusMANUAL.
+  """Whether the command list pins this code to StatusERROR rather than StatusMANUAL.
 
   A StatusERROR is cleared by homing, which :meth:`FluidXIntelliXcap96.home` does
   and which operations do for themselves when ``auto_recover`` is enabled. A
-  StatusMANUAL halts the instrument until an operator inspects it.
+  StatusMANUAL halts the instrument until an operator inspects it. False means
+  the command list does not pin the code to StatusERROR, not that the instrument
+  is certainly halted: it documents the mapping only for decap, recap, cartridge
+  eject and cartridge load. Read :meth:`FluidXIntelliXcap96.request_status` for
+  the state the instrument is actually in.
   """
   return code in RECOVERABLE_ERROR_CODES
 
@@ -322,9 +328,13 @@ class CartridgeProfile:
     )
 
 
-# The extended status bitmask, most significant bit first. The firmware reply is
-# read least-significant-bit-first from the right, so a reply shorter than this
-# tuple is treated as having its leading zeros suppressed.
+# The extended status bitmask, most significant bit first.
+#
+# The command list is inconsistent about the width: it names these twelve flags
+# but shows an eleven-character answer field. Which end a short reply is missing
+# is therefore unknown, and guessing costs correctness at the most significant
+# bit, which is CAPS_ON_PINS. A reply of any other width is rejected rather than
+# padded, so the discrepancy surfaces instead of silently reading caps as absent.
 EXTENDED_STATUS_FLAGS: Tuple[str, ...] = (
   "caps_on_pins",
   "dry_run_enabled",
@@ -334,7 +344,7 @@ EXTENDED_STATUS_FLAGS: Tuple[str, ...] = (
   "screw_caps_on",
   "cartridge_installed",
   "standby_active",
-  "stage_extended",
+  "stage_pos",
   "recover_mode",
   "estop_active",
   "time_for_service",
@@ -345,9 +355,13 @@ EXTENDED_STATUS_FLAGS: Tuple[str, ...] = (
 class ExtendedStatus:
   """Instrument state flags that the plain status word does not carry.
 
-  ``caps_on_pins`` is the authoritative answer to "are caps currently held?",
-  and ``cartridge_installed``, ``estop_active`` and ``recover_mode`` explain
-  states that otherwise only show up as a refused command.
+  ``caps_on_pins`` reports directly what the status word only implies through
+  ``StatusRECAP``, and ``cartridge_installed``, ``estop_active`` and
+  ``recover_mode`` explain states that otherwise only show up as a refused
+  command.
+
+  ``stage_pos`` is the command list's ``STAGE_POS`` bit. Which position each
+  value means is not documented.
   """
 
   caps_on_pins: bool
@@ -358,7 +372,7 @@ class ExtendedStatus:
   screw_caps_on: bool
   cartridge_installed: bool
   standby_active: bool
-  stage_extended: bool
+  stage_pos: bool
   recover_mode: bool
   estop_active: bool
   time_for_service: bool
@@ -374,15 +388,16 @@ class ExtendedStatus:
       )
     width = len(EXTENDED_STATUS_FLAGS)
     if len(bits) != width:
-      logger.warning(
-        "[IntelliXcap96] extended status is %d bits, expected %d: %r. Reading it from the "
-        "least significant bit.",
-        len(bits),
-        width,
-        bits,
+      raise FluidXError(
+        title="Unexpected extended status width",
+        message=(
+          f"got {len(bits)} bits, expected {width}: {bits!r}. The command list names {width} "
+          f"flags but shows an {width - 1}-character answer, so which end is missing cannot be "
+          "guessed without misreading CAPS_ON_PINS. Map this reply against the instrument's "
+          "known state and fix EXTENDED_STATUS_FLAGS."
+        ),
       )
-    aligned = bits.rjust(width, "0")[-width:]
-    values = {flag: aligned[index] == "1" for index, flag in enumerate(EXTENDED_STATUS_FLAGS)}
+    values = {flag: bits[index] == "1" for index, flag in enumerate(EXTENDED_STATUS_FLAGS)}
     return cls(raw=bits, **values)
 
 
@@ -470,14 +485,15 @@ class FluidXIntelliXcap96:
 
   Which state a failure lands in depends on the error code: 113/114 for decap,
   117/118 for recap, 142 for cartridge eject and 143/144 for cartridge load
-  latch ``StatusERROR``, and anything else halts in ``StatusMANUAL``.
-  :meth:`request_error_code` reads the latched code, and every raised
-  :class:`FluidXError` carries it in ``error_code`` when the instrument reported
-  one.
+  latch ``StatusERROR``, and the command list says anything else halts those
+  four commands in ``StatusMANUAL``. It does not document the mapping for the
+  other commands. :meth:`request_error_code` reads the latched code, and every
+  raised :class:`FluidXError` carries it in ``error_code`` when the instrument
+  reported one.
 
-  A ``StatusError`` is cleared only by homing. With ``auto_recover`` enabled (the
-  default), an operation issued while the device is latched in error homes to
-  recover and then proceeds.
+  Homing clears a ``StatusError``. With ``auto_recover`` enabled (the default),
+  an operation issued while the device is latched in error homes to recover and
+  then proceeds.
 
   Verified against hardware: connection, status, tray open/close, home,
   standby/ready, the decap error/recovery path, and decap/recap with a loaded
@@ -530,19 +546,26 @@ class FluidXIntelliXcap96:
 
   async def setup(self) -> None:
     await self.io.setup()
+    logger.warning(
+      "[IntelliXcap96 %s] most of this driver's commands are implemented from the RS232 command "
+      "list and have not been run on an instrument. The queries, tray open/close, home, "
+      "standby/ready and decap/recap/waste are hardware-verified; the tray travel, cartridge, "
+      "settings and manual recovery commands are not. Please report back so this can be updated.",
+      self.io.port,
+    )
     status = await self.request_status()
     up = status.upper()
     if "BUSY" in up:
-      # At connect there is no motion in flight, so a persistent StatusBUSY means
-      # the instrument is locked out. By far the most common cause is an engaged
-      # e-stop; the safety guard/hood and other interlocks do the same. The
-      # extended status carries an e-stop bit, so read it before giving up.
+      # At connect there is no motion in flight, so StatusBUSY means the
+      # instrument is locked out, commonly by an engaged e-stop; the safety
+      # guard/hood and other interlocks do the same. The extended status carries
+      # an e-stop bit, so read it before giving up.
       estop = await self._estop_hint()
       logger.error(
-        "[IntelliXcap96 %s] reports StatusBUSY at connect and will ignore commands. "
-        "Check the E-STOP first (most common cause), then the safety guard/hood and "
-        "interlocks, and retry.",
+        "[IntelliXcap96 %s] reports StatusBUSY at connect and will ignore commands. %s "
+        "Also check the safety guard/hood and interlocks, and retry.",
         self.io.port,
+        estop,
       )
       raise FluidXError(
         title="Decapper is not ready (StatusBUSY)",
@@ -671,7 +694,7 @@ class FluidXIntelliXcap96:
     try:
       extended = await self.request_extended_status()
     except FluidXError:
-      return "This is almost always an engaged E-STOP."
+      return "The E-STOP could not be read; it is a common cause."
     if extended.estop_active:
       return "The E-STOP is engaged; release it."
     return "The E-STOP reads as released."
@@ -729,7 +752,7 @@ class FluidXIntelliXcap96:
     fail_key: str,
     terminal_statuses: Tuple[str, ...] = ("StatusOK",),
     done_frames: Tuple[str, ...] = (),
-  ) -> None:
+  ) -> List[str]:
     """Poll status until it reaches an expected idle state.
 
     ``fail_key`` names the firmware error message to raise if the status word
@@ -738,22 +761,31 @@ class FluidXIntelliXcap96:
     ``StatusRECAP`` after decapping and after tray motion with caps held.
     ``done_frames`` are the operation's own completion frames, which end the
     wait as soon as one is seen.
+
+    Returns every frame seen while waiting, so a caller can pick up an answer
+    the instrument sends alongside its completion.
     """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     expected = {status.upper() for status in terminal_statuses}
     done = {frame.upper() for frame in done_frames}
+    seen: List[str] = []
     while loop.time() < deadline:
       frames = await self.send_command(STATUS)
+      seen.extend(frames)
+      for frame in frames:
+        if frame.upper() in ("RETRYDECAP", "RETRYRECAP"):
+          # The instrument retries a failed stroke by itself; report the attempt.
+          logger.info("[IntelliXcap96 %s] %s: instrument reports %s", self.io.port, name, frame)
       if any(_is_error_frame(f) for f in frames):
         raise await self._latched_fault(fail_key, f"{name}: {frames!r}", frames)
       if any(f.upper() in done for f in frames):
-        return
+        return seen
       status = self._status_frame(frames)
       if status is not None:
         up = status.upper()
         if up in expected:
-          return
+          return seen
         if "MANUAL" in up:
           # A halt needs an operator, so waiting out the timeout only delays the report.
           raise await self._latched_fault("StatusManual", f"{name}: {frames!r}", frames)
@@ -780,6 +812,9 @@ class FluidXIntelliXcap96:
     ``StatusERROR`` and ``StatusMANUAL`` say only that something went wrong.
     :func:`get_error_message` turns the code into its documented meaning, and
     :func:`is_recoverable_error` says whether homing will clear it.
+
+    The command list documents the reply only as a three-digit error code and
+    does not say how "no error" is expressed; a code of 0 is read as none.
     """
     frames = await self.send_command(ERROR_QUERY)
     self._require_accepted(ERROR_QUERY, frames, "Reading the error code", idempotent=True)
@@ -805,8 +840,9 @@ class FluidXIntelliXcap96:
   async def request_firmware_versions(self) -> FirmwareVersions:
     """Read the unit, touchscreen and light curtain firmware versions.
 
-    Dry-run mode requires touchscreen firmware V14 or above, and the store
-    operation is broken in unit firmware V44.
+    Dry-run mode requires touchscreen firmware V14 or above. The store operation
+    is broken in V44; the command list does not say which of the three
+    firmwares that version refers to.
     """
     frames = await self.send_command(FIRMWARE_QUERY)
     self._require_accepted(FIRMWARE_QUERY, frames, "Reading the firmware versions", idempotent=True)
@@ -841,7 +877,12 @@ class FluidXIntelliXcap96:
     return CartridgeProfile.from_raw(payload)
 
   async def caps_on_pins(self) -> bool:
-    """Whether caps are currently held on the ejector pins."""
+    """Whether caps are currently held on the ejector pins.
+
+    Reads the ``CAPS_ON_PINS`` bit. The decap, recap and waste guards instead
+    gate on the ``StatusRECAP`` word, which the command list ties to the same
+    condition and which is hardware-verified.
+    """
     return (await self.request_extended_status()).caps_on_pins
 
   # === Operations ===
@@ -855,7 +896,7 @@ class FluidXIntelliXcap96:
         timeout,
         "Opening the tray",
         "OpenTrayWasNotSuccesful",
-        ("StatusOK", "StatusRECAP", "StatusDECAP"),
+        ("StatusOK", "StatusRECAP"),
         done_frames=("OpenDONE",),
       )
     logger.info("[IntelliXcap96 %s] tray open", self.io.port)
@@ -869,7 +910,7 @@ class FluidXIntelliXcap96:
         timeout,
         "Closing the tray",
         "CloseTrayWasNotSuccesful",
-        ("StatusOK", "StatusRECAP", "StatusDECAP"),
+        ("StatusOK", "StatusRECAP"),
         done_frames=("CloseDONE",),
       )
     logger.info("[IntelliXcap96 %s] tray closed", self.io.port)
@@ -905,7 +946,11 @@ class FluidXIntelliXcap96:
   async def step_tray_out(self, timeout: float = 15.0) -> None:
     """Move the tray further out by the step distance in setpoint 88.
 
-    Travel is bounded by the load position (S3) and the extended position
+    Relative, so calling it twice moves the tray twice. The instrument offers no
+    way to command an intermediate position directly, and no way to read the
+    current one back, so stepping is the only access to the range between the
+    two ends; :meth:`extend_tray` and :meth:`retract_tray` are the absolute
+    moves. Travel is bounded by the load position (S3) and the extended position
     (S127); a step that would leave that range fails.
     """
     await self._tray_move(TRAY_STEP_OUT, "Stepping the tray out", timeout)
@@ -913,8 +958,9 @@ class FluidXIntelliXcap96:
   async def step_tray_in(self, timeout: float = 15.0) -> None:
     """Move the tray back in by the step distance in setpoint 88.
 
-    Travel is bounded by the load position (S3) and the extended position
-    (S127); a step that would leave that range fails.
+    Relative, so calling it twice moves the tray twice. See
+    :meth:`step_tray_out`. Travel is bounded by the load position (S3) and the
+    extended position (S127); a step that would leave that range fails.
     """
     await self._tray_move(TRAY_STEP_IN, "Stepping the tray in", timeout)
 
@@ -974,8 +1020,13 @@ class FluidXIntelliXcap96:
     Hardware testing confirmed that the home-all command transitions
     ``StatusMANUAL`` through ``StatusBUSY`` to ``StatusOK``. Call this only after
     inspecting the rack and cap head and confirming that axis motion is safe.
-    Homing drops any held caps; use :meth:`initialize_keeping_caps_on_pins` when
-    caps are still on the pins.
+
+    What homing does to caps held on the pins is unsettled. The command list
+    says the home sequence "will not drop caps", yet it also carries a separate
+    command to initialize without dropping them, which that would make
+    redundant. Neither behaviour has been checked on an instrument. With caps
+    held, prefer :meth:`initialize_keeping_caps_on_pins`, which is the command
+    documented for that case.
 
     This method is a no-op when the instrument is not in an error or manual
     recovery state.
@@ -1059,7 +1110,7 @@ class FluidXIntelliXcap96:
       timeout,
       "Retrying the decap",
       "RetryDecapWasNotSuccesful",
-      ("StatusOK", "StatusRECAP"),
+      ("StatusOK",),
       done_frames=("DecapDONE",),
     )
     logger.info("[IntelliXcap96 %s] decap retry complete", self.io.port)
@@ -1079,7 +1130,7 @@ class FluidXIntelliXcap96:
       timeout,
       "Recapping",
       "RecapWasNotSuccesful",
-      ("StatusOK", "StatusDECAP"),
+      ("StatusOK",),
       done_frames=("RecapDONE",),
     )
     logger.info("[IntelliXcap96 %s] recap complete", self.io.port)
@@ -1095,9 +1146,11 @@ class FluidXIntelliXcap96:
     threaded or torqued.
 
     The instrument picks the store sequence from the height of the cap carrier
-    and otherwise performs a recap. Unit firmware V44 does not implement this
-    command; on that firmware, load a store rack and use :meth:`decap` and
-    :meth:`recap`, which select the store sequence themselves.
+    and otherwise performs a recap. Firmware V44 does not implement this command
+    -- the command list does not say which of the three firmwares it means -- so
+    on that version load a store rack and use :meth:`decap` and :meth:`recap`,
+    which select the store sequence themselves. A store that times out presents
+    the tray, answering ``LoadOK`` alongside the ``StoreERROR``.
 
     User manual:
     https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf
@@ -1114,7 +1167,7 @@ class FluidXIntelliXcap96:
       timeout,
       "Wasting caps",
       "StoreWasNotSuccesful",
-      ("StatusOK", "StatusDECAP"),
+      ("StatusOK",),
       done_frames=("StoreDONE",),
     )
     logger.info("[IntelliXcap96 %s] waste complete", self.io.port)
@@ -1122,11 +1175,10 @@ class FluidXIntelliXcap96:
   async def standby(self, timeout: float = 15.0) -> None:
     """Put the decapper into low-power standby (sleep) mode.
 
-    A no-op when the instrument is already asleep. The instrument refuses to
-    sleep while caps are held on the pins.
+    A no-op when the instrument is already asleep. The instrument requires
+    StatusOK to sleep, and refuses while caps are held on the pins.
     """
-    status = (await self.request_status()).upper()
-    if "SLEEP" in status:
+    if "SLEEP" in (await self.request_status()).upper():
       return
     frames = await self.send_command(STANDBY)
     self._require_accepted(STANDBY, frames, "Entering standby")
@@ -1162,7 +1214,7 @@ class FluidXIntelliXcap96:
     if not extended.cartridge_installed:
       return
     if extended.caps_on_pins:
-      raise _fault("NeedToRecap", "the cartridge cannot be ejected while caps are held")
+      raise _fault("CapsOnPins", "the cartridge cannot be ejected while caps are held")
     await self._ensure_ready()
     frames = await self.send_command(CARTRIDGE_EJECT)
     self._require_accepted(CARTRIDGE_EJECT, frames, "Ejecting the cartridge")
@@ -1170,7 +1222,7 @@ class FluidXIntelliXcap96:
       timeout,
       "Ejecting the cartridge",
       "CartridgeEjectWasNotSuccesful",
-      ("StatusCAREJECT", "StatusOK"),
+      ("StatusCAREJECT",),
       done_frames=("CarEjectDONE",),
     )
     logger.info("[IntelliXcap96 %s] cartridge ejected", self.io.port)
@@ -1178,32 +1230,40 @@ class FluidXIntelliXcap96:
   async def load_cartridge(self, timeout: float = 60.0) -> Optional[int]:
     """Pick up the cartridge resting on the tray.
 
-    A no-op when a cartridge is already installed.
+    A no-op when a cartridge is already installed. Loading a stored profile
+    (16-96) answers ``ProfileLoadERROR`` if that profile does not exist or is
+    invalid.
 
     Returns:
-      The loaded profile number when the firmware reports one, else None.
+      The loaded profile number when the instrument reports one, else None. It
+      answers with ``onnOK`` at the end of the motion, so this is None if that
+      frame never arrives.
     """
     if (await self.request_extended_status()).cartridge_installed:
       return None
     frames = await self.send_command(CARTRIDGE_LOAD)
     self._require_accepted(CARTRIDGE_LOAD, frames, "Loading the cartridge")
-    await self._wait_for_idle(
+    if any(_is_error_frame(f) for f in frames):
+      raise await self._latched_fault(
+        "CartridgeLoadWasNotSuccesful", f"Loading the cartridge: {frames!r}", frames
+      )
+    seen = await self._wait_for_idle(
       timeout,
       "Loading the cartridge",
       "CartridgeLoadWasNotSuccesful",
       ("StatusOK",),
       done_frames=("CarLoadDONE", "ExtCarLoadDONE"),
     )
-    profile = _loaded_profile(frames)
+    profile = _loaded_profile(frames + seen)
     logger.info("[IntelliXcap96 %s] cartridge loaded (profile %s)", self.io.port, profile)
     return profile
 
   async def reset_cartridge_counter(self) -> None:
     """Reset the installed cartridge's cycle counter to zero."""
+    name = "Resetting the cartridge counter"
     frames = await self.send_command(CARTRIDGE_COUNTER_RESET)
-    self._require_accepted(
-      CARTRIDGE_COUNTER_RESET, frames, "Resetting the cartridge counter", idempotent=True
-    )
+    self._require_accepted(CARTRIDGE_COUNTER_RESET, frames, name, idempotent=True)
+    self._require_answer(frames, "CarResetDONE", name)
     logger.info("[IntelliXcap96 %s] cartridge counter reset", self.io.port)
 
   # === Settings ===
@@ -1240,9 +1300,8 @@ class FluidXIntelliXcap96:
   async def set_safety_door_enabled(self, enabled: bool) -> None:
     """Turn safety door operation on or off.
 
-    Disabling it leaves the door open and keeps it open until the instrument is
-    power cycled, which is how the door is enabled again. The door is enabled at
-    power-up.
+    Disabling it opens the door and keeps it open. Call this with ``True`` to
+    re-enable the door; it is also enabled again at power-up.
     """
     command = SAFETY_DOOR_ENABLE if enabled else SAFETY_DOOR_DISABLE
     name = "Enabling the safety door" if enabled else "Disabling the safety door"

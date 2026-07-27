@@ -194,11 +194,12 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     device = self._make([extended(caps_on_pins=True)])
     self.assertTrue(await device.caps_on_pins())
 
-  def test_extended_status_pads_a_short_reply_from_the_least_significant_bit(self):
-    # The firmware may suppress leading zeros, so the trailing bits stay aligned.
-    result = ExtendedStatus.from_raw("00000100000")
-    self.assertFalse(result.caps_on_pins)
-    self.assertTrue(result.cartridge_installed)
+  def test_extended_status_rejects_an_unexpected_width(self):
+    # The command list names 12 flags but shows an 11-character answer. Padding
+    # either end would guess at CAPS_ON_PINS, so the mismatch is surfaced.
+    with self.assertRaises(FluidXError) as ctx:
+      ExtendedStatus.from_raw("00000100000")
+    self.assertIn("11 bits, expected 12", str(ctx.exception))
 
   def test_extended_status_rejects_a_non_bitmask(self):
     with self.assertRaises(FluidXError):
@@ -558,6 +559,30 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     device = self._make([[ACK, "XOK", "CarResetDONE"]])
     await device.reset_cartridge_counter()
     self.assertEqual(self._written(device), ["X"])
+
+  async def test_reset_cartridge_counter_requires_its_answer(self):
+    device = self._make([[ACK, "XOK"]])
+    with self.assertRaises(FluidXError):
+      await device.reset_cartridge_counter()
+
+  async def test_load_cartridge_reads_the_profile_from_the_end_of_the_motion(self):
+    # onnOK is documented as an end-of-motion answer, not part of the ack.
+    device = self._make(
+      [
+        extended(cartridge_installed=False),
+        [ACK, "COK"],
+        [ACK, "aOK", "o24OK", "StatusOK"],
+      ]
+    )
+    self.assertEqual(await device.load_cartridge(), 24)
+
+  async def test_load_cartridge_reports_a_missing_profile(self):
+    device = self._make(
+      [extended(cartridge_installed=False), [ACK, "COK", "ProfileLoadERROR"], query("8", "143")]
+    )
+    with self.assertRaises(FluidXError) as ctx:
+      await device.load_cartridge()
+    self.assertEqual(ctx.exception.error_code, 143)
 
   # === Settings ===
 
