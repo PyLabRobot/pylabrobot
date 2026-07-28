@@ -270,17 +270,6 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     await device.close_tray()
     self.assertEqual(self._written(device), ["a", "g", "a", "a"])
 
-  async def test_extend_tray(self):
-    # A tray move acknowledges and answers with the same echo, so success is two.
-    device = self._make([status("StatusOK"), [ACK, "tOK", "tOK"]])
-    await device.extend_tray()
-    self.assertEqual(self._written(device), ["a", "t"])
-
-  async def test_retract_tray(self):
-    device = self._make([status("StatusOK"), [ACK, "TOK", "TOK"]])
-    await device.retract_tray()
-    self.assertEqual(self._written(device), ["a", "T"])
-
   async def test_step_tray_out_and_in(self):
     device = self._make(
       [
@@ -449,10 +438,17 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(ctx.exception.error_code, 167)
     self.assertFalse(ctx.exception.recoverable)
 
-  async def test_retry_decap_is_acknowledged_as_a_decap(self):
-    device = self._make([status("StatusOK"), [ACK, "hOK"], [ACK, "aOK", "DecapDONE"]])
+  async def test_retry_decap_finishes_with_caps_held(self):
+    device = self._make(
+      [
+        status("StatusRECAP"),
+        [ACK, "hOK"],
+        status("StatusBUSY"),
+        status("StatusRECAP"),
+      ]
+    )
     await device.retry_decap()
-    self.assertEqual(self._written(device), ["a", "Q", "a"])
+    self.assertEqual(self._written(device), ["a", "Q", "a", "a"])
 
   async def test_recap_blocked_when_not_decapped(self):
     device = self._make([status("StatusDecap")])
@@ -565,6 +561,11 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(FluidXError):
       await device.reset_cartridge_counter()
 
+  async def test_reset_cartridge_counter_is_idempotent(self):
+    device = self._make([[ACK, "XOK", "CommandIgnore"]])
+    await device.reset_cartridge_counter()
+    self.assertEqual(self._written(device), ["X"])
+
   async def test_load_cartridge_reads_the_profile_from_the_end_of_the_motion(self):
     # onnOK is documented as an end-of-motion answer, not part of the ack.
     device = self._make(
@@ -596,6 +597,11 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     await device.set_error_detection_enabled(True)
     self.assertEqual(self._written(device), ["L"])
 
+  async def test_set_error_detection_is_idempotent(self):
+    device = self._make([[ACK, "LOK", "CommandIgnore"]])
+    await device.set_error_detection_enabled(True)
+    self.assertEqual(self._written(device), ["L"])
+
   async def test_set_dry_run_enabled(self):
     device = self._make([[ACK, "dOK", "DryRunON"]])
     await device.set_dry_run_enabled(True)
@@ -603,6 +609,11 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_dry_run_disabled(self):
     device = self._make([[ACK, "DOK", "DryRunOFF"]])
+    await device.set_dry_run_enabled(False)
+    self.assertEqual(self._written(device), ["D"])
+
+  async def test_set_dry_run_is_idempotent(self):
+    device = self._make([[ACK, "DOK", "CommandIgnore"]])
     await device.set_dry_run_enabled(False)
     self.assertEqual(self._written(device), ["D"])
 
@@ -620,6 +631,11 @@ class TestIntelliXcap96(unittest.IsolatedAsyncioTestCase):
     device = self._make([[ACK, "-OK", "DoorOFFDONE"]])
     await device.set_safety_door_enabled(False)
     self.assertEqual(self._written(device), ["-"])
+
+  async def test_set_safety_door_is_idempotent(self):
+    device = self._make([[ACK, "+OK", "CommandIgnore"]])
+    await device.set_safety_door_enabled(True)
+    self.assertEqual(self._written(device), ["+"])
 
   # === Manual recovery commands ===
 

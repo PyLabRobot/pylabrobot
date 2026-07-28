@@ -31,8 +31,9 @@ STANDBY = "j"
 READY = "k"
 CARTRIDGE_EJECT = "c"
 CARTRIDGE_LOAD = "C"
-TRAY_EXTEND = "t"
-TRAY_RETRACT = "T"
+# Newer-firmware tray opcodes, intentionally not sent until verified there:
+# TRAY_EXTEND = "t"
+# TRAY_RETRACT = "T"
 TRAY_STEP_OUT = "s"
 TRAY_STEP_IN = "S"
 CARTRIDGE_COUNTER_RESET = "X"
@@ -457,22 +458,35 @@ class FluidXIntelliXcap96:
   to select a compatible cartridge.
 
   Single-character commands, each written followed by ETX:
-    a   request status                     e   extended status bitmask
-    h   start decapping                    E   cartridge profile settings
-    i   start recapping                    V   firmware versions
-    b   release held caps into a carrier   N   cartridge profile/cycles/serial
-    f   open the tray                      8   latched error code
-    g   close the tray                     c   eject the cartridge onto the tray
-    Z   home all axes                      C   load the cartridge from the tray
-    j   enter standby                      X   reset the cartridge cycle counter
-    k   leave standby (ready)              t   extend the tray to S127
-    l   light curtain detection off        T   retract the tray to S3
-    L   light curtain detection on         s   step the tray out by S88
-    d   dry-run mode on                    S   step the tray in by S88
-    D   dry-run mode off                   Q   force a decap retry
-    +   safety door on                     5   eject held caps (manual mode)
-    -   safety door off                    6   home the cap head (manual mode)
-    z   initialize keeping caps on pins    7   open the safety door (manual mode)
+    a   request status
+    b   release held caps into a carrier
+    c   eject the cartridge onto the tray
+    d   dry-run mode on
+    D   dry-run mode off
+    e   extended status bitmask
+    E   cartridge profile settings
+    f   open the tray
+    g   close the tray
+    h   start decapping
+    i   start recapping
+    j   enter standby
+    k   leave standby (ready)
+    l   light curtain detection off
+    L   light curtain detection on
+    N   cartridge profile/cycles/serial
+    Q   force a decap retry
+    s   step the tray out by S88
+    S   step the tray in by S88
+    V   firmware versions
+    X   reset the cartridge cycle counter
+    Z   home all axes
+    z   initialize keeping caps on pins
+    +   safety door on
+    -   safety door off
+    5   eject held caps (manual mode)
+    6   home the cap head (manual mode)
+    7   open the safety door (manual mode)
+    8   latched error code
 
   A command is answered with an ACK frame (0x06), a ``<cmd>OK`` echo frame, and a
   result frame. The status word, in the priority the firmware reports it, is
@@ -495,11 +509,17 @@ class FluidXIntelliXcap96:
   an operation issued while the device is latched in error homes to recover and
   then proceeds.
 
-  Verified against hardware: connection, status, tray open/close, home,
-  standby/ready, the decap error/recovery path, and decap/recap with a loaded
-  0.5 mL rack, including release of held caps with ``waste``. The remaining
-  commands are implemented from the RS232 command list (Azenta part 386063 Rev.
-  A) and have not been exercised on an instrument.
+  Newer firmware documents ``t``/``T`` commands for absolute tray travel
+  between S3 and S127. Unit firmware V49 ignored both commands completely, so
+  :meth:`extend_tray` and :meth:`retract_tray` raise
+  :class:`NotImplementedError` without writing to the instrument.
+
+  Verified against hardware: connection, queries, tray open/close, home,
+  standby/ready, settings, cartridge eject/load, the decap error/recovery path,
+  forced decap retry, and decap/recap with a loaded 0.5 mL rack, including
+  release of held caps with ``waste``. Unit firmware V49 did not acknowledge
+  the four tray travel commands. The cartridge counter reset and manual
+  recovery commands have not been exercised on an instrument.
 
   See the Azenta IntelliXcap user manual for the required carrier and physical
   setup:
@@ -547,10 +567,10 @@ class FluidXIntelliXcap96:
   async def setup(self) -> None:
     await self.io.setup()
     logger.warning(
-      "[IntelliXcap96 %s] most of this driver's commands are implemented from the RS232 command "
-      "list and have not been run on an instrument. The queries, tray open/close, home, "
-      "standby/ready and decap/recap/waste are hardware-verified; the tray travel, cartridge, "
-      "settings and manual recovery commands are not. Please report back so this can be updated.",
+      "[IntelliXcap96 %s] connection, queries, tray open/close, home, standby/ready, settings, "
+      "cartridge eject/load, forced decap retry and decap/recap/waste are hardware-verified. "
+      "Unit firmware V49 does not acknowledge the tray travel commands. The cartridge counter "
+      "reset and manual recovery commands are not hardware-verified.",
       self.io.port,
     )
     status = await self.request_status()
@@ -920,6 +940,8 @@ class FluidXIntelliXcap96:
 
     These acknowledge and answer with the same ``<cmd>OK`` frame, so a completed
     move is a second echo and a failed one is ``<cmd>ERROR``.
+
+    Unit firmware V49 does not acknowledge these commands.
     """
     await self._ensure_ready()
     echo = f"{command}OK"
@@ -934,14 +956,26 @@ class FluidXIntelliXcap96:
   async def extend_tray(self, timeout: float = 15.0) -> None:
     """Move the tray from the load position (S3) out to the extended position (S127).
 
-    Presents decapped tubes further out of the instrument. Fails unless the tray
-    is at the load position, so open the tray first.
+    This command is documented for newer firmware but is not implemented here:
+    unit firmware V49 ignored it completely. The method raises without writing
+    to the instrument.
     """
-    await self._tray_move(TRAY_EXTEND, "Extending the tray", timeout)
+    raise NotImplementedError(
+      "extend_tray() uses the newer-firmware 't' command, which is not supported by "
+      "IntelliXcap unit firmware V49"
+    )
 
   async def retract_tray(self, timeout: float = 15.0) -> None:
-    """Move the tray from the extended position (S127) back to the load position (S3)."""
-    await self._tray_move(TRAY_RETRACT, "Retracting the tray", timeout)
+    """Move the tray from the extended position (S127) back to the load position (S3).
+
+    This command is documented for newer firmware but is not implemented here:
+    unit firmware V49 ignored it completely. The method raises without writing
+    to the instrument.
+    """
+    raise NotImplementedError(
+      "retract_tray() uses the newer-firmware 'T' command, which is not supported by "
+      "IntelliXcap unit firmware V49"
+    )
 
   async def step_tray_out(self, timeout: float = 15.0) -> None:
     """Move the tray further out by the step distance in setpoint 88.
@@ -1100,7 +1134,9 @@ class FluidXIntelliXcap96:
     The command list documents only that this command is used "after a
     successful Decap" and "requires lightcurtain OFF". That those are the same
     condition is inferred from the automatic-retry and error-detection commands
-    rather than stated by the vendor.
+    rather than stated by the vendor. The instrument finishes in
+    ``StatusRECAP`` because it is still holding the caps for a subsequent
+    :meth:`recap`.
     """
     await self._ensure_ready()
     frames = await self.send_command(RETRY_DECAP)
@@ -1110,7 +1146,7 @@ class FluidXIntelliXcap96:
       timeout,
       "Retrying the decap",
       "RetryDecapWasNotSuccesful",
-      ("StatusOK",),
+      ("StatusRECAP",),
       done_frames=("DecapDONE",),
     )
     logger.info("[IntelliXcap96 %s] decap retry complete", self.io.port)
@@ -1262,8 +1298,8 @@ class FluidXIntelliXcap96:
     """Reset the installed cartridge's cycle counter to zero."""
     name = "Resetting the cartridge counter"
     frames = await self.send_command(CARTRIDGE_COUNTER_RESET)
-    self._require_accepted(CARTRIDGE_COUNTER_RESET, frames, name, idempotent=True)
-    self._require_answer(frames, "CarResetDONE", name)
+    if self._require_accepted(CARTRIDGE_COUNTER_RESET, frames, name, idempotent=True):
+      self._require_answer(frames, "CarResetDONE", name)
     logger.info("[IntelliXcap96 %s] cartridge counter reset", self.io.port)
 
   # === Settings ===
@@ -1278,8 +1314,8 @@ class FluidXIntelliXcap96:
     command = ERROR_DETECTION_ON if enabled else ERROR_DETECTION_OFF
     name = "Enabling error detection" if enabled else "Disabling error detection"
     frames = await self.send_command(command)
-    self._require_accepted(command, frames, name, idempotent=True)
-    self._require_answer(frames, "ErrorDetectON" if enabled else "ErrorDetectOFF", name)
+    if self._require_accepted(command, frames, name, idempotent=True):
+      self._require_answer(frames, "ErrorDetectON" if enabled else "ErrorDetectOFF", name)
     logger.info("[IntelliXcap96 %s] error detection %s", self.io.port, "on" if enabled else "off")
 
   async def set_dry_run_enabled(self, enabled: bool) -> None:
@@ -1293,8 +1329,8 @@ class FluidXIntelliXcap96:
     command = DRY_RUN_ON if enabled else DRY_RUN_OFF
     name = "Enabling dry-run mode" if enabled else "Disabling dry-run mode"
     frames = await self.send_command(command)
-    self._require_accepted(command, frames, name, idempotent=True)
-    self._require_answer(frames, "DryRunON" if enabled else "DryRunOFF", name)
+    if self._require_accepted(command, frames, name, idempotent=True):
+      self._require_answer(frames, "DryRunON" if enabled else "DryRunOFF", name)
     logger.info("[IntelliXcap96 %s] dry-run mode %s", self.io.port, "on" if enabled else "off")
 
   async def set_safety_door_enabled(self, enabled: bool) -> None:
@@ -1306,8 +1342,8 @@ class FluidXIntelliXcap96:
     command = SAFETY_DOOR_ENABLE if enabled else SAFETY_DOOR_DISABLE
     name = "Enabling the safety door" if enabled else "Disabling the safety door"
     frames = await self.send_command(command)
-    self._require_accepted(command, frames, name, idempotent=True)
-    self._require_answer(frames, "DoorONDONE" if enabled else "DoorOFFDONE", name)
+    if self._require_accepted(command, frames, name, idempotent=True):
+      self._require_answer(frames, "DoorONDONE" if enabled else "DoorOFFDONE", name)
     logger.info("[IntelliXcap96 %s] safety door %s", self.io.port, "on" if enabled else "off")
 
   # === Manual recovery ===
