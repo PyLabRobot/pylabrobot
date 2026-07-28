@@ -40,7 +40,6 @@ try:
   if status.busy:
     await cel.wait_for_controller_ready()
 
-  await cel.home_imaging_axes()  # Z, X, Y, then the dichroic filter
   result = await cel.acquire("A1", "green", autofocus="image")
   result.frame.save_pgm("A1-green.pgm")
 finally:
@@ -66,13 +65,19 @@ is rejected because the displacement-sensor interface is not yet implemented; us
 `autofocus="image"` for host-side image autofocus.
 
 `Celigo.setup()` opens both the controller and its configured camera, and `Celigo.stop()`
-closes both. Setup reads the native Lumenera format and, when necessary, applies a
-centered ROI matching `CalibrationConfig.xml`. On the installed camera this changes
-`2464x2056` to the calibrated `2048x2048` window at offset `(208, 4)`; the ROI and a
-4,194,304-byte frame have been verified on hardware. Format changes are read back and
-calibrated acquisition still fails closed on any mismatch. Camera SDK calls are
-serialized and time-bounded; after a timeout the camera remains poisoned until a
-deferred close completes.
+closes both. Setup also establishes position references by homing Z, X, Y, and the
+dichroic filter in that clearance-safe order. It reads the native Lumenera format and,
+when necessary, applies a centered ROI matching `CalibrationConfig.xml`. On the installed
+camera this changes `2464x2056` to the calibrated `2048x2048` window at offset `(208, 4)`;
+the ROI and a 4,194,304-byte frame have been verified on hardware. Format changes are
+read back and calibrated acquisition still fails closed on any mismatch. Camera SDK
+calls are serialized and time-bounded; after a timeout the camera remains poisoned until
+a deferred close completes.
+
+`select_channel()` selects the filter, galvo center, and lamp routing while keeping every
+light off. Use `set_illumination_enabled(True, intensity_percent=...)` for direct
+component work; `acquire()` handles illumination automatically and extinguishes it
+before returning, including after a failed capture.
 
 Machine-read commands use the `request_*` prefix. `request_controller_status()` returns a
 `ControllerStatus` dataclass with named fields such as `busy`, `error`,
@@ -109,9 +114,9 @@ the Celigo FTDI is uniquely identifiable by `device_id` or is the only matching 
 `CeligoConfig` is one complete per-instrument configuration and is required by `Celigo`.
 Load it with `CeligoConfig.from_install(config_root)`, then pass it to the constructor.
 The loader accepts the Celigo install root, its `ConfigFiles` directory, or the hardware
-configuration file itself. When its argument is omitted it checks `CELIGO_INSTALL_DIR`
-and the standard Windows installation locations. It indexes the configuration directory
-once and requires all companion calibration files:
+configuration file itself. The path is explicit; no global installation search is
+performed. It indexes the configuration directory once and requires all companion
+calibration files:
 
 ```python
 from pylabrobot.celigo import CeligoConfig
@@ -129,12 +134,11 @@ Live hardware verification covers controller startup/status/self-test, native XY
 homing, drawer open/close, galvo calibration/centering, native and calibrated camera
 capture, machine auto-exposure, image autofocus, camera-trigger diagnostics, all five
 configured illumination channels, and a 16-FOV galvo scan.
-The fluorescence paths were exercised without a fluorescent reference sample, so their
-output switching, filter movement, and acquisition are verified but signal quality is
-not characterized. Laser firing has not been exercised and remains blocked by the
-instrument's asserted generic interlock. `cel.laser` is disabled unless the `Celigo`
-constructor receives `allow_laser=True`, and should only be enabled after independently
-establishing a safe instrument state.
+Fluorescence output switching, filter movement, and acquisition are verified. Laser
+firing has not been exercised and remains blocked by the instrument's asserted generic
+interlock. `cel.laser` is disabled unless the `Celigo` constructor receives
+`allow_laser=True`, and should only be enabled after independently establishing a safe
+instrument state.
 
 ## Tests
 

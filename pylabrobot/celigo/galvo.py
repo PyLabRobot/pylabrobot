@@ -1,7 +1,9 @@
 """Galvo mirror control for the Celigo image cytometer."""
 
+import asyncio
 import math
 import struct
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
@@ -151,7 +153,7 @@ class Galvo:
   def __init__(self, celigo: "Celigo") -> None:
     self._celigo = celigo
 
-  async def initialize(self) -> None:
+  async def _initialize(self) -> None:
     """Configure, calibrate, and center both enabled galvos."""
     hardware = self._celigo.config.hardware
     axis_configs: Tuple[
@@ -236,9 +238,12 @@ class Galvo:
     ``logical_voltage`` is in volts and ``timeout`` is in seconds.
     """
     timeout_milliseconds = _timeout_seconds_to_controller_milliseconds(timeout)
+    axis_config = self._axis_config(axis)
+    if not math.isfinite(axis_config.big_move_delay) or axis_config.big_move_delay < 0:
+      raise CeligoError(f"{axis.upper()} galvo has an invalid configured post-move delay")
     hardware_voltage = logical_to_hardware_voltage(
       axis,
-      self._axis_config(axis),
+      axis_config,
       logical_voltage,
     )
     payload = struct.pack(
@@ -263,6 +268,8 @@ class Galvo:
       require_payload_length(response, 2, "galvo move")
       if struct.unpack_from(">H", response, 0)[0] != 0:
         raise CeligoError(f"{axis.upper()} galvo did not settle")
+      if axis_config.big_move_delay:
+        await asyncio.sleep(axis_config.big_move_delay)
     return hardware_voltage
 
   async def move_both(
@@ -272,19 +279,36 @@ class Galvo:
     wait_until_settled: bool = True,
     timeout: float = 6.0,
   ) -> Tuple[float, float]:
-    """Move both galvos to logical voltages and return their hardware voltages."""
+    """Start both galvo moves, optionally wait for both, and return hardware voltages."""
+    post_move_delay = max(
+      self._axis_config("x").big_move_delay,
+      self._axis_config("y").big_move_delay,
+    )
+    if not math.isfinite(post_move_delay) or post_move_delay < 0:
+      raise CeligoError("Galvo configuration has an invalid post-move delay")
     x_hardware_voltage = await self.move_single(
       "x",
       x_logical_voltage,
-      wait_until_settled=wait_until_settled,
+      wait_until_settled=False,
       timeout=timeout,
     )
     y_hardware_voltage = await self.move_single(
       "y",
       y_logical_voltage,
-      wait_until_settled=wait_until_settled,
+      wait_until_settled=False,
       timeout=timeout,
     )
+    if wait_until_settled:
+      deadline = time.monotonic() + timeout
+      while True:
+        status = await self.request_controller_status()
+        if not status.x_busy and not status.y_busy:
+          break
+        if time.monotonic() >= deadline:
+          raise TimeoutError(f"Galvos did not settle within {timeout:g} seconds")
+        await asyncio.sleep(0.005)
+      if post_move_delay:
+        await asyncio.sleep(post_move_delay)
     return x_hardware_voltage, y_hardware_voltage
 
   async def home(

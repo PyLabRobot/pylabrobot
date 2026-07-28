@@ -54,7 +54,7 @@ def _config() -> CeligoHardwareConfig:
     dichroic_filter_wheel=make_filter_wheel_config(
       axis_index=4,
       number_of_filters=4,
-      number_of_encoder_tick_per_rev=8000,
+      encoder_ticks_per_revolution=8000,
       filter_map=[
         FilterMapEntry(logical_number=2, physical_number=1),
         FilterMapEntry(logical_number=3, physical_number=2),
@@ -75,7 +75,7 @@ def _config() -> CeligoHardwareConfig:
           io_name="eBrightFieldIntensity",
           min_voltage=0,
           max_voltage=10,
-          delay_ms=0,
+          delay=0.0,
         ),
         LightingIOConfig(
           config_version=1000,
@@ -86,7 +86,7 @@ def _config() -> CeligoHardwareConfig:
           io_name="eFluorescentIntensity",
           min_voltage=0,
           max_voltage=10,
-          delay_ms=0,
+          delay=0.0,
         ),
       ],
       digital_ios=[
@@ -160,7 +160,7 @@ class TestConfiguredFilter(unittest.IsolatedAsyncioTestCase):
         magnification_changer=make_filter_wheel_config(
           axis_index=8,
           number_of_filters=4,
-          number_of_encoder_tick_per_rev=8000,
+          encoder_ticks_per_revolution=8000,
           filter_map=[FilterMapEntry(logical_number=5, physical_number=2)],
         )
       )
@@ -212,7 +212,7 @@ class TestConfiguredMotorAddress(unittest.TestCase):
 
 
 class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
-  async def test_channel_uses_configured_bits_filter_and_intensity(self):
+  async def test_channel_selection_leaves_illumination_off_until_enabled(self):
     driver = make_celigo(hardware=_config())
     driver.config.channels_by_magnification[driver.config.magnification] = _channels()
     driver.current_channel = None
@@ -236,11 +236,15 @@ class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
     await driver.select_channel("green")
 
     self.assertEqual(moves, [2])
-    self.assertEqual(digital, [(6, False), (4, False), (5, True), (6, True)])
-    self.assertIn((2, 3276), analog)
+    self.assertEqual(digital, [(6, False), (4, False), (5, True)])
+    self.assertEqual(analog, [(0, 0), (2, 0)])
     self.assertEqual(driver.current_channel, "green")
 
-  async def test_channel_intensity_override_is_explicitly_a_dac_count(self):
+    await driver.set_illumination_enabled(True)
+    self.assertEqual(analog[-1], (2, 3276))
+    self.assertEqual(digital[-1], (6, True))
+
+  async def test_channel_intensity_override_is_a_percentage(self):
     driver = make_celigo(hardware=_config())
     driver.config.channels_by_magnification[driver.config.magnification] = _channels()
     analog = []
@@ -254,9 +258,80 @@ class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
     stub(driver.dichroic_filter, move_to=no_op)
     stub(driver, set_digital_output=no_op)
     stub(driver, set_analog_output_count=set_analog_output_count)
-    await driver.select_channel("green", intensity_dac_count=1234)
+    await driver.select_channel("green")
+    await driver.set_illumination_enabled(True, intensity_percent=30)
 
-    self.assertIn((2, 1234), analog)
+    self.assertEqual(analog[-1], (2, 1228))
+
+  async def test_channel_control_respects_inverted_outputs(self):
+    hardware = _config()
+    io_config = hardware.io
+    assert io_config is not None
+    for output in io_config.digital_ios:
+      output.invert = True
+    io_config.lighting_ios[1].invert = True
+    driver = make_celigo(hardware=hardware)
+    driver.config.channels_by_magnification[driver.config.magnification] = _channels()
+    digital = []
+    analog = []
+
+    async def no_op(*_args, **_kwargs):
+      return None
+
+    async def set_digital(bit, high):
+      digital.append((bit, high))
+
+    async def set_analog(channel, value):
+      analog.append((channel, value))
+
+    stub(driver.dichroic_filter, move_to=no_op)
+    stub(driver, set_digital_output=set_digital, set_analog_output_count=set_analog)
+    await driver.select_channel("green")
+    await driver.set_illumination_enabled(True)
+    await driver.turn_off_illumination()
+
+    self.assertEqual(digital[:3], [(6, True), (4, True), (5, False)])
+    self.assertEqual(digital[3], (6, False))
+    self.assertEqual(digital[4], (6, True))
+    self.assertEqual(analog[:2], [(0, 0), (2, 4095)])
+    self.assertEqual(analog[2], (2, 819))
+    self.assertEqual(analog[-1], (2, 4095))
+
+  async def test_channel_selection_rejects_disabled_output_before_motion(self):
+    hardware = _config()
+    io_config = hardware.io
+    assert io_config is not None
+    io_config.lighting_ios[1].enabled = False
+    driver = make_celigo(hardware=hardware)
+    driver.config.channels_by_magnification[driver.config.magnification] = _channels()
+    moves = []
+
+    async def move_filter(logical_filter):
+      moves.append(logical_filter)
+      return 0
+
+    stub(driver.dichroic_filter, move_to=move_filter)
+    with self.assertRaisesRegex(CeligoError, "is disabled"):
+      await driver.select_channel("green")
+    self.assertEqual(moves, [])
+
+  async def test_channel_selection_rejects_input_only_selector_before_motion(self):
+    hardware = _config()
+    io_config = hardware.io
+    assert io_config is not None
+    io_config.digital_ios[0].io_type = "In"
+    driver = make_celigo(hardware=hardware)
+    driver.config.channels_by_magnification[driver.config.magnification] = _channels()
+    moves = []
+
+    async def move_filter(logical_filter):
+      moves.append(logical_filter)
+      return 0
+
+    stub(driver.dichroic_filter, move_to=move_filter)
+    with self.assertRaisesRegex(CeligoError, "not configured as an output"):
+      await driver.select_channel("green")
+    self.assertEqual(moves, [])
 
 
 class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
@@ -291,13 +366,18 @@ class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
     ):
       attempted.append(("x", distance_ticks, move_current_percent))
 
-    stub(driver, set_brightfield_enabled=no_op)
+    stub(driver, turn_off_illumination=no_op)
     stub(driver.z_axis, move_to=no_op)
     stub(driver.y_axis, move_to=no_op)
     stub(driver.x_axis, request_is_negative_limit_active=no_limit)
-    stub(driver.x_axis, move_relative_to_limit=relative)
+    stub(
+      driver.x_axis,
+      _limit_move_distance_ticks=lambda: 5,
+      _move_relative_to_limit=relative,
+    )
+    stub(driver.y_axis, _limit_move_distance_ticks=lambda: 5)
     with self.assertRaisesRegex(CeligoError, "X limit was not reached"):
-      await driver.open_drawer(eject_distance_ticks=5)
+      await driver.open_drawer()
     self.assertEqual(attempted, [("x", -5, 55)] * 3)
 
 
@@ -312,7 +392,10 @@ class TestCompanionConfigurationLoading(unittest.TestCase):
         config=make_test_config(),
       )
 
-    self.assertEqual(celigo.camera.sdk_library, "/opt/lumenera/liblucamapi.so")
+    self.assertIsInstance(celigo.camera, FakeCamera)
+    camera = celigo.camera
+    assert isinstance(camera, FakeCamera)
+    self.assertEqual(camera.sdk_library, "/opt/lumenera/liblucamapi.so")
     self.assertIsNone(celigo.plate)
 
   def test_constructor_requires_an_explicit_aggregate_config(self):

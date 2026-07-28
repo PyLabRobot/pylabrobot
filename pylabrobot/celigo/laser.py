@@ -206,7 +206,7 @@ class Laser:
       struct.pack(">Hii", laser_index, shots, delay_ticks),
     )
 
-  async def load_firing_targets(
+  async def _load_firing_targets(
     self,
     voltage_offsets: List[Tuple[float, float]],
     center_voltages: Tuple[float, float],
@@ -259,7 +259,7 @@ class Laser:
       raise CeligoError(f"Controller reported invalid laser firing-table size {table_size}")
     for start_index in range(0, len(voltage_offsets), table_size):
       chunk = voltage_offsets[start_index : start_index + table_size]
-      await self.load_firing_targets(chunk, center_voltages)
+      await self._load_firing_targets(chunk, center_voltages)
       payload = struct.pack(">HIIH", laser_index, pulses, delay_ticks, 0)
       # Loading and waiting can take long enough for the door/interlock state to change.
       await self._assert_safe()

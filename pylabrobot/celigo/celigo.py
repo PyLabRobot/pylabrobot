@@ -280,6 +280,12 @@ def _analog_dac_to_volts(
   max_voltage: float,
 ) -> float:
   """Inverse of :func:`_volts_to_analog_dac`."""
+  if not 0 <= dac_count <= int(_ANALOG_DAC_FULL_SCALE):
+    raise ValueError("DAC count must be in 0..4095")
+  if not all(math.isfinite(value) for value in (min_voltage, max_voltage)):
+    raise ValueError("analog voltage limits must be finite")
+  if max_voltage <= min_voltage:
+    raise ValueError("analog max_voltage must be greater than min_voltage")
   return dac_count / _ANALOG_DAC_FULL_SCALE * (max_voltage - min_voltage) + min_voltage
 
 
@@ -310,6 +316,17 @@ class Celigo:
     fluorescence_warmup_seconds: float = 300.0,
     fluorescence_power_change_interval: float = 10.0,
   ):
+    if not math.isfinite(reply_timeout) or reply_timeout <= 0:
+      raise ValueError("reply_timeout must be a finite, positive number of seconds")
+    if not math.isfinite(move_timeout) or move_timeout <= 0:
+      raise ValueError("move_timeout must be a finite, positive number of seconds")
+    if not math.isfinite(fluorescence_warmup_seconds) or fluorescence_warmup_seconds < 0:
+      raise ValueError("fluorescence_warmup_seconds must be finite and non-negative")
+    if (
+      not math.isfinite(fluorescence_power_change_interval)
+      or fluorescence_power_change_interval < 0
+    ):
+      raise ValueError("fluorescence_power_change_interval must be finite and non-negative")
     self.baudrate = baudrate
     self.latency_ms = latency_ms
     self.reply_timeout = reply_timeout
@@ -317,7 +334,7 @@ class Celigo:
     self.config = config
     self.plate: Optional[Plate] = None
     self.load_well = load_well
-    self.camera: LumeneraCamera = LumeneraCamera(sdk_library=lucam_sdk)
+    self.camera: CeligoCamera = LumeneraCamera(sdk_library=lucam_sdk)
     self.galvo = Galvo(self)
     self.laser = Laser(self, enabled=allow_laser)
     self.fluorescence_warmup_seconds = fluorescence_warmup_seconds
@@ -326,7 +343,12 @@ class Celigo:
     self._connected = False
     has_lamp_power = bool(
       config.hardware.io is not None
-      and any(output.io_name == "ExcitationLampPower" for output in config.hardware.io.digital_ios)
+      and any(
+        output.io_name == "ExcitationLampPower"
+        and output.enabled
+        and output.io_type.strip().lower() == "out"
+        for output in config.hardware.io.digital_ios
+      )
     )
     self._fluorescence_on_since: Optional[float] = 0.0 if not has_lamp_power else None
     self._last_fluorescence_power_change: Optional[float] = None
@@ -474,6 +496,10 @@ class Celigo:
       raise CeligoError("Celigo IO configuration is missing")
     for io_config in hardware.io.digital_ios:
       if io_config.io_name == io_name:
+        if not io_config.enabled:
+          raise CeligoError(f"Digital output {io_name!r} is disabled")
+        if io_config.io_type.strip().lower() != "out":
+          raise CeligoError(f"Digital IO {io_name!r} is not configured as an output")
         return io_config
     raise CeligoError(f"Celigo IO configuration has no {io_name!r} entry")
 
@@ -481,7 +507,14 @@ class Celigo:
     hardware = self.config.hardware
     if hardware.io is None:
       raise CeligoError("Celigo IO configuration is missing")
-    return next((item for item in hardware.io.digital_ios if item.io_name == io_name), None)
+    return next(
+      (
+        item
+        for item in hardware.io.digital_ios
+        if item.io_name == io_name and item.enabled and item.io_type.strip().lower() == "out"
+      ),
+      None,
+    )
 
   def _require_lighting_io(self, io_name: str) -> LightingIOConfig:
     hardware = self.config.hardware
@@ -489,6 +522,8 @@ class Celigo:
       raise CeligoError("Celigo IO configuration is missing")
     for io_config in hardware.io.lighting_ios:
       if io_config.io_name == io_name:
+        if not io_config.enabled:
+          raise CeligoError(f"Lighting output {io_name!r} is disabled")
         return io_config
     raise CeligoError(f"Celigo IO configuration has no {io_name!r} entry")
 
@@ -534,6 +569,7 @@ class Celigo:
       await self._initialize_hardware()
       await self.camera.setup()
       await self._configure_camera_for_calibration()
+      await self.home_imaging_axes()
     except BaseException:
       if io_open:
         with contextlib.suppress(Exception):
@@ -704,6 +740,10 @@ class Celigo:
     poll_interval: float = 0.01,
   ) -> bool:
     """Poll status until the controller BUSY flag clears; return False on timeout."""
+    if not math.isfinite(timeout) or timeout < 0:
+      raise ValueError("timeout must be a finite, non-negative number of seconds")
+    if not math.isfinite(poll_interval) or poll_interval <= 0:
+      raise ValueError("poll_interval must be a finite, positive number of seconds")
     deadline = time.monotonic() + timeout
     while await self.request_is_busy():
       if time.monotonic() >= deadline:
@@ -758,26 +798,42 @@ class Celigo:
       raise CeligoError(f"Configured motors were not detected: {missing_descriptions}")
     await self._initialize_safe_outputs()
     for motion_axis in self._configured_motion_axes():
-      await motion_axis.initialize()
-    await self.galvo.initialize()
+      await motion_axis._initialize()
+    await self.galvo._initialize()
 
   async def _initialize_safe_outputs(self) -> None:
     """Put every controller output in the vendor startup's inactive state."""
-    for channel_index in range(4):
-      await self.set_analog_output_count(channel_index, 0)
-    for bit_index in range(12):
-      await self.set_digital_output(bit_index, False)
-    self.current_channel = None
     hardware = self.config.hardware
-    lamp_power = None
-    if hardware.io is not None:
-      lamp_power = next(
-        (output for output in hardware.io.digital_ios if output.io_name == "ExcitationLampPower"),
-        None,
+    lighting_outputs = (
+      {output.channel: output for output in hardware.io.lighting_ios if output.enabled}
+      if hardware.io is not None
+      else {}
+    )
+    for channel_index in range(4):
+      lighting_output = lighting_outputs.get(channel_index)
+      if lighting_output is None:
+        await self.set_analog_output_count(channel_index, 0)
+      else:
+        await self._set_lighting_output_intensity(lighting_output, 0.0)
+    digital_outputs = (
+      {
+        output.bit_index: output
+        for output in hardware.io.digital_ios
+        if output.enabled and output.io_type.strip().lower() == "out"
+      }
+      if hardware.io is not None
+      else {}
+    )
+    for bit_index in range(12):
+      digital_output = digital_outputs.get(bit_index)
+      await self.set_digital_output(
+        bit_index,
+        digital_output.invert if digital_output is not None else False,
       )
-    # Raw output zero means logical ``invert`` for a controllable lamp; without a
-    # power line the source is always powered.
-    fluorescence_on = True if lamp_power is None else lamp_power.invert
+    self.current_channel = None
+    lamp_power = None if hardware.io is None else self._find_digital_io("ExcitationLampPower")
+    # Without a controllable power line the source is always powered.
+    fluorescence_on = lamp_power is None
     self._fluorescence_on_since = 0.0 if fluorescence_on else None
     self._last_fluorescence_power_change = None
 
@@ -817,7 +873,7 @@ class Celigo:
     return bool(await self.request_digital_output_bitmask() & (1 << bit_index))
 
   async def set_digital_output(self, bit_index: int, high: bool) -> None:
-    """Set one digital output line on or off."""
+    """Drive one raw digital output line high or low."""
     if not 0 <= bit_index < 12:
       raise ValueError("digital bit must be in 0..11")
     mask = 1 << bit_index
@@ -844,7 +900,12 @@ class Celigo:
       struct.pack(">H", channel_index),
     )
     require_payload_length(response, 4, "analog output")
-    _echoed_channel_index, dac_count = struct.unpack_from(">HH", response, 0)
+    echoed_channel_index, dac_count = struct.unpack_from(">HH", response, 0)
+    if echoed_channel_index != channel_index:
+      raise CeligoError(
+        f"Analog-output reply channel mismatch: requested {channel_index}, "
+        f"received {echoed_channel_index}"
+      )
     return int(dac_count)
 
   async def request_analog_input_count(self, channel_index: int) -> int:
@@ -921,6 +982,7 @@ class Celigo:
 
   async def home_imaging_axes(self) -> None:
     """Home Z first for clearance, then X, Y, and the dichroic filter wheel."""
+    await self.turn_off_illumination()
     await self.z_axis.home()
     await self.x_axis.home()
     await self.y_axis.home()
@@ -946,31 +1008,19 @@ class Celigo:
       y_park_mm=y_park_mm,
     )
 
-  async def open_drawer(
-    self,
-    eject_distance_ticks: Optional[int] = None,
-  ) -> None:
+  async def open_drawer(self) -> None:
     """Drive the stage out to the eject station so the plate is accessible.
 
     Retracts Z, moves Y to its configured clearance coordinate, then drives X negative
     and Y positive to their limit sensors using the lighter loading-pose currents.
     Already-active target limits are not driven again.
     """
-    await self.set_brightfield_enabled(False)
+    await self.turn_off_illumination()
+    self.current_channel = None
     await self.z_axis.move_to(self.z_axis.config.min_position)
     await self.y_axis.move_to(self.y_axis.config.min_position)
-    x_eject_distance_ticks = (
-      eject_distance_ticks
-      if eject_distance_ticks is not None
-      else self.x_axis.limit_move_distance_ticks()
-    )
-    y_eject_distance_ticks = (
-      eject_distance_ticks
-      if eject_distance_ticks is not None
-      else self.y_axis.limit_move_distance_ticks()
-    )
-    if x_eject_distance_ticks <= 0 or y_eject_distance_ticks <= 0:
-      raise ValueError("eject_distance_ticks must be positive")
+    x_eject_distance_ticks = self.x_axis._limit_move_distance_ticks()
+    y_eject_distance_ticks = self.y_axis._limit_move_distance_ticks()
     for axis, distance_ticks, request_is_limit_active in (
       (
         self.x_axis,
@@ -986,7 +1036,7 @@ class Celigo:
       for _ in range(3):
         if await request_is_limit_active():
           break
-        await axis.move_relative_to_limit(
+        await axis._move_relative_to_limit(
           distance_ticks,
           move_current_percent=axis.config.loading_current_percentage,
         )
@@ -999,6 +1049,8 @@ class Celigo:
     well: Optional[str] = None,
   ) -> None:
     """Move the stage under the optics using calibrated plate/well coordinates."""
+    await self.turn_off_illumination()
+    self.current_channel = None
     targets = self._drawer_load_targets(plate, well)
     await self.y_axis.move_to(targets.y_clearance_mm)
     await self.x_axis.move_to(targets.x_park_mm)
@@ -1037,28 +1089,52 @@ class Celigo:
     output = self._require_digital_io(io_name)
     await self.set_digital_output(output.bit_index, active != output.invert)
 
-  def _default_channel_analog_count(
-    self,
-    channel_config: IlluminationChannelConfig,
+  @staticmethod
+  def _lighting_output_analog_count(
+    output: LightingIOConfig,
+    intensity_percent: float,
   ) -> int:
-    output = self._require_lighting_io(channel_config.lighting_io_name)
+    if not math.isfinite(intensity_percent) or not 0 <= intensity_percent <= 100:
+      raise ValueError("intensity_percent must be finite and within 0..100")
+    if not math.isfinite(output.delay) or output.delay < 0:
+      raise CeligoError(f"Lighting output {output.io_name!r} has an invalid configured delay")
     voltage = (
-      output.min_voltage
-      + (output.max_voltage - output.min_voltage) * channel_config.intensity_percent / 100.0
+      output.min_voltage + (output.max_voltage - output.min_voltage) * intensity_percent / 100.0
     )
     if output.invert:
       voltage = output.max_voltage - voltage + output.min_voltage
     return _volts_to_analog_dac(voltage, output.min_voltage, output.max_voltage)
 
-  async def set_brightfield_enabled(self, enabled: bool) -> int:
-    """Turn configured brightfield illumination on/off and return its DAC readback."""
-    channel = self._require_channel_config("brightfield")
-    output = self._require_lighting_io(channel.lighting_io_name)
+  async def _set_lighting_output_intensity(
+    self,
+    output: LightingIOConfig,
+    intensity_percent: float,
+  ) -> None:
     await self.set_analog_output_count(
       output.channel,
-      self._default_channel_analog_count(channel) if enabled else 0,
+      self._lighting_output_analog_count(output, intensity_percent),
     )
-    return await self.request_analog_output_count(output.channel)
+    if output.delay:
+      await asyncio.sleep(output.delay)
+
+  async def _set_channel_intensity(
+    self,
+    channel_config: IlluminationChannelConfig,
+    intensity_percent: Optional[float] = None,
+  ) -> None:
+    output = self._require_lighting_io(channel_config.lighting_io_name)
+    await self._set_lighting_output_intensity(
+      output,
+      channel_config.intensity_percent if intensity_percent is None else intensity_percent,
+    )
+
+  async def set_brightfield_enabled(self, enabled: bool) -> None:
+    """Turn the configured brightfield illumination on or off."""
+    channel = self._require_channel_config("brightfield")
+    strobe = self._find_digital_io("FLOnOff")
+    if strobe is not None:
+      await self.set_digital_output(strobe.bit_index, strobe.invert)
+    await self._set_channel_intensity(channel, channel.intensity_percent if enabled else 0.0)
 
   @property
   def fluorescence_warmup_remaining(self) -> float:
@@ -1127,44 +1203,40 @@ class Celigo:
     if strobe is not None:
       await attempt(self.set_digital_output(strobe.bit_index, strobe.invert))
     for output in hardware.io.lighting_ios:
-      await attempt(self.set_analog_output_count(output.channel, 0))
+      if output.enabled:
+        await attempt(self._set_lighting_output_intensity(output, 0.0))
     if first_error is not None:
       raise first_error
 
   async def select_channel(
     self,
     channel: IlluminationChannelName,
-    intensity_dac_count: Optional[int] = None,
     require_lamp_ready: bool = False,
   ) -> None:
-    """Select an imaging channel (dichroic wheel + lamp-select bits + intensity DAC).
+    """Select an imaging channel while leaving its illumination off.
 
-    Drops the strobe first (light off while the wheel moves), moves the dichroic filter
-    wheel to the channel position, sets the fluorescence lamp-select bits, drives the
-    channel's intensity DAC (zeroing the other), then raises the strobe for fluorescence.
-    ``intensity_dac_count`` overrides the channel's default 12-bit DAC count.
+    Drops the strobe and all lighting outputs before moving the dichroic filter wheel,
+    centering the galvos, and setting the fluorescence lamp-select bits. Call
+    :meth:`set_illumination_enabled` to turn on the selected channel.
 
     Moves the filter wheel (hardware motion). The power toggle interval is enforced;
     pass ``require_lamp_ready=True`` to enforce the configured warm-up interval too.
     """
     channel_config = self._require_channel_config(channel)
-    # Strobe low before any warm-up validation or mechanism movement.
-    await self._set_named_digital_output("FLOnOff", False)
+    self._require_lighting_io(channel_config.lighting_io_name)
+    if channel_config.strobe:
+      self._require_digital_io("FLOnOff")
+    if channel_config.bit_value is not None:
+      self._require_digital_io("FLBit0")
+      self._require_digital_io("FLBit1")
+    self.current_channel = None
+    await self.turn_off_illumination()
     if channel_config.strobe:
       await self.set_fluorescence_lamp_power(True)
       if require_lamp_ready and not self.fluorescence_lamp_ready:
         raise CeligoError(
           f"Fluorescence lamp is warming up ({self.fluorescence_warmup_remaining:.1f}s left)"
         )
-    selected_intensity_dac_count = (
-      self._default_channel_analog_count(channel_config)
-      if intensity_dac_count is None
-      else intensity_dac_count
-    )
-    if not 0 <= selected_intensity_dac_count <= int(_ANALOG_DAC_FULL_SCALE):
-      raise ValueError(
-        f"intensity_dac_count must be a 12-bit DAC count, got {selected_intensity_dac_count}"
-      )
     await self.dichroic_filter.move_to(channel_config.logical_filter)
     hardware = self.config.hardware
     if (
@@ -1179,16 +1251,30 @@ class Celigo:
       await self._set_named_digital_output("FLBit0", bool(channel_config.bit_value & 0b10))
       await self._set_named_digital_output("FLBit1", bool(channel_config.bit_value & 0b01))
 
-    output = self._require_lighting_io(channel_config.lighting_io_name)
-    if hardware.io is None:
-      raise CeligoError("Celigo IO configuration is missing")
-    for other in hardware.io.lighting_ios:
-      if other.channel != output.channel:
-        await self.set_analog_output_count(other.channel, 0)
-    await self.set_analog_output_count(output.channel, selected_intensity_dac_count)
-    if channel_config.strobe:
-      await self._set_named_digital_output("FLOnOff", True)
     self.current_channel = channel
+
+  async def set_illumination_enabled(
+    self,
+    enabled: bool,
+    intensity_percent: Optional[float] = None,
+  ) -> None:
+    """Turn the selected channel on or off using a percentage intensity override."""
+    if not enabled:
+      await self.turn_off_illumination()
+      return
+    if self.current_channel is None:
+      raise CeligoError("Select an imaging channel before enabling illumination")
+    channel_config = self._require_channel_config(self.current_channel)
+    strobe = self._find_digital_io("FLOnOff")
+    if channel_config.strobe:
+      if strobe is None:
+        raise CeligoError("Fluorescence channel requires the FLOnOff digital output")
+      await self._set_channel_intensity(channel_config, intensity_percent)
+      await self.set_digital_output(strobe.bit_index, not strobe.invert)
+    else:
+      if strobe is not None:
+        await self.set_digital_output(strobe.bit_index, strobe.invert)
+      await self._set_channel_intensity(channel_config, intensity_percent)
 
   # -- autofocus -------------------------------------------------------------
 
@@ -1258,7 +1344,6 @@ class Celigo:
     """Set camera properties through the Celigo-owned camera lifecycle.
 
     ``restart_camera_stream=True`` closes and reopens the stream after applying settings.
-    This is useful for USB/IP cameras that can otherwise return one stale request.
     """
     camera = await self._ensure_camera_ready(require_calibrated_geometry=False)
     if exposure_ms is not None:
@@ -1487,13 +1572,14 @@ class Celigo:
   ) -> AcquisitionResult:
     """Navigate, select optics, optionally focus, and capture one calibrated FOV."""
     x_mm, y_mm = await self.move_to_well(well, plate)
-    await self.select_channel(channel, require_lamp_ready=require_lamp_ready)
     channel_config = self._require_channel_config(channel)
     target_z_mm = z_mm
     if target_z_mm is None:
       target_z_mm = (
         self.config.calibration.calibrated_z_position + channel_config.z_offset_to_brightfield_mm
       )
+    settled_z_mm = await self.z_axis.move_to(target_z_mm)
+    await self.select_channel(channel, require_lamp_ready=require_lamp_ready)
     logical_filter = channel_config.logical_filter
     logical_galvo_voltages = self.galvo.voltages_for_offset(
       logical_filter,
@@ -1506,18 +1592,16 @@ class Celigo:
       await camera.set_exposure(exposure_ms)
     if gain is not None:
       await camera.set_gain(gain)
+    await self.set_illumination_enabled(True)
     if machine_auto_exposure:
       await self.auto_exposure()
 
     focus_result: Optional[FocusResult] = None
     if autofocus is not None:
-      settled_z_mm = await self.z_axis.move_to(target_z_mm)
       focus_result = await self.autofocus(
         autofocus_method=autofocus,
         center_z_ticks=self.z_axis.mm_to_encoder_ticks(settled_z_mm),
       )
-    else:
-      settled_z_mm = await self.z_axis.move_to(target_z_mm)
     frame = focus_result.frame if focus_result is not None else await camera.capture(flush_frames=2)
     self._validate_frame_geometry(frame)
     return AcquisitionResult(
@@ -1544,9 +1628,9 @@ class Celigo:
     galvo_offset_mm: Tuple[float, float] = (0.0, 0.0),
     machine_auto_exposure: bool = False,
   ) -> AcquisitionResult:
-    """Acquire one FOV, extinguishing illumination if any step fails or is cancelled."""
+    """Acquire one FOV and extinguish illumination before returning."""
     try:
-      return await self._acquire_field(
+      result = await self._acquire_field(
         well=well,
         channel=channel,
         plate=plate,
@@ -1562,6 +1646,8 @@ class Celigo:
       with contextlib.suppress(Exception):
         await complete_cleanup(self.turn_off_illumination())
       raise
+    await complete_cleanup(self.turn_off_illumination())
+    return result
 
   async def acquire_scan(
     self,
@@ -1680,6 +1766,9 @@ class Celigo:
     a camera frame when configured. ``run_motion_checks=True`` additionally performs a
     five-tick round-trip on X/Y/Z and therefore requires a clear motion envelope.
     """
+    if run_motion_checks and not run_active_checks:
+      raise ValueError("run_motion_checks requires run_active_checks=True")
+
     checks: Dict[str, Any] = {}
     failures: List[str] = []
 
@@ -1755,15 +1844,17 @@ class Celigo:
     await record("controller_status", self.request_controller_status)
     status = checks.get("controller_status")
     if isinstance(status, ControllerStatus) and status.has_controller_fault:
-      failures.append("controller_fault_flags")
+      failures.append("controller_status")
     await record("controller_info", self.request_controller_info)
     await record("motor_map", self.request_detected_motor_addresses)
     await record("encoders", request_encoder_positions)
     await record("digital_inputs", self.request_digital_input_bitmask)
 
     for logical_filter, transform in sorted(self.config.galvo_calibrations.items()):
+      check_name = f"galvo_calibration_{logical_filter}"
+      checks[check_name] = transform.successful
       if transform.successful is False:
-        failures.append(f"galvo_calibration_{logical_filter}")
+        failures.append(check_name)
 
     for axis in self._configured_motion_axes():
       check_name = f"motor_{axis.axis_index}_encoder_ratio"
@@ -1781,14 +1872,11 @@ class Celigo:
       await record("galvo_center", self.galvo.home)
       await record("camera_frame", self.capture_frame)
     if run_motion_checks:
-      if not run_active_checks:
-        failures.append("motion_checks_require_active_checks")
-      else:
-        for axis_name in _LINEAR_AXIS_NAMES:
-          await record(
-            f"{axis_name}_motion_round_trip",
-            partial(run_motion_round_trip, axis_name),
-          )
+      for axis_name in _LINEAR_AXIS_NAMES:
+        await record(
+          f"{axis_name}_motion_round_trip",
+          partial(run_motion_round_trip, axis_name),
+        )
 
     # Preserve first occurrence while making the report deterministic.
     unique_failures = tuple(dict.fromkeys(failures))

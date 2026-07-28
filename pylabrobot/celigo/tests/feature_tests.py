@@ -5,7 +5,7 @@ import ctypes
 import struct
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.celigo.camera import CameraError, CameraFrame, LumeneraCamera
 from pylabrobot.celigo.celigo import (
@@ -26,7 +26,12 @@ from pylabrobot.celigo.config import (
   IOConfig,
   LightingIOConfig,
 )
-from pylabrobot.celigo.galvo import GalvoControllerStatus, _CMD_CALIBRATE_GALVO, dac_count_to_volts
+from pylabrobot.celigo.galvo import (
+  GalvoControllerStatus,
+  _CMD_CALIBRATE_GALVO,
+  _CMD_MOVE_GALVO,
+  dac_count_to_volts,
+)
 from pylabrobot.celigo.laser import (
   _CMD_FIRE_GALVO_GRID,
   _CMD_FIRE_LASER,
@@ -69,11 +74,11 @@ def _filter_config() -> FilterWheelConfig:
     mode_enable_position_correction=True,
     encoder_to_motor_tick_ratio=25.6,
     moving_overload_limit=10,
-    course_position_error_window=20,
+    coarse_position_error_window=20,
     fine_position_error_window=1,
     gain=5,
     motor_response_time=2,
-    number_of_encoder_tick_per_rev=8000,
+    encoder_ticks_per_revolution=8000,
     number_of_filters=4,
     filter_map=[],
   )
@@ -236,6 +241,53 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(analog, [(0, 0), (1, 0), (2, 0), (3, 0)])
     self.assertEqual(digital, [(bit, False) for bit in range(12)])
 
+  async def test_safe_output_initialization_respects_inverted_outputs_and_delay(self):
+    inverted_light = LightingIOConfig(
+      config_version=1000,
+      controller_index=0,
+      channel=2,
+      enabled=True,
+      invert=True,
+      io_name="eFluorescentIntensity",
+      min_voltage=0,
+      max_voltage=10,
+      delay=0.025,
+    )
+    inverted_lamp_power = DigitalIOConfig(
+      config_version=1000,
+      io_type="Out",
+      bit_index=7,
+      invert=True,
+      enabled=True,
+      io_name="ExcitationLampPower",
+    )
+    celigo = make_celigo(
+      hardware=CeligoHardwareConfig(
+        io=IOConfig(
+          analog_ins=[],
+          digital_ios=[inverted_lamp_power],
+          lighting_ios=[inverted_light],
+        )
+      )
+    )
+    analog = []
+    digital = []
+
+    async def set_analog(channel, value):
+      analog.append((channel, value))
+
+    async def set_digital(bit, high):
+      digital.append((bit, high))
+
+    stub(celigo, set_analog_output_count=set_analog, set_digital_output=set_digital)
+    with patch("pylabrobot.celigo.celigo.asyncio.sleep", new_callable=AsyncMock) as sleep:
+      await celigo._initialize_safe_outputs()
+
+    self.assertEqual(analog, [(0, 0), (1, 0), (2, 4095), (3, 0)])
+    self.assertEqual(digital, [(bit, bit == 7) for bit in range(12)])
+    sleep.assert_awaited_once_with(0.025)
+    self.assertIsNone(celigo._fluorescence_on_since)
+
   async def test_initialization_replays_vendor_tokens(self):
     celigo = make_celigo(hardware=CeligoHardwareConfig(dichroic_filter_wheel=_filter_config()))
     commands = []
@@ -246,7 +298,7 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       return f"/0`{data}"
 
     stub(celigo.motor_controller, send_command=motor_query)
-    await celigo.dichroic_filter.initialize()
+    await celigo.dichroic_filter._initialize()
     self.assertEqual(commands[0], "/4&\r")
     self.assertEqual(commands[1], "/4T\r")
     self.assertEqual(commands[2], "/4N32R\r")
@@ -277,7 +329,7 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       request_motor_controller_firmware_version=fail_firmware_query,
     )
     with self.assertRaisesRegex(CeligoError, "firmware query failed"):
-      await celigo.x_axis.initialize()
+      await celigo.x_axis._initialize()
     self.assertFalse(celigo.x_axis.is_initialized)
     self.assertFalse(celigo.x_axis._supports_accurate_encoder_index)
 
@@ -292,7 +344,7 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
         io_name="brightfield",
         min_voltage=0,
         max_voltage=10,
-        delay_ms=0,
+        delay=0.0,
       ),
       LightingIOConfig(
         config_version=1000,
@@ -303,7 +355,7 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
         io_name="fluorescence",
         min_voltage=0,
         max_voltage=10,
-        delay_ms=0,
+        delay=0.0,
       ),
     ]
     celigo = make_celigo(
@@ -342,7 +394,7 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       io_name="fluorescence",
       min_voltage=0,
       max_voltage=10,
-      delay_ms=0,
+      delay=0.0,
     )
     celigo = make_celigo(
       hardware=CeligoHardwareConfig(
@@ -789,6 +841,15 @@ class TestLumeneraCamera(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(library.closed)
     self.assertIsNone(camera._executor)
 
+  async def test_capture_sleeps_only_between_flushed_frames(self):
+    library = _FakeLucamLibrary()
+    camera = LumeneraCamera(library=library)
+    await camera.setup()
+    with patch("pylabrobot.celigo.camera.time.sleep") as sleep:
+      await camera.capture(flush_frames=2)
+    self.assertEqual(sleep.call_count, 2)
+    await camera.stop()
+
   async def test_unsupported_pixel_format_closes_camera(self):
     library = _FakeLucamLibrary()
 
@@ -897,9 +958,53 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
     self.assertEqual((wait, timeout), (1, 6000))
     self.assertEqual(transaction_timeouts, [7.0])
     self.assertEqual(celigo.reply_timeout, 2.0)
-    self.assertEqual(celigo.reply_timeout, 2.0)
     with self.assertRaisesRegex(CeligoError, "outside configured range"):
       await celigo.galvo.move_single("x", 10.1)
+
+  async def test_move_both_starts_both_axes_before_polling_and_applies_configured_delay(self):
+    celigo = make_celigo()
+    celigo.config.hardware = CeligoHardwareConfig(
+      x_galvo=make_galvo_config(
+        enabled=True,
+        min_voltage=-10,
+        max_voltage=10,
+        big_move_delay=0.01,
+      ),
+      y_galvo=make_galvo_config(
+        enabled=True,
+        min_voltage=-10,
+        max_voltage=10,
+        big_move_delay=0.02,
+      ),
+    )
+    transactions = []
+    status_requests = 0
+
+    async def send_command(opcode, payload=b"", **_kwargs):
+      transactions.append((opcode, payload))
+      return b""
+
+    async def request_status():
+      nonlocal status_requests
+      status_requests += 1
+      return _galvo_controller_status(
+        fire_table_size=0,
+        points_loaded=0,
+        fire_table_index=0,
+      )
+
+    stub(celigo, send_command=send_command)
+    stub(celigo.galvo, request_controller_status=request_status)
+    with patch("pylabrobot.celigo.galvo.asyncio.sleep", new_callable=AsyncMock) as sleep:
+      self.assertEqual(await celigo.galvo.move_both(1.0, 2.0), (1.0, 2.0))
+
+    self.assertEqual([opcode for opcode, _ in transactions], [_CMD_MOVE_GALVO] * 2)
+    self.assertEqual(
+      [struct.unpack(">HiHH", payload)[::2] for _, payload in transactions],
+      [(0, 0), (1, 0)],
+    )
+    self.assertEqual(status_requests, 1)
+    sleep.assert_awaited_once_with(0.02)
 
 
 class _FocusCamera:
@@ -1055,8 +1160,12 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     async def move_both(_x, _y):
       return 0.0, 0.0
 
+    async def no_op(*_args, **_kwargs):
+      return None
+
     stub(celigo, move_to_well=move_to_well)
     stub(celigo, select_channel=select)
+    stub(celigo, set_illumination_enabled=no_op, turn_off_illumination=no_op)
     stub(celigo.z_axis, move_to=move_z)
     stub(celigo.galvo, voltages_for_offset=lambda _filter, _offset: (0.0, 0.0))
     stub(celigo.galvo, move_both=move_both)
@@ -1124,8 +1233,12 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     async def move_both(_x, _y):
       return 0.0, 0.0
 
+    async def no_op(*_args, **_kwargs):
+      return None
+
     stub(celigo, move_to_well=move_to_well)
     stub(celigo, select_channel=select)
+    stub(celigo, set_illumination_enabled=no_op, turn_off_illumination=no_op)
     stub(celigo.z_axis, move_to=move_z)
     stub(celigo.galvo, voltages_for_offset=lambda _filter, _offset: (0.0, 0.0))
     stub(celigo.galvo, move_both=move_both)
@@ -1147,6 +1260,22 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     stub(celigo, turn_off_illumination=turn_off_illumination)
     with self.assertRaisesRegex(CeligoError, "capture failure"):
       await celigo.acquire("A1", "brightfield")
+    self.assertEqual(extinguished, [True])
+
+  async def test_successful_acquire_extinguishes_illumination(self):
+    celigo = make_celigo()
+    result = object()
+    extinguished = []
+
+    async def acquire_field(**_kwargs):
+      return result
+
+    async def turn_off_illumination():
+      extinguished.append(True)
+
+    stub(celigo, _acquire_field=acquire_field)
+    stub(celigo, turn_off_illumination=turn_off_illumination)
+    self.assertIs(await celigo.acquire("A1", "brightfield"), result)
     self.assertEqual(extinguished, [True])
 
 
@@ -1340,7 +1469,7 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
     stub(celigo, request_controller_status=status)
     stub(celigo, send_command=transact)
     stub(celigo, wait_for_controller_ready=ready)
-    await celigo.laser.load_firing_targets([(0.1, -0.1)], (1.6, 1.5))
+    await celigo.laser._load_firing_targets([(0.1, -0.1)], (1.6, 1.5))
     self.assertEqual(transactions[0][0], _CMD_LOAD_FIRING_TABLE)
     x_dac, y_dac = struct.unpack_from(">HH", transactions[0][1], 4)
     self.assertAlmostEqual(dac_count_to_volts(x_dac), -1.7, places=3)
@@ -1372,7 +1501,7 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
 
     stub(celigo, request_controller_status=status)
     stub(celigo.galvo, request_controller_status=targeting_status)
-    stub(celigo.laser, load_firing_targets=load)
+    stub(celigo.laser, _load_firing_targets=load)
     stub(celigo, send_command=transact)
     with self.assertRaises(CeligoError):
       await celigo.laser.fire_targets(
@@ -1429,7 +1558,7 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
 
     stub(celigo, request_controller_status=status)
     stub(celigo.galvo, request_controller_status=targeting_status)
-    stub(celigo.laser, load_firing_targets=load)
+    stub(celigo.laser, _load_firing_targets=load)
     stub(celigo, send_command=transact)
     stub(celigo, wait_for_controller_ready=ready)
     await celigo.laser.fire_targets([(0.0, 0.0)], 1, 1)

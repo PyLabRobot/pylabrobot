@@ -117,8 +117,7 @@ class CameraFrame:
   def sharpness(self, sample_step: int = 2) -> float:
     """Variance of a Laplacian over the central image region.
 
-    This matches the focus metric used by the working capture script while keeping the
-    packaged driver dependency-free. ``sample_step`` reduces work on large sensors.
+    ``sample_step`` reduces work on large sensors.
     """
     if sample_step < 1:
       raise ValueError("sample_step must be at least 1")
@@ -605,9 +604,9 @@ class LumeneraCamera:
     if byte_count <= 0:
       raise CameraError(f"Invalid capture geometry {self.width}x{self.height}")
     buffer = ctypes.create_string_buffer(byte_count)
-    for _ in range(flush_frames + 1):
+    for frame_index in range(flush_frames + 1):
       self._raise_if_sdk_call_failed(lib.LucamTakeVideo(handle, 1, buffer), "capture camera frame")
-      if flush_frames:
+      if frame_index < flush_frames:
         time.sleep(max(0.001, self.exposure_ms / 1000.0))
     return CameraFrame(
       data=buffer.raw[:byte_count],

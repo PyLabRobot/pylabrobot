@@ -25,8 +25,7 @@ Live verification covers controller setup/status/self-test, native XYZ and filte
 homing, drawer motion, galvo calibration/centering, native and calibrated Lumenera
 capture, image autofocus on an A1 cell sample, machine auto-exposure, all five configured
 illumination channels, camera-trigger diagnostics, and a 16-FOV galvo scan. Fluorescence
-output switching, filter motion, and acquisition are verified,
-but signal quality was not characterized without a fluorescent reference sample.
+output switching, filter motion, and acquisition are verified.
 Hardware-displacement autofocus is not implemented, and externally triggered frame
 acquisition and laser firing have not been exercised.
 
@@ -39,17 +38,15 @@ requires `2048x2048`. Setup programs and reads back the calibrated centered ROI 
 offset `(208, 4)`, and calibrated acquisition fails closed if the resulting camera
 geometry does not match the configuration.
 
-After `setup()`, call `await celigo.home_imaging_axes()` or home individual components with
-`celigo.z_axis.home()`, `celigo.x_axis.home()`, `celigo.y_axis.home()`, and
-`celigo.dichroic_filter.home()`. Homing checks encoder response, proves negative-limit
-activation and release, establishes the configured index datum, restores the controller
-mode, and verifies the final in-range position. Controller serial I/O uses the
-instrument FTDI interface at 230400 baud; the Lumenera camera is a separate USB
-connection through its SDK. See the Hello World notebook for direct USB and USB/IP
-setup, a native homing/drawer cycle, and brightfield capture.
+`setup()` homes Z, X, Y, and the dichroic filter in that order. Homing checks encoder
+response, proves negative-limit activation and release, establishes the configured index
+datum, restores the controller mode, and verifies the final in-range position. Controller
+serial I/O uses the instrument FTDI interface at 230400 baud; the Lumenera camera is a
+separate USB connection through its SDK. See [Celigo Hello World](celigo/hello-world.ipynb)
+for direct USB setup, a native homing/drawer cycle, and brightfield capture.
 
-The Advanced Imaging notebook covers coordinate transforms, frame analysis, exposure,
-autofocus, structured acquisition results, and calibrated galvo FOV planning. The
-Hardware Components and Diagnostics notebook covers axes, filter wheels, controller
-I/O, galvo diagnostics, barcode and trigger interfaces, active self-tests, and the
-laser component's explicit safety boundary.
+[Advanced Imaging](celigo/advanced-imaging.ipynb) covers coordinate transforms, frame
+analysis, exposure, autofocus, structured acquisition results, and calibrated galvo FOV
+planning. [Hardware Components and Diagnostics](celigo/components-and-diagnostics.ipynb)
+covers axes, filter wheels, controller I/O, galvo diagnostics, barcode and trigger
+interfaces, active self-tests, and the laser component's explicit safety boundary.

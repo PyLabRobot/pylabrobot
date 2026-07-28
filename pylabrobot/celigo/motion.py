@@ -420,7 +420,7 @@ class Axis:
       hold_current_percent=self.config.holding_current_percentage or None,
     )
 
-  async def initialize(self) -> None:
+  async def _initialize(self) -> None:
     """Replay the vendor's per-motor initialization configuration."""
     self._initialized = False
     self._supports_accurate_encoder_index = False
@@ -445,7 +445,7 @@ class Axis:
     if self.config.mode_enable_position_correction:
       command_tokens += (
         f"{_EZ_SET_OVERLOAD_TIMEOUT}{self.config.moving_overload_limit}"
-        f"{_EZ_SET_COARSE_WINDOW}{self.config.course_position_error_window}"
+        f"{_EZ_SET_COARSE_WINDOW}{self.config.coarse_position_error_window}"
         f"{_EZ_SET_FINE_WINDOW}{self.config.fine_position_error_window}"
         f"{_EZ_SET_INTEGRATION_PERIOD}{self.config.gain}"
       )
@@ -656,10 +656,10 @@ class LinearAxis(Axis):
     """Whether this process knows the axis position relative to its physical datum."""
     return self._has_position_reference
 
-  async def initialize(self) -> None:
+  async def _initialize(self) -> None:
     """Forget any process-local datum and replay the motor configuration."""
     self._has_position_reference = False
-    await super().initialize()
+    await super()._initialize()
 
   def _rate_to_encoder_tick_rate(self, configured_rate: float) -> int:
     if self.config.mm_per_encoder_tick <= 0:
@@ -683,6 +683,10 @@ class LinearAxis(Axis):
       raise CeligoError(f"axis {self.name} has invalid mm_per_encoder_tick")
     direction = -1.0 if self.config.invert_axis_direction else 1.0
     return (encoder_ticks * self.config.mm_per_encoder_tick - self.config.home_offset) * direction
+
+  async def request_position(self) -> float:
+    """Read the current axis position in millimeters."""
+    return self.encoder_ticks_to_mm(await self.request_encoder_ticks())
 
   def encoder_bounds(self) -> Tuple[int, int]:
     """Return the configured encoder bounds in ascending order."""
@@ -779,7 +783,7 @@ class LinearAxis(Axis):
     if self.config.homing_short_move <= 0:
       raise CeligoError(f"axis {self.name!r} has an invalid homing backoff distance")
     if not self.is_initialized:
-      await self.initialize()
+      await self._initialize()
 
     self._has_position_reference = False
     homing_motor_mode = self._motor_mode(enable_position_correction=False)
@@ -857,7 +861,7 @@ class LinearAxis(Axis):
       await terminate_and_restore()
       raise
 
-  async def move_relative_to_limit(
+  async def _move_relative_to_limit(
     self,
     distance_ticks: int,
     move_current_percent: Optional[int] = None,
@@ -887,7 +891,7 @@ class LinearAxis(Axis):
       raise CeligoError(f"axis {self.name} relative move error (code {response.error_code})")
     await self.motor.wait_until_ready()
 
-  def limit_move_distance_ticks(self) -> int:
+  def _limit_move_distance_ticks(self) -> int:
     """Return a relative distance guaranteed to exceed configured travel."""
     if self.config.mm_per_encoder_tick <= 0:
       raise CeligoError(f"Cannot derive {self.name.upper()} limit move without axis configuration")
@@ -916,22 +920,22 @@ class FilterWheel(Axis):
     """Whether this process has homed the wheel to physical position one."""
     return self._home_encoder_ticks is not None
 
-  async def initialize(self) -> None:
+  async def _initialize(self) -> None:
     """Forget the learned wheel datum and replay the motor configuration."""
     self._home_encoder_ticks = None
-    await super().initialize()
+    await super()._initialize()
 
   def _ticks_per_position(self) -> int:
-    if self.config.number_of_filters <= 0 or self.config.number_of_encoder_tick_per_rev <= 0:
+    if self.config.number_of_filters <= 0 or self.config.encoder_ticks_per_revolution <= 0:
       raise CeligoError(f"{self.name} wheel geometry is invalid")
-    if self.config.number_of_encoder_tick_per_rev % self.config.number_of_filters != 0:
+    if self.config.encoder_ticks_per_revolution % self.config.number_of_filters != 0:
       raise CeligoError(f"{self.name} encoder ticks/revolution is not divisible by filter count")
-    return self.config.number_of_encoder_tick_per_rev // self.config.number_of_filters
+    return self.config.encoder_ticks_per_revolution // self.config.number_of_filters
 
   async def home(self) -> int:
     """Reference the encoder index and locate physical wheel position one."""
     if not self.is_initialized:
-      await self.initialize()
+      await self._initialize()
     ticks_per_position = self._ticks_per_position()
     self._home_encoder_ticks = None
     search_distance_ticks = round(ticks_per_position * 1.2)
@@ -959,7 +963,7 @@ class FilterWheel(Axis):
       except (CeligoError, TimeoutError) as exc:
         last_error = exc
     if last_error is not None:
-      await self.initialize()
+      await self._initialize()
       raise CeligoError(f"Failed to find encoder index for {self.name}") from last_error
 
     target_encoder_ticks = round(self.config.home_offset)
@@ -977,9 +981,9 @@ class FilterWheel(Axis):
           target_encoder_ticks += ticks_per_position
     except BaseException:
       with contextlib.suppress(Exception):
-        await complete_cleanup(self.initialize())
+        await complete_cleanup(self._initialize())
       raise
-    await self.initialize()
+    await self._initialize()
     raise CeligoError(f"Opto1 sensor was not active at any {self.name} position")
 
   async def move_to(self, logical_position: int) -> int:
@@ -1000,10 +1004,10 @@ class FilterWheel(Axis):
     canonical_target = self._home_encoder_ticks + (physical_position - 1) * ticks_per_position
     current_encoder_ticks = await self.request_encoder_ticks()
     revolutions = math.ceil(
-      (current_encoder_ticks - canonical_target) / self.config.number_of_encoder_tick_per_rev - 0.5
+      (current_encoder_ticks - canonical_target) / self.config.encoder_ticks_per_revolution - 0.5
     )
     return await self.move_to_ticks(
-      canonical_target + revolutions * self.config.number_of_encoder_tick_per_rev
+      canonical_target + revolutions * self.config.encoder_ticks_per_revolution
     )
 
 

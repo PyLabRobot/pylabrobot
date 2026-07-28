@@ -34,34 +34,30 @@ _CONFIG_SUBDIRECTORIES = (
 )
 
 
-def _locate_hardware_config_file(install_dir: Optional[str]) -> Optional[str]:
+def _locate_hardware_config_file(install_dir: str) -> Optional[str]:
   """Locate the one hardware file that establishes the complete config directory."""
-  roots = [install_dir] if install_dir is not None else []
-  environment_root = os.environ.get("CELIGO_INSTALL_DIR")
-  if environment_root:
-    roots.append(environment_root)
-  for root in roots:
-    if os.path.isfile(root):
-      if os.path.basename(root).lower() == _HARDWARE_CONFIG_FILENAME.lower():
-        return root
-      root = os.path.dirname(root)
-    for subdirectory in _CONFIG_SUBDIRECTORIES:
-      directory = os.path.join(root, subdirectory)
-      exact_path = os.path.join(directory, _HARDWARE_CONFIG_FILENAME)
-      if os.path.isfile(exact_path):
-        return exact_path
-      if not os.path.isdir(directory):
-        continue
-      case_insensitive_match = next(
-        (
-          filename
-          for filename in os.listdir(directory)
-          if filename.lower() == _HARDWARE_CONFIG_FILENAME.lower()
-        ),
-        None,
-      )
-      if case_insensitive_match is not None:
-        return os.path.join(directory, case_insensitive_match)
+  root = install_dir
+  if os.path.isfile(root):
+    if os.path.basename(root).lower() == _HARDWARE_CONFIG_FILENAME.lower():
+      return root
+    root = os.path.dirname(root)
+  for subdirectory in _CONFIG_SUBDIRECTORIES:
+    directory = os.path.join(root, subdirectory)
+    exact_path = os.path.join(directory, _HARDWARE_CONFIG_FILENAME)
+    if os.path.isfile(exact_path):
+      return exact_path
+    if not os.path.isdir(directory):
+      continue
+    case_insensitive_match = next(
+      (
+        filename
+        for filename in os.listdir(directory)
+        if filename.lower() == _HARDWARE_CONFIG_FILENAME.lower()
+      ),
+      None,
+    )
+    if case_insensitive_match is not None:
+      return os.path.join(directory, case_insensitive_match)
   return None
 
 
@@ -175,7 +171,7 @@ class _AxisXmlValues:
   mode_enable_step_and_direction: bool
   mode_enable_position_correction: bool
   mode_enable_motor_slave_to_encoder: bool
-  course_position_error_window: int
+  coarse_position_error_window: int
   fine_position_error_window: int
   gain: int
   encoder_to_motor_tick_ratio: float
@@ -222,7 +218,7 @@ def _read_axis_values(reader: _XmlScalars, limit_polarity: int) -> _AxisXmlValue
     mode_enable_step_and_direction=reader.boolean("Mode_EnableStepAndDirection"),
     mode_enable_position_correction=reader.boolean("Mode_EnablePositionCorrection"),
     mode_enable_motor_slave_to_encoder=reader.boolean("Mode_EnableMotorSlaveToEncoder"),
-    course_position_error_window=reader.integer("CoursePositionErrorWindow"),
+    coarse_position_error_window=reader.integer("CoursePositionErrorWindow"),
     fine_position_error_window=reader.integer("FinePositionErrorWindow"),
     gain=reader.integer("Gain"),
     encoder_to_motor_tick_ratio=reader.floating("EncoderToMotorTickRatio"),
@@ -279,7 +275,7 @@ class AxisConfig:
   mode_enable_step_and_direction: bool
   mode_enable_position_correction: bool
   mode_enable_motor_slave_to_encoder: bool
-  course_position_error_window: int
+  coarse_position_error_window: int
   fine_position_error_window: int
   gain: int
   encoder_to_motor_tick_ratio: float
@@ -327,7 +323,7 @@ class AxisConfig:
       mode_enable_step_and_direction=values.mode_enable_step_and_direction,
       mode_enable_position_correction=values.mode_enable_position_correction,
       mode_enable_motor_slave_to_encoder=values.mode_enable_motor_slave_to_encoder,
-      course_position_error_window=values.course_position_error_window,
+      coarse_position_error_window=values.coarse_position_error_window,
       fine_position_error_window=values.fine_position_error_window,
       gain=values.gain,
       encoder_to_motor_tick_ratio=values.encoder_to_motor_tick_ratio,
@@ -385,7 +381,7 @@ class LinearAxisConfig(AxisConfig):
       mode_enable_step_and_direction=values.mode_enable_step_and_direction,
       mode_enable_position_correction=values.mode_enable_position_correction,
       mode_enable_motor_slave_to_encoder=values.mode_enable_motor_slave_to_encoder,
-      course_position_error_window=values.course_position_error_window,
+      coarse_position_error_window=values.coarse_position_error_window,
       fine_position_error_window=values.fine_position_error_window,
       gain=values.gain,
       encoder_to_motor_tick_ratio=values.encoder_to_motor_tick_ratio,
@@ -409,7 +405,7 @@ class GalvoConfig:
   controller_index: int
   position_error_window: int
   velocity_error_window: int
-  big_move_delay_ms: int
+  big_move_delay: float
   min_voltage: float
   max_voltage: float
   invert_voltage: bool
@@ -424,7 +420,7 @@ class GalvoConfig:
       controller_index=reader.integer("ControllerIndex"),
       position_error_window=reader.integer("PositionErrorWindow"),
       velocity_error_window=reader.integer("VelocityErrorWindow"),
-      big_move_delay_ms=reader.integer("BigMoveDelayMS"),
+      big_move_delay=reader.integer("BigMoveDelayMS") / 1000.0,
       min_voltage=reader.floating("MinVoltage"),
       max_voltage=reader.floating("MaxVoltage"),
       invert_voltage=reader.boolean("InvertVoltage"),
@@ -504,7 +500,7 @@ class FilterMapEntry:
 class FilterWheelConfig(AxisConfig):
   """A discrete rotary filter wheel (``DichroicFilterWheel`` and friends)."""
 
-  number_of_encoder_tick_per_rev: int
+  encoder_ticks_per_revolution: int
   number_of_filters: int
   filter_map: List[FilterMapEntry]
 
@@ -547,13 +543,13 @@ class FilterWheelConfig(AxisConfig):
       mode_enable_step_and_direction=values.mode_enable_step_and_direction,
       mode_enable_position_correction=values.mode_enable_position_correction,
       mode_enable_motor_slave_to_encoder=values.mode_enable_motor_slave_to_encoder,
-      course_position_error_window=values.course_position_error_window,
+      coarse_position_error_window=values.coarse_position_error_window,
       fine_position_error_window=values.fine_position_error_window,
       gain=values.gain,
       encoder_to_motor_tick_ratio=values.encoder_to_motor_tick_ratio,
       backlash_compensation=values.backlash_compensation,
       motor_response_time=values.motor_response_time,
-      number_of_encoder_tick_per_rev=reader.integer("NumberOfEncoderTickPerRev"),
+      encoder_ticks_per_revolution=reader.integer("NumberOfEncoderTickPerRev"),
       number_of_filters=reader.integer("NumberOfFilters"),
       filter_map=[
         FilterMapEntry.from_element(child)
@@ -628,7 +624,7 @@ class LightingIOConfig:
   io_name: str
   min_voltage: float
   max_voltage: float
-  delay_ms: int
+  delay: float
   unrecognized_fields: Dict[str, str] = field(default_factory=dict)
 
   @classmethod
@@ -643,7 +639,7 @@ class LightingIOConfig:
       io_name=reader.text("IOName"),
       min_voltage=reader.floating("MinVoltage"),
       max_voltage=reader.floating("MaxVoltage"),
-      delay_ms=reader.integer("DelayMS"),
+      delay=reader.integer("DelayMS") / 1000.0,
       unrecognized_fields=reader.unrecognized(),
     )
 
@@ -1243,14 +1239,13 @@ class CeligoConfig:
   @classmethod
   def from_install(
     cls,
-    install_dir: Optional[str] = None,
+    install_dir: str,
     magnification: int = 3,
   ) -> "CeligoConfig":
     """Load the complete configuration set used to initialize :class:`Celigo`.
 
     ``install_dir`` may be the Celigo installation root, its ``ConfigFiles`` directory,
-    or the path to ``USBIOHardwareConfig.config``. When it is omitted, the loader checks
-    ``CELIGO_INSTALL_DIR`` and the standard Windows installation locations.
+    or the path to ``USBIOHardwareConfig.config``.
 
     .. code-block:: python
 
@@ -1263,8 +1258,7 @@ class CeligoConfig:
     if hardware_path is None:
       raise FileNotFoundError(
         f"Could not find {_HARDWARE_CONFIG_FILENAME}. Pass install_dir= pointing "
-        "at the Celigo install root or its ConfigFiles directory, or set "
-        "CELIGO_INSTALL_DIR."
+        "at the Celigo install root or its ConfigFiles directory."
       )
     config_directory = os.path.dirname(os.path.abspath(hardware_path))
     files_by_name = {

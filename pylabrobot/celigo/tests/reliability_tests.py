@@ -15,7 +15,7 @@ from pylabrobot.celigo.celigo import (
   ControllerStatus,
   _fletcher16,
 )
-from pylabrobot.celigo.config import CeligoHardwareConfig
+from pylabrobot.celigo.config import Calibrated2DPolynomialTransform, CeligoHardwareConfig
 from pylabrobot.celigo.galvo import dac_count_to_volts
 from pylabrobot.celigo.motion import _decode_oem_response
 from pylabrobot.celigo.tests.helpers import (
@@ -82,6 +82,25 @@ class TestMotorReliability(unittest.IsolatedAsyncioTestCase):
     settled_mm = await driver.z_axis.move_to(2.5)
     self.assertEqual(calls, [(5, None)])
     self.assertEqual(settled_mm, 2.5)
+
+  async def test_public_position_read_returns_millimeters(self):
+    driver = make_celigo(
+      hardware=CeligoHardwareConfig(
+        z_axis=make_linear_axis_config(
+          axis_index=3,
+          min_position=0,
+          max_position=10,
+          home_offset=1,
+          mm_per_encoder_tick=0.5,
+        )
+      )
+    )
+
+    async def request_encoder_ticks():
+      return 7
+
+    stub(driver.z_axis, request_encoder_ticks=request_encoder_ticks)
+    self.assertEqual(await driver.z_axis.request_position(), 2.5)
 
   async def test_xyz_move_requires_explicit_trust_after_vendor_homing(self):
     driver = make_celigo(
@@ -299,6 +318,16 @@ class TestResponseValidation(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(status.has_controller_fault)
     self.assertTrue(status.has_laser_safety_fault)
 
+  async def test_analog_output_reply_must_echo_the_requested_channel(self):
+    driver = make_celigo()
+
+    async def send_command(_opcode, _payload):
+      return struct.pack(">HH", 1, 123)
+
+    stub(driver, send_command=send_command)
+    with self.assertRaisesRegex(CeligoError, "requested 2, received 1"):
+      await driver.request_analog_output_count(2)
+
   async def test_corrupt_header_checksum_never_retransmits_command(self):
     # Independent reference implementation: no production checksum helper is used.
     def reference_fletcher(data):
@@ -499,6 +528,52 @@ class TestSelfTest(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(report.failures, ())
     self.assertTrue(report.checks["controller_status"].interlock_open)
 
+  async def test_controller_fault_is_attributed_to_existing_status_check(self):
+    driver = self._configured_driver()
+    self._stub_read_only_checks(driver)
+
+    async def request_controller_status():
+      return ControllerStatus(2, 0)
+
+    stub(driver, request_controller_status=request_controller_status)
+    for axis in driver._configured_motion_axes():
+
+      async def request_encoder_ratio(axis_index=axis.axis_index):
+        return float(axis_index)
+
+      stub(axis, request_encoder_ratio=request_encoder_ratio)
+    report = await driver.run_self_test()
+
+    self.assertEqual(report.failures, ("controller_status",))
+    self.assertIn("controller_status", report.checks)
+
+  async def test_failed_galvo_calibration_has_a_named_check(self):
+    driver = self._configured_driver()
+    self._stub_read_only_checks(driver)
+    driver.config.galvo_calibrations = {
+      3: Calibrated2DPolynomialTransform(
+        forward={},
+        reverse={},
+        order=2,
+        successful=False,
+      ),
+    }
+    for axis in driver._configured_motion_axes():
+
+      async def request_encoder_ratio(axis_index=axis.axis_index):
+        return float(axis_index)
+
+      stub(axis, request_encoder_ratio=request_encoder_ratio)
+    report = await driver.run_self_test()
+
+    self.assertEqual(report.failures, ("galvo_calibration_3",))
+    self.assertFalse(report.checks["galvo_calibration_3"])
+
+  async def test_motion_checks_require_active_checks(self):
+    driver = self._configured_driver()
+    with self.assertRaisesRegex(ValueError, "requires run_active_checks"):
+      await driver.run_self_test(run_motion_checks=True)
+
   async def test_motion_checks_round_trip_each_linear_axis(self):
     driver = self._configured_driver()
     self._stub_read_only_checks(driver)
@@ -617,6 +692,7 @@ class TestLifecycleReliability(unittest.IsolatedAsyncioTestCase):
     celigo.config.hardware = CeligoHardwareConfig()
     celigo._connected = False
     initialization_calls = 0
+    homing_calls = 0
 
     async def no_op(*_args, **_kwargs):
       return None
@@ -631,13 +707,19 @@ class TestLifecycleReliability(unittest.IsolatedAsyncioTestCase):
       nonlocal initialization_calls
       initialization_calls += 1
 
+    async def track_homing():
+      nonlocal homing_calls
+      homing_calls += 1
+
     stub(celigo, abort_controller_operation=no_op)
     stub(celigo, request_controller_status=status)
     stub(celigo, request_controller_info=identity)
     stub(celigo, _initialize_hardware=track_hardware_initialization)
     stub(celigo, _initialize_safe_outputs=no_op)
+    stub(celigo, home_imaging_axes=track_homing)
     await celigo.setup()
     self.assertEqual(initialization_calls, 1)
+    self.assertEqual(homing_calls, 1)
     self.assertEqual(camera.setup_calls, 1)
     self.assertEqual(camera.format_calls, [(2048, 2048, None, None)])
     self.assertEqual((camera.width, camera.height), (2048, 2048))
