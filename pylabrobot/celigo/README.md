@@ -33,7 +33,7 @@ cel = Celigo(
   usb_address="3-2",  # optional USB bus/port path when more than one FTDI is attached
   lucam_sdk="/path/to/liblucamapi.so",  # optional when discoverable or set in the environment
 )
-cel.plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+cel.set_plate(Cor_96_wellplate_360ul_Fb(name="imaging_plate"))
 await cel.setup()
 try:
   status = await cel.request_controller_status()
@@ -49,8 +49,8 @@ finally:
 Linear-axis movement is expressed in millimeters; encoder conversion is internal. For
 example, `await cel.z_axis.move_to(5.0)` moves the focus axis to 5.0 mm. Use
 `cel.x_axis`, `cel.y_axis`, and `cel.z_axis` for axis-specific homing, position reads,
-and movement. The Corning 3603 resource's Celigo-specific registration correction is
-applied internally by model name.
+and movement. Well navigation uses the geometry of the assigned PyLabRobot plate
+resource.
 
 Filter wheels are components too: use `cel.dichroic_filter.move_to(logical_position)`,
 `cel.camera_filter.move_to(logical_position)`, or their `home()` methods. A wheel must

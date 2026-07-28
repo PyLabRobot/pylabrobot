@@ -10,16 +10,22 @@ celigo/components-and-diagnostics
 
 PyLabRobot controls the Celigo through one plain `Celigo` class. Configuration copied
 from the vendor installation supplies motor limits, channels, optical centers, filter
-positions, and plate navigation data.
+positions, and the instrument coordinate calibration. The assigned PyLabRobot `Plate`
+resource supplies the plate and well geometry used for navigation.
 
-Load that configuration explicitly when constructing the instrument:
+Load the instrument configuration explicitly, then set the plate:
 
 ```python
 from pylabrobot.celigo import Celigo, CeligoConfig
+from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 
 config = CeligoConfig.from_install("/path/to/Celigo/ConfigFiles")
 celigo = Celigo(config=config)
+celigo.set_plate(Cor_96_wellplate_360ul_Fb(name="imaging_plate"))
 ```
+
+Opening the drawer does not depend on a plate. Closing it to a well, moving to wells,
+and acquiring images require `set_plate()` first.
 
 Live verification covers controller setup/status/self-test, native XYZ and filter
 homing, drawer motion, galvo calibration/centering, native and calibrated Lumenera

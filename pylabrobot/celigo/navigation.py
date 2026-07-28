@@ -15,7 +15,6 @@ must step. Effective FOV = frame size minus overlap; FOVs per FOR per axis =
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from typing import List, Tuple
 
 from pylabrobot.celigo.config import (
@@ -24,43 +23,6 @@ from pylabrobot.celigo.config import (
 )
 from pylabrobot.celigo.coordinates import Coordinate2D, CoordinateSystems
 from pylabrobot.resources.plate import Plate
-
-
-@dataclass(frozen=True)
-class _PlateGeometry:
-  """SBS microplate geometry, in plate(sample) mm relative to the plate corner.
-
-  ``a1_x_mm`` / ``a1_y_mm`` are the A1 well-center offset from the corner the Celigo
-  calibrates to; ``pitch`` is the center-to-center well spacing.
-  """
-
-  name: str
-  num_rows: int
-  num_cols: int
-  a1_x_mm: float
-  a1_y_mm: float
-  pitch_x_mm: float
-  pitch_y_mm: float
-
-
-# Exact installed NEX Corning 3603 profile values (instance origin + nonzero grid start).
-_CORNING_3603_96 = _PlateGeometry(
-  name="Corning 3603 96-well",
-  num_rows=8,
-  num_cols=12,
-  a1_x_mm=14.196530815027272,
-  a1_y_mm=11.113591166551164,
-  pitch_x_mm=9.023312301578526,
-  pitch_y_mm=9.012954100880759,
-)
-
-
-# The PLR resource describes the nominal physical plate. These small corrections are
-# instrument/profile registration values that belong to the Celigo integration, not in
-# the user's plate definition.
-_CELIGO_GEOMETRY_BY_PLR_MODEL = {
-  "Cor_96_wellplate_360ul_Fb": _CORNING_3603_96,
-}
 
 
 def _well_center_sample_mm(plate: Plate, well: str) -> Coordinate2D:
@@ -73,32 +35,9 @@ def _well_center_sample_mm(plate: Plate, well: str) -> Coordinate2D:
     raise ValueError(f"Well {well!r} does not exist on plate {plate.name!r}") from exc
   if item.location is None:
     raise ValueError(f"Well {well!r} on plate {plate.name!r} has no location")
-  sample_x = item.location.x + item.get_size_x() / 2
-  sample_y = plate.get_size_y() - (item.location.y + item.get_size_y() / 2)
-
-  registered = _CELIGO_GEOMETRY_BY_PLR_MODEL.get(plate.model or "")
-  if registered is None:
-    return sample_x, sample_y
-  if (plate.num_items_y, plate.num_items_x) != (registered.num_rows, registered.num_cols):
-    raise ValueError(
-      f"Plate model {plate.model!r} has an unexpected "
-      f"{plate.num_items_y}x{plate.num_items_x} well grid"
-    )
-
-  a1 = plate.get_well("A1")
-  a2 = plate.get_well("A2")
-  b1 = plate.get_well("B1")
-  if a1.location is None or a2.location is None or b1.location is None:
-    raise ValueError(f"Plate model {plate.model!r} has incomplete registration wells")
-  nominal_a1_x = a1.location.x + a1.get_size_x() / 2
-  nominal_a1_y = plate.get_size_y() - (a1.location.y + a1.get_size_y() / 2)
-  nominal_pitch_x = a2.location.x - a1.location.x
-  nominal_pitch_y = a1.location.y - b1.location.y
-  if nominal_pitch_x == 0 or nominal_pitch_y == 0:
-    raise ValueError(f"Plate model {plate.model!r} has invalid well pitch")
   return (
-    registered.a1_x_mm + (sample_x - nominal_a1_x) * registered.pitch_x_mm / nominal_pitch_x,
-    registered.a1_y_mm + (sample_y - nominal_a1_y) * registered.pitch_y_mm / nominal_pitch_y,
+    item.location.x + item.get_size_x() / 2,
+    plate.get_size_y() - (item.location.y + item.get_size_y() / 2),
   )
 
 

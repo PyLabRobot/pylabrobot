@@ -36,21 +36,9 @@ def _coords():
 
 
 class TestPlateNavigation(unittest.TestCase):
-  def test_plr_corning_3603_uses_internal_celigo_registration(self):
+  def test_plr_plate_uses_its_resource_geometry(self):
     _, _, cs = _coords()
     plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
-    a1 = well_to_stage_mm(plate, "A1", cs)
-    a2 = well_to_stage_mm(plate, "A2", cs)
-    b1 = well_to_stage_mm(plate, "B1", cs)
-    self.assertAlmostEqual(a1[0], 16.355530815027272)
-    self.assertAlmostEqual(a1[1], 14.605591166551164)
-    self.assertAlmostEqual(a2[0] - a1[0], 9.023312301578526)
-    self.assertAlmostEqual(b1[1] - a1[1], 9.012954100880759)
-
-  def test_unregistered_plr_plate_uses_nominal_well_geometry(self):
-    _, _, cs = _coords()
-    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
-    plate.model = "unregistered_test_plate"
     a1 = well_to_stage_mm(plate, "A1", cs)
     a2 = well_to_stage_mm(plate, "A2", cs)
     b1 = well_to_stage_mm(plate, "B1", cs)
@@ -96,9 +84,8 @@ class TestWellToStage(unittest.TestCase):
     plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
     x, y = well_to_stage_mm(plate, "A1", cs)
     # this config has no calibrated corner offset, so stage = sample + default corner:
-    # Exact installed CPR A1 center plus the configured sample-to-stage corner.
-    self.assertAlmostEqual(x, 16.355530815027272)
-    self.assertAlmostEqual(y, 14.605591166551164)
+    self.assertAlmostEqual(x, 16.459)
+    self.assertAlmostEqual(y, 14.772)
 
   def test_adjacent_wells_differ_by_pitch(self):
     _, _, cs = _coords()
@@ -106,8 +93,8 @@ class TestWellToStage(unittest.TestCase):
     a1 = well_to_stage_mm(plate, "A1", cs)
     a2 = well_to_stage_mm(plate, "A2", cs)
     b1 = well_to_stage_mm(plate, "B1", cs)
-    self.assertAlmostEqual(a2[0] - a1[0], 9.023312301578526)
-    self.assertAlmostEqual(b1[1] - a1[1], 9.012954100880759)
+    self.assertAlmostEqual(a2[0] - a1[0], 9.0)
+    self.assertAlmostEqual(b1[1] - a1[1], 9.0)
 
 
 class TestFovGrid(unittest.TestCase):

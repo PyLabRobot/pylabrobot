@@ -339,12 +339,16 @@ class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
     driver = make_celigo(hardware=_config())
     driver.config.calibration = make_calibration_config()
     driver.config.hardware_defaults = make_hardware_default_config()
-    driver.plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
-    driver.load_well = "A1"
-    targets = driver._drawer_load_targets(None, None)
-    self.assertAlmostEqual(targets.x_park_mm, 14.196530815027272)
+    driver.set_plate(Cor_96_wellplate_360ul_Fb(name="imaging_plate"))
+    targets = driver._drawer_load_targets("A1")
+    self.assertAlmostEqual(targets.x_park_mm, 14.3)
     self.assertEqual(targets.y_clearance_mm, 2)
-    self.assertAlmostEqual(targets.y_park_mm, 11.113591166551164)
+    self.assertAlmostEqual(targets.y_park_mm, 11.28)
+
+  def test_load_position_requires_set_plate(self):
+    driver = make_celigo(hardware=_config())
+    with self.assertRaisesRegex(CeligoError, r"set_plate\(\)"):
+      driver._drawer_load_targets("A1")
 
   async def test_open_drawer_retries_and_requires_target_limit(self):
     hardware = _config()
@@ -382,7 +386,7 @@ class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
 
 
 class TestCompanionConfigurationLoading(unittest.TestCase):
-  def test_constructor_builds_camera_from_lucam_sdk_and_leaves_plate_unset(self):
+  def test_constructor_builds_camera_from_lucam_sdk(self):
     with (
       patch("pylabrobot.celigo.celigo.FTDI"),
       patch("pylabrobot.celigo.celigo.LumeneraCamera", FakeCamera),
@@ -396,7 +400,6 @@ class TestCompanionConfigurationLoading(unittest.TestCase):
     camera = celigo.camera
     assert isinstance(camera, FakeCamera)
     self.assertEqual(camera.sdk_library, "/opt/lumenera/liblucamapi.so")
-    self.assertIsNone(celigo.plate)
 
   def test_constructor_requires_an_explicit_aggregate_config(self):
     with self.assertRaisesRegex(TypeError, "config"):

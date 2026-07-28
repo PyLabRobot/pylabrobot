@@ -310,7 +310,6 @@ class Celigo:
     latency_ms: int = 2,
     reply_timeout: float = 2.0,
     move_timeout: float = 30.0,
-    load_well: str = "A1",
     lucam_sdk: Optional[str] = None,
     allow_laser: bool = False,
     fluorescence_warmup_seconds: float = 300.0,
@@ -332,8 +331,7 @@ class Celigo:
     self.reply_timeout = reply_timeout
     self.move_timeout = move_timeout
     self.config = config
-    self.plate: Optional[Plate] = None
-    self.load_well = load_well
+    self._plate: Optional[Plate] = None
     self.camera: CeligoCamera = LumeneraCamera(sdk_library=lucam_sdk)
     self.galvo = Galvo(self)
     self.laser = Laser(self, enabled=allow_laser)
@@ -990,18 +988,19 @@ class Celigo:
 
   # -- drawer (stage eject / load) -------------------------------------------
 
-  def _drawer_load_targets(self, plate: Optional[Plate], well: Optional[str]) -> _DrawerLoadTargets:
-    plate = plate or self.plate
-    if plate is None:
-      raise CeligoError("close_drawer requires a configured plate or plate= argument")
-    coordinates = CoordinateSystems.from_config(
-      self.config.calibration, self.config.hardware_defaults
-    )
-    x_park_mm, y_park_mm = well_to_stage_mm(
-      plate,
-      well or self.load_well,
-      coordinates,
-    )
+  def set_plate(self, plate: Plate) -> None:
+    """Set the plate used by drawer loading, well navigation, and acquisition."""
+    if not isinstance(plate, Plate):
+      raise TypeError(f"plate must be a Plate, got {type(plate).__name__}")
+    self._plate = plate
+
+  def _require_plate(self) -> Plate:
+    if self._plate is None:
+      raise CeligoError("Set a plate with set_plate() before navigating to a well")
+    return self._plate
+
+  def _drawer_load_targets(self, well: str) -> _DrawerLoadTargets:
+    x_park_mm, y_park_mm = self.well_position_mm(well)
     return _DrawerLoadTargets(
       x_park_mm=x_park_mm,
       y_clearance_mm=self.y_axis.config.min_position,
@@ -1043,38 +1042,30 @@ class Celigo:
       else:
         raise CeligoError(f"drawer {axis.name.upper()} limit was not reached")
 
-  async def close_drawer(
-    self,
-    plate: Optional[Plate] = None,
-    well: Optional[str] = None,
-  ) -> None:
+  async def close_drawer(self, well: str) -> None:
     """Move the stage under the optics using calibrated plate/well coordinates."""
     await self.turn_off_illumination()
     self.current_channel = None
-    targets = self._drawer_load_targets(plate, well)
+    targets = self._drawer_load_targets(well)
     await self.y_axis.move_to(targets.y_clearance_mm)
     await self.x_axis.move_to(targets.x_park_mm)
     await self.y_axis.move_to(targets.y_park_mm)
 
-  def well_position_mm(self, well: str, plate: Optional[Plate] = None) -> Tuple[float, float]:
+  def well_position_mm(self, well: str) -> Tuple[float, float]:
     """Return the calibrated X/Y stage position for a named well."""
-    plate = plate or self.plate
-    if plate is None:
-      raise CeligoError("Well navigation requires a configured plate or plate= argument")
     coordinates = CoordinateSystems.from_config(
       self.config.calibration, self.config.hardware_defaults
     )
-    return well_to_stage_mm(plate, well, coordinates)
+    return well_to_stage_mm(self._require_plate(), well, coordinates)
 
   async def move_to_well(
     self,
     well: str,
-    plate: Optional[Plate] = None,
     retract_z: bool = False,
     safe_z_mm: Optional[float] = None,
   ) -> Tuple[float, float]:
     """Move the stage to a calibrated well center and return settled X/Y millimeters."""
-    x_mm, y_mm = self.well_position_mm(well, plate)
+    x_mm, y_mm = self.well_position_mm(well)
     if retract_z:
       if safe_z_mm is None:
         safe_z_mm = self.z_axis.config.min_position
@@ -1561,7 +1552,6 @@ class Celigo:
     self,
     well: str,
     channel: IlluminationChannelName,
-    plate: Optional[Plate] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
     autofocus: Optional[Literal["image", "hardware"]] = None,
@@ -1571,7 +1561,7 @@ class Celigo:
     machine_auto_exposure: bool = False,
   ) -> AcquisitionResult:
     """Navigate, select optics, optionally focus, and capture one calibrated FOV."""
-    x_mm, y_mm = await self.move_to_well(well, plate)
+    x_mm, y_mm = await self.move_to_well(well)
     channel_config = self._require_channel_config(channel)
     target_z_mm = z_mm
     if target_z_mm is None:
@@ -1619,7 +1609,6 @@ class Celigo:
     self,
     well: str,
     channel: IlluminationChannelName,
-    plate: Optional[Plate] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
     autofocus: Optional[Literal["image", "hardware"]] = None,
@@ -1633,7 +1622,6 @@ class Celigo:
       result = await self._acquire_field(
         well=well,
         channel=channel,
-        plate=plate,
         exposure_ms=exposure_ms,
         gain=gain,
         autofocus=autofocus,
@@ -1653,7 +1641,6 @@ class Celigo:
     self,
     wells: List[str],
     channels: List[IlluminationChannelName],
-    plate: Optional[Plate] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
     autofocus: Optional[Literal["image", "hardware"]] = None,
@@ -1691,7 +1678,6 @@ class Celigo:
           result = await self.acquire(
             well=well,
             channel=channel,
-            plate=plate,
             exposure_ms=exposure_ms,
             gain=gain,
             autofocus=focus_mode,

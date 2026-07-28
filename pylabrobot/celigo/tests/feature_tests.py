@@ -1147,7 +1147,7 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     celigo.current_channel = "brightfield"
     moved_z = []
 
-    async def move_to_well(_well, _plate):
+    async def move_to_well(_well):
       return 10, 20
 
     async def select(channel, **_kwargs):
@@ -1220,7 +1220,7 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     celigo.current_channel = None
     moved_z = []
 
-    async def move_to_well(_well, _plate):
+    async def move_to_well(_well):
       return 10, 20
 
     async def select(channel, **_kwargs):
