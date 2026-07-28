@@ -8,6 +8,8 @@ celigo/advanced-imaging
 celigo/components-and-diagnostics
 ```
 
+[OEM link](https://www.revvity.com/product/celigo-5c-config-200-bffl-5c)
+
 PyLabRobot controls the Celigo through one plain `Celigo` class. Configuration copied
 from the vendor installation supplies motor limits, channels, optical centers, filter
 positions, and the instrument coordinate calibration. The assigned PyLabRobot `Plate`
