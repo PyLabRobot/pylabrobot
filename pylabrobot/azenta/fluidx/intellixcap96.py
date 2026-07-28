@@ -566,13 +566,6 @@ class FluidXIntelliXcap96:
 
   async def setup(self) -> None:
     await self.io.setup()
-    logger.warning(
-      "[IntelliXcap96 %s] connection, queries, tray open/close, home, standby/ready, settings, "
-      "cartridge eject/load, forced decap retry and decap/recap/waste are hardware-verified. "
-      "Unit firmware V49 does not acknowledge the tray travel commands. The cartridge counter "
-      "reset and manual recovery commands are not hardware-verified.",
-      self.io.port,
-    )
     status = await self.request_status()
     up = status.upper()
     if "BUSY" in up:
