@@ -7,11 +7,7 @@ from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
 from pylabrobot.celigo.config import Calibrated2DPolynomialTransform, GalvoConfig
 from pylabrobot.celigo.errors import CeligoError
-from pylabrobot.celigo.protocol import (
-  TARGETING_STATUS_OPCODE,
-  parse_targeting_controller_status,
-  require_payload_length,
-)
+from pylabrobot.celigo.protocol import require_payload_length
 
 if TYPE_CHECKING:
   from pylabrobot.celigo.celigo import Celigo
@@ -21,6 +17,7 @@ GalvoAxisName = Literal["x", "y"]
 
 # Controller-board opcodes owned by the galvo subsystem.
 _CMD_MOVE_GALVO = 7
+_CMD_REQUEST_CONTROLLER_STATUS = 12
 _CMD_CALIBRATE_GALVO = 27
 _CMD_GET_GALVO_CAL_DATA = 28
 _CMD_SET_GALVO_WINDOW = 29
@@ -305,19 +302,23 @@ class Galvo:
 
   async def request_controller_status(self) -> GalvoControllerStatus:
     """Read the complete galvo and laser-firing state from the controller."""
-    response = await self._celigo.send_command(TARGETING_STATUS_OPCODE)
-    controller_status = parse_targeting_controller_status(response)
+    response = await self._celigo.send_command(_CMD_REQUEST_CONTROLLER_STATUS)
+    require_payload_length(response, 23, "galvo controller status")
+    x_ready, y_ready, x_dac_count, y_dac_count = struct.unpack_from(">BBHH", response, 0)
+    fire_table_size, points_loaded, fire_table_index = struct.unpack_from(">iii", response, 6)
+    firing_status = response[18]
+    capture_armed, capture_table_size = struct.unpack_from(">hh", response, 19)
     return GalvoControllerStatus(
-      x_busy=controller_status.x_busy,
-      y_busy=controller_status.y_busy,
-      x_hardware_voltage=dac_count_to_volts(controller_status.x_dac_count),
-      y_hardware_voltage=dac_count_to_volts(controller_status.y_dac_count),
-      fire_table_size=controller_status.fire_table_size,
-      points_loaded=controller_status.points_loaded,
-      fire_table_index=controller_status.fire_table_index,
-      firing_status=controller_status.firing_status,
-      capture_armed=controller_status.capture_armed,
-      capture_table_size=controller_status.capture_table_size,
+      x_busy=x_ready == 0,
+      y_busy=y_ready == 0,
+      x_hardware_voltage=dac_count_to_volts(x_dac_count),
+      y_hardware_voltage=dac_count_to_volts(y_dac_count),
+      fire_table_size=fire_table_size,
+      points_loaded=points_loaded,
+      fire_table_index=fire_table_index,
+      firing_status=firing_status,
+      capture_armed=capture_armed != 0,
+      capture_table_size=capture_table_size,
     )
 
   async def _set_settling_window(

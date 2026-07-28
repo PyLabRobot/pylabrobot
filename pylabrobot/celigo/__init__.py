@@ -52,7 +52,7 @@ from pylabrobot.celigo.config import (
 from pylabrobot.celigo.coordinates import CoordinateSystems
 from pylabrobot.celigo.errors import CeligoError
 from pylabrobot.celigo.galvo import Galvo, GalvoControllerStatus
-from pylabrobot.celigo.laser import Laser, ShootingStatus
+from pylabrobot.celigo.laser import Laser
 from pylabrobot.celigo.motion import (
   Axis,
   FilterWheel,
@@ -105,7 +105,6 @@ __all__ = [
   "MotorController",
   "NavigationConfig",
   "SelfTestReport",
-  "ShootingStatus",
   "StepperMotor",
   "load_channel_descriptors",
   "load_galvo_calibrations",

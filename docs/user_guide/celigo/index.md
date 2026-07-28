@@ -4,6 +4,8 @@
 :maxdepth: 1
 
 celigo/hello-world
+celigo/advanced-imaging
+celigo/components-and-diagnostics
 ```
 
 PyLabRobot controls the Celigo through one plain `Celigo` class. Configuration copied
@@ -45,3 +47,9 @@ mode, and verifies the final in-range position. Controller serial I/O uses the
 instrument FTDI interface at 230400 baud; the Lumenera camera is a separate USB
 connection through its SDK. See the Hello World notebook for direct USB and USB/IP
 setup, a native homing/drawer cycle, and brightfield capture.
+
+The Advanced Imaging notebook covers coordinate transforms, frame analysis, exposure,
+autofocus, structured acquisition results, and calibrated galvo FOV planning. The
+Hardware Components and Diagnostics notebook covers axes, filter wheels, controller
+I/O, galvo diagnostics, barcode and trigger interfaces, active self-tests, and the
+laser component's explicit safety boundary.

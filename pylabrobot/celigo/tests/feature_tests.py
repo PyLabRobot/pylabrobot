@@ -26,7 +26,7 @@ from pylabrobot.celigo.config import (
   IOConfig,
   LightingIOConfig,
 )
-from pylabrobot.celigo.galvo import _CMD_CALIBRATE_GALVO, dac_count_to_volts
+from pylabrobot.celigo.galvo import GalvoControllerStatus, _CMD_CALIBRATE_GALVO, dac_count_to_volts
 from pylabrobot.celigo.laser import (
   _CMD_FIRE_GALVO_GRID,
   _CMD_FIRE_LASER,
@@ -35,7 +35,6 @@ from pylabrobot.celigo.laser import (
   _CMD_SEND_LASER_COMM,
   _CMD_TARGETED_FIRE,
   Laser,
-  ShootingStatus,
 )
 from pylabrobot.celigo.motion import (
   _LIMIT_OPTO_1,
@@ -80,19 +79,23 @@ def _filter_config() -> FilterWheelConfig:
   )
 
 
-def _shooting_status(
+def _galvo_controller_status(
   *,
-  fire_table_size: int = 0,
-  points_loaded: int = 0,
-  fire_table_index: int = 0,
-) -> ShootingStatus:
-  return ShootingStatus(
+  fire_table_size: int,
+  points_loaded: int,
+  fire_table_index: int,
+) -> GalvoControllerStatus:
+  return GalvoControllerStatus(
+    x_busy=False,
+    y_busy=False,
+    x_hardware_voltage=0.0,
+    y_hardware_voltage=0.0,
     fire_table_size=fire_table_size,
     points_loaded=points_loaded,
     fire_table_index=fire_table_index,
     firing_status=0,
-    galvo_capture_armed=False,
-    galvo_capture_table_size=0,
+    capture_armed=False,
+    capture_table_size=0,
   )
 
 
@@ -1351,11 +1354,15 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
     async def status():
       return next(statuses)
 
-    async def shooting_status():
-      return _shooting_status(fire_table_size=32)
-
     async def load(_points, _center):
       return None
+
+    async def targeting_status():
+      return _galvo_controller_status(
+        fire_table_size=32,
+        points_loaded=0,
+        fire_table_index=0,
+      )
 
     async def transact(opcode, payload=b"", retries=3):
       del payload, retries
@@ -1364,7 +1371,7 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
       return b""
 
     stub(celigo, request_controller_status=status)
-    stub(celigo.laser, request_status=shooting_status)
+    stub(celigo.galvo, request_controller_status=targeting_status)
     stub(celigo.laser, load_firing_targets=load)
     stub(celigo, send_command=transact)
     with self.assertRaises(CeligoError):
@@ -1389,21 +1396,29 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
       GalvoAxisOpticalCalibration({}, {}, laser_center_voltage=1.5, uv_laser_center_voltage=0.1),
     )
     centers = []
-    shooting = iter(
+    targeting_statuses = iter(
       (
-        _shooting_status(fire_table_size=32),
-        _shooting_status(fire_table_index=1, points_loaded=1),
+        _galvo_controller_status(
+          fire_table_size=32,
+          points_loaded=0,
+          fire_table_index=0,
+        ),
+        _galvo_controller_status(
+          fire_table_size=32,
+          points_loaded=1,
+          fire_table_index=1,
+        ),
       )
     )
 
     async def status():
       return ControllerStatus(0, 0)
 
-    async def shooting_status():
-      return next(shooting)
-
     async def load(_points, center):
       centers.append(center)
+
+    async def targeting_status():
+      return next(targeting_statuses)
 
     async def transact(_opcode, _payload=b"", retries=3):
       del retries
@@ -1413,7 +1428,7 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
       return True
 
     stub(celigo, request_controller_status=status)
-    stub(celigo.laser, request_status=shooting_status)
+    stub(celigo.galvo, request_controller_status=targeting_status)
     stub(celigo.laser, load_firing_targets=load)
     stub(celigo, send_command=transact)
     stub(celigo, wait_for_controller_ready=ready)

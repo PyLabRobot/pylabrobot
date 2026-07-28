@@ -188,7 +188,7 @@ class ControllerStatus:
 
 @dataclass(frozen=True)
 class FocusResult:
-  """Best Z position and the scored frames inspected by host-side autofocus."""
+  """Best Z position, scored Z samples, and verified final autofocus frame."""
 
   z_ticks: int
   z_mm: float

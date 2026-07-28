@@ -13,11 +13,7 @@ from pylabrobot.celigo.galvo import (
   voltage_delta_to_dac_count,
   volts_to_dac_count,
 )
-from pylabrobot.celigo.protocol import (
-  TARGETING_STATUS_OPCODE,
-  parse_targeting_controller_status,
-  require_payload_length,
-)
+from pylabrobot.celigo.protocol import require_payload_length
 
 if TYPE_CHECKING:
   from pylabrobot.celigo.celigo import Celigo
@@ -32,18 +28,6 @@ _CMD_SEND_LASER_COMM = 26
 _CMD_READ_LASER_COMM = 32
 _DELAY_TICK_SECONDS = 10e-6
 _MAX_DELAY_TICKS = 0x7FFFFFFF
-
-
-@dataclass(frozen=True)
-class ShootingStatus:
-  """Laser target-table/firing state embedded in SEND_GALVO_INFO."""
-
-  fire_table_size: int
-  points_loaded: int
-  fire_table_index: int
-  firing_status: int
-  galvo_capture_armed: bool
-  galvo_capture_table_size: int
 
 
 @dataclass(frozen=True)
@@ -200,19 +184,6 @@ class Laser:
     require_payload_length(response, 4 + response_length, "laser response")
     return response[4 : 4 + response_length].rstrip(b"\x00").decode("ascii", errors="replace")
 
-  async def request_status(self) -> ShootingStatus:
-    """Read the laser firing-table state embedded in ``SEND_GALVO_INFO``."""
-    response = await self._celigo.send_command(TARGETING_STATUS_OPCODE)
-    controller_status = parse_targeting_controller_status(response)
-    return ShootingStatus(
-      fire_table_size=controller_status.fire_table_size,
-      points_loaded=controller_status.points_loaded,
-      fire_table_index=controller_status.fire_table_index,
-      firing_status=controller_status.firing_status,
-      galvo_capture_armed=controller_status.capture_armed,
-      galvo_capture_table_size=controller_status.capture_table_size,
-    )
-
   async def fire(
     self,
     laser_index: int,
@@ -283,7 +254,7 @@ class Laser:
         optical.x.laser_center_voltage if laser_index == 0 else optical.x.uv_laser_center_voltage,
         optical.y.laser_center_voltage if laser_index == 0 else optical.y.uv_laser_center_voltage,
       )
-    table_size = (await self.request_status()).fire_table_size
+    table_size = (await self._celigo.galvo.request_controller_status()).fire_table_size
     if table_size <= 0:
       raise CeligoError(f"Controller reported invalid laser firing-table size {table_size}")
     for start_index in range(0, len(voltage_offsets), table_size):
@@ -297,7 +268,7 @@ class Laser:
         timeout=max(5.0, self._celigo.move_timeout)
       ):
         raise TimeoutError("Targeted laser firing did not complete")
-      status = await self.request_status()
+      status = await self._celigo.galvo.request_controller_status()
       if status.fire_table_index != status.points_loaded:
         raise CeligoError(
           f"Laser firing stopped at target {status.fire_table_index}/{status.points_loaded}"

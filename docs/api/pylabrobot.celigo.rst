@@ -27,7 +27,6 @@ Load the vendor configuration explicitly before constructing the instrument:
     Galvo
     GalvoControllerStatus
     Laser
-    ShootingStatus
     ControllerInfo
     ControllerStatus
     DetectedMotorAddress

@@ -10,7 +10,7 @@ Two coordinate frames are constructed:
 * ``image_to_stage``: image pixels -> stage mm. Applies pixel scale
   (``microns_per_pixel_x`` / ``microns_per_pixel_y``) about the image center, rotation
   (``image_to_stage_theta_radians``), and chains through ``sample_to_stage``. Reference
-  point is the current FOR+FOV position in stage mm.
+  point is the current FOR+FOV center in sample mm.
 
 Methods provide conversions between coordinate spaces: sample mm <-> stage mm, image
 pixels <-> sample mm, image pixels <-> stage mm, etc.
@@ -160,8 +160,8 @@ class _ScaledShearCoordinateFrame(_CoordinateFrame):
 class CoordinateSystems:
   """Affine coordinate frames and conversion methods.
 
-  Build with :meth:`from_config`. ``reference_point_mm`` is the current stage position
-  the image is taken at; pass it per FOV, or leave at the origin for plate-relative
+  Build with :meth:`from_config`. ``reference_point_mm`` is the current field center in
+  sample coordinates; pass it per FOV, or leave it at the sample origin for plate-relative
   conversions.
   """
 
