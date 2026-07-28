@@ -3,15 +3,27 @@ import math
 import re
 import unittest
 import unittest.mock
+from collections import OrderedDict
 from typing import Any, Dict
 
-from . import resource as resource_module
-from .barcode import Barcode
-from .coordinate import Coordinate
-from .deck import Deck
-from .errors import ResourceNotFoundError
-from .resource import Resource
-from .rotation import Rotation
+from pylabrobot.legacy.centrifuge.centrifuge import Centrifuge, Loader
+from pylabrobot.legacy.centrifuge.chatterbox import (
+  CentrifugeChatterboxBackend,
+  LoaderChatterboxBackend,
+)
+from pylabrobot.legacy.liquid_handling.backends import LiquidHandlerChatterboxBackend
+from pylabrobot.legacy.liquid_handling.liquid_handler import LiquidHandler
+from pylabrobot.legacy.storage.chatterbox import IncubatorChatterboxBackend
+from pylabrobot.legacy.storage.incubator import Incubator
+from pylabrobot.resources import resource as resource_module
+from pylabrobot.resources.barcode import Barcode
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.errors import ResourceNotFoundError
+from pylabrobot.resources.plate_adapter import PlateAdapter
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.resources.tip import Tip
 
 
 def _make_test_deck() -> Deck:
@@ -757,6 +769,119 @@ class TestResourceMetadata(unittest.TestCase):
     deck.assign_child_resource(waste, location=Coordinate(40, 0, 0))
     return deck, plate, well, trough, waste
 
+  def _resource_factoryies_with_meta(self, meta):
+    from pylabrobot.resources.carrier import (
+      Carrier,
+      MFXCarrier,
+      PlateCarrier,
+      PlateHolder,
+      TipCarrier,
+      TroughCarrier,
+      TubeCarrier,
+    )
+    from pylabrobot.resources.container import Container
+    from pylabrobot.resources.itemized_resource import ItemizedResource
+    from pylabrobot.resources.lid import Lid
+    from pylabrobot.resources.plate import Plate
+    from pylabrobot.resources.resource_holder import ResourceHolder
+    from pylabrobot.resources.resource_stack import ResourceStack
+    from pylabrobot.resources.tecan.tecan_resource import TecanResource
+    from pylabrobot.resources.tip_rack import TipRack, TipSpot
+
+    return {
+      "Carrier": lambda: Carrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "TipCarrier": lambda: TipCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "PlateCarrier": lambda: PlateCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "MFXCarrier": lambda: MFXCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "TubeCarrier": lambda: TubeCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "TroughCarrier": lambda: TroughCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "PlateHolder": lambda: PlateHolder(
+        "ph", size_x=10, size_y=10, size_z=10, pedestal_size_z=5, metadata=meta
+      ),
+      "Container": lambda: Container("cont", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "Deck": lambda: Deck(name="d", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "ItemizedResource": lambda: ItemizedResource(
+        "ir", size_x=10, size_y=10, size_z=10, ordering=OrderedDict(), metadata=meta
+      ),
+      "Lid": lambda: Lid("lid", size_x=10, size_y=10, size_z=10, nesting_z_height=0, metadata=meta),
+      "Plate": lambda: Plate(
+        "p", size_x=10, size_y=10, size_z=10, ordering=OrderedDict(), metadata=meta
+      ),
+      "PlateAdapter": lambda: PlateAdapter(
+        "pa",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        dx=1,
+        dy=1,
+        dz=1,
+        adapter_hole_size_x=1,
+        adapter_hole_size_y=1,
+        metadata=meta,
+      ),
+      "ResourceHolder": lambda: ResourceHolder(
+        "rh", size_x=10, size_y=10, size_z=10, metadata=meta
+      ),
+      "ResourceStack": lambda: ResourceStack("rs", direction="z", metadata=meta),
+      "TecanResource": lambda: TecanResource("tr", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "TipSpot": lambda: TipSpot(
+        "ts",
+        size_x=10,
+        size_y=10,
+        make_tip=lambda name: Tip(
+          name=name, has_filter=False, maximal_volume=10, fitting_depth=1, total_tip_length=10
+        ),
+        metadata=meta,
+      ),
+      "TipRack": lambda: TipRack(
+        "tr", size_x=10, size_y=10, size_z=10, ordering=OrderedDict(), metadata=meta
+      ),
+      "Centrifuge": lambda: Centrifuge(
+        backend=CentrifugeChatterboxBackend(),
+        name="cent",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        metadata=meta,
+      ),
+      "Loader": lambda: Loader(
+        backend=LoaderChatterboxBackend(),
+        centrifuge=Centrifuge(
+          backend=CentrifugeChatterboxBackend(), name="cent", size_x=10, size_y=10, size_z=10
+        ),
+        name="loader",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        child_location=Coordinate(0, 0, 0),
+        metadata=meta,
+      ),
+      "Incubator": lambda: Incubator(
+        backend=IncubatorChatterboxBackend(),
+        name="inc",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        racks=[
+          PlateCarrier(
+            "pc0",
+            size_x=10,
+            size_y=10,
+            size_z=10,
+            metadata=dict(is_child_of_parent_with=meta),
+          ),
+        ],
+        loading_tray_location=Coordinate(0, 0, 0),
+        metadata=meta,
+      ),
+      "LiquidHandler": lambda: LiquidHandler(
+        backend=LiquidHandlerChatterboxBackend(),
+        deck=Deck(size_x=10, size_y=10, size_z=10),
+        name="lh",
+        metadata=meta,
+      ),
+    }
+
   def test_metadata_init_and_equality(self):
     r1 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 1, "is_clean": True})
     r2 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 1, "is_clean": True})
@@ -784,6 +909,13 @@ class TestResourceMetadata(unittest.TestCase):
 
     original["nested"].append(3)
     self.assertEqual(r.metadata["nested"], [1, 2, 3])  # nested value shared
+
+  def test_metadata_kwarg_reaches_resource_for_every_subclass(self):
+    meta = {"k": "v"}
+    factories = self._resource_factoryies_with_meta(meta)
+    for name, make in factories.items():
+      with self.subTest(name):
+        self.assertEqual(make().metadata, meta)
 
   def test_metadata_serialization_deserialization(self):
     meta = {"string": "hello", "int": 42, "bool": False, "list": [1, 2, 3], "nested": {"k": "v"}}
@@ -857,7 +989,7 @@ class TestResourceMetadata(unittest.TestCase):
 
   def test_deserialize_without_metadata_key_is_backward_compatible(self):
     # Resources serialized before metadata existed have no "metadata" key.
-    data = Resource("r", size_x=1, size_y=1, size_z=1).serialize()
+    data = Resource("r", size_x=1, size_y=1, size_z=1, metadata={"key": "value"}).serialize()
     del data["metadata"]
     restored = Resource.deserialize(data)
     self.assertEqual(restored.metadata, {})
@@ -867,6 +999,30 @@ class TestResourceMetadata(unittest.TestCase):
     data["metadata"] = ["not", "a", "dict"]
     with self.assertRaises(TypeError):
       Resource.deserialize(data)
+
+  def test_subclass_deserialize_and_copy_preserves_metadata(self):
+    meta = {"key": "val", "num": 42}
+
+    factories = self._resource_factoryies_with_meta(meta)
+    for name, make in factories.items():
+      with self.subTest(name):
+        r = make()
+        self.assertEqual(r.metadata, meta)
+        if name == "Loader":
+          # Loader doesn't expose metadata at the top-level
+          self.assertEqual(r.serialize()["resource"]["metadata"], meta)
+        else:
+          self.assertEqual(r.serialize()["metadata"], meta)
+        if name == "ResourceStack":
+          with self.assertRaises(
+            TypeError
+          ):  # unrelated to metadata: ResourceStack.copy() is broken
+            r.copy()
+        else:
+          r_copy = r.copy()
+          self.assertEqual(r_copy.metadata, meta)
+          self.assertEqual(r_copy.name, r.name)
+          self.assertEqual(r_copy, r)
 
   def test_deserialize_same_named_class_via_module_alias(self):
     # Simulate a class imported under two module paths: find_subclass returns a

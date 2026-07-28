@@ -96,8 +96,8 @@ def _match_type(resource: Resource, matcher: TypeMatcher) -> bool:
   raise TypeError(f"Unexpected type matcher of type {type(matcher).__qualname__}")
 
 
-def _match_top_level_attribute(resource: Resource, attr_name: str, matcher: StrAttrMatcher) -> bool:
-  """Return whether ``resource``'s top-level attribute ``attr_name`` matches ``matcher``.
+def _match_attribute_value(attr_val: Any, matcher: StrAttrMatcher) -> bool:
+  """Return whether a top-level resource attribute value matches ``matcher``.
 
   The interpretation of ``matcher`` depends on its type:
 
@@ -107,7 +107,6 @@ def _match_top_level_attribute(resource: Resource, attr_name: str, matcher: StrA
 
   Note the callable receives different arguments than for `_match_type`.
   """
-  attr_val = getattr(resource, attr_name, None)
   if isinstance(matcher, re.Pattern):
     return attr_val is not None and bool(matcher.search(str(attr_val)))
   if callable(matcher):
@@ -741,23 +740,17 @@ class Resource(SerializableMixin):
     elif has_metadata is not None:
       has_keys = list(has_metadata)
 
-    top_level_attr_matchers = {
-      k: v
-      for k, v in dict(
-        name=name,
-        model=model,
-        category=category,
-      ).items()
-      if v is not None
-    }
-
     for resource in candidates:
       if any(k not in resource.metadata for k in has_keys):
         continue
 
-      if any(
-        not _match_top_level_attribute(resource, k, v) for k, v in top_level_attr_matchers.items()
-      ):
+      if name is not None and not _match_attribute_value(resource.name, name):
+        continue
+
+      if model is not None and not _match_attribute_value(resource.model, model):
+        continue
+
+      if category is not None and not _match_attribute_value(resource.category, category):
         continue
 
       if metadata is not None and any(

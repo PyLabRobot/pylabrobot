@@ -4,9 +4,11 @@ import warnings
 from collections import OrderedDict
 from typing import (
   TYPE_CHECKING,
+  Any,
   Dict,
   List,
   Literal,
+  Mapping,
   Optional,
   Sequence,
   Tuple,
@@ -40,6 +42,7 @@ class Plate(Liddable, ItemizedResource["Well"]):
     model: Optional[str] = None,
     plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
     stacking_z_height: Optional[float] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Initialize a Plate resource.
 
@@ -64,6 +67,7 @@ class Plate(Liddable, ItemizedResource["Well"]):
       ordering=ordering,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self.plate_type = plate_type
     self.stacking_z_height = stacking_z_height

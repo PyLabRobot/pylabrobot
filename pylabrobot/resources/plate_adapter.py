@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import List, Optional
+from typing import Any, List, Mapping, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
@@ -75,6 +75,7 @@ class PlateAdapter(Resource):
     category: Optional[str] = None,
     model: Optional[str] = None,
     adapter_hole_size_z=None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name=name,
@@ -83,6 +84,7 @@ class PlateAdapter(Resource):
       size_z=size_z,
       category=category or "plate_adapter",
       model=model,
+      metadata=metadata,
     )
 
     if adapter_hole_size_z is not None:

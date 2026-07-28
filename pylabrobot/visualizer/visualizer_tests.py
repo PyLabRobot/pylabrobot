@@ -274,3 +274,45 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
       call_args["data"]["plate_01_well_H12"]["volume"],
       500,
     )
+
+
+class TestVisualizerMetadataHandling(unittest.TestCase):
+  """Tests for visualizer metadata handling."""
+
+  def test_serialize_resource_tree_preserves_and_stringifies_metadata(self):
+    deck = Resource(
+      size_x=100,
+      size_y=100,
+      size_z=100,
+      name="deck",
+      metadata={"level": 0, "fn": lambda x: x},
+    )
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.metadata = {"level": 1, "unserializable": object()}
+    plate.get_well("A1").metadata = {"level": 2, "sample_id": 123}
+    deck.assign_child_resource(plate, location=Coordinate(0, 0, 0))
+
+    serialized = _serialize_resource_tree(deck)
+    self.assertIn("metadata", serialized)
+    self.assertEqual(serialized["metadata"]["level"], 0)
+
+    plate_serialized = serialized["children"][0]
+    self.assertIn("metadata", plate_serialized)
+    self.assertEqual(plate_serialized["metadata"]["level"], 1)
+
+    well_serialized = plate_serialized["children"][0]
+    self.assertIn("metadata", well_serialized)
+    self.assertEqual(well_serialized["metadata"]["level"], 2)
+    self.assertEqual(well_serialized["metadata"]["sample_id"], 123)
+
+    # Ensure _assemble_command succeeds and round-trips via json.loads
+    vis = Visualizer(deck, open_browser=False)
+    payload, _ = vis._assemble_command(
+      "set_root_resource", {"resource": _serialize_resource_tree(deck)}
+    )
+    decoded = json.loads(payload)["data"]["resource"]
+    self.assertEqual(decoded["name"], "deck")
+    self.assertEqual(decoded["metadata"]["level"], 0)
+    self.assertIsInstance(decoded["metadata"]["fn"], str)
+    self.assertEqual(decoded["children"][0]["metadata"]["level"], 1)
+    self.assertEqual(decoded["children"][0]["children"][0]["metadata"]["sample_id"], 123)

@@ -294,7 +294,11 @@ class Visualizer:
     event: str,
     data: Dict[str, Any],
   ) -> Tuple[str, str]:
-    """Assemble a command into standard JSON form."""
+    """Assemble a command into standard JSON form.
+
+    Will fall-back to stringifying non-JSON-serializable types.
+    These can potentially exist in resource metadata.
+    """
     id_ = self._generate_id()
     command_data = {
       "id": id_,
@@ -302,7 +306,10 @@ class Visualizer:
       "data": data,
       "event": event,
     }
-    return json.dumps(_sanitize_floats(command_data)), id_
+    return json.dumps(
+      _sanitize_floats(command_data),
+      default=str,
+    ), id_
 
   def has_connection(self) -> bool:
     """Return `True` if a websocket connection has been established."""
