@@ -1,28 +1,59 @@
-from pylabrobot.capabilities.capability import Capability, need_capability_ready
-from pylabrobot.resources import Plate, PlateHolder
+from typing import Optional
 
-from .backend import AutomatedRetrievalBackend
+from pylabrobot.capabilities.capability import Capability, CapabilityBackend
+from pylabrobot.resources import Plate, PlateHolder, ResourceNotFoundError
 
 
 class AutomatedRetrieval(Capability):
-  """Automated plate retrieval/storage capability.
+  """Shared base for storage-retrieval capabilities that move plates to and from a single
+  transfer position -- the "loading tray".
 
-  See :doc:`/user_guide/capabilities/automated-retrieval` for a walkthrough.
+  Concrete capabilities differ only in how storage locations are addressed:
+
+  * :class:`~pylabrobot.capabilities.automated_retrieval.RandomAccessRetrieval` is *random access*
+    -- individually addressable rack sites.
+  * :class:`~pylabrobot.capabilities.automated_retrieval.StackerRetrieval` is *sequential* --
+    single-ended LIFO stacks.
+
+  This base owns the loading tray and the small amount of plate-movement plumbing the two share
+  (loading-tray access and the summary table), so the concrete capabilities only implement their
+  location-addressing logic.
   """
 
-  def __init__(self, backend: AutomatedRetrievalBackend):
+  def __init__(self, backend: CapabilityBackend, loading_tray: Optional[PlateHolder] = None):
     super().__init__(backend=backend)
-    self.backend: AutomatedRetrievalBackend = backend
+    self.loading_tray = loading_tray
 
-  @need_capability_ready
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
-    """Retrieve a plate from storage and place it on the loading tray."""
-    await self.backend.fetch_plate_to_loading_tray(plate)
+  def _require_loading_tray(self) -> PlateHolder:
+    if self.loading_tray is None:
+      raise RuntimeError("No loading tray configured for this capability.")
+    return self.loading_tray
 
-  @need_capability_ready
-  async def store_plate(self, plate: Plate, site: PlateHolder):
-    """Store a plate from the loading tray into the given site."""
-    await self.backend.store_plate(plate, site)
+  def _plate_on_loading_tray(self) -> Plate:
+    tray = self._require_loading_tray()
+    plate = tray.resource
+    if not isinstance(plate, Plate):
+      raise ResourceNotFoundError("No plate on the loading tray.")
+    return plate
 
-  async def _on_stop(self):
-    await super()._on_stop()
+  @staticmethod
+  def _pretty_table(header, *columns) -> str:
+    col_widths = [
+      max(len(str(item)) for item in [header[i]] + list(columns[i])) for i in range(len(header))
+    ]
+
+    def format_row(row, border="|") -> str:
+      return (
+        f"{border} "
+        + " | ".join(f"{str(row[i]).ljust(col_widths[i])}" for i in range(len(row)))
+        + f" {border}"
+      )
+
+    def separator_line(cross: str = "+", line: str = "-") -> str:
+      return cross + cross.join(line * (width + 2) for width in col_widths) + cross
+
+    table = [separator_line(), format_row(header), separator_line()]
+    for row in zip(*columns):
+      table.append(format_row(row))
+    table.append(separator_line())
+    return "\n".join(table)

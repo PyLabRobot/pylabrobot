@@ -11,7 +11,9 @@ except ImportError:
   HAS_PYLIBFTDI = False
   FtdiError = Exception  # type: ignore[misc,assignment]
 
+from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
 from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
+from pylabrobot.capabilities.loading_tray import LoadingTray
 from pylabrobot.capabilities.plate_reading.absorbance import Absorbance
 from pylabrobot.capabilities.plate_reading.fluorescence import Fluorescence
 from pylabrobot.capabilities.plate_reading.luminescence import Luminescence
@@ -130,7 +132,21 @@ class SynergyH1(Resource, Device):
     self.luminescence = Luminescence(backend=backend)
     self.fluorescence = Fluorescence(backend=backend)
     self.temperature = TemperatureController(backend=backend)
-    self._capabilities = [self.absorbance, self.luminescence, self.fluorescence, self.temperature]
+    self.loading_tray = LoadingTray(
+      backend=BioTekLoadingTrayBackend(driver=backend),
+      name=name + "_loading_tray",
+      size_x=127.76,
+      size_y=85.48,
+      size_z=0,
+      child_location=Coordinate.zero(),
+    )
+    self._capabilities = [
+      self.absorbance,
+      self.luminescence,
+      self.fluorescence,
+      self.temperature,
+      self.loading_tray,
+    ]
 
     self.plate_holder = PlateHolder(
       name=name + "_plate_holder",
@@ -144,9 +160,3 @@ class SynergyH1(Resource, Device):
 
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Device.serialize(self)}
-
-  async def open(self, slow: bool = False) -> None:
-    await self.driver.open(slow=slow)
-
-  async def close(self, slow: bool = False) -> None:
-    await self.driver.close(slow=slow)

@@ -10,7 +10,9 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Literal, Optional
 
-from pylabrobot.capabilities.bulk_dispensers.peristaltic.backend8 import PeristalticDispensingBackend8
+from pylabrobot.capabilities.bulk_dispensers.peristaltic.backend8 import (
+  PeristalticDispensingBackend8,
+)
 from pylabrobot.capabilities.capability import BackendParams
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Plate
@@ -190,13 +192,18 @@ class EL406PeristalticDispensingBackend8(PeristalticDispensingBackend8):
       wire_volume, wire_duration = volume, 0
 
     validate_peristaltic_flow_rate(p.flow_rate)
-    logger.info("Peristaltic prime: %.1f uL, flow rate %s, cassette %s",
-                wire_volume, p.flow_rate, p.cassette)
+    logger.info(
+      "Peristaltic prime: %.1f uL, flow rate %s, cassette %s", wire_volume, p.flow_rate, p.cassette
+    )
 
     data = self._build_peristaltic_prime_command(
-      plate=plate, volume=wire_volume, duration=wire_duration,
+      plate=plate,
+      volume=wire_volume,
+      duration=wire_duration,
       flow_rate=PERISTALTIC_FLOW_RATE_MAP[p.flow_rate],
-      reverse=True, cassette=p.cassette, pump=1,
+      reverse=True,
+      cassette=p.cassette,
+      pump=1,
     )
     framed_command = build_framed_message(command=0x90, data=data)
     async with self._driver.batch():
@@ -246,13 +253,18 @@ class EL406PeristalticDispensingBackend8(PeristalticDispensingBackend8):
       wire_volume, wire_duration = volume, 0
 
     validate_peristaltic_flow_rate(p.flow_rate)
-    logger.info("Peristaltic purge: %.1f uL, flow rate %s, cassette %s",
-                wire_volume, p.flow_rate, p.cassette)
+    logger.info(
+      "Peristaltic purge: %.1f uL, flow rate %s, cassette %s", wire_volume, p.flow_rate, p.cassette
+    )
 
     data = self._build_peristaltic_prime_command(
-      plate=plate, volume=wire_volume, duration=wire_duration,
+      plate=plate,
+      volume=wire_volume,
+      duration=wire_duration,
       flow_rate=PERISTALTIC_FLOW_RATE_MAP[p.flow_rate],
-      reverse=True, cassette=p.cassette, pump=1,
+      reverse=True,
+      cassette=p.cassette,
+      pump=1,
     )
     framed_command = build_framed_message(command=0x91, data=data)
     async with self._driver.batch():
@@ -340,14 +352,23 @@ class EL406PeristalticDispensingBackend8(PeristalticDispensingBackend8):
       self._validate_dispense_params(plate, volume, columns, p)
     )
 
-    logger.info("Peristaltic dispense: %.1f uL, flow rate %s, cassette %s",
-                volume, p.flow_rate, p.cassette)
+    logger.info(
+      "Peristaltic dispense: %.1f uL, flow rate %s, cassette %s", volume, p.flow_rate, p.cassette
+    )
 
     data = self._build_peristaltic_dispense_command(
-      plate=plate, volume=volume, flow_rate=flow_rate_enum, cassette=p.cassette,
-      offset_x=offset_x_steps, offset_y=offset_y_steps, offset_z=offset_z_steps,
-      pre_dispense_volume=p.pre_dispense_volume, num_pre_dispenses=p.num_pre_dispenses,
-      column_mask=column_mask, rows=p.rows, pump=1,
+      plate=plate,
+      volume=volume,
+      flow_rate=flow_rate_enum,
+      cassette=p.cassette,
+      offset_x=offset_x_steps,
+      offset_y=offset_y_steps,
+      offset_z=offset_z_steps,
+      pre_dispense_volume=p.pre_dispense_volume,
+      num_pre_dispenses=p.num_pre_dispenses,
+      column_mask=column_mask,
+      rows=p.rows,
+      pump=1,
     )
     framed_command = build_framed_message(command=0x8F, data=data)
     async with self._driver.batch():

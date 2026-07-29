@@ -47,9 +47,15 @@ class SCILADriver(Driver):
   plus device-level operations (drawers, status, CO2/valves).
   """
 
-  def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
+  def __init__(
+    self,
+    scila_ip: str,
+    client_ip: Optional[str] = None,
+    gas_mixer_connected: bool = True,
+  ) -> None:
     super().__init__()
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
+    self.gas_mixer_connected = gas_mixer_connected
 
   async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
     await self._sila_interface.setup()
@@ -111,6 +117,7 @@ class SCILADriver(Driver):
       **super().serialize(),
       "scila_ip": self._sila_interface.machine_ip,
       "client_ip": self._sila_interface.client_ip,
+      "gas_mixer_connected": self.gas_mixer_connected,
     }
 
 

@@ -2,7 +2,18 @@
 
 import contextlib
 import logging
-from typing import Awaitable, Callable, Dict, Generator, List, Literal, Optional, Sequence, Tuple, Union
+from typing import (
+  Awaitable,
+  Callable,
+  Dict,
+  Generator,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  Union,
+)
 
 from pylabrobot.capabilities.capability import BackendParams, Capability, need_capability_ready
 from pylabrobot.resources import (
@@ -836,9 +847,7 @@ class PIP(Capability):
     clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}
     for idx, tip_spot in enumerate(tip_spots):
       assert tip_spot.location is not None, "TipSpot location must be set"
-      clusters_by_x.setdefault(tip_spot.location.x, []).append(
-        (tip_spot, use_channels[idx], idx)
-      )
+      clusters_by_x.setdefault(tip_spot.location.x, []).append((tip_spot, use_channels[idx], idx))
     sorted_clusters = [clusters_by_x[x] for x in sorted(clusters_by_x)]
 
     for cluster in sorted_clusters:
@@ -861,14 +870,10 @@ class PIP(Capability):
         spots = [ts for ts, _, _ in live]
         chans = [uc for _, uc, _ in live]
         try:
-          await self.drop_tips(
-            spots, use_channels=chans, backend_params=drop_backend_params
-          )
+          await self.drop_tips(spots, use_channels=chans, backend_params=drop_backend_params)
         except Exception as e:
           assert cluster[0][0].location is not None
-          logger.warning(
-            "drop_tips failed for cluster at x=%s: %s", cluster[0][0].location.x, e
-          )
+          logger.warning("drop_tips failed for cluster at x=%s: %s", cluster[0][0].location.x, e)
 
     return {ts.name: flag for ts, flag in zip(tip_spots, presence_flags)}
 
@@ -876,9 +881,7 @@ class PIP(Capability):
   async def probe_tip_inventory(
     self,
     tip_spots: List[TipSpot],
-    probing_fn: Optional[
-      Callable[[List[TipSpot], List[int]], Awaitable[Dict[str, bool]]]
-    ] = None,
+    probing_fn: Optional[Callable[[List[TipSpot], List[int]], Awaitable[Dict[str, bool]]]] = None,
     use_channels: Optional[List[int]] = None,
   ) -> Dict[str, bool]:
     """Probe presence on a long list of tip spots, batching by available channels."""
@@ -936,16 +939,10 @@ class PIP(Capability):
       if not (any(tip_status) and not all(tip_status)):
         continue
 
-      tipspots_w_tips = [
-        ts for has_tip, ts in zip(tip_status, tip_rack.get_all_items()) if has_tip
-      ]
+      tipspots_w_tips = [ts for has_tip, ts in zip(tip_status, tip_rack.get_all_items()) if has_tip]
       current_model = hash(tipspots_w_tips[0].tracker.get_tip())
-      if not all(
-        hash(ts.tracker.get_tip()) == current_model for ts in tipspots_w_tips[1:]
-      ):
-        raise ValueError(
-          f"Tip rack {tip_rack.name} has mixed tip models, cannot consolidate."
-        )
+      if not all(hash(ts.tracker.get_tip()) == current_model for ts in tipspots_w_tips[1:]):
+        raise ValueError(f"Tip rack {tip_rack.name} has mixed tip models, cannot consolidate.")
       num_empty = len(tip_status) - len(tipspots_w_tips)
       clusters_by_model.setdefault(current_model, []).append((tip_rack, num_empty))
 
@@ -955,17 +952,13 @@ class PIP(Capability):
     for rack_list in clusters_by_model.values():
       logger.info("Consolidating: %s", ", ".join(rack.name for rack, _ in rack_list))
 
-      all_tip_spots_list = [
-        ts for tip_rack, _ in rack_list for ts in tip_rack.get_all_items()
-      ]
+      all_tip_spots_list = [ts for tip_rack, _ in rack_list for ts in tip_rack.get_all_items()]
       current_tip_presence_list = [ts.has_tip() for ts in all_tip_spots_list]
       total_length = len(all_tip_spots_list)
       num_tips = sum(current_tip_presence_list)
       target_tip_presence_list = [i < num_tips for i in range(total_length)]
 
-      tip_movement = [
-        c - t for c, t in zip(current_tip_presence_list, target_tip_presence_list)
-      ]
+      tip_movement = [c - t for c, t in zip(current_tip_presence_list, target_tip_presence_list)]
       origin_idxs = [i for i, v in enumerate(tip_movement) if v == 1]
       target_idxs = [i for i, v in enumerate(tip_movement) if v == -1]
       all_origin_tip_spots = [all_tip_spots_list[i] for i in origin_idxs]
@@ -988,7 +981,8 @@ class PIP(Capability):
       if use_channels is None:
         num_channels_available = len(
           [
-            c for c in range(self.backend.num_channels)
+            c
+            for c in range(self.backend.num_channels)
             if self.backend.can_pick_up_tip(c, current_tip_model)
           ]
         )

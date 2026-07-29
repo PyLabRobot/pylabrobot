@@ -2,6 +2,7 @@ from typing import Optional
 
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.legacy.shaking import Shaker
+from pylabrobot.legacy.shaking.shaker import _NewShaker, _ShakingAdapter
 from pylabrobot.legacy.temperature_controlling import TemperatureController
 from pylabrobot.resources.coordinate import Coordinate
 
@@ -33,6 +34,12 @@ class HeaterShaker(TemperatureController, Shaker):
       model=model,
     )
     self.backend: HeaterShakerBackend = backend  # fix type
+    self._shaking_cap = _NewShaker(backend=_ShakingAdapter(backend))
+
+  async def setup(self, **backend_kwargs):
+    await Machine.setup(self, **backend_kwargs)
+    await self._tc_cap._on_setup()
+    await self._shaking_cap._on_setup()
 
   async def stop(self):
     await self.deactivate()

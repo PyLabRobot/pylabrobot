@@ -14,8 +14,7 @@ contributing-to-docs
 :maxdepth: 2
 :caption: Adding Backends/Drivers
 
-new-machine-type
-new-concrete-backend
+device-driver-guide
 ```
 
 <hr>

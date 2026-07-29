@@ -16,31 +16,92 @@ Sign conventions follow right-hand rule about +Z (CCW positive looking down).
 """
 
 from dataclasses import dataclass
-from math import atan2, cos, hypot, pi, radians, degrees, sin
-from typing import TYPE_CHECKING
+from math import atan2, cos, degrees, hypot, pi, radians, sin
+from typing import Literal, Optional, Tuple
 
-from pylabrobot.capabilities.arms.standard import JointPose
+from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
+from pylabrobot.resources import Coordinate, Rotation
 
-if TYPE_CHECKING:
-  from pylabrobot.brooks.precise_flex import PreciseFlexCartesianPose
+# ---------------------------------------------------------------------------
+# Value types
+# ---------------------------------------------------------------------------
+
+
+ElbowOrientation = Literal["right", "left"]
+Wrist = Literal["cw", "ccw"]
+
+
+# -- value types, device params & errors -----------------------------------
+
+
+@dataclass
+class PreciseFlexCartesianPose(CartesianPose):
+  rail_position: Optional[float] = None
+  orientation: Optional[ElbowOrientation] = None
+  wrist: Optional[Wrist] = None
+
+
+@dataclass(frozen=True)
+class WorkEnvelope:
+  """Reachable tool-tip envelope: an annulus about the shoulder, over a Z range (mm)."""
+
+  inner: float
+  outer: float
+  zmin: float
+  zmax: float
+
+
+# ---------------------------------------------------------------------------
+# Kinematic parameters
+# ---------------------------------------------------------------------------
+
+
+# Known PF400 link-length configs (l1 = shoulder->elbow, l2 = elbow->wrist), in mm, per the 615287
+# System Dimensions - the single source of truth for the standard vs extended arm.
+ARM_LINKS_STANDARD = (225.0, 210.0)
+ARM_LINKS_EXTENDED = (302.0, 289.0)
+_LINK_MATCH_TOLERANCE = 5.0  # mm; per-link calibration spread allowed when matching a read
 
 
 @dataclass
 class PF400Params:
   """Calibrated link lengths; sub-mm FK residual on a held-out probe set."""
 
-  l1: float = 302.0  # shoulder -> elbow [mm]
-  l2: float = 289.0  # elbow -> wrist [mm]
+  l1: float = ARM_LINKS_EXTENDED[0]  # shoulder -> elbow [mm]
+  l2: float = ARM_LINKS_EXTENDED[1]  # elbow -> wrist [mm]
   gripper_length: float = 162.0  # wrist -> TCP [mm]
   gripper_z_offset: float = 0.0
   eps: float = 1e-6
 
 
-class IKError(ValueError):
-  """Target pose is unreachable."""
+def _classify_pf400_reach(links: Tuple[float, float]) -> Literal["standard", "extended", "unknown"]:
+  """Classify (l1, l2) link lengths as the standard or extended PF400 arm, or "unknown".
+
+  "unknown" means the lengths match neither known config - a sign the arm's device-stored link
+  lengths may have been changed.
+
+  Args:
+    links: (l1, l2) link lengths in mm (inner shoulder -> elbow, outer elbow -> wrist).
+  Returns:
+    "standard", "extended", or "unknown".
+  """
+  l1, l2 = links
+  tol = _LINK_MATCH_TOLERANCE
+  if abs(l1 - ARM_LINKS_STANDARD[0]) <= tol and abs(l2 - ARM_LINKS_STANDARD[1]) <= tol:
+    return "standard"
+  if abs(l1 - ARM_LINKS_EXTENDED[0]) <= tol and abs(l2 - ARM_LINKS_EXTENDED[1]) <= tol:
+    return "extended"
+  return "unknown"
 
 
-def fk(joints: JointPose, p: PF400Params) -> "PreciseFlexCartesianPose":
+# ---------------------------------------------------------------------------
+# Forward / inverse kinematics
+# ---------------------------------------------------------------------------
+
+# -- forward kinematics ----------------------------------------------------
+
+
+def fk(joints: JointPose, p: PF400Params) -> PreciseFlexCartesianPose:
   """Forward kinematics.
 
   Args:
@@ -51,9 +112,6 @@ def fk(joints: JointPose, p: PF400Params) -> "PreciseFlexCartesianPose":
     orientation/wrist derived from the joint configuration (J3 sign and
     wrapped J4 sign, respectively).
   """
-  from pylabrobot.brooks.precise_flex import PreciseFlexCartesianPose
-  from pylabrobot.resources import Coordinate, Rotation
-
   j1 = joints[1]
   j2 = radians(joints[2])
   j3 = radians(joints[3])
@@ -64,8 +122,8 @@ def fk(joints: JointPose, p: PF400Params) -> "PreciseFlexCartesianPose":
   y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.gripper_length * sin(yaw)
   z = j1 + p.gripper_z_offset
   j3_wrapped = (joints[3] + 180) % 360 - 180
-  orientation = "right" if j3_wrapped >= 0 else "left"
-  wrist = "ccw" if joints[4] >= 0 else "cw"
+  orientation: ElbowOrientation = "right" if j3_wrapped >= 0 else "left"
+  wrist: Wrist = "ccw" if joints[4] >= 0 else "cw"
   return PreciseFlexCartesianPose(
     location=Coordinate(x, y, z),
     rotation=Rotation(-180, 90, z=degrees(yaw)),
@@ -75,7 +133,14 @@ def fk(joints: JointPose, p: PF400Params) -> "PreciseFlexCartesianPose":
   )
 
 
-def ik(pose: "PreciseFlexCartesianPose", p: PF400Params) -> JointPose:
+# -- inverse kinematics ----------------------------------------------------
+
+
+class IKError(ValueError):
+  """Target pose is unreachable."""
+
+
+def ik(pose: PreciseFlexCartesianPose, p: PF400Params) -> JointPose:
   """Inverse kinematics.
 
   Args:

@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
 from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
 from pylabrobot.agilent.biotek.plate_readers.cytation import (
   CytationImagingConfig,
@@ -37,6 +38,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     self._microscopy_backend = CytationMicroscopyBackend(
       driver=self._new, imaging_config=imaging_config
     )
+    self._loading_tray = BioTekLoadingTrayBackend(driver=self._new)
 
   @property
   def imaging_config(self):
@@ -72,7 +74,9 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     return self._microscopy_backend.filters
 
   async def close(self, plate=None, slow=False):
-    await self._new.close(plate=plate, slow=slow)
+    await self._loading_tray.close(
+      backend_params=BioTekLoadingTrayBackend.CloseParams(slow=slow), resource=plate
+    )
 
   def start_acquisition(self):
     self._microscopy_backend.start_acquisition()

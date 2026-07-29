@@ -12,11 +12,11 @@ from pylabrobot.capabilities.liquid_handling.pip import PIP
 from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.hamilton import HamiltonDeck, STARDeck, STARLetDeck
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers, HamiltonSTARDeck
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 
 from .chatterbox import STARChatterboxDriver
 from .core import CoreGripper
-from .driver import STARDriver
+from .driver import STARConfiguration, STARDriver
 
 
 class _HamiltonSTAR(Device):
@@ -26,8 +26,17 @@ class _HamiltonSTAR(Device):
   after hardware discovery during setup().
   """
 
-  def __init__(self, deck: HamiltonDeck, chatterbox: bool = False):
-    driver = STARChatterboxDriver(deck=deck) if chatterbox else STARDriver(deck=deck)
+  def __init__(
+    self,
+    deck: HamiltonDeck,
+    chatterbox: bool = False,
+    configuration: Optional[STARConfiguration] = None,
+  ):
+    driver = (
+      STARChatterboxDriver(deck=deck, configuration=configuration)
+      if chatterbox
+      else STARDriver(deck=deck, configuration=configuration)
+    )
     super().__init__(driver=driver)
     self.driver: STARDriver = driver
     self.deck = deck
@@ -212,12 +221,12 @@ class _HamiltonSTAR(Device):
 class STAR(_HamiltonSTAR):
   """Hamilton STAR liquid handler."""
 
-  def __init__(self, chatterbox: bool = False):
-    super().__init__(deck=STARDeck(), chatterbox=chatterbox)
+  def __init__(self, chatterbox: bool = False, configuration: Optional[STARConfiguration] = None):
+    super().__init__(deck=STARDeck(), chatterbox=chatterbox, configuration=configuration)
 
 
 class STARLet(_HamiltonSTAR):
   """Hamilton STARLet liquid handler."""
 
-  def __init__(self, chatterbox: bool = False):
-    super().__init__(deck=STARLetDeck(), chatterbox=chatterbox)
+  def __init__(self, chatterbox: bool = False, configuration: Optional[STARConfiguration] = None):
+    super().__init__(deck=STARLetDeck(), chatterbox=chatterbox, configuration=configuration)

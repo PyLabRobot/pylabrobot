@@ -11,7 +11,7 @@ import numpy  # noqa: E402
 
 from pylabrobot.capabilities.microscopy.backend import MicroscopyBackend
 from pylabrobot.capabilities.microscopy.chatterbox import MicroscopyChatterboxBackend
-from pylabrobot.capabilities.microscopy.microscopy import Microscopy
+from pylabrobot.capabilities.microscopy.microscopy import Microscopy, white_balance
 from pylabrobot.capabilities.microscopy.standard import (
   Exposure,
   FocalPosition,
@@ -169,6 +169,23 @@ class TestChatterboxBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(result.images), 1)
     self.assertAlmostEqual(result.exposure_time, 10.0)
     self.assertAlmostEqual(result.focal_height, 1.0)
+
+
+class TestWhiteBalance(unittest.TestCase):
+  def test_neutralizes_color_cast(self):
+    # Uniform magenta field (green at half of red/blue) should come back neutral gray.
+    img = numpy.zeros((8, 8, 3), dtype=numpy.uint8)
+    img[..., 0], img[..., 1], img[..., 2] = 200, 100, 200
+    out = white_balance(img)
+    self.assertEqual(out.shape, (8, 8, 3))
+    self.assertEqual(out.dtype, numpy.uint8)
+    means = [int(out[..., k].mean()) for k in range(3)]
+    self.assertEqual(means[0], means[1])
+    self.assertEqual(means[1], means[2])
+
+  def test_rejects_non_rgb_image(self):
+    with self.assertRaises(ValueError):
+      white_balance(numpy.zeros((8, 8), dtype=numpy.uint8))
 
 
 if __name__ == "__main__":

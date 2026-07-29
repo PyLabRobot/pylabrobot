@@ -102,7 +102,11 @@ class USB(IOBase):
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
-    self._executor: Optional[ThreadPoolExecutor] = None
+    # Reads and writes use separate single-worker executors. The reader thread parks a long
+    # blocking read on its worker; sharing one worker with writes would let that read starve
+    # (and deadlock against) the write whose response the read is waiting for.
+    self._read_executor: Optional[ThreadPoolExecutor] = None
+    self._write_executor: Optional[ThreadPoolExecutor] = None
 
     # unique id in the logs
     self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
@@ -127,10 +131,10 @@ class USB(IOBase):
     loop = asyncio.get_running_loop()
     write_endpoint = self.write_endpoint
     dev = self.dev
-    if self._executor is None or dev is None or write_endpoint is None:
+    if self._write_executor is None or dev is None or write_endpoint is None:
       raise RuntimeError(f"Call setup() first for USB device '{self.human_readable_device_name}'.")
     await loop.run_in_executor(
-      self._executor,
+      self._write_executor,
       lambda: dev.write(
         write_endpoint, data, timeout=int(timeout * 1000)
       ),  # PyUSB expects timeout in milliseconds
@@ -138,7 +142,7 @@ class USB(IOBase):
     if len(data) % write_endpoint.wMaxPacketSize == 0:
       # send a zero-length packet to indicate the end of the transfer
       await loop.run_in_executor(
-        self._executor,
+        self._write_executor,
         lambda: dev.write(write_endpoint, b"", timeout=int(timeout * 1000)),
       )
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
@@ -265,9 +269,9 @@ class USB(IOBase):
       )
 
     loop = asyncio.get_running_loop()
-    if self._executor is None or self.dev is None:
+    if self._read_executor is None or self.dev is None:
       raise RuntimeError(f"Call setup() first for USB device '{self.human_readable_device_name}'.")
-    return await loop.run_in_executor(self._executor, read_or_timeout)
+    return await loop.run_in_executor(self._read_executor, read_or_timeout)
 
   def get_available_devices(self) -> List["usb.core.Device"]:
     """Get a list of available devices that match the specified vendor and product IDs, and serial
@@ -447,7 +451,8 @@ class USB(IOBase):
       while self._read_packet() is not None:
         pass
 
-    self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
+    self._read_executor = ThreadPoolExecutor(max_workers=self.max_workers)
+    self._write_executor = ThreadPoolExecutor(max_workers=self.max_workers)
 
   async def stop(self):
     """Close the USB connection to the machine. Safe to call multiple times."""
@@ -458,9 +463,10 @@ class USB(IOBase):
     usb.util.dispose_resources(self.dev)
     self.dev = None
 
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+    for executor in (self._read_executor, self._write_executor):
+      if executor is not None:
+        executor.shutdown(wait=True)
+    self._read_executor = self._write_executor = None
 
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""

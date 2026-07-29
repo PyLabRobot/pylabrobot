@@ -134,8 +134,9 @@ class EL406SyringeDispensingBackend8(SyringeDispensingBackend8):
 
     column_mask = columns_to_column_mask(columns, plate_wells=plate_well_count(plate))
 
-    logger.info("Syringe dispense: %.1f uL from syringe %s, flow rate %d",
-                volume, p.syringe, p.flow_rate)
+    logger.info(
+      "Syringe dispense: %.1f uL from syringe %s, flow rate %d", volume, p.syringe, p.flow_rate
+    )
 
     # Convert mm → 0.1mm steps for wire protocol
     offset_x_steps = round(p.offset_x * 10)
@@ -143,11 +144,18 @@ class EL406SyringeDispensingBackend8(SyringeDispensingBackend8):
     offset_z_steps = round(p.offset_z * 10)
 
     data = self._build_syringe_dispense_command(
-      plate=plate, volume=volume, syringe=p.syringe, flow_rate=p.flow_rate,
-      offset_x=offset_x_steps, offset_y=offset_y_steps, offset_z=offset_z_steps,
-      pump_delay_ms=pump_delay_ms, pre_dispense=p.pre_dispense,
+      plate=plate,
+      volume=volume,
+      syringe=p.syringe,
+      flow_rate=p.flow_rate,
+      offset_x=offset_x_steps,
+      offset_y=offset_y_steps,
+      offset_z=offset_z_steps,
+      pump_delay_ms=pump_delay_ms,
+      pre_dispense=p.pre_dispense,
       pre_dispense_volume=p.pre_dispense_volume,
-      num_pre_dispenses=p.num_pre_dispenses, column_mask=column_mask,
+      num_pre_dispenses=p.num_pre_dispenses,
+      column_mask=column_mask,
     )
     framed_command = build_framed_message(command=0xA1, data=data)
     async with self._driver.batch():
@@ -222,13 +230,20 @@ class EL406SyringeDispensingBackend8(SyringeDispensingBackend8):
 
     logger.info(
       "Syringe prime: syringe %s, %.1f uL, flow rate %d, %d refills",
-      p.syringe, volume, p.flow_rate, p.refills,
+      p.syringe,
+      volume,
+      p.flow_rate,
+      p.refills,
     )
 
     data = self._build_syringe_prime_command(
-      plate=plate, volume=volume, syringe=p.syringe,
-      flow_rate=p.flow_rate, refills=p.refills,
-      pump_delay_ms=pump_delay_ms, submerge_tips=p.submerge_tips,
+      plate=plate,
+      volume=volume,
+      syringe=p.syringe,
+      flow_rate=p.flow_rate,
+      refills=p.refills,
+      pump_delay_ms=pump_delay_ms,
+      submerge_tips=p.submerge_tips,
       submerge_duration_min=submerge_duration_min,
     )
     framed_command = build_framed_message(command=0xA2, data=data)

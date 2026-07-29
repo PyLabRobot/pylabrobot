@@ -326,3 +326,31 @@ def evaluate_focus_nvmg_sobel(image) -> float:
   mean_gm = np.mean(gradient_magnitude)
   var_gm = np.var(gradient_magnitude)
   return float(var_gm / (mean_gm + 1e-6))
+
+
+def white_balance(image, percentile: float = 98.0):
+  """White-balance an RGB image using the white-patch (bright background) assumption.
+
+  Scales each channel so its high-percentile value -- the bright, ideally neutral background --
+  matches the brightest channel, neutralizing a color cast while preserving relative color. Handy
+  for color-brightfield images, whose three LED channels differ in intensity/response (e.g. green
+  is absorbed by phenol-red media), giving the raw stack a magenta cast.
+
+  Args:
+    image: an ``(H, W, 3)`` RGB array.
+    percentile: per-channel percentile used as the "white" reference (default 98).
+
+  Returns:
+    An ``(H, W, 3)`` uint8 array, white-balanced.
+  """
+  if np is None:
+    raise ImportError("numpy is required for white_balance")
+
+  arr = np.asarray(image, dtype=np.float32)
+  if arr.ndim != 3 or arr.shape[-1] != 3:
+    raise ValueError(f"expected an (H, W, 3) RGB image, got shape {arr.shape}")
+
+  ref = np.percentile(arr.reshape(-1, 3), percentile, axis=0)
+  ref[ref == 0] = 1.0  # avoid divide-by-zero on an empty channel
+  gains = ref.max() / ref
+  return np.clip(arr * gains, 0, 255).astype(np.uint8)

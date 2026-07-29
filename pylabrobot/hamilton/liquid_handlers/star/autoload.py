@@ -398,8 +398,7 @@ class STARAutoload:
     import warnings as _warnings
 
     _warnings.warn(
-      "set_barcode_type is deprecated; use set_1d_barcode_type with a "
-      "Barcode1DSymbology instead.",
+      "set_barcode_type is deprecated; use set_1d_barcode_type with a Barcode1DSymbology instead.",
       DeprecationWarning,
       stacklevel=2,
     )

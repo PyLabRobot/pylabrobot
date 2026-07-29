@@ -74,9 +74,7 @@ class HamiltonHeaterShakerBackend(
       if await self.request_is_shaking():
         break
       if timeout is not None and time.time() - now > timeout:
-        logger.error(
-          "[HHS %d] failed to start shaking within %ss timeout", self.index, timeout
-        )
+        logger.error("[HHS %d] failed to start shaking within %ss timeout", self.index, timeout)
         raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):

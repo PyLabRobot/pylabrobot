@@ -7,11 +7,11 @@ from pylabrobot.io.usb import USB
 from pylabrobot.resources import Coordinate, Plate, Well, create_ordered_items_2d
 from pylabrobot.tecan.infinite.driver import TecanInfiniteDriver
 from pylabrobot.tecan.infinite.protocol import (
+  _absorbance_od_calibrated,
   _AbsorbanceRunDecoder,
+  _consume_leading_ascii_frame,
   _FluorescenceRunDecoder,
   _LuminescenceRunDecoder,
-  _absorbance_od_calibrated,
-  _consume_leading_ascii_frame,
   frame_command,
   is_terminal_frame,
 )
@@ -195,7 +195,9 @@ class TestAbsorbanceBackend(unittest.IsolatedAsyncioTestCase):
     with patch.object(driver, "_await_measurements", side_effect=mock_await):
       with patch.object(driver, "_await_scan_terminal", new_callable=AsyncMock):
         results = await backend.read_absorbance(
-          plate=self.plate, wells=[], wavelength=600,
+          plate=self.plate,
+          wells=[],
+          wavelength=600,
           backend_params=TecanInfiniteAbsorbanceParams(),
         )
 
@@ -234,8 +236,11 @@ class TestFluorescenceBackend(unittest.IsolatedAsyncioTestCase):
     with patch.object(driver, "_await_measurements", side_effect=mock_await):
       with patch.object(driver, "_await_scan_terminal", new_callable=AsyncMock):
         results = await backend.read_fluorescence(
-          plate=self.plate, wells=[], excitation_wavelength=485,
-          emission_wavelength=520, focal_height=20.0,
+          plate=self.plate,
+          wells=[],
+          excitation_wavelength=485,
+          emission_wavelength=520,
+          focal_height=20.0,
           backend_params=TecanInfiniteFluorescenceParams(),
         )
 
@@ -273,7 +278,9 @@ class TestLuminescenceBackend(unittest.IsolatedAsyncioTestCase):
     with patch.object(driver, "_await_measurements", side_effect=mock_await):
       with patch.object(driver, "_await_scan_terminal", new_callable=AsyncMock):
         results = await backend.read_luminescence(
-          plate=self.plate, wells=[], focal_height=14.62,
+          plate=self.plate,
+          wells=[],
+          focal_height=14.62,
           backend_params=TecanInfiniteLuminescenceParams(),
         )
 

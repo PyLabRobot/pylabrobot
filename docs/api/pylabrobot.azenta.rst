@@ -45,3 +45,25 @@ XPeel Peeler
 
 .. autoclass:: pylabrobot.azenta.xpeel.XPeelPeelerBackend.PeelParams
    :members:
+
+
+FluidX IntelliXcap 96
+---------------------
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    FluidXIntelliXcap96
+    FluidXError
+    ExtendedStatus
+    CartridgeProfile
+    CartridgeInfo
+    FirmwareVersions
+    get_error_message
+    is_recoverable_error
+    ERROR_CODE_MESSAGES
+    RECOVERABLE_ERROR_CODES

@@ -17,8 +17,8 @@ from pylabrobot.resources.rotation import Rotation
 # so the table reads top-to-bottom in CCW order from +X.
 _GRIPPER_DIRECTION_TO_DEGREES: Dict[GripperDirection, float] = {
   "right": 0.0,
-  "back":  90.0,
-  "left":  180.0,
+  "back": 90.0,
+  "left": 180.0,
   "front": 270.0,
 }
 

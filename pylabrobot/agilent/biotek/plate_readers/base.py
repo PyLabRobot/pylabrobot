@@ -207,22 +207,15 @@ class BioTekBackend(
     assert resp is not None
     return " ".join(resp[1:-1].decode().split(" ")[3:4])
 
-  async def _set_slow_mode(self, slow: bool):
+  async def set_slow_mode(self, slow: bool):
     if self._slow_mode == slow:
       return
     await self.send_command("&", "S1" if slow else "S0")
     self._slow_mode = slow
 
-  async def open(self, slow: bool = False):
-    await self._set_slow_mode(slow)
-    return await self.send_command("J")
-
-  async def close(self, plate: Optional[Plate] = None, slow: bool = False):
+  def clear_plate(self) -> None:
+    """Forget the plate geometry the firmware last had loaded (e.g. after closing the tray)."""
     self._plate = None
-    await self._set_slow_mode(slow)
-    if plate is not None:
-      await self.set_plate(plate)
-    return await self.send_command("A")
 
   async def home(self):
     return await self.send_command("i", "x")

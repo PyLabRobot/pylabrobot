@@ -1,15 +1,17 @@
 """STARChatterboxDriver: logs commands instead of sending them over USB."""
 
 import logging
+from typing import Optional
+
+from pylabrobot.resources.hamilton import HamiltonDeck
 
 from .autoload import STARAutoload
 from .cover import STARCover
-from pylabrobot.resources.hamilton import HamiltonDeck
-
 from .driver import (
   DriveConfiguration,
   ExtendedConfiguration,
   MachineConfiguration,
+  STARConfiguration,
   STARDriver,
 )
 from .head96_backend import STARHead96Backend
@@ -49,8 +51,9 @@ class STARChatterboxDriver(STARDriver):
     num_channels: int = 8,
     machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONF,
     extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONF,
+    configuration: Optional[STARConfiguration] = None,
   ):
-    super().__init__(deck=deck)
+    super().__init__(deck=deck, configuration=configuration)
     self._num_channels = num_channels
     self._machine_configuration = machine_configuration
     self._extended_configuration = extended_configuration
@@ -77,7 +80,7 @@ class STARChatterboxDriver(STARDriver):
       self.head96 = None
 
     if self.extended_conf.left_x_drive.iswap_installed:
-      self.iswap = iSWAPBackend(driver=self)
+      self.iswap = iSWAPBackend(driver=self, configuration=self._configuration.iswap)
       self.iswap._version = "chatterbox"
       self.iswap._parked = True
     else:

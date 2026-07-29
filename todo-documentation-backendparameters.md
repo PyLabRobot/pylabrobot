@@ -62,6 +62,7 @@ classes received new or expanded docstrings in this pass:
 - `PreciseFlexArmBackend.DropParams` -- new docstring
 - `PreciseFlexArmBackend.MoveToJointPositionParams` -- new docstring
 - `PreciseFlexArmBackend.MoveToLocationParams` -- new docstring
+- `PreciseFlexArmBackend.MoveThroughCartesianPosesParams` -- new docstring
 
 ### Already documented (no changes needed)
 - `MultidropCombiPeristalticDispensingBackend.DispenseParams`

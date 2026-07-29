@@ -2,6 +2,7 @@
 
 from typing import Dict, List, Optional
 
+from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
 from pylabrobot.agilent.biotek.plate_readers import base as biotek
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
@@ -16,6 +17,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     device_id: Optional[str] = None,
   ) -> None:
     self._new = biotek.BioTekBackend(timeout=timeout, device_id=device_id)
+    self._loading_tray = BioTekLoadingTrayBackend(driver=self._new)
 
   # Expose internals for subclass compatibility
   @property
@@ -120,10 +122,14 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     return await self._new.request_firmware_version()
 
   async def open(self, slow=False):
-    return await self._new.open(slow=slow)
+    return await self._loading_tray.open(
+      backend_params=BioTekLoadingTrayBackend.OpenParams(slow=slow)
+    )
 
   async def close(self, plate=None, slow=False):
-    return await self._new.close(plate=plate, slow=slow)
+    return await self._loading_tray.close(
+      backend_params=BioTekLoadingTrayBackend.CloseParams(slow=slow), resource=plate
+    )
 
   async def home(self):
     return await self._new.home()

@@ -15,7 +15,7 @@ from pylabrobot.resources.well import Well
 from pylabrobot.serializer import SerializableMixin
 
 from .driver import TecanInfiniteDriver
-from .protocol import _AbsorbanceRunDecoder, _absorbance_od_calibrated, format_plate_result
+from .protocol import _absorbance_od_calibrated, _AbsorbanceRunDecoder, format_plate_result
 
 logger = logging.getLogger(__name__)
 

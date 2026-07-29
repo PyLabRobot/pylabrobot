@@ -32,17 +32,23 @@ definitions
 
 agilent/index
 azenta/index
+big_bear/index
 bmg_labtech/index
 brooks/index
 byonoy/index
+curiox/index
 hamilton/index
+high_res/index
 inheco/index
+kbioscience/index
+kbiosystems/index
 liconic/index
 mettler_toledo/index
 molecular_devices/index
 opentrons/index
 qinstruments/index
 revvity/index
+sartorius/index
 thermo_fisher/index
 ufactory/index
 ```
