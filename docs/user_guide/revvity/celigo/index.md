@@ -26,8 +26,10 @@ celigo = Celigo(config=config)
 celigo.set_plate(Cor_96_wellplate_360ul_Fb(name="imaging_plate"))
 ```
 
-Opening the drawer does not depend on a plate. Closing it to a well, moving to wells,
-and acquiring images require `set_plate()` first.
+Opening the drawer and closing it to a calibrated sample-relative coordinate do not
+depend on a plate. Use `close_drawer_to_sample_mm(x_mm, y_mm)` for custom carriers.
+Closing to a named well, moving to wells, and acquiring well images require
+`set_plate()` first.
 
 Live verification covers controller setup/status/self-test, native XYZ and filter
 homing, drawer motion, galvo calibration/centering, native and calibrated Lumenera
