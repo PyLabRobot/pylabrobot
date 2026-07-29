@@ -5,9 +5,9 @@ from dataclasses import replace
 from typing import Any, Optional, Tuple, TypeVar
 from unittest.mock import patch
 
-from pylabrobot.celigo.camera import CameraFrame
-from pylabrobot.celigo.celigo import Celigo
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.camera import CameraFrame
+from pylabrobot.revvity.celigo.celigo import Celigo
+from pylabrobot.revvity.celigo.config import (
   AxisConfig,
   CalibrationConfig,
   CeligoConfig,
@@ -355,7 +355,7 @@ def make_celigo(**kwargs: Any) -> Celigo:
   camera = FakeCamera()
   transport = FakeTransport(device_id=kwargs.get("device_id"))
   with (
-    patch("pylabrobot.celigo.celigo.FTDI", return_value=transport),
-    patch("pylabrobot.celigo.celigo.LumeneraCamera", return_value=camera),
+    patch("pylabrobot.revvity.celigo.celigo.FTDI", return_value=transport),
+    patch("pylabrobot.revvity.celigo.celigo.LumeneraCamera", return_value=camera),
   ):
     return Celigo(**kwargs)

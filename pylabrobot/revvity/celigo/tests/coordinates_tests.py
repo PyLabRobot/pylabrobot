@@ -5,12 +5,12 @@ import os
 import tempfile
 import unittest
 
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.config import (
   CalibrationConfig,
   HardwareDefaultConfig,
 )
-from pylabrobot.celigo.coordinates import CoordinateSystems
-from pylabrobot.celigo.tests.helpers import (
+from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
+from pylabrobot.revvity.celigo.tests.helpers import (
   make_calibration_config,
   make_hardware_default_config,
 )

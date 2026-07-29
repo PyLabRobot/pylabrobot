@@ -7,14 +7,14 @@ import threading
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.celigo.camera import CameraError, CameraFrame, LumeneraCamera
-from pylabrobot.celigo.celigo import (
+from pylabrobot.revvity.celigo.camera import CameraError, CameraFrame, LumeneraCamera
+from pylabrobot.revvity.celigo.celigo import (
   CeligoError,
   ControllerInfo,
   ControllerStatus,
   DetectedMotorAddress,
 )
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.config import (
   CeligoHardwareConfig,
   DigitalIOConfig,
   ExternalCameraControlConfig,
@@ -26,13 +26,13 @@ from pylabrobot.celigo.config import (
   IOConfig,
   LightingIOConfig,
 )
-from pylabrobot.celigo.galvo import (
+from pylabrobot.revvity.celigo.galvo import (
   GalvoControllerStatus,
   _CMD_CALIBRATE_GALVO,
   _CMD_MOVE_GALVO,
   dac_count_to_volts,
 )
-from pylabrobot.celigo.laser import (
+from pylabrobot.revvity.celigo.laser import (
   _CMD_FIRE_GALVO_GRID,
   _CMD_FIRE_LASER,
   _CMD_LOAD_FIRING_TABLE,
@@ -41,12 +41,12 @@ from pylabrobot.celigo.laser import (
   _CMD_TARGETED_FIRE,
   Laser,
 )
-from pylabrobot.celigo.motion import (
+from pylabrobot.revvity.celigo.motion import (
   _LIMIT_OPTO_1,
   Axis,
   _parse_motor_controller_firmware_version,
 )
-from pylabrobot.celigo.tests.helpers import (
+from pylabrobot.revvity.celigo.tests.helpers import (
   make_calibration_config,
   make_celigo,
   make_filter_wheel_config,
@@ -280,7 +280,7 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       digital.append((bit, high))
 
     stub(celigo, set_analog_output_count=set_analog, set_digital_output=set_digital)
-    with patch("pylabrobot.celigo.celigo.asyncio.sleep", new_callable=AsyncMock) as sleep:
+    with patch("pylabrobot.revvity.celigo.celigo.asyncio.sleep", new_callable=AsyncMock) as sleep:
       await celigo._initialize_safe_outputs()
 
     self.assertEqual(analog, [(0, 0), (1, 0), (2, 4095), (3, 0)])
@@ -845,7 +845,7 @@ class TestLumeneraCamera(unittest.IsolatedAsyncioTestCase):
     library = _FakeLucamLibrary()
     camera = LumeneraCamera(library=library)
     await camera.setup()
-    with patch("pylabrobot.celigo.camera.time.sleep") as sleep:
+    with patch("pylabrobot.revvity.celigo.camera.time.sleep") as sleep:
       await camera.capture(flush_frames=2)
     self.assertEqual(sleep.call_count, 2)
     await camera.stop()
@@ -995,7 +995,7 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
 
     stub(celigo, send_command=send_command)
     stub(celigo.galvo, request_controller_status=request_status)
-    with patch("pylabrobot.celigo.galvo.asyncio.sleep", new_callable=AsyncMock) as sleep:
+    with patch("pylabrobot.revvity.celigo.galvo.asyncio.sleep", new_callable=AsyncMock) as sleep:
       self.assertEqual(await celigo.galvo.move_both(1.0, 2.0), (1.0, 2.0))
 
     self.assertEqual([opcode for opcode, _ in transactions], [_CMD_MOVE_GALVO] * 2)

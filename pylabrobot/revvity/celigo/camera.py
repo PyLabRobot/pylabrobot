@@ -172,7 +172,7 @@ class CameraFrame:
 
 
 class CeligoCamera(Protocol):
-  """Camera interface consumed by :class:`pylabrobot.celigo.Celigo`."""
+  """Camera interface consumed by :class:`pylabrobot.revvity.celigo.Celigo`."""
 
   exposure_ms: float
   gain: float

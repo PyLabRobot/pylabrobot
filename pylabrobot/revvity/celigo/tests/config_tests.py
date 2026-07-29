@@ -5,14 +5,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.config import (
   CeligoConfig,
   CeligoHardwareConfig,
   load_galvo_calibrations,
   load_galvo_optical_calibration,
   load_illumination_channels,
 )
-from pylabrobot.celigo.tests.helpers import make_linear_axis_config, require
+from pylabrobot.revvity.celigo.tests.helpers import make_linear_axis_config, require
 
 # A trimmed but structurally faithful USBIOHardwareConfig.config.
 COMMON_MOTOR_XML = """
@@ -356,7 +356,7 @@ class TestAggregateConfig(unittest.TestCase):
     with tempfile.TemporaryDirectory() as directory:
       hardware_path = self._write_complete_config(directory)
       with patch(
-        "pylabrobot.celigo.config.os.listdir",
+        "pylabrobot.revvity.celigo.config.os.listdir",
         wraps=os.listdir,
       ) as list_directory:
         config = CeligoConfig.from_install(hardware_path, magnification=10)

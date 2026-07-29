@@ -11,7 +11,7 @@ This module mirrors that schema as nested dataclasses. Two ways to obtain a conf
 * Construct :class:`CeligoConfig` and its typed subobjects directly — for users who want
   to specify everything in code, or override individual values after loading.
 
-The :class:`~pylabrobot.celigo.Celigo` constructor accepts a complete
+The :class:`~pylabrobot.revvity.celigo.Celigo` constructor accepts a complete
 :class:`CeligoConfig`, or loads one with :meth:`CeligoConfig.from_install`.
 """
 
@@ -1096,7 +1096,7 @@ class CalibrationConfig:
   """Per-machine optical/stage calibration (``CalibrationConfig.xml``).
 
   Feeds the pixel<->mm and sample-mm<->stage-mm affine transforms (see
-  :mod:`pylabrobot.celigo.coordinates`).
+  :mod:`pylabrobot.revvity.celigo.coordinates`).
   """
 
   microns_per_pixel_x: float

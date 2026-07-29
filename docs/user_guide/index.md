@@ -33,7 +33,6 @@ azenta/index
 big_bear/index
 brooks/index
 byonoy/index
-celigo/index
 cole_parmer/index
 curiox/index
 hamilton/index
@@ -45,6 +44,7 @@ mettler_toledo/index
 micronic/index
 molecular_devices/index
 qinstruments/index
+revvity/index
 sartorius/index
 thermo_fisher/index
 ufactory/index

@@ -3,12 +3,12 @@
 ```{toctree}
 :maxdepth: 1
 
-celigo/hello-world
-celigo/advanced-imaging
-celigo/components-and-diagnostics
+hello-world
+advanced-imaging
+components-and-diagnostics
 ```
 
-[OEM link](https://www.revvity.com/product/celigo-5c-config-200-bffl-5c)
+[Product page](https://www.revvity.com/product/celigo-5c-config-200-bffl-5c)
 
 PyLabRobot controls the Celigo through one plain `Celigo` class. Configuration copied
 from the vendor installation supplies motor limits, channels, optical centers, filter
@@ -18,7 +18,7 @@ resource supplies the plate and well geometry used for navigation.
 Load the instrument configuration explicitly, then set the plate:
 
 ```python
-from pylabrobot.celigo import Celigo, CeligoConfig
+from pylabrobot.revvity import Celigo, CeligoConfig
 from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 
 config = CeligoConfig.from_install("/path/to/Celigo/ConfigFiles")
@@ -50,11 +50,11 @@ geometry does not match the configuration.
 response, proves negative-limit activation and release, establishes the configured index
 datum, restores the controller mode, and verifies the final in-range position. Controller
 serial I/O uses the instrument FTDI interface at 230400 baud; the Lumenera camera is a
-separate USB connection through its SDK. See [Celigo Hello World](celigo/hello-world.ipynb)
+separate USB connection through its SDK. See [Celigo Hello World](hello-world.ipynb)
 for direct USB setup, a native homing/drawer cycle, and brightfield capture.
 
-[Advanced Imaging](celigo/advanced-imaging.ipynb) covers coordinate transforms, frame
+[Advanced Imaging](advanced-imaging.ipynb) covers coordinate transforms, frame
 analysis, exposure, autofocus, structured acquisition results, and calibrated galvo FOV
-planning. [Hardware Components and Diagnostics](celigo/components-and-diagnostics.ipynb)
+planning. [Hardware Components and Diagnostics](components-and-diagnostics.ipynb)
 covers axes, filter wheels, controller I/O, galvo diagnostics, barcode and trigger
 interfaces, active self-tests, and the laser component's explicit safety boundary.

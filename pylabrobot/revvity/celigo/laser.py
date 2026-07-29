@@ -5,19 +5,19 @@ import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from pylabrobot.celigo.config import GalvoConfig
-from pylabrobot.celigo.errors import CeligoError
-from pylabrobot.celigo.galvo import (
+from pylabrobot.revvity.celigo.config import GalvoConfig
+from pylabrobot.revvity.celigo.errors import CeligoError
+from pylabrobot.revvity.celigo.galvo import (
   GalvoAxisName,
   logical_to_hardware_voltage,
   voltage_delta_to_dac_count,
   volts_to_dac_count,
 )
-from pylabrobot.celigo.protocol import require_payload_length
+from pylabrobot.revvity.celigo.protocol import require_payload_length
 
 if TYPE_CHECKING:
-  from pylabrobot.celigo.celigo import Celigo
-  from pylabrobot.celigo.motion import Axis, FilterWheel
+  from pylabrobot.revvity.celigo.celigo import Celigo
+  from pylabrobot.revvity.celigo.motion import Axis, FilterWheel
 
 # Controller-board opcodes used only by the laser subsystem.
 _CMD_LOAD_FIRING_TABLE = 1

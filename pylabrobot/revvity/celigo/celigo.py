@@ -1,4 +1,4 @@
-"""Celigo image cytometer.
+"""Revvity Celigo image cytometer.
 
 Drives the Celigo's FTDI-based USB-IO controller board over a serial link: the XY
 stage, Z/focus, filter wheel (AllMotion EZStepper motors with encoder feedback), the
@@ -34,8 +34,8 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tuple, cast
 
-from pylabrobot.celigo.camera import CameraFrame, CeligoCamera, LumeneraCamera
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.camera import CameraFrame, CeligoCamera, LumeneraCamera
+from pylabrobot.revvity.celigo.config import (
   AxisConfig,
   CeligoConfig,
   DigitalIOConfig,
@@ -43,19 +43,19 @@ from pylabrobot.celigo.config import (
   IlluminationChannelConfig,
   LightingIOConfig,
 )
-from pylabrobot.celigo.coordinates import CoordinateSystems
-from pylabrobot.celigo.errors import CeligoError
-from pylabrobot.celigo.galvo import Galvo
-from pylabrobot.celigo.laser import Laser
-from pylabrobot.celigo.motion import (
+from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
+from pylabrobot.revvity.celigo.errors import CeligoError
+from pylabrobot.revvity.celigo.galvo import Galvo
+from pylabrobot.revvity.celigo.laser import Laser
+from pylabrobot.revvity.celigo.motion import (
   Axis,
   FilterWheel,
   LinearAxis,
   MagnificationChanger,
   MotorController,
 )
-from pylabrobot.celigo.navigation import galvo_field_of_view_offsets_mm, well_to_stage_mm
-from pylabrobot.celigo.protocol import (
+from pylabrobot.revvity.celigo.navigation import galvo_field_of_view_offsets_mm, well_to_stage_mm
+from pylabrobot.revvity.celigo.protocol import (
   complete_cleanup,
   require_payload_length,
 )

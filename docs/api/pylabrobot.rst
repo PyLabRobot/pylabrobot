@@ -25,7 +25,6 @@ Manufacturers
     pylabrobot.big_bear
     pylabrobot.brooks
     pylabrobot.byonoy
-    pylabrobot.celigo
     pylabrobot.cole_parmer
     pylabrobot.curiox
     pylabrobot.hamilton
@@ -37,5 +36,6 @@ Manufacturers
     pylabrobot.micronic
     pylabrobot.molecular_devices
     pylabrobot.qinstruments
+    pylabrobot.revvity
     pylabrobot.sartorius
     pylabrobot.thermo_fisher

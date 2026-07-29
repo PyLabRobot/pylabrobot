@@ -1,17 +1,17 @@
-.. currentmodule:: pylabrobot.celigo
-
-pylabrobot.celigo package
-=========================
+pylabrobot.revvity package
+==========================
 
 Celigo
 ------
+
+.. currentmodule:: pylabrobot.revvity.celigo
 
 Load the vendor configuration explicitly, construct the instrument, then assign the
 PyLabRobot plate used for well navigation:
 
 .. code-block:: python
 
-   from pylabrobot.celigo import Celigo, CeligoConfig
+   from pylabrobot.revvity import Celigo, CeligoConfig
    from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 
    config = CeligoConfig.from_install("/path/to/Celigo/ConfigFiles")

@@ -7,12 +7,12 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
-from pylabrobot.celigo.config import Calibrated2DPolynomialTransform, GalvoConfig
-from pylabrobot.celigo.errors import CeligoError
-from pylabrobot.celigo.protocol import require_payload_length
+from pylabrobot.revvity.celigo.config import Calibrated2DPolynomialTransform, GalvoConfig
+from pylabrobot.revvity.celigo.errors import CeligoError
+from pylabrobot.revvity.celigo.protocol import require_payload_length
 
 if TYPE_CHECKING:
-  from pylabrobot.celigo.celigo import Celigo
+  from pylabrobot.revvity.celigo.celigo import Celigo
 
 
 GalvoAxisName = Literal["x", "y"]

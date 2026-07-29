@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 from typing import Optional, Tuple
 
-from pylabrobot.celigo.config import CalibrationConfig, HardwareDefaultConfig
+from pylabrobot.revvity.celigo.config import CalibrationConfig, HardwareDefaultConfig
 
 Coordinate2D = Tuple[float, float]
 Matrix2x2 = Tuple[float, float, float, float]

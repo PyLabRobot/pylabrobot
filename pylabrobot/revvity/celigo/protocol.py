@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 from typing import Awaitable, TypeVar
 
-from pylabrobot.celigo.errors import CeligoError
+from pylabrobot.revvity.celigo.errors import CeligoError
 
 _T = TypeVar("_T")
 
