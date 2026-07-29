@@ -1,5 +1,6 @@
 """Laser subsystem for the Celigo image cytometer."""
 
+import contextlib
 import math
 import struct
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ from pylabrobot.revvity.celigo.galvo import (
   voltage_delta_to_dac_count,
   volts_to_dac_count,
 )
-from pylabrobot.revvity.celigo.protocol import require_payload_length
+from pylabrobot.revvity.celigo.protocol import complete_cleanup, require_payload_length
 
 if TYPE_CHECKING:
   from pylabrobot.revvity.celigo.celigo import Celigo
@@ -201,10 +202,22 @@ class Laser:
       raise ValueError("shots must fit in a positive signed 32-bit integer")
     delay_ticks = _delay_seconds_to_controller_ticks(delay)
     await self._assert_safe()
-    await self._celigo.send_command(
-      _CMD_FIRE_LASER,
-      struct.pack(">Hii", laser_index, shots, delay_ticks),
-    )
+    try:
+      await self._celigo.send_command(
+        _CMD_FIRE_LASER,
+        struct.pack(">Hii", laser_index, shots, delay_ticks),
+      )
+      timeout = max(
+        5.0,
+        self._celigo.move_timeout,
+        max(0, shots - 1) * delay + 5.0,
+      )
+      if not await self._celigo.wait_for_controller_ready(timeout=timeout):
+        raise TimeoutError("Laser firing did not complete")
+    except BaseException:
+      with contextlib.suppress(Exception):
+        await complete_cleanup(self._celigo.abort_controller_operation())
+      raise
 
   async def _load_firing_targets(
     self,
@@ -257,22 +270,30 @@ class Laser:
     table_size = (await self._celigo.galvo.request_controller_status()).fire_table_size
     if table_size <= 0:
       raise CeligoError(f"Controller reported invalid laser firing-table size {table_size}")
-    for start_index in range(0, len(voltage_offsets), table_size):
-      chunk = voltage_offsets[start_index : start_index + table_size]
-      await self._load_firing_targets(chunk, center_voltages)
-      payload = struct.pack(">HIIH", laser_index, pulses, delay_ticks, 0)
-      # Loading and waiting can take long enough for the door/interlock state to change.
-      await self._assert_safe()
-      await self._celigo.send_command(_CMD_TARGETED_FIRE, payload)
-      if not await self._celigo.wait_for_controller_ready(
-        timeout=max(5.0, self._celigo.move_timeout)
-      ):
-        raise TimeoutError("Targeted laser firing did not complete")
-      status = await self._celigo.galvo.request_controller_status()
-      if status.fire_table_index != status.points_loaded:
-        raise CeligoError(
-          f"Laser firing stopped at target {status.fire_table_index}/{status.points_loaded}"
+    try:
+      for start_index in range(0, len(voltage_offsets), table_size):
+        chunk = voltage_offsets[start_index : start_index + table_size]
+        await self._load_firing_targets(chunk, center_voltages)
+        payload = struct.pack(">HIIH", laser_index, pulses, delay_ticks, 0)
+        # Loading and waiting can take long enough for the door/interlock state to change.
+        await self._assert_safe()
+        await self._celigo.send_command(_CMD_TARGETED_FIRE, payload)
+        timeout = max(
+          5.0,
+          self._celigo.move_timeout,
+          len(chunk) * max(0, pulses - 1) * delay_between_pulses + 5.0,
         )
+        if not await self._celigo.wait_for_controller_ready(timeout=timeout):
+          raise TimeoutError("Targeted laser firing did not complete")
+        status = await self._celigo.galvo.request_controller_status()
+        if status.fire_table_index != status.points_loaded:
+          raise CeligoError(
+            f"Laser firing stopped at target {status.fire_table_index}/{status.points_loaded}"
+          )
+    except BaseException:
+      with contextlib.suppress(Exception):
+        await complete_cleanup(self._celigo.abort_controller_operation())
+      raise
 
   async def fire_grid(
     self,
@@ -303,7 +324,6 @@ class Laser:
       size_voltages,
       center_voltages,
     )
-    await self._assert_safe()
     payload = struct.pack(
       ">HHHHHHHiiiiH",
       laser_index,
@@ -319,8 +339,17 @@ class Laser:
       pattern_bitmask,
       0,
     )
-    await self._celigo.send_command(_CMD_FIRE_GALVO_GRID, payload)
-    if not await self._celigo.wait_for_controller_ready(
-      timeout=max(5.0, self._celigo.move_timeout)
-    ):
-      raise TimeoutError("Laser grid firing did not complete")
+    await self._assert_safe()
+    try:
+      await self._celigo.send_command(_CMD_FIRE_GALVO_GRID, payload)
+      timeout = max(
+        5.0,
+        self._celigo.move_timeout,
+        max(0, repeats - 1) * delay_between_repeats + 5.0,
+      )
+      if not await self._celigo.wait_for_controller_ready(timeout=timeout):
+        raise TimeoutError("Laser grid firing did not complete")
+    except BaseException:
+      with contextlib.suppress(Exception):
+        await complete_cleanup(self._celigo.abort_controller_operation())
+      raise

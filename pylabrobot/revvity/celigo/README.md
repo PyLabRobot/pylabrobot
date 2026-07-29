@@ -123,7 +123,7 @@ calibration files:
 from pylabrobot.revvity import CeligoConfig
 
 config = CeligoConfig.from_install(config_root)
-config.hardware_defaults.default_calibrated_z += 0.01
+config.calibration.calibrated_z_position += 0.01
 cel = Celigo(config=config)
 ```
 

@@ -369,7 +369,7 @@ class LumeneraCamera:
         [ctypes.c_void_p],
       )
     except AttributeError as exc:
-      raise CameraError(f"Lumenera SDK does not export {exc.name}") from exc
+      raise CameraError(f"Lumenera SDK is missing a required export: {exc}") from exc
     return lib
 
   def _request_last_sdk_error_code(self) -> int:

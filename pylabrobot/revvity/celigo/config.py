@@ -135,7 +135,7 @@ class _XmlScalars:
     return {tag: value for tag, value in self._scalars.items() if tag not in self._recognized_tags}
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True)
 class _AxisXmlValues:
   motion_name: str
   config_version: int
@@ -227,7 +227,7 @@ def _read_axis_values(reader: _XmlScalars, limit_polarity: int) -> _AxisXmlValue
   )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class AxisConfig:
   """Configuration shared by encoder-controlled motors."""
 
@@ -282,13 +282,13 @@ class AxisConfig:
   backlash_compensation: int
   motor_response_time: int
 
-  unrecognized_fields: Dict[str, str] = field(default_factory=dict)
+  unrecognized_fields: Dict[str, str] = field(default_factory=dict, init=False)
 
   @classmethod
   def from_element(cls, element: ET.Element) -> "AxisConfig":
     reader = _XmlScalars(_leaf_scalars(element))
     values = _read_axis_values(reader, reader.integer("LimitPolarity"))
-    return cls(
+    config = cls(
       motion_name=values.motion_name,
       config_version=values.config_version,
       motor_type=values.motor_type,
@@ -329,11 +329,12 @@ class AxisConfig:
       encoder_to_motor_tick_ratio=values.encoder_to_motor_tick_ratio,
       backlash_compensation=values.backlash_compensation,
       motor_response_time=values.motor_response_time,
-      unrecognized_fields=reader.unrecognized(),
     )
+    config.unrecognized_fields = reader.unrecognized()
+    return config
 
 
-@dataclass(kw_only=True)
+@dataclass
 class LinearAxisConfig(AxisConfig):
   """A linear X, Y, or Z motor with millimeter position bounds."""
 
@@ -346,7 +347,7 @@ class LinearAxisConfig(AxisConfig):
     reader = _XmlScalars(_leaf_scalars(element))
     # Linear-axis vendor files commonly omit LimitPolarity; their fixed polarity is 0.
     values = _read_axis_values(reader, reader.integer_or("LimitPolarity", 0))
-    return cls(
+    config = cls(
       motion_name=values.motion_name,
       config_version=values.config_version,
       motor_type=values.motor_type,
@@ -390,11 +391,12 @@ class LinearAxisConfig(AxisConfig):
       min_position=reader.floating("MinPosition"),
       max_position=reader.floating("MaxPosition"),
       mm_per_encoder_tick=reader.floating("MMPerEncoderTick"),
-      unrecognized_fields=reader.unrecognized(),
     )
+    config.unrecognized_fields = reader.unrecognized()
+    return config
 
 
-@dataclass(kw_only=True)
+@dataclass
 class GalvoConfig:
   """A galvanometer scan axis (``XGalvo`` / ``YGalvo``).
 
@@ -456,7 +458,7 @@ class GalvoOpticalCalibration:
   source_path: Optional[str] = None
 
 
-@dataclass(kw_only=True)
+@dataclass
 class ExternalCameraControlConfig:
   """Camera trigger/status-line configuration from ``ExternalCameraControl``."""
 
@@ -478,7 +480,7 @@ class ExternalCameraControlConfig:
     )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class FilterMapEntry:
   """One physical<->logical filter position mapping (``FilterMap``)."""
 
@@ -496,7 +498,7 @@ class FilterMapEntry:
     )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class FilterWheelConfig(AxisConfig):
   """A discrete rotary filter wheel (``DichroicFilterWheel`` and friends)."""
 
@@ -508,7 +510,7 @@ class FilterWheelConfig(AxisConfig):
   def from_element(cls, element: ET.Element) -> "FilterWheelConfig":
     reader = _XmlScalars(_leaf_scalars(element))
     values = _read_axis_values(reader, reader.integer("LimitPolarity"))
-    return cls(
+    config = cls(
       motion_name=values.motion_name,
       config_version=values.config_version,
       motor_type=values.motor_type,
@@ -556,11 +558,12 @@ class FilterWheelConfig(AxisConfig):
         for child in element
         if _xml_local_name(child.tag) == "FilterMap"
       ],
-      unrecognized_fields=reader.unrecognized(),
     )
+    config.unrecognized_fields = reader.unrecognized()
+    return config
 
 
-@dataclass(kw_only=True)
+@dataclass
 class AnalogInputConfig:
   """One analog input from ``IOConfiguration``."""
 
@@ -586,7 +589,7 @@ class AnalogInputConfig:
     )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class DigitalIOConfig:
   """One digital input or output from ``IOConfiguration``."""
 
@@ -612,7 +615,7 @@ class DigitalIOConfig:
     )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class LightingIOConfig:
   """One analog lighting output from ``IOConfiguration``."""
 
@@ -644,7 +647,7 @@ class LightingIOConfig:
     )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class IOConfig:
   """The board IO map: analog ins, digital IOs and lighting IOs."""
 
@@ -755,7 +758,7 @@ class CeligoHardwareConfig:
     return hardware_config
 
 
-@dataclass(kw_only=True)
+@dataclass
 class ChannelDescriptor:
   """An imaging channel from ``ChannelConfig.xml`` (Default / HWAF / fluorescence)."""
 
@@ -1091,7 +1094,7 @@ def load_galvo_calibrations(path: str) -> Dict[int, Calibrated2DPolynomialTransf
   return calibrations
 
 
-@dataclass(kw_only=True)
+@dataclass
 class CalibrationConfig:
   """Per-machine optical/stage calibration (``CalibrationConfig.xml``).
 
@@ -1147,7 +1150,7 @@ class CalibrationConfig:
     )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class HardwareDefaultConfig:
   """Instrument defaults (``HardwareDefaultConfig.xml``): plate corner, FOV, galvo MM/V."""
 
@@ -1177,7 +1180,7 @@ class HardwareDefaultConfig:
     )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class NavigationConfig:
   """Galvo reach and frame overlap from ``NavigationConfig.xml``."""
 
