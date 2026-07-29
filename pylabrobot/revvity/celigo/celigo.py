@@ -56,7 +56,11 @@ from pylabrobot.revvity.celigo.motion import (
   MagnificationChanger,
   MotorController,
 )
-from pylabrobot.revvity.celigo.navigation import galvo_field_of_view_offsets_mm, well_to_stage_mm
+from pylabrobot.revvity.celigo.navigation import (
+  galvo_field_of_view_offsets_mm,
+  well_to_sample_mm,
+  well_to_stage_mm,
+)
 from pylabrobot.revvity.celigo.protocol import (
   complete_cleanup,
   require_payload_length,
@@ -1013,8 +1017,28 @@ class Celigo:
       raise CeligoError("Set a plate with set_plate() before navigating to a well")
     return self._plate
 
-  def _drawer_load_targets(self, well: str) -> _DrawerLoadTargets:
-    x_park_mm, y_park_mm = self.well_position_mm(well)
+  def _drawer_load_targets_from_sample_mm(
+    self,
+    x_mm: float,
+    y_mm: float,
+  ) -> _DrawerLoadTargets:
+    if not all(math.isfinite(value) for value in (x_mm, y_mm)):
+      raise ValueError("sample X/Y coordinates must be finite")
+    coordinates = CoordinateSystems.from_config(
+      self.config.calibration,
+      self.config.hardware_defaults,
+    )
+    x_park_mm, y_park_mm = coordinates.sample_mm_to_stage_mm(x_mm, y_mm)
+    for axis, target_mm in (
+      (self.x_axis, x_park_mm),
+      (self.y_axis, y_park_mm),
+    ):
+      low_mm, high_mm = sorted((axis.config.min_position, axis.config.max_position))
+      if not math.isfinite(target_mm) or not low_mm <= target_mm <= high_mm:
+        raise CeligoError(
+          f"sample target ({x_mm:g}, {y_mm:g}) mm maps to {axis.name.upper()} "
+          f"{target_mm:g} mm outside configured range {low_mm:g}..{high_mm:g} mm"
+        )
     return _DrawerLoadTargets(
       x_park_mm=x_park_mm,
       y_clearance_mm=self.y_axis.config.min_position,
@@ -1058,9 +1082,20 @@ class Celigo:
 
   async def close_drawer(self, well: str) -> None:
     """Move the stage under the optics using calibrated plate/well coordinates."""
+    sample_x_mm, sample_y_mm = well_to_sample_mm(self._require_plate(), well)
+    await self.close_drawer_to_sample_mm(sample_x_mm, sample_y_mm)
+
+  async def close_drawer_to_sample_mm(self, x_mm: float, y_mm: float) -> None:
+    """Safely close the drawer to a calibrated sample-relative X/Y coordinate.
+
+    A PyLabRobot plate is not required. The sample coordinate is transformed to stage
+    millimeters and both targets are validated before illumination or motion changes.
+    Z retracts before the drawer moves through Y clearance to the final X/Y position.
+    """
+    targets = self._drawer_load_targets_from_sample_mm(x_mm, y_mm)
     await self.turn_off_illumination()
     self.current_channel = None
-    targets = self._drawer_load_targets(well)
+    await self.z_axis.move_to(self.z_axis.config.min_position)
     await self.y_axis.move_to(targets.y_clearance_mm)
     await self.x_axis.move_to(targets.x_park_mm)
     await self.y_axis.move_to(targets.y_park_mm)

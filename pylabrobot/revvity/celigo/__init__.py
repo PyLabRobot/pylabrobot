@@ -61,7 +61,7 @@ from pylabrobot.revvity.celigo.motion import (
   MotorController,
   StepperMotor,
 )
-from pylabrobot.revvity.celigo.navigation import well_to_stage_mm
+from pylabrobot.revvity.celigo.navigation import well_to_sample_mm, well_to_stage_mm
 
 __all__ = [
   "AcquisitionResult",
@@ -110,5 +110,6 @@ __all__ = [
   "load_galvo_calibrations",
   "load_galvo_optical_calibration",
   "load_illumination_channels",
+  "well_to_sample_mm",
   "well_to_stage_mm",
 ]

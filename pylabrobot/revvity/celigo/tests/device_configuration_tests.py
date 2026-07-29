@@ -335,20 +335,101 @@ class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
 
 
 class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
-  def test_load_position_comes_from_plate_and_axis_calibration(self):
+  def test_sample_load_position_uses_coordinate_and_axis_calibration(self):
+    driver = make_celigo(hardware=_config())
+    driver.config.calibration = make_calibration_config()
+    driver.config.hardware_defaults = make_hardware_default_config(
+      default_plate_x_corner_stage_coordinate=2,
+      default_plate_y_corner_stage_coordinate=3,
+    )
+    targets = driver._drawer_load_targets_from_sample_mm(4, 5)
+    self.assertEqual(targets.x_park_mm, 6)
+    self.assertEqual(targets.y_clearance_mm, 2)
+    self.assertEqual(targets.y_park_mm, 8)
+
+  async def test_close_to_well_requires_set_plate(self):
+    driver = make_celigo(hardware=_config())
+    with self.assertRaisesRegex(CeligoError, r"set_plate\(\)"):
+      await driver.close_drawer("A1")
+
+  async def test_close_to_well_delegates_to_sample_coordinates(self):
     driver = make_celigo(hardware=_config())
     driver.config.calibration = make_calibration_config()
     driver.config.hardware_defaults = make_hardware_default_config()
     driver.set_plate(Cor_96_wellplate_360ul_Fb(name="imaging_plate"))
-    targets = driver._drawer_load_targets("A1")
-    self.assertAlmostEqual(targets.x_park_mm, 14.3)
-    self.assertEqual(targets.y_clearance_mm, 2)
-    self.assertAlmostEqual(targets.y_park_mm, 11.28)
+    calls = []
 
-  def test_load_position_requires_set_plate(self):
+    async def close_to_sample(x_mm, y_mm):
+      calls.append((x_mm, y_mm))
+
+    stub(driver, close_drawer_to_sample_mm=close_to_sample)
+    await driver.close_drawer("A1")
+    self.assertEqual(len(calls), 1)
+    self.assertAlmostEqual(calls[0][0], 14.3)
+    self.assertAlmostEqual(calls[0][1], 11.28)
+
+  async def test_close_to_sample_retracts_z_and_moves_via_y_clearance(self):
+    hardware = _config()
+    hardware.z_axis = make_linear_axis_config(
+      axis_index=3,
+      min_position=0,
+      max_position=10,
+      mm_per_encoder_tick=1,
+    )
+    driver = make_celigo(hardware=hardware)
+    driver.config.calibration = make_calibration_config()
+    driver.config.hardware_defaults = make_hardware_default_config(
+      default_plate_x_corner_stage_coordinate=2,
+      default_plate_y_corner_stage_coordinate=3,
+    )
+    driver.current_channel = "brightfield"
+    calls = []
+
+    async def turn_off():
+      calls.append(("illumination", None))
+
+    async def move_z(position):
+      calls.append(("z", position))
+      return position
+
+    async def move_x(position):
+      calls.append(("x", position))
+      return position
+
+    async def move_y(position):
+      calls.append(("y", position))
+      return position
+
+    stub(driver, turn_off_illumination=turn_off)
+    stub(driver.z_axis, move_to=move_z)
+    stub(driver.x_axis, move_to=move_x)
+    stub(driver.y_axis, move_to=move_y)
+    await driver.close_drawer_to_sample_mm(4, 5)
+    self.assertIsNone(driver.current_channel)
+    self.assertEqual(
+      calls,
+      [
+        ("illumination", None),
+        ("z", 0),
+        ("y", 2),
+        ("x", 6),
+        ("y", 8),
+      ],
+    )
+
+  async def test_close_to_sample_rejects_invalid_targets_before_motion(self):
     driver = make_celigo(hardware=_config())
-    with self.assertRaisesRegex(CeligoError, r"set_plate\(\)"):
-      driver._drawer_load_targets("A1")
+    driver.config.calibration = make_calibration_config()
+    driver.config.hardware_defaults = make_hardware_default_config()
+
+    async def unexpected():
+      self.fail("invalid drawer target changed illumination")
+
+    stub(driver, turn_off_illumination=unexpected)
+    with self.assertRaisesRegex(ValueError, "must be finite"):
+      await driver.close_drawer_to_sample_mm(float("nan"), 5)
+    with self.assertRaisesRegex(CeligoError, "outside configured range"):
+      await driver.close_drawer_to_sample_mm(100, 5)
 
   async def test_open_drawer_retries_and_requires_target_limit(self):
     hardware = _config()

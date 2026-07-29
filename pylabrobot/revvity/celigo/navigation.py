@@ -25,7 +25,7 @@ from pylabrobot.revvity.celigo.config import (
 from pylabrobot.revvity.celigo.coordinates import Coordinate2D, CoordinateSystems
 
 
-def _well_center_sample_mm(plate: Plate, well: str) -> Coordinate2D:
+def well_to_sample_mm(plate: Plate, well: str) -> Coordinate2D:
   """Return a PLR well center in the Celigo's top-left plate coordinate frame."""
   if not isinstance(plate, Plate):
     raise TypeError("plate must be a PyLabRobot Plate")
@@ -47,7 +47,7 @@ def well_to_stage_mm(
   coordinate_systems: CoordinateSystems,
 ) -> Coordinate2D:
   """Stage mm for the center of a named well (e.g. ``"A1"``)."""
-  sample_x_mm, sample_y_mm = _well_center_sample_mm(plate, well)
+  sample_x_mm, sample_y_mm = well_to_sample_mm(plate, well)
   return coordinate_systems.sample_mm_to_stage_mm(sample_x_mm, sample_y_mm)
 
 

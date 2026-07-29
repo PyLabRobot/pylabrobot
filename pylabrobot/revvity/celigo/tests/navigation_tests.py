@@ -10,6 +10,7 @@ from pylabrobot.revvity.celigo.navigation import (
   effective_fov_mm,
   fields_of_view_per_field_of_reference,
   galvo_field_of_view_offsets_mm,
+  well_to_sample_mm,
   well_to_stage_mm,
 )
 from pylabrobot.revvity.celigo.tests.helpers import (
@@ -36,6 +37,12 @@ def _coords():
 
 
 class TestPlateNavigation(unittest.TestCase):
+  def test_well_sample_position_uses_plate_geometry_without_stage_calibration(self):
+    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    x, y = well_to_sample_mm(plate, "A1")
+    self.assertAlmostEqual(x, 14.3)
+    self.assertAlmostEqual(y, 11.28)
+
   def test_plr_plate_uses_its_resource_geometry(self):
     _, _, cs = _coords()
     plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
