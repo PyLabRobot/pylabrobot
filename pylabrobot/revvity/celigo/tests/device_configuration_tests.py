@@ -4,6 +4,7 @@ import inspect
 import unittest
 from unittest.mock import patch
 
+from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 from pylabrobot.revvity.celigo.celigo import Celigo, CeligoError
 from pylabrobot.revvity.celigo.config import (
   CeligoHardwareConfig,
@@ -24,7 +25,6 @@ from pylabrobot.revvity.celigo.tests.helpers import (
   make_test_config,
   stub,
 )
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 
 
 def _config() -> CeligoHardwareConfig:

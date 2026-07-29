@@ -34,6 +34,8 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tuple, cast
 
+from pylabrobot.io.ftdi import FTDI
+from pylabrobot.resources.plate import Plate
 from pylabrobot.revvity.celigo.camera import CameraFrame, CeligoCamera, LumeneraCamera
 from pylabrobot.revvity.celigo.config import (
   AxisConfig,
@@ -59,8 +61,6 @@ from pylabrobot.revvity.celigo.protocol import (
   complete_cleanup,
   require_payload_length,
 )
-from pylabrobot.io.ftdi import FTDI
-from pylabrobot.resources.plate import Plate
 
 logger = logging.getLogger(__name__)
 
@@ -643,24 +643,35 @@ class Celigo:
       attempt = 0
       while True:
         attempt += 1
-        written = await self.io.write(command_packet)
-        if written != len(command_packet):
-          await self.io.usb_purge_rx_buffer()
-          await self.io.usb_purge_tx_buffer()
-          raise CeligoError(f"Short write: expected {len(command_packet)} bytes, wrote {written}")
         try:
+          written = await self.io.write(command_packet)
+          if written != len(command_packet):
+            raise CeligoError(f"Short write: expected {len(command_packet)} bytes, wrote {written}")
           return await self._read_controller_response(
             opcode,
             sequence,
             selected_reply_timeout,
           )
-        except CeligoError as exc:
-          # Purge after any failed read so leftover bytes can't desync the next command.
-          await self.io.usb_purge_rx_buffer()
-          await self.io.usb_purge_tx_buffer()
-          if exc.ack in _ACK_RETRYABLE and attempt < retries:
+        except BaseException as exc:
+          # A cancelled executor-backed FTDI read can still consume bytes in its worker.
+          # Queue both purges behind it before allowing another command to use the link.
+          with contextlib.suppress(Exception):
+            await complete_cleanup(self._purge_controller_buffers())
+          if isinstance(exc, CeligoError) and exc.ack in _ACK_RETRYABLE and attempt < retries:
             continue
           raise
+
+  async def _purge_controller_buffers(self) -> None:
+    """Purge both directions, attempting the second purge even if the first fails."""
+    first_error: Optional[BaseException] = None
+    for purge in (self.io.usb_purge_rx_buffer, self.io.usb_purge_tx_buffer):
+      try:
+        await purge()
+      except BaseException as exc:
+        if first_error is None:
+          first_error = exc
+    if first_error is not None:
+      raise first_error
 
   async def _read_controller_response(
     self,
@@ -979,9 +990,12 @@ class Celigo:
   # -- motion ----------------------------------------------------------------
 
   async def home_imaging_axes(self) -> None:
-    """Home Z first for clearance, then X, Y, and the dichroic filter wheel."""
+    """Home Z for clearance, synchronize magnification, then home X, Y, and dichroic."""
     await self.turn_off_illumination()
     await self.z_axis.home()
+    if "magnification" in self._optical_axes:
+      await self.magnification_changer.home()
+      await self.magnification_changer.move_to(self.config.magnification)
     await self.x_axis.home()
     await self.y_axis.home()
     await self.dichroic_filter.home()
@@ -1561,7 +1575,7 @@ class Celigo:
     machine_auto_exposure: bool = False,
   ) -> AcquisitionResult:
     """Navigate, select optics, optionally focus, and capture one calibrated FOV."""
-    x_mm, y_mm = await self.move_to_well(well)
+    x_mm, y_mm = await self.move_to_well(well, retract_z=True)
     channel_config = self._require_channel_config(channel)
     target_z_mm = z_mm
     if target_z_mm is None:

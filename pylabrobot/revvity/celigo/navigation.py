@@ -17,12 +17,12 @@ from __future__ import annotations
 import math
 from typing import List, Tuple
 
+from pylabrobot.resources.plate import Plate
 from pylabrobot.revvity.celigo.config import (
   CalibrationConfig,
   NavigationConfig,
 )
 from pylabrobot.revvity.celigo.coordinates import Coordinate2D, CoordinateSystems
-from pylabrobot.resources.plate import Plate
 
 
 def _well_center_sample_mm(plate: Plate, well: str) -> Coordinate2D:

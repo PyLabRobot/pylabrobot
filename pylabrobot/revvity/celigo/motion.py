@@ -612,6 +612,8 @@ class Axis:
         last_position = await self.motor.wait_until_ready()
       except BaseException as exc:
         with contextlib.suppress(Exception):
+          await complete_cleanup(self.motor._terminate())
+        with contextlib.suppress(Exception):
           await complete_cleanup(
             self.motor._set_parameter(
               _EZ_SET_HOLD_CURRENT,

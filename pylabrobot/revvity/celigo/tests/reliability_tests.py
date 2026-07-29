@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Tuple
 from unittest.mock import patch
 
+from pylabrobot.io.ftdi import FTDI
 from pylabrobot.revvity.celigo.celigo import (
   _MAX_RESPONSE_PAYLOAD_BYTES,
   _STATUS_INTERLOCK_OPEN,
@@ -25,7 +26,6 @@ from pylabrobot.revvity.celigo.tests.helpers import (
   make_linear_axis_config,
   stub,
 )
-from pylabrobot.io.ftdi import FTDI
 
 
 def _oem_response(content: bytes) -> bytes:
@@ -436,6 +436,39 @@ class TestResponseValidation(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(CeligoError, "Short write"):
       await driver.send_command(23)
     self.assertEqual((io.rx_purges, io.tx_purges), (1, 1))
+
+  async def test_cancelled_read_purges_both_buffers_before_returning(self):
+    read_started = asyncio.Event()
+
+    class BlockingReadIO:
+      def __init__(self):
+        self.purges = []
+
+      async def write(self, data):
+        return len(data)
+
+      async def read(self, _count):
+        read_started.set()
+        await asyncio.Future()
+
+      async def usb_purge_rx_buffer(self):
+        self.purges.append("rx")
+
+      async def usb_purge_tx_buffer(self):
+        self.purges.append("tx")
+
+    driver = make_celigo()
+    driver._command_lock = asyncio.Lock()
+    io = BlockingReadIO()
+    stub(driver, io=io)
+
+    command = asyncio.create_task(driver.send_command(23))
+    await read_started.wait()
+    command.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await command
+
+    self.assertEqual(io.purges, ["rx", "tx"])
 
 
 class TestSelfTest(unittest.IsolatedAsyncioTestCase):

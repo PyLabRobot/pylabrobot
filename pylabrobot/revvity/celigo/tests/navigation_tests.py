@@ -2,6 +2,9 @@
 
 import unittest
 
+from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.tecan.plates import DeepWell_Greiner_1536_Well
+from pylabrobot.resources.vwr.plates import VWR_1_troughplate_195000uL_Ub
 from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
 from pylabrobot.revvity.celigo.navigation import (
   effective_fov_mm,
@@ -14,9 +17,6 @@ from pylabrobot.revvity.celigo.tests.helpers import (
   make_hardware_default_config,
   make_navigation_config,
 )
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
-from pylabrobot.resources.tecan.plates import DeepWell_Greiner_1536_Well
-from pylabrobot.resources.vwr.plates import VWR_1_troughplate_195000uL_Ub
 
 
 def _coords():
