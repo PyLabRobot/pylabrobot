@@ -1,19 +1,19 @@
-"""Control for the Nexcelom/Cyntellect Celigo image cytometer.
+"""Control for the Revvity Celigo image cytometer.
 
-The :class:`~pylabrobot.celigo.celigo.Celigo` class drives the instrument's FTDI USB-IO
+The :class:`~pylabrobot.revvity.celigo.celigo.Celigo` class drives the instrument's FTDI USB-IO
 controller board: stage/Z/filter motion, drawer open/close, illumination channels
 (brightfield + fluorescence), galvo steering, and the board's digital/analog IO and
-barcode reader. Its :class:`~pylabrobot.celigo.laser.Laser` component owns laser
-communication and firing operations, while :class:`~pylabrobot.celigo.galvo.Galvo`
+barcode reader. Its :class:`~pylabrobot.revvity.celigo.laser.Laser` component owns laser
+communication and firing operations, while :class:`~pylabrobot.revvity.celigo.galvo.Galvo`
 owns galvo positioning and calibration.
 
-The :mod:`~pylabrobot.celigo.config`, :mod:`~pylabrobot.celigo.coordinates`, and
-:mod:`~pylabrobot.celigo.navigation` modules hold the configuration and plate/well
+The :mod:`~pylabrobot.revvity.celigo.config`, :mod:`~pylabrobot.revvity.celigo.coordinates`, and
+:mod:`~pylabrobot.revvity.celigo.navigation` modules hold the configuration and plate/well
 navigation math used by the device.
 """
 
-from pylabrobot.celigo.camera import CameraError, CameraFrame, CeligoCamera
-from pylabrobot.celigo.celigo import (
+from pylabrobot.revvity.celigo.camera import CameraError, CameraFrame, CeligoCamera
+from pylabrobot.revvity.celigo.celigo import (
   AcquisitionResult,
   Celigo,
   ControllerInfo,
@@ -22,7 +22,7 @@ from pylabrobot.celigo.celigo import (
   FocusResult,
   SelfTestReport,
 )
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.config import (
   AnalogInputConfig,
   AxisConfig,
   Calibrated2DPolynomialTransform,
@@ -49,11 +49,11 @@ from pylabrobot.celigo.config import (
   load_galvo_optical_calibration,
   load_illumination_channels,
 )
-from pylabrobot.celigo.coordinates import CoordinateSystems
-from pylabrobot.celigo.errors import CeligoError
-from pylabrobot.celigo.galvo import Galvo, GalvoControllerStatus
-from pylabrobot.celigo.laser import Laser
-from pylabrobot.celigo.motion import (
+from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
+from pylabrobot.revvity.celigo.errors import CeligoError
+from pylabrobot.revvity.celigo.galvo import Galvo, GalvoControllerStatus
+from pylabrobot.revvity.celigo.laser import Laser
+from pylabrobot.revvity.celigo.motion import (
   Axis,
   FilterWheel,
   LinearAxis,
@@ -61,7 +61,7 @@ from pylabrobot.celigo.motion import (
   MotorController,
   StepperMotor,
 )
-from pylabrobot.celigo.navigation import well_to_stage_mm
+from pylabrobot.revvity.celigo.navigation import well_to_stage_mm
 
 __all__ = [
   "AcquisitionResult",

@@ -2,15 +2,15 @@
 
 import unittest
 
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.config import (
   Calibrated2DPolynomialTransform,
   GalvoAxisOpticalCalibration,
   GalvoMagnificationCalibration,
   GalvoOpticalCalibration,
 )
-from pylabrobot.celigo.errors import CeligoError
-from pylabrobot.celigo.galvo import volts_to_dac_count
-from pylabrobot.celigo.tests.helpers import make_celigo
+from pylabrobot.revvity.celigo.errors import CeligoError
+from pylabrobot.revvity.celigo.galvo import volts_to_dac_count
+from pylabrobot.revvity.celigo.tests.helpers import make_celigo
 
 
 class TestGalvoPolynomial(unittest.TestCase):

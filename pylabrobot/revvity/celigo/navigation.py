@@ -1,6 +1,6 @@
 """Plate / well navigation for the Celigo.
 
-Uses the coordinate systems from :mod:`pylabrobot.celigo.coordinates` to answer the
+Uses the coordinate systems from :mod:`pylabrobot.revvity.celigo.coordinates` to answer the
 practical navigation questions the device asks:
 
 * where in stage millimeters is the center of well ``(row, col)``?
@@ -17,11 +17,11 @@ from __future__ import annotations
 import math
 from typing import List, Tuple
 
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.config import (
   CalibrationConfig,
   NavigationConfig,
 )
-from pylabrobot.celigo.coordinates import Coordinate2D, CoordinateSystems
+from pylabrobot.revvity.celigo.coordinates import Coordinate2D, CoordinateSystems
 from pylabrobot.resources.plate import Plate
 
 
@@ -89,7 +89,7 @@ def galvo_field_of_view_offsets_mm(
 ) -> List[Coordinate2D]:
   """Galvo FOV-center offsets (mm, relative to FOR center) in serpentine order.
 
-  :meth:`pylabrobot.celigo.galvo.Galvo.voltages_for_offset` combines each offset with
+  :meth:`pylabrobot.revvity.celigo.galvo.Galvo.voltages_for_offset` combines each offset with
   the calibrated imaging center and logical-filter correction.
   """
   columns, rows = fields_of_view_per_field_of_reference(calibration, navigation)

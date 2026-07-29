@@ -2,14 +2,14 @@
 
 import unittest
 
-from pylabrobot.celigo.coordinates import CoordinateSystems
-from pylabrobot.celigo.navigation import (
+from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
+from pylabrobot.revvity.celigo.navigation import (
   effective_fov_mm,
   fields_of_view_per_field_of_reference,
   galvo_field_of_view_offsets_mm,
   well_to_stage_mm,
 )
-from pylabrobot.celigo.tests.helpers import (
+from pylabrobot.revvity.celigo.tests.helpers import (
   make_calibration_config,
   make_hardware_default_config,
   make_navigation_config,

@@ -10,17 +10,17 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, Tuple
 
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.config import (
   AxisConfig,
   CeligoConfig,
   FilterWheelConfig,
   LinearAxisConfig,
 )
-from pylabrobot.celigo.errors import CeligoError
-from pylabrobot.celigo.protocol import complete_cleanup, require_payload_length
+from pylabrobot.revvity.celigo.errors import CeligoError
+from pylabrobot.revvity.celigo.protocol import complete_cleanup, require_payload_length
 
 if TYPE_CHECKING:
-  from pylabrobot.celigo.celigo import Celigo
+  from pylabrobot.revvity.celigo.celigo import Celigo
 
 LinearAxisName = Literal["x", "y", "z"]
 MotorControllerFirmwareVersion = Tuple[int, int]

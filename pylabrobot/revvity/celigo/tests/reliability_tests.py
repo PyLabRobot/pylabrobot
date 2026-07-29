@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Tuple
 from unittest.mock import patch
 
-from pylabrobot.celigo.celigo import (
+from pylabrobot.revvity.celigo.celigo import (
   _MAX_RESPONSE_PAYLOAD_BYTES,
   _STATUS_INTERLOCK_OPEN,
   CeligoError,
@@ -15,10 +15,10 @@ from pylabrobot.celigo.celigo import (
   ControllerStatus,
   _fletcher16,
 )
-from pylabrobot.celigo.config import Calibrated2DPolynomialTransform, CeligoHardwareConfig
-from pylabrobot.celigo.galvo import dac_count_to_volts
-from pylabrobot.celigo.motion import _decode_oem_response
-from pylabrobot.celigo.tests.helpers import (
+from pylabrobot.revvity.celigo.config import Calibrated2DPolynomialTransform, CeligoHardwareConfig
+from pylabrobot.revvity.celigo.galvo import dac_count_to_volts
+from pylabrobot.revvity.celigo.motion import _decode_oem_response
+from pylabrobot.revvity.celigo.tests.helpers import (
   make_calibration_config,
   make_celigo,
   make_galvo_config,

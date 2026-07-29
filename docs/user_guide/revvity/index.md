@@ -1,4 +1,4 @@
-# Celigo
+# Revvity
 
 ```{toctree}
 :maxdepth: 1
@@ -8,7 +8,11 @@ celigo/advanced-imaging
 celigo/components-and-diagnostics
 ```
 
-[OEM link](https://www.revvity.com/product/celigo-5c-config-200-bffl-5c)
+Revvity instruments supported by PyLabRobot:
+
+## Celigo
+
+[Product page](https://www.revvity.com/product/celigo-5c-config-200-bffl-5c)
 
 PyLabRobot controls the Celigo through one plain `Celigo` class. Configuration copied
 from the vendor installation supplies motor limits, channels, optical centers, filter
@@ -18,7 +22,7 @@ resource supplies the plate and well geometry used for navigation.
 Load the instrument configuration explicitly, then set the plate:
 
 ```python
-from pylabrobot.celigo import Celigo, CeligoConfig
+from pylabrobot.revvity import Celigo, CeligoConfig
 from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 
 config = CeligoConfig.from_install("/path/to/Celigo/ConfigFiles")

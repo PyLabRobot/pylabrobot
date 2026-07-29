@@ -37,7 +37,6 @@ Manufacturers
     pylabrobot.bmg_labtech
     pylabrobot.brooks
     pylabrobot.byonoy
-    pylabrobot.celigo
     pylabrobot.hamilton
     pylabrobot.inheco
     pylabrobot.liconic
@@ -45,5 +44,6 @@ Manufacturers
     pylabrobot.molecular_devices
     pylabrobot.opentrons
     pylabrobot.qinstruments
+    pylabrobot.revvity
     pylabrobot.tecan
     pylabrobot.thermo_fisher

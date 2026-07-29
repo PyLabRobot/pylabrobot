@@ -4,8 +4,8 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-from pylabrobot.celigo.celigo import Celigo, CeligoError
-from pylabrobot.celigo.config import (
+from pylabrobot.revvity.celigo.celigo import Celigo, CeligoError
+from pylabrobot.revvity.celigo.config import (
   CeligoHardwareConfig,
   DigitalIOConfig,
   FilterMapEntry,
@@ -13,8 +13,8 @@ from pylabrobot.celigo.config import (
   IOConfig,
   LightingIOConfig,
 )
-from pylabrobot.celigo.motion import Axis
-from pylabrobot.celigo.tests.helpers import (
+from pylabrobot.revvity.celigo.motion import Axis
+from pylabrobot.revvity.celigo.tests.helpers import (
   FakeCamera,
   make_calibration_config,
   make_celigo,
@@ -388,8 +388,8 @@ class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
 class TestCompanionConfigurationLoading(unittest.TestCase):
   def test_constructor_builds_camera_from_lucam_sdk(self):
     with (
-      patch("pylabrobot.celigo.celigo.FTDI"),
-      patch("pylabrobot.celigo.celigo.LumeneraCamera", FakeCamera),
+      patch("pylabrobot.revvity.celigo.celigo.FTDI"),
+      patch("pylabrobot.revvity.celigo.celigo.LumeneraCamera", FakeCamera),
     ):
       celigo = Celigo(
         lucam_sdk="/opt/lumenera/liblucamapi.so",
@@ -407,7 +407,7 @@ class TestCompanionConfigurationLoading(unittest.TestCase):
 
   def test_constructor_uses_explicit_aggregate_config(self):
     config = make_test_config()
-    with patch("pylabrobot.celigo.celigo.FTDI"):
+    with patch("pylabrobot.revvity.celigo.celigo.FTDI"):
       celigo = Celigo(config=config)
 
     self.assertIs(celigo.config, config)

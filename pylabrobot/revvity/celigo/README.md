@@ -1,8 +1,9 @@
 # Celigo
 
-A direct PyLabRobot driver for the Nexcelom/Cyntellect Celigo image cytometer. `Celigo`
-is the main entry point and owns its camera, galvo, and laser components. It talks to
-the FTDI USB-IO controller without requiring the Celigo application.
+A direct PyLabRobot driver for the Revvity Celigo image cytometer (formerly sold by
+Nexcelom/Cyntellect). `Celigo` is the main entry point and owns its camera, galvo, and
+laser components. It talks to the FTDI USB-IO controller without requiring the Celigo
+application.
 
 ## Package
 
@@ -24,7 +25,7 @@ configuration. Selecting a logical filter requires a known filter-wheel home pos
 ## Usage
 
 ```python
-from pylabrobot.celigo import Celigo, CeligoConfig
+from pylabrobot.revvity import Celigo, CeligoConfig
 from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 
 config = CeligoConfig.from_install("/path/to/Celigo/ConfigFiles")
@@ -119,7 +120,7 @@ performed. It indexes the configuration directory once and requires all companio
 calibration files:
 
 ```python
-from pylabrobot.celigo import CeligoConfig
+from pylabrobot.revvity import CeligoConfig
 
 config = CeligoConfig.from_install(config_root)
 config.hardware_defaults.default_calibrated_z += 0.01
@@ -143,5 +144,5 @@ instrument state.
 ## Tests
 
 ```console
-pytest pylabrobot/celigo/tests
+pytest pylabrobot/revvity/celigo/tests
 ```
