@@ -18,5 +18,6 @@ Thermocyclers are essential for temperature-controlled processes like PCR (Polym
 ```{toctree}
 :maxdepth: 1
 
+Thermocycler quickstart <thermocycler-quickstart>
 Inheco ODTC <inheco-odtc>
 ```
