@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, Tuple
+from typing import Optional, Tuple, cast
 
 from pylabrobot.legacy.centrifuge.backend import CentrifugeBackend, LoaderBackend
 from pylabrobot.legacy.centrifuge.standard import (
@@ -143,9 +143,9 @@ class Centrifuge(Machine, Resource):
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
-      rotation=Rotation.deserialize(data["rotation"]),
-      category=data["category"],
-      model=data["model"],
+      rotation=cast(Optional[Rotation], deserialize(data.get("rotation"))),
+      category=data.get("category"),
+      model=data.get("model"),
       buckets=buckets,
     )
 
@@ -236,7 +236,7 @@ class Loader(Machine, ResourceHolder):
       size_y=data["resource"]["size_y"],
       size_z=data["resource"]["size_z"],
       child_location=deserialize(data["resource"]["child_location"]),
-      rotation=deserialize(data["resource"]["rotation"]),
-      category=data["resource"]["category"],
-      model=data["resource"]["model"],
+      rotation=deserialize(data["resource"].get("rotation")),
+      category=data["resource"].get("category"),
+      model=data["resource"].get("model"),
     )

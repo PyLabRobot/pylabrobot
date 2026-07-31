@@ -311,20 +311,22 @@ class FTDI(IOBase):
 
   async def read(self, num_bytes: int = 1) -> bytes:
     data = self.dev.read(num_bytes)
-    logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
-    capturer.record(
-      FTDICommand(
-        device_id=self.device_id,
-        action="read",
-        data=data if isinstance(data, str) else data.hex(),
+    if len(data) != 0:
+      logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
+      capturer.record(
+        FTDICommand(
+          device_id=self.device_id,
+          action="read",
+          data=data if isinstance(data, str) else data.hex(),
+        )
       )
-    )
     return cast(bytes, data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     data = self.dev.readline()
-    logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
-    capturer.record(FTDICommand(device_id=self.device_id, action="readline", data=data.hex()))
+    if len(data) != 0:
+      logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
+      capturer.record(FTDICommand(device_id=self.device_id, action="readline", data=data.hex()))
     return cast(bytes, data)
 
   def serialize(self):

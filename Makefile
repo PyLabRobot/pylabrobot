@@ -3,7 +3,7 @@ ifeq ($(shell test -e ./env/ && echo yes),yes)
 $(info Using virtualenv in env)
 endif
 
-.PHONY: docs lint test
+.PHONY: docs docs-fast docs-check docs-linkcheck clean-docs lint test
 
 docs:
 	sphinx-build -b html docs docs/build/ -j 16 -W
@@ -14,6 +14,9 @@ docs-fast:
 
 docs-check:
 	sphinx-build -b dummy docs docs/build/ -j 16 -W
+
+docs-linkcheck:
+	sphinx-build -b linkcheck docs docs/build/linkcheck -j 16 -W
 
 clean-docs:
 	rm -rf docs/build

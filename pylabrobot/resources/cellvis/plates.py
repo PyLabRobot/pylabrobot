@@ -1,3 +1,5 @@
+import warnings
+
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
@@ -7,18 +9,18 @@ from pylabrobot.resources.well import (
 )
 
 
-def CellVis_24_wellplate_3600uL_Fb_Lid(name: str) -> Lid:
+def cellvis_24_wellplate_3600uL_Fb_lid(name: str) -> Lid:
   return Lid(
     name=name,
     size_x=127.15,  # from spec
     size_y=85.05,  # from spec
     size_z=10,  # from spec
     nesting_z_height=7.5,  # from spec
-    model="CellVis_24_wellplate_3600uL_Fb_Lid",
+    model="cellvis_24_wellplate_3600uL_Fb_lid",
   )
 
 
-def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:
+def cellvis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:
   """p/n P24-1.5P
 
   https://www.cellvis.com/_24-well-plate-with--number-1.5-glass-like-polymer-coverslip-bottom-tissue-culture-treated-for-better-cell-attachment-than-cover-glass_/product_detail.php?product_id=65
@@ -29,8 +31,8 @@ def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.5,  # from spec
     size_y=85.25,  # from spec
     size_z=20,  # from spec
-    lid=CellVis_24_wellplate_3600uL_Fb_Lid(name + "_Lid") if with_lid else None,
-    model="CellVis_24_wellplate_3600uL_Fb",
+    lid=cellvis_24_wellplate_3600uL_Fb_lid(name + "_Lid") if with_lid else None,
+    model="cellvis_24_wellplate_3600uL_Fb",
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=6,
@@ -52,18 +54,18 @@ def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:
   )
 
 
-def CellVis_96_wellplate_350uL_Fb_Lid(name: str) -> Lid:
+def cellvis_96_wellplate_350uL_Fb_lid(name: str) -> Lid:
   return Lid(
     name=name,
     size_x=127.6,  # from spec
     size_y=85.75,  # from spec
     size_z=10,  # from spec
     nesting_z_height=10 - (16.03 - 13.83),  # from spec
-    model="CellVis_24_wellplate_3600uL_Fb_Lid",
+    model="cellvis_96_wellplate_350uL_Fb_lid",
   )
 
 
-def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
+def cellvis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
   """p/n P96-1.5H-N
 
   https://www.cellvis.com/_96-well-glass-bottom-plate-with-high-performance-number-1.5-cover-glass_/product_detail.php?product_id=50
@@ -74,8 +76,8 @@ def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.6,  # from spec
     size_y=85.75,  # from spec
     size_z=13.83,  # from spec
-    lid=CellVis_24_wellplate_3600uL_Fb_Lid(name + "_Lid") if with_lid else None,
-    model="CellVis_24_wellplate_3600uL_Fb",
+    lid=cellvis_96_wellplate_350uL_Fb_lid(name + "_Lid") if with_lid else None,
+    model="cellvis_96_wellplate_350uL_Fb",
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -93,3 +95,68 @@ def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
     ),
   )
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
+
+
+def CellVis_24_wellplate_3600uL_Fb_Lid(name: str) -> Lid:  # remove v1b1
+  """Deprecated alias for cellvis_24_wellplate_3600uL_Fb_lid().
+
+  This alias will be removed in v1b1.
+  Use `cellvis_24_wellplate_3600uL_Fb_lid()` instead.
+  """
+  warnings.warn(
+    "CellVis_24_wellplate_3600uL_Fb_Lid() is deprecated and will be removed in v1b1. "
+    "Use cellvis_24_wellplate_3600uL_Fb_lid() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cellvis_24_wellplate_3600uL_Fb_lid(name)
+
+
+def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+  """Deprecated alias for cellvis_24_wellplate_3600uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `cellvis_24_wellplate_3600uL_Fb()` instead.
+  """
+  warnings.warn(
+    "CellVis_24_wellplate_3600uL_Fb() is deprecated and will be removed in v1b1. "
+    "Use cellvis_24_wellplate_3600uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cellvis_24_wellplate_3600uL_Fb(name, with_lid)
+
+
+def CellVis_96_wellplate_350uL_Fb_Lid(name: str) -> Lid:  # remove v1b1
+  """Deprecated alias for cellvis_96_wellplate_350uL_Fb_lid().
+
+  This alias will be removed in v1b1.
+  Use `cellvis_96_wellplate_350uL_Fb_lid()` instead.
+  """
+  warnings.warn(
+    "CellVis_96_wellplate_350uL_Fb_Lid() is deprecated and will be removed in v1b1. "
+    "Use cellvis_96_wellplate_350uL_Fb_lid() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cellvis_96_wellplate_350uL_Fb_lid(name)
+
+
+def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:  # remove v1b1
+  """Deprecated alias for cellvis_96_wellplate_350uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `cellvis_96_wellplate_350uL_Fb()` instead.
+  """
+  warnings.warn(
+    "CellVis_96_wellplate_350uL_Fb() is deprecated and will be removed in v1b1. "
+    "Use cellvis_96_wellplate_350uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cellvis_96_wellplate_350uL_Fb(name, with_lid)

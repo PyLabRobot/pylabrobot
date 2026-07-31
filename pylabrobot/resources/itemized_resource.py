@@ -108,10 +108,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         raise ValueError("Must specify either `ordered_items` or `ordering`.")
       self._ordering = ordering
 
-    # validate that ordering is in the transposed Excel style notation
-    for identifier in self._ordering:
-      _ = split_identifier(identifier)
-
   def __getitem__(
     self,
     identifier: Union[str, int, Sequence[int], Sequence[str], slice, range],

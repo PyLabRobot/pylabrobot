@@ -28,6 +28,7 @@ mis = "mis"
 RHE = "RHE"
 "ASEND" = "ASEND"
 caf = "caf"
+scap = "scap"
 
 [files]
 extend-exclude = [

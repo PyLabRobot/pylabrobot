@@ -70,6 +70,11 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://www.preciseflexrobots.com/
 ```
 
+```{image} /img/supported_by/logo_q.png
+:alt: QINSTRUMENTS
+:class: company
+:target: https://www.qinstruments.com
+```
 
 ## Used by
 
@@ -200,6 +205,7 @@ api/pylabrobot
 ```{toctree}
 :hidden:
 
+community-protocols/index
 Community <https://discuss.pylabrobot.org/>
 ```
 

@@ -1,10 +1,10 @@
 import unittest
 
 from pylabrobot.resources import (
-  CellVis_24_wellplate_3600uL_Fb,
-  Cor_Cos_6_wellplate_16800ul_Fb,
   Revvity_384_wellplate_28ul_Ub,
   Thermo_TS_96_wellplate_1200ul_Rb,
+  cellvis_24_wellplate_3600uL_Fb,
+  cor_cos_6_wellplate_16800uL_Fb,
 )
 
 from .coordinate import Coordinate
@@ -63,10 +63,61 @@ class TestLid(unittest.TestCase):
     self.assertIsNone(plate.lid)
 
 
+class TestStackingZHeight(unittest.TestCase):
+  def test_default_is_none(self):
+    plate = Plate("plate", size_x=1, size_y=1, size_z=15, ordered_items={})
+    self.assertIsNone(plate.stacking_z_height)
+
+  def test_stored(self):
+    plate = Plate("plate", size_x=1, size_y=1, size_z=15, ordered_items={}, stacking_z_height=12.5)
+    self.assertEqual(plate.stacking_z_height, 12.5)
+
+  def test_serialize_round_trip(self):
+    plate = Plate(
+      "plate",
+      size_x=1,
+      size_y=1,
+      size_z=15,
+      ordered_items={},
+      stacking_z_height=12.5,
+      plate_type="non-skirted",
+    )
+    serialized = plate.serialize()
+    self.assertEqual(serialized["stacking_z_height"], 12.5)
+    self.assertEqual(serialized["plate_type"], "non-skirted")
+
+    restored = Plate.deserialize(serialized)
+    self.assertEqual(restored.stacking_z_height, 12.5)
+    self.assertEqual(restored.plate_type, "non-skirted")
+
+  def test_differs_in_equality(self):
+    # `stacking_z_height` is a physical dimension, so plates that differ in it are not equal.
+    def make(stacking_z_height):
+      return Plate(
+        "plate",
+        size_x=1,
+        size_y=1,
+        size_z=15,
+        ordered_items={},
+        stacking_z_height=stacking_z_height,
+      )
+
+    self.assertEqual(make(12.5), make(12.5))
+    self.assertNotEqual(make(12.5), make(13.0))
+    self.assertNotEqual(make(12.5), make(None))
+
+  def test_remains_hashable(self):
+    plate = Plate("plate", size_x=1, size_y=1, size_z=15, ordered_items={}, stacking_z_height=12.5)
+    # equal plates hash equally; the object stays usable in sets/dicts.
+    other = Plate("plate", size_x=1, size_y=1, size_z=15, ordered_items={}, stacking_z_height=12.5)
+    self.assertEqual(hash(plate), hash(other))
+    self.assertIn(plate, {plate})
+
+
 class TestQuadrants(unittest.TestCase):
   def setUp(self):
-    self.example_6_wellplate = Cor_Cos_6_wellplate_16800ul_Fb(name="example_6_wellplate")
-    self.example_24_wellplate = CellVis_24_wellplate_3600uL_Fb(name="example_24_wellplate")
+    self.example_6_wellplate = cor_cos_6_wellplate_16800uL_Fb(name="example_6_wellplate")
+    self.example_24_wellplate = cellvis_24_wellplate_3600uL_Fb(name="example_24_wellplate")
     self.example_96_wellplate = Thermo_TS_96_wellplate_1200ul_Rb(name="example_96_wellplate")
     self.example_384_wellplate = Revvity_384_wellplate_28ul_Ub(name="example_384_wellplate")
 

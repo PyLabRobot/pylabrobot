@@ -25,10 +25,17 @@ teach, and accelerate your own automation workflows.
       <li>Resource movement using CORE grippers</li>
       <li>Resource position check using grippers</li>
       <li>PLR autocorrection of plate placement onto PlateAdapter/magnet</li></ul>
-   :image: /cookbook/assets/star_movement_plate_to_alpaqua_core/preview.jpg
-   :image_hover: /cookbook/assets/star_movement_plate_to_alpaqua_core/animation.mp4
    :link: star_movement_plate_to_alpaqua_core.html
    :tags: ResourceMovement PlateAdapter HamiltonSTAR
+
+.. plrcard::
+   :header: Send PyLabRobot notifications to Slack
+   :card_description: <ul>
+      <li>Post run start/finish/failure messages to a Slack channel</li>
+      <li>Uses only the Python standard library (no extra deps)</li>
+      <li>Webhook URL stored in a local file outside the repo</li></ul>
+   :link: slack_notifications.html
+   :tags: Notifications Slack Monitoring
 
 .. plrcardgrid::
 
@@ -42,3 +49,4 @@ teach, and accelerate your own automation workflows.
    :hidden:
 
    star_movement_plate_to_alpaqua_core
+   slack_notifications

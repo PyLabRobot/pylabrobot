@@ -205,7 +205,7 @@ class Incubator(Machine, Resource):
       size_z=data["size_z"],
       racks=[PlateCarrier.deserialize(rack) for rack in data["racks"]],
       loading_tray_location=cast(Coordinate, deserialize(data["loading_tray_location"])),
-      rotation=Rotation.deserialize(data["rotation"]),
-      category=data["category"],
-      model=data["model"],
+      rotation=cast(Optional[Rotation], deserialize(data.get("rotation"))),
+      category=data.get("category"),
+      model=data.get("model"),
     )

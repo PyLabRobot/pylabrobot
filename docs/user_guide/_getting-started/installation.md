@@ -79,7 +79,7 @@ See [CONTRIBUTING.md](/contributor_guide/contributing) for specific instructions
 
 ## Using the USB interface
 
-If you want to use the firmware version of the Hamilton or Tecan interfaces, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
+If you want to use the firmware version of the Hamilton or Tecan interfaces, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions in the [PyUSB README](https://github.com/pyusb/pyusb/). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
 
 First, install the USB dependencies:
 
@@ -167,7 +167,7 @@ If you ever wish to switch back from firmware command to use `pyhamilton` or pla
 
 ### Troubleshooting
 
-If you get a `usb.core.NoBackendError: No backend available` error: [this](https://github.com/pyusb/pyusb/blob/master/docs/faq.rst#how-do-i-fix-no-backend-available-errors) may be helpful.
+If you get a `usb.core.NoBackendError: No backend available` error, the [PyUSB repository](https://github.com/pyusb/pyusb/) and its FAQ may be helpful.
 
 If you are still having trouble, please reach out on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).
 
