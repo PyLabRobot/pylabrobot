@@ -22,13 +22,16 @@ from pylabrobot.resources import (
   TIP_CAR_480_A00,
   Container,
   Coordinate,
-  Cor_96_wellplate_360ul_Fb,
   Deck,
   Lid,
+  PetriDish,
   Plate,
+  Resource,
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
+  cor_96_wellplate_360uL_Fb,
+  hamilton_1_trough_200mL_Vb,
   nest_1_troughplate_195000uL_Vb,
   no_tip_tracking,
   set_tip_tracking,
@@ -46,6 +49,7 @@ from pylabrobot.resources.hamilton import (
 from pylabrobot.resources.revvity.plates import Revvity_384_wellplate_28ul_Ub
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
+  no_volume_tracking,
   set_volume_tracking,
 )
 from pylabrobot.resources.well import Well
@@ -113,11 +117,10 @@ def _make_disp(
 
 
 class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+  def setUp(self):
     self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.backend, deck=self.deck)
-    await self.lh.setup()
 
   def test_resource_assignment(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
@@ -126,8 +129,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car[3] = hamilton_96_tiprack_1000uL_filter("tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-    plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
+    plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
 
     self.deck.assign_child_resource(tip_car, rails=1)
     self.deck.assign_child_resource(plt_car, rails=21)
@@ -157,7 +160,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
     self.deck.assign_child_resource(tip_car, rails=1)
     self.deck.assign_child_resource(plt_car, rails=10)
 
@@ -192,8 +195,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     tip_car[3] = hamilton_96_tiprack_1000uL_filter(name="tip_rack_04")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-    plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
+    plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
     self.deck.assign_child_resource(tip_car, rails=1)
     self.deck.assign_child_resource(plt_car, rails=10)
 
@@ -240,7 +243,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="sub")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="sub")
     self.deck.assign_child_resource(tip_car, rails=1)
     with self.assertRaises(ValueError):
       self.deck.assign_child_resource(plt_car, rails=10)
@@ -251,15 +254,15 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="ok")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="ok")
     self.deck.assign_child_resource(tip_car, rails=1)
     self.deck.assign_child_resource(plt_car, rails=10)
     with self.assertRaises(ValueError):
-      plt_car[1] = Cor_96_wellplate_360ul_Fb(name="sub")
+      plt_car[1] = cor_96_wellplate_360uL_Fb(name="sub")
 
   async def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    plt_car[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(plt_car, rails=21)
 
     await self.lh.move_plate(plate, plt_car[2])
@@ -273,7 +276,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_plate_free(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    plt_car[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(plt_car, rails=1)
 
     await self.lh.move_plate(plate, Coordinate(1000, 1000, 1000))
@@ -309,6 +312,27 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       plate.get_absolute_location().z + plate.get_absolute_size_z() - lid_height
       == lid.get_absolute_location().z
     )
+
+  async def test_move_lid_to_trash(self):
+    # a lid moved to the trash is discarded, not seated on it
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
+    self.deck.assign_child_resource(plate, location=Coordinate(0, 0, 100))
+    lid = Lid(name="lid", size_x=100, size_y=100, size_z=10, nesting_z_height=10)
+    plate.assign_child_resource(lid)
+    trash = self.deck.get_trash_area()
+
+    with unittest.mock.patch.object(
+      self.lh.backend, "drop_resource", wraps=self.lh.backend.drop_resource
+    ) as mock_drop:
+      await self.lh.move_lid(lid, trash)
+
+    self.assertEqual(
+      mock_drop.call_args.kwargs["drop"].destination,
+      trash.get_location_wrt(self.deck),
+    )
+    self.assertFalse(plate.has_lid())
+    self.assertIsNone(lid.parent)
+    self.assertNotIn(lid, trash.children)
 
   async def test_move_plate_onto_resource_stack_with_lid(self):
     plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
@@ -486,7 +510,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
@@ -533,6 +557,15 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.backend.drop_tips96.assert_called_once()
     call_kwargs = self.backend.drop_tips96.call_args.kwargs
     self.assertEqual(call_kwargs["drop"].offset, Coordinate(1, 3, 3))
+
+  async def test_aspirate96_tip_tracker_respects_volume_tracking_off(self):
+    """With volume tracking off, aspirate96 leaves the 96-head tip trackers untouched, matching
+    single-channel aspirate (the global flag governs the tip side, not just the source)."""
+    await self.lh.pick_up_tips96(self.tip_rack)
+    tip = self.lh.head96[0].get_tip()
+    with no_volume_tracking():
+      await self.lh.aspirate96(self.plate, volume=10)
+    self.assertEqual(tip.tracker.get_used_volume(), 0)
 
   async def test_default_offset_head96_initializer(self):
     backend = _create_mock_backend(num_channels=8)
@@ -659,7 +692,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_dispense96_well_list_mixed_parents(self):
-    plate2 = Cor_96_wellplate_360ul_Fb(name="plate2")
+    plate2 = cor_96_wellplate_360uL_Fb(name="plate2")
     self.deck.assign_child_resource(plate2, location=Coordinate(400, 100, 0))
     mixed = self.plate.get_all_items()[:48] + plate2.get_all_items()[:48]
     await self.lh.pick_up_tips96(self.tip_rack)
@@ -906,6 +939,57 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.lh.aspirate([well], vols=[10])
 
+  async def test_aspirate_from_trough_with_lid(self):
+    trough = hamilton_1_trough_200mL_Vb(name="trough")
+    trough.lid = Lid(
+      "trough_lid",
+      size_x=trough.get_size_x() + 2,
+      size_y=trough.get_size_y() + 2,
+      size_z=10,
+      nesting_z_height=4,
+    )
+    t = self.tip_rack.get_item("A1").get_tip()
+    self.lh.update_head_state({0: t})
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([trough], vols=[10])
+
+  async def test_aspirate_from_petri_dish_with_lid(self):
+    dish = PetriDish("petri_dish", diameter=90, height=15)
+    dish.lid = Lid(
+      "petri_dish_lid",
+      size_x=dish.get_size_x() + 4,
+      size_y=dish.get_size_y() + 4,
+      size_z=10,
+      nesting_z_height=4,
+    )
+    t = self.tip_rack.get_item("A1").get_tip()
+    self.lh.update_head_state({0: t})
+    with self.assertRaises(ValueError):
+      await self.lh.aspirate([dish], vols=[10])
+
+  async def test_lidded_ancestor_walks_full_chain(self):
+    # A lid on any ancestor blocks pipetting, not just the direct parent: nest a target two levels
+    # under a lidded container and check the walk finds it.
+    from pylabrobot.legacy.liquid_handling.liquid_handler import _lidded_ancestor
+
+    trough = hamilton_1_trough_200mL_Vb(name="trough")
+    trough.lid = Lid(
+      "trough_lid",
+      size_x=trough.get_size_x() + 2,
+      size_y=trough.get_size_y() + 2,
+      size_z=10,
+      nesting_z_height=4,
+    )
+    middle = Resource("middle", size_x=1, size_y=1, size_z=1)
+    target = Resource("target", size_x=1, size_y=1, size_z=1)
+    trough.assign_child_resource(middle, location=Coordinate.zero())
+    middle.assign_child_resource(target, location=Coordinate.zero())
+
+    self.assertIs(_lidded_ancestor(target), trough)
+    self.assertIs(_lidded_ancestor(middle), trough)
+    trough.lid = None
+    self.assertIsNone(_lidded_ancestor(target))
+
   @pytest.mark.filterwarnings("ignore:Extra arguments to backend")
   async def test_strictness(self):
     # Create a mock backend with a custom pick_up_tips that checks arguments
@@ -1017,7 +1101,7 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     self.single_well_plate = nest_1_troughplate_195000uL_Vb(name="single_well_plate")
     self.deck.assign_child_resource(self.single_well_plate, location=Coordinate(300, 100, 0))
@@ -1125,7 +1209,7 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()

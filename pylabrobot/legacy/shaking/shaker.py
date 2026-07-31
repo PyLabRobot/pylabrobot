@@ -1,49 +1,14 @@
 import asyncio
 from typing import Optional
 
-from pylabrobot.capabilities.shaking import Shaker as _NewShaker
-from pylabrobot.capabilities.shaking import ShakerBackend as _NewShakerBackend
-from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .backend import ShakerBackend
 
 
-class _ShakingAdapter(_NewShakerBackend, HasContinuousShaking):
-  def __init__(self, legacy: ShakerBackend):
-    self._legacy = legacy
-
-  async def setup(self):
-    pass
-
-  async def stop(self):
-    pass
-
-  async def shake(self, speed: float, duration: float, backend_params=None):
-    await self.start_shaking(speed)
-    await asyncio.sleep(duration)
-    await self.stop_shaking()
-
-  async def start_shaking(self, speed: float):
-    await self._legacy.start_shaking(speed)
-
-  async def stop_shaking(self):
-    await self._legacy.stop_shaking()
-
-  @property
-  def supports_locking(self) -> bool:
-    return self._legacy.supports_locking
-
-  async def lock_plate(self):
-    await self._legacy.lock_plate()
-
-  async def unlock_plate(self):
-    await self._legacy.unlock_plate()
-
-
 class Shaker(ResourceHolder, Machine):
-  """Legacy. Use a vendor-specific machine with Shaker instead."""
+  """A shaker machine"""
 
   def __init__(
     self,
@@ -67,30 +32,35 @@ class Shaker(ResourceHolder, Machine):
       child_location=child_location,
     )
     Machine.__init__(self, backend=backend)
-    self.backend: ShakerBackend = backend
-    self._shaking_cap = _NewShaker(backend=_ShakingAdapter(backend))
-
-  async def setup(self, **backend_kwargs):
-    await super().setup(**backend_kwargs)
-    await self._shaking_cap._on_setup()
+    self.backend: ShakerBackend = backend  # fix type
 
   async def shake(self, speed: float, duration: Optional[float] = None, **backend_kwargs):
-    if duration is not None:
-      return await self._shaking_cap.shake(speed=speed, duration=duration)
-    return await self._shaking_cap.start_shaking(speed=speed)
+    """Shake the shaker at the given speed
+
+    Args:
+      speed: Speed of shaking in revolutions per minute (RPM)
+      duration: Duration of shaking in seconds. If None, shake indefinitely (and return immediately).
+    """
+    if self.backend.supports_locking:
+      await self.backend.lock_plate()
+    await self.backend.start_shaking(speed=speed, **backend_kwargs)
+
+    if duration is None:
+      return
+
+    await asyncio.sleep(duration)
+    await self.backend.stop_shaking()
+    if self.backend.supports_locking:
+      await self.backend.unlock_plate()
 
   async def stop_shaking(self, **backend_kwargs):
-    await self._shaking_cap.stop_shaking()
+    await self.backend.stop_shaking(**backend_kwargs)
 
   async def lock_plate(self, **backend_kwargs):
-    await self._shaking_cap.lock_plate()
+    await self.backend.lock_plate(**backend_kwargs)
 
   async def unlock_plate(self, **backend_kwargs):
-    await self._shaking_cap.unlock_plate()
-
-  async def stop(self):
-    await self._shaking_cap._on_stop()
-    await super().stop()
+    await self.backend.unlock_plate(**backend_kwargs)
 
   def serialize(self) -> dict:
     return {

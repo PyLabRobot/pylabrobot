@@ -1,9 +1,18 @@
-"""Legacy. Use pylabrobot.capabilities.centrifuging.errors instead."""
+class LoaderNoPlateError(Exception):
+  pass
 
-from pylabrobot.capabilities.centrifuging.errors import (  # noqa: F401
-  BucketHasPlateError,
-  BucketNoPlateError,
-  CentrifugeDoorError,
-  LoaderNoPlateError,
-  NotAtBucketError,
-)
+
+class CentrifugeDoorError(Exception):
+  pass
+
+
+class NotAtBucketError(Exception):
+  pass
+
+
+class BucketNoPlateError(Exception):
+  pass
+
+
+class BucketHasPlateError(Exception):
+  pass

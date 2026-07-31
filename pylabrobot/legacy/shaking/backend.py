@@ -1,5 +1,3 @@
-"""Legacy. Use pylabrobot.capabilities.shaking.ShakerBackend instead."""
-
 from abc import ABCMeta, abstractmethod
 
 from pylabrobot.legacy.machines.backend import MachineBackend

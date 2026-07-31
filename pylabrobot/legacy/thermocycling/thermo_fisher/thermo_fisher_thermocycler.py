@@ -257,7 +257,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     self._num_blocks: Optional[int] = None
     self.num_temp_zones = 0
     self.available_blocks: List[int] = []
-    self.logger = logging.getLogger("pylabrobot.thermocycling.proflex")
+    self.logger = logging.getLogger("pylabrobot.legacy.thermocycling.proflex")
     self.current_runs: Dict[int, str] = {}
 
   @property

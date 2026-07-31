@@ -134,22 +134,18 @@ class Centrifuge(Machine, Resource):
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
-    buckets_data = data.get("buckets")
-    buckets = (
-      tuple(ResourceHolder.deserialize(bucket) for bucket in buckets_data) if buckets_data else None
-    )
-    if buckets is not None:
-      assert len(buckets) == 2
-    rotation_data = data.get("rotation")
+    backend = CentrifugeBackend.deserialize(data["backend"])
+    buckets = tuple(ResourceHolder.deserialize(bucket) for bucket in data["buckets"])
+    assert len(buckets) == 2
     return cls(
-      backend=CentrifugeBackend.deserialize(data["backend"]),
+      backend=backend,
       name=data["name"],
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
-      rotation=deserialize(rotation_data) if rotation_data else None,
-      category=data.get("category"),
-      model=data.get("model"),
+      rotation=Rotation.deserialize(data["rotation"]),
+      category=data["category"],
+      model=data["model"],
       buckets=buckets,
     )
 
@@ -232,18 +228,15 @@ class Loader(Machine, ResourceHolder):
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
-    resource_data = data.get("resource", {})
-    machine_data = data.get("machine", {})
-    rotation_data = resource_data.get("rotation")
     return cls(
-      backend=LoaderBackend.deserialize(machine_data["backend"]),
+      backend=LoaderBackend.deserialize(data["machine"]["backend"]),
       centrifuge=Centrifuge.deserialize(data["centrifuge"]),
-      name=resource_data["name"],
-      size_x=resource_data["size_x"],
-      size_y=resource_data["size_y"],
-      size_z=resource_data["size_z"],
-      child_location=deserialize(resource_data["child_location"]),
-      rotation=deserialize(rotation_data) if rotation_data else None,
-      category=resource_data.get("category"),
-      model=resource_data.get("model"),
+      name=data["resource"]["name"],
+      size_x=data["resource"]["size_x"],
+      size_y=data["resource"]["size_y"],
+      size_z=data["resource"]["size_z"],
+      child_location=deserialize(data["resource"]["child_location"]),
+      rotation=deserialize(data["resource"]["rotation"]),
+      category=data["resource"]["category"],
+      model=data["resource"]["model"],
     )

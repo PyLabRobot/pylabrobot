@@ -9,8 +9,8 @@ from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
   Coordinate,
-  Cor_96_wellplate_360ul_Fb,
   STARLetDeck,
+  cor_96_wellplate_360uL_Fb,
   hamilton_96_tiprack_300uL_filter,
   no_tip_tracking,
   no_volume_tracking,
@@ -37,8 +37,8 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
-    self.plt_car[1] = self.other_plate = Cor_96_wellplate_360ul_Fb(name="plate_02")
+    self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
+    self.plt_car[1] = self.other_plate = cor_96_wellplate_360uL_Fb(name="plate_02")
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.backend.send_command.reset_mock()

@@ -28,8 +28,8 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
   ``ot_api`` library.
 
   Example:
-    >>> from pylabrobot.liquid_handling import LiquidHandler
-    >>> from pylabrobot.liquid_handling.backends import OpentronsOT2Simulator
+    >>> from pylabrobot.legacy.liquid_handling import LiquidHandler
+    >>> from pylabrobot.legacy.liquid_handling.backends import OpentronsOT2Simulator
     >>> from pylabrobot.resources.opentrons import OTDeck
     >>> lh = LiquidHandler(backend=OpentronsOT2Simulator(), deck=OTDeck())
     >>> await lh.setup()

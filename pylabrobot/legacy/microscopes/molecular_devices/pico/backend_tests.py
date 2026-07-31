@@ -1,4 +1,4 @@
-"""Tests for PicoDriver.
+"""Tests for PicoBackend.
 
 Focus: verify the gRPC commands generated and responses decoded for each
 high-level method. The mock channel records every (path, request, metadata)
@@ -21,7 +21,6 @@ pytest.importorskip("grpc")
 
 import numpy as np  # type: ignore[import-not-found]
 
-from pylabrobot.capabilities.microscopy import ImagingMode, Objective
 from pylabrobot.io.sila.grpc import (
   decode_fields,
   get_field_bytes,
@@ -29,7 +28,7 @@ from pylabrobot.io.sila.grpc import (
   sila_string,
   varint_field,
 )
-from pylabrobot.molecular_devices.imageXpress.pico.backend import (
+from pylabrobot.legacy.microscopes.molecular_devices.pico.backend import (
   _FC_SVC,
   _HW_SVC,
   _INST_SVC,
@@ -37,12 +36,12 @@ from pylabrobot.molecular_devices.imageXpress.pico.backend import (
   _LOCK_SVC,
   _OBJ_SVC,
   _SNAP_SVC,
-  PicoDriver,
-  PicoMicroscopyBackend,
+  ExperimentalPicoBackend,
   _decode_intermediate_response,
   _extract_image_buffer,
   _get_image_info,
 )
+from pylabrobot.legacy.plate_reading.standard import ImagingMode, Objective
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
@@ -181,23 +180,20 @@ def _make_backend(
   objectives=None,
   filter_cubes=None,
   lock_timeout=3600,
-) -> Tuple[PicoDriver, PicoMicroscopyBackend, _MockChannel]:
-  """Create a PicoDriver + PicoMicroscopyBackend with a mock channel, bypassing setup()."""
-  driver = PicoDriver(
+) -> Tuple[ExperimentalPicoBackend, _MockChannel]:
+  """Create a PicoBackend with a mock channel, bypassing setup()."""
+  backend = ExperimentalPicoBackend(
     host="127.0.0.1",
     port=8091,
     lock_timeout=lock_timeout,
-  )
-  microscopy = PicoMicroscopyBackend(
-    driver=driver,
     objectives=objectives or {},
     filter_cubes=filter_cubes or {},
   )
   channel = _MockChannel()
-  driver._channel = channel
-  driver._lock_id = "pylabrobot"
-  driver._locked = True
-  return driver, microscopy, channel
+  backend._channel = channel
+  backend._lock_id = "pylabrobot"
+  backend._locked = True
+  return backend, channel
 
 
 def _decode_sila_string_from_request(data: bytes) -> str:
@@ -227,8 +223,7 @@ def _unwrap_sila_string(data: bytes) -> str:
 class TestSetup(unittest.IsolatedAsyncioTestCase):
   async def test_setup_sends_correct_sequence(self):
     """setup() with no objectives/filter_cubes: unlock stale, lock, query hardware."""
-    driver = PicoDriver(host="127.0.0.1", lock_timeout=120)
-    microscopy = PicoMicroscopyBackend(driver=driver)
+    backend = ExperimentalPicoBackend(host="127.0.0.1", lock_timeout=120)
     channel = _MockChannel()
 
     channel.set_response(f"/{_LOCK_SVC}/UnlockServer", b"")
@@ -243,8 +238,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     )
 
     with patch("grpc.insecure_channel", return_value=channel):
-      await driver.setup()
-      await microscopy._on_setup()
+      await backend.setup()
 
     self.assertEqual(len(channel.calls), 4)
     self.assertEqual(channel.calls[0].path, f"/{_LOCK_SVC}/UnlockServer")
@@ -260,9 +254,8 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_configures_objectives_and_filter_cubes(self):
     """When objectives/filter_cubes are specified, setup() calls ChangeHardware."""
-    driver = PicoDriver(host="127.0.0.1")
-    microscopy = PicoMicroscopyBackend(
-      driver=driver,
+    backend = ExperimentalPicoBackend(
+      host="127.0.0.1",
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -278,7 +271,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       f"/{_FC_SVC}/Get_InstalledFilterCubes",
       _sila_string_response(json.dumps({"filterCubesData": [{"Id": "DAPI"}]})),
     )
-    # request_available_objectives / request_available_filter_cubes for validation
+    # get_available_objectives / get_available_filter_cubes for validation
     channel.set_response(
       f"/{_OBJ_SVC}/GetAvailableObjectivesForPosition",
       _sila_string_response(json.dumps({"objectives": [{"Id": "PL FLUOTAR 4x/0.13"}]})),
@@ -291,8 +284,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     channel.set_response(f"/{_FC_SVC}/ChangeHardware", b"")
 
     with patch("grpc.insecure_channel", return_value=channel):
-      await driver.setup()
-      await microscopy._on_setup()
+      await backend.setup()
 
     # Verify ChangeHardware was called with correct JSON params
     obj_change_calls = channel.get_calls(f"/{_OBJ_SVC}/ChangeHardware")
@@ -315,7 +307,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
 
 class TestStop(unittest.IsolatedAsyncioTestCase):
   async def test_stop_sends_unlock(self):
-    backend, _, channel = _make_backend()
+    backend, channel = _make_backend()
 
     await backend.stop()
 
@@ -332,7 +324,7 @@ class TestStop(unittest.IsolatedAsyncioTestCase):
 
 class TestDoorCommands(unittest.IsolatedAsyncioTestCase):
   async def test_open_door(self):
-    backend, _, channel = _make_backend()
+    backend, channel = _make_backend()
     channel.set_response(f"/{_INST_SVC}/Initialize", b"")
     channel.set_response(f"/{_HW_SVC}/OpenPlateDrawer", b"")
 
@@ -346,7 +338,7 @@ class TestDoorCommands(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(backend.door_open)
 
   async def test_close_door(self):
-    backend, _, channel = _make_backend()
+    backend, channel = _make_backend()
     backend._door_open = True
     channel.set_response(f"/{_INST_SVC}/Initialize", b"")
     channel.set_response(f"/{_HW_SVC}/ClosePlateDrawer", b"")
@@ -368,11 +360,11 @@ class TestDoorCommands(unittest.IsolatedAsyncioTestCase):
 
 class TestObjectiveMaintenanceCommands(unittest.IsolatedAsyncioTestCase):
   async def test_enter_maintenance(self):
-    _, microscopy, channel = _make_backend()
+    backend, channel = _make_backend()
     channel.set_response(f"/{_INST_SVC}/Initialize", b"")
     channel.set_response(f"/{_OBJ_SVC}/EnterObjectiveMaintenance", b"")
 
-    await microscopy.enter_objective_maintenance(2)
+    await backend.enter_objective_maintenance(2)
 
     self.assertEqual(len(channel.calls), 2)
     self.assertEqual(channel.calls[0].path, f"/{_INST_SVC}/Initialize")
@@ -382,10 +374,10 @@ class TestObjectiveMaintenanceCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(params, {"Index": 2})
 
   async def test_exit_maintenance(self):
-    _, microscopy, channel = _make_backend()
+    backend, channel = _make_backend()
     channel.set_response(f"/{_OBJ_SVC}/ExitObjectiveMaintenance", b"")
 
-    await microscopy.exit_objective_maintenance()
+    await backend.exit_objective_maintenance()
 
     self.assertEqual(len(channel.calls), 1)
     self.assertEqual(channel.calls[0].path, f"/{_OBJ_SVC}/ExitObjectiveMaintenance")
@@ -394,13 +386,13 @@ class TestObjectiveMaintenanceCommands(unittest.IsolatedAsyncioTestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tests: request_configuration command + response decoding
+# Tests: get_configuration command + response decoding
 # ---------------------------------------------------------------------------
 
 
 class TestGetConfiguration(unittest.IsolatedAsyncioTestCase):
   async def test_decodes_instrument_configuration(self):
-    backend, _, channel = _make_backend()
+    backend, channel = _make_backend()
     config = {
       "InstrumentConfiguration": {
         "objectivesComponent": {"objectives": [{"Id": "4x", "Magnification": 4}]},
@@ -412,12 +404,12 @@ class TestGetConfiguration(unittest.IsolatedAsyncioTestCase):
       _sila_string_response(json.dumps(config)),
     )
 
-    result = await backend.request_configuration()
+    result = await backend.get_configuration()
 
     self.assertEqual(len(channel.calls), 1)
     self.assertEqual(channel.calls[0].path, f"/{_INST_SVC}/Get_InstrumentConfiguration")
     self.assertEqual(channel.calls[0].request, b"")
-    # Response unwrapped from SiLA String -> JSON -> InstrumentConfiguration key extracted
+    # Response unwrapped from SiLA String → JSON → InstrumentConfiguration key extracted
     self.assertEqual(result, config["InstrumentConfiguration"])
 
 
@@ -428,7 +420,7 @@ class TestGetConfiguration(unittest.IsolatedAsyncioTestCase):
 
 class TestChangeHardwareCommands(unittest.IsolatedAsyncioTestCase):
   async def test_change_objective(self):
-    _, microscopy, channel = _make_backend()
+    backend, channel = _make_backend()
     available = [{"Id": "PL FLUOTAR 4x/0.13"}, {"Id": "PL FLUOTAR 10x/0.30"}]
     channel.set_response(
       f"/{_OBJ_SVC}/GetAvailableObjectivesForPosition",
@@ -436,7 +428,7 @@ class TestChangeHardwareCommands(unittest.IsolatedAsyncioTestCase):
     )
     channel.set_response(f"/{_OBJ_SVC}/ChangeHardware", b"")
 
-    await microscopy.change_objective(1, "PL FLUOTAR 10x/0.30")
+    await backend.change_objective(1, "PL FLUOTAR 10x/0.30")
 
     # Query available, then change
     self.assertEqual(len(channel.calls), 2)
@@ -451,14 +443,14 @@ class TestChangeHardwareCommands(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(channel.calls[1].has_lock_metadata)
 
   async def test_change_objective_rejects_invalid_id(self):
-    _, microscopy, channel = _make_backend()
+    backend, channel = _make_backend()
     channel.set_response(
       f"/{_OBJ_SVC}/GetAvailableObjectivesForPosition",
       _sila_string_response(json.dumps({"objectives": [{"Id": "4x"}]})),
     )
 
     with self.assertRaises(ValueError) as ctx:
-      await microscopy.change_objective(0, "INVALID")
+      await backend.change_objective(0, "INVALID")
     self.assertIn("not compatible", str(ctx.exception))
 
     # Only the query was sent, ChangeHardware was NOT called
@@ -466,14 +458,14 @@ class TestChangeHardwareCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(channel.calls[0].path, f"/{_OBJ_SVC}/GetAvailableObjectivesForPosition")
 
   async def test_change_filter_cube(self):
-    _, microscopy, channel = _make_backend()
+    backend, channel = _make_backend()
     channel.set_response(
       f"/{_FC_SVC}/Get_CompatibleFilterCubes",
       _sila_string_response(json.dumps({"filterCubes": [{"Id": "DAPI"}, {"Id": "FITC"}]})),
     )
     channel.set_response(f"/{_FC_SVC}/ChangeHardware", b"")
 
-    await microscopy.change_filter_cube(1, "FITC")
+    await backend.change_filter_cube(1, "FITC")
 
     self.assertEqual(len(channel.calls), 2)
     self.assertEqual(channel.calls[0].path, f"/{_FC_SVC}/Get_CompatibleFilterCubes")
@@ -512,7 +504,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_sends_correct_snap_params(self):
     """Verify SnapImages request contains the right labware + snap JSON."""
 
-    _, microscopy, channel = _make_backend(
+    backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -527,7 +519,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     }
     self._setup_capture_channel(channel, "uuid-1", snap_event)
 
-    await microscopy.capture(
+    await backend.capture(
       row=3,
       column=7,
       mode=ImagingMode.DAPI,
@@ -584,7 +576,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_auto_exposure_and_autofocus(self):
     """When exposure_time='auto' and focal_height='auto', verify params."""
 
-    _, microscopy, channel = _make_backend(
+    backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -599,7 +591,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     }
     self._setup_capture_channel(channel, "uuid-2", snap_event)
 
-    await microscopy.capture(
+    await backend.capture(
       row=0,
       column=0,
       mode=ImagingMode.DAPI,
@@ -623,7 +615,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_observable_command_flow(self):
     """Verify the 3-step observable command protocol: start, stream, result."""
 
-    _, microscopy, channel = _make_backend(
+    backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -638,7 +630,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     }
     self._setup_capture_channel(channel, "exec-uuid-abc", snap_event)
 
-    result = await microscopy.capture(
+    result = await backend.capture(
       row=0,
       column=0,
       mode=ImagingMode.DAPI,
@@ -674,7 +666,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_multi_chunk_reassembly(self):
     """Verify image data is correctly reassembled from multiple chunks."""
 
-    _, microscopy, channel = _make_backend(
+    backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},
     )
@@ -711,7 +703,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
       ],
     )
 
-    result = await microscopy.capture(
+    result = await backend.capture(
       row=0,
       column=0,
       mode=ImagingMode.DAPI,
@@ -728,7 +720,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
   async def test_capture_brightfield_uses_correct_illumination(self):
     """Brightfield mode uses different light_channel/excitation_source."""
 
-    _, microscopy, channel = _make_backend(
+    backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.BRIGHTFIELD},
     )
@@ -743,7 +735,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     }
     self._setup_capture_channel(channel, "uuid-bf", snap_event)
 
-    await microscopy.capture(
+    await backend.capture(
       row=0,
       column=0,
       mode=ImagingMode.BRIGHTFIELD,

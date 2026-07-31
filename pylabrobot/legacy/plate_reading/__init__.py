@@ -4,6 +4,8 @@ from typing import Any
 
 from .agilent import (
   BioTekPlateReaderBackend,
+  Cytation5Backend,
+  Cytation5ImagingConfig,
   CytationBackend,
   CytationImagingConfig,
   SynergyH1Backend,
@@ -28,6 +30,7 @@ from .molecular_devices import (
   MolecularDevicesNVRAMError,
   MolecularDevicesSettings,
   MolecularDevicesSpectraMax384PlusBackend,
+  MolecularDevicesSpectraMaxGeminiEMBackend,
   MolecularDevicesSpectraMaxM5Backend,
   MolecularDevicesUnrecognizedCommandError,
   PmtGain,

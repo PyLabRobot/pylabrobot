@@ -1,11 +1,11 @@
 import unittest
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.legacy.temperature_controlling import (
   TemperatureController,
   TemperatureControllerChatterboxBackend,
 )
 from pylabrobot.legacy.temperature_controlling.backend import TemperatureControllerBackend
-from pylabrobot.resources.coordinate import Coordinate
 
 
 class TemperatureControllerTests(unittest.TestCase):
@@ -36,12 +36,8 @@ class PassiveCoolingTests(unittest.IsolatedAsyncioTestCase):
       child_location=Coordinate.zero(),
     )
 
-    await tc.setup()
-    try:
-      with self.assertRaises(ValueError):
-        await tc.set_temperature(10)
-    finally:
-      await tc.stop()
+    with self.assertRaises(ValueError):
+      await tc.set_temperature(10)
 
   async def test_passive_cooling_without_support(self):
     backend = TemperatureControllerChatterboxBackend(dummy_temperature=20.0)
@@ -54,13 +50,9 @@ class PassiveCoolingTests(unittest.IsolatedAsyncioTestCase):
       child_location=Coordinate.zero(),
     )
 
-    await tc.setup()
-    try:
-      await tc.set_temperature(10, passive=True)
-      # Temperature should remain unchanged on the backend.
-      self.assertEqual(await backend.get_current_temperature(), 20.0)
-    finally:
-      await tc.stop()
+    await tc.set_temperature(10, passive=True)
+    # Temperature should remain unchanged on the backend.
+    self.assertEqual(await backend.get_current_temperature(), 20.0)
 
 
 class _FakeBackend(TemperatureControllerBackend):
@@ -102,9 +94,5 @@ class PassiveCoolingWithSupportTests(unittest.IsolatedAsyncioTestCase):
       child_location=Coordinate.zero(),
     )
 
-    await tc.setup()
-    try:
-      await tc.set_temperature(20, passive=True)
-      self.assertFalse(backend.set_called)
-    finally:
-      await tc.stop()
+    await tc.set_temperature(20, passive=True)
+    self.assertFalse(backend.set_called)

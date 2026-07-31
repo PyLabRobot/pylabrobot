@@ -1,44 +1,60 @@
-"""Legacy. Use pylabrobot.opentrons.OpentronsTemperatureModuleTemperatureBackend instead."""
+from typing import cast
 
 from pylabrobot.legacy.temperature_controlling.backend import (
   TemperatureControllerBackend,
 )
-from pylabrobot.opentrons.temperature_module import (
-  OpentronsTemperatureModuleDriver,
-)
-from pylabrobot.opentrons.temperature_module import (
-  OpentronsTemperatureModuleTemperatureBackend as _NewBackend,
-)
+
+try:
+  import ot_api
+
+  USE_OT = True
+except ImportError as e:
+  USE_OT = False
+  _OT_IMPORT_ERROR = e
 
 
 class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
-  """Legacy. Use pylabrobot.opentrons.OpentronsTemperatureModuleTemperatureBackend instead."""
+  """Opentrons temperature module backend."""
 
   @property
   def supports_active_cooling(self) -> bool:
-    return self._backend.supports_active_cooling
+    return False
 
   def __init__(self, opentrons_id: str):
-    self.driver = OpentronsTemperatureModuleDriver(opentrons_id=opentrons_id)
-    self._backend = _NewBackend(driver=self.driver)
+    """Create a new Opentrons temperature module backend.
+
+    Args:
+      opentrons_id: Opentrons ID of the temperature module. Get it from
+        `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
+    """
     self.opentrons_id = opentrons_id
 
+    if not USE_OT:
+      raise RuntimeError(
+        "Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
+        f" Import error: {_OT_IMPORT_ERROR}."
+      )
+
   async def setup(self):
-    await self.driver.setup()
-    await self._backend._on_setup()
+    pass
 
   async def stop(self):
-    await self._backend._on_stop()
-    await self.driver.stop()
+    await self.deactivate()
 
   def serialize(self) -> dict:
-    return self.driver.serialize()
+    return {**super().serialize(), "opentrons_id": self.opentrons_id}
 
   async def set_temperature(self, temperature: float):
-    await self._backend.set_temperature(temperature)
+    ot_api.modules.temperature_module_set_temperature(
+      celsius=temperature, module_id=self.opentrons_id
+    )
 
   async def deactivate(self):
-    await self._backend.deactivate()
+    ot_api.modules.temperature_module_deactivate(module_id=self.opentrons_id)
 
   async def get_current_temperature(self) -> float:
-    return await self._backend.request_current_temperature()
+    modules = ot_api.modules.list_connected_modules()
+    for module in modules:
+      if module["id"] == self.opentrons_id:
+        return cast(float, module["data"]["currentTemperature"])
+    raise RuntimeError(f"Module with id '{self.opentrons_id}' not found")

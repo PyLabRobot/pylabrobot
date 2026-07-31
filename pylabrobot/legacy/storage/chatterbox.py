@@ -1,6 +1,6 @@
-from pylabrobot.legacy.storage.backend import IncubatorBackend
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.plate import Plate
+from pylabrobot.legacy.storage.backend import IncubatorBackend
 
 
 class IncubatorChatterboxBackend(IncubatorBackend):
@@ -27,7 +27,6 @@ class IncubatorChatterboxBackend(IncubatorBackend):
 
   async def set_temperature(self, temperature: float):
     print(f"Setting temperature to {temperature}")
-    self._dummy_temperature = temperature
 
   async def get_temperature(self) -> float:
     print("Getting temperature")

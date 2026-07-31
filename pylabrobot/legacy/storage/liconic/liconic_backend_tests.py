@@ -7,6 +7,8 @@ import pytest
 
 pytest.importorskip("serial")
 
+from pylabrobot.resources import PlateHolder
+from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.legacy.storage.liconic.constants import LiconicType
 from pylabrobot.legacy.storage.liconic.liconic_backend import (
   LICONIC_SITE_HEIGHT_TO_STEPS,
@@ -17,8 +19,6 @@ from pylabrobot.legacy.storage.liconic.racks import (
   liconic_rack_17mm_22,
   liconic_rack_44mm_10,
 )
-from pylabrobot.resources import PlateHolder
-from pylabrobot.resources.carrier import PlateCarrier
 
 
 class TestStepSizeFormula(unittest.TestCase):
@@ -154,7 +154,7 @@ class TestValueConversions(unittest.IsolatedAsyncioTestCase):
   """Test the PLC register value conversions without actual serial IO."""
 
   def setUp(self):
-    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_DC2, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend._send_command = AsyncMock(return_value="OK")
     self.backend._wait_ready = AsyncMock()
 
@@ -305,7 +305,7 @@ class TestSensors(unittest.IsolatedAsyncioTestCase):
 
 class TestClimateGetters(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_DC2, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend._wait_ready = AsyncMock()
 
   async def test_get_target_temperature(self):
@@ -368,6 +368,24 @@ class TestInitialize(unittest.IsolatedAsyncioTestCase):
     await self.backend.initialize()
     self.backend._send_command.assert_any_call("ST 1900")
     self.backend._send_command.assert_any_call("ST 1801")
+    self.backend._wait_ready.assert_awaited()
+
+
+class TestScanBarcode(unittest.IsolatedAsyncioTestCase):
+  """scan_barcode must wait for the z-lift to reach the read position (ST 1910)
+  before triggering the scan, otherwise the beam fires while the lift is still
+  travelling and reads a plate it passes en route, not the target."""
+
+  def setUp(self):
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend._racks = [liconic_rack_17mm_22("rack1")]
+    self.backend._send_command = AsyncMock(return_value="OK")
+    self.backend._wait_ready = AsyncMock()
+    self.backend.barcode_scanner = AsyncMock()
+
+  async def test_scan_barcode_waits_for_lift(self):
+    await self.backend.scan_barcode(self.backend._racks[0].sites[0])
+    self.backend._send_command.assert_any_call("ST 1910")
     self.backend._wait_ready.assert_awaited()
 
 

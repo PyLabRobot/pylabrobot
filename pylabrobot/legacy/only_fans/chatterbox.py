@@ -1,10 +1,8 @@
-"""Legacy. Use pylabrobot.hamilton.hepa_fan.HamiltonHepaFanChatterboxBackend instead."""
-
-from pylabrobot.legacy.only_fans.backend import FanBackend
+from pylabrobot.legacy.only_fans import FanBackend
 
 
 class FanChatterboxBackend(FanBackend):
-  """Legacy chatterbox backend for device-free testing."""
+  """Chatter box backend for device-free testing. Prints out all operations."""
 
   async def setup(self) -> None:
     print("Setting up the fan.")

@@ -1,7 +1,7 @@
 import unittest
 
-from pylabrobot.legacy.storage import Incubator, IncubatorChatterboxBackend
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.legacy.storage import Incubator, IncubatorChatterboxBackend
 
 
 class IncubatorTests(unittest.TestCase):
