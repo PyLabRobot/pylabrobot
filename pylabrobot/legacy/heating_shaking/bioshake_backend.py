@@ -1,8 +1,8 @@
 import asyncio
 import warnings
 
-from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
+from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.legacy.machines.backend import MachineBackend
 
 try:

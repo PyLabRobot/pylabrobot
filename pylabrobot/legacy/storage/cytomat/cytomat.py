@@ -13,7 +13,6 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
-from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.legacy.storage.backend import IncubatorBackend
 from pylabrobot.legacy.storage.cytomat.constants import (
   ActionRegister,
@@ -46,6 +45,7 @@ from pylabrobot.legacy.storage.cytomat.utils import (
   hex_to_binary,
   validate_storage_location_number,
 )
+from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 logger = logging.getLogger(__name__)
 

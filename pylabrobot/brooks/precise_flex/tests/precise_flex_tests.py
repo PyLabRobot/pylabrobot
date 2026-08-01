@@ -1,4 +1,5 @@
 import unittest
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.brooks.precise_flex import (
@@ -10,6 +11,15 @@ from pylabrobot.brooks.precise_flex import (
 from pylabrobot.resources import Coordinate, Rotation
 
 
+def mocked(method: object) -> AsyncMock:
+  """A real method that a test replaced with an ``AsyncMock``.
+
+  Assertions like ``call_args_list`` live on the mock, not on the declared
+  method type, so they need narrowing before mypy will accept them.
+  """
+  return cast(AsyncMock, method)
+
+
 def _make_arm(closed_gripper_position: float = 500.0) -> PreciseFlex:
   """An arm whose transport is stubbed out, so tests assert on the commands it would send."""
   arm = PreciseFlex(
@@ -18,7 +28,7 @@ def _make_arm(closed_gripper_position: float = 500.0) -> PreciseFlex:
     gripper_z_offset=0.0,
     closed_gripper_position=closed_gripper_position,
   )
-  arm.send_command = AsyncMock(return_value="")
+  arm.send_command = AsyncMock(return_value="")  # type: ignore[method-assign]
   return arm
 
 
@@ -28,7 +38,7 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     self.arm = _make_arm(closed_gripper_position=500.0)
 
   def _sent_commands(self) -> list[str]:
-    return [c.args[0] for c in self.arm.send_command.call_args_list]
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
 
   async def test_move_gripper_force_sensing_false_opens_with_position(self):
     # 80 mm ⇒ 500 + (80 - 60) = 520 firmware units.
@@ -66,7 +76,7 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     # Different anchor ⇒ same width yields a different firmware-unit target.
     arm = _make_arm(closed_gripper_position=1000.0)
     await arm.move_gripper(width=80.0, force_sensing=False)
-    commands = [c.args[0] for c in arm.send_command.call_args_list]
+    commands = [c.args[0] for c in mocked(arm.send_command).call_args_list]
     # 80 mm ⇒ 1000 + (80 - 60) = 1020 units.
     self.assertEqual(commands, ["GripOpenPos 1020.0", "gripper 1"])
 
@@ -80,7 +90,7 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
 class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.arm = _make_arm()
-    self.arm._wait_for_eom = AsyncMock()
+    self.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
     # Minimal stub configuration: only the soft limits the recovery logic reads.
     self.arm._configuration = MagicMock(
       soft_limits={
@@ -104,11 +114,13 @@ class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
         return f"{self.arm.profile_index} 50.0"
       return ""
 
-    self.arm.send_command = AsyncMock(side_effect=respond)
+    self.arm.send_command = AsyncMock(side_effect=respond)  # type: ignore[method-assign]
 
   def _move_one_axis_cmds(self) -> list[str]:
     return [
-      c.args[0] for c in self.arm.send_command.call_args_list if c.args[0].startswith("MoveOneAxis")
+      c.args[0]
+      for c in mocked(self.arm.send_command).call_args_list
+      if c.args[0].startswith("MoveOneAxis")
     ]
 
   async def test_recover_moves_offenders_toward_limit_in_order_and_skips_wrist(self):
@@ -134,7 +146,7 @@ class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):
 class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.arm = _make_arm()
-    self.arm._wait_for_eom = AsyncMock()
+    self.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
 
   def _full_soft_limits(self) -> MagicMock:
     return MagicMock(
@@ -149,7 +161,9 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
 
   def _movej_cmds(self) -> list[str]:
     return [
-      c.args[0] for c in self.arm.send_command.call_args_list if c.args[0].startswith("moveJ")
+      c.args[0]
+      for c in mocked(self.arm.send_command).call_args_list
+      if c.args[0].startswith("moveJ")
     ]
 
   def test_named_constants_are_orientation_only_planar_folds(self):
@@ -189,7 +203,7 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     self.arm._configuration = self._full_soft_limits()
     # Current pose deliberately differs from the target (base 50 not 300; orientation 10/200/90 not
     # 0/180/180) so the assertion proves park() supplied the fill and orientation, not the live pose.
-    self.arm.send_command = AsyncMock(return_value="50 10 200 90 0")
+    self.arm.send_command = AsyncMock(return_value="50 10 200 90 0")  # type: ignore[method-assign]
     self.arm.parking_position = PreciseFlex.PARKING_POSITION_RIGHT
     await self.arm.park()
     # Z filled at 3/4 of 400 = 300; orientation = RIGHT (0/180/180); gripper carried from current.
@@ -200,7 +214,7 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     self.arm._configuration = self._full_soft_limits()
     # base 50 in the current pose so the explicit 123 (neither the 300 fill nor the live 50) proves
     # the supplied base is honored and not Z-filled; elbow/wrist carry from current.
-    self.arm.send_command = AsyncMock(return_value="50 10 200 90 0")
+    self.arm.send_command = AsyncMock(return_value="50 10 200 90 0")  # type: ignore[method-assign]
     self.arm.parking_position = {Axis.BASE: 123.0, Axis.SHOULDER: 0.0}
     await self.arm.park()
     self.assertEqual(self._movej_cmds(), ["moveJ 1 123.0 0.0 200.0 90.0 0.0"])
@@ -208,14 +222,14 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
   async def test_park_without_position_falls_back_to_movetosafe(self):
     """While parking_position is unset (no configuration), park() uses the firmware movetosafe."""
     await self.arm.park()
-    self.arm.send_command.assert_awaited_once_with("movetosafe")
+    mocked(self.arm.send_command).assert_awaited_once_with("movetosafe")
     self.assertEqual(self._movej_cmds(), [])
 
 
 class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.arm = _make_arm()
-    self.arm._wait_for_eom = AsyncMock()
+    self.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
     self.current_joints = {
       Axis.BASE: 100.0,
       Axis.SHOULDER: 0.0,
@@ -230,7 +244,7 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
       orientation="right",
       wrist="ccw",
     )
-    self.arm._request_state = AsyncMock(return_value=(self.current_joints, self.current_pose))
+    self.arm._request_state = AsyncMock(return_value=(self.current_joints, self.current_pose))  # type: ignore[method-assign]
 
   def _stub_profile_transport(self, profile: str = "1 50 0 100 100 0 0 25 0") -> None:
     async def respond(command: str) -> str:
@@ -238,16 +252,20 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
         return profile
       return ""
 
-    self.arm.send_command = AsyncMock(side_effect=respond)
+    self.arm.send_command = AsyncMock(side_effect=respond)  # type: ignore[method-assign]
 
   def _movej_cmds(self) -> list[str]:
     return [
-      c.args[0] for c in self.arm.send_command.call_args_list if c.args[0].startswith("moveJ")
+      c.args[0]
+      for c in mocked(self.arm.send_command).call_args_list
+      if c.args[0].startswith("moveJ")
     ]
 
   def _profile_cmds(self) -> list[str]:
     return [
-      c.args[0] for c in self.arm.send_command.call_args_list if c.args[0].startswith("Profile")
+      c.args[0]
+      for c in mocked(self.arm.send_command).call_args_list
+      if c.args[0].startswith("Profile")
     ]
 
   async def test_move_through_cartesian_poses_plans_from_one_state_snapshot(self):
@@ -274,8 +292,8 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
     ) as ik:
       await self.arm.move_through_cartesian_poses(poses)
 
-    self.arm._request_state.assert_awaited_once()
-    self.arm._wait_for_eom.assert_awaited_once()
+    mocked(self.arm._request_state).assert_awaited_once()
+    mocked(self.arm._wait_for_eom).assert_awaited_once()
     self.assertEqual(
       self._movej_cmds(),
       [
@@ -325,14 +343,14 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(self._profile_cmds(), [])
     self.assertEqual(self._movej_cmds(), ["moveJ 1 110.0 10.0 20.0 30.0 70.0"])
-    self.arm._wait_for_eom.assert_awaited_once()
+    mocked(self.arm._wait_for_eom).assert_awaited_once()
 
   async def test_move_through_cartesian_poses_blocks_before_motion_on_limit_failure(self):
     pose = PreciseFlexCartesianPose(
       location=Coordinate(200.0, 20.0, 110.0),
       rotation=Rotation(x=-180.0, y=90.0, z=10.0),
     )
-    self.arm._assert_within_soft_limits = MagicMock(side_effect=ValueError("bad target"))
+    self.arm._assert_within_soft_limits = MagicMock(side_effect=ValueError("bad target"))  # type: ignore[method-assign]
 
     with patch(
       "pylabrobot.brooks.precise_flex.precise_flex.kinematics.ik",
@@ -343,7 +361,7 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(self._movej_cmds(), [])
     self.assertEqual(self._profile_cmds(), [])
-    self.arm._wait_for_eom.assert_not_awaited()
+    mocked(self.arm._wait_for_eom).assert_not_awaited()
 
 
 _LOGGER = "pylabrobot.brooks.precise_flex.precise_flex"
@@ -354,7 +372,7 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
 
   def setUp(self):
     self.arm = _make_arm()
-    self.arm._wait_for_eom = AsyncMock()
+    self.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
     self.arm._configuration = MagicMock(
       soft_limits={
         Axis.SHOULDER: (-93.0, 93.0),
@@ -376,10 +394,14 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
         state["recovered"] = True
       return ""
 
-    self.arm.send_command = AsyncMock(side_effect=respond)
+    self.arm.send_command = AsyncMock(side_effect=respond)  # type: ignore[method-assign]
 
   def _cmds(self, prefix: str) -> list[str]:
-    return [c.args[0] for c in self.arm.send_command.call_args_list if c.args[0].startswith(prefix)]
+    return [
+      c.args[0]
+      for c in mocked(self.arm.send_command).call_args_list
+      if c.args[0].startswith(prefix)
+    ]
 
   async def test_opted_out_raises_and_does_not_move_or_recover(self):
     """Opted out: an out-of-range axis raises OutOfRangeOfMotionError; no recovery, no moveJ."""

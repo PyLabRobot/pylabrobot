@@ -2,13 +2,13 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.resources import Coordinate
 from pylabrobot.legacy.thermocycling import (
   Thermocycler,
   ThermocyclerBackend,
   ThermocyclerChatterboxBackend,
 )
 from pylabrobot.legacy.thermocycling.standard import Protocol, Stage, Step
+from pylabrobot.resources import Coordinate
 
 
 def mock_backend() -> MagicMock:

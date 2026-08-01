@@ -2,10 +2,10 @@
 
 from typing import Optional, cast
 
-from pylabrobot.resources import Coordinate, ItemizedResource
-from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.legacy.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
 from pylabrobot.legacy.thermocycling.thermocycler import Thermocycler
+from pylabrobot.resources import Coordinate, ItemizedResource
+from pylabrobot.resources.opentrons.module import OTModule
 
 
 class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):

@@ -144,10 +144,14 @@ class CurioxHT2000:
 
   Frame layout of a command:
     FF FF FF FF FF 01 | <len> | <payload ASCII> | <checksum hi> <checksum lo> | FF
+
   where <len> is the payload length and the checksum is the low 16 bits of
   (sum of payload bytes + length), sent high byte first.
 
   Commands:
+
+  ::
+
     0            ping / status (15-byte reply)
     4            enquire report (42-byte reply)
     201          recover home
@@ -157,6 +161,7 @@ class CurioxHT2000:
     221/222/223/224  prime: standard / head / pump / short
     231          drain aspirator
     232          drain spill tray
+
   Every action other than ping and enquire-report returns an 11-byte acknowledgement.
 
   Not verified: has NOT been tested against hardware in PyLabRobot. A warning is

@@ -81,6 +81,9 @@ class ThermoScientificALPS5000(ThermoScientificALPSSealer):
 
   Extends the shared ALPS protocol with initialisation, force-sensor control,
   foil length, sealing distance, and shuttle movement:
+
+  ::
+
     I            initialise the instrument; replies ok or err
     PS={f:02d}   set sealing force, 5..50; replies ok
     FS=1 / FS=0  enable / disable the force sensor; replies ok or err

@@ -23,7 +23,7 @@ class _FirmwareLock:
     gated but not per-module serialized.
 
   Read-only request (``R*``) and query (``Q*``) commands are not coordinated here at all —
-  they take no lock and run fully in parallel (see ``STARDriver.send_command``).
+  they take no lock and run fully in parallel.
 
   The first slave-module command acquires the exclusive lock and the last one releases it,
   so a C0 command simply takes the same lock and automatically waits the slaves out.

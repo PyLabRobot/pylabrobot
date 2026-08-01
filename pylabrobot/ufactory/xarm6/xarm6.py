@@ -115,7 +115,9 @@ class XArm6:
     Args:
       skip_gripper_init: If True, skip gripper mode/enable during setup.
     """
-    from xarm.wrapper import XArmAPI  # type: ignore[import-not-found]
+    # xarm-python-sdk ships no stubs; when the xarm extra is absent the module is
+    # missing outright, so both codes can fire depending on the environment.
+    from xarm.wrapper import XArmAPI  # type: ignore[import-not-found,import-untyped]
 
     self._arm = XArmAPI(self._ip)
     await self.clear_errors()

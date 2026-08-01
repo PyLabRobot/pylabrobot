@@ -1,8 +1,9 @@
 import unittest
-from typing import List
-from unittest.mock import patch
+from typing import List, cast
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.curiox.ht2000 import CurioxHT2000
+from pylabrobot.io.serial import Serial
 
 
 def ping_reply(mode: str = "0", status: str = "0", error: str = "00") -> bytes:
@@ -36,35 +37,31 @@ def report_reply(
   return bytes(buf)
 
 
-class FakeHT2000Serial:
-  """In-memory serial stand-in that replays one scripted reply per write."""
+def make_device(replies: List[bytes]) -> CurioxHT2000:
+  """Build a device whose ``io`` is an AsyncMock replaying one reply per write.
 
-  def __init__(self, replies: List[bytes]) -> None:
-    self.port = "FAKE"
-    self.written: List[bytes] = []
-    self._replies = list(replies)
-    self._rx = bytearray()
+  Writes are recorded by the mock itself, so assert against ``device.io.write``
+  (``assert_any_await``, ``await_count``, ``call_args_list``).
+  """
+  io = AsyncMock(spec=Serial)
+  io.port = "FAKE"
 
-  async def setup(self) -> None:
-    pass
+  rx = bytearray()
+  pending = list(replies)
 
-  async def stop(self) -> None:
-    pass
+  async def write(data: bytes) -> None:
+    if pending:
+      rx.extend(pending.pop(0))
 
-  async def write(self, data: bytes) -> None:
-    self.written.append(data)
-    if self._replies:
-      self._rx += self._replies.pop(0)
-
-  async def read(self, num_bytes: int = 1) -> bytes:
-    out = bytes(self._rx[:num_bytes])
-    del self._rx[:num_bytes]
+  async def read(num_bytes: int = 1) -> bytes:
+    out = bytes(rx[:num_bytes])
+    del rx[:num_bytes]
     return out
 
+  io.write.side_effect = write
+  io.read.side_effect = read
 
-def make_device(replies: List[bytes]) -> CurioxHT2000:
-  fake = FakeHT2000Serial(replies)
-  with patch("pylabrobot.curiox.ht2000.Serial", return_value=fake):
+  with patch("pylabrobot.curiox.ht2000.Serial", return_value=io):
     device = CurioxHT2000(
       port="FAKE",
       wash_start_settle=0,
@@ -74,6 +71,16 @@ def make_device(replies: List[bytes]) -> CurioxHT2000:
       poll_interval=0,
     )
   return device
+
+
+def writes(device: CurioxHT2000) -> AsyncMock:
+  """The mock standing in for ``device.io.write``."""
+  return cast(AsyncMock, device.io.write)
+
+
+def written_payloads(device: CurioxHT2000) -> List[str]:
+  """The ASCII payload of every frame written, in order."""
+  return [call.args[0][7:-3].decode("ascii") for call in writes(device).call_args_list]
 
 
 class HT2000FrameTests(unittest.TestCase):
@@ -121,10 +128,11 @@ class HT2000ProtocolTests(unittest.IsolatedAsyncioTestCase):
     await device.io.setup()
     await device.wash(wash_number=5, initial_volume=40, flow_rate=8, channel=2)
 
-    # Second write is the parameter upload: "1" + wash + vol + flow + channel + trailer.
-    param_frame = device.io.written[1]
-    payload = param_frame[7:-3].decode("ascii")
-    self.assertEqual(payload, "1" + "05" + "040" + "08" + "02" + "025060090000012")
+    # The parameter upload is "1" + wash + vol + flow + channel + trailer.
+    params = "1" + "05" + "040" + "08" + "02" + "025060090000012"
+    writes(device).assert_any_await(CurioxHT2000._build_frame(params))
+    # ping, parameter upload, then the standard-wash command.
+    self.assertEqual(written_payloads(device)[:3], ["0", params, "210"])
 
   async def test_wash_waits_for_cycle_completion(self):
     device = make_device(
@@ -140,7 +148,8 @@ class HT2000ProtocolTests(unittest.IsolatedAsyncioTestCase):
     await device.io.setup()
     await device.wash()
     # ping + set + wash + three enquire polls.
-    self.assertEqual(len(device.io.written), 6)
+    self.assertEqual(writes(device).await_count, 6)
+    self.assertEqual(written_payloads(device)[2:], ["210", "4", "4", "4"])
 
   async def test_wait_for_wash_raises_on_missing_plate(self):
     device = make_device(
@@ -160,7 +169,7 @@ class HT2000ProtocolTests(unittest.IsolatedAsyncioTestCase):
     await device.io.setup()
     await device.move_tray_out()
     # Only the status read; no toggle command issued.
-    self.assertEqual(len(device.io.written), 1)
+    writes(device).assert_awaited_once_with(CurioxHT2000._build_frame("4"))
 
   async def test_move_tray_out_toggles_when_in(self):
     device = make_device(
@@ -173,7 +182,7 @@ class HT2000ProtocolTests(unittest.IsolatedAsyncioTestCase):
     await device.io.setup()
     await device.move_tray_out()
     # read + toggle + confirm read.
-    self.assertEqual(len(device.io.written), 3)
+    self.assertEqual(written_payloads(device), ["4", "211", "4"])
 
   async def test_move_tray_in_toggles_when_out(self):
     device = make_device(
@@ -185,7 +194,7 @@ class HT2000ProtocolTests(unittest.IsolatedAsyncioTestCase):
     )
     await device.io.setup()
     await device.move_tray_in()
-    self.assertEqual(len(device.io.written), 3)
+    self.assertEqual(written_payloads(device), ["4", "211", "4"])
 
   async def test_move_tray_raises_if_position_not_reached(self):
     device = make_device(

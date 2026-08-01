@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 try:
   import numpy as np
@@ -23,10 +23,14 @@ logger = logging.getLogger(__name__)
 #   - Python bindings: pip install PyGObject
 # If not installed, AravisCamera.setup() will raise ImportError with instructions.
 try:
-  import gi
+  # PyGObject ships no stubs, and it is absent entirely wherever the
+  # cytation-microscopy extra is not installed, so both codes can fire.
+  import gi  # type: ignore[import-untyped,import-not-found]
 
   gi.require_version("Aravis", "0.8")
-  from gi.repository import Aravis  # type: ignore[attr-defined]
+  from gi.repository import (  # type: ignore[attr-defined,import-untyped,import-not-found]
+    Aravis,
+  )
 
   HAS_ARAVIS = True
 except (ImportError, ValueError):
@@ -84,9 +88,9 @@ class AravisCamera:
   """
 
   def __init__(self) -> None:
-    self._camera: Optional[object] = None  # Aravis.Camera
-    self._device: Optional[object] = None  # Aravis.Device
-    self._stream: Optional[object] = None  # Aravis.Stream
+    self._camera: Optional[Any] = None  # Aravis.Camera
+    self._device: Optional[Any] = None  # Aravis.Device
+    self._stream: Optional[Any] = None  # Aravis.Stream
     self._serial_number: Optional[str] = None
     self._acquiring: bool = False
     self._width: int = 0
@@ -102,6 +106,27 @@ class AravisCamera:
   def height(self) -> int:
     """Image height in pixels (read-only, from camera default)."""
     return self._height
+
+  @property
+  def camera(self) -> Any:
+    """The ``Aravis.Camera`` bound at setup. Raises before setup()."""
+    if self._camera is None:
+      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    return self._camera
+
+  @property
+  def device(self) -> Any:
+    """The ``Aravis.Device`` bound at setup. Raises before setup()."""
+    if self._device is None:
+      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    return self._device
+
+  @property
+  def stream(self) -> Any:
+    """The ``Aravis.Stream`` allocated at setup. Raises before setup()."""
+    if self._stream is None:
+      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    return self._stream
 
   async def setup(self, serial_number: Optional[str] = None) -> None:
     """Connect to camera, configure software trigger, allocate buffers.
@@ -161,19 +186,19 @@ class AravisCamera:
         f"Is the camera in use by another process? Error: {e}"
       ) from e
 
-    self._device = self._camera.get_device()
+    self._device = self.camera.get_device()
 
     # Configure software trigger mode.
     # GenICam nodes: TriggerSelector, TriggerSource, TriggerMode are
     # standard SFNC (Standard Features Naming Convention) names.
-    self._device.set_string_feature_value("TriggerSelector", "FrameStart")
-    self._device.set_string_feature_value("TriggerSource", "Software")
-    self._device.set_string_feature_value("TriggerMode", "On")
+    self.device.set_string_feature_value("TriggerSelector", "FrameStart")
+    self.device.set_string_feature_value("TriggerSource", "Software")
+    self.device.set_string_feature_value("TriggerMode", "On")
 
     # Read image dimensions and payload size from camera.
-    self._width = self._camera.get_region()[2]  # x, y, width, height
-    self._height = self._camera.get_region()[3]
-    self._payload_size = self._camera.get_payload()
+    self._width = self.camera.get_region()[2]  # x, y, width, height
+    self._height = self.camera.get_region()[3]
+    self._payload_size = self.camera.get_payload()
 
     # BlackFly/Flea3 cameras need a delay after trigger mode change.
     await asyncio.sleep(1)
@@ -182,13 +207,13 @@ class AravisCamera:
     # Aravis requires buffers to be pushed to the stream before acquisition.
     # We allocate a small pool (5 buffers) — for single-frame software
     # trigger, we only use one at a time but the pool prevents starvation.
-    self._stream = self._camera.create_stream(None, None)
+    self._stream = self.camera.create_stream(None, None)
     for _ in range(_BUFFER_COUNT):
-      self._stream.push_buffer(Aravis.Buffer.new_allocate(self._payload_size))
+      self.stream.push_buffer(Aravis.Buffer.new_allocate(self._payload_size))
 
     logger.info(
       "AravisCamera: Connected to %s (SN: %s), %dx%d",
-      self._device.get_string_feature_value("DeviceModelName"),
+      self.device.get_string_feature_value("DeviceModelName"),
       serial_number,
       self._width,
       self._height,
@@ -200,11 +225,10 @@ class AravisCamera:
     After this call, the
     camera is ready to receive software triggers and produce image buffers.
     """
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    camera = self.camera
     if self._acquiring:
       return
-    self._camera.start_acquisition()
+    camera.start_acquisition()
     self._acquiring = True
 
   def stop_acquisition(self) -> None:
@@ -212,11 +236,10 @@ class AravisCamera:
 
     Stop camera acquisition.
     """
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    camera = self.camera
     if not self._acquiring:
       return
-    self._camera.stop_acquisition()
+    camera.stop_acquisition()
     self._acquiring = False
 
   async def trigger(self, timeout_ms: int = 5000) -> np.ndarray:
@@ -235,17 +258,16 @@ class AravisCamera:
     Raises:
         RuntimeError: If camera not initialized, not acquiring, or times out.
     """
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    _ = self.camera
     if not self._acquiring:
       raise RuntimeError("Camera is not acquiring. Call start_acquisition() first.")
 
     # Send software trigger command.
-    self._device.execute_command("TriggerSoftware")
+    self.device.execute_command("TriggerSoftware")
 
     # Pop the filled buffer from the stream.
     # timeout_pop_buffer takes microseconds, so convert from ms.
-    buffer = self._stream.timeout_pop_buffer(timeout_ms * 1000)
+    buffer = self.stream.timeout_pop_buffer(timeout_ms * 1000)
     if buffer is None:
       raise RuntimeError(
         f"Camera capture timed out after {timeout_ms}ms. "
@@ -257,7 +279,7 @@ class AravisCamera:
     image = np.frombuffer(data, dtype=np.uint8).reshape(self._height, self._width).copy()
 
     # Return buffer to pool for reuse.
-    self._stream.push_buffer(buffer)
+    self.stream.push_buffer(buffer)
 
     return image
 
@@ -295,20 +317,17 @@ class AravisCamera:
     Args:
         exposure_ms: Exposure time in milliseconds (e.g., 10.0 = 10 ms).
     """
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    camera = self.camera
     # Disable auto-exposure before setting manual value.
-    self._device.set_string_feature_value("ExposureAuto", "Off")
+    self.device.set_string_feature_value("ExposureAuto", "Off")
     # GenICam ExposureTime is in microseconds.
     exposure_us = exposure_ms * 1000.0
-    self._camera.set_exposure_time(exposure_us)
+    camera.set_exposure_time(exposure_us)
 
   async def get_exposure(self) -> float:
     """Read current exposure time in milliseconds (from hardware, not cached)."""
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
-    exposure_us = self._camera.get_exposure_time()
-    return exposure_us / 1000.0
+    exposure_us = self.camera.get_exposure_time()
+    return float(exposure_us) / 1000.0
 
   async def set_gain(self, gain: float) -> None:
     """Set gain value.
@@ -319,10 +338,9 @@ class AravisCamera:
     Args:
         gain: Gain value (e.g., 1.0).
     """
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
-    self._device.set_string_feature_value("GainAuto", "Off")
-    self._camera.set_gain(gain)
+    camera = self.camera
+    self.device.set_string_feature_value("GainAuto", "Off")
+    camera.set_gain(gain)
 
   async def set_auto_gain(self, mode: str) -> None:
     """Set auto-gain mode.
@@ -331,19 +349,16 @@ class AravisCamera:
         mode: One of "off", "once", "continuous". Maps to GenICam
             GainAuto node values: Off, Once, Continuous.
     """
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    _ = self.camera
     mode_map = {"off": "Off", "once": "Once", "continuous": "Continuous"}
     aravis_mode = mode_map.get(mode.lower())
     if aravis_mode is None:
       raise ValueError(f"Invalid auto-gain mode '{mode}'. Use 'off', 'once', or 'continuous'.")
-    self._device.set_string_feature_value("GainAuto", aravis_mode)
+    self.device.set_string_feature_value("GainAuto", aravis_mode)
 
   async def get_gain(self) -> float:
     """Read current gain value (from hardware, not cached)."""
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
-    return self._camera.get_gain()
+    return float(self.camera.get_gain())
 
   async def set_auto_exposure(self, mode: str) -> None:
     """Set auto-exposure mode.
@@ -352,13 +367,12 @@ class AravisCamera:
         mode: One of "off", "once", "continuous". Maps to GenICam
             ExposureAuto node values: Off, Once, Continuous.
     """
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    _ = self.camera
     mode_map = {"off": "Off", "once": "Once", "continuous": "Continuous"}
     aravis_mode = mode_map.get(mode.lower())
     if aravis_mode is None:
       raise ValueError(f"Invalid auto-exposure mode '{mode}'. Use 'off', 'once', or 'continuous'.")
-    self._device.set_string_feature_value("ExposureAuto", aravis_mode)
+    self.device.set_string_feature_value("ExposureAuto", aravis_mode)
 
   async def set_pixel_format(self, fmt: Optional[int] = None) -> None:
     """Set pixel format. Default is Mono8.
@@ -369,14 +383,13 @@ class AravisCamera:
     Args:
         fmt: Aravis pixel format constant. If None, uses Mono8.
     """
-    if self._camera is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    camera = self.camera
     if fmt is None:
       if HAS_ARAVIS:
         fmt = Aravis.PIXEL_FORMAT_MONO_8
       else:
         return
-    self._camera.set_pixel_format(fmt)
+    camera.set_pixel_format(fmt)
 
   def get_device_info(self) -> CameraInfo:
     """Read camera identification from GenICam nodes.
@@ -387,13 +400,12 @@ class AravisCamera:
     Returns:
         CameraInfo with fields populated from the camera's GenICam XML.
     """
-    if self._device is None:
-      raise RuntimeError("Camera is not initialized. Call setup() first.")
+    device = self.device
     return CameraInfo(
-      serial_number=self._device.get_string_feature_value("DeviceSerialNumber"),
-      model_name=self._device.get_string_feature_value("DeviceModelName"),
-      vendor=self._device.get_string_feature_value("DeviceVendorName"),
-      firmware_version=self._device.get_string_feature_value("DeviceFirmwareVersion"),
+      serial_number=device.get_string_feature_value("DeviceSerialNumber"),
+      model_name=device.get_string_feature_value("DeviceModelName"),
+      vendor=device.get_string_feature_value("DeviceVendorName"),
+      firmware_version=device.get_string_feature_value("DeviceFirmwareVersion"),
       connection_type="USB3",
     )
 

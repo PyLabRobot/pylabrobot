@@ -185,6 +185,7 @@ library/imcs
 library/nest
 library/opentrons
 library/perkin_elmer
+library/pioreactor
 library/porvair
 library/revvity
 library/sergi

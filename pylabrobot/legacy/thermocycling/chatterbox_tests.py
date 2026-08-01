@@ -2,9 +2,9 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 
-from pylabrobot.resources import Coordinate
 from pylabrobot.legacy.thermocycling import Thermocycler, ThermocyclerChatterboxBackend
 from pylabrobot.legacy.thermocycling.standard import Protocol, Stage, Step
+from pylabrobot.resources import Coordinate
 
 
 class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):

@@ -1,7 +1,7 @@
 import unittest
 
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.legacy.shaking import Shaker, ShakerChatterboxBackend
+from pylabrobot.resources.coordinate import Coordinate
 
 
 class ShakerTests(unittest.TestCase):

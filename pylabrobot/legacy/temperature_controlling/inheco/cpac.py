@@ -1,7 +1,7 @@
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.legacy.temperature_controlling.inheco.control_box import InhecoTECControlBox
 from pylabrobot.legacy.temperature_controlling.inheco.cpac_backend import InhecoCPACBackend
 from pylabrobot.legacy.temperature_controlling.temperature_controller import TemperatureController
+from pylabrobot.resources.coordinate import Coordinate
 
 
 def inheco_cpac_ultraflat(

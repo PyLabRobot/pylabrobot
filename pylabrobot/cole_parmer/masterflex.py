@@ -67,9 +67,7 @@ class Masterflex:
 
   async def run_revolutions(self, num_revolutions: float):
     num_revolutions = round(num_revolutions, 2)
-    logger.info(
-      "[Masterflex %s] dispensing %.2f revolutions", self.com_port, num_revolutions
-    )
+    logger.info("[Masterflex %s] dispensing %.2f revolutions", self.com_port, num_revolutions)
     cmd = f"V{num_revolutions}G"
     await self.send_command(cmd)
 

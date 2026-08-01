@@ -1,11 +1,11 @@
 import unittest
 
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.legacy.temperature_controlling import (
   TemperatureController,
   TemperatureControllerChatterboxBackend,
 )
 from pylabrobot.legacy.temperature_controlling.backend import TemperatureControllerBackend
+from pylabrobot.resources.coordinate import Coordinate
 
 
 class TemperatureControllerTests(unittest.TestCase):

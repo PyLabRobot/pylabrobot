@@ -1,17 +1,17 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
-from pylabrobot.molecular_devices.spectramax.results import (
-  AbsorbanceResult,
-  FluorescenceResult,
-  LuminescenceResult,
-)
 from pylabrobot.molecular_devices.spectramax.base import (
   KineticSettings,
   MolecularDevicesPlateReader,
   MolecularDevicesSettings,
   ShakeSettings,
   SpectrumSettings,
+)
+from pylabrobot.molecular_devices.spectramax.results import (
+  AbsorbanceResult,
+  FluorescenceResult,
+  LuminescenceResult,
 )
 from pylabrobot.molecular_devices.spectramax.spectramax_m5 import SpectraMaxM5
 from pylabrobot.resources.agenbio.plates import AGenBio_96_wellplate_Ub_2200ul

@@ -14,8 +14,32 @@ BioTek EL406
   :recursive:
 
     EL406
+
+.. currentmodule:: pylabrobot.agilent.biotek.el406.plate_washer
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
     PlateWasher
+
+.. currentmodule:: pylabrobot.agilent.biotek.el406.syringe_dispenser
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
     SyringeDispenser
+
+.. currentmodule:: pylabrobot.agilent.biotek.el406.peristaltic_dispenser
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
     PeristalticDispenser
 
 
@@ -58,10 +82,5 @@ VSpin
   :recursive:
 
     VSpin
-    VSpinDriver
-    VSpinCentrifugeBackend
     Access2
     Access2Driver
-
-.. autoclass:: pylabrobot.agilent.vspin.VSpinCentrifugeBackend.SpinParams
-   :members:

@@ -99,7 +99,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
 
     # Configure mock executor and device
-    mock_dev._executor = MagicMock()
+    mock_dev.read_executor = MagicMock()
     mock_dev.dev = MagicMock()
     mock_dev.write_timeout = 30  # default
 
@@ -112,7 +112,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
         f.set_exception(e)
       return f
 
-    mock_dev._executor.submit.side_effect = execute_sync
+    mock_dev.read_executor.submit.side_effect = execute_sync
 
     # Mock _read_packet to avoid TypeError in background task (must be MagicMock, not AsyncMock)
     mock_dev._read_packet = MagicMock()
@@ -174,7 +174,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       ]
 
       # Configure mock executor and device for read retry
-      mock_reader._executor = MagicMock()
+      mock_reader.read_executor = MagicMock()
       mock_reader.dev = MagicMock()
       mock_reader.read_timeout = 30
 
@@ -184,7 +184,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
         f.set_result(result)
         return f
 
-      mock_reader._executor.submit.side_effect = execute_sync
+      mock_reader.read_executor.submit.side_effect = execute_sync
 
       # Mock _read_packet
       # First call inside _get_response (via executor)
@@ -208,7 +208,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     mock_dev._read_packet = MagicMock()
     self.reader.devices[SparkDevice.ABSORPTION] = mock_dev
 
-    mock_dev._executor = MagicMock()
+    mock_dev.read_executor = MagicMock()
     mock_dev.dev = MagicMock()
     mock_dev.read_timeout = 30
 
@@ -221,7 +221,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
         f.set_exception(e)
       return f
 
-    mock_dev._executor.submit.side_effect = execute_sync
+    mock_dev.read_executor.submit.side_effect = execute_sync
 
     DATA1 = b"\x81\x01\x00\x00\x00"
     DATA2 = b"\x81\x02\x00\x00\x00"
@@ -293,7 +293,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     mock_reader._read_packet = MagicMock()
 
     # Configure mock executor and device for read retry
-    mock_reader._executor = MagicMock()
+    mock_reader.read_executor = MagicMock()
     mock_reader.dev = MagicMock()
     mock_reader.read_timeout = 30
 
@@ -303,7 +303,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       f.set_result(result)
       return f
 
-    mock_reader._executor.submit.side_effect = execute_sync
+    mock_reader.read_executor.submit.side_effect = execute_sync
 
     with patch(
       "pylabrobot.legacy.plate_reading.tecan.spark20m.spark_reader_async.parse_single_spark_packet"
@@ -341,7 +341,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
   async def test_read_packet_in_executor_retries(self) -> None:
     # Test that _read_packet_in_executor retries on invalid packets using new validation logic
     mock_reader = AsyncMock()
-    mock_reader._executor = MagicMock()
+    mock_reader.read_executor = MagicMock()
 
     def execute_sync(func, *args):
       # We need to execute the lambda passed to run_in_executor
@@ -373,24 +373,16 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       side_effect=[INVALID_SHORT, INVALID_INDICATOR, INVALID_TRUNCATED, VALID]
     )
 
-    # We need to mock loop.run_in_executor to execute the lambda?
-    # Or just use the real loop since we are in async test.
-    # The real loop uses the executor. Since we mocked reader._executor, we just need to confirm it's passed.
-    # But wait, helper checks reader._executor is not None.
-
-    # In the code: loop.run_in_executor(reader._executor, lambda...)
-    # We want to use the REAL run_in_executor with a Mock executor?
-    # Standard ThreadPoolExecutor works fine.
-    # Let's use a real ThreadPoolExecutor for simplicity and just mock _read_packet on the reader object.
-
-    mock_reader._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    # The helper does loop.run_in_executor(reader.read_executor, lambda: reader._read_packet(...)),
+    # so a real ThreadPoolExecutor runs the lambda while _read_packet stays mocked.
+    mock_reader.read_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
     try:
       data = await self.reader._read_packet_in_executor(mock_reader, timeout=1.0)
       self.assertEqual(data, VALID)
       self.assertEqual(mock_reader._read_packet.call_count, 4)
     finally:
-      mock_reader._executor.shutdown()
+      mock_reader.read_executor.shutdown()
 
 
 if __name__ == "__main__":

@@ -48,6 +48,9 @@ class BigBearOrbitalShaker:
   Commands (each addressed command is "@<id>" followed by the command chars,
   where <id> is the nest number in hex; a value-setting command is followed by
   a "@<id>?<c>" read-back query):
+
+  ::
+
     U            enter daisy-chain mode (unaddressed)
     ~            report the number of shakers on the chain (unaddressed)
     @<id>V<rpm>  set speed (60..3570 rpm)
@@ -59,6 +62,7 @@ class BigBearOrbitalShaker:
     @<id>F       find home
     @<id>Q       poll status (reply is read back)
     @<id>Y/X/Z   serial-number fields
+
   A rejected command or a comms failure replies "?:".
 
   Not verified: has NOT been tested against hardware in PyLabRobot. A warning is

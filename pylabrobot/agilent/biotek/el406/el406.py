@@ -162,7 +162,6 @@ class EL406:
       logger.debug("  RTS and DTR enabled")
     except Exception as e:
       await self.io.stop()
-      self.io = None
       raise EL406CommunicationError(
         f"Failed to configure FTDI device: {e}",
         operation="configure",
@@ -192,9 +191,7 @@ class EL406:
   async def stop(self) -> None:
     """Close the FTDI connection."""
     logger.info("EL406Driver stopping")
-    if self.io is not None:
-      await self.io.stop()
-      self.io = None
+    await self.io.stop()
 
   # ---------------------------------------------------------------------------
   # Low-level I/O

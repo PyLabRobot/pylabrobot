@@ -104,6 +104,9 @@ class KBioscienceKUBE:
   of its reply, so the leading command characters are stripped before the reply
   is read (e.g. ``A160`` -> ``A160ok`` -> ``ok``; ``?`` -> ``?3f`` -> ``3f``). A
   reply containing ``syntax`` means the command was rejected.
+
+  ::
+
     ?            read status byte, two hex digits (see KUBEStatus)
     E            read error code, two decimal digits (see DEVICE_ERRORS)
     S            seal the plate; replies ok or err

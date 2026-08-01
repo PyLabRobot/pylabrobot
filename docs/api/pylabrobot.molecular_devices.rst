@@ -42,5 +42,18 @@ ImageXpress Pico
   :recursive:
 
     Pico
-    PicoDriver
-    PicoMicroscopyBackend
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    ImagingMode
+    ImagingResult
+    Objective
+    Exposure
+    Gain
+    FocalPosition
+    WellBottomType

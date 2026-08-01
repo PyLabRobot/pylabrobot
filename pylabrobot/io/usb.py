@@ -11,7 +11,7 @@ from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 try:
-  import libusb_package
+  import libusb_package  # type: ignore[import-not-found]
   import usb.core
   import usb.util
 
@@ -111,6 +111,12 @@ class USB(IOBase):
     # unique id in the logs
     self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
     self.human_readable_device_name = human_readable_device_name
+
+  @property
+  def read_executor(self) -> ThreadPoolExecutor:
+    if self._read_executor is None:
+      raise RuntimeError("Read executor not initialized. Call setup() first.")
+    return self._read_executor
 
   async def write(self, data: bytes, timeout: Optional[float] = None):
     """Write data to the device.

@@ -2,7 +2,6 @@ import logging
 
 from pylabrobot.inheco.control_box import InhecoTECControlBox
 
-
 logger = logging.getLogger(__name__)
 
 

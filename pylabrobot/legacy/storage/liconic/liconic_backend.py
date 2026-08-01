@@ -13,14 +13,14 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.legacy.barcode_scanners import BarcodeScanner
 from pylabrobot.io.serial import Serial
-from pylabrobot.resources import Plate, PlateHolder
-from pylabrobot.resources.barcode import Barcode
-from pylabrobot.resources.carrier import PlateCarrier
+from pylabrobot.legacy.barcode_scanners import BarcodeScanner
 from pylabrobot.legacy.storage.backend import IncubatorBackend
 from pylabrobot.legacy.storage.liconic.constants import ControllerError, HandlingError, LiconicType
 from pylabrobot.legacy.storage.liconic.errors import controller_error_map, handler_error_map
+from pylabrobot.resources import Plate, PlateHolder
+from pylabrobot.resources.barcode import Barcode
+from pylabrobot.resources.carrier import PlateCarrier
 
 logger = logging.getLogger(__name__)
 

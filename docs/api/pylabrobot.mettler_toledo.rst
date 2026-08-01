@@ -10,5 +10,6 @@ pylabrobot.mettler_toledo package
   :nosignatures:
   :recursive:
 
-    MettlerToledoWXS205SDUDriver
+    MettlerToledoWXS205SDU
+    MettlerToledoResponse
     MettlerToledoError

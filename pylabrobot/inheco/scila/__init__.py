@@ -1,1 +1,1 @@
-from .scila import DrawerStatus, SCILA, SCILADrawerLoadingTray
+from .scila import SCILA, DrawerStatus, SCILADrawerLoadingTray

@@ -1,7 +1,7 @@
 from pylabrobot.legacy.heating_shaking.heater_shaker import HeaterShaker
 from pylabrobot.legacy.heating_shaking.inheco.thermoshake_backend import InhecoThermoshakeBackend
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.legacy.temperature_controlling.inheco.control_box import InhecoTECControlBox
+from pylabrobot.resources.coordinate import Coordinate
 
 
 def inheco_thermoshake_ac(name: str, control_box: InhecoTECControlBox, index: int) -> HeaterShaker:

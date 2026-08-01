@@ -10,11 +10,11 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.barcode_scanners.backend import (
   BarcodeScannerBackend,
   BarcodeScannerError,
 )
-from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
 
 logger = logging.getLogger(__name__)

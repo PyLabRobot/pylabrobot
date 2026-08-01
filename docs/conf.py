@@ -73,7 +73,9 @@ autodoc_default_options = {
   # 'undoc-members': False,
   "show-inheritance": True,
   # 'special-members': '__init__,__getitem__',
-  "exclude-members": "__weakref__",
+  # from_bytes/to_bytes are inherited from int by the IntEnum/IntFlag status
+  # types; CPython's docstring for them is not valid reStructuredText.
+  "exclude-members": "__weakref__,from_bytes,to_bytes",
 }
 
 default_role = "code"  # allow single backticks for inline code

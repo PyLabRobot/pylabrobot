@@ -71,6 +71,9 @@ class KBiosystemsUltrasealXTPro(KBiosystemsSealer):
 
   Commands (in addition to the shared ``?``/``E``/``S``/``A``/``B``/``C``/
   ``D``/``F``, see :class:`KBiosystemsSealer`):
+
+  ::
+
     P            park the shuttle (move in); replies ok or err
     U            unpark the shuttle (move out); replies ok or err
     R            reset the sealer; replies ok

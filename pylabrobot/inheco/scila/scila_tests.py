@@ -1,3 +1,4 @@
+import logging
 import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, patch
@@ -199,8 +200,13 @@ class TestSCILADrawerLoadingTray(_SCILATestCase):
         raise RuntimeError("command OpenDoor failed with code 2: 'Warning: CO2 flow NOK'")
 
     self.mock_sila_interface.send_command.side_effect = side_effect
-    with self.assertNoLogs("pylabrobot.inheco.scila.scila", level="WARNING"):
+    # assertNoLogs needs Python 3.10; emit a sentinel so assertLogs has something
+    # to capture and assert the drawer added nothing of its own.
+    logger_name = "pylabrobot.inheco.scila.scila"
+    with self.assertLogs(logger_name, level="WARNING") as captured:
+      logging.getLogger(logger_name).warning("sentinel")
       await self.scila.drawers[1].open()
+    self.assertEqual(captured.output, [f"WARNING:{logger_name}:sentinel"])
 
   async def test_open_non_warning_error_always_raises(self):
     self.scila.gas_mixer_connected = False  # most permissive setting

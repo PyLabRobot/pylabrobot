@@ -4,8 +4,8 @@ import warnings
 from enum import Enum
 from typing import Dict, Literal, Optional
 
-from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.usb import USB
+from pylabrobot.legacy.heating_shaking.backend import HeaterShakerBackend
 
 
 class PlateLockPosition(Enum):

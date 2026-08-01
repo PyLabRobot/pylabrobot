@@ -13,9 +13,9 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
+from pylabrobot.legacy.storage.backend import IncubatorBackend
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
-from pylabrobot.legacy.storage.backend import IncubatorBackend
 
 logger = logging.getLogger(__name__)
 

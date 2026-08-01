@@ -280,7 +280,7 @@ class VSpinBackend(CentrifugeBackend):
 
     # If we have not set the calibration yet, load it now.
     if self._bucket_1_remainder is None:
-      device_id = await self.io.get_serial()
+      device_id = await self.io.request_serial()
       self._bucket_1_remainder = _load_vspin_calibrations(device_id)
 
   @property
@@ -292,7 +292,7 @@ class VSpinBackend(CentrifugeBackend):
   async def set_bucket_1_position_to_current(self) -> None:
     """Set the current position as bucket 1 position and save calibration."""
     current_position = await self.get_position()
-    device_id = await self.io.get_serial()
+    device_id = await self.io.request_serial()
     remainder = await self.get_home_position() - current_position
     self._bucket_1_remainder = current_position % FULL_ROTATION
     _save_vspin_calibrations(device_id, remainder)

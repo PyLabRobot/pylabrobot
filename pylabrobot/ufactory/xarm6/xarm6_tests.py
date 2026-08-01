@@ -142,8 +142,8 @@ class TestXArm6Motion(unittest.IsolatedAsyncioTestCase):
     """Build an XArm6 sharing the mock arm and the _call_sdk recorder."""
     device = XArm6(ip="192.168.1.113", **kwargs)
     device._arm = self.arm
-    device._call_sdk = self.call_sdk
-    device.clear_errors = AsyncMock()
+    device._call_sdk = self.call_sdk  # type: ignore[method-assign]
+    device.clear_errors = AsyncMock()  # type: ignore[method-assign]
     return device
 
   def setUp(self):
@@ -200,14 +200,14 @@ class TestXArm6Motion(unittest.IsolatedAsyncioTestCase):
     async def call_sdk(func, *args, op="", num_retries=0, **kwargs):
       return 5
 
-    self.device._call_sdk = AsyncMock(side_effect=call_sdk)
+    self.device._call_sdk = AsyncMock(side_effect=call_sdk)  # type: ignore[method-assign]
     self.assertTrue(await self.device.is_gripper_closed())
 
   async def test_is_gripper_closed_false(self):
     async def call_sdk(func, *args, op="", num_retries=0, **kwargs):
       return 500
 
-    self.device._call_sdk = AsyncMock(side_effect=call_sdk)
+    self.device._call_sdk = AsyncMock(side_effect=call_sdk)  # type: ignore[method-assign]
     self.assertFalse(await self.device.is_gripper_closed())
 
   # -- Base arm --------------------------------------------------------------

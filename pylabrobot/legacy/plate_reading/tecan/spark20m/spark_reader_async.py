@@ -172,7 +172,7 @@ class SparkReaderAsync:
     timeout: Optional[float] = None,
   ) -> Optional[bytes]:
     loop = asyncio.get_running_loop()
-    if reader._executor is None:
+    if reader.read_executor is None:
       raise RuntimeError("Call setup() first.")
 
     start_time = time.monotonic()
@@ -187,7 +187,7 @@ class SparkReaderAsync:
         current_timeout = timeout - elapsed
 
       data = await loop.run_in_executor(
-        reader._executor,
+        reader.read_executor,
         lambda: reader._read_packet(size=size, timeout=current_timeout, endpoint=endpoint),
       )
 

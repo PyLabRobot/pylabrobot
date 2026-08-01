@@ -5,7 +5,7 @@ import logging
 import time
 from abc import ABCMeta
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Literal, Optional, Tuple
+from typing import Dict, Iterator, List, Literal, Optional, Tuple, cast
 
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
@@ -161,7 +161,7 @@ class Abs1StatusError(enum.IntFlag):
 
 _GENERIC_ERROR_NAMES: Dict[int, str] = {0: "NO_ERROR"}
 ABS96_ERROR_NAMES: Dict[int, str] = {e.value: e.name for e in Abs96StatusError}
-ABS1_ERROR_NAMES: Dict[int, str] = {e.value: e.name for e in Abs1StatusError}
+ABS1_ERROR_NAMES: Dict[int, str] = {e.value: cast(str, e.name) for e in Abs1StatusError}
 
 
 _ACCEL_LSB_PER_G = 16384.0  # 14-bit signed @ ±2 g full scale

@@ -17,13 +17,122 @@ from pylabrobot.utils.list import reshape_2d
 logger = logging.getLogger(__name__)
 
 
-class ByonoyAbsorbance96(ByonoyDriver):
-  """Byonoy Absorbance 96 Automate plate reader."""
+class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
+  """Plate holder with interlock: blocks drops while illumination unit is on the base."""
+
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    pedestal_size_z: float = 0,
+    child_location: Coordinate = Coordinate.zero(),
+    category: str = "plate_holder",
+    model: Optional[str] = None,
+  ):
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      pedestal_size_z=pedestal_size_z,
+      child_location=child_location,
+      category=category,
+      model=model,
+    )
+    self._byonoy_base: Optional[ByonoyAbsorbanceBaseUnit] = None
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    if self._byonoy_base is None:
+      raise RuntimeError(
+        "Plate holder not assigned to a ByonoyAbsorbanceBaseUnit. This should not happen."
+      )
+    if self._byonoy_base.illumination_unit_holder.resource is not None:
+      raise RuntimeError(
+        f"Cannot drop resource {resource.name} onto plate holder while illumination unit is on "
+        "the base. Please remove the illumination unit from the base before dropping a resource."
+      )
+    super().check_can_drop_resource_here(resource, reassign=reassign)
+
+
+class ByonoyAbsorbanceBaseUnit(Resource):
+  def __init__(
+    self,
+    name: str,
+    size_x: float = 155.26,
+    size_y: float = 95.48,
+    size_z: float = 18.5,
+    rotation: Optional[Rotation] = None,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+    barcode: Optional[Barcode] = None,
+    preferred_pickup_location: Optional[Coordinate] = None,
+  ):
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      rotation=rotation,
+      category=category,
+      model=model,
+      barcode=barcode,
+      preferred_pickup_location=preferred_pickup_location,
+    )
+
+    self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
+      name=self.name + "_plate_holder",
+      size_x=127.76,
+      size_y=85.59,
+      size_z=0,
+      child_location=Coordinate(x=22.5, y=5.0, z=16.0),
+      pedestal_size_z=0,
+    )
+    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+
+    self.illumination_unit_holder = ResourceHolder(
+      name=self.name + "_illumination_unit_holder",
+      size_x=size_x,
+      size_y=size_y,
+      size_z=0,
+      child_location=Coordinate(x=0, y=0, z=14.1),
+    )
+    self.assign_child_resource(self.illumination_unit_holder, location=Coordinate.zero())
+
+  def assign_child_resource(
+    self, resource: Resource, location: Optional[Coordinate], reassign: bool = True
+  ) -> None:
+    if isinstance(resource, _ByonoyAbsorbanceReaderPlateHolder):
+      if self.plate_holder._byonoy_base is not None:
+        raise ValueError("ByonoyDriver can only have one plate holder assigned.")
+      self.plate_holder._byonoy_base = self
+    super().assign_child_resource(resource, location, reassign)
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    raise RuntimeError(
+      "ByonoyDriver does not support assigning child resources directly. "
+      "Use the plate_holder or illumination_unit_holder to assign plates and the "
+      "illumination unit, respectively."
+    )
+
+
+class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
+  """The Byonoy Absorbance 96 Automate reader unit.
+
+  Inherits the base unit so it owns the ``plate_holder`` and
+  ``illumination_unit_holder``. ``ByonoyAbsorbanceBaseUnit`` comes first in the
+  MRO so ``Resource``'s ``name`` property (and its setter, which the resource
+  tree needs) wins over the driver's device-name property.
+  """
 
   _ERROR_NAMES = ABS96_ERROR_NAMES
 
-  def __init__(self) -> None:
-    super().__init__(pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96")
+  def __init__(self, name: str = "byonoy_absorbance_96") -> None:
+    ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
+    ByonoyDriver.__init__(
+      self, pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96"
+    )
     self.available_wavelengths: List[float] = []
 
   async def setup(self) -> None:
@@ -186,106 +295,6 @@ class ByonoyAbsorbance96(ByonoyDriver):
         timestamp=datetime.now(),
       )
     ]
-
-
-class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
-  """Plate holder with interlock: blocks drops while illumination unit is on the base."""
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    pedestal_size_z: float = 0,
-    child_location: Coordinate = Coordinate.zero(),
-    category: str = "plate_holder",
-    model: Optional[str] = None,
-  ):
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      pedestal_size_z=pedestal_size_z,
-      child_location=child_location,
-      category=category,
-      model=model,
-    )
-    self._byonoy_base: Optional[ByonoyAbsorbanceBaseUnit] = None
-
-  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
-    if self._byonoy_base is None:
-      raise RuntimeError(
-        "Plate holder not assigned to a ByonoyAbsorbanceBaseUnit. This should not happen."
-      )
-    if self._byonoy_base.illumination_unit_holder.resource is not None:
-      raise RuntimeError(
-        f"Cannot drop resource {resource.name} onto plate holder while illumination unit is on "
-        "the base. Please remove the illumination unit from the base before dropping a resource."
-      )
-    super().check_can_drop_resource_here(resource, reassign=reassign)
-
-
-class ByonoyAbsorbanceBaseUnit(Resource):
-  def __init__(
-    self,
-    name: str,
-    size_x: float = 155.26,
-    size_y: float = 95.48,
-    size_z: float = 18.5,
-    rotation: Optional[Rotation] = None,
-    category: Optional[str] = None,
-    model: Optional[str] = None,
-    barcode: Optional[Barcode] = None,
-    preferred_pickup_location: Optional[Coordinate] = None,
-  ):
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      rotation=rotation,
-      category=category,
-      model=model,
-      barcode=barcode,
-      preferred_pickup_location=preferred_pickup_location,
-    )
-
-    self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
-      name=self.name + "_plate_holder",
-      size_x=127.76,
-      size_y=85.59,
-      size_z=0,
-      child_location=Coordinate(x=22.5, y=5.0, z=16.0),
-      pedestal_size_z=0,
-    )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
-
-    self.illumination_unit_holder = ResourceHolder(
-      name=self.name + "_illumination_unit_holder",
-      size_x=size_x,
-      size_y=size_y,
-      size_z=0,
-      child_location=Coordinate(x=0, y=0, z=14.1),
-    )
-    self.assign_child_resource(self.illumination_unit_holder, location=Coordinate.zero())
-
-  def assign_child_resource(
-    self, resource: Resource, location: Optional[Coordinate], reassign: bool = True
-  ) -> None:
-    if isinstance(resource, _ByonoyAbsorbanceReaderPlateHolder):
-      if self.plate_holder._byonoy_base is not None:
-        raise ValueError("ByonoyDriver can only have one plate holder assigned.")
-      self.plate_holder._byonoy_base = self
-    super().assign_child_resource(resource, location, reassign)
-
-  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
-    raise RuntimeError(
-      "ByonoyDriver does not support assigning child resources directly. "
-      "Use the plate_holder or illumination_unit_holder to assign plates and the "
-      "illumination unit, respectively."
-    )
 
 
 def byonoy_sbs_adapter(name: str) -> ResourceHolder:

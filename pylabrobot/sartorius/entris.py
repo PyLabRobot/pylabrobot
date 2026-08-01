@@ -50,6 +50,9 @@ class SartoriusEntris2:
     terminator.
 
   Commands (SBI control commands, format "<Esc> <char> CR LF"):
+
+  ::
+
     <Esc>P     print current weight value
     <Esc>T     tare (Zero/Tara command)
     <Esc>V     zero (Key ZERO)
@@ -112,7 +115,7 @@ class SartoriusEntris2:
     """Send a command token and return the trimmed, de-spaced reply.
 
     Args:
-      token: command token, e.g. "P", "T", "x1_" (ESC prefix added here).
+      token: command token, e.g. "P", "T", "x1\\_" (ESC prefix added here).
       timeout: seconds to wait for a response.
       read_reply: if False, do not read a reply (used for tare, which sends no
         parseable line).

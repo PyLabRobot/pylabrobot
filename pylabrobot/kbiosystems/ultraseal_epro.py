@@ -76,6 +76,9 @@ class KBiosystemsUltrasealEPRO(KBiosystemsSealer):
 
   Commands (in addition to the shared ``?``/``E``/``S``/``A``/``B``/``C``/
   ``D``/``F``, see :class:`KBiosystemsSealer`):
+
+  ::
+
     I            initialize/home; replies ok or err
     L={l:03d}    set foil length (117..128)
     DO={d:02d}   set sealing distance (10..50), distance mode

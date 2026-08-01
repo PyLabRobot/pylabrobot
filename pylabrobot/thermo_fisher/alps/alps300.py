@@ -30,7 +30,7 @@ STATUS_MESSAGES: Dict[enum.IntFlag, str] = {
   ALPS300Status.NotAssigned: "Status not assigned",
   ALPS300Status.FoilLow: "No foil detected or foil low.",
   ALPS300Status.DoorOpen: "Door open",
-  ALPS300Status.ProceedOverridden: "Proceed overriden",
+  ALPS300Status.ProceedOverridden: "Proceed overridden",
 }
 
 # Error codes returned by the ``E`` command. The firmware leaves gaps in the

@@ -3,7 +3,6 @@ import datetime
 import logging
 import threading
 import time
-import warnings
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import (
@@ -60,7 +59,6 @@ class HamiltonUSBDriver(metaclass=ABCMeta):
       read_timeout: The timeout for reading from the Hamilton machine in seconds.
     """
 
-    super().__init__()
     self.io = USB(
       human_readable_device_name="Hamilton",
       id_vendor=0x08AF,
@@ -77,17 +75,6 @@ class HamiltonUSBDriver(metaclass=ABCMeta):
     self._reading_thread: Optional[threading.Thread] = None
     self._reading_thread_stop = threading.Event()
     self._waiting_tasks: List[HamiltonTask] = []
-
-  def __setattr__(self, name: str, value: Any) -> None:
-    if name == "allow_firmware_planning":
-      warnings.warn(
-        "allow_firmware_planning is deprecated and will be removed in a future version. "
-        "The behavior is now always enabled.",
-        DeprecationWarning,
-        stacklevel=2,
-      )
-      return
-    super().__setattr__(name, value)
 
   async def setup(self):
     await self.io.setup()
@@ -106,13 +93,6 @@ class HamiltonUSBDriver(metaclass=ABCMeta):
       )
     self._waiting_tasks.clear()
     await self.io.stop()
-
-  def serialize(self) -> dict:
-    usb_serialized = self.io.serialize()
-    del usb_serialized["id_vendor"]
-    del usb_serialized["id_product"]
-    del usb_serialized["human_readable_device_name"]
-    return {**super().serialize(), **usb_serialized}
 
   @property
   @abstractmethod

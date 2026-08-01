@@ -408,9 +408,9 @@ class TestBioTekLoadingTray(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.manager = unittest.mock.Mock()
     self.backend = BioTekPlateReaderDriver(timeout=0.1)
-    self.backend.set_slow_mode = unittest.mock.AsyncMock()
-    self.backend.set_plate = unittest.mock.AsyncMock()
-    self.backend.send_command = unittest.mock.AsyncMock()
+    self.backend.set_slow_mode = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    self.backend.set_plate = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    self.backend.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
     self.manager.attach_mock(self.backend.set_plate, "set_plate")
     self.manager.attach_mock(self.backend.send_command, "send_command")
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")

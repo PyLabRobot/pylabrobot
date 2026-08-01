@@ -1,6 +1,5 @@
 from .biotek import (
   EL406,
-  BioTekPlateReaderDriver,
   Cytation1,
   Cytation5,
   CytationImagingConfig,

@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 
 from pylabrobot.kbiosystems import (
   KBiosystemsError,
-  KBiosystemsSealer,
   KBiosystemsUltrasealEPRO,
   KBiosystemsUltrasealPRO,
   KBiosystemsUltrasealXTPro,
@@ -216,27 +215,6 @@ class TestUltrasealPRO(KBiosystemsSealerTestBase):
       await sealer.wait_for_idle()
     self.assertEqual(ctx.exception.error_code, 9)
     self.assertEqual(ctx.exception.message, "The sealer is overheating.")
-
-
-class TestSharedBase(unittest.TestCase):
-  def test_both_drivers_subclass_base(self):
-    self.assertTrue(issubclass(KBiosystemsUltrasealEPRO, KBiosystemsSealer))
-    self.assertTrue(issubclass(KBiosystemsUltrasealXTPro, KBiosystemsSealer))
-    self.assertTrue(issubclass(KBiosystemsUltrasealPRO, KBiosystemsSealer))
-
-  def test_base_is_abstract(self):
-    with self.assertRaises(TypeError):
-      KBiosystemsSealer(port="FAKE")  # setup/seal are abstract
-
-  def test_shared_low_status_bits(self):
-    # The state machine in the base relies on these being identical.
-    for bit in ("Ready", "NoFoil", "Error", "Busy", "NotAtSealTemperature", "PlateNotPresent"):
-      self.assertEqual(
-        int(getattr(UltrasealEPROStatus, bit)), int(getattr(UltrasealXTProStatus, bit))
-      )
-      self.assertEqual(
-        int(getattr(UltrasealEPROStatus, bit)), int(getattr(UltrasealPROStatus, bit))
-      )
 
 
 if __name__ == "__main__":

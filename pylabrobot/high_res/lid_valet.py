@@ -56,6 +56,9 @@ class HighResLidValet:
 
   Commands (``<n>`` is the 1-based nest number, which the server calls a hotel;
   ``reset`` and ``status`` address every nest at once when ``<n>`` is omitted):
+
+  ::
+
     reset <n>    home/reset a nest, or every nest
     unlid <n>    lift the lid off the plate into the suction cup (delid)
     lid <n>      lower the held lid back onto the plate

@@ -23,11 +23,40 @@ from pylabrobot.utils.list import reshape_2d
 logger = logging.getLogger(__name__)
 
 
-class ByonoyLuminescence96(ByonoyDriver):
-  """Backend for the Byonoy Luminescence 96 Automate plate reader."""
+class ByonoyLuminescence96(Resource, ByonoyDriver):
+  """The Byonoy Luminescence 96 Automate reader unit.
 
-  def __init__(self) -> None:
-    super().__init__(pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96, name="Byonoy L96")
+  ``Resource`` comes first in the MRO so its ``name`` property (and its setter,
+  which the resource tree needs) wins over the driver's device-name property.
+  """
+
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    rotation: Optional[Rotation] = None,
+    category: Optional[str] = None,
+    model: Optional[str] = "Byonoy L96 Reader Unit",
+    barcode: Optional[Barcode] = None,
+    preferred_pickup_location: Optional[Coordinate] = None,
+  ) -> None:
+    Resource.__init__(
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      rotation=rotation,
+      category=category,
+      model=model,
+      barcode=barcode,
+      preferred_pickup_location=preferred_pickup_location,
+    )
+    ByonoyDriver.__init__(
+      self, pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96, name="Byonoy L96"
+    )
 
   async def read_luminescence(
     self,
