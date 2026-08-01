@@ -1,0 +1,6 @@
+﻿pylabrobot.molecular\_devices.imageXpress.pico.pico.Exposure
+============================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autodata:: Exposure

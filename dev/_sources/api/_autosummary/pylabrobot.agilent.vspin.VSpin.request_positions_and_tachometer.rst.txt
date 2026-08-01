@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.request\_positions\_and\_tachometer
+==================================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: VSpin.request_positions_and_tachometer

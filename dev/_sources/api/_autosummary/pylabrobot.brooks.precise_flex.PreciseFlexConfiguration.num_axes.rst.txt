@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.num\_axes
+==================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexConfiguration.num_axes

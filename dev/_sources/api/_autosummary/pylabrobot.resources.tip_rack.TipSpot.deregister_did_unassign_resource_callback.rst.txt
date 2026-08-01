@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.deregister\_did\_unassign\_resource\_callback
+====================================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.deregister_did_unassign_resource_callback

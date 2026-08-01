@@ -1,0 +1,36 @@
+﻿:orphan:
+
+
+pylabrobot.azenta.fluidx.intellixcap96.CartridgeProfile
+=======================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoclass:: CartridgeProfile
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CartridgeProfile.number
+      ~CartridgeProfile.communication_protocol
+      ~CartridgeProfile.decap_max_retry
+      ~CartridgeProfile.recap_max_retry
+      ~CartridgeProfile.raw
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CartridgeProfile.__init__
+      ~CartridgeProfile.from_raw
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectraMaxM5.start\_shake
+==================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: SpectraMaxM5.start_shake

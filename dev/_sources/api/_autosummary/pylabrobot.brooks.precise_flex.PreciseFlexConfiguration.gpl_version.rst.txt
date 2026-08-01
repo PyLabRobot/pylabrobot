@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration.gpl\_version
+=====================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexConfiguration.gpl_version

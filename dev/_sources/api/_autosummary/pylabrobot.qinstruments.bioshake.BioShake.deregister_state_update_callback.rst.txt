@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.deregister\_state\_update\_callback
+=============================================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.deregister_state_update_callback

@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.centers
+=================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.centers

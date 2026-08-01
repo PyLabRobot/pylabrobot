@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILADrawerLoadingTray.register\_did\_assign\_resource\_callback
+==============================================================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILADrawerLoadingTray.register_did_assign_resource_callback

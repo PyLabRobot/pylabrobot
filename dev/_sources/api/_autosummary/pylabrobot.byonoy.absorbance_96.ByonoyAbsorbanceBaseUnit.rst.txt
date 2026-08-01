@@ -1,0 +1,78 @@
+﻿:orphan:
+
+
+pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbanceBaseUnit
+=========================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autoclass:: ByonoyAbsorbanceBaseUnit
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ByonoyAbsorbanceBaseUnit.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ByonoyAbsorbanceBaseUnit.__init__
+      ~ByonoyAbsorbanceBaseUnit.assign_child_by_anchor
+      ~ByonoyAbsorbanceBaseUnit.assign_child_resource
+      ~ByonoyAbsorbanceBaseUnit.at
+      ~ByonoyAbsorbanceBaseUnit.center
+      ~ByonoyAbsorbanceBaseUnit.centers
+      ~ByonoyAbsorbanceBaseUnit.check_can_drop_resource_here
+      ~ByonoyAbsorbanceBaseUnit.copy
+      ~ByonoyAbsorbanceBaseUnit.deregister_did_assign_resource_callback
+      ~ByonoyAbsorbanceBaseUnit.deregister_did_unassign_resource_callback
+      ~ByonoyAbsorbanceBaseUnit.deregister_state_update_callback
+      ~ByonoyAbsorbanceBaseUnit.deregister_will_assign_resource_callback
+      ~ByonoyAbsorbanceBaseUnit.deregister_will_unassign_resource_callback
+      ~ByonoyAbsorbanceBaseUnit.deserialize
+      ~ByonoyAbsorbanceBaseUnit.get_absolute_location
+      ~ByonoyAbsorbanceBaseUnit.get_absolute_rotation
+      ~ByonoyAbsorbanceBaseUnit.get_absolute_size_x
+      ~ByonoyAbsorbanceBaseUnit.get_absolute_size_y
+      ~ByonoyAbsorbanceBaseUnit.get_absolute_size_z
+      ~ByonoyAbsorbanceBaseUnit.get_all_children
+      ~ByonoyAbsorbanceBaseUnit.get_anchor
+      ~ByonoyAbsorbanceBaseUnit.get_highest_known_point
+      ~ByonoyAbsorbanceBaseUnit.get_location_wrt
+      ~ByonoyAbsorbanceBaseUnit.get_resource
+      ~ByonoyAbsorbanceBaseUnit.get_root
+      ~ByonoyAbsorbanceBaseUnit.get_size_x
+      ~ByonoyAbsorbanceBaseUnit.get_size_y
+      ~ByonoyAbsorbanceBaseUnit.get_size_z
+      ~ByonoyAbsorbanceBaseUnit.is_in_subtree_of
+      ~ByonoyAbsorbanceBaseUnit.load_all_state
+      ~ByonoyAbsorbanceBaseUnit.load_from_json_file
+      ~ByonoyAbsorbanceBaseUnit.load_state
+      ~ByonoyAbsorbanceBaseUnit.load_state_from_file
+      ~ByonoyAbsorbanceBaseUnit.named
+      ~ByonoyAbsorbanceBaseUnit.register_did_assign_resource_callback
+      ~ByonoyAbsorbanceBaseUnit.register_did_unassign_resource_callback
+      ~ByonoyAbsorbanceBaseUnit.register_state_update_callback
+      ~ByonoyAbsorbanceBaseUnit.register_will_assign_resource_callback
+      ~ByonoyAbsorbanceBaseUnit.register_will_unassign_resource_callback
+      ~ByonoyAbsorbanceBaseUnit.rotate
+      ~ByonoyAbsorbanceBaseUnit.rotated
+      ~ByonoyAbsorbanceBaseUnit.save
+      ~ByonoyAbsorbanceBaseUnit.save_state_to_file
+      ~ByonoyAbsorbanceBaseUnit.serialize
+      ~ByonoyAbsorbanceBaseUnit.serialize_all_state
+      ~ByonoyAbsorbanceBaseUnit.serialize_state
+      ~ByonoyAbsorbanceBaseUnit.unassign
+      ~ByonoyAbsorbanceBaseUnit.unassign_child_resource
+   
+   

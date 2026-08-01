@@ -1,0 +1,48 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesPlateReader
+====================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoclass:: MolecularDevicesPlateReader
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MolecularDevicesPlateReader.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MolecularDevicesPlateReader.__init__
+      ~MolecularDevicesPlateReader.clear_error_log
+      ~MolecularDevicesPlateReader.close
+      ~MolecularDevicesPlateReader.deactivate
+      ~MolecularDevicesPlateReader.open
+      ~MolecularDevicesPlateReader.read_absorbance
+      ~MolecularDevicesPlateReader.read_error_log
+      ~MolecularDevicesPlateReader.request_current_temperature
+      ~MolecularDevicesPlateReader.request_firmware_version
+      ~MolecularDevicesPlateReader.request_status
+      ~MolecularDevicesPlateReader.request_temperature
+      ~MolecularDevicesPlateReader.send_command
+      ~MolecularDevicesPlateReader.set_temperature
+      ~MolecularDevicesPlateReader.setup
+      ~MolecularDevicesPlateReader.start_shake
+      ~MolecularDevicesPlateReader.stop
+      ~MolecularDevicesPlateReader.stop_shake
+      ~MolecularDevicesPlateReader.wait_for_idle
+   
+   

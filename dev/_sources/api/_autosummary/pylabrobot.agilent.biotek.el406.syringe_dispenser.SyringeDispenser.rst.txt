@@ -1,0 +1,26 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.el406.syringe\_dispenser.SyringeDispenser
+===================================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.el406.syringe_dispenser
+
+.. autoclass:: SyringeDispenser
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SyringeDispenser.__init__
+      ~SyringeDispenser.dispense
+      ~SyringeDispenser.prime
+   
+   

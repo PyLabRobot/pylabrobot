@@ -1,0 +1,85 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.cpac.InhecoCPAC
+=================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. autoclass:: InhecoCPAC
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoCPAC.name
+      ~InhecoCPAC.resource
+      ~InhecoCPAC.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoCPAC.__init__
+      ~InhecoCPAC.assign_child_by_anchor
+      ~InhecoCPAC.assign_child_resource
+      ~InhecoCPAC.at
+      ~InhecoCPAC.center
+      ~InhecoCPAC.centers
+      ~InhecoCPAC.check_can_drop_resource_here
+      ~InhecoCPAC.copy
+      ~InhecoCPAC.deregister_did_assign_resource_callback
+      ~InhecoCPAC.deregister_did_unassign_resource_callback
+      ~InhecoCPAC.deregister_state_update_callback
+      ~InhecoCPAC.deregister_will_assign_resource_callback
+      ~InhecoCPAC.deregister_will_unassign_resource_callback
+      ~InhecoCPAC.deserialize
+      ~InhecoCPAC.get_absolute_location
+      ~InhecoCPAC.get_absolute_rotation
+      ~InhecoCPAC.get_absolute_size_x
+      ~InhecoCPAC.get_absolute_size_y
+      ~InhecoCPAC.get_absolute_size_z
+      ~InhecoCPAC.get_all_children
+      ~InhecoCPAC.get_anchor
+      ~InhecoCPAC.get_default_child_location
+      ~InhecoCPAC.get_highest_known_point
+      ~InhecoCPAC.get_location_wrt
+      ~InhecoCPAC.get_resource
+      ~InhecoCPAC.get_root
+      ~InhecoCPAC.get_size_x
+      ~InhecoCPAC.get_size_y
+      ~InhecoCPAC.get_size_z
+      ~InhecoCPAC.is_in_subtree_of
+      ~InhecoCPAC.load_all_state
+      ~InhecoCPAC.load_from_json_file
+      ~InhecoCPAC.load_state
+      ~InhecoCPAC.load_state_from_file
+      ~InhecoCPAC.named
+      ~InhecoCPAC.register_did_assign_resource_callback
+      ~InhecoCPAC.register_did_unassign_resource_callback
+      ~InhecoCPAC.register_state_update_callback
+      ~InhecoCPAC.register_will_assign_resource_callback
+      ~InhecoCPAC.register_will_unassign_resource_callback
+      ~InhecoCPAC.request_current_temperature
+      ~InhecoCPAC.request_device_info
+      ~InhecoCPAC.rotate
+      ~InhecoCPAC.rotated
+      ~InhecoCPAC.save
+      ~InhecoCPAC.save_state_to_file
+      ~InhecoCPAC.serialize
+      ~InhecoCPAC.serialize_all_state
+      ~InhecoCPAC.serialize_state
+      ~InhecoCPAC.set_temperature
+      ~InhecoCPAC.stop_temperature_control
+      ~InhecoCPAC.unassign
+      ~InhecoCPAC.unassign_child_resource
+   
+   

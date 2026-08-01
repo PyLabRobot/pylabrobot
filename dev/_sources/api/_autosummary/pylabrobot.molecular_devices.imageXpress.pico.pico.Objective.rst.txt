@@ -1,0 +1,30 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.imageXpress.pico.pico.Objective
+=============================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autoclass:: Objective
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Objective.magnification
+      ~Objective.objective_id
+      ~Objective.O_2_5X_N_PLAN
+      ~Objective.O_4X_PL_FL
+      ~Objective.O_10X_PL_FL
+      ~Objective.O_20X_PL_FL
+      ~Objective.O_40X_PL_FL
+   
+   
+
+   
+   
+   

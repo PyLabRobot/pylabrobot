@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.set\_bucket\_1\_position\_to\_current
+====================================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: VSpin.set_bucket_1_position_to_current

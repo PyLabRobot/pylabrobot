@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexCartesianPose.rotation
+=================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: PreciseFlexCartesianPose.rotation

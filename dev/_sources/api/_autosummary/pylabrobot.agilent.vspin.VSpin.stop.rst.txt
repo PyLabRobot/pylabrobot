@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.stop
+===================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: VSpin.stop

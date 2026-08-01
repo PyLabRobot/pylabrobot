@@ -1,0 +1,78 @@
+﻿:orphan:
+
+
+pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit
+=============================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. autoclass:: ByonoyLuminescenceBaseUnit
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ByonoyLuminescenceBaseUnit.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ByonoyLuminescenceBaseUnit.__init__
+      ~ByonoyLuminescenceBaseUnit.assign_child_by_anchor
+      ~ByonoyLuminescenceBaseUnit.assign_child_resource
+      ~ByonoyLuminescenceBaseUnit.at
+      ~ByonoyLuminescenceBaseUnit.center
+      ~ByonoyLuminescenceBaseUnit.centers
+      ~ByonoyLuminescenceBaseUnit.check_can_drop_resource_here
+      ~ByonoyLuminescenceBaseUnit.copy
+      ~ByonoyLuminescenceBaseUnit.deregister_did_assign_resource_callback
+      ~ByonoyLuminescenceBaseUnit.deregister_did_unassign_resource_callback
+      ~ByonoyLuminescenceBaseUnit.deregister_state_update_callback
+      ~ByonoyLuminescenceBaseUnit.deregister_will_assign_resource_callback
+      ~ByonoyLuminescenceBaseUnit.deregister_will_unassign_resource_callback
+      ~ByonoyLuminescenceBaseUnit.deserialize
+      ~ByonoyLuminescenceBaseUnit.get_absolute_location
+      ~ByonoyLuminescenceBaseUnit.get_absolute_rotation
+      ~ByonoyLuminescenceBaseUnit.get_absolute_size_x
+      ~ByonoyLuminescenceBaseUnit.get_absolute_size_y
+      ~ByonoyLuminescenceBaseUnit.get_absolute_size_z
+      ~ByonoyLuminescenceBaseUnit.get_all_children
+      ~ByonoyLuminescenceBaseUnit.get_anchor
+      ~ByonoyLuminescenceBaseUnit.get_highest_known_point
+      ~ByonoyLuminescenceBaseUnit.get_location_wrt
+      ~ByonoyLuminescenceBaseUnit.get_resource
+      ~ByonoyLuminescenceBaseUnit.get_root
+      ~ByonoyLuminescenceBaseUnit.get_size_x
+      ~ByonoyLuminescenceBaseUnit.get_size_y
+      ~ByonoyLuminescenceBaseUnit.get_size_z
+      ~ByonoyLuminescenceBaseUnit.is_in_subtree_of
+      ~ByonoyLuminescenceBaseUnit.load_all_state
+      ~ByonoyLuminescenceBaseUnit.load_from_json_file
+      ~ByonoyLuminescenceBaseUnit.load_state
+      ~ByonoyLuminescenceBaseUnit.load_state_from_file
+      ~ByonoyLuminescenceBaseUnit.named
+      ~ByonoyLuminescenceBaseUnit.register_did_assign_resource_callback
+      ~ByonoyLuminescenceBaseUnit.register_did_unassign_resource_callback
+      ~ByonoyLuminescenceBaseUnit.register_state_update_callback
+      ~ByonoyLuminescenceBaseUnit.register_will_assign_resource_callback
+      ~ByonoyLuminescenceBaseUnit.register_will_unassign_resource_callback
+      ~ByonoyLuminescenceBaseUnit.rotate
+      ~ByonoyLuminescenceBaseUnit.rotated
+      ~ByonoyLuminescenceBaseUnit.save
+      ~ByonoyLuminescenceBaseUnit.save_state_to_file
+      ~ByonoyLuminescenceBaseUnit.serialize
+      ~ByonoyLuminescenceBaseUnit.serialize_all_state
+      ~ByonoyLuminescenceBaseUnit.serialize_state
+      ~ByonoyLuminescenceBaseUnit.unassign
+      ~ByonoyLuminescenceBaseUnit.unassign_child_resource
+   
+   

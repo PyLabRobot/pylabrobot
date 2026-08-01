@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesPlateReader.clear\_error\_log
+======================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: MolecularDevicesPlateReader.clear_error_log

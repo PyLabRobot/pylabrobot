@@ -1,0 +1,90 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.thermoshake.InhecoThermoShake
+===============================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. autoclass:: InhecoThermoShake
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoThermoShake.name
+      ~InhecoThermoShake.resource
+      ~InhecoThermoShake.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoThermoShake.__init__
+      ~InhecoThermoShake.assign_child_by_anchor
+      ~InhecoThermoShake.assign_child_resource
+      ~InhecoThermoShake.at
+      ~InhecoThermoShake.center
+      ~InhecoThermoShake.centers
+      ~InhecoThermoShake.check_can_drop_resource_here
+      ~InhecoThermoShake.copy
+      ~InhecoThermoShake.deregister_did_assign_resource_callback
+      ~InhecoThermoShake.deregister_did_unassign_resource_callback
+      ~InhecoThermoShake.deregister_state_update_callback
+      ~InhecoThermoShake.deregister_will_assign_resource_callback
+      ~InhecoThermoShake.deregister_will_unassign_resource_callback
+      ~InhecoThermoShake.deserialize
+      ~InhecoThermoShake.get_absolute_location
+      ~InhecoThermoShake.get_absolute_rotation
+      ~InhecoThermoShake.get_absolute_size_x
+      ~InhecoThermoShake.get_absolute_size_y
+      ~InhecoThermoShake.get_absolute_size_z
+      ~InhecoThermoShake.get_all_children
+      ~InhecoThermoShake.get_anchor
+      ~InhecoThermoShake.get_default_child_location
+      ~InhecoThermoShake.get_highest_known_point
+      ~InhecoThermoShake.get_location_wrt
+      ~InhecoThermoShake.get_resource
+      ~InhecoThermoShake.get_root
+      ~InhecoThermoShake.get_size_x
+      ~InhecoThermoShake.get_size_y
+      ~InhecoThermoShake.get_size_z
+      ~InhecoThermoShake.is_in_subtree_of
+      ~InhecoThermoShake.load_all_state
+      ~InhecoThermoShake.load_from_json_file
+      ~InhecoThermoShake.load_state
+      ~InhecoThermoShake.load_state_from_file
+      ~InhecoThermoShake.named
+      ~InhecoThermoShake.register_did_assign_resource_callback
+      ~InhecoThermoShake.register_did_unassign_resource_callback
+      ~InhecoThermoShake.register_state_update_callback
+      ~InhecoThermoShake.register_will_assign_resource_callback
+      ~InhecoThermoShake.register_will_unassign_resource_callback
+      ~InhecoThermoShake.request_current_temperature
+      ~InhecoThermoShake.request_device_info
+      ~InhecoThermoShake.rotate
+      ~InhecoThermoShake.rotated
+      ~InhecoThermoShake.save
+      ~InhecoThermoShake.save_state_to_file
+      ~InhecoThermoShake.serialize
+      ~InhecoThermoShake.serialize_all_state
+      ~InhecoThermoShake.serialize_state
+      ~InhecoThermoShake.set_shaker_shape
+      ~InhecoThermoShake.set_shaker_speed
+      ~InhecoThermoShake.set_temperature
+      ~InhecoThermoShake.shake
+      ~InhecoThermoShake.start_shaking
+      ~InhecoThermoShake.stop_shaking
+      ~InhecoThermoShake.stop_temperature_control
+      ~InhecoThermoShake.unassign
+      ~InhecoThermoShake.unassign_child_resource
+   
+   

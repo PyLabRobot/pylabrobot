@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer.STATUS
+======================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. autoattribute:: KBiosystemsSealer.STATUS

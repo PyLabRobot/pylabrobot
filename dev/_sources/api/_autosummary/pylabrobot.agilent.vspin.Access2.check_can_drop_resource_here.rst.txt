@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2.check\_can\_drop\_resource\_here
+=================================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2.check_can_drop_resource_here

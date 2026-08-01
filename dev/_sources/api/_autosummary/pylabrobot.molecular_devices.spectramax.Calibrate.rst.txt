@@ -1,0 +1,6 @@
+﻿pylabrobot.molecular\_devices.spectramax.Calibrate
+==================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autodata:: Calibrate

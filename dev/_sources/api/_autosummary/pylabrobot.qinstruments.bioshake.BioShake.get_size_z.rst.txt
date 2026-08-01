@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.get\_size\_z
+======================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.get_size_z

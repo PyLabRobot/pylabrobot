@@ -1,0 +1,6 @@
+﻿pylabrobot.azenta.fluidx.intellixcap96.FluidXError
+==================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoexception:: FluidXError

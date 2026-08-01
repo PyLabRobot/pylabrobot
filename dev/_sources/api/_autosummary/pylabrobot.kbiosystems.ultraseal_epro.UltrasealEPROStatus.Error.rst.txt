@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.UltrasealEPROStatus.Error
+================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. autoattribute:: UltrasealEPROStatus.Error

@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectraMax384Plus.read\_error\_log
+===========================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: SpectraMax384Plus.read_error_log

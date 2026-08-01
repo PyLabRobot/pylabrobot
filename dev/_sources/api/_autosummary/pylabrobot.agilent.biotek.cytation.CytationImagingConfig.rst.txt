@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.cytation.CytationImagingConfig
+========================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.cytation
+
+.. autoclass:: CytationImagingConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CytationImagingConfig.camera_serial_number
+      ~CytationImagingConfig.filters
+      ~CytationImagingConfig.image_read_delay
+      ~CytationImagingConfig.max_image_read_attempts
+      ~CytationImagingConfig.objectives
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CytationImagingConfig.__init__
+   
+   

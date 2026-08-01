@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILADrawerLoadingTray.center
+===========================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILADrawerLoadingTray.center

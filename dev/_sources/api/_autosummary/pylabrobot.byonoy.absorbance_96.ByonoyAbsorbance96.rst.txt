@@ -1,0 +1,94 @@
+﻿:orphan:
+
+
+pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbance96
+===================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autoclass:: ByonoyAbsorbance96
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ByonoyAbsorbance96.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ByonoyAbsorbance96.__init__
+      ~ByonoyAbsorbance96.assign_child_by_anchor
+      ~ByonoyAbsorbance96.assign_child_resource
+      ~ByonoyAbsorbance96.at
+      ~ByonoyAbsorbance96.cancel
+      ~ByonoyAbsorbance96.center
+      ~ByonoyAbsorbance96.centers
+      ~ByonoyAbsorbance96.check_can_drop_resource_here
+      ~ByonoyAbsorbance96.copy
+      ~ByonoyAbsorbance96.deregister_did_assign_resource_callback
+      ~ByonoyAbsorbance96.deregister_did_unassign_resource_callback
+      ~ByonoyAbsorbance96.deregister_state_update_callback
+      ~ByonoyAbsorbance96.deregister_will_assign_resource_callback
+      ~ByonoyAbsorbance96.deregister_will_unassign_resource_callback
+      ~ByonoyAbsorbance96.describe_error_code
+      ~ByonoyAbsorbance96.deserialize
+      ~ByonoyAbsorbance96.get_absolute_location
+      ~ByonoyAbsorbance96.get_absolute_rotation
+      ~ByonoyAbsorbance96.get_absolute_size_x
+      ~ByonoyAbsorbance96.get_absolute_size_y
+      ~ByonoyAbsorbance96.get_absolute_size_z
+      ~ByonoyAbsorbance96.get_all_children
+      ~ByonoyAbsorbance96.get_anchor
+      ~ByonoyAbsorbance96.get_highest_known_point
+      ~ByonoyAbsorbance96.get_location_wrt
+      ~ByonoyAbsorbance96.get_resource
+      ~ByonoyAbsorbance96.get_root
+      ~ByonoyAbsorbance96.get_size_x
+      ~ByonoyAbsorbance96.get_size_y
+      ~ByonoyAbsorbance96.get_size_z
+      ~ByonoyAbsorbance96.initialize_measurements
+      ~ByonoyAbsorbance96.is_in_subtree_of
+      ~ByonoyAbsorbance96.load_all_state
+      ~ByonoyAbsorbance96.load_from_json_file
+      ~ByonoyAbsorbance96.load_state
+      ~ByonoyAbsorbance96.load_state_from_file
+      ~ByonoyAbsorbance96.named
+      ~ByonoyAbsorbance96.read_absorbance
+      ~ByonoyAbsorbance96.register_did_assign_resource_callback
+      ~ByonoyAbsorbance96.register_did_unassign_resource_callback
+      ~ByonoyAbsorbance96.register_state_update_callback
+      ~ByonoyAbsorbance96.register_will_assign_resource_callback
+      ~ByonoyAbsorbance96.register_will_unassign_resource_callback
+      ~ByonoyAbsorbance96.request_api_version
+      ~ByonoyAbsorbance96.request_available_absorbance_wavelengths
+      ~ByonoyAbsorbance96.request_device_info
+      ~ByonoyAbsorbance96.request_environment
+      ~ByonoyAbsorbance96.request_status
+      ~ByonoyAbsorbance96.request_supported_reports
+      ~ByonoyAbsorbance96.request_versions
+      ~ByonoyAbsorbance96.rotate
+      ~ByonoyAbsorbance96.rotated
+      ~ByonoyAbsorbance96.save
+      ~ByonoyAbsorbance96.save_state_to_file
+      ~ByonoyAbsorbance96.send_command
+      ~ByonoyAbsorbance96.serialize
+      ~ByonoyAbsorbance96.serialize_all_state
+      ~ByonoyAbsorbance96.serialize_state
+      ~ByonoyAbsorbance96.set_led_color
+      ~ByonoyAbsorbance96.set_led_colors
+      ~ByonoyAbsorbance96.setup
+      ~ByonoyAbsorbance96.stop
+      ~ByonoyAbsorbance96.unassign
+      ~ByonoyAbsorbance96.unassign_child_resource
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.Pico.channel
+===========================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico
+
+.. autoproperty:: Pico.channel

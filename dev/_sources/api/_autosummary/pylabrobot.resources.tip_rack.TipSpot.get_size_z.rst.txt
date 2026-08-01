@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.get\_size\_z
+===================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.get_size_z

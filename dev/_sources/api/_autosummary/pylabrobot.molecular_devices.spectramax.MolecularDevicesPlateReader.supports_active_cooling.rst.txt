@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.MolecularDevicesPlateReader.supports\_active\_cooling
+==============================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoproperty:: MolecularDevicesPlateReader.supports_active_cooling

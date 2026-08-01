@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer.MIN\_SEALING\_DURATION
+======================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. autoattribute:: KBiosystemsSealer.MIN_SEALING_DURATION

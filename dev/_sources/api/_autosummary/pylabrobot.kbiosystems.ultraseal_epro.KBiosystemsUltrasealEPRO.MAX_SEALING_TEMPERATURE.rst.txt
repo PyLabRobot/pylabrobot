@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_epro.KBiosystemsUltrasealEPRO.MAX\_SEALING\_TEMPERATURE
+=========================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. autoattribute:: KBiosystemsUltrasealEPRO.MAX_SEALING_TEMPERATURE

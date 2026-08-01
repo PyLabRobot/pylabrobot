@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4SStatus.sensor\_status
+==============================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. autoattribute:: A4SStatus.sensor_status

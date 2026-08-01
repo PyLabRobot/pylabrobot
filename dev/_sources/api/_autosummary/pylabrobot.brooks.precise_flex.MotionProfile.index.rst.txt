@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.MotionProfile.index
+===================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: MotionProfile.index

@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.unassign
+==========================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.unassign

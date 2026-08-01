@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.assign\_child\_by\_anchor
+================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.assign_child_by_anchor

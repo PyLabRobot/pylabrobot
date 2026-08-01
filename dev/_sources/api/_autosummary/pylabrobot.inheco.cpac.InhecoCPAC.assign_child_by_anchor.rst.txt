@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.assign\_child\_by\_anchor
+===========================================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.assign_child_by_anchor

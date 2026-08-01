@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.parking\_position
+=============================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoproperty:: PreciseFlex.parking_position

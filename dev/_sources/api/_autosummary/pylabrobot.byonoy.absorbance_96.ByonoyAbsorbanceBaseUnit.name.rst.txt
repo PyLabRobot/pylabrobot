@@ -1,0 +1,6 @@
+pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbanceBaseUnit.name
+==============================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autoproperty:: ByonoyAbsorbanceBaseUnit.name

@@ -1,0 +1,6 @@
+﻿pylabrobot.mettler\_toledo.mettler\_toledo.MettlerToledoError
+=============================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo.mettler_toledo
+
+.. autoexception:: MettlerToledoError

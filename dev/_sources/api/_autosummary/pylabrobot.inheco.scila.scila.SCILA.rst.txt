@@ -1,0 +1,94 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.scila.scila.SCILA
+===================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. autoclass:: SCILA
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SCILA.name
+      ~SCILA.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SCILA.__init__
+      ~SCILA.assign_child_by_anchor
+      ~SCILA.assign_child_resource
+      ~SCILA.at
+      ~SCILA.center
+      ~SCILA.centers
+      ~SCILA.check_can_drop_resource_here
+      ~SCILA.copy
+      ~SCILA.deactivate
+      ~SCILA.deregister_did_assign_resource_callback
+      ~SCILA.deregister_did_unassign_resource_callback
+      ~SCILA.deregister_state_update_callback
+      ~SCILA.deregister_will_assign_resource_callback
+      ~SCILA.deregister_will_unassign_resource_callback
+      ~SCILA.deserialize
+      ~SCILA.get_absolute_location
+      ~SCILA.get_absolute_rotation
+      ~SCILA.get_absolute_size_x
+      ~SCILA.get_absolute_size_y
+      ~SCILA.get_absolute_size_z
+      ~SCILA.get_all_children
+      ~SCILA.get_anchor
+      ~SCILA.get_highest_known_point
+      ~SCILA.get_location_wrt
+      ~SCILA.get_resource
+      ~SCILA.get_root
+      ~SCILA.get_size_x
+      ~SCILA.get_size_y
+      ~SCILA.get_size_z
+      ~SCILA.is_in_subtree_of
+      ~SCILA.is_temperature_control_enabled
+      ~SCILA.load_all_state
+      ~SCILA.load_from_json_file
+      ~SCILA.load_state
+      ~SCILA.load_state_from_file
+      ~SCILA.named
+      ~SCILA.register_did_assign_resource_callback
+      ~SCILA.register_did_unassign_resource_callback
+      ~SCILA.register_state_update_callback
+      ~SCILA.register_will_assign_resource_callback
+      ~SCILA.register_will_unassign_resource_callback
+      ~SCILA.request_co2_flow_status
+      ~SCILA.request_current_temperature
+      ~SCILA.request_drawer_status
+      ~SCILA.request_drawer_statuses
+      ~SCILA.request_liquid_level
+      ~SCILA.request_status
+      ~SCILA.request_target_temperature
+      ~SCILA.request_temperature_information
+      ~SCILA.request_valve_status
+      ~SCILA.rotate
+      ~SCILA.rotated
+      ~SCILA.save
+      ~SCILA.save_state_to_file
+      ~SCILA.send_command
+      ~SCILA.serialize
+      ~SCILA.serialize_all_state
+      ~SCILA.serialize_state
+      ~SCILA.set_temperature
+      ~SCILA.setup
+      ~SCILA.stop
+      ~SCILA.unassign
+      ~SCILA.unassign_child_resource
+   
+   

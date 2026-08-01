@@ -1,0 +1,6 @@
+﻿pylabrobot.molecular\_devices.spectramax.PmtGain
+================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autodata:: PmtGain

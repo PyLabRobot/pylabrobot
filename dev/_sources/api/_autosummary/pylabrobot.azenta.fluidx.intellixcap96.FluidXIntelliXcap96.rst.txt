@@ -1,0 +1,58 @@
+﻿:orphan:
+
+
+pylabrobot.azenta.fluidx.intellixcap96.FluidXIntelliXcap96
+==========================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoclass:: FluidXIntelliXcap96
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FluidXIntelliXcap96.__init__
+      ~FluidXIntelliXcap96.caps_on_pins
+      ~FluidXIntelliXcap96.close_tray
+      ~FluidXIntelliXcap96.decap
+      ~FluidXIntelliXcap96.eject_caps
+      ~FluidXIntelliXcap96.eject_cartridge
+      ~FluidXIntelliXcap96.extend_tray
+      ~FluidXIntelliXcap96.head_up
+      ~FluidXIntelliXcap96.home
+      ~FluidXIntelliXcap96.initialize_keeping_caps_on_pins
+      ~FluidXIntelliXcap96.load_cartridge
+      ~FluidXIntelliXcap96.open_safety_door
+      ~FluidXIntelliXcap96.open_tray
+      ~FluidXIntelliXcap96.ready
+      ~FluidXIntelliXcap96.recap
+      ~FluidXIntelliXcap96.request_cartridge_info
+      ~FluidXIntelliXcap96.request_error_code
+      ~FluidXIntelliXcap96.request_extended_status
+      ~FluidXIntelliXcap96.request_firmware_versions
+      ~FluidXIntelliXcap96.request_profile
+      ~FluidXIntelliXcap96.request_status
+      ~FluidXIntelliXcap96.reset_cartridge_counter
+      ~FluidXIntelliXcap96.reset_error
+      ~FluidXIntelliXcap96.retract_tray
+      ~FluidXIntelliXcap96.retry_decap
+      ~FluidXIntelliXcap96.send_command
+      ~FluidXIntelliXcap96.set_dry_run_enabled
+      ~FluidXIntelliXcap96.set_error_detection_enabled
+      ~FluidXIntelliXcap96.set_safety_door_enabled
+      ~FluidXIntelliXcap96.setup
+      ~FluidXIntelliXcap96.standby
+      ~FluidXIntelliXcap96.step_tray_in
+      ~FluidXIntelliXcap96.step_tray_out
+      ~FluidXIntelliXcap96.stop
+      ~FluidXIntelliXcap96.waste
+   
+   

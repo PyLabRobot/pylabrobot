@@ -1,0 +1,6 @@
+pylabrobot.inheco.thermoshake.InhecoThermoShake.supports\_active\_cooling
+=========================================================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. autoproperty:: InhecoThermoShake.supports_active_cooling

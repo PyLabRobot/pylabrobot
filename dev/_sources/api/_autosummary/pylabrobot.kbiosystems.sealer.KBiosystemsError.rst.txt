@@ -1,0 +1,6 @@
+﻿pylabrobot.kbiosystems.sealer.KBiosystemsError
+==============================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. autoexception:: KBiosystemsError

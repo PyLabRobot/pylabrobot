@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.AbsorbanceResult.\_\_init\_\_
+======================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: AbsorbanceResult.__init__

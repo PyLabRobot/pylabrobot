@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.save\_state\_to\_file
+============================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.save_state_to_file

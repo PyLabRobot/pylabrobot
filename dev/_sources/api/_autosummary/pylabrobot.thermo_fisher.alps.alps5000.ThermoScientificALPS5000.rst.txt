@@ -1,0 +1,56 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.alps.alps5000.ThermoScientificALPS5000
+================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
+
+.. autoclass:: ThermoScientificALPS5000
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ThermoScientificALPS5000.ERRORS
+      ~ThermoScientificALPS5000.MAX_SEALING_DURATION
+      ~ThermoScientificALPS5000.MAX_SEALING_TEMPERATURE
+      ~ThermoScientificALPS5000.MIN_SEALING_DURATION
+      ~ThermoScientificALPS5000.MIN_SEALING_TEMPERATURE
+      ~ThermoScientificALPS5000.STATUS_MESSAGES
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ThermoScientificALPS5000.__init__
+      ~ThermoScientificALPS5000.enable_force_sensor
+      ~ThermoScientificALPS5000.initialise
+      ~ThermoScientificALPS5000.request_error_code
+      ~ThermoScientificALPS5000.request_sealing_temperature
+      ~ThermoScientificALPS5000.request_sealing_time
+      ~ThermoScientificALPS5000.request_status
+      ~ThermoScientificALPS5000.request_temperature
+      ~ThermoScientificALPS5000.seal
+      ~ThermoScientificALPS5000.send_command
+      ~ThermoScientificALPS5000.set_foil_length
+      ~ThermoScientificALPS5000.set_force
+      ~ThermoScientificALPS5000.set_sealing_distance
+      ~ThermoScientificALPS5000.set_sealing_time
+      ~ThermoScientificALPS5000.set_temperature
+      ~ThermoScientificALPS5000.setup
+      ~ThermoScientificALPS5000.shuttle_in
+      ~ThermoScientificALPS5000.shuttle_out
+      ~ThermoScientificALPS5000.stop
+      ~ThermoScientificALPS5000.wait_for_idle
+      ~ThermoScientificALPS5000.wait_for_sealing_temperature
+   
+   

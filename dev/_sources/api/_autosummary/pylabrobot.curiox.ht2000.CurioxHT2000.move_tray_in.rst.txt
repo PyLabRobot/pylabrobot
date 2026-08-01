@@ -1,0 +1,6 @@
+pylabrobot.curiox.ht2000.CurioxHT2000.move\_tray\_in
+====================================================
+
+.. currentmodule:: pylabrobot.curiox.ht2000
+
+.. automethod:: CurioxHT2000.move_tray_in

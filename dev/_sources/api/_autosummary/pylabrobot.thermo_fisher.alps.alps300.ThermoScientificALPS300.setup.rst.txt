@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps300.ThermoScientificALPS300.setup
+====================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps300
+
+.. automethod:: ThermoScientificALPS300.setup

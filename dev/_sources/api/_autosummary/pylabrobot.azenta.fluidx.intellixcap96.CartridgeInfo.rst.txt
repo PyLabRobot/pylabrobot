@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.azenta.fluidx.intellixcap96.CartridgeInfo
+====================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoclass:: CartridgeInfo
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CartridgeInfo.cycle_count
+      ~CartridgeInfo.profile
+      ~CartridgeInfo.serial
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CartridgeInfo.__init__
+      ~CartridgeInfo.count
+      ~CartridgeInfo.index
+   
+   

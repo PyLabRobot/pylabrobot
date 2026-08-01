@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.spectramax.KineticSettings
+========================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoclass:: KineticSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KineticSettings.interval
+      ~KineticSettings.num_readings
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KineticSettings.__init__
+   
+   

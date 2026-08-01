@@ -1,0 +1,55 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.el406.EL406
+=====================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.el406
+
+.. autoclass:: EL406
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~EL406.MAX_SHAKE_DURATION
+      ~EL406.MAX_SOAK_DURATION
+      ~EL406.plate
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~EL406.__init__
+      ~EL406.abort
+      ~EL406.batch
+      ~EL406.cleanup_after_protocol
+      ~EL406.clear_plate
+      ~EL406.home_motors
+      ~EL406.pause
+      ~EL406.request_instrument_settings
+      ~EL406.request_peristaltic_installed
+      ~EL406.request_sensor_enabled
+      ~EL406.request_serial_number
+      ~EL406.request_syringe_box_info
+      ~EL406.request_syringe_manifold
+      ~EL406.request_washer_manifold
+      ~EL406.reset
+      ~EL406.resume
+      ~EL406.run_self_check
+      ~EL406.set_plate
+      ~EL406.set_washer_manifold
+      ~EL406.setup
+      ~EL406.shake
+      ~EL406.start_batch
+      ~EL406.stop
+   
+   

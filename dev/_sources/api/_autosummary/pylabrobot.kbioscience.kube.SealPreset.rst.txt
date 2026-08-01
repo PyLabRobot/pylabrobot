@@ -1,0 +1,45 @@
+﻿:orphan:
+
+
+pylabrobot.kbioscience.kube.SealPreset
+======================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. autoclass:: SealPreset
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SealPreset.real
+      ~SealPreset.imag
+      ~SealPreset.numerator
+      ~SealPreset.denominator
+      ~SealPreset.USER_DEFINED
+      ~SealPreset.ONE
+      ~SealPreset.TWO
+      ~SealPreset.THREE
+      ~SealPreset.FOUR
+      ~SealPreset.FIVE
+      ~SealPreset.SIX
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SealPreset.conjugate
+      ~SealPreset.bit_length
+      ~SealPreset.bit_count
+      ~SealPreset.as_integer_ratio
+      ~SealPreset.__init__
+   
+   

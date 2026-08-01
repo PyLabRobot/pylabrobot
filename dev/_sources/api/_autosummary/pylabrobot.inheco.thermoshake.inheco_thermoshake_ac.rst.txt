@@ -1,0 +1,6 @@
+﻿pylabrobot.inheco.thermoshake.inheco\_thermoshake\_ac
+=====================================================
+
+.. currentmodule:: pylabrobot.inheco.thermoshake
+
+.. autofunction:: inheco_thermoshake_ac

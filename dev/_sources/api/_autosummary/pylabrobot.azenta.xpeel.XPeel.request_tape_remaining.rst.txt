@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.request\_tape\_remaining
+======================================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.request_tape_remaining

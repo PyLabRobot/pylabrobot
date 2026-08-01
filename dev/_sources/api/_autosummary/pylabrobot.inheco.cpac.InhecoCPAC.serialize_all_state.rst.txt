@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.serialize\_all\_state
+=======================================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.serialize_all_state

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps3000.ThermoScientificALPS3000.request\_sealing\_temperature
+==============================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps3000
+
+.. automethod:: ThermoScientificALPS3000.request_sealing_temperature

@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.set\_seal\_threshold\_upper
+=========================================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.set_seal_threshold_upper

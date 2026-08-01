@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.pico.ImagingResult.\_\_init\_\_
+==============================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. automethod:: ImagingResult.__init__

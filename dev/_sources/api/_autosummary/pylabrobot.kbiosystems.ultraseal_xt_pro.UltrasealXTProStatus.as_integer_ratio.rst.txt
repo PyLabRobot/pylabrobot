@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.UltrasealXTProStatus.as\_integer\_ratio
+=================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. automethod:: UltrasealXTProStatus.as_integer_ratio

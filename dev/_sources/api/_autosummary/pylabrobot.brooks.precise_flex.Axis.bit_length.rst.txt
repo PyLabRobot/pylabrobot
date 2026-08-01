@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.Axis.bit\_length
+================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: Axis.bit_length

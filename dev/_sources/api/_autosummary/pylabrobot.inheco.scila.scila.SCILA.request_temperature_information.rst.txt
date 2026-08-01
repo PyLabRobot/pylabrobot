@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILA.request\_temperature\_information
+=====================================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILA.request_temperature_information

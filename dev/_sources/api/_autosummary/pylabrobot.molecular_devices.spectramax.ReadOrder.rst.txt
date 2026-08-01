@@ -1,0 +1,6 @@
+﻿pylabrobot.molecular\_devices.spectramax.ReadOrder
+==================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autodata:: ReadOrder

@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KBioscienceKUBE.send\_command
+=========================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. automethod:: KBioscienceKUBE.send_command

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.lid\_valet.HighResLidValet.num\_nests
+==========================================================
+
+.. currentmodule:: pylabrobot.high_res.lid_valet
+
+.. autoproperty:: HighResLidValet.num_nests

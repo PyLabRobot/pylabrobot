@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps5000.ThermoScientificALPS5000.MIN\_SEALING\_TEMPERATURE
+==========================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
+
+.. autoattribute:: ThermoScientificALPS5000.MIN_SEALING_TEMPERATURE

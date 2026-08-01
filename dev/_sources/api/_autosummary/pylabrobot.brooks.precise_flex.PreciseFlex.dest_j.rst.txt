@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.dest\_j
+===================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.dest_j

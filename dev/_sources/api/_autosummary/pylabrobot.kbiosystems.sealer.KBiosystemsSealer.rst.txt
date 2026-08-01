@@ -1,0 +1,50 @@
+﻿:orphan:
+
+
+pylabrobot.kbiosystems.sealer.KBiosystemsSealer
+===============================================
+
+.. currentmodule:: pylabrobot.kbiosystems.sealer
+
+.. autoclass:: KBiosystemsSealer
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KBiosystemsSealer.MAX_SEALING_DURATION
+      ~KBiosystemsSealer.MIN_SEALING_DURATION
+      ~KBiosystemsSealer.STATUS
+      ~KBiosystemsSealer.STATUS_MESSAGES
+      ~KBiosystemsSealer.ERRORS
+      ~KBiosystemsSealer.MIN_SEALING_TEMPERATURE
+      ~KBiosystemsSealer.MAX_SEALING_TEMPERATURE
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KBiosystemsSealer.__init__
+      ~KBiosystemsSealer.request_error_code
+      ~KBiosystemsSealer.request_sealing_temperature
+      ~KBiosystemsSealer.request_sealing_time
+      ~KBiosystemsSealer.request_status
+      ~KBiosystemsSealer.request_temperature
+      ~KBiosystemsSealer.seal
+      ~KBiosystemsSealer.send_command
+      ~KBiosystemsSealer.set_sealing_time
+      ~KBiosystemsSealer.set_temperature
+      ~KBiosystemsSealer.setup
+      ~KBiosystemsSealer.stop
+      ~KBiosystemsSealer.wait_for_idle
+      ~KBiosystemsSealer.wait_for_sealing_temperature
+   
+   

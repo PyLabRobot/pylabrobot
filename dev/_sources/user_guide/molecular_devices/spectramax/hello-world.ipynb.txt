@@ -1,0 +1,274 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Molecular Devices SpectraMax\n",
+    "\n",
+    "The SpectraMax family of plate readers from Molecular Devices communicate over RS-232 serial. Both models share the same serial protocol ({class}`~pylabrobot.molecular_devices.spectramax.base.MolecularDevicesPlateReader`), but differ in what they can read.\n",
+    "\n",
+    "| Model | PLR Name | Absorbance | Fluorescence | Luminescence | Temperature Control |\n",
+    "|---|---|---|---|---|---|\n",
+    "| SpectraMax M5 | `SpectraMaxM5` | yes | yes | yes | yes |\n",
+    "| SpectraMax 384 Plus | `SpectraMax384Plus` | yes | no | no | yes |\n",
+    "\n",
+    "Connect the reader to your computer via an RS-232 serial cable (or USB-to-serial adapter). Note the serial port name (e.g. `COM3` on Windows, `/dev/ttyUSB0` on Linux)."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Setup"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.molecular_devices.spectramax import SpectraMaxM5\n",
+    "\n",
+    "reader = SpectraMaxM5(name=\"spectramax\", port=\"/dev/ttyUSB0\")  # replace with your port\n",
+    "await reader.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "For the SpectraMax 384 Plus:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# from pylabrobot.molecular_devices.spectramax import SpectraMax384Plus\n",
+    "#\n",
+    "# reader = SpectraMax384Plus(name=\"spectramax\", port=\"/dev/ttyUSB0\")\n",
+    "# await reader.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Assign a plate to the reader's loading tray:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import Cor_96_wellplate_360ul_Fb\n",
+    "\n",
+    "plate = Cor_96_wellplate_360ul_Fb(name=\"plate\")\n",
+    "reader.loading_tray.assign_child_resource(plate)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Absorbance\n",
+    "\n",
+    "Both the M5 and 384 Plus support absorbance reads. Pass the plate and the wells to read, plus the wavelength in nm."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "results = await reader.read_absorbance(plate, plate.get_wells(), wavelength=450)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Reads are configured with keyword arguments, e.g. speed reads and calibration mode:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "results = await reader.read_absorbance(\n",
+    "    plate,\n",
+    "    plate.get_wells(),\n",
+    "    wavelength=450,\n",
+    "    speed_read=True,\n",
+    "    calibrate=\"once\",\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Fluorescence (M5 only)\n",
+    "\n",
+    "The SpectraMax M5 supports fluorescence reads."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "results = await reader.read_fluorescence(\n",
+    "    plate,\n",
+    "    plate.get_wells(),\n",
+    "    excitation_wavelength=485,\n",
+    "    emission_wavelength=520,\n",
+    "    focal_height=0.0,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "PMT gain accepts one of `\"auto\"`, `\"high\"`, `\"medium\"`, `\"low\"`, or a raw integer value:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "results = await reader.read_fluorescence(\n",
+    "    plate,\n",
+    "    plate.get_wells(),\n",
+    "    excitation_wavelength=485,\n",
+    "    emission_wavelength=520,\n",
+    "    focal_height=0.0,\n",
+    "    pmt_gain=\"high\",\n",
+    "    read_from_bottom=True,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Luminescence (M5 only)\n",
+    "\n",
+    "The SpectraMax M5 supports luminescence reads. `emission_wavelengths` is required."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "results = await reader.read_luminescence(\n",
+    "    plate,\n",
+    "    plate.get_wells(),\n",
+    "    focal_height=0.0,\n",
+    "    emission_wavelengths=[460],\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Temperature control\n",
+    "\n",
+    "Both models can hold a temperature between 0 and 45 C."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await reader.set_temperature(37.0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "current = await reader.request_current_temperature()\n",
+    "print(f\"{current:.1f} \\u00b0C\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await reader.deactivate()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Tray control\n",
+    "\n",
+    "Open and close the plate tray:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await reader.open()\n",
+    "# load plate\n",
+    "await reader.close()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Teardown"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await reader.stop()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.11.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

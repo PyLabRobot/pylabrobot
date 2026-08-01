@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.initialize
+=========================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: VSpin.initialize

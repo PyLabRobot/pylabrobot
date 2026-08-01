@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.byonoy.luminescence\_96.LuminescenceResult
+=====================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. autoclass:: LuminescenceResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LuminescenceResult.data
+      ~LuminescenceResult.temperature
+      ~LuminescenceResult.timestamp
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LuminescenceResult.__init__
+   
+   

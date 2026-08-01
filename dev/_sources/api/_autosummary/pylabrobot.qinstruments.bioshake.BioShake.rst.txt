@@ -1,0 +1,93 @@
+﻿:orphan:
+
+
+pylabrobot.qinstruments.bioshake.BioShake
+=========================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. autoclass:: BioShake
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BioShake.name
+      ~BioShake.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BioShake.__init__
+      ~BioShake.assign_child_by_anchor
+      ~BioShake.assign_child_resource
+      ~BioShake.at
+      ~BioShake.center
+      ~BioShake.centers
+      ~BioShake.check_can_drop_resource_here
+      ~BioShake.copy
+      ~BioShake.deactivate
+      ~BioShake.deregister_did_assign_resource_callback
+      ~BioShake.deregister_did_unassign_resource_callback
+      ~BioShake.deregister_state_update_callback
+      ~BioShake.deregister_will_assign_resource_callback
+      ~BioShake.deregister_will_unassign_resource_callback
+      ~BioShake.deserialize
+      ~BioShake.get_absolute_location
+      ~BioShake.get_absolute_rotation
+      ~BioShake.get_absolute_size_x
+      ~BioShake.get_absolute_size_y
+      ~BioShake.get_absolute_size_z
+      ~BioShake.get_all_children
+      ~BioShake.get_anchor
+      ~BioShake.get_default_child_location
+      ~BioShake.get_highest_known_point
+      ~BioShake.get_location_wrt
+      ~BioShake.get_resource
+      ~BioShake.get_root
+      ~BioShake.get_size_x
+      ~BioShake.get_size_y
+      ~BioShake.get_size_z
+      ~BioShake.home
+      ~BioShake.is_in_subtree_of
+      ~BioShake.load_all_state
+      ~BioShake.load_from_json_file
+      ~BioShake.load_state
+      ~BioShake.load_state_from_file
+      ~BioShake.lock_plate
+      ~BioShake.named
+      ~BioShake.register_did_assign_resource_callback
+      ~BioShake.register_did_unassign_resource_callback
+      ~BioShake.register_state_update_callback
+      ~BioShake.register_will_assign_resource_callback
+      ~BioShake.register_will_unassign_resource_callback
+      ~BioShake.request_current_temperature
+      ~BioShake.reset
+      ~BioShake.rotate
+      ~BioShake.rotated
+      ~BioShake.save
+      ~BioShake.save_state_to_file
+      ~BioShake.send_command
+      ~BioShake.serialize
+      ~BioShake.serialize_all_state
+      ~BioShake.serialize_state
+      ~BioShake.set_temperature
+      ~BioShake.setup
+      ~BioShake.shake
+      ~BioShake.start_shaking
+      ~BioShake.stop
+      ~BioShake.stop_shaking
+      ~BioShake.unassign
+      ~BioShake.unassign_child_resource
+      ~BioShake.unlock_plate
+   
+   

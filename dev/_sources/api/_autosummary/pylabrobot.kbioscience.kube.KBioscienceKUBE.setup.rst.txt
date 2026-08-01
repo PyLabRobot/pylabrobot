@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KBioscienceKUBE.setup
+=================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. automethod:: KBioscienceKUBE.setup

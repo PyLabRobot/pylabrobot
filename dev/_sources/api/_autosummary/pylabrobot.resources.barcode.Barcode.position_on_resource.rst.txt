@@ -1,0 +1,6 @@
+pylabrobot.resources.barcode.Barcode.position\_on\_resource
+===========================================================
+
+.. currentmodule:: pylabrobot.resources.barcode
+
+.. autoattribute:: Barcode.position_on_resource

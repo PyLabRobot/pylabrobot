@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KBioscienceKUBE.wait\_for\_idle
+===========================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. automethod:: KBioscienceKUBE.wait_for_idle

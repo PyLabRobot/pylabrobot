@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexCartesianPose.\_\_init\_\_
+=====================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexCartesianPose.__init__

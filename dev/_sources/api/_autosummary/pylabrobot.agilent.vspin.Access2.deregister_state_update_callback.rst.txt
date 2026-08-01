@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2.deregister\_state\_update\_callback
+====================================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2.deregister_state_update_callback

@@ -1,0 +1,403 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "1c911a78",
+   "metadata": {},
+   "source": "# FluidX IntelliXcap 96\n\nThe FluidX IntelliXcap 96 (an Azenta brand) is an automated screw-cap **decapper**. It unscrews, holds, and screws back on all 96 caps of a screw-cap tube rack in a single stroke. A plate mover loads the rack onto its one nest.\n\n## Resources\n\n- [Azenta IntelliXcap user manual](https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf)\n- [Azenta IntelliXcap 96 product page](https://www.azenta.com/products/intellixcap-automated-screw-cap-decapper-recapper-96-format)\n\n| Property | Value |\n| --- | --- |\n| Communication | Serial, STX/ETX-framed ASCII |\n| Serial settings | 9600 baud, 8 data bits, no parity, 1 stop bit, no handshake |\n| Framing | each reply is wrapped in STX (`0x02`) .. ETX (`0x03`) |\n| Reply pattern | ACK (`0x06`), then `<cmd>OK` echo, then a result frame |\n\nEvery command is a single character written followed by ETX. A motion command is accepted with an ACK and a `<cmd>OK` echo; the status word then reads `StatusBUSY` while it moves. The terminal state depends on the operation: decap finishes at `StatusRECAP` while the head holds caps, whereas recap and waste finish at `StatusOK`. A refused or no-op command answers `CommandIgnore`.\n\n```{important}\nThe instrument only answers this protocol in **IntelliXcap mode**. Set setpoint 86 to `2` on the instrument touchscreen; there is no serial command for it.\n```"
+  },
+  {
+   "cell_type": "markdown",
+   "id": "085d70c0",
+   "metadata": {},
+   "source": "## Physical setup\n\nConnect the decapper's serial port to your computer through its USB-to-serial adapter and use the stable `by-id` path so the port survives re-enumeration, e.g. `/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_XXXXXXXX-if00-port0`.\n\nTube volume is not a driver setting. The installed IntelliCartridge and its firmware profile define the supported tube height, cap geometry/thread, and motion settings. Use the cartridge specified for the exact tube family: two nominally 0.5 mL tube types may require different cartridges. Cartridge IDs 1–14 load their matching profiles automatically; extended cartridges require the corresponding stored profile to be selected on the instrument. The Python commands are otherwise identical for every supported tube type. See the [official Azenta IntelliXcap user manual](https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf) for cartridge/profile setup and compatibility guidance.\n\n```{important}\nIf the instrument comes up reporting `StatusBUSY` and ignores commands, it is locked out. The usual cause is an **engaged e-stop**; the safety guard/hood and other interlocks do the same. `setup()` reads the e-stop bit from the extended status and says whether it is actually engaged, then raises. If the e-stop reads as released, check the guard/hood and interlocks.\n\n`request_extended_status().estop_active` reports the same bit at any time.\n```"
+  },
+  {
+   "cell_type": "markdown",
+   "id": "33641725",
+   "metadata": {},
+   "source": [
+    "## Connect\n\n",
+    "\n\n",
+    "`setup()` opens the serial port and reads the status. It raises if the device is not ready (e.g. e-stop)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "729f73e2",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.azenta.fluidx import FluidXIntelliXcap96\n\n",
+    "\n\n",
+    "decapper = FluidXIntelliXcap96(port=\"/dev/ttyUSB0\")  # replace with your port\n\n",
+    "await decapper.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e4a5895a",
+   "metadata": {},
+   "source": "## Status\n\n`request_status()` returns the current status word: `StatusOK` (idle with no caps held), `StatusBUSY` (moving), `StatusRECAP` (decapped; caps held and ready to recap or waste), `StatusSLEEP` (standby), `StatusCAREJECT` (cartridge ejected), or `StatusMANUAL` (halted; needs inspection, then `reset_error()` or one of the manual recovery commands). Note the status word does **not** encode the tray position."
+  },
+  {
+   "cell_type": "code",
+   "id": "00808280",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(\"status:\", await decapper.request_status())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9d0c74b1",
+   "metadata": {},
+   "source": "### Error codes\n\n`StatusERROR` and `StatusMANUAL` only say that *something* went wrong. `request_error_code()` asks the instrument for the numeric code behind it, and returns `None` when nothing is latched.\n\nThe driver does this for you: whenever an operation fails, it reads the code back and raises a `FluidXError` carrying it in `error_code`, with the documented meaning in the message. `get_error_message()` looks a code up by hand, and `is_recoverable_error()` (also on the exception, as `.recoverable`) says whether homing will clear it:\n\n- **Recoverable** codes latch `StatusERROR`, which homing clears: 113/114 (decap), 117/118 (recap), 142 (cartridge eject), 143/144 (cartridge load).\n- **Every other** code halts the instrument in `StatusMANUAL`, which needs an operator to inspect it.\n\nThe code table comes from the error list in the [official Azenta IntelliXcap user manual](https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf)."
+  },
+  {
+   "cell_type": "code",
+   "id": "3c55c578",
+   "source": "from pylabrobot.azenta.fluidx import get_error_message, is_recoverable_error\n\ncode = await decapper.request_error_code()\nif code is None:\n    print(\"no error latched\")\nelse:\n    print(code, get_error_message(code), \"recoverable:\", is_recoverable_error(code))",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "414a2f74",
+   "source": "## What the instrument can tell you about itself\n\nFour queries describe the machine and its consumable:\n\n- `request_firmware_versions()` -> unit, touchscreen and light curtain firmware. Two features depend on it: dry-run mode needs touchscreen V14 or above, and `waste()` is broken in V44 (the command list does not say which firmware that version refers to).\n- `request_cartridge_info()` -> the installed cartridge's profile, cycle count and serial. The serial always reads `\"00000000\"`; the firmware does not implement it.\n- `request_profile()` -> the active profile number and its decap/recap retry limits.\n- `request_extended_status()` -> the flags the status word leaves out, including whether caps are held on the pins, whether a cartridge is installed and whether the e-stop is engaged. `caps_on_pins()` is a shortcut for the first of those.\n\n```{note}\nThe command list names twelve extended-status flags but shows an eleven-character answer. `request_extended_status()` rejects any width other than twelve rather than guess which end is missing, because the most significant bit is `CAPS_ON_PINS`. If it raises on your instrument, the raw string is in the message.\n```",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "id": "e15d3859",
+   "source": "print(\"firmware:\", await decapper.request_firmware_versions())",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "a35b8210",
+   "source": "print(\"cartridge:\", await decapper.request_cartridge_info())\nprint(\"profile:\", await decapper.request_profile())",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "a9137607",
+   "source": "print(\"extended status:\", await decapper.request_extended_status())\nprint(\"caps held:\", await decapper.caps_on_pins())",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6812c7f3",
+   "metadata": {},
+   "source": [
+    "## Tray\n",
+    "\n",
+    "Open and close the loading tray. Asking for a position the tray is already in is a harmless no-op. Tray motion does not change whether caps are held, so after decapping the terminal state remains `StatusRECAP` rather than returning to `StatusOK`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "b55ee6e6",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await decapper.open_tray()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "7b6fe71d",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await decapper.close_tray()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "de6913a2",
+   "source": "### Presenting the tray further out\n\nPast the load position the tray can travel out to an extended position, which is useful for handing decapped tubes to an operator or another instrument. The two ends are setpoints 3 (load) and 127 (extended), and the step size is setpoint 88; all three are configured on the instrument.\n\n- `extend_tray()` / `retract_tray()` move between the two ends. Extending requires the tray to be at the load position, so open the tray first.\n- `step_tray_out()` / `step_tray_in()` move by one step. A step that would leave the S3..S127 range fails rather than clipping.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "id": "17591151",
+   "source": "# t fails unless the tray is already at the load position, so open it first.\nawait decapper.open_tray()\nawait decapper.extend_tray()    # S3 -> S127, all the way out",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "8962b392",
+   "source": "await decapper.step_tray_in()   # one S88 step back in",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "d57fd7ec",
+   "source": "await decapper.retract_tray()   # all the way back to S3",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "310cb8dd",
+   "metadata": {},
+   "source": [
+    "## Home\n\n",
+    "\n\n",
+    "Home all axes."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "349d6644",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await decapper.home()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ec297b15",
+   "metadata": {},
+   "source": "## Decap, recap, waste\n\nWith a rack of screw-cap tubes loaded on the nest, `decap()` unscrews and holds all 96 caps. After decapping, choose **one** terminal operation: `recap()` screws those caps back onto the tubes, while `waste()` releases them into a separately positioned cap carrier. `decap()` refuses if caps are already held (recap or waste first); `recap()` refuses if none are held.\n\nA fault (e.g. decapping with no rack loaded) can latch the device in `StatusError`, and the failing call raises a `FluidXError` carrying the instrument's error code and its documented meaning. Homing clears a latched `StatusError`. By default (`auto_recover=True`) the next operation you issue homes to clear it and then proceeds; pass `auto_recover=False` to have it raise instead. `StatusMANUAL` requires an explicit safety decision: inspect the rack and cap head, confirm that axis motion is safe, then call `reset_error()`. Hardware testing confirmed that it homes the machine from `StatusMANUAL` through `StatusBUSY` to `StatusOK`. Normal motion commands remain blocked until recovery completes.\n\nThe command list says the initialize sequence \"will not drop caps\", but it also documents a separate command for initializing without dropping them. Neither has been checked on hardware. With caps held, use `initialize_keeping_caps_on_pins()` (see *Manual recovery* below), which is the command documented for that case.\n\n```{warning}\n`waste()` is irreversible and does not detect whether a cap carrier is present. Before calling it, open the tray, remove the sample-tube rack, and position the correct cap carrier or collection vessel according to your instrument's procedure. On hardware, leaving the tube rack beneath the head caused the released caps to fall back onto the tube openings. They looked recapped but were not guaranteed to be threaded or torqued. See the [official Azenta IntelliXcap user manual](https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf), which defines waste as dropping caps into a carrier.\n\nFirmware V44 does not implement `waste()` at all — the command list does not say which of the three firmwares it means. On that version, load a store rack and use `decap()`/`recap()`, which select the store sequence themselves. `request_firmware_versions()` reports all three.\n```"
+  },
+  {
+   "cell_type": "code",
+   "id": "6b3ddcb2",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# After inspecting the rack/head and confirming motion is safe:\n",
+    "await decapper.reset_error()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "cd3b20d4",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await decapper.decap()   # unscrew and hold all 96 caps"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "19704bfd",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Choose this path to retain the caps.\n",
+    "await decapper.recap()   # screw and torque the held caps back on"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "af381383",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Alternative to recap: with caps held, remove the tube rack and position\n",
+    "# the correct cap carrier first. Do not run this after recap.\n",
+    "await decapper.waste()   # irreversibly release held caps into the carrier"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "32aae9c6",
+   "source": "### Forcing another decap attempt\n\n**You only need this if you have turned light curtain error detection off.** With detection on, the instrument spots the tubes that failed to decap and retries the stroke by itself inside `decap()`, up to the profile's decap retry limit (`request_profile().decap_max_retry`). There is nothing left for you to force.\n\nWith detection off the instrument cannot see those tubes, so `decap()` returns successfully and leaves them capped. `retry_decap()` forces another stroke; `decap()` itself refuses, because caps are held. Call it as many times as you need.\n\n```{note}\nThe command list documents only that this command is used \"after a successful Decap\" and \"requires lightcurtain OFF\". That those are the same condition is inferred from the automatic-retry and error-detection commands rather than stated by the vendor.\n```",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "id": "deb6dfc4",
+   "source": "await decapper.set_error_detection_enabled(False)\nawait decapper.retry_decap()",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "5058ff42",
+   "source": "## Changing the cartridge\n\nThe IntelliCartridge defines which tubes the instrument can handle, so switching tube families means swapping it. `eject_cartridge()` puts the installed cartridge on the tray and `load_cartridge()` picks up the one resting there, returning the profile number the instrument loaded. Both read the extended status first, so calling them when the instrument is already in that state is a no-op.\n\nPhysically remove the ejected cartridge from the tray, and place the new one, between the two calls.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "id": "1ca901ec",
+   "source": "# Empty the tray and make sure no caps are held first.\nawait decapper.eject_cartridge()",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "fb66970d",
+   "source": "# Place the replacement cartridge on the tray, then pick it up.\nprint(\"loaded profile:\", await decapper.load_cartridge())",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "e5924fd6",
+   "source": "# Zero the cycle counter, e.g. after fitting a rebuilt cartridge.\nawait decapper.reset_cartridge_counter()",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4e73401b",
+   "source": "## Settings\n\nThree flags change how the instrument behaves during a run.\n\n- `set_error_detection_enabled(False)` stops the light curtain from failing a decap/recap on error 135/136, so the stroke always finishes. It is also the prerequisite for `retry_decap()`. Detection is on at power-up.\n- `set_dry_run_enabled(True)` makes the instrument pause and wait for the operator on light curtain errors 114, 118, 135 and 136 instead of failing the operation. Needs touchscreen firmware V14 or above.\n- `set_safety_door_enabled(False)` disables the safety door, which leaves it open. Call it with `True` to re-enable; the door is also enabled at power-up.\n\n```{warning}\nEach of these weakens a safety or error check.\n```",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "id": "6d7bc7b0",
+   "source": "await decapper.set_error_detection_enabled(False)",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "fe87592b",
+   "source": "# Requires touchscreen firmware V14 or above.\nawait decapper.set_dry_run_enabled(True)",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "63266af7",
+   "source": "# Opens the door and keeps it open; call with True to re-enable.\nawait decapper.set_safety_door_enabled(False)",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9a8f1df0",
+   "source": "## Manual recovery\n\nThese commands are only accepted while the instrument is halted in `StatusMANUAL`, and it stays there afterwards. They exist to get a stuck instrument back to a state you can inspect and clear.\n\n```{warning}\nAll of these move axes or open the safety door. Look inside the instrument and confirm that motion is safe before running any of them.\n```",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "id": "2cce2756",
+   "source": "await decapper.open_safety_door()",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "5201c0f1",
+   "source": "# Home the Z axis, keeping any held caps on the pins.\nawait decapper.head_up()",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "724dea0a",
+   "source": "# Drops any caps still on the cap drivers, wherever the head is standing.\n# Clear the deck first; use waste() when you want to collect them.\nawait decapper.eject_caps()",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "id": "2b9e2326",
+   "source": "# Clears the error state and homes without dropping caps held on the pins.\n# Follow it with recap() to put the caps back on the tubes.\nawait decapper.initialize_keeping_caps_on_pins()",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6acf47ef",
+   "metadata": {},
+   "source": [
+    "## Standby\n\n",
+    "\n\n",
+    "Put the decapper to sleep with `standby()` and wake it with `ready()`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "6ce5ea4b",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await decapper.standby()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "7fad708f",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await decapper.ready()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6d6c3888",
+   "metadata": {},
+   "source": [
+    "## Teardown\n\n",
+    "\n\n",
+    "`stop()` closes the serial connection."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "id": "a0d6806f",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await decapper.stop()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

@@ -1,0 +1,59 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.biotek.synergy.SynergyH1
+===========================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy
+
+.. autoclass:: SynergyH1
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SynergyH1.abs_wavelength_range
+      ~SynergyH1.emission_range
+      ~SynergyH1.excitation_range
+      ~SynergyH1.focal_height_range
+      ~SynergyH1.supports_active_cooling
+      ~SynergyH1.supports_cooling
+      ~SynergyH1.supports_heating
+      ~SynergyH1.temperature_range
+      ~SynergyH1.version
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SynergyH1.__init__
+      ~SynergyH1.clear_plate
+      ~SynergyH1.close
+      ~SynergyH1.deactivate
+      ~SynergyH1.home
+      ~SynergyH1.open
+      ~SynergyH1.read_absorbance
+      ~SynergyH1.read_fluorescence
+      ~SynergyH1.read_luminescence
+      ~SynergyH1.request_current_temperature
+      ~SynergyH1.request_firmware_version
+      ~SynergyH1.request_serial_number
+      ~SynergyH1.send_command
+      ~SynergyH1.set_plate
+      ~SynergyH1.set_slow_mode
+      ~SynergyH1.set_temperature
+      ~SynergyH1.setup
+      ~SynergyH1.shake
+      ~SynergyH1.stop
+      ~SynergyH1.stop_heating_or_cooling
+      ~SynergyH1.stop_shaking
+   
+   

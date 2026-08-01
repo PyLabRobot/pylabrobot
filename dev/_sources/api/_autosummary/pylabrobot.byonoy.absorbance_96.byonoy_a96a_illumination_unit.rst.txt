@@ -1,0 +1,6 @@
+﻿pylabrobot.byonoy.absorbance\_96.byonoy\_a96a\_illumination\_unit
+=================================================================
+
+.. currentmodule:: pylabrobot.byonoy.absorbance_96
+
+.. autofunction:: byonoy_a96a_illumination_unit

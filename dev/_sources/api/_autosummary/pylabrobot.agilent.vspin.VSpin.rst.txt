@@ -1,0 +1,59 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.vspin.VSpin
+==============================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoclass:: VSpin
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VSpin.at_bucket
+      ~VSpin.bucket_1_remainder
+      ~VSpin.door_open
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VSpin.__init__
+      ~VSpin.close_door
+      ~VSpin.configure_and_initialize
+      ~VSpin.g_to_rpm
+      ~VSpin.go_to_bucket1
+      ~VSpin.go_to_bucket2
+      ~VSpin.go_to_position
+      ~VSpin.initialize
+      ~VSpin.lock_bucket
+      ~VSpin.lock_door
+      ~VSpin.open_door
+      ~VSpin.request_bucket_1_position
+      ~VSpin.request_bucket_locked
+      ~VSpin.request_door_locked
+      ~VSpin.request_door_open
+      ~VSpin.request_home_position
+      ~VSpin.request_position
+      ~VSpin.request_positions_and_tachometer
+      ~VSpin.request_tachometer
+      ~VSpin.send_command
+      ~VSpin.set_bucket_1_position_to_current
+      ~VSpin.set_configuration_data
+      ~VSpin.setup
+      ~VSpin.spin
+      ~VSpin.stop
+      ~VSpin.unlock_bucket
+      ~VSpin.unlock_door
+   
+   

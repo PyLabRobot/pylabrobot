@@ -1,0 +1,6 @@
+pylabrobot.azenta.a4s.A4S.request\_remaining\_time
+==================================================
+
+.. currentmodule:: pylabrobot.azenta.a4s
+
+.. automethod:: A4S.request_remaining_time

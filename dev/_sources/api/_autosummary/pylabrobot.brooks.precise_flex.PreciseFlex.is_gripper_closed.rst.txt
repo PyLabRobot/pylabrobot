@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.is\_gripper\_closed
+===============================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.is_gripper_closed

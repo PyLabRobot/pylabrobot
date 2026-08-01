@@ -1,0 +1,1224 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Byonoy Luminescence 96 — lab guide &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/byonoy/luminescence_96/hello-world';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/byonoy/luminescence_96/hello-world.html" />
+    <link rel="icon" href="../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Byonoy L96 — LED bar" href="led_bar.html" />
+    <link rel="prev" title="Byonoy Absorbance 96" href="../absorbance_96/hello-world.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/units.html">Default Units</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../definitions.html">Definitions</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/mixing.html">Mixing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/container_no_go_zones.html">Container No-Go Zones</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="simple">
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../azenta/index.html">Azenta</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../azenta/fluidx/intellixcap96/hello-world.html">FluidX IntelliXcap 96</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../big_bear/index.html">BigBear</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../big_bear/orbital-shaker/hello-world.html">BigBear Orbital Shaker</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../brooks/index.html">Brooks</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../brooks/precise_flex/hello-world.html">Brooks PreciseFlex PF400 / PF3400</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Byonoy</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../absorbance_96/hello-world.html">Byonoy Absorbance 96</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Byonoy Luminescence 96 — lab guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="led_bar.html">Byonoy L96 — LED bar</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../curiox/index.html">Curiox</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../curiox/curiox-ht2000/hello-world.html">Curiox Laminar Wash HT2000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../hamilton/index.html">Hamilton</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../hamilton/star/index.html">Hamilton STAR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../hamilton/star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../hamilton/star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/cpac/hello-world.html">Inheco CPAC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/incubator_shaker/hello-world.html">Inheco Incubator Shaker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/odtc/hello-world.html">Inheco ODTC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/scila/hello-world.html">Inheco SCILA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/thermoshake/hello-world.html">Inheco ThermoShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../kbioscience/index.html">KBioscience</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../kbioscience/kube/hello-world.html">KBioscience KUBE</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../kbiosystems/index.html">KBiosystems</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-epro/hello-world.html">KBiosystems Ultraseal ePRO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-pro/hello-world.html">KBiosystems Ultraseal PRO (formerly WASP)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-xt-pro/hello-world.html">KBiosystems Ultraseal XT Pro</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../mettler_toledo/index.html">Mettler Toledo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../mettler_toledo/wxs205sdu/hello-world.html">Mettler Toledo WXS205SDU</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../molecular_devices/index.html">Molecular Devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../molecular_devices/spectramax/hello-world.html">Molecular Devices SpectraMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../molecular_devices/imageXpress/pico.html">ImageXpress Pico</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../qinstruments/index.html">QInstruments</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../qinstruments/bioshake/hello-world.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../sartorius/index.html">Sartorius</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../sartorius/entris2/hello-world.html">Sartorius Entris II</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../thermo_fisher/index.html">Thermo Fisher</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../thermo_fisher/alps/index.html">ALPS Heat Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps300/hello-world.html">Thermo Scientific ALPS 300</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps3000/hello-world.html">Thermo Scientific ALPS 3000</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps5000/hello-world.html">Thermo Scientific ALPS 5000</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../ufactory/index.html">UFACTORY</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../ufactory/xarm6/hello-world.html">UFACTORY xArm 6</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Byonoy</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Byonoy Luminescence 96 — lab guide</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="byonoy-luminescence-96-lab-guide">
+<h1>Byonoy Luminescence 96 — lab guide<a class="headerlink" href="#byonoy-luminescence-96-lab-guide" title="Link to this heading">#</a></h1>
+<p>Run a luminescence assay on the Byonoy L96 from PyLabRobot. Assumes the device is plugged in via USB and you’ve installed <code class="docutils literal notranslate"><span class="pre">pylabrobot</span></code> (with <code class="docutils literal notranslate"><span class="pre">hid</span></code> and <code class="docutils literal notranslate"><span class="pre">hidapi</span></code>).</p>
+<p>The L96 is a 96-well luminescence-only plate reader. It reads emitted light per well, no excitation source. Communicates over USB HID (vid <code class="docutils literal notranslate"><span class="pre">0x16D0</span></code>, pid <code class="docutils literal notranslate"><span class="pre">0x119B</span></code>).</p>
+<section id="connect">
+<h2>1. Connect<a class="headerlink" href="#connect" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">base</span></code> is a resource (a plate goes here); <code class="docutils literal notranslate"><span class="pre">reader</span></code> is both a resource and a device (the detector unit). After <code class="docutils literal notranslate"><span class="pre">setup()</span></code> the HID handle is open.</p>
+<blockquote>
+<div><p><strong>One process at a time.</strong> macOS / Windows / Linux all give exclusive HID access. If a previous Python session crashed without <code class="docutils literal notranslate"><span class="pre">stop()</span></code>, the next <code class="docutils literal notranslate"><span class="pre">setup()</span></code> will fail with “device already open”. Replug the USB cable to force-release.</p>
+</div></blockquote>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.byonoy</span><span class="w"> </span><span class="kn">import</span> <span class="n">byonoy_l96</span>  <span class="c1"># or byonoy_l96a for the automate variant</span>
+
+<span class="n">base</span><span class="p">,</span> <span class="n">reader</span> <span class="o">=</span> <span class="n">byonoy_l96</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;l96&quot;</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="resource-layout">
+<h2>Resource layout<a class="headerlink" href="#resource-layout" title="Link to this heading">#</a></h2>
+<p>The reader unit is both a <code class="docutils literal notranslate"><span class="pre">Resource</span></code> and a <code class="docutils literal notranslate"><span class="pre">Device</span></code>. The base unit owns two child holders, and the interlock lives on the plate holder:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ByonoyLuminescenceBaseUnit</span> <span class="p">(</span><span class="n">base</span><span class="p">)</span>
+ <span class="o">+--</span> <span class="n">plate_holder</span>         <span class="p">(</span><span class="n">assign</span> <span class="n">plates</span> <span class="n">here</span><span class="p">)</span>
+ <span class="o">+--</span> <span class="n">reader_unit_holder</span>   <span class="p">(</span><span class="n">reader</span> <span class="n">unit</span> <span class="n">sits</span> <span class="n">here</span> <span class="n">during</span> <span class="n">measurement</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="load-a-plate">
+<h2>2. Load a plate<a class="headerlink" href="#load-a-plate" title="Link to this heading">#</a></h2>
+<p>The reader-on-base interlock prevents you from assigning a plate while the detector is still on the holder — it forces a sane physical sequence.</p>
+<p>After running this cell, physically place the plate in the reader and place the detector back on top.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cor_96_wellplate_360ul_Fb</span>
+
+<span class="n">base</span><span class="o">.</span><span class="n">reader_unit_holder</span><span class="o">.</span><span class="n">unassign_child_resource</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span>  <span class="c1"># take detector off</span>
+<span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate&quot;</span><span class="p">)</span>
+<span class="n">base</span><span class="o">.</span><span class="n">plate_holder</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="read-the-basics">
+<h2>3. Read — the basics<a class="headerlink" href="#read-the-basics" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">focal_height</span></code> is required by the abstract <code class="docutils literal notranslate"><span class="pre">Luminescence</span></code> capability but <strong>ignored by the L96</strong> — the device has a fixed optical configuration (the detector unit clamps onto the base; geometry is determined by plate + base + detector heights, not user-tunable). Pass <code class="docutils literal notranslate"><span class="pre">0</span></code> by convention.</p>
+<section id="result-shape">
+<h3>Result shape<a class="headerlink" href="#result-shape" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">data</span></code> is plate row-major: <code class="docutils literal notranslate"><span class="pre">data[0]</span></code> = <code class="docutils literal notranslate"><span class="pre">[A1..A12]</span></code>, <code class="docutils literal notranslate"><span class="pre">data[1]</span></code> = <code class="docutils literal notranslate"><span class="pre">[B1..B12]</span></code>, …, <code class="docutils literal notranslate"><span class="pre">data[7]</span></code> = <code class="docutils literal notranslate"><span class="pre">[H1..H12]</span></code>. So <code class="docutils literal notranslate"><span class="pre">data[2][5]</span></code> is well <code class="docutils literal notranslate"><span class="pre">C6</span></code>. Values are floats in <strong>RLU (Relative Light Units) per integration period</strong> — not per second. Doubling integration time roughly doubles signal <em>and</em> dark counts.</p>
+</section>
+<section id="background">
+<h3>Background<a class="headerlink" href="#background" title="Link to this heading">#</a></h3>
+<p>With nothing in the wells (and a dark environment), expect noise around ±50 RLU at SENSITIVE (2 s). Non-zero noise is dark-current spread; <strong>negative values are normal</strong> because the firmware applies a baseline subtraction.</p>
+<blockquote>
+<div><p><strong>Light leakage.</strong> The L96 is designed to be light-tight from above (the detector unit covers the plate) but the bottom housing isn’t perfectly sealed. Reading on a <em>white</em> surface vs a <em>black</em> surface can change empty-well readings from ~50 to ~50,000+ RLU because reflected ambient light leaks in. For real assays use a black mat or a dark cabinet.</p>
+</div></blockquote>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">luminescence</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span> <span class="n">focal_height</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>            <span class="c1"># 8 × 12 list[list[float]]</span>
+<span class="n">timestamp</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">timestamp</span>  <span class="c1"># epoch seconds</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;timestamp=</span><span class="si">{</span><span class="n">timestamp</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  &quot;</span> <span class="o">+</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s2">8.2f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">row</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="picking-an-integration-mode">
+<h2>4. Picking an integration mode<a class="headerlink" href="#picking-an-integration-mode" title="Link to this heading">#</a></h2>
+<p>Four modes, mapping to the byonoy_device_library presets:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Mode</p></th>
+<th class="head"><p>Integration time</p></th>
+<th class="head"><p>Use for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RAPID</span></code></p></td>
+<td><p>100 ms</p></td>
+<td><p>Saturation checks, quick “is it bright?”</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SENSITIVE</span></code></p></td>
+<td><p>2 s (default)</p></td>
+<td><p>Most assays — luciferase, BRET, NanoBiT</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ULTRA_SENSITIVE</span></code></p></td>
+<td><p>20 s</p></td>
+<td><p>Very faint signals; low-copy reporters</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CUSTOM</span></code></p></td>
+<td><p>user-supplied</p></td>
+<td><p>Your own duration</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.byonoy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ByonoyLuminescence96Backend</span>
+
+<span class="c1"># Preset</span>
+<span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">luminescence</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
+    <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+    <span class="n">focal_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">backend_params</span><span class="o">=</span><span class="n">ByonoyLuminescence96Backend</span><span class="o">.</span><span class="n">LuminescenceParams</span><span class="p">(</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;ultra_sensitive&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1"># Custom (any duration in seconds) — auto-switches to CUSTOM mode</span>
+<span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">luminescence</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
+    <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+    <span class="n">focal_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">backend_params</span><span class="o">=</span><span class="n">ByonoyLuminescence96Backend</span><span class="o">.</span><span class="n">LuminescenceParams</span><span class="p">(</span>
+        <span class="n">integration_time</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="reading-specific-wells">
+<h2>5. Reading specific wells<a class="headerlink" href="#reading-specific-wells" title="Link to this heading">#</a></h2>
+<p>Pass a <code class="docutils literal notranslate"><span class="pre">wells=</span></code> list to <code class="docutils literal notranslate"><span class="pre">read()</span></code> — only those wells get real values back; everything else comes back as <code class="docutils literal notranslate"><span class="pre">None</span></code>. The result shape is still 8×12 (per the <code class="docutils literal notranslate"><span class="pre">LuminescenceResult</span></code> contract); unmeasured cells are <code class="docutils literal notranslate"><span class="pre">None</span></code> so you can distinguish “didn’t read” from a legitimate <code class="docutils literal notranslate"><span class="pre">0.0</span></code> reading (baseline subtraction can yield ~0 or negative values).</p>
+<blockquote>
+<div><p><strong>No speed-up.</strong> The firmware always integrates the whole 96-sensor array. Reading one column with <code class="docutils literal notranslate"><span class="pre">SENSITIVE</span></code> takes the same wall-clock as reading the full plate (~28 s in our hardware test). The <code class="docutils literal notranslate"><span class="pre">wells</span></code> filter keeps your downstream tidy — it doesn’t save time. If you want fast, use <code class="docutils literal notranslate"><span class="pre">RAPID</span></code> mode.</p>
+</div></blockquote>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Only column 1 (A1, B1, ..., H1)</span>
+<span class="n">col1_wells</span> <span class="o">=</span> <span class="p">[</span><span class="n">plate</span><span class="o">.</span><span class="n">get_well</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">1&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="s2">&quot;ABCDEFGH&quot;</span><span class="p">]</span>
+
+<span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">luminescence</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
+    <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+    <span class="n">focal_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">wells</span><span class="o">=</span><span class="n">col1_wells</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># results[0].data[0][0] is A1 (float); results[0].data[0][1] is A2 (None)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="timed-read-delay-before-reading">
+<h2>6. Timed read (delay before reading)<a class="headerlink" href="#timed-read-delay-before-reading" title="Link to this heading">#</a></h2>
+<p>For a substrate-injection assay where you want a fixed delay between adding reagent and reading. <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">asyncio.sleep</span></code> doesn’t block the event loop, and the reader stays connected.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+
+<span class="c1"># ... pipette substrate into the plate ...</span>
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">60</span><span class="p">)</span>   <span class="c1"># 60 s incubation</span>
+<span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">luminescence</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span> <span class="n">focal_height</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="kinetic-read-time-series">
+<h2>7. Kinetic read (time series)<a class="headerlink" href="#kinetic-read-time-series" title="Link to this heading">#</a></h2>
+<p>Read the same plate every N seconds, collect a stack of matrices. With <code class="docutils literal notranslate"><span class="pre">SENSITIVE</span></code> (2 s) the wall-clock per read is around 3 s including overhead, so <code class="docutils literal notranslate"><span class="pre">interval_s</span></code> must be ≥ 3. With <code class="docutils literal notranslate"><span class="pre">ULTRA_SENSITIVE</span></code> (20 s) it’s around 28 s — plan accordingly.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span><span class="o">,</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">frames</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">duration_s</span> <span class="o">=</span> <span class="mi">600</span>      <span class="c1"># 10 minutes total</span>
+<span class="n">interval_s</span> <span class="o">=</span> <span class="mi">30</span>       <span class="c1"># one read every 30 s</span>
+
+<span class="n">t_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t_start</span> <span class="o">&lt;</span> <span class="n">duration_s</span><span class="p">:</span>
+    <span class="n">t_read</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">luminescence</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span> <span class="n">focal_height</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">frames</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+        <span class="s2">&quot;t&quot;</span><span class="p">:</span> <span class="n">t_read</span> <span class="o">-</span> <span class="n">t_start</span><span class="p">,</span>
+        <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+    <span class="p">})</span>
+    <span class="n">elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t_read</span>
+    <span class="k">if</span> <span class="n">elapsed</span> <span class="o">&lt;</span> <span class="n">interval_s</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">interval_s</span> <span class="o">-</span> <span class="n">elapsed</span><span class="p">)</span>
+
+<span class="n">matrix_stack</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">f</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">frames</span><span class="p">])</span>  <span class="c1"># (n_frames, 8, 12)</span>
+<span class="n">times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">f</span><span class="p">[</span><span class="s2">&quot;t&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">frames</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;collected </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span><span class="si">}</span><span class="s2"> frames over </span><span class="si">{</span><span class="n">duration_s</span><span class="si">}</span><span class="s2"> s&quot;</span><span class="p">)</span>
+<span class="c1"># Trace for well C6:</span>
+<span class="n">trace</span> <span class="o">=</span> <span class="n">matrix_stack</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="stopping-a-long-read">
+<h2>8. Stopping a long read<a class="headerlink" href="#stopping-a-long-read" title="Link to this heading">#</a></h2>
+<p>If you need to bail out of an <code class="docutils literal notranslate"><span class="pre">ULTRA_SENSITIVE</span></code> read mid-flight (or any read takes longer than expected), <code class="docutils literal notranslate"><span class="pre">cancel()</span></code> raises a flag the read loop checks; bail-out is within ~2 s. After cancel the device stays initialised and immediately accepts new reads.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span>
+    <span class="n">reader</span><span class="o">.</span><span class="n">luminescence</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span> <span class="n">focal_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">backend_params</span><span class="o">=</span><span class="n">ByonoyLuminescence96Backend</span><span class="o">.</span><span class="n">LuminescenceParams</span><span class="p">(</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;ultra_sensitive&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">task</span>
+<span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;aborted cleanly&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="device-health-identity">
+<h2>9. Device health &amp; identity<a class="headerlink" href="#device-health-identity" title="Link to this heading">#</a></h2>
+<p>Useful at the start of a session, in error messages, or for run logging.</p>
+<blockquote>
+<div><p><strong><code class="docutils literal notranslate"><span class="pre">slot_state</span></code></strong>: <code class="docutils literal notranslate"><span class="pre">OCCUPIED</span></code> when a plate is loaded, <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> when nothing is in the reader (the firmware can’t tell empty from missing). Don’t treat <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> as an error.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">error_code</span></code></strong>: <code class="docutils literal notranslate"><span class="pre">0</span></code> is <code class="docutils literal notranslate"><span class="pre">NO_ERROR</span></code>. The Lum96 firmware doesn’t publish a documented table for non-zero values, so non-zero codes surface as <code class="docutils literal notranslate"><span class="pre">errorCode=0xNN</span></code> (matching what Byonoy’s own C library returns). For Abs96 / AbsOne backends, names like <code class="docutils literal notranslate"><span class="pre">ERROR_CALIB</span></code> / <code class="docutils literal notranslate"><span class="pre">AMBIENT_LIGHT</span></code> are decoded automatically.</p>
+</div></blockquote>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_status</span><span class="p">()</span>
+<span class="n">env</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_environment</span><span class="p">()</span>
+<span class="n">info</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_device_info</span><span class="p">()</span>
+<span class="n">versions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_versions</span><span class="p">()</span>
+<span class="n">api</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_api_version</span><span class="p">()</span>
+<span class="n">supported</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_supported_reports</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">device_name</span><span class="si">}</span><span class="s2"> sn=</span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">serial_no</span><span class="si">}</span><span class="s2"> fw=</span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">firmware_version</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  uptime </span><span class="si">{</span><span class="n">status</span><span class="o">.</span><span class="n">uptime_s</span><span class="si">}</span><span class="s2"> s, T=</span><span class="si">{</span><span class="n">env</span><span class="o">.</span><span class="n">temperature_c</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">°C, RH=</span><span class="si">{</span><span class="n">env</span><span class="o">.</span><span class="n">humidity</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  slot: </span><span class="si">{</span><span class="n">status</span><span class="o">.</span><span class="n">slot_state</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, error: </span><span class="si">{</span><span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">describe_error_code</span><span class="p">(</span><span class="n">status</span><span class="o">.</span><span class="n">error_code</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  api v</span><span class="si">{</span><span class="n">api</span><span class="si">}</span><span class="s2">, fw production=</span><span class="si">{</span><span class="n">versions</span><span class="o">.</span><span class="n">is_production</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  supported reports (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">supported</span><span class="p">)</span><span class="si">}</span><span class="s2">): &quot;</span> <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;0x</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">04X</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">supported</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="visual-feedback-led-bar">
+<h2>10. Visual feedback (LED bar)<a class="headerlink" href="#visual-feedback-led-bar" title="Link to this heading">#</a></h2>
+<p>The L96 has a 20-pixel addressable RGB front bar. Useful in a workcell to flag run state — solid colors for status, firmware-driven animations (<code class="docutils literal notranslate"><span class="pre">BREATHING</span></code>, <code class="docutils literal notranslate"><span class="pre">CYLON</span></code>, etc.) for “busy” indicators, or per-pixel control for progress bars and custom animations.</p>
+<p>See the dedicated <a class="reference internal" href="led_bar.html"><span class="std std-doc">LED bar notebook</span></a> for the full surface and recipes (KITT scanner, gradients, etc.). Quick taste below.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">set_led_color</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>                                <span class="c1"># solid green: ready</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">set_led_color</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="s2">&quot;breathing&quot;</span><span class="p">,</span> <span class="n">duration_ms</span><span class="o">=</span><span class="mi">10000</span><span class="p">)</span>  <span class="c1"># busy</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">set_led_colors</span><span class="p">([(</span><span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span> <span class="o">*</span> <span class="mi">10</span> <span class="o">+</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">)]</span> <span class="o">*</span> <span class="mi">10</span><span class="p">)</span>   <span class="c1"># per-pixel split</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="end-point-luciferase-recipe">
+<h2>11. End-point luciferase recipe<a class="headerlink" href="#end-point-luciferase-recipe" title="Link to this heading">#</a></h2>
+<p>End-to-end workflow for a typical end-point luciferase assay.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span><span class="o">,</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.byonoy</span><span class="w"> </span><span class="kn">import</span> <span class="n">byonoy_l96</span><span class="p">,</span> <span class="n">ByonoyLuminescence96Backend</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cor_96_wellplate_360ul_Fb</span>
+
+<span class="c1"># Connect</span>
+<span class="n">base</span><span class="p">,</span> <span class="n">reader</span> <span class="o">=</span> <span class="n">byonoy_l96</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;assay&quot;</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">set_led_color</span><span class="p">((</span><span class="mi">255</span><span class="p">,</span> <span class="mi">150</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>  <span class="c1"># amber: prep</span>
+
+<span class="c1"># Sanity check</span>
+<span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_status</span><span class="p">()</span>
+<span class="n">info</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_device_info</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">device_name</span><span class="si">}</span><span class="s2"> sn=</span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">serial_no</span><span class="si">}</span><span class="s2"> — </span><span class="si">{</span><span class="n">status</span><span class="o">.</span><span class="n">slot_state</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">status</span><span class="o">.</span><span class="n">error_code</span> <span class="o">==</span> <span class="mi">0</span>
+
+<span class="c1"># Load plate</span>
+<span class="n">base</span><span class="o">.</span><span class="n">reader_unit_holder</span><span class="o">.</span><span class="n">unassign_child_resource</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span>
+<span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;assay_plate&quot;</span><span class="p">)</span>
+<span class="n">base</span><span class="o">.</span><span class="n">plate_holder</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+<span class="c1"># (operator places plate, places detector back on top)</span>
+
+<span class="c1"># Read — green while measuring</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">set_led_color</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+<span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">luminescence</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
+    <span class="n">plate</span><span class="o">=</span><span class="n">plate</span><span class="p">,</span>
+    <span class="n">focal_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">backend_params</span><span class="o">=</span><span class="n">ByonoyLuminescence96Backend</span><span class="o">.</span><span class="n">LuminescenceParams</span><span class="p">(</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;sensitive&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>   <span class="c1"># 8 × 12</span>
+
+<span class="c1"># Save + tidy up</span>
+<span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;luminescence_</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span><span class="si">}</span><span class="s2">.npy&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">set_led_color</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>  <span class="c1"># off</span>
+<span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="troubleshooting">
+<h2>12. Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Symptom</p></th>
+<th class="head"><p>Likely cause</p></th>
+<th class="head"><p>Fix</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">setup()</span></code> raises “device already open”</p></td>
+<td><p>Previous Python session left HID handle locked</p></td>
+<td><p>Replug USB cable, or kill stale Python processes</p></td>
+</tr>
+<tr class="row-odd"><td><p>All wells read very high (10⁴–10⁶) with no sample</p></td>
+<td><p>Light leak through housing bottom</p></td>
+<td><p>Use a dark mat or close the room</p></td>
+</tr>
+<tr class="row-even"><td><p>Strong gradient A→H with no sample</p></td>
+<td><p>Directional light leak (one side leakier)</p></td>
+<td><p>Same — dark mat</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">slot_state=UNKNOWN</span></code></p></td>
+<td><p>No plate loaded</p></td>
+<td><p>Expected — firmware cannot detect “nothing” definitively</p></td>
+</tr>
+<tr class="row-even"><td><p>Read takes 28 s for one well in SENSITIVE</p></td>
+<td><p>Firmware always integrates 96 wells</p></td>
+<td><p>Use <code class="docutils literal notranslate"><span class="pre">RAPID</span></code> for fast, accept the 28 s for SENSITIVE</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cancel()</span></code> returns immediately, read keeps going</p></td>
+<td><p>No measurement in flight</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cancel()</span></code> auto-detects the in-flight trigger; no-op if there isn’t one</p></td>
+</tr>
+<tr class="row-even"><td><p>Negative readings on empty wells</p></td>
+<td><p>Firmware baseline subtraction</p></td>
+<td><p>Expected — they should sit around zero</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">focal_height</span></code> parameter has no effect</p></td>
+<td><p>L96 has fixed optics</p></td>
+<td><p>Expected — parameter is ABC contract, ignored on this device</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="reference">
+<h2>13. Reference<a class="headerlink" href="#reference" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Hardware protocol</strong>: HID 64-byte frames, vid <code class="docutils literal notranslate"><span class="pre">0x16D0</span></code>, pid <code class="docutils literal notranslate"><span class="pre">0x119B</span></code>. Report IDs decoded from Byonoy’s <code class="docutils literal notranslate"><span class="pre">byonoyusbhid.h</span></code>. <code class="docutils literal notranslate"><span class="pre">routing_info=\x80\x40</span></code> requests a reply; <code class="docutils literal notranslate"><span class="pre">\x00\x00</span></code> is fire-and-forget.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../absorbance_96/hello-world.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Byonoy Absorbance 96</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="led_bar.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Byonoy L96 — LED bar</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connect">1. Connect</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-layout">Resource layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-a-plate">2. Load a plate</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#read-the-basics">3. Read — the basics</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#result-shape">Result shape</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#background">Background</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#picking-an-integration-mode">4. Picking an integration mode</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-specific-wells">5. Reading specific wells</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#timed-read-delay-before-reading">6. Timed read (delay before reading)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#kinetic-read-time-series">7. Kinetic read (time series)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stopping-a-long-read">8. Stopping a long read</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#device-health-identity">9. Device health &amp; identity</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#visual-feedback-led-bar">10. Visual feedback (LED bar)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#end-point-luciferase-recipe">11. End-point luciferase recipe</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#troubleshooting">12. Troubleshooting</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference">13. Reference</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/byonoy/luminescence_96/hello-world.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../../_sources/user_guide/byonoy/luminescence_96/hello-world.ipynb.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.20.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

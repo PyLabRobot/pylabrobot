@@ -1,0 +1,6 @@
+﻿pylabrobot.sartorius.entris.SartoriusError
+==========================================
+
+.. currentmodule:: pylabrobot.sartorius.entris
+
+.. autoexception:: SartoriusError

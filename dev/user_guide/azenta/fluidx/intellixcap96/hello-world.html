@@ -1,0 +1,1255 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>FluidX IntelliXcap 96 &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/azenta/fluidx/intellixcap96/hello-world';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/azenta/fluidx/intellixcap96/hello-world.html" />
+    <link rel="icon" href="../../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="BigBear" href="../../../big_bear/index.html" />
+    <link rel="prev" title="Azenta" href="../../index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../../../../_static/searchtools.js"></script>
+    <script src="../../../../_static/language_data.js"></script>
+    <script src="../../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/units.html">Default Units</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../definitions.html">Definitions</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/mixing.html">Mixing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/container_no_go_zones.html">Container No-Go Zones</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="simple">
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">Azenta</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">FluidX IntelliXcap 96</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../big_bear/index.html">BigBear</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../big_bear/orbital-shaker/hello-world.html">BigBear Orbital Shaker</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../brooks/index.html">Brooks</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../brooks/precise_flex/hello-world.html">Brooks PreciseFlex PF400 / PF3400</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../byonoy/index.html">Byonoy</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../byonoy/absorbance_96/hello-world.html">Byonoy Absorbance 96</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../byonoy/luminescence_96/hello-world.html">Byonoy Luminescence 96 — lab guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../byonoy/luminescence_96/led_bar.html">Byonoy L96 — LED bar</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../curiox/index.html">Curiox</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../curiox/curiox-ht2000/hello-world.html">Curiox Laminar Wash HT2000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../hamilton/index.html">Hamilton</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../hamilton/star/index.html">Hamilton STAR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../hamilton/star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../hamilton/star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/cpac/hello-world.html">Inheco CPAC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/incubator_shaker/hello-world.html">Inheco Incubator Shaker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/odtc/hello-world.html">Inheco ODTC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/scila/hello-world.html">Inheco SCILA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/thermoshake/hello-world.html">Inheco ThermoShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../kbioscience/index.html">KBioscience</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../kbioscience/kube/hello-world.html">KBioscience KUBE</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../kbiosystems/index.html">KBiosystems</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../kbiosystems/ultraseal-epro/hello-world.html">KBiosystems Ultraseal ePRO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../kbiosystems/ultraseal-pro/hello-world.html">KBiosystems Ultraseal PRO (formerly WASP)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../kbiosystems/ultraseal-xt-pro/hello-world.html">KBiosystems Ultraseal XT Pro</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../mettler_toledo/index.html">Mettler Toledo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../mettler_toledo/wxs205sdu/hello-world.html">Mettler Toledo WXS205SDU</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../molecular_devices/index.html">Molecular Devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../molecular_devices/spectramax/hello-world.html">Molecular Devices SpectraMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../molecular_devices/imageXpress/pico.html">ImageXpress Pico</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../qinstruments/index.html">QInstruments</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../qinstruments/bioshake/hello-world.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../sartorius/index.html">Sartorius</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../sartorius/entris2/hello-world.html">Sartorius Entris II</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../thermo_fisher/index.html">Thermo Fisher</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../thermo_fisher/alps/index.html">ALPS Heat Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../thermo_fisher/alps/alps300/hello-world.html">Thermo Scientific ALPS 300</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../thermo_fisher/alps/alps3000/hello-world.html">Thermo Scientific ALPS 3000</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../thermo_fisher/alps/alps5000/hello-world.html">Thermo Scientific ALPS 5000</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../ufactory/index.html">UFACTORY</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../ufactory/xarm6/hello-world.html">UFACTORY xArm 6</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Azenta</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">FluidX IntelliXcap 96</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="fluidx-intellixcap-96">
+<h1>FluidX IntelliXcap 96<a class="headerlink" href="#fluidx-intellixcap-96" title="Link to this heading">#</a></h1>
+<p>The FluidX IntelliXcap 96 (an Azenta brand) is an automated screw-cap <strong>decapper</strong>. It unscrews, holds, and screws back on all 96 caps of a screw-cap tube rack in a single stroke. A plate mover loads the rack onto its one nest.</p>
+<section id="resources">
+<h2>Resources<a class="headerlink" href="#resources" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf">Azenta IntelliXcap user manual</a></p></li>
+<li><p><a class="reference external" href="https://www.azenta.com/products/intellixcap-automated-screw-cap-decapper-recapper-96-format">Azenta IntelliXcap 96 product page</a></p></li>
+</ul>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Property</p></th>
+<th class="head"><p>Value</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Communication</p></td>
+<td><p>Serial, STX/ETX-framed ASCII</p></td>
+</tr>
+<tr class="row-odd"><td><p>Serial settings</p></td>
+<td><p>9600 baud, 8 data bits, no parity, 1 stop bit, no handshake</p></td>
+</tr>
+<tr class="row-even"><td><p>Framing</p></td>
+<td><p>each reply is wrapped in STX (<code class="docutils literal notranslate"><span class="pre">0x02</span></code>) .. ETX (<code class="docutils literal notranslate"><span class="pre">0x03</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Reply pattern</p></td>
+<td><p>ACK (<code class="docutils literal notranslate"><span class="pre">0x06</span></code>), then <code class="docutils literal notranslate"><span class="pre">&lt;cmd&gt;OK</span></code> echo, then a result frame</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Every command is a single character written followed by ETX. A motion command is accepted with an ACK and a <code class="docutils literal notranslate"><span class="pre">&lt;cmd&gt;OK</span></code> echo; the status word then reads <code class="docutils literal notranslate"><span class="pre">StatusBUSY</span></code> while it moves. The terminal state depends on the operation: decap finishes at <code class="docutils literal notranslate"><span class="pre">StatusRECAP</span></code> while the head holds caps, whereas recap and waste finish at <code class="docutils literal notranslate"><span class="pre">StatusOK</span></code>. A refused or no-op command answers <code class="docutils literal notranslate"><span class="pre">CommandIgnore</span></code>.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The instrument only answers this protocol in <strong>IntelliXcap mode</strong>. Set setpoint 86 to <code class="docutils literal notranslate"><span class="pre">2</span></code> on the instrument touchscreen; there is no serial command for it.</p>
+</div>
+</section>
+<section id="physical-setup">
+<h2>Physical setup<a class="headerlink" href="#physical-setup" title="Link to this heading">#</a></h2>
+<p>Connect the decapper’s serial port to your computer through its USB-to-serial adapter and use the stable <code class="docutils literal notranslate"><span class="pre">by-id</span></code> path so the port survives re-enumeration, e.g. <code class="docutils literal notranslate"><span class="pre">/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_XXXXXXXX-if00-port0</span></code>.</p>
+<p>Tube volume is not a driver setting. The installed IntelliCartridge and its firmware profile define the supported tube height, cap geometry/thread, and motion settings. Use the cartridge specified for the exact tube family: two nominally 0.5 mL tube types may require different cartridges. Cartridge IDs 1–14 load their matching profiles automatically; extended cartridges require the corresponding stored profile to be selected on the instrument. The Python commands are otherwise identical for every supported tube type. See the <a class="reference external" href="https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf">official Azenta IntelliXcap user manual</a> for cartridge/profile setup and compatibility guidance.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>If the instrument comes up reporting <code class="docutils literal notranslate"><span class="pre">StatusBUSY</span></code> and ignores commands, it is locked out. The usual cause is an <strong>engaged e-stop</strong>; the safety guard/hood and other interlocks do the same. <code class="docutils literal notranslate"><span class="pre">setup()</span></code> reads the e-stop bit from the extended status and says whether it is actually engaged, then raises. If the e-stop reads as released, check the guard/hood and interlocks.</p>
+<p><code class="docutils literal notranslate"><span class="pre">request_extended_status().estop_active</span></code> reports the same bit at any time.</p>
+</div>
+</section>
+<section id="connect">
+<h2>Connect<a class="headerlink" href="#connect" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">setup()</span></code> opens the serial port and reads the status. It raises if the device is not ready (e.g. e-stop).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.azenta.fluidx</span><span class="w"> </span><span class="kn">import</span> <span class="n">FluidXIntelliXcap96</span>
+
+
+
+<span class="n">decapper</span> <span class="o">=</span> <span class="n">FluidXIntelliXcap96</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/ttyUSB0&quot;</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
+
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="status">
+<h2>Status<a class="headerlink" href="#status" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">request_status()</span></code> returns the current status word: <code class="docutils literal notranslate"><span class="pre">StatusOK</span></code> (idle with no caps held), <code class="docutils literal notranslate"><span class="pre">StatusBUSY</span></code> (moving), <code class="docutils literal notranslate"><span class="pre">StatusRECAP</span></code> (decapped; caps held and ready to recap or waste), <code class="docutils literal notranslate"><span class="pre">StatusSLEEP</span></code> (standby), <code class="docutils literal notranslate"><span class="pre">StatusCAREJECT</span></code> (cartridge ejected), or <code class="docutils literal notranslate"><span class="pre">StatusMANUAL</span></code> (halted; needs inspection, then <code class="docutils literal notranslate"><span class="pre">reset_error()</span></code> or one of the manual recovery commands). Note the status word does <strong>not</strong> encode the tray position.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;status:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_status</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="error-codes">
+<h3>Error codes<a class="headerlink" href="#error-codes" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">StatusERROR</span></code> and <code class="docutils literal notranslate"><span class="pre">StatusMANUAL</span></code> only say that <em>something</em> went wrong. <code class="docutils literal notranslate"><span class="pre">request_error_code()</span></code> asks the instrument for the numeric code behind it, and returns <code class="docutils literal notranslate"><span class="pre">None</span></code> when nothing is latched.</p>
+<p>The driver does this for you: whenever an operation fails, it reads the code back and raises a <code class="docutils literal notranslate"><span class="pre">FluidXError</span></code> carrying it in <code class="docutils literal notranslate"><span class="pre">error_code</span></code>, with the documented meaning in the message. <code class="docutils literal notranslate"><span class="pre">get_error_message()</span></code> looks a code up by hand, and <code class="docutils literal notranslate"><span class="pre">is_recoverable_error()</span></code> (also on the exception, as <code class="docutils literal notranslate"><span class="pre">.recoverable</span></code>) says whether homing will clear it:</p>
+<ul class="simple">
+<li><p><strong>Recoverable</strong> codes latch <code class="docutils literal notranslate"><span class="pre">StatusERROR</span></code>, which homing clears: 113/114 (decap), 117/118 (recap), 142 (cartridge eject), 143/144 (cartridge load).</p></li>
+<li><p><strong>Every other</strong> code halts the instrument in <code class="docutils literal notranslate"><span class="pre">StatusMANUAL</span></code>, which needs an operator to inspect it.</p></li>
+</ul>
+<p>The code table comes from the error list in the <a class="reference external" href="https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf">official Azenta IntelliXcap user manual</a>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.azenta.fluidx</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_error_message</span><span class="p">,</span> <span class="n">is_recoverable_error</span>
+
+<span class="n">code</span> <span class="o">=</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_error_code</span><span class="p">()</span>
+<span class="k">if</span> <span class="n">code</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;no error latched&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">get_error_message</span><span class="p">(</span><span class="n">code</span><span class="p">),</span> <span class="s2">&quot;recoverable:&quot;</span><span class="p">,</span> <span class="n">is_recoverable_error</span><span class="p">(</span><span class="n">code</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="what-the-instrument-can-tell-you-about-itself">
+<h2>What the instrument can tell you about itself<a class="headerlink" href="#what-the-instrument-can-tell-you-about-itself" title="Link to this heading">#</a></h2>
+<p>Four queries describe the machine and its consumable:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">request_firmware_versions()</span></code> -&gt; unit, touchscreen and light curtain firmware. Two features depend on it: dry-run mode needs touchscreen V14 or above, and <code class="docutils literal notranslate"><span class="pre">waste()</span></code> is broken in V44 (the command list does not say which firmware that version refers to).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">request_cartridge_info()</span></code> -&gt; the installed cartridge’s profile, cycle count and serial. The serial always reads <code class="docutils literal notranslate"><span class="pre">&quot;00000000&quot;</span></code>; the firmware does not implement it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">request_profile()</span></code> -&gt; the active profile number and its decap/recap retry limits.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">request_extended_status()</span></code> -&gt; the flags the status word leaves out, including whether caps are held on the pins, whether a cartridge is installed and whether the e-stop is engaged. <code class="docutils literal notranslate"><span class="pre">caps_on_pins()</span></code> is a shortcut for the first of those.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The command list names twelve extended-status flags but shows an eleven-character answer. <code class="docutils literal notranslate"><span class="pre">request_extended_status()</span></code> rejects any width other than twelve rather than guess which end is missing, because the most significant bit is <code class="docutils literal notranslate"><span class="pre">CAPS_ON_PINS</span></code>. If it raises on your instrument, the raw string is in the message.</p>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;firmware:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_firmware_versions</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;cartridge:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_cartridge_info</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;profile:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_profile</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;extended status:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_extended_status</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;caps held:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">caps_on_pins</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="tray">
+<h2>Tray<a class="headerlink" href="#tray" title="Link to this heading">#</a></h2>
+<p>Open and close the loading tray. Asking for a position the tray is already in is a harmless no-op. Tray motion does not change whether caps are held, so after decapping the terminal state remains <code class="docutils literal notranslate"><span class="pre">StatusRECAP</span></code> rather than returning to <code class="docutils literal notranslate"><span class="pre">StatusOK</span></code>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">open_tray</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">close_tray</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="presenting-the-tray-further-out">
+<h3>Presenting the tray further out<a class="headerlink" href="#presenting-the-tray-further-out" title="Link to this heading">#</a></h3>
+<p>Past the load position the tray can travel out to an extended position, which is useful for handing decapped tubes to an operator or another instrument. The two ends are setpoints 3 (load) and 127 (extended), and the step size is setpoint 88; all three are configured on the instrument.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">extend_tray()</span></code> / <code class="docutils literal notranslate"><span class="pre">retract_tray()</span></code> move between the two ends. Extending requires the tray to be at the load position, so open the tray first.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">step_tray_out()</span></code> / <code class="docutils literal notranslate"><span class="pre">step_tray_in()</span></code> move by one step. A step that would leave the S3..S127 range fails rather than clipping.</p></li>
+</ul>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># t fails unless the tray is already at the load position, so open it first.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">open_tray</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">extend_tray</span><span class="p">()</span>    <span class="c1"># S3 -&gt; S127, all the way out</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">step_tray_in</span><span class="p">()</span>   <span class="c1"># one S88 step back in</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">retract_tray</span><span class="p">()</span>   <span class="c1"># all the way back to S3</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="home">
+<h2>Home<a class="headerlink" href="#home" title="Link to this heading">#</a></h2>
+<p>Home all axes.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">home</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="decap-recap-waste">
+<h2>Decap, recap, waste<a class="headerlink" href="#decap-recap-waste" title="Link to this heading">#</a></h2>
+<p>With a rack of screw-cap tubes loaded on the nest, <code class="docutils literal notranslate"><span class="pre">decap()</span></code> unscrews and holds all 96 caps. After decapping, choose <strong>one</strong> terminal operation: <code class="docutils literal notranslate"><span class="pre">recap()</span></code> screws those caps back onto the tubes, while <code class="docutils literal notranslate"><span class="pre">waste()</span></code> releases them into a separately positioned cap carrier. <code class="docutils literal notranslate"><span class="pre">decap()</span></code> refuses if caps are already held (recap or waste first); <code class="docutils literal notranslate"><span class="pre">recap()</span></code> refuses if none are held.</p>
+<p>A fault (e.g. decapping with no rack loaded) can latch the device in <code class="docutils literal notranslate"><span class="pre">StatusError</span></code>, and the failing call raises a <code class="docutils literal notranslate"><span class="pre">FluidXError</span></code> carrying the instrument’s error code and its documented meaning. Homing clears a latched <code class="docutils literal notranslate"><span class="pre">StatusError</span></code>. By default (<code class="docutils literal notranslate"><span class="pre">auto_recover=True</span></code>) the next operation you issue homes to clear it and then proceeds; pass <code class="docutils literal notranslate"><span class="pre">auto_recover=False</span></code> to have it raise instead. <code class="docutils literal notranslate"><span class="pre">StatusMANUAL</span></code> requires an explicit safety decision: inspect the rack and cap head, confirm that axis motion is safe, then call <code class="docutils literal notranslate"><span class="pre">reset_error()</span></code>. Hardware testing confirmed that it homes the machine from <code class="docutils literal notranslate"><span class="pre">StatusMANUAL</span></code> through <code class="docutils literal notranslate"><span class="pre">StatusBUSY</span></code> to <code class="docutils literal notranslate"><span class="pre">StatusOK</span></code>. Normal motion commands remain blocked until recovery completes.</p>
+<p>The command list says the initialize sequence “will not drop caps”, but it also documents a separate command for initializing without dropping them. Neither has been checked on hardware. With caps held, use <code class="docutils literal notranslate"><span class="pre">initialize_keeping_caps_on_pins()</span></code> (see <em>Manual recovery</em> below), which is the command documented for that case.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code class="docutils literal notranslate"><span class="pre">waste()</span></code> is irreversible and does not detect whether a cap carrier is present. Before calling it, open the tray, remove the sample-tube rack, and position the correct cap carrier or collection vessel according to your instrument’s procedure. On hardware, leaving the tube rack beneath the head caused the released caps to fall back onto the tube openings. They looked recapped but were not guaranteed to be threaded or torqued. See the <a class="reference external" href="https://web.azenta.com/hubfs/azenta-files/resources/manuals-guides/319430-IXC-User-Manual.pdf">official Azenta IntelliXcap user manual</a>, which defines waste as dropping caps into a carrier.</p>
+<p>Firmware V44 does not implement <code class="docutils literal notranslate"><span class="pre">waste()</span></code> at all — the command list does not say which of the three firmwares it means. On that version, load a store rack and use <code class="docutils literal notranslate"><span class="pre">decap()</span></code>/<code class="docutils literal notranslate"><span class="pre">recap()</span></code>, which select the store sequence themselves. <code class="docutils literal notranslate"><span class="pre">request_firmware_versions()</span></code> reports all three.</p>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># After inspecting the rack/head and confirming motion is safe:</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">reset_error</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">decap</span><span class="p">()</span>   <span class="c1"># unscrew and hold all 96 caps</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Choose this path to retain the caps.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">recap</span><span class="p">()</span>   <span class="c1"># screw and torque the held caps back on</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Alternative to recap: with caps held, remove the tube rack and position</span>
+<span class="c1"># the correct cap carrier first. Do not run this after recap.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">waste</span><span class="p">()</span>   <span class="c1"># irreversibly release held caps into the carrier</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="forcing-another-decap-attempt">
+<h3>Forcing another decap attempt<a class="headerlink" href="#forcing-another-decap-attempt" title="Link to this heading">#</a></h3>
+<p><strong>You only need this if you have turned light curtain error detection off.</strong> With detection on, the instrument spots the tubes that failed to decap and retries the stroke by itself inside <code class="docutils literal notranslate"><span class="pre">decap()</span></code>, up to the profile’s decap retry limit (<code class="docutils literal notranslate"><span class="pre">request_profile().decap_max_retry</span></code>). There is nothing left for you to force.</p>
+<p>With detection off the instrument cannot see those tubes, so <code class="docutils literal notranslate"><span class="pre">decap()</span></code> returns successfully and leaves them capped. <code class="docutils literal notranslate"><span class="pre">retry_decap()</span></code> forces another stroke; <code class="docutils literal notranslate"><span class="pre">decap()</span></code> itself refuses, because caps are held. Call it as many times as you need.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The command list documents only that this command is used “after a successful Decap” and “requires lightcurtain OFF”. That those are the same condition is inferred from the automatic-retry and error-detection commands rather than stated by the vendor.</p>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">set_error_detection_enabled</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">retry_decap</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="changing-the-cartridge">
+<h2>Changing the cartridge<a class="headerlink" href="#changing-the-cartridge" title="Link to this heading">#</a></h2>
+<p>The IntelliCartridge defines which tubes the instrument can handle, so switching tube families means swapping it. <code class="docutils literal notranslate"><span class="pre">eject_cartridge()</span></code> puts the installed cartridge on the tray and <code class="docutils literal notranslate"><span class="pre">load_cartridge()</span></code> picks up the one resting there, returning the profile number the instrument loaded. Both read the extended status first, so calling them when the instrument is already in that state is a no-op.</p>
+<p>Physically remove the ejected cartridge from the tray, and place the new one, between the two calls.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Empty the tray and make sure no caps are held first.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">eject_cartridge</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Place the replacement cartridge on the tray, then pick it up.</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;loaded profile:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">load_cartridge</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Zero the cycle counter, e.g. after fitting a rebuilt cartridge.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">reset_cartridge_counter</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="settings">
+<h2>Settings<a class="headerlink" href="#settings" title="Link to this heading">#</a></h2>
+<p>Three flags change how the instrument behaves during a run.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">set_error_detection_enabled(False)</span></code> stops the light curtain from failing a decap/recap on error 135/136, so the stroke always finishes. It is also the prerequisite for <code class="docutils literal notranslate"><span class="pre">retry_decap()</span></code>. Detection is on at power-up.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_dry_run_enabled(True)</span></code> makes the instrument pause and wait for the operator on light curtain errors 114, 118, 135 and 136 instead of failing the operation. Needs touchscreen firmware V14 or above.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_safety_door_enabled(False)</span></code> disables the safety door, which leaves it open. Call it with <code class="docutils literal notranslate"><span class="pre">True</span></code> to re-enable; the door is also enabled at power-up.</p></li>
+</ul>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Each of these weakens a safety or error check.</p>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">set_error_detection_enabled</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Requires touchscreen firmware V14 or above.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">set_dry_run_enabled</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Opens the door and keeps it open; call with True to re-enable.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">set_safety_door_enabled</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="manual-recovery">
+<h2>Manual recovery<a class="headerlink" href="#manual-recovery" title="Link to this heading">#</a></h2>
+<p>These commands are only accepted while the instrument is halted in <code class="docutils literal notranslate"><span class="pre">StatusMANUAL</span></code>, and it stays there afterwards. They exist to get a stuck instrument back to a state you can inspect and clear.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>All of these move axes or open the safety door. Look inside the instrument and confirm that motion is safe before running any of them.</p>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">open_safety_door</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Home the Z axis, keeping any held caps on the pins.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">head_up</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Drops any caps still on the cap drivers, wherever the head is standing.</span>
+<span class="c1"># Clear the deck first; use waste() when you want to collect them.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">eject_caps</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clears the error state and homes without dropping caps held on the pins.</span>
+<span class="c1"># Follow it with recap() to put the caps back on the tubes.</span>
+<span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">initialize_keeping_caps_on_pins</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="standby">
+<h2>Standby<a class="headerlink" href="#standby" title="Link to this heading">#</a></h2>
+<p>Put the decapper to sleep with <code class="docutils literal notranslate"><span class="pre">standby()</span></code> and wake it with <code class="docutils literal notranslate"><span class="pre">ready()</span></code>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">standby</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">ready</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="teardown">
+<h2>Teardown<a class="headerlink" href="#teardown" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">stop()</span></code> closes the serial connection.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../../index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Azenta</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../../../big_bear/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">BigBear</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resources">Resources</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#physical-setup">Physical setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connect">Connect</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#status">Status</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#error-codes">Error codes</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-instrument-can-tell-you-about-itself">What the instrument can tell you about itself</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tray">Tray</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#presenting-the-tray-further-out">Presenting the tray further out</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#home">Home</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#decap-recap-waste">Decap, recap, waste</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forcing-another-decap-attempt">Forcing another decap attempt</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#changing-the-cartridge">Changing the cartridge</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#settings">Settings</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-recovery">Manual recovery</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#standby">Standby</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#teardown">Teardown</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/azenta/fluidx/intellixcap96/hello-world.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../../../_sources/user_guide/azenta/fluidx/intellixcap96/hello-world.ipynb.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.20.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

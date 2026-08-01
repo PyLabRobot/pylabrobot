@@ -1,0 +1,47 @@
+﻿:orphan:
+
+
+pylabrobot.kbiosystems.ultraseal\_epro.UltrasealEPROStatus
+==========================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_epro
+
+.. autoclass:: UltrasealEPROStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~UltrasealEPROStatus.real
+      ~UltrasealEPROStatus.imag
+      ~UltrasealEPROStatus.numerator
+      ~UltrasealEPROStatus.denominator
+      ~UltrasealEPROStatus.Ready
+      ~UltrasealEPROStatus.NoFoil
+      ~UltrasealEPROStatus.Error
+      ~UltrasealEPROStatus.Busy
+      ~UltrasealEPROStatus.NotAtSealTemperature
+      ~UltrasealEPROStatus.PlateNotPresent
+      ~UltrasealEPROStatus.NotInitialised
+      ~UltrasealEPROStatus.ForceSensorActivated
+      ~UltrasealEPROStatus.ParkMode
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~UltrasealEPROStatus.conjugate
+      ~UltrasealEPROStatus.bit_length
+      ~UltrasealEPROStatus.bit_count
+      ~UltrasealEPROStatus.as_integer_ratio
+      ~UltrasealEPROStatus.__init__
+   
+   

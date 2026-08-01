@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.imageXpress.pico.pico.Objective.O\_2\_5X\_N\_PLAN
+===============================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico.pico
+
+.. autoattribute:: Objective.O_2_5X_N_PLAN

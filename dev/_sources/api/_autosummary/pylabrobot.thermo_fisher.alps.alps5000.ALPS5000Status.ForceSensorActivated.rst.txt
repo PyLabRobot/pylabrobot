@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps5000.ALPS5000Status.ForceSensorActivated
+===========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
+
+.. autoattribute:: ALPS5000Status.ForceSensorActivated

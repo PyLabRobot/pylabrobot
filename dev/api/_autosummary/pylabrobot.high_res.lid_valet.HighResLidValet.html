@@ -1,0 +1,886 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pylabrobot.high_res.lid_valet.HighResLidValet &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.high_res.lid_valet.HighResLidValet';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.high_res.lid_valet.HighResLidValet.html" />
+    <link rel="icon" href="../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="pylabrobot.high_res.lid_valet.HighResLidValet.num_nests" href="pylabrobot.high_res.lid_valet.HighResLidValet.num_nests.html" />
+    <link rel="prev" title="pylabrobot.high_res package" href="../pylabrobot.high_res.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../../_static/searchtools.js"></script>
+    <script src="../../_static/language_data.js"></script>
+    <script src="../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" current active">
+  <a class="nav-link dropdown-item nav-internal" href="../pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../pylabrobot.html" class="nav-link">API</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../pylabrobot.high_res.html" class="nav-link">pylabrobot.high_res package</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.high_res.lid_valet.HighResLidValet</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="pylabrobot-high-res-lid-valet-highreslidvalet">
+<h1>pylabrobot.high_res.lid_valet.HighResLidValet<a class="headerlink" href="#pylabrobot-high-res-lid-valet-highreslidvalet" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="pylabrobot.high_res.lid_valet.HighResLidValet">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.high_res.lid_valet.</span></span><span class="sig-name descname"><span class="pre">HighResLidValet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'192.168.127.60'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ack_timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">command_timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reset_timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">busy_timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status_poll_interval</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lid_retries</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lid_retry_delay</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.high_res.lid_valet.HighResLidValet" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>HighRes LidValet delidder.</p>
+<p>A benchtop delidder that removes and replaces plate lids with vacuum suction
+cups. It has one or more nests, each addressed by a 1-based number; a mover
+presents a lidded plate to a nest, the LidValet lifts the lid into its suction
+cup (“delid”), and later lowers it back onto the plate (“lid”).</p>
+<p>The controller is a TCP device server (default <code class="docutils literal notranslate"><span class="pre">192.168.127.60:1000</span></code>,
+printed on the back of the device) speaking an ASCII command/ACK protocol.
+A command is sent as a newline-terminated ASCII line; the server replies with
+<code class="docutils literal notranslate"><span class="pre">ACK!</span> <span class="pre">&lt;command&gt;</span> <span class="pre">&lt;id&gt;</span></code> and then streams text until it reports <code class="docutils literal notranslate"><span class="pre">OK!</span></code>
+(success), <code class="docutils literal notranslate"><span class="pre">ERROR!</span></code> (failure, with a preceding error line), or <code class="docutils literal notranslate"><span class="pre">ABORTED!</span></code>.</p>
+<p>Commands (<code class="docutils literal notranslate"><span class="pre">&lt;n&gt;</span></code> is the 1-based nest number, which the server calls a hotel;
+<code class="docutils literal notranslate"><span class="pre">reset</span></code> and <code class="docutils literal notranslate"><span class="pre">status</span></code> address every nest at once when <code class="docutils literal notranslate"><span class="pre">&lt;n&gt;</span></code> is omitted):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reset</span> <span class="o">&lt;</span><span class="n">n</span><span class="o">&gt;</span>    <span class="n">home</span><span class="o">/</span><span class="n">reset</span> <span class="n">a</span> <span class="n">nest</span><span class="p">,</span> <span class="ow">or</span> <span class="n">every</span> <span class="n">nest</span>
+<span class="n">unlid</span> <span class="o">&lt;</span><span class="n">n</span><span class="o">&gt;</span>    <span class="n">lift</span> <span class="n">the</span> <span class="n">lid</span> <span class="n">off</span> <span class="n">the</span> <span class="n">plate</span> <span class="n">into</span> <span class="n">the</span> <span class="n">suction</span> <span class="n">cup</span> <span class="p">(</span><span class="n">delid</span><span class="p">)</span>
+<span class="n">lid</span> <span class="o">&lt;</span><span class="n">n</span><span class="o">&gt;</span>      <span class="n">lower</span> <span class="n">the</span> <span class="n">held</span> <span class="n">lid</span> <span class="n">back</span> <span class="n">onto</span> <span class="n">the</span> <span class="n">plate</span>
+<span class="n">status</span> <span class="o">&lt;</span><span class="n">n</span><span class="o">&gt;</span>   <span class="n">report</span> <span class="n">nest</span> <span class="n">state</span> <span class="p">(</span><span class="n">BUSY</span> <span class="o">/</span> <span class="n">OPEN</span> <span class="o">/</span> <span class="n">HAS_LID</span> <span class="o">/</span> <span class="n">ERROR</span><span class="p">)</span>
+<span class="n">home</span>         <span class="n">home</span> <span class="n">the</span> <span class="n">whole</span> <span class="n">system</span>
+<span class="n">wave</span> <span class="o">&lt;</span><span class="n">c</span><span class="o">&gt;</span>     <span class="n">synchronously</span> <span class="n">drop</span> <span class="ow">and</span> <span class="k">raise</span> <span class="n">the</span> <span class="n">lifts</span> <span class="o">&lt;</span><span class="n">c</span><span class="o">&gt;</span> <span class="n">times</span>
+<span class="n">vacon</span><span class="o">/</span><span class="n">vacoff</span> <span class="o">&lt;</span><span class="n">n</span><span class="o">&gt;</span>      <span class="n">turn</span> <span class="n">the</span> <span class="n">vacuum</span> <span class="n">cycle</span> <span class="n">on</span> <span class="n">a</span> <span class="n">nest</span> <span class="n">on</span><span class="o">/</span><span class="n">off</span>
+<span class="n">purgeon</span><span class="o">/</span><span class="n">purgeoff</span> <span class="o">&lt;</span><span class="n">n</span><span class="o">&gt;</span>  <span class="n">turn</span> <span class="n">the</span> <span class="n">purge</span> <span class="n">cycle</span> <span class="n">on</span> <span class="n">a</span> <span class="n">nest</span> <span class="n">on</span><span class="o">/</span><span class="n">off</span>
+<span class="n">clearabort</span>            <span class="n">clear</span> <span class="n">the</span> <span class="n">abort</span> <span class="n">state</span>
+<span class="n">errors</span><span class="o">/</span><span class="n">history</span><span class="o">/</span><span class="n">settings</span><span class="o">/</span><span class="n">version</span><span class="o">/</span><span class="n">firmwareversion</span><span class="o">/</span><span class="n">detailedversion</span>
+<span class="n">change</span><span class="o">/</span><span class="n">save</span><span class="o">/</span><span class="n">revert</span>    <span class="n">edit</span><span class="p">,</span> <span class="n">persist</span> <span class="ow">or</span> <span class="n">discard</span> <span class="ow">in</span><span class="o">-</span><span class="n">memory</span> <span class="n">settings</span>
+<span class="n">savecvm</span>               <span class="n">save</span> <span class="n">the</span> <span class="n">CVM</span> <span class="n">program</span> <span class="n">to</span> <span class="n">the</span> <span class="n">Copley</span> <span class="n">controllers</span>
+<span class="nb">list</span><span class="o">/</span><span class="n">info</span><span class="o">/</span><span class="n">help</span>        <span class="n">what</span> <span class="n">the</span> <span class="n">server</span> <span class="n">accepts</span><span class="p">;</span> <span class="s2">&quot;all&quot;</span> <span class="n">includes</span> <span class="n">maintenance</span>
+<span class="n">reboot</span>                <span class="n">reboot</span> <span class="n">the</span> <span class="n">device</span>
+</pre></div>
+</div>
+<p>The nest count is read from the device’s <code class="docutils literal notranslate"><span class="pre">ACTIVE_HOTELS</span></code> setting at setup.</p>
+<p class="rubric">Attributes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.num_nests.html#pylabrobot.high_res.lid_valet.HighResLidValet.num_nests" title="pylabrobot.high_res.lid_valet.HighResLidValet.num_nests"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_nests</span></code></a></p></td>
+<td><p>How many nests the device has, read from it at setup.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.__init__.html#pylabrobot.high_res.lid_valet.HighResLidValet.__init__" title="pylabrobot.high_res.lid_valet.HighResLidValet.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>([host, port, ack_timeout, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.change_setting.html#pylabrobot.high_res.lid_valet.HighResLidValet.change_setting" title="pylabrobot.high_res.lid_valet.HighResLidValet.change_setting"><code class="xref py py-obj docutils literal notranslate"><span class="pre">change_setting</span></code></a>(setting, value)</p></td>
+<td><p>Change a setting in memory.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.clear_abort.html#pylabrobot.high_res.lid_valet.HighResLidValet.clear_abort" title="pylabrobot.high_res.lid_valet.HighResLidValet.clear_abort"><code class="xref py py-obj docutils literal notranslate"><span class="pre">clear_abort</span></code></a>()</p></td>
+<td><p>Clear the abort state.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.delid.html#pylabrobot.high_res.lid_valet.HighResLidValet.delid" title="pylabrobot.high_res.lid_valet.HighResLidValet.delid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">delid</span></code></a>(nest)</p></td>
+<td><p>Lift the lid off the plate at <code class="docutils literal notranslate"><span class="pre">nest</span></code> into the suction cup.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.home.html#pylabrobot.high_res.lid_valet.HighResLidValet.home" title="pylabrobot.high_res.lid_valet.HighResLidValet.home"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home</span></code></a>()</p></td>
+<td><p>Home the whole system.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.lid.html#pylabrobot.high_res.lid_valet.HighResLidValet.lid" title="pylabrobot.high_res.lid_valet.HighResLidValet.lid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lid</span></code></a>(nest)</p></td>
+<td><p>Lower the held lid back onto the plate at <code class="docutils literal notranslate"><span class="pre">nest</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.list_commands.html#pylabrobot.high_res.lid_valet.HighResLidValet.list_commands" title="pylabrobot.high_res.lid_valet.HighResLidValet.list_commands"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_commands</span></code></a>([include_maintenance])</p></td>
+<td><p>List the commands the server recognizes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.reboot.html#pylabrobot.high_res.lid_valet.HighResLidValet.reboot" title="pylabrobot.high_res.lid_valet.HighResLidValet.reboot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reboot</span></code></a>()</p></td>
+<td><p>Reboot the device.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_all_states.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_all_states" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_all_states"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_all_states</span></code></a>()</p></td>
+<td><p>Query every nest in one round trip, keyed by 1-based nest number.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_command_help.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_command_help" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_command_help"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_command_help</span></code></a>(command)</p></td>
+<td><p>Return the parameter information for a single command.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_command_info.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_command_info" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_command_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_command_info</span></code></a>([include_maintenance])</p></td>
+<td><p>List the server's commands with their parameter information.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_command_status.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_command_status" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_command_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_command_status</span></code></a>(command_id)</p></td>
+<td><p>Return the status of a previously issued command.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_detailed_version.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_detailed_version" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_detailed_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_detailed_version</span></code></a>()</p></td>
+<td><p>Return version details about all hardware.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_errors.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_errors" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_errors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_errors</span></code></a>([count])</p></td>
+<td><p>Return the top errors on the device's error stack.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_firmware_version.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_firmware_version" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_firmware_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_firmware_version</span></code></a>()</p></td>
+<td><p>Return the firmware version.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_has_lid.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_has_lid" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_has_lid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_has_lid</span></code></a>(nest)</p></td>
+<td><p>Whether the suction cup at <code class="docutils literal notranslate"><span class="pre">nest</span></code> is holding a lid.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_history.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_history" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_history"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_history</span></code></a>([count])</p></td>
+<td><p>Return the last commands sent to the server.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_home_offset.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_home_offset" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_home_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_home_offset</span></code></a>(address)</p></td>
+<td><p>Return the home offset for the motor at <code class="docutils literal notranslate"><span class="pre">address</span></code> (a Copley address).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_is_busy.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_is_busy" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_is_busy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_is_busy</span></code></a>(nest)</p></td>
+<td><p>Whether <code class="docutils literal notranslate"><span class="pre">nest</span></code> is currently busy.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_raw_settings.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_raw_settings" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_raw_settings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_raw_settings</span></code></a>()</p></td>
+<td><p>Return the settings file as the device reports it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_settings.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_settings" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_settings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_settings</span></code></a>()</p></td>
+<td><p>Return the device's settings as a typed, frozen object.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_state.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_state" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_state</span></code></a>(nest)</p></td>
+<td><p>Query a nest: &quot;busy&quot;, &quot;open&quot;, &quot;has_lid&quot;, &quot;error&quot;, or &quot;unknown&quot;.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.request_version.html#pylabrobot.high_res.lid_valet.HighResLidValet.request_version" title="pylabrobot.high_res.lid_valet.HighResLidValet.request_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_version</span></code></a>()</p></td>
+<td><p>Return the software version report.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.reset.html#pylabrobot.high_res.lid_valet.HighResLidValet.reset" title="pylabrobot.high_res.lid_valet.HighResLidValet.reset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset</span></code></a>([nest])</p></td>
+<td><p>Home/reset a nest, or every nest when <code class="docutils literal notranslate"><span class="pre">nest</span></code> is omitted.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.revert_settings.html#pylabrobot.high_res.lid_valet.HighResLidValet.revert_settings" title="pylabrobot.high_res.lid_valet.HighResLidValet.revert_settings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">revert_settings</span></code></a>()</p></td>
+<td><p>Discard in-memory settings changes, restoring the stored values.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.save_cvm.html#pylabrobot.high_res.lid_valet.HighResLidValet.save_cvm" title="pylabrobot.high_res.lid_valet.HighResLidValet.save_cvm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_cvm</span></code></a>()</p></td>
+<td><p>Save the CVM program to every Copley motor controller.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.save_settings.html#pylabrobot.high_res.lid_valet.HighResLidValet.save_settings" title="pylabrobot.high_res.lid_valet.HighResLidValet.save_settings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_settings</span></code></a>()</p></td>
+<td><p>Persist the in-memory settings to permanent memory.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.send_command.html#pylabrobot.high_res.lid_valet.HighResLidValet.send_command" title="pylabrobot.high_res.lid_valet.HighResLidValet.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(command, timeout)</p></td>
+<td><p>Send a command and wait for the controller to complete it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.set_purge.html#pylabrobot.high_res.lid_valet.HighResLidValet.set_purge" title="pylabrobot.high_res.lid_valet.HighResLidValet.set_purge"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_purge</span></code></a>(nest, on)</p></td>
+<td><p>Turn the purge cycle on <code class="docutils literal notranslate"><span class="pre">nest</span></code> on or off.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.set_vacuum.html#pylabrobot.high_res.lid_valet.HighResLidValet.set_vacuum" title="pylabrobot.high_res.lid_valet.HighResLidValet.set_vacuum"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_vacuum</span></code></a>(nest, on)</p></td>
+<td><p>Turn the vacuum cycle on <code class="docutils literal notranslate"><span class="pre">nest</span></code> on or off.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.setup.html#pylabrobot.high_res.lid_valet.HighResLidValet.setup" title="pylabrobot.high_res.lid_valet.HighResLidValet.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.stop.html#pylabrobot.high_res.lid_valet.HighResLidValet.stop" title="pylabrobot.high_res.lid_valet.HighResLidValet.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
+<td><p>Ask the server to close this client's connection, then drop the socket.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.wait_until_ready.html#pylabrobot.high_res.lid_valet.HighResLidValet.wait_until_ready" title="pylabrobot.high_res.lid_valet.HighResLidValet.wait_until_ready"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wait_until_ready</span></code></a>(nest[, timeout])</p></td>
+<td><p>Poll <code class="docutils literal notranslate"><span class="pre">nest</span></code> until it is no longer busy.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.high_res.lid_valet.HighResLidValet.wave.html#pylabrobot.high_res.lid_valet.HighResLidValet.wave" title="pylabrobot.high_res.lid_valet.HighResLidValet.wave"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wave</span></code></a>([cycles])</p></td>
+<td><p>Drop and raise the lifts <code class="docutils literal notranslate"><span class="pre">cycles</span></code> times, synchronously.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>host</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>port</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>ack_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>command_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>reset_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>status_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>busy_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>status_poll_interval</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>lid_retries</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>lid_retry_delay</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../pylabrobot.high_res.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">pylabrobot.high_res package</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="pylabrobot.high_res.lid_valet.HighResLidValet.num_nests.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pylabrobot.high_res.lid_valet.HighResLidValet.num_nests</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.high_res.lid_valet.HighResLidValet"><code class="docutils literal notranslate"><span class="pre">HighResLidValet</span></code></a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.high_res.lid_valet.HighResLidValet.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/api/_autosummary/pylabrobot.high_res.lid_valet.HighResLidValet.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.20.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

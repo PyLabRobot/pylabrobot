@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.MotionProfile.in\_range
+=======================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: MotionProfile.in_range

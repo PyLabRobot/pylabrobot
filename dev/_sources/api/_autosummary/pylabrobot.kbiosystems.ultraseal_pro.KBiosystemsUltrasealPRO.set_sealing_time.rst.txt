@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_pro.KBiosystemsUltrasealPRO.set\_sealing\_time
+================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_pro
+
+.. automethod:: KBiosystemsUltrasealPRO.set_sealing_time

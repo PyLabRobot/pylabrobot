@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps5000.ThermoScientificALPS5000.set\_sealing\_distance
+=======================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
+
+.. automethod:: ThermoScientificALPS5000.set_sealing_distance

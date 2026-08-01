@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectraMax384Plus.request\_firmware\_version
+=====================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: SpectraMax384Plus.request_firmware_version

@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.get\_absolute\_rotation
+=================================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.get_absolute_rotation

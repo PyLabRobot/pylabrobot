@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps5000.ThermoScientificALPS5000.send\_command
+==============================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
+
+.. automethod:: ThermoScientificALPS5000.send_command

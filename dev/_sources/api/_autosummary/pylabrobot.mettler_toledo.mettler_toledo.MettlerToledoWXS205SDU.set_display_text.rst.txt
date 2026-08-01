@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.mettler\_toledo.MettlerToledoWXS205SDU.set\_display\_text
+====================================================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo.mettler_toledo
+
+.. automethod:: MettlerToledoWXS205SDU.set_display_text

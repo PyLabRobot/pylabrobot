@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILA.serialize
+=============================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILA.serialize

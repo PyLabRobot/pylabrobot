@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.request\_extra\_axis\_count
+=======================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.request_extra_axis_count

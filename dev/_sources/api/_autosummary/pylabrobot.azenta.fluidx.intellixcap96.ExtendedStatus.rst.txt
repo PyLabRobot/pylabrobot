@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.azenta.fluidx.intellixcap96.ExtendedStatus
+=====================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoclass:: ExtendedStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ExtendedStatus.caps_on_pins
+      ~ExtendedStatus.dry_run_enabled
+      ~ExtendedStatus.light_curtain_disabled
+      ~ExtendedStatus.safety_door_rs232_disabled
+      ~ExtendedStatus.stage_enabled
+      ~ExtendedStatus.screw_caps_on
+      ~ExtendedStatus.cartridge_installed
+      ~ExtendedStatus.standby_active
+      ~ExtendedStatus.stage_pos
+      ~ExtendedStatus.recover_mode
+      ~ExtendedStatus.estop_active
+      ~ExtendedStatus.time_for_service
+      ~ExtendedStatus.raw
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ExtendedStatus.__init__
+      ~ExtendedStatus.from_raw
+   
+   

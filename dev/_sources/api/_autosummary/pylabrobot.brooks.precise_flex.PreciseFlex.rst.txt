@@ -1,0 +1,137 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlex
+===========================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlex
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlex.PARKING_POSITION_BACK
+      ~PreciseFlex.PARKING_POSITION_FRONT
+      ~PreciseFlex.PARKING_POSITION_RIGHT
+      ~PreciseFlex.ResponseMode
+      ~PreciseFlex.configuration
+      ~PreciseFlex.max_gripper_width
+      ~PreciseFlex.min_gripper_width
+      ~PreciseFlex.parking_position
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlex.__init__
+      ~PreciseFlex.are_grippers_closed
+      ~PreciseFlex.attach
+      ~PreciseFlex.change_config
+      ~PreciseFlex.change_config2
+      ~PreciseFlex.dest_c
+      ~PreciseFlex.dest_j
+      ~PreciseFlex.detach
+      ~PreciseFlex.drop_at_joint_position
+      ~PreciseFlex.drop_at_location
+      ~PreciseFlex.halt
+      ~PreciseFlex.here_c
+      ~PreciseFlex.here_j
+      ~PreciseFlex.home
+      ~PreciseFlex.home_all
+      ~PreciseFlex.is_gripper_closed
+      ~PreciseFlex.move_gripper
+      ~PreciseFlex.move_rail
+      ~PreciseFlex.move_through_cartesian_poses
+      ~PreciseFlex.move_to_joint_position
+      ~PreciseFlex.move_to_location
+      ~PreciseFlex.nop
+      ~PreciseFlex.park
+      ~PreciseFlex.pick_up_at_joint_position
+      ~PreciseFlex.pick_up_at_location
+      ~PreciseFlex.power_off_robot
+      ~PreciseFlex.power_on_robot
+      ~PreciseFlex.recover_axes_within_limits
+      ~PreciseFlex.recover_from_fault
+      ~PreciseFlex.release_brake
+      ~PreciseFlex.request_axis_count
+      ~PreciseFlex.request_axis_mask
+      ~PreciseFlex.request_base
+      ~PreciseFlex.request_controller_model
+      ~PreciseFlex.request_controller_serial
+      ~PreciseFlex.request_extra_axis_count
+      ~PreciseFlex.request_gpl_version
+      ~PreciseFlex.request_gripper_pose
+      ~PreciseFlex.request_hardware_version
+      ~PreciseFlex.request_joint_limits
+      ~PreciseFlex.request_joint_position
+      ~PreciseFlex.request_kinematic_parameters
+      ~PreciseFlex.request_link_lengths
+      ~PreciseFlex.request_manufacturer
+      ~PreciseFlex.request_max_acceleration_percent
+      ~PreciseFlex.request_max_deceleration_percent
+      ~PreciseFlex.request_max_speed_percent
+      ~PreciseFlex.request_mode
+      ~PreciseFlex.request_monitor_speed
+      ~PreciseFlex.request_motion_profile_values
+      ~PreciseFlex.request_parameter
+      ~PreciseFlex.request_payload
+      ~PreciseFlex.request_power_state
+      ~PreciseFlex.request_profile_acceleration
+      ~PreciseFlex.request_profile_acceleration_ramp
+      ~PreciseFlex.request_profile_deceleration
+      ~PreciseFlex.request_profile_deceleration_ramp
+      ~PreciseFlex.request_profile_in_range
+      ~PreciseFlex.request_profile_speed
+      ~PreciseFlex.request_profile_speed2
+      ~PreciseFlex.request_profile_straight
+      ~PreciseFlex.request_reference_acceleration
+      ~PreciseFlex.request_reference_cartesian_acceleration
+      ~PreciseFlex.request_reference_cartesian_speed
+      ~PreciseFlex.request_reference_speed
+      ~PreciseFlex.request_robot_name
+      ~PreciseFlex.request_robot_type
+      ~PreciseFlex.request_selected_robot
+      ~PreciseFlex.request_signal
+      ~PreciseFlex.request_state
+      ~PreciseFlex.request_system_state
+      ~PreciseFlex.request_tool_length
+      ~PreciseFlex.request_tool_transformation_values
+      ~PreciseFlex.request_version
+      ~PreciseFlex.reset
+      ~PreciseFlex.select_robot
+      ~PreciseFlex.send_command
+      ~PreciseFlex.set_axis_parameter
+      ~PreciseFlex.set_base
+      ~PreciseFlex.set_brake
+      ~PreciseFlex.set_monitor_speed
+      ~PreciseFlex.set_motion_profile_values
+      ~PreciseFlex.set_parameter
+      ~PreciseFlex.set_payload
+      ~PreciseFlex.set_power
+      ~PreciseFlex.set_profile_acceleration
+      ~PreciseFlex.set_profile_acceleration_ramp
+      ~PreciseFlex.set_profile_deceleration
+      ~PreciseFlex.set_profile_deceleration_ramp
+      ~PreciseFlex.set_profile_in_range
+      ~PreciseFlex.set_profile_speed
+      ~PreciseFlex.set_profile_speed2
+      ~PreciseFlex.set_profile_straight
+      ~PreciseFlex.set_response_mode
+      ~PreciseFlex.set_signal
+      ~PreciseFlex.setup
+      ~PreciseFlex.start_freedrive_mode
+      ~PreciseFlex.stop
+      ~PreciseFlex.stop_freedrive_mode
+      ~PreciseFlex.zero_torque
+   
+   

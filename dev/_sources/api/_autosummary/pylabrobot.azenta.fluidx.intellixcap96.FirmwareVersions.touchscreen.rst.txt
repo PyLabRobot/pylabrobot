@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.FirmwareVersions.touchscreen
+===================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoattribute:: FirmwareVersions.touchscreen

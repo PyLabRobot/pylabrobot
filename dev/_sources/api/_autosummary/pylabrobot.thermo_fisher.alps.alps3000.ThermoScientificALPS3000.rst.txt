@@ -1,0 +1,49 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.alps.alps3000.ThermoScientificALPS3000
+================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps3000
+
+.. autoclass:: ThermoScientificALPS3000
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ThermoScientificALPS3000.ERRORS
+      ~ThermoScientificALPS3000.MAX_SEALING_DURATION
+      ~ThermoScientificALPS3000.MAX_SEALING_TEMPERATURE
+      ~ThermoScientificALPS3000.MIN_SEALING_DURATION
+      ~ThermoScientificALPS3000.MIN_SEALING_TEMPERATURE
+      ~ThermoScientificALPS3000.STATUS_MESSAGES
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ThermoScientificALPS3000.__init__
+      ~ThermoScientificALPS3000.request_error_code
+      ~ThermoScientificALPS3000.request_sealing_temperature
+      ~ThermoScientificALPS3000.request_sealing_time
+      ~ThermoScientificALPS3000.request_status
+      ~ThermoScientificALPS3000.request_temperature
+      ~ThermoScientificALPS3000.seal
+      ~ThermoScientificALPS3000.send_command
+      ~ThermoScientificALPS3000.set_sealing_time
+      ~ThermoScientificALPS3000.set_temperature
+      ~ThermoScientificALPS3000.setup
+      ~ThermoScientificALPS3000.stop
+      ~ThermoScientificALPS3000.wait_for_idle
+      ~ThermoScientificALPS3000.wait_for_sealing_temperature
+   
+   

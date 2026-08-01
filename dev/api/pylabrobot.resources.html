@@ -60,8 +60,8 @@
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="pylabrobot.resources.Carrier" href="_autosummary/pylabrobot.resources.Carrier.html" />
-    <link rel="prev" title="pylabrobot.only_fans.hamilton_hepa_fan_backend.HamiltonHepaFanBackend.turn_on" href="_autosummary/pylabrobot.only_fans.hamilton_hepa_fan_backend.HamiltonHepaFanBackend.turn_on.html" />
+    <link rel="next" title="pylabrobot.resources.barcode.Barcode" href="_autosummary/pylabrobot.resources.barcode.Barcode.html" />
+    <link rel="prev" title="pylabrobot.config.formats.ini_config.IniSaver.save" href="_autosummary/pylabrobot.config.formats.ini_config.IniSaver.save.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.2" />
@@ -580,76 +580,85 @@
 <p>Resources represent on-deck liquid handling equipment, including tip racks, plates and carriers. Many resources defined in the VENUS and Opentrons labware libraries are also defined in this package. In addition, by (optionally subclassing and) instantiating the appropriate classes, you can define your own resources.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.Carrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Carrier</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.barcode.Barcode.html#pylabrobot.resources.barcode.Barcode" title="pylabrobot.resources.barcode.Barcode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">barcode.Barcode</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.Carrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Carrier</span></code></a></p></td>
 <td><p>Base class for all carriers.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Container.html#pylabrobot.resources.Container" title="pylabrobot.resources.Container"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Container</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Container.html#pylabrobot.resources.Container" title="pylabrobot.resources.Container"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Container</span></code></a></p></td>
 <td><p>A container is an abstract base class for a resource that can hold liquid.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.Coordinate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Coordinate</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.Coordinate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Coordinate</span></code></a></p></td>
 <td><p>Represents coordinates.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Deck.html#pylabrobot.resources.Deck" title="pylabrobot.resources.Deck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Deck</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Deck.html#pylabrobot.resources.Deck" title="pylabrobot.resources.Deck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Deck</span></code></a></p></td>
 <td><p>Base class for liquid handler decks.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ItemizedResource.html#pylabrobot.resources.ItemizedResource" title="pylabrobot.resources.ItemizedResource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ItemizedResource</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ItemizedResource.html#pylabrobot.resources.ItemizedResource" title="pylabrobot.resources.ItemizedResource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ItemizedResource</span></code></a></p></td>
 <td><p>Base class for Itemized resources.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.utils.create_equally_spaced_2d.html#pylabrobot.resources.utils.create_equally_spaced_2d" title="pylabrobot.resources.utils.create_equally_spaced_2d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.create_equally_spaced_2d</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.utils.create_equally_spaced_2d.html#pylabrobot.resources.utils.create_equally_spaced_2d" title="pylabrobot.resources.utils.create_equally_spaced_2d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.create_equally_spaced_2d</span></code></a></p></td>
 <td><p>Make equally spaced resources in a 2D grid.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Lid.html#pylabrobot.resources.Lid" title="pylabrobot.resources.Lid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Lid</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Lid.html#pylabrobot.resources.Lid" title="pylabrobot.resources.Lid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Lid</span></code></a></p></td>
 <td><p>A removable cover seated on top of a <code class="xref py py-class docutils literal notranslate"><span class="pre">Liddable</span></code> resource.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Liquid.html#pylabrobot.resources.Liquid" title="pylabrobot.resources.Liquid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Liquid</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Liquid.html#pylabrobot.resources.Liquid" title="pylabrobot.resources.Liquid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Liquid</span></code></a></p></td>
 <td><p>A type of liquid (eg water, ethanol, etc.).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PetriDish.html#pylabrobot.resources.PetriDish" title="pylabrobot.resources.PetriDish"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PetriDish</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PetriDish.html#pylabrobot.resources.PetriDish" title="pylabrobot.resources.PetriDish"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PetriDish</span></code></a></p></td>
 <td><p>A petri dish</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Plate.html#pylabrobot.resources.Plate" title="pylabrobot.resources.Plate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Plate</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Plate.html#pylabrobot.resources.Plate" title="pylabrobot.resources.Plate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Plate</span></code></a></p></td>
 <td><p>Base class for Plate resources.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PlateCarrier.html#pylabrobot.resources.PlateCarrier" title="pylabrobot.resources.PlateCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PlateCarrier</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PlateCarrier.html#pylabrobot.resources.PlateCarrier" title="pylabrobot.resources.PlateCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PlateCarrier</span></code></a></p></td>
 <td><p>Base class for plate carriers.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PlateHolder.html#pylabrobot.resources.PlateHolder" title="pylabrobot.resources.PlateHolder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PlateHolder</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.PlateHolder.html#pylabrobot.resources.PlateHolder" title="pylabrobot.resources.PlateHolder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PlateHolder</span></code></a></p></td>
 <td><p>A single site within a plate carrier.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.Resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Resource</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.Resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Resource</span></code></a></p></td>
 <td><p>Base class for deck resources.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ResourceHolder.html#pylabrobot.resources.ResourceHolder" title="pylabrobot.resources.ResourceHolder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ResourceHolder</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ResourceHolder.html#pylabrobot.resources.ResourceHolder" title="pylabrobot.resources.ResourceHolder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ResourceHolder</span></code></a></p></td>
 <td><p>A mixin class for resources that can hold other resources, like a plate or a lid.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ResourceStack.html#pylabrobot.resources.ResourceStack" title="pylabrobot.resources.ResourceStack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ResourceStack</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.ResourceStack.html#pylabrobot.resources.ResourceStack" title="pylabrobot.resources.ResourceStack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ResourceStack</span></code></a></p></td>
 <td><p>ResourceStack represent a group of resources that are stacked together and act as a single unit.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Rotation.html#pylabrobot.resources.Rotation" title="pylabrobot.resources.Rotation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Rotation</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Rotation.html#pylabrobot.resources.Rotation" title="pylabrobot.resources.Rotation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Rotation</span></code></a></p></td>
 <td><p>Represents a 3D rotation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tip.Tip.html#pylabrobot.resources.tip.Tip" title="pylabrobot.resources.tip.Tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tip.Tip</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tip.Tip.html#pylabrobot.resources.tip.Tip" title="pylabrobot.resources.tip.Tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tip.Tip</span></code></a></p></td>
 <td><p>A single tip.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TipCarrier.html#pylabrobot.resources.TipCarrier" title="pylabrobot.resources.TipCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TipCarrier</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TipCarrier.html#pylabrobot.resources.TipCarrier" title="pylabrobot.resources.TipCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TipCarrier</span></code></a></p></td>
 <td><p>Base class for tip carriers.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TipRack.html#pylabrobot.resources.TipRack" title="pylabrobot.resources.TipRack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TipRack</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TipRack.html#pylabrobot.resources.TipRack" title="pylabrobot.resources.TipRack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TipRack</span></code></a></p></td>
 <td><p>Tip rack for disposable tips.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Trough.html#pylabrobot.resources.Trough" title="pylabrobot.resources.Trough"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Trough</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.tip_rack.TipSpot.html#pylabrobot.resources.tip_rack.TipSpot" title="pylabrobot.resources.tip_rack.TipSpot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tip_rack.TipSpot</span></code></a></p></td>
+<td><p>A tip spot, a location in a tip rack where there may or may not be a tip.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Trash.html#pylabrobot.resources.Trash" title="pylabrobot.resources.Trash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Trash</span></code></a></p></td>
+<td><p>Trash area.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Trough.html#pylabrobot.resources.Trough" title="pylabrobot.resources.Trough"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Trough</span></code></a></p></td>
 <td><p>A trough is a container, particularly useful for multichannel liquid handling operations.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Tube.html#pylabrobot.resources.Tube" title="pylabrobot.resources.Tube"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tube</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Tube.html#pylabrobot.resources.Tube" title="pylabrobot.resources.Tube"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tube</span></code></a></p></td>
 <td><p>Tube container, like Eppendorf tubes.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TubeCarrier.html#pylabrobot.resources.TubeCarrier" title="pylabrobot.resources.TubeCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TubeCarrier</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TubeCarrier.html#pylabrobot.resources.TubeCarrier" title="pylabrobot.resources.TubeCarrier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TubeCarrier</span></code></a></p></td>
 <td><p>Base class for tube/sample carriers.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TubeRack.html#pylabrobot.resources.TubeRack" title="pylabrobot.resources.TubeRack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TubeRack</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.TubeRack.html#pylabrobot.resources.TubeRack" title="pylabrobot.resources.TubeRack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TubeRack</span></code></a></p></td>
 <td><p>A rack of tubes.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Well.html#pylabrobot.resources.Well" title="pylabrobot.resources.Well"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Well</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.resources.Well.html#pylabrobot.resources.Well" title="pylabrobot.resources.Well"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Well</span></code></a></p></td>
 <td><p>Base class for Well resources.</p></td>
 </tr>
 </tbody>
@@ -923,20 +932,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="_autosummary/pylabrobot.only_fans.hamilton_hepa_fan_backend.HamiltonHepaFanBackend.turn_on.html"
+       href="_autosummary/pylabrobot.config.formats.ini_config.IniSaver.save.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.only_fans.hamilton_hepa_fan_backend.HamiltonHepaFanBackend.turn_on</p>
+        <p class="prev-next-title">pylabrobot.config.formats.ini_config.IniSaver.save</p>
       </div>
     </a>
     <a class="right-next"
-       href="_autosummary/pylabrobot.resources.Carrier.html"
+       href="_autosummary/pylabrobot.resources.barcode.Barcode.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.resources.Carrier</p>
+        <p class="prev-next-title">pylabrobot.resources.barcode.Barcode</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

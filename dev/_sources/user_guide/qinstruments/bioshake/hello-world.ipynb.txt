@@ -1,0 +1,64 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# QInstruments BioShake\n",
+    "\n",
+    "The BioShake is a family of heater-cooler-shaker devices from QInstruments. Depending on the model, it supports shaking and temperature control (heating and/or cooling).\n",
+    "\n",
+    "All models share the same serial firmware, so a single driver covers the entire family. Use a **model-specific factory function** to create instances -- it pre-fills dimensions and enables only the capabilities your hardware supports.\n",
+    "\n",
+    "| Model | PLR Name | Shaking (rpm) | Plate Lock | Heating | Active Cooling |\n",
+    "|---|---|---|---|---|---|\n",
+    "| BioShake Q1 | `BioShakeQ1` | 200--3000 | yes | yes | yes |\n",
+    "| BioShake Q2 | `BioShakeQ2` | 200--3000 | yes | yes | yes |\n",
+    "| BioShake 3000 | `BioShake3000` | 200--3000 | no | no | no |\n",
+    "| BioShake 3000 elm | `BioShake3000Elm` | 200--3000 | yes | no | no |\n",
+    "| BioShake 3000 elm DWP | `BioShake3000ElmDWP` | 200--3000 | yes | no | no |\n",
+    "| BioShake D30 elm | `BioShakeD30Elm` | 200--2000 | yes | no | no |\n",
+    "| BioShake 5000 elm | `BioShake5000Elm` | 200--5000 | yes | no | no |\n",
+    "| BioShake 3000-T | `BioShake3000T` | 200--3000 | no | yes | no |\n",
+    "| BioShake 3000-T elm | `BioShake3000TElm` | 200--3000 | yes | yes | no |\n",
+    "| BioShake D30-T elm | `BioShakeD30TElm` | 200--2000 | yes | yes | no |\n",
+    "| Heatplate | `Heatplate` | -- | no | yes | no |\n",
+    "| ColdPlate | `ColdPlate` | -- | no | yes | yes |\n",
+    "\n",
+    "See the [BioShake integration manual](https://www.qinstruments.com/fileadmin/Article/All/integration-manual-en-1-8-0.pdf) for hardware setup. Connect via RS232 or USB-A with a 24 VDC power supply."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Setup"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.qinstruments import BioShakeQ1\n",
+    "\n",
+    "bs = BioShakeQ1(name=\"bioshake\", port=\"COM1\")  # replace with your port\n",
+    "await bs.setup()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.12.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

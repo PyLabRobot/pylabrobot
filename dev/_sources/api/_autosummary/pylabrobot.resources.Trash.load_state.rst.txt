@@ -1,0 +1,6 @@
+pylabrobot.resources.Trash.load\_state
+======================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trash.load_state

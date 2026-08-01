@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.power\_off\_robot
+=============================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.power_off_robot

@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.imageXpress.pico.Pico
+===================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.imageXpress.pico
+
+.. autoclass:: Pico
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Pico.channel
+      ~Pico.door_open
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Pico.__init__
+      ~Pico.capture
+      ~Pico.change_filter_cube
+      ~Pico.change_objective
+      ~Pico.close_door
+      ~Pico.enter_objective_maintenance
+      ~Pico.exit_objective_maintenance
+      ~Pico.open_door
+      ~Pico.request_available_filter_cubes
+      ~Pico.request_available_objectives
+      ~Pico.request_configuration
+      ~Pico.setup
+      ~Pico.stop
+   
+   

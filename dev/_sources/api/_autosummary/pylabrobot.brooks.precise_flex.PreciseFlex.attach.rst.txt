@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.attach
+==================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.attach

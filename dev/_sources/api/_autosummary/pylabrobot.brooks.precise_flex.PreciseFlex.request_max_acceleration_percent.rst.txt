@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.request\_max\_acceleration\_percent
+===============================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.request_max_acceleration_percent

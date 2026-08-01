@@ -1,0 +1,52 @@
+﻿:orphan:
+
+
+pylabrobot.molecular\_devices.spectramax.SpectraMaxM5
+=====================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoclass:: SpectraMaxM5
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SpectraMaxM5.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SpectraMaxM5.__init__
+      ~SpectraMaxM5.clear_error_log
+      ~SpectraMaxM5.close
+      ~SpectraMaxM5.deactivate
+      ~SpectraMaxM5.open
+      ~SpectraMaxM5.read_absorbance
+      ~SpectraMaxM5.read_error_log
+      ~SpectraMaxM5.read_fluorescence
+      ~SpectraMaxM5.read_fluorescence_polarization
+      ~SpectraMaxM5.read_luminescence
+      ~SpectraMaxM5.read_time_resolved_fluorescence
+      ~SpectraMaxM5.request_current_temperature
+      ~SpectraMaxM5.request_firmware_version
+      ~SpectraMaxM5.request_status
+      ~SpectraMaxM5.request_temperature
+      ~SpectraMaxM5.send_command
+      ~SpectraMaxM5.set_temperature
+      ~SpectraMaxM5.setup
+      ~SpectraMaxM5.start_shake
+      ~SpectraMaxM5.stop
+      ~SpectraMaxM5.stop_shake
+      ~SpectraMaxM5.wait_for_idle
+   
+   

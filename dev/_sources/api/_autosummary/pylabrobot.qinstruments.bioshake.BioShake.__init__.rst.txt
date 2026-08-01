@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.\_\_init\_\_
+======================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.__init__

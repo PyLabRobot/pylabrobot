@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.assign\_child\_by\_anchor
+===================================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.assign_child_by_anchor

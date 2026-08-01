@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectraMaxM5.request\_firmware\_version
+================================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: SpectraMaxM5.request_firmware_version

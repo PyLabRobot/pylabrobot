@@ -1,0 +1,47 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.alps.alps5000.ALPS5000Status
+======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
+
+.. autoclass:: ALPS5000Status
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ALPS5000Status.real
+      ~ALPS5000Status.imag
+      ~ALPS5000Status.numerator
+      ~ALPS5000Status.denominator
+      ~ALPS5000Status.Ready
+      ~ALPS5000Status.NoFoil
+      ~ALPS5000Status.Error
+      ~ALPS5000Status.Busy
+      ~ALPS5000Status.WaitingForSealTemperature
+      ~ALPS5000Status.PlateNotPresent
+      ~ALPS5000Status.NotInitialised
+      ~ALPS5000Status.ForceSensorActivated
+      ~ALPS5000Status.PlatePresent
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ALPS5000Status.conjugate
+      ~ALPS5000Status.bit_length
+      ~ALPS5000Status.bit_count
+      ~ALPS5000Status.as_integer_ratio
+      ~ALPS5000Status.__init__
+   
+   

@@ -1,0 +1,6 @@
+﻿pylabrobot.byonoy.luminescence\_96.Lum96IntegrationMode
+=======================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. autodata:: Lum96IntegrationMode

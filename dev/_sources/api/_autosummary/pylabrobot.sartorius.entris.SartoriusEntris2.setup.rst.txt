@@ -1,0 +1,6 @@
+pylabrobot.sartorius.entris.SartoriusEntris2.setup
+==================================================
+
+.. currentmodule:: pylabrobot.sartorius.entris
+
+.. automethod:: SartoriusEntris2.setup

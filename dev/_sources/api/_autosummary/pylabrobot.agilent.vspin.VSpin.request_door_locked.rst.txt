@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.request\_door\_locked
+====================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: VSpin.request_door_locked

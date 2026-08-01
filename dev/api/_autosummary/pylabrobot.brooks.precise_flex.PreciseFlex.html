@@ -1,0 +1,1082 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pylabrobot.brooks.precise_flex.PreciseFlex &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.brooks.precise_flex.PreciseFlex';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.brooks.precise_flex.PreciseFlex.html" />
+    <link rel="icon" href="../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_BACK" href="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_BACK.html" />
+    <link rel="prev" title="pylabrobot.brooks package" href="../pylabrobot.brooks.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../../_static/searchtools.js"></script>
+    <script src="../../_static/language_data.js"></script>
+    <script src="../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" current active">
+  <a class="nav-link dropdown-item nav-internal" href="../pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../pylabrobot.html" class="nav-link">API</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../pylabrobot.brooks.html" class="nav-link">pylabrobot.brooks package</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.brooks.precise_flex.PreciseFlex</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="pylabrobot-brooks-precise-flex-preciseflex">
+<h1>pylabrobot.brooks.precise_flex.PreciseFlex<a class="headerlink" href="#pylabrobot-brooks-precise-flex-preciseflex" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="pylabrobot.brooks.precise_flex.PreciseFlex">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.brooks.precise_flex.</span></span><span class="sig-name descname"><span class="pre">PreciseFlex</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">gripper_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">gripper_z_offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">closed_gripper_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_dual_gripper</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_rail</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">read_kinematics_from_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recover_out_of_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parking_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlex" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Driver for PreciseFlex robotic arms.</p>
+<p>Owns the Socket I/O connection and device-level operations (power, attach,
+home, response mode).  Exposes <code class="docutils literal notranslate"><span class="pre">send_command</span></code> as the generic wire method.</p>
+<p>Documentation and error codes available at
+<a class="reference external" href="https://www2.brooksautomation.com/#Root/Welcome.htm">https://www2.brooksautomation.com/#Root/Welcome.htm</a></p>
+<p class="rubric">Attributes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_BACK.html#pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_BACK" title="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_BACK"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PARKING_POSITION_BACK</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_FRONT.html#pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_FRONT" title="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_FRONT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PARKING_POSITION_FRONT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_RIGHT.html#pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_RIGHT" title="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_RIGHT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PARKING_POSITION_RIGHT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.ResponseMode.html#pylabrobot.brooks.precise_flex.PreciseFlex.ResponseMode" title="pylabrobot.brooks.precise_flex.PreciseFlex.ResponseMode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ResponseMode</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.configuration.html#pylabrobot.brooks.precise_flex.PreciseFlex.configuration" title="pylabrobot.brooks.precise_flex.PreciseFlex.configuration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">configuration</span></code></a></p></td>
+<td><p>The device configuration resolved at setup.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width.html#pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width" title="pylabrobot.brooks.precise_flex.PreciseFlex.max_gripper_width"><code class="xref py py-obj docutils literal notranslate"><span class="pre">max_gripper_width</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width.html#pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width" title="pylabrobot.brooks.precise_flex.PreciseFlex.min_gripper_width"><code class="xref py py-obj docutils literal notranslate"><span class="pre">min_gripper_width</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.parking_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.parking_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.parking_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parking_position</span></code></a></p></td>
+<td><p>The pose <code class="docutils literal notranslate"><span class="pre">park()</span></code> moves to.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.__init__.html#pylabrobot.brooks.precise_flex.PreciseFlex.__init__" title="pylabrobot.brooks.precise_flex.PreciseFlex.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(host, gripper_length, ...[, port, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.are_grippers_closed.html#pylabrobot.brooks.precise_flex.PreciseFlex.are_grippers_closed" title="pylabrobot.brooks.precise_flex.PreciseFlex.are_grippers_closed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">are_grippers_closed</span></code></a>()</p></td>
+<td><p>(Dual Gripper Only) Tests if each gripper is fully closed by checking the end-of-travel sensors.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.attach.html#pylabrobot.brooks.precise_flex.PreciseFlex.attach" title="pylabrobot.brooks.precise_flex.PreciseFlex.attach"><code class="xref py py-obj docutils literal notranslate"><span class="pre">attach</span></code></a>([attach_state])</p></td>
+<td><p>Attach or release the robot, or get attachment state.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.change_config.html#pylabrobot.brooks.precise_flex.PreciseFlex.change_config" title="pylabrobot.brooks.precise_flex.PreciseFlex.change_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">change_config</span></code></a>([grip_mode])</p></td>
+<td><p>Change Robot configuration from Righty to Lefty or vice versa using customizable locations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.change_config2.html#pylabrobot.brooks.precise_flex.PreciseFlex.change_config2" title="pylabrobot.brooks.precise_flex.PreciseFlex.change_config2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">change_config2</span></code></a>([grip_mode])</p></td>
+<td><p>Change Robot configuration from Righty to Lefty or vice versa using algorithm.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.dest_c.html#pylabrobot.brooks.precise_flex.PreciseFlex.dest_c" title="pylabrobot.brooks.precise_flex.PreciseFlex.dest_c"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dest_c</span></code></a>([arg1])</p></td>
+<td><p>Get the destination or current Cartesian location of the robot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.dest_j.html#pylabrobot.brooks.precise_flex.PreciseFlex.dest_j" title="pylabrobot.brooks.precise_flex.PreciseFlex.dest_j"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dest_j</span></code></a>([arg1])</p></td>
+<td><p>Get the destination or current joint location of the robot.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.detach.html#pylabrobot.brooks.precise_flex.PreciseFlex.detach" title="pylabrobot.brooks.precise_flex.PreciseFlex.detach"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detach</span></code></a>()</p></td>
+<td><p>Detach the robot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_joint_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_at_joint_position</span></code></a>(position, resource_width)</p></td>
+<td><p>Drop at the specified joint position.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location.html#pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location" title="pylabrobot.brooks.precise_flex.PreciseFlex.drop_at_location"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_at_location</span></code></a>(location, direction, ...[, ...])</p></td>
+<td><p>Drop at the specified Cartesian location.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.halt.html#pylabrobot.brooks.precise_flex.PreciseFlex.halt" title="pylabrobot.brooks.precise_flex.PreciseFlex.halt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">halt</span></code></a>()</p></td>
+<td><p>Stops the current robot immediately but leaves power on.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.here_c.html#pylabrobot.brooks.precise_flex.PreciseFlex.here_c" title="pylabrobot.brooks.precise_flex.PreciseFlex.here_c"><code class="xref py py-obj docutils literal notranslate"><span class="pre">here_c</span></code></a>(location_index)</p></td>
+<td><p>Record the current position of the selected robot into the specified Location as Cartesian.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.here_j.html#pylabrobot.brooks.precise_flex.PreciseFlex.here_j" title="pylabrobot.brooks.precise_flex.PreciseFlex.here_j"><code class="xref py py-obj docutils literal notranslate"><span class="pre">here_j</span></code></a>(location_index)</p></td>
+<td><p>Record the current position of the selected robot into the specified Location as angles.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.home.html#pylabrobot.brooks.precise_flex.PreciseFlex.home" title="pylabrobot.brooks.precise_flex.PreciseFlex.home"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home</span></code></a>()</p></td>
+<td><p>Home the robot associated with this thread.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.home_all.html#pylabrobot.brooks.precise_flex.PreciseFlex.home_all" title="pylabrobot.brooks.precise_flex.PreciseFlex.home_all"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home_all</span></code></a>()</p></td>
+<td><p>Home all robots.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.is_gripper_closed.html#pylabrobot.brooks.precise_flex.PreciseFlex.is_gripper_closed" title="pylabrobot.brooks.precise_flex.PreciseFlex.is_gripper_closed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_gripper_closed</span></code></a>()</p></td>
+<td><p>(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper.html#pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper" title="pylabrobot.brooks.precise_flex.PreciseFlex.move_gripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_gripper</span></code></a>(width[, force_sensing])</p></td>
+<td><p>Move the PreciseFlex gripper jaws.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.move_rail.html#pylabrobot.brooks.precise_flex.PreciseFlex.move_rail" title="pylabrobot.brooks.precise_flex.PreciseFlex.move_rail"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_rail</span></code></a>(rail_position)</p></td>
+<td><p>Move the rail to the specified position.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.move_through_cartesian_poses.html#pylabrobot.brooks.precise_flex.PreciseFlex.move_through_cartesian_poses" title="pylabrobot.brooks.precise_flex.PreciseFlex.move_through_cartesian_poses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_through_cartesian_poses</span></code></a>(poses[, ...])</p></td>
+<td><p>Move through a sequence of Cartesian poses using one planned IK route.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.move_to_joint_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.move_to_joint_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.move_to_joint_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to_joint_position</span></code></a>(position[, speed_pct])</p></td>
+<td><p>Move the arm to the specified joint position.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.move_to_location.html#pylabrobot.brooks.precise_flex.PreciseFlex.move_to_location" title="pylabrobot.brooks.precise_flex.PreciseFlex.move_to_location"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to_location</span></code></a>(location, direction[, ...])</p></td>
+<td><p>Move the arm to the specified Cartesian location.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.nop.html#pylabrobot.brooks.precise_flex.PreciseFlex.nop" title="pylabrobot.brooks.precise_flex.PreciseFlex.nop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nop</span></code></a>()</p></td>
+<td><p>No operation command.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.park.html#pylabrobot.brooks.precise_flex.PreciseFlex.park" title="pylabrobot.brooks.precise_flex.PreciseFlex.park"><code class="xref py py-obj docutils literal notranslate"><span class="pre">park</span></code></a>()</p></td>
+<td><p>Move to <code class="docutils literal notranslate"><span class="pre">self.parking_position</span></code>; defaults at setup, reassignable at runtime.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.pick_up_at_joint_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.pick_up_at_joint_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.pick_up_at_joint_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_at_joint_position</span></code></a>(position, ...[, ...])</p></td>
+<td><p>Pick up at the specified joint position.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.pick_up_at_location.html#pylabrobot.brooks.precise_flex.PreciseFlex.pick_up_at_location" title="pylabrobot.brooks.precise_flex.PreciseFlex.pick_up_at_location"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_at_location</span></code></a>(location, direction, ...)</p></td>
+<td><p>Pick up at the specified Cartesian location.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.power_off_robot.html#pylabrobot.brooks.precise_flex.PreciseFlex.power_off_robot" title="pylabrobot.brooks.precise_flex.PreciseFlex.power_off_robot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">power_off_robot</span></code></a>()</p></td>
+<td><p>Power off the robot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.power_on_robot.html#pylabrobot.brooks.precise_flex.PreciseFlex.power_on_robot" title="pylabrobot.brooks.precise_flex.PreciseFlex.power_on_robot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">power_on_robot</span></code></a>()</p></td>
+<td><p>Power on the robot.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.recover_axes_within_limits.html#pylabrobot.brooks.precise_flex.PreciseFlex.recover_axes_within_limits" title="pylabrobot.brooks.precise_flex.PreciseFlex.recover_axes_within_limits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recover_axes_within_limits</span></code></a>([speed_pct, ...])</p></td>
+<td><p>Bring out-of-range axes back inside their soft limits, one axis at a time.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.recover_from_fault.html#pylabrobot.brooks.precise_flex.PreciseFlex.recover_from_fault" title="pylabrobot.brooks.precise_flex.PreciseFlex.recover_from_fault"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recover_from_fault</span></code></a>()</p></td>
+<td><p>Recover after a collision / fault that stopped the arm and dropped power, leaving it usable.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.release_brake.html#pylabrobot.brooks.precise_flex.PreciseFlex.release_brake" title="pylabrobot.brooks.precise_flex.PreciseFlex.release_brake"><code class="xref py py-obj docutils literal notranslate"><span class="pre">release_brake</span></code></a>(axis)</p></td>
+<td><p>Release the axis brake.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_axis_count.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_axis_count" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_axis_count"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_axis_count</span></code></a>()</p></td>
+<td><p>Number of servoed axes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_axis_mask.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_axis_mask" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_axis_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_axis_mask</span></code></a>()</p></td>
+<td><p>Capability/option bit field (rail, dual gripper, ...).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_base.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_base" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_base"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_base</span></code></a>()</p></td>
+<td><p>Get the robot base offset.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_controller_model.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_controller_model" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_controller_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_controller_model</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_controller_serial.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_controller_serial" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_controller_serial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_controller_serial</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_extra_axis_count.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_extra_axis_count" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_extra_axis_count"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_extra_axis_count</span></code></a>()</p></td>
+<td><p>Number of non-servoed (extra) axes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_gpl_version.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_gpl_version" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_gpl_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_gpl_version</span></code></a>()</p></td>
+<td><p>Controller firmware/runtime version (distinct from <code class="docutils literal notranslate"><span class="pre">request_version</span></code>, the TCS app).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_gripper_pose.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_gripper_pose" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_gripper_pose"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_gripper_pose</span></code></a>()</p></td>
+<td><p>Get the current pose using our kinematics model (no firmware <code class="code docutils literal notranslate"><span class="pre">wherec</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_hardware_version.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_hardware_version" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_hardware_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_hardware_version</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_joint_limits.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_joint_limits" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_joint_limits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_joint_limits</span></code></a>([hard])</p></td>
+<td><p>Per-axis travel limits as {Axis: (min, max)}.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_joint_position.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_joint_position" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_joint_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_joint_position</span></code></a>()</p></td>
+<td><p>Get the current joint position of the arm.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_kinematic_parameters.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_kinematic_parameters" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_kinematic_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_kinematic_parameters</span></code></a>()</p></td>
+<td><p>Build PF400Params from the controller's stored geometry.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_link_lengths.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_link_lengths" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_link_lengths"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_link_lengths</span></code></a>()</p></td>
+<td><p>(l1, l2) SCARA link lengths in mm: shoulder-&gt;elbow, elbow-&gt;wrist.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_manufacturer.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_manufacturer" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_manufacturer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_manufacturer</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_max_acceleration_percent.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_max_acceleration_percent" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_max_acceleration_percent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_max_acceleration_percent</span></code></a>()</p></td>
+<td><p>Global cap on the acceleration percentage (one value, applies to all joints).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_max_deceleration_percent.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_max_deceleration_percent" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_max_deceleration_percent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_max_deceleration_percent</span></code></a>()</p></td>
+<td><p>Global cap on the deceleration percentage (one value, applies to all joints).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_max_speed_percent.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_max_speed_percent" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_max_speed_percent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_max_speed_percent</span></code></a>()</p></td>
+<td><p>Global cap on the speed percentage (one value, applies to all joints).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_mode.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_mode" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_mode</span></code></a>()</p></td>
+<td><p>Get the current response mode.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_monitor_speed.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_monitor_speed" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_monitor_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_monitor_speed</span></code></a>()</p></td>
+<td><p>Get the global system (monitor) speed.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_motion_profile_values.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_motion_profile_values" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_motion_profile_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_motion_profile_values</span></code></a>(profile)</p></td>
+<td><p>Get the current motion profile values for the specified profile index on the PreciseFlex robot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_parameter.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_parameter" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_parameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_parameter</span></code></a>(data_id[, unit_number, ...])</p></td>
+<td><p>Get the value of a numeric parameter database item.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_payload.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_payload" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_payload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_payload</span></code></a>()</p></td>
+<td><p>Get the payload percent value for the current robot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_power_state.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_power_state" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_power_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_power_state</span></code></a>()</p></td>
+<td><p>Get the current robot power state.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_acceleration.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_acceleration" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_acceleration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_profile_acceleration</span></code></a>(profile_index)</p></td>
+<td><p>Get the acceleration property of the specified profile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_acceleration_ramp.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_acceleration_ramp" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_acceleration_ramp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_profile_acceleration_ramp</span></code></a>(profile_index)</p></td>
+<td><p>Get the acceleration ramp property of the specified profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_deceleration.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_deceleration" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_deceleration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_profile_deceleration</span></code></a>(profile_index)</p></td>
+<td><p>Get the deceleration property of the specified profile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_deceleration_ramp.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_deceleration_ramp" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_deceleration_ramp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_profile_deceleration_ramp</span></code></a>(profile_index)</p></td>
+<td><p>Get the deceleration ramp property of the specified profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_in_range.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_in_range" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_in_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_profile_in_range</span></code></a>(profile_index)</p></td>
+<td><p>Get the InRange property of the specified profile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_speed.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_speed" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_profile_speed</span></code></a>(profile_index)</p></td>
+<td><p>Get the speed property of the specified profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_speed2.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_speed2" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_speed2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_profile_speed2</span></code></a>(profile_index)</p></td>
+<td><p>Get the speed2 property of the specified profile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_straight.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_straight" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_profile_straight"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_profile_straight</span></code></a>(profile_index)</p></td>
+<td><p>Get the Straight property of the specified profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_acceleration.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_acceleration" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_acceleration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_reference_acceleration</span></code></a>()</p></td>
+<td><p>Per-axis rated acceleration at 100%.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_cartesian_acceleration.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_cartesian_acceleration" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_cartesian_acceleration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_reference_cartesian_acceleration</span></code></a>()</p></td>
+<td><p>Rated Cartesian (translational) acceleration at 100%, in mm/s^2.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_cartesian_speed.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_cartesian_speed" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_cartesian_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_reference_cartesian_speed</span></code></a>()</p></td>
+<td><p>Rated Cartesian (translational) speed at 100%, in mm/s.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_speed.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_speed" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_reference_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_reference_speed</span></code></a>()</p></td>
+<td><p>Per-axis rated speed at 100%; J1/J5 in mm/s, J2-J4 in deg/s.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_robot_name.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_robot_name" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_robot_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_robot_name</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_robot_type.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_robot_type" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_robot_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_robot_type</span></code></a>()</p></td>
+<td><p>Built-in kinematic model id (PF400 = 12).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_selected_robot.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_selected_robot" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_selected_robot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_selected_robot</span></code></a>()</p></td>
+<td><p>Get the number of the currently selected robot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_signal.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_signal" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_signal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_signal</span></code></a>(signal_number)</p></td>
+<td><p>Get the value of the specified digital input or output signal.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_state.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_state" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_state</span></code></a>()</p></td>
+<td><p>Return state of motion.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_system_state.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_system_state" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_system_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_system_state</span></code></a>()</p></td>
+<td><p>Controller power/system-state word (the <code class="docutils literal notranslate"><span class="pre">sysState</span></code> command, == DataID 234).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_tool_length.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_tool_length" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_tool_length"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tool_length</span></code></a>()</p></td>
+<td><p>Wrist-&gt;TCP distance in mm (z of the tool-offset transform).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_tool_transformation_values.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_tool_transformation_values" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_tool_transformation_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tool_transformation_values</span></code></a>()</p></td>
+<td><p>Get the current tool transformation values.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.request_version.html#pylabrobot.brooks.precise_flex.PreciseFlex.request_version" title="pylabrobot.brooks.precise_flex.PreciseFlex.request_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_version</span></code></a>()</p></td>
+<td><p>Get the current version of TCS and any installed plug-ins.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.reset.html#pylabrobot.brooks.precise_flex.PreciseFlex.reset" title="pylabrobot.brooks.precise_flex.PreciseFlex.reset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset</span></code></a>(robot_number)</p></td>
+<td><p>Reset the threads associated with the specified robot.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.select_robot.html#pylabrobot.brooks.precise_flex.PreciseFlex.select_robot" title="pylabrobot.brooks.precise_flex.PreciseFlex.select_robot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">select_robot</span></code></a>(robot_number)</p></td>
+<td><p>Change the robot associated with this communications link.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.send_command.html#pylabrobot.brooks.precise_flex.PreciseFlex.send_command" title="pylabrobot.brooks.precise_flex.PreciseFlex.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(command)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_axis_parameter.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_axis_parameter" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_axis_parameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_axis_parameter</span></code></a>(data_id, axis, value[, ...])</p></td>
+<td><p>Change one joint's element of a per-axis parameter array (<code class="docutils literal notranslate"><span class="pre">pc</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_base.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_base" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_base"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_base</span></code></a>(x_offset, y_offset, z_offset, ...)</p></td>
+<td><p>Set the robot base offset.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_brake.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_brake" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_brake"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_brake</span></code></a>(axis)</p></td>
+<td><p>Set the axis brake.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_monitor_speed.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_monitor_speed" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_monitor_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_monitor_speed</span></code></a>(speed_pct)</p></td>
+<td><p>Set the global system (monitor) speed.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_motion_profile_values.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_motion_profile_values" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_motion_profile_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_motion_profile_values</span></code></a>(profile, ...)</p></td>
+<td><p>Set motion profile values for the specified profile index on the PreciseFlex robot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_parameter.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_parameter" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_parameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_parameter</span></code></a>(data_id, value[, unit_number, ...])</p></td>
+<td><p>Change a value in the controller's parameter database.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_payload.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_payload" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_payload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_payload</span></code></a>(payload_pct)</p></td>
+<td><p>Set the payload percent of maximum for the currently selected or attached robot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_power.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_power" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_power"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_power</span></code></a>(enable[, timeout])</p></td>
+<td><p>Enable or disable robot high power.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_acceleration.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_acceleration" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_acceleration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_profile_acceleration</span></code></a>(profile_index, ...)</p></td>
+<td><p>Set the acceleration property of the specified profile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_acceleration_ramp.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_acceleration_ramp" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_acceleration_ramp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_profile_acceleration_ramp</span></code></a>(profile_index, ...)</p></td>
+<td><p>Set the acceleration ramp property of the specified profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_deceleration.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_deceleration" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_deceleration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_profile_deceleration</span></code></a>(profile_index, ...)</p></td>
+<td><p>Set the deceleration property of the specified profile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_deceleration_ramp.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_deceleration_ramp" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_deceleration_ramp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_profile_deceleration_ramp</span></code></a>(profile_index, ...)</p></td>
+<td><p>Set the deceleration ramp property of the specified profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_in_range.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_in_range" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_in_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_profile_in_range</span></code></a>(profile_index, ...)</p></td>
+<td><p>Set the InRange property of the specified profile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_speed.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_speed" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_speed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_profile_speed</span></code></a>(profile_index, speed_pct)</p></td>
+<td><p>Set the speed property of the specified profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_speed2.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_speed2" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_speed2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_profile_speed2</span></code></a>(profile_index, speed2_pct)</p></td>
+<td><p>Set the speed2 property of the specified profile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_straight.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_straight" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_profile_straight"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_profile_straight</span></code></a>(profile_index, ...)</p></td>
+<td><p>Set the Straight property of the specified profile.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_response_mode.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_response_mode" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_response_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_response_mode</span></code></a>(mode)</p></td>
+<td><p>Set the response mode.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.set_signal.html#pylabrobot.brooks.precise_flex.PreciseFlex.set_signal" title="pylabrobot.brooks.precise_flex.PreciseFlex.set_signal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_signal</span></code></a>(signal_number, value)</p></td>
+<td><p>Set the specified digital input or output signal.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.setup.html#pylabrobot.brooks.precise_flex.PreciseFlex.setup" title="pylabrobot.brooks.precise_flex.PreciseFlex.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>([skip_home])</p></td>
+<td><p>Initialize the PreciseFlex driver.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.start_freedrive_mode.html#pylabrobot.brooks.precise_flex.PreciseFlex.start_freedrive_mode" title="pylabrobot.brooks.precise_flex.PreciseFlex.start_freedrive_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_freedrive_mode</span></code></a>([free_axes])</p></td>
+<td><p>Enter freedrive mode, allowing manual movement of the specified joints.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.stop.html#pylabrobot.brooks.precise_flex.PreciseFlex.stop" title="pylabrobot.brooks.precise_flex.PreciseFlex.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
+<td><p>Stop the PreciseFlex driver.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.stop_freedrive_mode.html#pylabrobot.brooks.precise_flex.PreciseFlex.stop_freedrive_mode" title="pylabrobot.brooks.precise_flex.PreciseFlex.stop_freedrive_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_freedrive_mode</span></code></a>()</p></td>
+<td><p>Exit freedrive mode for all axes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlex.zero_torque.html#pylabrobot.brooks.precise_flex.PreciseFlex.zero_torque" title="pylabrobot.brooks.precise_flex.PreciseFlex.zero_torque"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zero_torque</span></code></a>(enable[, axis_mask])</p></td>
+<td><p>Sets or clears zero torque mode for the selected robot.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>host</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>gripper_length</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>gripper_z_offset</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>closed_gripper_position</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>port</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>is_dual_gripper</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>has_rail</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>read_kinematics_from_device</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>recover_out_of_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>parking_position</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><em>Dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>] </em><em>| </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../pylabrobot.brooks.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">pylabrobot.brooks package</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_BACK.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pylabrobot.brooks.precise_flex.PreciseFlex.PARKING_POSITION_BACK</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.brooks.precise_flex.PreciseFlex"><code class="docutils literal notranslate"><span class="pre">PreciseFlex</span></code></a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.brooks.precise_flex.PreciseFlex.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/api/_autosummary/pylabrobot.brooks.precise_flex.PreciseFlex.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.20.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

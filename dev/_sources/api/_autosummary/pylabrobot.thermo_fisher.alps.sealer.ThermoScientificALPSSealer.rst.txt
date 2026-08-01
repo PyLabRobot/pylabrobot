@@ -1,0 +1,50 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.alps.sealer.ThermoScientificALPSSealer
+================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.sealer
+
+.. autoclass:: ThermoScientificALPSSealer
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ThermoScientificALPSSealer.MAX_SEALING_DURATION
+      ~ThermoScientificALPSSealer.MAX_SEALING_TEMPERATURE
+      ~ThermoScientificALPSSealer.MIN_SEALING_DURATION
+      ~ThermoScientificALPSSealer.MIN_SEALING_TEMPERATURE
+      ~ThermoScientificALPSSealer.STATUS
+      ~ThermoScientificALPSSealer.STATUS_MESSAGES
+      ~ThermoScientificALPSSealer.ERRORS
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ThermoScientificALPSSealer.__init__
+      ~ThermoScientificALPSSealer.request_error_code
+      ~ThermoScientificALPSSealer.request_sealing_temperature
+      ~ThermoScientificALPSSealer.request_sealing_time
+      ~ThermoScientificALPSSealer.request_status
+      ~ThermoScientificALPSSealer.request_temperature
+      ~ThermoScientificALPSSealer.seal
+      ~ThermoScientificALPSSealer.send_command
+      ~ThermoScientificALPSSealer.set_sealing_time
+      ~ThermoScientificALPSSealer.set_temperature
+      ~ThermoScientificALPSSealer.setup
+      ~ThermoScientificALPSSealer.stop
+      ~ThermoScientificALPSSealer.wait_for_idle
+      ~ThermoScientificALPSSealer.wait_for_sealing_temperature
+   
+   

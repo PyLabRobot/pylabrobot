@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KUBEStatus.Ready
+============================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. autoattribute:: KUBEStatus.Ready

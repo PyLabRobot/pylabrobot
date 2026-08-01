@@ -1,0 +1,6 @@
+﻿pylabrobot.qinstruments.bioshake.BioShake5000Elm
+================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. autofunction:: BioShake5000Elm

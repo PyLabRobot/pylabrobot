@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.configuration
+=========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoproperty:: PreciseFlex.configuration

@@ -1,0 +1,54 @@
+﻿:orphan:
+
+
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.KBiosystemsUltrasealXTPro
+===================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. autoclass:: KBiosystemsUltrasealXTPro
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KBiosystemsUltrasealXTPro.ERRORS
+      ~KBiosystemsUltrasealXTPro.MAX_SEALING_DURATION
+      ~KBiosystemsUltrasealXTPro.MAX_SEALING_TEMPERATURE
+      ~KBiosystemsUltrasealXTPro.MIN_SEALING_DURATION
+      ~KBiosystemsUltrasealXTPro.MIN_SEALING_TEMPERATURE
+      ~KBiosystemsUltrasealXTPro.STATUS_MESSAGES
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KBiosystemsUltrasealXTPro.__init__
+      ~KBiosystemsUltrasealXTPro.move_shuttle_in
+      ~KBiosystemsUltrasealXTPro.move_shuttle_out
+      ~KBiosystemsUltrasealXTPro.park
+      ~KBiosystemsUltrasealXTPro.request_error_code
+      ~KBiosystemsUltrasealXTPro.request_sealing_temperature
+      ~KBiosystemsUltrasealXTPro.request_sealing_time
+      ~KBiosystemsUltrasealXTPro.request_status
+      ~KBiosystemsUltrasealXTPro.request_temperature
+      ~KBiosystemsUltrasealXTPro.reset
+      ~KBiosystemsUltrasealXTPro.seal
+      ~KBiosystemsUltrasealXTPro.send_command
+      ~KBiosystemsUltrasealXTPro.set_sealing_time
+      ~KBiosystemsUltrasealXTPro.set_temperature
+      ~KBiosystemsUltrasealXTPro.setup
+      ~KBiosystemsUltrasealXTPro.stop
+      ~KBiosystemsUltrasealXTPro.unpark
+      ~KBiosystemsUltrasealXTPro.wait_for_idle
+      ~KBiosystemsUltrasealXTPro.wait_for_sealing_temperature
+   
+   

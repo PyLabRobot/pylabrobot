@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.FluorescenceResult.data
+================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. autoattribute:: FluorescenceResult.data

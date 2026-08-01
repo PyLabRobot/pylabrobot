@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.sealer.ThermoScientificALPSSealer.STATUS
+=======================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.sealer
+
+.. autoattribute:: ThermoScientificALPSSealer.STATUS

@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.synergy.SynergyH1.excitation\_range
+=============================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy
+
+.. autoproperty:: SynergyH1.excitation_range

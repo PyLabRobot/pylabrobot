@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps300.ALPS300Status.bit\_length
+================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps300
+
+.. automethod:: ALPS300Status.bit_length

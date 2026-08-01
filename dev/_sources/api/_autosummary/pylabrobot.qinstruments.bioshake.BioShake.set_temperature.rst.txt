@@ -1,0 +1,6 @@
+pylabrobot.qinstruments.bioshake.BioShake.set\_temperature
+==========================================================
+
+.. currentmodule:: pylabrobot.qinstruments.bioshake
+
+.. automethod:: BioShake.set_temperature

@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.serialize\_state
+=======================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.serialize_state

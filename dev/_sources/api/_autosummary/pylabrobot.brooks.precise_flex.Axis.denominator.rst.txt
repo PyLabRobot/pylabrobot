@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.Axis.denominator
+================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: Axis.denominator

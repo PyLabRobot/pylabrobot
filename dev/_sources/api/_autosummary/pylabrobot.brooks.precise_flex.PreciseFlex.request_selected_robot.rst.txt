@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.request\_selected\_robot
+====================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.request_selected_robot

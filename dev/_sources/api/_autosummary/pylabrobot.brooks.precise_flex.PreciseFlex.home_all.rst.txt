@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.home\_all
+=====================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.home_all

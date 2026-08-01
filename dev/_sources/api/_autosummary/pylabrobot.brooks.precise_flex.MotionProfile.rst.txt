@@ -1,0 +1,41 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.MotionProfile
+=============================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: MotionProfile
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MotionProfile.acceleration
+      ~MotionProfile.acceleration_ramp
+      ~MotionProfile.deceleration
+      ~MotionProfile.deceleration_ramp
+      ~MotionProfile.in_range
+      ~MotionProfile.profile
+      ~MotionProfile.speed
+      ~MotionProfile.speed2
+      ~MotionProfile.straight
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MotionProfile.__init__
+      ~MotionProfile.count
+      ~MotionProfile.index
+   
+   

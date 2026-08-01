@@ -1,0 +1,370 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-intro",
+   "metadata": {},
+   "source": [
+    "# UFACTORY xArm 6\n",
+    "\n",
+    "The [UFACTORY xArm 6](https://www.ufactory.cc/xarm-collaborative-robot/) is a 6-axis articulated robotic arm. PyLabRobot supports it with the xArm bio-gripper. It supports:\n",
+    "\n",
+    "The device communicates over Ethernet using the [xarm-python-sdk](https://pypi.org/project/xarm-python-sdk/). Install the optional dependency group with `pip install PyLabRobot[xarm]`.\n",
+    "\n",
+    "| Model | PLR Name | Notes |\n",
+    "|---|---|---|\n",
+    "| xArm 6 | `XArm6` | 6-DOF articulated arm + bio-gripper |"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-setup-header",
+   "metadata": {},
+   "source": [
+    "## Setup\n",
+    "\n",
+    "Construct `XArm6` with the controller IP (and optional TCP offset/load), then call `setup()`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-setup-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.ufactory.xarm6 import XArm6\n",
+    "\n",
+    "xarm = XArm6(\n",
+    "  ip=\"192.168.1.220\",\n",
+    "  tcp_offset=(0, 0, 0, 0, 0, 0),  # adjust for your gripper mount (x, y, z, roll, pitch, yaw)\n",
+    ")\n",
+    "await xarm.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-setup-note",
+   "metadata": {},
+   "source": [
+    "`setup()` connects to the controller, clears any pending errors, enables motion, and initializes the bio-gripper. To skip the gripper init, pass `skip_gripper_init=True` to `setup()`."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-arm-header",
+   "metadata": {},
+   "source": [
+    "## Gripper control\n",
+    "\n",
+    "Gripper widths are in millimeters. The bio-gripper range is 71 mm (fully closed) to 150 mm (fully open); override with `gripper_min_mm` / `gripper_max_mm` on the constructor."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-gripper-header",
+   "metadata": {},
+   "source": [
+    "Open and close by moving to the ends of the range:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-gripper-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.move_gripper(width=xarm.max_gripper_width)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "a730d6d4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.move_gripper(width=xarm.min_gripper_width)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f46f6337",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.is_gripper_closed()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-cartesian-header",
+   "metadata": {},
+   "source": [
+    "### Cartesian movement\n",
+    "\n",
+    "Move the arm to a Cartesian location with a full 3D rotation. `speed` (mm/s) and `mvacc` (mm/s^2) override the defaults."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-cartesian-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import Coordinate\n",
+    "from pylabrobot.resources.rotation import Rotation\n",
+    "\n",
+    "await xarm.move_to_location(\n",
+    "  location=Coordinate(x=300, y=0, z=200),\n",
+    "  rotation=Rotation(x=180, y=0, z=0),  # roll, pitch, yaw (degrees)\n",
+    "  speed=150,\n",
+    "  mvacc=2500,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-joint-header",
+   "metadata": {},
+   "source": [
+    "### Joint movement\n",
+    "\n",
+    "Move in joint space using the {class}`~pylabrobot.ufactory.xarm6.joints.XArm6Axis` enum. `speed` is in deg/s and `mvacc` in deg/s^2. Axes you omit keep their current angle.\n",
+    "\n",
+    "```{warning}\n",
+    "Moving to arbitrary joint positions can cause the arm to collide with its base, the gripper, or nearby equipment. Verify coordinates carefully in a safe workspace first.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-joint-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.ufactory.xarm6 import XArm6Axis\n",
+    "\n",
+    "position = {\n",
+    "  XArm6Axis.J1: 0.0,\n",
+    "  XArm6Axis.J2: -30.0,\n",
+    "  XArm6Axis.J3: -60.0,\n",
+    "  XArm6Axis.J4: 0.0,\n",
+    "  XArm6Axis.J5: 90.0,\n",
+    "  XArm6Axis.J6: 0.0,\n",
+    "}\n",
+    "await xarm.move_to_joint_position(position, speed=40)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-query-header",
+   "metadata": {},
+   "source": [
+    "### Querying position\n",
+    "\n",
+    "Get the current joint angles or Cartesian end-effector pose:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-query-joints",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.request_joint_position()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-query-cart",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.request_gripper_pose()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-pick-place-header",
+   "metadata": {},
+   "source": [
+    "### Pick and place\n",
+    "\n",
+    "`pick_up_at_location` moves the arm to the target pose and closes the gripper to `resource_width`. `drop_at_location` moves to the target and fully opens the gripper. Approach and retract motions are the caller's responsibility — wrap these calls with your own pre- and post-moves as needed."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-pick-place-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "pick = Coordinate(x=300, y=100, z=50)\n",
+    "place = Coordinate(x=300, y=-100, z=50)\n",
+    "above = Coordinate(x=0, y=0, z=80)\n",
+    "down = Rotation(x=180, y=0, z=0)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8965a469",
+   "metadata": {},
+   "source": [
+    "Approach the pick position from 80 mm above, descend, close the gripper, and retract:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "66890ff1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.move_to_location(pick + above, down)\n",
+    "await xarm.pick_up_at_location(location=pick, rotation=down, resource_width=80)\n",
+    "await xarm.move_to_location(pick + above, down)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "07782575",
+   "metadata": {},
+   "source": [
+    "Travel to the place position, descend, release, and retract:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "143c9c74",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.move_to_location(place + above, down)\n",
+    "await xarm.drop_at_location(location=place, rotation=down, resource_width=80)\n",
+    "await xarm.move_to_location(place + above, down)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-freedrive-header",
+   "metadata": {},
+   "source": [
+    "### Freedrive (teaching mode)\n",
+    "\n",
+    "Enter freedrive mode to manually position the arm by hand, then read coordinates for use in your protocol. The xArm SDK frees all axes simultaneously; the `free_axes` argument is accepted for API compatibility but ignored."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-freedrive-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.start_freedrive_mode(free_axes=[0])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d3d63cd0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Manually guide the arm to the desired pose, then read it:\n",
+    "taught = await xarm.request_gripper_pose()\n",
+    "print(taught)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c4c843d4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.stop_freedrive_mode()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-misc-header",
+   "metadata": {},
+   "source": [
+    "### Park, halt, and error recovery\n",
+    "\n",
+    "Park the arm (SDK home by default, or a user-supplied `park_location`), emergency-stop all motion, or clear an error state:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-misc-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.park()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "bec2f90d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.halt()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "a2dae38b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.clear_errors()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "xarm6-teardown-header",
+   "metadata": {},
+   "source": [
+    "## Teardown"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "xarm6-teardown-code",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await xarm.stop()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.11.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

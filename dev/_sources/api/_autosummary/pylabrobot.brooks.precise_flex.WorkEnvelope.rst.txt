@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.WorkEnvelope
+============================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: WorkEnvelope
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~WorkEnvelope.inner
+      ~WorkEnvelope.outer
+      ~WorkEnvelope.zmin
+      ~WorkEnvelope.zmax
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~WorkEnvelope.__init__
+   
+   

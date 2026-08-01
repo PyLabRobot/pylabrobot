@@ -1,0 +1,83 @@
+﻿:orphan:
+
+
+pylabrobot.resources.tip\_rack.TipSpot
+======================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. autoclass:: TipSpot
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TipSpot.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TipSpot.__init__
+      ~TipSpot.assign_child_by_anchor
+      ~TipSpot.assign_child_resource
+      ~TipSpot.at
+      ~TipSpot.center
+      ~TipSpot.centers
+      ~TipSpot.check_can_drop_resource_here
+      ~TipSpot.copy
+      ~TipSpot.deregister_did_assign_resource_callback
+      ~TipSpot.deregister_did_unassign_resource_callback
+      ~TipSpot.deregister_state_update_callback
+      ~TipSpot.deregister_will_assign_resource_callback
+      ~TipSpot.deregister_will_unassign_resource_callback
+      ~TipSpot.deserialize
+      ~TipSpot.empty
+      ~TipSpot.get_absolute_location
+      ~TipSpot.get_absolute_rotation
+      ~TipSpot.get_absolute_size_x
+      ~TipSpot.get_absolute_size_y
+      ~TipSpot.get_absolute_size_z
+      ~TipSpot.get_all_children
+      ~TipSpot.get_anchor
+      ~TipSpot.get_highest_known_point
+      ~TipSpot.get_identifier
+      ~TipSpot.get_location_wrt
+      ~TipSpot.get_resource
+      ~TipSpot.get_root
+      ~TipSpot.get_size_x
+      ~TipSpot.get_size_y
+      ~TipSpot.get_size_z
+      ~TipSpot.get_tip
+      ~TipSpot.has_tip
+      ~TipSpot.is_in_subtree_of
+      ~TipSpot.load_all_state
+      ~TipSpot.load_from_json_file
+      ~TipSpot.load_state
+      ~TipSpot.load_state_from_file
+      ~TipSpot.make_tip
+      ~TipSpot.named
+      ~TipSpot.register_did_assign_resource_callback
+      ~TipSpot.register_did_unassign_resource_callback
+      ~TipSpot.register_state_update_callback
+      ~TipSpot.register_will_assign_resource_callback
+      ~TipSpot.register_will_unassign_resource_callback
+      ~TipSpot.rotate
+      ~TipSpot.rotated
+      ~TipSpot.save
+      ~TipSpot.save_state_to_file
+      ~TipSpot.serialize
+      ~TipSpot.serialize_all_state
+      ~TipSpot.serialize_state
+      ~TipSpot.unassign
+      ~TipSpot.unassign_child_resource
+   
+   

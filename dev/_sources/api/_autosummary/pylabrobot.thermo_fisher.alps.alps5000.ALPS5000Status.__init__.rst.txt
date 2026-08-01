@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.alps5000.ALPS5000Status.\_\_init\_\_
+===================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
+
+.. automethod:: ALPS5000Status.__init__

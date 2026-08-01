@@ -1,0 +1,161 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "n0a5pl74u0o",
+   "metadata": {},
+   "source": [
+    "# Byonoy Absorbance 96\n",
+    "\n",
+    "The Absorbance 96 Automate (A96A) is a USB-HID plate reader from Byonoy that measures absorbance across a 96-well plate in a single flash.\n",
+    "\n",
+    "The hardware consists of three physical parts: a **base unit** (holds the plate), an **illumination unit** (light source, sits on top during measurement), and an optional **SBS adapter** for standard footprint integration. PLR models all three as resources so a robotic arm can move the illumination unit on and off the base.\n",
+    "\n",
+    "- **Communication**: USB HID (VID `0x16D0` / PID `0x1199`)\n",
+    "- **Communication level**: Firmware"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "tupar6h068",
+   "metadata": {},
+   "source": [
+    "## Setup\n",
+    "\n",
+    "Use `byonoy_a96a` to create the full setup (detection unit + illumination unit). The detection unit is both a `Resource` (base with plate holder) and a `Device` (drives the backend over USB HID)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "w1m3gjaser",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.byonoy import byonoy_a96a\n",
+    "\n",
+    "reader, illumination_unit = byonoy_a96a(name=\"a96a\")\n",
+    "await reader.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "tby71rvde8s",
+   "metadata": {},
+   "source": [
+    "During `setup()`, the backend opens the USB HID connection and runs an initialization measurement to calibrate the sensor."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "j2dquxyo5gm",
+   "metadata": {},
+   "source": [
+    "## Absorbance\n",
+    "\n",
+    "Before reading, assign a plate to the base unit's plate holder and make sure the illumination unit is removed from the base (the interlock will raise an error otherwise)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "dugdvssa3zq",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import Cor_96_wellplate_360ul_Fb\n",
+    "\n",
+    "# Remove the illumination unit from the base so the plate can be loaded\n",
+    "reader.illumination_unit_holder.unassign_child_resource(illumination_unit)\n",
+    "\n",
+    "plate = Cor_96_wellplate_360ul_Fb(name=\"plate\")\n",
+    "reader.plate_holder.assign_child_resource(plate)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "re14dqp1uxb",
+   "metadata": {},
+   "source": [
+    "Read absorbance at a single wavelength. The wavelength must be one of the device's available wavelengths (queried automatically during `setup()`)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "bhi338chcfk",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "results = await reader.absorbance.read_absorbance(plate, wavelength=450)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "qrtoibefkpl",
+   "metadata": {},
+   "source": [
+    "You can check which wavelengths are available on your unit:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6p6cl01jswv",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(reader.driver.available_wavelengths)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "43bn89mateq",
+   "metadata": {},
+   "source": [
+    "## Resource layout\n",
+    "\n",
+    "The Absorbance 96 has an interlock: you cannot assign a plate to the base while the illumination unit is on top. In an automated workcell, use a robotic arm to move the illumination unit to a parking base before loading the plate.\n",
+    "\n",
+    "```\n",
+    "ByonoyAbsorbance96 (base + device)\n",
+    " +-- plate_holder              (assign plates here)\n",
+    " +-- illumination_unit_holder  (illumination unit sits here during measurement)\n",
+    "```\n",
+    "\n",
+    "A separate `byonoy_a96a_parking_unit` can be used as a second base (no backend) where the illumination unit rests while plates are swapped."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "vt3457fkbz",
+   "metadata": {},
+   "source": [
+    "## Teardown"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2bhu26jg5gt",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await reader.stop()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.11.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

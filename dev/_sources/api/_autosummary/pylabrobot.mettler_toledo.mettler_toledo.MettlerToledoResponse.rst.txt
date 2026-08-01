@@ -1,0 +1,6 @@
+﻿pylabrobot.mettler\_toledo.mettler\_toledo.MettlerToledoResponse
+================================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo.mettler_toledo
+
+.. autodata:: MettlerToledoResponse

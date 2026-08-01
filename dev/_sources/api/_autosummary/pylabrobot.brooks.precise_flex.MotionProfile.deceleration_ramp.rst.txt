@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.MotionProfile.deceleration\_ramp
+================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: MotionProfile.deceleration_ramp

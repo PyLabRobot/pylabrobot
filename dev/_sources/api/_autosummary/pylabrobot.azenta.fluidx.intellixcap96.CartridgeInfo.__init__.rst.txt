@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.CartridgeInfo.\_\_init\_\_
+=================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. automethod:: CartridgeInfo.__init__

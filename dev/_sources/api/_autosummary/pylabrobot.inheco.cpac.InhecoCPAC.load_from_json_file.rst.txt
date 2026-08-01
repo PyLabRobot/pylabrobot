@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.load\_from\_json\_file
+========================================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.load_from_json_file

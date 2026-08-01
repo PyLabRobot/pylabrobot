@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.synergy.SynergyH1.focal\_height\_range
+================================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy
+
+.. autoproperty:: SynergyH1.focal_height_range

@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlex.drop\_at\_location
+==============================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlex.drop_at_location

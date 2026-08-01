@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectraMaxM5.read\_luminescence
+========================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: SpectraMaxM5.read_luminescence

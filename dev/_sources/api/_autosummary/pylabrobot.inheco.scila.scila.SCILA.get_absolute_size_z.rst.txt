@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILA.get\_absolute\_size\_z
+==========================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILA.get_absolute_size_z

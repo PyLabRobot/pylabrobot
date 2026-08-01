@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.CartridgeInfo.profile
+============================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoattribute:: CartridgeInfo.profile

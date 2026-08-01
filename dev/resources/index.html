@@ -574,6 +574,7 @@
 <li class="toctree-l1"><a class="reference internal" href="library/nest.html">Wuxi Nest</a></li>
 <li class="toctree-l1"><a class="reference internal" href="library/opentrons.html">Opentrons</a></li>
 <li class="toctree-l1"><a class="reference internal" href="library/perkin_elmer.html">Perkin Elmer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/pioreactor.html">Pioreactor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="library/porvair.html">Porvair</a></li>
 <li class="toctree-l1"><a class="reference internal" href="library/revvity.html">Revvity</a></li>
 <li class="toctree-l1"><a class="reference internal" href="library/sergi.html">Sergi Lab Supplies</a></li>
@@ -693,7 +694,7 @@ Each subclass adds unique methods or attributes to represent its unique physical
   <tr><td><a href="introduction.html">Resource</a></td></tr>
   <!-- Arm subtree -->
   <tr><td>├── <a href="deck/deck.html">Arm</a></td></tr>
-  <tr><td>│   ├── ArticulatedArm</td></tr>
+  <tr><td>│   ├── ArticulatedGripperArm</td></tr>
   <tr><td>│   ├── CartesianArm</td></tr>
   <tr><td>│   └── SCARA</td></tr>
   <!-- Carrier subtree -->
@@ -726,12 +727,12 @@ Each subclass adds unique methods or attributes to represent its unique physical
   <tr><td>│       └── TubeRack</td></tr>
   <!-- ResourceHolder subtree -->
   <tr><td>├── <a href="resource-holder/resource-holder.html">ResourceHolder</a></td></tr>
-  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">PlateHolder</a></td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder.html">PlateHolder</a></td></tr>
   <!-- Others -->
   <tr><td>├── Lid</td></tr>
   <tr><td>├── <a href="plate-adapter/plate-adapter.html">PlateAdapter</a></td></tr>
   <tr><td>├── ResourceStack</td></tr>
-  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">NestedTipRackStack (to be made)</a></td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder.html">NestedTipRackStack (to be made)</a></td></tr>
   <tr><td>└── Workcell (to be made)</td></tr>
 </table>
 <hr>
@@ -879,6 +880,10 @@ If you cannot find something, please contribute what you are looking for!</p>
 <li class="toctree-l2"><a class="reference internal" href="library/perkin_elmer.html#plates">Plates</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="library/pioreactor.html">Pioreactor</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/pioreactor.html#bioreactors">Bioreactors</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="library/porvair.html">Porvair</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="library/porvair.html#plates">Plates</a></li>
 <li class="toctree-l2"><a class="reference internal" href="library/porvair.html#reservoirs">Reservoirs</a></li>
@@ -906,6 +911,7 @@ If you cannot find something, please contribute what you are looking for!</p>
 <li class="toctree-l1"><a class="reference internal" href="library/diy/index.html">DIY Resources</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="library/diy/grindbio.html">GrindBio</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="library/diy/grindbio.html#mfx-modules">MFX modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/diy/grindbio.html#pioreactor-plate-adapter">Pioreactor Plate Adapter</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="library/diy/davidnedrud.html">Designs by David Nedrud</a><ul>

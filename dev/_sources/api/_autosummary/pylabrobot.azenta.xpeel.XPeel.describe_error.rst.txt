@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.describe\_error
+=============================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.describe_error

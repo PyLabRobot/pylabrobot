@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.alps.sealer.ThermoScientificALPSSealer.wait\_for\_sealing\_temperature
+================================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.alps.sealer
+
+.. automethod:: ThermoScientificALPSSealer.wait_for_sealing_temperature

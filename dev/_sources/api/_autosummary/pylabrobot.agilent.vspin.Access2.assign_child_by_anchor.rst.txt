@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2.assign\_child\_by\_anchor
+==========================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2.assign_child_by_anchor

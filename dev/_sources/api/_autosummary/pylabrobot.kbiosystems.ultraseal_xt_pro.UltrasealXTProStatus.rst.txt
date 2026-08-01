@@ -1,0 +1,46 @@
+﻿:orphan:
+
+
+pylabrobot.kbiosystems.ultraseal\_xt\_pro.UltrasealXTProStatus
+==============================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_xt_pro
+
+.. autoclass:: UltrasealXTProStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~UltrasealXTProStatus.real
+      ~UltrasealXTProStatus.imag
+      ~UltrasealXTProStatus.numerator
+      ~UltrasealXTProStatus.denominator
+      ~UltrasealXTProStatus.Ready
+      ~UltrasealXTProStatus.NoFoil
+      ~UltrasealXTProStatus.Error
+      ~UltrasealXTProStatus.Busy
+      ~UltrasealXTProStatus.NotAtSealTemperature
+      ~UltrasealXTProStatus.PlateNotPresent
+      ~UltrasealXTProStatus.LowAir
+      ~UltrasealXTProStatus.ParkMode
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~UltrasealXTProStatus.conjugate
+      ~UltrasealXTProStatus.bit_length
+      ~UltrasealXTProStatus.bit_count
+      ~UltrasealXTProStatus.as_integer_ratio
+      ~UltrasealXTProStatus.__init__
+   
+   

@@ -1,0 +1,6 @@
+﻿pylabrobot.brooks.precise\_flex.PreciseFlexError
+================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoexception:: PreciseFlexError

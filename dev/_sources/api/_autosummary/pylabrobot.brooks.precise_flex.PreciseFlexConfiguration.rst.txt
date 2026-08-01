@@ -1,0 +1,59 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration
+========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexConfiguration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexConfiguration.gripper_width_range
+      ~PreciseFlexConfiguration.has_rail
+      ~PreciseFlexConfiguration.is_dual_gripper
+      ~PreciseFlexConfiguration.is_vision_gripper
+      ~PreciseFlexConfiguration.kinematics_source
+      ~PreciseFlexConfiguration.reach_class
+      ~PreciseFlexConfiguration.work_envelope
+      ~PreciseFlexConfiguration.z_range
+      ~PreciseFlexConfiguration.manufacturer
+      ~PreciseFlexConfiguration.controller_model
+      ~PreciseFlexConfiguration.hardware_version
+      ~PreciseFlexConfiguration.gpl_version
+      ~PreciseFlexConfiguration.controller_serial
+      ~PreciseFlexConfiguration.robot_name
+      ~PreciseFlexConfiguration.robot_type
+      ~PreciseFlexConfiguration.tcs_version
+      ~PreciseFlexConfiguration.modules
+      ~PreciseFlexConfiguration.num_axes
+      ~PreciseFlexConfiguration.extra_axes
+      ~PreciseFlexConfiguration.axis_mask
+      ~PreciseFlexConfiguration.soft_limits
+      ~PreciseFlexConfiguration.hard_limits
+      ~PreciseFlexConfiguration.max_joint_speed
+      ~PreciseFlexConfiguration.max_joint_acceleration
+      ~PreciseFlexConfiguration.max_joint_deceleration
+      ~PreciseFlexConfiguration.max_cartesian_speed
+      ~PreciseFlexConfiguration.max_cartesian_acceleration
+      ~PreciseFlexConfiguration.power_state
+      ~PreciseFlexConfiguration.kinematics
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexConfiguration.__init__
+   
+   

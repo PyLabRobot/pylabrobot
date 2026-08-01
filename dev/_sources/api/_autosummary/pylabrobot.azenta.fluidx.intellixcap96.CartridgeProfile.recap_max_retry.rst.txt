@@ -1,0 +1,6 @@
+pylabrobot.azenta.fluidx.intellixcap96.CartridgeProfile.recap\_max\_retry
+=========================================================================
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autoattribute:: CartridgeProfile.recap_max_retry

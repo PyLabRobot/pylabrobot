@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.cytation.Cytation5.open
+=================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.cytation
+
+.. automethod:: Cytation5.open

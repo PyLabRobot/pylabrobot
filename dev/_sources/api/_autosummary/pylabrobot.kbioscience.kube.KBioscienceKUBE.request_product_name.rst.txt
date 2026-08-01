@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KBioscienceKUBE.request\_product\_name
+==================================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. automethod:: KBioscienceKUBE.request_product_name

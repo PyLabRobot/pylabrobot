@@ -1,0 +1,6 @@
+pylabrobot.kbioscience.kube.KUBEStatus.bit\_length
+==================================================
+
+.. currentmodule:: pylabrobot.kbioscience.kube
+
+.. automethod:: KUBEStatus.bit_length

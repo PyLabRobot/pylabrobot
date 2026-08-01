@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectraMaxM5.wait\_for\_idle
+=====================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: SpectraMaxM5.wait_for_idle

@@ -1,0 +1,6 @@
+pylabrobot.resources.tip\_rack.TipSpot.register\_state\_update\_callback
+========================================================================
+
+.. currentmodule:: pylabrobot.resources.tip_rack
+
+.. automethod:: TipSpot.register_state_update_callback

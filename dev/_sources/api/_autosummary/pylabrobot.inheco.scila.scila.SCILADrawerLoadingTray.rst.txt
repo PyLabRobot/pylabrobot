@@ -1,0 +1,82 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.scila.scila.SCILADrawerLoadingTray
+====================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. autoclass:: SCILADrawerLoadingTray
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SCILADrawerLoadingTray.name
+      ~SCILADrawerLoadingTray.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SCILADrawerLoadingTray.__init__
+      ~SCILADrawerLoadingTray.assign_child_by_anchor
+      ~SCILADrawerLoadingTray.assign_child_resource
+      ~SCILADrawerLoadingTray.at
+      ~SCILADrawerLoadingTray.center
+      ~SCILADrawerLoadingTray.centers
+      ~SCILADrawerLoadingTray.check_can_drop_resource_here
+      ~SCILADrawerLoadingTray.close
+      ~SCILADrawerLoadingTray.copy
+      ~SCILADrawerLoadingTray.deregister_did_assign_resource_callback
+      ~SCILADrawerLoadingTray.deregister_did_unassign_resource_callback
+      ~SCILADrawerLoadingTray.deregister_state_update_callback
+      ~SCILADrawerLoadingTray.deregister_will_assign_resource_callback
+      ~SCILADrawerLoadingTray.deregister_will_unassign_resource_callback
+      ~SCILADrawerLoadingTray.deserialize
+      ~SCILADrawerLoadingTray.get_absolute_location
+      ~SCILADrawerLoadingTray.get_absolute_rotation
+      ~SCILADrawerLoadingTray.get_absolute_size_x
+      ~SCILADrawerLoadingTray.get_absolute_size_y
+      ~SCILADrawerLoadingTray.get_absolute_size_z
+      ~SCILADrawerLoadingTray.get_all_children
+      ~SCILADrawerLoadingTray.get_anchor
+      ~SCILADrawerLoadingTray.get_default_child_location
+      ~SCILADrawerLoadingTray.get_highest_known_point
+      ~SCILADrawerLoadingTray.get_location_wrt
+      ~SCILADrawerLoadingTray.get_resource
+      ~SCILADrawerLoadingTray.get_root
+      ~SCILADrawerLoadingTray.get_size_x
+      ~SCILADrawerLoadingTray.get_size_y
+      ~SCILADrawerLoadingTray.get_size_z
+      ~SCILADrawerLoadingTray.is_in_subtree_of
+      ~SCILADrawerLoadingTray.load_all_state
+      ~SCILADrawerLoadingTray.load_from_json_file
+      ~SCILADrawerLoadingTray.load_state
+      ~SCILADrawerLoadingTray.load_state_from_file
+      ~SCILADrawerLoadingTray.named
+      ~SCILADrawerLoadingTray.open
+      ~SCILADrawerLoadingTray.register_did_assign_resource_callback
+      ~SCILADrawerLoadingTray.register_did_unassign_resource_callback
+      ~SCILADrawerLoadingTray.register_state_update_callback
+      ~SCILADrawerLoadingTray.register_will_assign_resource_callback
+      ~SCILADrawerLoadingTray.register_will_unassign_resource_callback
+      ~SCILADrawerLoadingTray.rotate
+      ~SCILADrawerLoadingTray.rotated
+      ~SCILADrawerLoadingTray.save
+      ~SCILADrawerLoadingTray.save_state_to_file
+      ~SCILADrawerLoadingTray.serialize
+      ~SCILADrawerLoadingTray.serialize_all_state
+      ~SCILADrawerLoadingTray.serialize_state
+      ~SCILADrawerLoadingTray.unassign
+      ~SCILADrawerLoadingTray.unassign_child_resource
+   
+   

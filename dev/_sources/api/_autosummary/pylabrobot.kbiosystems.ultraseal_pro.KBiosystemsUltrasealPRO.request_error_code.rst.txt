@@ -1,0 +1,6 @@
+pylabrobot.kbiosystems.ultraseal\_pro.KBiosystemsUltrasealPRO.request\_error\_code
+==================================================================================
+
+.. currentmodule:: pylabrobot.kbiosystems.ultraseal_pro
+
+.. automethod:: KBiosystemsUltrasealPRO.request_error_code

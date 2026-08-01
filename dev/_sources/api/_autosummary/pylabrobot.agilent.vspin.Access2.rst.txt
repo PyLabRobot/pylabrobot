@@ -1,0 +1,82 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.vspin.Access2
+================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoclass:: Access2
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Access2.name
+      ~Access2.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Access2.__init__
+      ~Access2.assign_child_by_anchor
+      ~Access2.assign_child_resource
+      ~Access2.at
+      ~Access2.center
+      ~Access2.centers
+      ~Access2.check_can_drop_resource_here
+      ~Access2.copy
+      ~Access2.deregister_did_assign_resource_callback
+      ~Access2.deregister_did_unassign_resource_callback
+      ~Access2.deregister_state_update_callback
+      ~Access2.deregister_will_assign_resource_callback
+      ~Access2.deregister_will_unassign_resource_callback
+      ~Access2.deserialize
+      ~Access2.get_absolute_location
+      ~Access2.get_absolute_rotation
+      ~Access2.get_absolute_size_x
+      ~Access2.get_absolute_size_y
+      ~Access2.get_absolute_size_z
+      ~Access2.get_all_children
+      ~Access2.get_anchor
+      ~Access2.get_default_child_location
+      ~Access2.get_highest_known_point
+      ~Access2.get_location_wrt
+      ~Access2.get_resource
+      ~Access2.get_root
+      ~Access2.get_size_x
+      ~Access2.get_size_y
+      ~Access2.get_size_z
+      ~Access2.is_in_subtree_of
+      ~Access2.load
+      ~Access2.load_all_state
+      ~Access2.load_from_json_file
+      ~Access2.load_state
+      ~Access2.load_state_from_file
+      ~Access2.named
+      ~Access2.register_did_assign_resource_callback
+      ~Access2.register_did_unassign_resource_callback
+      ~Access2.register_state_update_callback
+      ~Access2.register_will_assign_resource_callback
+      ~Access2.register_will_unassign_resource_callback
+      ~Access2.rotate
+      ~Access2.rotated
+      ~Access2.save
+      ~Access2.save_state_to_file
+      ~Access2.serialize
+      ~Access2.serialize_all_state
+      ~Access2.serialize_state
+      ~Access2.unassign
+      ~Access2.unassign_child_resource
+      ~Access2.unload
+   
+   

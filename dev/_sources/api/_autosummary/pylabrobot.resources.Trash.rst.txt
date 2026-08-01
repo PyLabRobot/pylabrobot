@@ -1,0 +1,85 @@
+﻿:orphan:
+
+
+pylabrobot.resources.Trash
+==========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Trash
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Trash.lid
+      ~Trash.material_z_thickness
+      ~Trash.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Trash.__init__
+      ~Trash.assign_child_by_anchor
+      ~Trash.assign_child_resource
+      ~Trash.at
+      ~Trash.center
+      ~Trash.centers
+      ~Trash.check_can_drop_resource_here
+      ~Trash.compute_height_from_volume
+      ~Trash.compute_volume_from_height
+      ~Trash.copy
+      ~Trash.deregister_did_assign_resource_callback
+      ~Trash.deregister_did_unassign_resource_callback
+      ~Trash.deregister_state_update_callback
+      ~Trash.deregister_will_assign_resource_callback
+      ~Trash.deregister_will_unassign_resource_callback
+      ~Trash.deserialize
+      ~Trash.get_absolute_location
+      ~Trash.get_absolute_rotation
+      ~Trash.get_absolute_size_x
+      ~Trash.get_absolute_size_y
+      ~Trash.get_absolute_size_z
+      ~Trash.get_all_children
+      ~Trash.get_anchor
+      ~Trash.get_highest_known_point
+      ~Trash.get_lid_location
+      ~Trash.get_location_wrt
+      ~Trash.get_resource
+      ~Trash.get_root
+      ~Trash.get_size_x
+      ~Trash.get_size_y
+      ~Trash.get_size_z
+      ~Trash.has_lid
+      ~Trash.is_in_subtree_of
+      ~Trash.load_all_state
+      ~Trash.load_from_json_file
+      ~Trash.load_state
+      ~Trash.load_state_from_file
+      ~Trash.named
+      ~Trash.register_did_assign_resource_callback
+      ~Trash.register_did_unassign_resource_callback
+      ~Trash.register_state_update_callback
+      ~Trash.register_will_assign_resource_callback
+      ~Trash.register_will_unassign_resource_callback
+      ~Trash.rotate
+      ~Trash.rotated
+      ~Trash.save
+      ~Trash.save_state_to_file
+      ~Trash.serialize
+      ~Trash.serialize_all_state
+      ~Trash.serialize_state
+      ~Trash.supports_compute_height_volume_functions
+      ~Trash.unassign
+      ~Trash.unassign_child_resource
+   
+   

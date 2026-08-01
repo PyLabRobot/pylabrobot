@@ -1,0 +1,6 @@
+pylabrobot.resources.barcode.Barcode.data
+=========================================
+
+.. currentmodule:: pylabrobot.resources.barcode
+
+.. autoattribute:: Barcode.data

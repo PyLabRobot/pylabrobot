@@ -1,0 +1,92 @@
+﻿:orphan:
+
+
+pylabrobot.byonoy.luminescence\_96.ByonoyLuminescence96
+=======================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. autoclass:: ByonoyLuminescence96
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ByonoyLuminescence96.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ByonoyLuminescence96.__init__
+      ~ByonoyLuminescence96.assign_child_by_anchor
+      ~ByonoyLuminescence96.assign_child_resource
+      ~ByonoyLuminescence96.at
+      ~ByonoyLuminescence96.cancel
+      ~ByonoyLuminescence96.center
+      ~ByonoyLuminescence96.centers
+      ~ByonoyLuminescence96.check_can_drop_resource_here
+      ~ByonoyLuminescence96.copy
+      ~ByonoyLuminescence96.deregister_did_assign_resource_callback
+      ~ByonoyLuminescence96.deregister_did_unassign_resource_callback
+      ~ByonoyLuminescence96.deregister_state_update_callback
+      ~ByonoyLuminescence96.deregister_will_assign_resource_callback
+      ~ByonoyLuminescence96.deregister_will_unassign_resource_callback
+      ~ByonoyLuminescence96.describe_error_code
+      ~ByonoyLuminescence96.deserialize
+      ~ByonoyLuminescence96.get_absolute_location
+      ~ByonoyLuminescence96.get_absolute_rotation
+      ~ByonoyLuminescence96.get_absolute_size_x
+      ~ByonoyLuminescence96.get_absolute_size_y
+      ~ByonoyLuminescence96.get_absolute_size_z
+      ~ByonoyLuminescence96.get_all_children
+      ~ByonoyLuminescence96.get_anchor
+      ~ByonoyLuminescence96.get_highest_known_point
+      ~ByonoyLuminescence96.get_location_wrt
+      ~ByonoyLuminescence96.get_resource
+      ~ByonoyLuminescence96.get_root
+      ~ByonoyLuminescence96.get_size_x
+      ~ByonoyLuminescence96.get_size_y
+      ~ByonoyLuminescence96.get_size_z
+      ~ByonoyLuminescence96.is_in_subtree_of
+      ~ByonoyLuminescence96.load_all_state
+      ~ByonoyLuminescence96.load_from_json_file
+      ~ByonoyLuminescence96.load_state
+      ~ByonoyLuminescence96.load_state_from_file
+      ~ByonoyLuminescence96.named
+      ~ByonoyLuminescence96.read_luminescence
+      ~ByonoyLuminescence96.register_did_assign_resource_callback
+      ~ByonoyLuminescence96.register_did_unassign_resource_callback
+      ~ByonoyLuminescence96.register_state_update_callback
+      ~ByonoyLuminescence96.register_will_assign_resource_callback
+      ~ByonoyLuminescence96.register_will_unassign_resource_callback
+      ~ByonoyLuminescence96.request_api_version
+      ~ByonoyLuminescence96.request_device_info
+      ~ByonoyLuminescence96.request_environment
+      ~ByonoyLuminescence96.request_status
+      ~ByonoyLuminescence96.request_supported_reports
+      ~ByonoyLuminescence96.request_versions
+      ~ByonoyLuminescence96.rotate
+      ~ByonoyLuminescence96.rotated
+      ~ByonoyLuminescence96.save
+      ~ByonoyLuminescence96.save_state_to_file
+      ~ByonoyLuminescence96.send_command
+      ~ByonoyLuminescence96.serialize
+      ~ByonoyLuminescence96.serialize_all_state
+      ~ByonoyLuminescence96.serialize_state
+      ~ByonoyLuminescence96.set_led_color
+      ~ByonoyLuminescence96.set_led_colors
+      ~ByonoyLuminescence96.setup
+      ~ByonoyLuminescence96.stop
+      ~ByonoyLuminescence96.unassign
+      ~ByonoyLuminescence96.unassign_child_resource
+   
+   

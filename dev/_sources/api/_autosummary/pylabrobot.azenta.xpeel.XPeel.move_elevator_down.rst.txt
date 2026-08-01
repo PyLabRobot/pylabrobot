@@ -1,0 +1,6 @@
+pylabrobot.azenta.xpeel.XPeel.move\_elevator\_down
+==================================================
+
+.. currentmodule:: pylabrobot.azenta.xpeel
+
+.. automethod:: XPeel.move_elevator_down

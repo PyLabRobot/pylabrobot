@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILA.assign\_child\_by\_anchor
+=============================================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILA.assign_child_by_anchor

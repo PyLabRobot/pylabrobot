@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.MotionProfile.acceleration
+==========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoattribute:: MotionProfile.acceleration

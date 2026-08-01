@@ -1,0 +1,6 @@
+pylabrobot.agilent.biotek.cytation.Cytation1.abs\_wavelength\_range
+===================================================================
+
+.. currentmodule:: pylabrobot.agilent.biotek.cytation
+
+.. autoproperty:: Cytation1.abs_wavelength_range

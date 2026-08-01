@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.WorkEnvelope.\_\_init\_\_
+=========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: WorkEnvelope.__init__

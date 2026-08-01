@@ -1,0 +1,6 @@
+pylabrobot.molecular\_devices.spectramax.SpectraMaxM5.clear\_error\_log
+=======================================================================
+
+.. currentmodule:: pylabrobot.molecular_devices.spectramax
+
+.. automethod:: SpectraMaxM5.clear_error_log
