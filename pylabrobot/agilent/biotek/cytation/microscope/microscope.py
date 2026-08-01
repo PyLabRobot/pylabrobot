@@ -1,0 +1,640 @@
+"""The Cytation's microscope.
+
+Owns the AravisCamera and all imaging state/logic: optics control (filter wheel,
+objectives, focus, LED, stage positioning), camera control (exposure, gain,
+acquisition), and capture orchestration (tiling, retry).
+
+Optics commands go over the plate reader's serial connection (``send_command``); frames
+come from the AravisCamera (GenICam/USB3 Vision).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import math
+import re
+import time
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, List, Literal, Optional, Tuple, Union
+
+from pylabrobot.agilent.biotek.cytation.microscope.models import (
+  Exposure,
+  FocalPosition,
+  Gain,
+  Image,
+  ImagingMode,
+  ImagingResult,
+  Objective,
+)
+from pylabrobot.resources.plate import Plate
+
+from .aravis_camera import AravisCamera
+
+if TYPE_CHECKING:
+  from pylabrobot.agilent.biotek.plate_reader_base import BioTekPlateReaderDriver
+
+logger = logging.getLogger(__name__)
+
+# Color brightfield is not a fixed imaging mode. Instead of a single illuminated acquisition, the
+# instrument illuminates the sample sequentially with three separate LED colors and the host
+# combines the resulting mono frames into one RGB image. These are the firmware LED codes for the
+# three colors, in the order they are cycled (red, green, blue), discovered by reverse-engineering
+# a Gen5 color-brightfield capture: per color the firmware sends `i L0{code}10` (LED on) followed
+# by `i l{code}` (strobe) before each camera trigger. White brightfield (code 5) is used only for
+# setup/focus, never in the cycle.
+COLOR_BRIGHTFIELD_LED_CODES = (6, 7, 8)
+
+
+@dataclass
+class CytationImagingConfig:
+  """Imaging configuration for the Cytation."""
+
+  camera_serial_number: Optional[str] = None
+  filters: Optional[List[Optional[ImagingMode]]] = None
+  objectives: Optional[List[Optional[Objective]]] = None
+  max_image_read_attempts: int = 50
+  image_read_delay: float = 0.3
+
+
+class CytationMicroscope:
+  """The Cytation's microscope.
+
+  Owns the AravisCamera and all imaging state, and drives the optics over the plate
+  reader's serial connection.
+  """
+
+  def __init__(
+    self,
+    driver: BioTekPlateReaderDriver,
+    camera_serial: Optional[str] = None,
+    imaging_config: Optional[CytationImagingConfig] = None,
+    use_cam: bool = True,
+  ) -> None:
+    self.driver = driver
+    self.camera = AravisCamera()
+    self._camera_serial = camera_serial
+    self._use_cam = use_cam
+    self.imaging_config = imaging_config or CytationImagingConfig(
+      camera_serial_number=camera_serial
+    )
+
+    # Imaging state
+    self._filters: Optional[List[Optional[ImagingMode]]] = self.imaging_config.filters
+    self._objectives: Optional[List[Optional[Objective]]] = self.imaging_config.objectives
+    self._exposure: Optional[Exposure] = None
+    self._focal_height: Optional[FocalPosition] = None
+    self._gain: Optional[Gain] = None
+    self._imaging_mode: Optional[ImagingMode] = None
+    self._row: Optional[int] = None
+    self._column: Optional[int] = None
+    self._pos_x: Optional[float] = None
+    self._pos_y: Optional[float] = None
+    self._objective: Optional[Objective] = None
+    self._acquiring = False
+
+  async def _on_setup(self) -> None:
+    """Connect camera (if use_cam) and load filters/objectives from firmware."""
+    if self._use_cam:
+      serial = self._camera_serial or (
+        self.imaging_config.camera_serial_number if self.imaging_config else None
+      )
+      await self.camera.setup(serial_number=serial)
+      logger.info("Camera connected: %s", self.camera.get_device_info())
+
+    if self._filters is None:
+      await self._load_filters()
+    if self._objectives is None:
+      await self._load_objectives()
+
+  async def _on_stop(self) -> None:
+    self._clear_imaging_state()
+    try:
+      await self.camera.stop()
+    except Exception:
+      logger.exception("Error stopping camera")
+
+  # ─── Properties ─────────────────────────────────────────────────────
+
+  @property
+  def filters(self) -> List[Optional[ImagingMode]]:
+    if self._filters is None:
+      raise RuntimeError("Filters not loaded. Call setup() first.")
+    return self._filters
+
+  @property
+  def objectives(self) -> List[Optional[Objective]]:
+    if self._objectives is None:
+      raise RuntimeError("Objectives not loaded. Call setup() first.")
+    return self._objectives
+
+  def _clear_imaging_state(self) -> None:
+    self._exposure = None
+    self._focal_height = None
+    self._gain = None
+    self._imaging_mode = None
+    self._row = None
+    self._column = None
+    self._pos_x = None
+    self._pos_y = None
+    self._objective = None
+    self._acquiring = False
+
+  # ─── Filter / Objective Discovery ────────────────────────────────────
+
+  async def _load_filters(self) -> None:
+    """Discover installed filter cube positions from firmware."""
+    cytation_code2imaging_mode = {
+      1225121: ImagingMode.C377_647,
+      1225123: ImagingMode.C400_647,
+      1225113: ImagingMode.C469_593,
+      1225109: ImagingMode.ACRIDINE_ORANGE,
+      1225107: ImagingMode.CFP,
+      1225118: ImagingMode.CFP_FRET_V2,
+      1225110: ImagingMode.CFP_YFP_FRET,
+      1225119: ImagingMode.CFP_YFP_FRET_V2,
+      1225112: ImagingMode.CHLOROPHYLL_A,
+      1225105: ImagingMode.CY5,
+      1225114: ImagingMode.CY5_5,
+      1225106: ImagingMode.CY7,
+      1225100: ImagingMode.DAPI,
+      1225101: ImagingMode.GFP,
+      1225116: ImagingMode.GFP_CY5,
+      1225122: ImagingMode.OXIDIZED_ROGFP2,
+      1225111: ImagingMode.PROPIDIUM_IODIDE,
+      1225103: ImagingMode.RFP,
+      1225117: ImagingMode.RFP_CY5,
+      1225115: ImagingMode.TAG_BFP,
+      1225102: ImagingMode.TEXAS_RED,
+      1225104: ImagingMode.YFP,
+    }
+
+    self._filters = []
+    for slot in range(1, 5):
+      configuration = await self.driver.send_command("i", f"q{slot}")
+      assert configuration is not None
+      parts = configuration.decode().strip().split(" ")
+      if len(parts) == 1:
+        self._filters.append(None)
+      else:
+        cytation_code = int(parts[0])
+        self._filters.append(cytation_code2imaging_mode.get(cytation_code, None))
+
+    logger.info("Loaded filters: %s", self._filters)
+
+  async def _load_objectives(self) -> None:
+    """Discover installed objective positions from firmware."""
+    weird_encoding = {
+      0x00: " ",
+      0x14: ".",
+      0x15: "/",
+      0x16: "0",
+      0x17: "1",
+      0x18: "2",
+      0x19: "3",
+      0x20: "4",
+      0x21: "5",
+      0x22: "6",
+      0x23: "7",
+      0x24: "8",
+      0x25: "9",
+      0x33: "A",
+      0x34: "B",
+      0x35: "C",
+      0x36: "D",
+      0x37: "E",
+      0x38: "F",
+      0x39: "G",
+      0x40: "H",
+      0x41: "I",
+      0x42: "J",
+      0x43: "K",
+      0x44: "L",
+      0x45: "M",
+      0x46: "N",
+      0x47: "O",
+      0x48: "P",
+      0x49: "Q",
+      0x50: "R",
+      0x51: "S",
+      0x52: "T",
+      0x53: "U",
+      0x54: "V",
+      0x55: "W",
+      0x56: "X",
+      0x57: "Y",
+      0x58: "Z",
+    }
+    part_number2objective = {
+      "uplsapo 40x2": Objective.O_40X_PL_APO,
+      "lucplfln 60X": Objective.O_60X_PL_FL,
+      "uplfln 4x": Objective.O_4X_PL_FL,
+      "lucplfln 20xph": Objective.O_20X_PL_FL_Phase,
+      "lucplfln 40xph": Objective.O_40X_PL_FL_Phase,
+      "u plan": Objective.O_2_5X_PL_ACH_Meiji,
+      "uplfln 10xph": Objective.O_10X_PL_FL_Phase,
+      "plapon 1.25x": Objective.O_1_25X_PL_APO,
+      "uplfln 10x": Objective.O_10X_PL_FL,
+      "uplfln 60xoi": Objective.O_60X_OIL_PL_FL,
+      "pln 4x": Objective.O_4X_PL_ACH,
+      "pln 40x": Objective.O_40X_PL_ACH,
+      "lucplfln 40x": Objective.O_40X_PL_FL,
+      "ec-h-plan/2x": Objective.O_2X_PL_ACH_Motic,
+      "uplfln 100xO2": Objective.O_100X_OIL_PL_FL,
+      "uplfln 4xph": Objective.O_4X_PL_FL_Phase,
+      "lucplfln 20X": Objective.O_20X_PL_FL,
+      "pln 20x": Objective.O_20X_PL_ACH,
+      "fluar 2.5x/0.12": Objective.O_2_5X_FL_Zeiss,
+      "uplsapo 100xo": Objective.O_100X_OIL_PL_APO,
+      "plapon 60xo": Objective.O_60X_OIL_PL_APO,
+      "uplsapo 20x": Objective.O_20X_PL_APO,
+    }
+
+    self._objectives = []
+    version = self.driver.version
+    if version.startswith("1"):
+      for slot in [1, 2]:
+        configuration = await self.driver.send_command("i", f"o{slot}")
+        if configuration is None:
+          raise RuntimeError("Failed to load objective configuration")
+        middle_part = re.split(r"\s+", configuration.rstrip(b"\x03").decode("utf-8"))[1]
+        if middle_part == "0000":
+          self._objectives.append(None)
+        else:
+          part_number = "".join([weird_encoding[x] for x in bytes.fromhex(middle_part)])
+          self._objectives.append(part_number2objective.get(part_number.lower(), None))
+    elif version.startswith("2"):
+      for slot in range(1, 7):
+        configuration = await self.driver.send_command("i", f"h{slot + 1}")
+        assert configuration is not None
+        if configuration.startswith(b"****"):
+          self._objectives.append(None)
+        else:
+          annulus_code = int(configuration.decode("latin").strip().split(" ")[0])
+          annulus2objective = {
+            1320520: Objective.O_4X_PL_FL_Phase,
+            1320521: Objective.O_20X_PL_FL_Phase,
+            1322026: Objective.O_40X_PL_FL_Phase,
+          }
+          self._objectives.append(annulus2objective.get(annulus_code, None))
+    else:
+      raise RuntimeError(f"Unsupported firmware version: {version}")
+
+    logger.info("Loaded objectives: %s", self._objectives)
+
+  # ─── Camera Control ──────────────────────────────────────────────────
+
+  async def set_exposure(self, exposure: Exposure) -> None:
+    """Set camera exposure time in ms."""
+    if exposure == self._exposure:
+      return
+
+    if isinstance(exposure, str):
+      if exposure == "machine-auto":
+        await self.camera.set_auto_exposure("continuous")
+        self._exposure = "machine-auto"
+        return
+      raise ValueError("exposure must be a number or 'machine-auto'")
+    await self.camera.set_auto_exposure("off")
+    await self.camera.set_exposure(float(exposure))
+    self._exposure = exposure
+
+  async def set_gain(self, gain: Gain) -> None:
+    """Set camera gain."""
+    if gain == self._gain:
+      return
+
+    if gain == "machine-auto":
+      await self.camera.set_auto_gain("continuous")
+    else:
+      await self.camera.set_gain(float(gain))
+
+    self._gain = gain
+
+  async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]) -> None:
+    """Set camera auto-exposure mode."""
+    await self.camera.set_auto_exposure(auto_exposure)
+
+  def start_acquisition(self) -> None:
+    """Start camera acquisition (buffered streaming)."""
+    self.camera.start_acquisition()
+    self._acquiring = True
+
+  def stop_acquisition(self) -> None:
+    """Stop camera acquisition."""
+    if self._acquiring:
+      self.camera.stop_acquisition()
+      self._acquiring = False
+
+  async def acquire_image(self) -> Image:
+    """Trigger camera and read image, with retry on failure."""
+    config = self.imaging_config
+    for attempt in range(config.max_image_read_attempts):
+      try:
+        return await self.camera.trigger(timeout_ms=5000)
+      except Exception:
+        if attempt < config.max_image_read_attempts - 1:
+          logger.warning("Failed to get image, retrying...")
+          self.stop_acquisition()
+          self.start_acquisition()
+          await asyncio.sleep(config.image_read_delay)
+        else:
+          raise
+    raise TimeoutError("max_image_read_attempts reached")
+
+  async def _set_color_brightfield_led(self, led_code: int, intensity: int) -> None:
+    """Switch color-brightfield illumination to a single LED color and strobe it.
+
+    Unlike other modes, color brightfield has no static LED state: the instrument turns on one of
+    the three LED colors (``i L0{led_code}{intensity}``), strobes it (``i l{led_code}``), then the
+    camera is triggered, repeating once per color. See ``COLOR_BRIGHTFIELD_LED_CODES``.
+    """
+    if not 1 <= intensity <= 10:
+      raise ValueError("intensity must be between 1 and 10")
+    intensity_str = str(intensity).zfill(2)
+    await self.driver.send_command("i", f"L0{led_code}{intensity_str}")
+    await self.driver.send_command("i", f"l{led_code}")
+
+  async def _acquire_color_brightfield_image(self, led_intensity: int) -> Image:
+    """Acquire one color-brightfield image.
+
+    Captures a mono frame under each of the three brightfield LED colors and stacks them into an
+    ``(H, W, 3)`` RGB image. A single exposure/gain (set by the caller) is used for all three
+    channels; Gen5's per-color auto-exposure is not replicated.
+    """
+    import numpy as np
+
+    channels: List[Image] = []
+    for led_code in COLOR_BRIGHTFIELD_LED_CODES:
+      await self._set_color_brightfield_led(led_code, intensity=led_intensity)
+      channels.append(await self.acquire_image())
+    return np.stack(channels, axis=-1)
+
+  async def get_exposure(self) -> float:
+    """Get current exposure time in ms."""
+    return await self.camera.get_exposure()
+
+  # ─── Optics Control (serial protocol) ────────────────────────────────
+
+  def _imaging_mode_code(self, mode: ImagingMode) -> int:
+    """Get filter wheel position index for an imaging mode."""
+    if mode in (
+      ImagingMode.BRIGHTFIELD,
+      ImagingMode.PHASE_CONTRAST,
+      ImagingMode.COLOR_BRIGHTFIELD,
+    ):
+      # Color brightfield uses the brightfield light path (filter cube 5); its three colors are
+      # selected via LED codes 6/7/8 during acquisition, not here.
+      return 5
+    for i, f in enumerate(self.filters):
+      if f == mode:
+        return i + 1
+    raise ValueError(f"Mode {mode} not found in filters: {self.filters}")
+
+  def _objective_code(self, objective: Objective) -> int:
+    """Get turret position index for an objective."""
+    for i, o in enumerate(self.objectives):
+      if o == objective:
+        return i + 1
+    raise ValueError(f"Objective {objective} not found: {self.objectives}")
+
+  async def set_imaging_mode(self, mode: ImagingMode, led_intensity: int = 10) -> None:
+    """Set filter wheel position and LED."""
+    if mode == self._imaging_mode:
+      # Color brightfield has no single LED state to (re)enable; its colors are cycled per frame
+      # during acquisition (see _acquire_color_brightfield_image).
+      if mode != ImagingMode.COLOR_BRIGHTFIELD:
+        await self.led_on(intensity=led_intensity)
+      return
+
+    await self.led_off()
+    filter_index = self._imaging_mode_code(mode)
+
+    if self.driver.version.startswith("1"):
+      if mode == ImagingMode.PHASE_CONTRAST:
+        raise NotImplementedError("Phase contrast not implemented on Cytation 1")
+      elif mode == ImagingMode.COLOR_BRIGHTFIELD:
+        raise NotImplementedError("Color brightfield not implemented on Cytation 1")
+      elif mode == ImagingMode.BRIGHTFIELD:
+        await self.driver.send_command("Y", "P0c05")
+        await self.driver.send_command("Y", "P0f02")
+      else:
+        await self.driver.send_command("Y", f"P0c{filter_index:02}")
+        await self.driver.send_command("Y", "P0f01")
+    else:
+      if mode == ImagingMode.PHASE_CONTRAST:
+        await self.driver.send_command("Y", "P1120")
+        await self.driver.send_command("Y", "P0d05")
+        await self.driver.send_command("Y", "P1002")
+      elif mode in (ImagingMode.BRIGHTFIELD, ImagingMode.COLOR_BRIGHTFIELD):
+        # Color brightfield uses the same light path as brightfield; the three colors are
+        # selected via LED codes during acquisition.
+        await self.driver.send_command("Y", "P1101")
+        await self.driver.send_command("Y", "P0d05")
+        await self.driver.send_command("Y", "P1002")
+      else:
+        await self.driver.send_command("Y", "P1101")
+        await self.driver.send_command("Y", f"P0d{filter_index:02}")
+        await self.driver.send_command("Y", "P1001")
+
+    # Color brightfield has no single LED state; its colors are cycled per frame during
+    # acquisition (see _acquire_color_brightfield_image).
+    self._imaging_mode = mode
+    if mode != ImagingMode.COLOR_BRIGHTFIELD:
+      await self.led_on(intensity=led_intensity)
+
+  async def set_objective(self, objective: Objective) -> None:
+    """Rotate objective turret to the specified objective."""
+    if objective == self._objective:
+      return
+    obj_code = self._objective_code(objective)
+    if self.driver.version.startswith("1"):
+      await self.driver.send_command("Y", f"P0d{obj_code:02}", timeout=60)
+    else:
+      await self.driver.send_command("Y", f"P0e{obj_code:02}", timeout=60)
+    self._objective = objective
+    self._imaging_mode = None  # force re-set after objective change
+
+  async def set_focus(self, focal_position: FocalPosition) -> None:
+    """Move focus motor to the specified height (mm)."""
+    if focal_position == "machine-auto":
+      raise ValueError("focal_position cannot be 'machine-auto'. Use PLR's auto-focus instead.")
+
+    if focal_position == self._focal_height:
+      return
+
+    slope, intercept = (10.637991436186072, 1.0243013203461762)
+    focus_integer = int(float(focal_position) + intercept + slope * float(focal_position) * 1000)
+    focus_str = str(focus_integer).zfill(5)
+
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Call set_imaging_mode() first.")
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    await self.driver.send_command("i", f"F{imaging_mode_code}0{focus_str}")
+
+    self._focal_height = focal_position
+
+  async def led_on(self, intensity: int = 10) -> None:
+    """Turn on LED at specified intensity (1-10)."""
+    if not 1 <= intensity <= 10:
+      raise ValueError("intensity must be between 1 and 10")
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Call set_imaging_mode() first.")
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    intensity_str = str(intensity).zfill(2)
+    await self.driver.send_command("i", f"L0{imaging_mode_code}{intensity_str}")
+
+  async def led_off(self) -> None:
+    """Turn off LED."""
+    await self.driver.send_command("i", "L0001")
+
+  async def select(self, row: int, column: int) -> None:
+    """Move plate stage to a well position."""
+    if row == self._row and column == self._column:
+      return
+    row_str = str(row).zfill(2)
+    col_str = str(column).zfill(2)
+    await self.driver.send_command("Y", f"W6{row_str}{col_str}")
+    self._row, self._column = row, column
+    self._pos_x, self._pos_y = None, None
+    await self.set_position(0, 0)
+
+  async def set_position(self, x: float, y: float) -> None:
+    """Fine-position the plate stage within a well (mm)."""
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Call set_imaging_mode() first.")
+
+    if x == self._pos_x and y == self._pos_y:
+      return
+
+    x_str = str(round(x * 100 * 0.984)).zfill(6)
+    y_str = str(round(y * 100 * 0.984)).zfill(6)
+
+    if self._row is None or self._column is None:
+      raise ValueError("Row and column not set. Call select() first.")
+    row_str = str(self._row).zfill(2)
+    column_str = str(self._column).zfill(2)
+
+    if self._objective is None:
+      raise ValueError("Objective not set. Call set_objective() first.")
+    objective_code = self._objective_code(self._objective)
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    await self.driver.send_command(
+      "Y",
+      f"Z{objective_code}{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}",
+    )
+
+    relative_x = x - (self._pos_x or 0)
+    relative_y = y - (self._pos_y or 0)
+    if relative_x != 0:
+      relative_x_str = str(round(relative_x * 100 * 0.984)).zfill(6)
+      await self.driver.send_command("Y", f"O00{relative_x_str}")
+    if relative_y != 0:
+      relative_y_str = str(round(relative_y * 100 * 0.984)).zfill(6)
+      await self.driver.send_command("Y", f"O01{relative_y_str}")
+
+    self._pos_x, self._pos_y = x, y
+    await asyncio.sleep(0.1)
+
+  async def capture(
+    self,
+    row: int,
+    column: int,
+    mode: ImagingMode,
+    objective: Objective,
+    exposure_time: Exposure,
+    focal_height: FocalPosition,
+    gain: Gain,
+    plate: Plate,
+    led_intensity: int = 10,
+    coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1),
+    center_position: Optional[Tuple[float, float]] = None,
+    overlap: Optional[float] = None,
+    auto_stop_acquisition: bool = True,
+  ) -> ImagingResult:
+    """Capture an image of a well.
+
+    Args:
+      led_intensity: LED intensity (1-10).
+      coverage: Image tiling coverage. ``"full"`` for full-well montage, or a
+        ``(rows, cols)`` tuple for a specific tile grid. ``(1, 1)`` is a single image.
+      center_position: Center position of the capture area as ``(x_mm, y_mm)`` relative
+        to the well center. If None, centers on the well.
+      overlap: Fractional overlap between tiles (0.0-1.0) for montage stitching.
+        If None, no overlap. Only used when coverage produces multiple tiles.
+      auto_stop_acquisition: Whether to automatically stop image acquisition after capture.
+    """
+    if overlap is not None:
+      raise NotImplementedError("overlap is not implemented yet")
+
+    await self.driver.set_plate(plate)
+
+    if not self._acquiring:
+      self.start_acquisition()
+
+    try:
+      await self.set_objective(objective)
+      await self.set_imaging_mode(mode, led_intensity=led_intensity)
+      await self.select(row, column)
+      await self.set_exposure(exposure_time)
+      await self.set_gain(gain)
+      await self.set_focus(focal_height)
+
+      def image_size(magnification: float) -> Tuple[float, float]:
+        if magnification == 4:
+          return (3474 / 1000, 3474 / 1000)
+        if magnification == 10:
+          # Estimated from the ~13880 um * magnification^-1 pattern of the other entries; the
+          # 4/20/40x values are measured. Refine with a measured 10x field of view if available.
+          return (1388 / 1000, 1388 / 1000)
+        if magnification == 20:
+          return (694 / 1000, 694 / 1000)
+        if magnification == 40:
+          return (347 / 1000, 347 / 1000)
+        raise ValueError(f"Don't know image size for magnification {magnification}")
+
+      if self._objective is None:
+        raise RuntimeError("Objective not set. Run set_objective() first.")
+      magnification = self._objective.magnification
+      img_width, img_height = image_size(magnification)
+
+      first_well = plate.get_item(0)
+      well_size_x, well_size_y = (first_well.get_size_x(), first_well.get_size_y())
+      if coverage == "full":
+        coverage = (
+          math.ceil(well_size_x / image_size(magnification)[0]),
+          math.ceil(well_size_y / image_size(magnification)[1]),
+        )
+      rows, cols = coverage
+
+      if center_position is None:
+        center_position = (0, 0)
+      positions = [
+        (x * img_width + center_position[0], -y * img_height + center_position[1])
+        for y in [i - (rows - 1) / 2 for i in range(rows)]
+        for x in [i - (cols - 1) / 2 for i in range(cols)]
+      ]
+
+      images: List[Image] = []
+      for x_pos, y_pos in positions:
+        await self.set_position(x=x_pos, y=y_pos)
+        t0 = time.time()
+        if mode == ImagingMode.COLOR_BRIGHTFIELD:
+          images.append(await self._acquire_color_brightfield_image(led_intensity=led_intensity))
+        else:
+          images.append(await self.acquire_image())
+        t1 = time.time()
+        logger.debug("[cytation] acquired image in %.2f seconds", t1 - t0)
+    finally:
+      try:
+        await self.led_off()
+      except Exception:
+        logger.exception("Failed to turn off LED during cleanup")
+      if auto_stop_acquisition:
+        self.stop_acquisition()
+
+    exposure_ms = await self.get_exposure()
+    assert self._focal_height is not None
+    focal_height_val = float(self._focal_height)
+
+    return ImagingResult(images=images, exposure_time=exposure_ms, focal_height=focal_height_val)

@@ -10,7 +10,7 @@ from .plate import Plate
 from .resource import Resource
 from .resource_stack import ResourceStack
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 S = TypeVar("S", bound=ResourceHolder)

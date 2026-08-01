@@ -1,6 +1,10 @@
-"""Hamilton backends for liquid handling."""
+import warnings
 
-from .base import HamiltonLiquidHandler
-from .pump import Pump  # TODO: move elsewhere.
-from .STAR_backend import STAR
-from .vantage_backend import Vantage
+warnings.warn(
+  "Importing from pylabrobot.liquid_handling.backends.hamilton is deprecated. "
+  "Use pylabrobot.legacy.liquid_handling.backends.hamilton instead.",
+  DeprecationWarning,
+  stacklevel=2,
+)
+
+from pylabrobot.legacy.liquid_handling.backends.hamilton import *  # noqa: F401,F403,E402

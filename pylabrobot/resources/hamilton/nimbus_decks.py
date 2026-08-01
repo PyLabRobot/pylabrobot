@@ -17,7 +17,7 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
 from pylabrobot.serializer import serialize
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class NimbusDeck(HamiltonDeck):

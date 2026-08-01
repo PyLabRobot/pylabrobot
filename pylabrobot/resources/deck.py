@@ -45,7 +45,7 @@ class Deck(Resource):
   def serialize(self) -> dict:
     """Serialize this deck."""
     super_serialized = super().serialize()
-    del super_serialized["model"]  # deck's don't typically have a model
+    super_serialized.pop("model", None)  # deck's don't typically have a model
     return super_serialized
 
   def _check_naming_conflicts(self, resource: Resource):

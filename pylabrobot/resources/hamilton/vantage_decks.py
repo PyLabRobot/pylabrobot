@@ -61,5 +61,5 @@ class VantageDeck(HamiltonDeck):
   def serialize(self) -> dict:
     super_serialized = super().serialize()
     for key in ["size_x", "size_y", "size_z", "num_rails"]:
-      super_serialized.pop(key)
+      super_serialized.pop(key, None)
     return {"size": self.size, **super_serialized}

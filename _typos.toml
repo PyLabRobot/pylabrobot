@@ -30,6 +30,22 @@ RHE = "RHE"
 caf = "caf"
 scap = "scap"
 
+# Sartorius Entris II, a product name.
+Entris = "Entris"
+
+# FluidX IntelliXcap firmware vocabulary. `*WasNotSuccesful` are fault tokens
+# keyed in ERROR_MESSAGES and passed to _wait_for_idle as the expected error
+# frame; `onnOK` and `LOK` are reply frames. Renaming them breaks the driver.
+Succesful = "Succesful"
+onn = "onn"
+LOK = "LOK"
+
+# HighRes LidValet settings keys. HighResLidValetSettings.from_lines matches
+# each dataclass field name uppercased against the device's `settings` output,
+# so these spellings are the device's, not ours.
+ouput = "ouput"
+hegiht = "hegiht"
+
 [files]
 extend-exclude = [
     "*.ipynb"

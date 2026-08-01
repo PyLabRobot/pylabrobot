@@ -1,7 +1,9 @@
-from pylabrobot.scales.chatterbox import ScaleChatterboxBackend
-from pylabrobot.scales.mettler_toledo_backend import (
-  MettlerToledoWXS205SDU,
-  MettlerToledoWXS205SDUBackend,
+import warnings
+
+warnings.warn(
+  "Importing from pylabrobot.scales is deprecated. Use pylabrobot.legacy.scales instead.",
+  DeprecationWarning,
+  stacklevel=2,
 )
-from pylabrobot.scales.scale import Scale
-from pylabrobot.scales.scale_backend import ScaleBackend
+
+from pylabrobot.legacy.scales import *  # noqa: F401,F403,E402
