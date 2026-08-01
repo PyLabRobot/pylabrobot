@@ -2,18 +2,23 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.brooks.precise_flex.driver import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.errors import (
   OperationInterrupted,
   PreciseFlexError,
   is_collision,
 )
 from pylabrobot.brooks.precise_flex.interrupt import halt_and_resync, halt_on_interrupt
+from pylabrobot.brooks.precise_flex.precise_flex import PreciseFlex
 
 
-def _make_driver() -> PreciseFlexDriver:
-  """A driver whose socket is mocked: writes recorded, reads drain immediately (TimeoutError)."""
-  d = PreciseFlexDriver(host="localhost")
+def _make_arm() -> PreciseFlex:
+  """An arm whose socket is mocked: writes recorded, reads drain immediately (TimeoutError)."""
+  d = PreciseFlex(
+    host="localhost",
+    gripper_length=162.0,
+    gripper_z_offset=0.0,
+    closed_gripper_position=500.0,
+  )
   d.io = MagicMock()
   d.io.write = AsyncMock()
   d.io.readline = AsyncMock(side_effect=TimeoutError())
@@ -28,13 +33,13 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
     wherej = iter(
       ["0 0 0 0 0", "5 5 5 5 5", "9.9 9.9 9.9 9.9 9.9", "10 10 10 10 10", "10 10 10 10 10"]
     )
-    d = _make_driver()
+    d = _make_arm()
     d.send_command = AsyncMock(side_effect=lambda cmd: next(wherej))
     await d._wait_for_eom(poll_interval=0)  # no error == returned at the settled sample
 
   async def test_returns_immediately_when_already_stationary(self):
     """An idle arm (e.g. halted short of its last target) returns at once, never hangs to reach it."""
-    d = _make_driver()
+    d = _make_arm()
     d.send_command = AsyncMock(return_value="113 81 218 64 70")  # stable every poll
     await d._wait_for_eom(poll_interval=0)
 
@@ -48,7 +53,7 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
       except StopIteration:
         raise KeyboardInterrupt()
 
-    d = _make_driver()
+    d = _make_arm()
     d.send_command = AsyncMock(side_effect=fake)
     with self.assertRaises(OperationInterrupted):
       await d._wait_for_eom(poll_interval=0)
@@ -64,7 +69,7 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
       except StopIteration:
         raise asyncio.CancelledError()
 
-    d = _make_driver()
+    d = _make_arm()
     d.send_command = AsyncMock(side_effect=fake)
     with self.assertRaises(asyncio.CancelledError):
       await d._wait_for_eom(poll_interval=0)
@@ -73,7 +78,7 @@ class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
   async def test_timeout_when_never_settles(self):
     """An arm that never stops moving raises TimeoutError rather than spinning forever."""
     n = iter(range(1000))
-    d = _make_driver()
+    d = _make_arm()
     d.send_command = AsyncMock(side_effect=lambda cmd: f"{next(n)} 0 0 0 0")  # always changing
     with self.assertRaises(TimeoutError):
       await d._wait_for_eom(poll_interval=0, timeout=0)
@@ -131,7 +136,7 @@ class TestRequestSystemState(unittest.IsolatedAsyncioTestCase):
   async def test_returns_state_word_and_decodes_to_powerstate(self):
     from pylabrobot.brooks.precise_flex.data_ids import PowerState
 
-    d = _make_driver()
+    d = _make_arm()
     d.send_command = AsyncMock(return_value="15")
     state = await d.request_system_state()
     self.assertEqual(state, 15)
@@ -154,7 +159,7 @@ class TestCollisionDetectionAndRecovery(unittest.IsolatedAsyncioTestCase):
 
   async def test_recover_repowers_attaches_and_homes(self):
     """Recovery from a non-E-stop fault re-enables power, re-attaches, and re-homes."""
-    d = _make_driver()
+    d = _make_arm()
     d.request_system_state = AsyncMock(return_value=7)  # off, waiting for enable (not E-stop)
     d.power_on_robot = AsyncMock()
     d.attach = AsyncMock()
@@ -166,7 +171,7 @@ class TestCollisionDetectionAndRecovery(unittest.IsolatedAsyncioTestCase):
 
   async def test_recover_refuses_while_estop_engaged(self):
     """A hard E-stop blocks recovery (release the button first); power is not touched."""
-    d = _make_driver()
+    d = _make_arm()
     d.request_system_state = AsyncMock(return_value=15)  # OFF_HARD_ESTOP
     d.power_on_robot = AsyncMock()
     d.home = AsyncMock()

@@ -7,8 +7,6 @@ from abc import ABCMeta
 from dataclasses import dataclass
 from typing import Dict, Iterator, List, Literal, Optional, Tuple
 
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.device import Driver
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
 
@@ -169,7 +167,7 @@ ABS1_ERROR_NAMES: Dict[int, str] = {e.value: e.name for e in Abs1StatusError}
 _ACCEL_LSB_PER_G = 16384.0  # 14-bit signed @ ±2 g full scale
 
 
-class ByonoyDriver(Driver, metaclass=ABCMeta):
+class ByonoyDriver(metaclass=ABCMeta):
   """Shared HID communication logic for Byonoy plate readers."""
 
   # Firmware error-code → name mapping. Default mirrors Byonoy's generic
@@ -193,7 +191,7 @@ class ByonoyDriver(Driver, metaclass=ABCMeta):
   def name(self) -> str:
     return self.io.human_readable_device_name
 
-  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
+  async def setup(self) -> None:
     await self.io.setup()
     logger.info("[%s] connected", self.name)
 

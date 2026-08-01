@@ -15,13 +15,11 @@ SpectraMax
 
     SpectraMaxM5
     SpectraMax384Plus
-    MolecularDevicesDriver
-    MolecularDevicesAbsorbanceBackend
-    SpectraMax384PlusAbsorbanceBackend
-    SpectraMaxM5FluorescenceBackend
-    SpectraMaxM5LuminescenceBackend
-    MolecularDevicesTemperatureBackend
+    MolecularDevicesPlateReader
     MolecularDevicesSettings
+    AbsorbanceResult
+    FluorescenceResult
+    LuminescenceResult
     ReadMode
     ReadType
     ReadOrder
@@ -31,15 +29,6 @@ SpectraMax
     ShakeSettings
     KineticSettings
     SpectrumSettings
-
-.. autoclass:: pylabrobot.molecular_devices.spectramax.backend.MolecularDevicesAbsorbanceBackend.AbsorbanceParams
-   :members:
-
-.. autoclass:: pylabrobot.molecular_devices.spectramax.spectramax_m5.SpectraMaxM5FluorescenceBackend.FluorescenceParams
-   :members:
-
-.. autoclass:: pylabrobot.molecular_devices.spectramax.spectramax_m5.SpectraMaxM5LuminescenceBackend.LuminescenceParams
-   :members:
 
 
 ImageXpress Pico

@@ -4,14 +4,14 @@
 import math
 import unittest
 import unittest.mock
+from datetime import datetime
 from typing import Iterator
 
 import pytest
 
 pytest.importorskip("pylibftdi")
 
-from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
-from pylabrobot.agilent.biotek.plate_readers.base import BioTekBackend
+from pylabrobot.agilent.biotek.plate_reader_base import BioTekPlateReaderDriver
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 
@@ -24,7 +24,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   """Tests for the Cytation5Backend."""
 
   async def asyncSetUp(self):
-    self.backend = BioTekBackend(timeout=0.1)
+    self.backend = BioTekPlateReaderDriver(timeout=0.1)
     self.backend.io = unittest.mock.MagicMock()
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()
@@ -40,9 +40,13 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.io.set_rts = unittest.mock.AsyncMock()
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
-    # Mock time.time() to control the timestamp in the results
-    self._time_patcher = unittest.mock.patch("time.time", return_value=12345.6789)
-    self.mock_time = self._time_patcher.start()
+    # Freeze the clock so the timestamp in the results is predictable.
+    self.now = datetime(2024, 5, 17, 12, 34, 56)
+    self._time_patcher = unittest.mock.patch(
+      "pylabrobot.agilent.biotek.plate_reader_base.datetime",
+      unittest.mock.Mock(now=unittest.mock.Mock(return_value=self.now)),
+    )
+    self._time_patcher.start()
     self.addCleanup(self._time_patcher.stop)
 
   async def test_setup(self):
@@ -65,13 +69,13 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def test_open(self):
     self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x03"]
-    await BioTekLoadingTrayBackend(driver=self.backend).open()
+    await self.backend.open()
     self.backend.io.write.assert_called_with(b"J")
 
   async def test_close(self):
     self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x06", b"\x03", b"\x03"]
     plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
-    await BioTekLoadingTrayBackend(driver=self.backend).close(resource=plate)
+    await self.backend.close(plate=plate)
     self.backend.io.write.assert_called_with(b"A")
 
   async def test_request_current_temperature(self):
@@ -198,7 +202,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(resp[0].wavelength, 580)
     self.assertEqual(resp[0].data, expected_data)
     self.assertEqual(resp[0].temperature, 23.6)
-    self.assertEqual(resp[0].timestamp, 12345.6789)
+    self.assertEqual(resp[0].timestamp, self.now)
 
   async def test_read_luminescence_partial(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -232,7 +236,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       focal_height=4.5,
       plate=plate,
       wells=wells,
-      backend_params=BioTekBackend.LuminescenceParams(integration_time=0.4),
+      integration_time=0.4,
     )
 
     self.backend.io.write.assert_any_call(b"D")
@@ -260,7 +264,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(resp), 1)
     self.assertEqual(resp[0].data, expected_data)
     self.assertEqual(resp[0].temperature, 23.6)
-    self.assertEqual(resp[0].timestamp, 12345.6789)
+    self.assertEqual(resp[0].timestamp, self.now)
 
   async def test_read_fluorescence(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -326,7 +330,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(resp[0].emission_wavelength, 528)
     self.assertEqual(resp[0].data, expected_data)
     self.assertEqual(resp[0].temperature, 23.6)
-    self.assertEqual(resp[0].timestamp, 12345.6789)
+    self.assertEqual(resp[0].timestamp, self.now)
 
   async def test_parse_body_asterisks_as_nan(self):
     """Unmeasured wells return ******* which should be parsed as NaN."""
@@ -398,30 +402,35 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
           self.assertEqual(v, e, f"Mismatch at ({r},{c})")
 
 
-class TestBioTekLoadingTrayBackend(unittest.IsolatedAsyncioTestCase):
+class TestBioTekLoadingTray(unittest.IsolatedAsyncioTestCase):
   """The tray must send the plate geometry to the firmware before closing (tall-plate clearance)."""
 
   async def asyncSetUp(self):
-    from pylabrobot.agilent.biotek.loading_tray_backend import BioTekLoadingTrayBackend
-
     self.manager = unittest.mock.Mock()
-    self.driver = unittest.mock.MagicMock()
-    self.driver.set_slow_mode = unittest.mock.AsyncMock()
-    self.driver.set_plate = unittest.mock.AsyncMock()
-    self.driver.send_command = unittest.mock.AsyncMock()
-    self.manager.attach_mock(self.driver.set_plate, "set_plate")
-    self.manager.attach_mock(self.driver.send_command, "send_command")
-    self.backend = BioTekLoadingTrayBackend(driver=self.driver)
+    self.backend = BioTekPlateReaderDriver(timeout=0.1)
+    self.backend.set_slow_mode = unittest.mock.AsyncMock()
+    self.backend.set_plate = unittest.mock.AsyncMock()
+    self.backend.send_command = unittest.mock.AsyncMock()
+    self.manager.attach_mock(self.backend.set_plate, "set_plate")
+    self.manager.attach_mock(self.backend.send_command, "send_command")
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
   async def test_close_sends_plate_geometry_then_closes(self):
-    await self.backend.close(resource=self.plate)
-    self.driver.set_plate.assert_awaited_once_with(self.plate)
-    self.driver.send_command.assert_awaited_once_with("A")
+    await self.backend.close(plate=self.plate)
+    self.backend.set_plate.assert_awaited_once_with(self.plate)
+    self.backend.send_command.assert_awaited_once_with("A")
     # set_plate must run before the close ("A") command.
     self.assertEqual([call[0] for call in self.manager.mock_calls], ["set_plate", "send_command"])
 
   async def test_close_without_plate_skips_set_plate(self):
-    await self.backend.close(resource=None)
-    self.driver.set_plate.assert_not_awaited()
-    self.driver.send_command.assert_awaited_once_with("A")
+    await self.backend.close(plate=None)
+    self.backend.set_plate.assert_not_awaited()
+    self.backend.send_command.assert_awaited_once_with("A")
+
+  async def test_open_sends_j(self):
+    await self.backend.open()
+    self.backend.send_command.assert_awaited_once_with("J")
+
+  async def test_slow_mode_forwarded(self):
+    await self.backend.open(slow=True)
+    self.backend.set_slow_mode.assert_awaited_once_with(True)

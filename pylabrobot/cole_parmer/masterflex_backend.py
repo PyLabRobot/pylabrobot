@@ -1,11 +1,5 @@
 import logging
-from typing import Optional
 
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.pumping.backend import PumpBackend
-from pylabrobot.capabilities.pumping.calibration import PumpCalibration
-from pylabrobot.capabilities.pumping.pumping import Pump
-from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 
 try:
@@ -19,7 +13,7 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 
-class MasterflexDriver(Driver):
+class Masterflex:
   """Serial driver for Cole Parmer Masterflex L/S pumps.
 
   tested on:
@@ -56,7 +50,7 @@ class MasterflexDriver(Driver):
       human_readable_device_name="Masterflex Pump",
     )
 
-  async def setup(self, backend_params: Optional[BackendParams] = None):
+  async def setup(self):
     await self.io.setup()
     await self.io.write(b"\x05")  # Enquiry; ready to send.
     await self.io.write(b"\x05P02\r")
@@ -66,28 +60,18 @@ class MasterflexDriver(Driver):
     await self.io.stop()
     logger.info("[Masterflex %s] disconnected", self.com_port)
 
-  async def send_command(self, command: str):
+  async def send_command(self, command: str) -> bytes:
     command = "\x02P02" + command + "\x0d"
     await self.io.write(command.encode())
     return await self.io.read()
 
-  def serialize(self):
-    return {"type": self.__class__.__name__, "com_port": self.com_port}
-
-
-class MasterflexBackend(PumpBackend):
-  """Pump capability backend for Masterflex L/S pumps."""
-
-  def __init__(self, driver: MasterflexDriver):
-    self.driver = driver
-
   async def run_revolutions(self, num_revolutions: float):
     num_revolutions = round(num_revolutions, 2)
     logger.info(
-      "[Masterflex %s] dispensing %.2f revolutions", self.driver.com_port, num_revolutions
+      "[Masterflex %s] dispensing %.2f revolutions", self.com_port, num_revolutions
     )
     cmd = f"V{num_revolutions}G"
-    await self.driver.send_command(cmd)
+    await self.send_command(cmd)
 
   async def run_continuously(self, speed: float):
     if speed == 0:
@@ -96,35 +80,15 @@ class MasterflexBackend(PumpBackend):
 
     logger.info(
       "[Masterflex %s] pumping continuously at speed=%s direction=%s",
-      self.driver.com_port,
+      self.com_port,
       abs(speed),
       "forward" if speed > 0 else "reverse",
     )
     direction = "+" if speed > 0 else "-"
     speed_int = int(abs(speed))
     cmd = f"S{direction}{speed_int}G0"
-    await self.driver.send_command(cmd)
+    await self.send_command(cmd)
 
   async def halt(self):
-    logger.info("[Masterflex %s] halting", self.driver.com_port)
-    await self.driver.send_command("H")
-
-  def serialize(self):
-    return {
-      "com_port": self.driver.com_port,
-    }
-
-
-class MasterflexPump(Device):
-  """Cole Parmer Masterflex L/S pump."""
-
-  def __init__(
-    self,
-    com_port: str,
-    calibration: Optional[PumpCalibration] = None,
-  ):
-    driver = MasterflexDriver(com_port=com_port)
-    super().__init__(driver=driver)
-    self.driver: MasterflexDriver
-    self.pumping = Pump(backend=MasterflexBackend(driver), calibration=calibration)
-    self._capabilities = [self.pumping]
+    logger.info("[Masterflex %s] halting", self.com_port)
+    await self.send_command("H")

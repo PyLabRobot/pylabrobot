@@ -1,3 +1,7 @@
-from .base import BioTekBackend
-from .cytation import Cytation1, Cytation5, CytationImagingConfig, CytationMicroscopyBackend
-from .synergy import SynergyH1, SynergyH1Backend
+from pylabrobot.agilent.biotek.cytation import (
+  Cytation1,
+  Cytation5,
+  CytationImagingConfig,
+)
+from pylabrobot.agilent.biotek.plate_reader_base import BioTekPlateReaderDriver
+from pylabrobot.agilent.biotek.synergy import SynergyH1

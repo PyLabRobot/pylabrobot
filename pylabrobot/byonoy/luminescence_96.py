@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.driver import (
@@ -11,56 +11,30 @@ from pylabrobot.byonoy.driver import (
   Lum96IntegrationMode,
   encode_well_bitmask,
 )
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.plate_reading.luminescence import (
-  Luminescence,
-  LuminescenceBackend,
-  LuminescenceResult,
-)
-from pylabrobot.device import Device
+from pylabrobot.byonoy.results import LuminescenceResult
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.resources import Coordinate, PlateHolder, Resource, ResourceHolder
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.well import Well
-from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Backend
-# ---------------------------------------------------------------------------
 
-
-class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
+class ByonoyLuminescence96(ByonoyDriver):
   """Backend for the Byonoy Luminescence 96 Automate plate reader."""
 
   def __init__(self) -> None:
     super().__init__(pid=0x119B, device_type=ByonoyDevice.LUMINESCENCE_96, name="Byonoy L96")
 
-  @dataclass
-  class LuminescenceParams(BackendParams):
-    """Byonoy Luminescence 96 parameters for luminescence reads.
-
-    Args:
-      mode: One of "rapid" (100 ms), "sensitive" (2 s, default),
-        "ultra_sensitive" (20 s), or "custom". Presets match the
-        byonoy_device_library mapping.
-      integration_time: Integration time in seconds. If set, forces "custom"
-        mode regardless of `mode`. Required when `mode == "custom"`.
-    """
-
-    mode: Lum96IntegrationMode = "sensitive"
-    integration_time: Optional[float] = None
-
   async def read_luminescence(
     self,
     plate: Plate,
     wells: List[Well],
-    focal_height: float,
-    backend_params: Optional[SerializableMixin] = None,
+    mode: Lum96IntegrationMode = "sensitive",
+    integration_time: Optional[float] = None,
   ) -> List[LuminescenceResult]:
     """Read luminescence.
 
@@ -73,19 +47,18 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
         base; the optical path is determined by plate + base + detector
         geometry, not user-tunable). Passing any value is harmless;
         passing 0 is conventional.
-      backend_params: Backend-specific parameters.
+      mode: One of "rapid" (100 ms), "sensitive" (2 s, default),
+        "ultra_sensitive" (20 s), or "custom". Presets match the
+        byonoy_device_library mapping.
+      integration_time: Integration time in seconds. If set, forces "custom"
+        mode regardless of `mode`. Required when `mode == "custom"`.
     """
-    if not isinstance(backend_params, self.LuminescenceParams):
-      backend_params = ByonoyLuminescence96Backend.LuminescenceParams()
-
     # Resolve mode + integration time
-    if backend_params.integration_time is not None:
+    if integration_time is not None:
       mode = "custom"
-      integration_time = backend_params.integration_time
-    elif backend_params.mode == "custom":
+    elif mode == "custom":
       raise ValueError("'custom' mode requires integration_time to be set.")
     else:
-      mode = backend_params.mode
       integration_time = LUM96_PRESET_S[mode]
 
     # Firmware always scans all 96 wells; this mask only filters which are
@@ -210,14 +183,9 @@ class ByonoyLuminescence96Backend(ByonoyDriver, LuminescenceBackend):
       LuminescenceResult(
         data=reshape_2d(masked, (8, 12)),
         temperature=None,
-        timestamp=time.time(),
+        timestamp=datetime.now(),
       )
     ]
-
-
-# ---------------------------------------------------------------------------
-# Resources
-# ---------------------------------------------------------------------------
 
 
 class _ByonoyLuminescenceReaderPlateHolder(PlateHolder):
@@ -268,7 +236,7 @@ class ByonoyLuminescenceBaseUnit(Resource):
     reader_unit_holder_child_location: Coordinate,
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
-    model: Optional[str] = None,
+    model: Optional[str] = "Byonoy L96 Reader Unit",
     barcode: Optional[Barcode] = None,
   ):
     super().__init__(
@@ -313,40 +281,8 @@ class ByonoyLuminescenceBaseUnit(Resource):
       "respectively."
     )
 
-
-# ---------------------------------------------------------------------------
-# Device (reader unit — sits on top of a ByonoyLuminescenceBaseUnit)
-# ---------------------------------------------------------------------------
-
-
-class ByonoyLuminescence96(Resource, Device):
-  """Byonoy Luminescence 96 reader unit."""
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    preferred_pickup_location: Optional[Coordinate] = None,
-  ):
-    backend = ByonoyLuminescence96Backend()
-    Resource.__init__(
-      self,
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      model="Byonoy L96 Reader Unit",
-      preferred_pickup_location=preferred_pickup_location,
-    )
-    Device.__init__(self, driver=backend)
-    self.driver: ByonoyLuminescence96Backend = backend
-    self.luminescence = Luminescence(backend=backend)
-    self._capabilities = [self.luminescence]
-
   def serialize(self) -> dict:
-    return {**Resource.serialize(self), **Device.serialize(self)}
+    return {**Resource.serialize(self)}
 
 
 # ---------------------------------------------------------------------------

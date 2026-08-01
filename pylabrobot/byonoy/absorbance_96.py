@@ -1,34 +1,24 @@
 import asyncio
 import logging
 import time
+from datetime import datetime
 from typing import List, Optional, Tuple
 
 from pylabrobot.byonoy.driver import ABS96_ERROR_NAMES, ByonoyDevice, ByonoyDriver
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.plate_reading.absorbance import (
-  Absorbance,
-  AbsorbanceBackend,
-  AbsorbanceResult,
-)
-from pylabrobot.device import Device
+from pylabrobot.byonoy.results import AbsorbanceResult
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.resources import Coordinate, PlateHolder, Resource, ResourceHolder
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.well import Well
-from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.list import reshape_2d
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Backend
-# ---------------------------------------------------------------------------
 
-
-class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
-  """Backend for the Byonoy Absorbance 96 Automate plate reader."""
+class ByonoyAbsorbance96(ByonoyDriver):
+  """Byonoy Absorbance 96 Automate plate reader."""
 
   _ERROR_NAMES = ABS96_ERROR_NAMES
 
@@ -36,8 +26,8 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
     super().__init__(pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96")
     self.available_wavelengths: List[float] = []
 
-  async def setup(self, backend_params: Optional["BackendParams"] = None) -> None:
-    await super().setup(backend_params=backend_params)
+  async def setup(self) -> None:
+    await super().setup()
     await self.initialize_measurements()
     self.available_wavelengths = await self.request_available_absorbance_wavelengths()
     logger.info(
@@ -166,7 +156,6 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
     plate: Plate,
     wells: List[Well],
     wavelength: int,
-    backend_params: Optional[SerializableMixin] = None,
   ) -> List[AbsorbanceResult]:
     if wavelength not in self.available_wavelengths:
       raise ValueError(
@@ -194,14 +183,9 @@ class ByonoyAbsorbance96Backend(ByonoyDriver, AbsorbanceBackend):
         data=matrix,
         wavelength=wavelength,
         temperature=None,
-        timestamp=time.time(),
+        timestamp=datetime.now(),
       )
     ]
-
-
-# ---------------------------------------------------------------------------
-# Resources
-# ---------------------------------------------------------------------------
 
 
 class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
@@ -330,26 +314,6 @@ def byonoy_a96a_illumination_unit(name: str) -> Resource:
     model="Byonoy A96A Illumination Unit",
     preferred_pickup_location=Coordinate(x=size_x / 2, y=size_y / 2, z=29.5),
   )
-
-
-# ---------------------------------------------------------------------------
-# Device + Resource composite
-# ---------------------------------------------------------------------------
-
-
-class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, Device):
-  """Byonoy Absorbance 96 Automate plate reader."""
-
-  def __init__(self, name: str = "byonoy_absorbance_96"):
-    backend = ByonoyAbsorbance96Backend()
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
-    Device.__init__(self, driver=backend)
-    self.driver: ByonoyAbsorbance96Backend = backend
-    self.absorbance = Absorbance(backend=backend)
-    self._capabilities = [self.absorbance]
-
-  def serialize(self) -> dict:
-    return {**Resource.serialize(self), **Device.serialize(self)}
 
 
 def byonoy_a96a_detection_unit(name: str) -> ByonoyAbsorbance96:

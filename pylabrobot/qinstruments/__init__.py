@@ -1,4 +1,4 @@
-from .bioshake import (
+from pylabrobot.qinstruments.bioshake import (
   BioShake,
   BioShake3000,
   BioShake3000Elm,
@@ -8,11 +8,8 @@ from .bioshake import (
   BioShake5000Elm,
   BioShakeD30Elm,
   BioShakeD30TElm,
-  BioShakeDriver,
   BioShakeQ1,
   BioShakeQ2,
-  BioShakeShakerBackend,
-  BioShakeTemperatureBackend,
   ColdPlate,
   Heatplate,
 )

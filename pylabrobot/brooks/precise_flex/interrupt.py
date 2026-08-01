@@ -7,7 +7,7 @@ stop+resync that is itself protected against a second interrupt, then re-raises 
 ``asyncio.CancelledError`` (preserving cancellation) or converts a ``KeyboardInterrupt`` to
 ``OperationInterrupted``.
 
-Behaviour by context:
+Behavior by context:
 - Notebook: the kernel stays alive; the device is stopped and the connection resynced, so work
   continues in the same session.
 - Script via ``asyncio.run``: shutdown cancels the task, so the stop still fires before the process

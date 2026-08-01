@@ -11,5 +11,4 @@ pylabrobot.mettler_toledo package
   :recursive:
 
     MettlerToledoWXS205SDUDriver
-    MettlerToledoWXS205SDUScaleBackend
     MettlerToledoError

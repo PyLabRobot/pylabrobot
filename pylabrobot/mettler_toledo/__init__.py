@@ -1,5 +1,1 @@
-from .mettler_toledo import (
-  MettlerToledoError,
-  MettlerToledoWXS205SDUDriver,
-  MettlerToledoWXS205SDUScaleBackend,
-)
+from .mettler_toledo import MettlerToledoError, MettlerToledoWXS205SDU

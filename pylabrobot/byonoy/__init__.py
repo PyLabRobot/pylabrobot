@@ -1,6 +1,5 @@
 from .absorbance_96 import (
   ByonoyAbsorbance96,
-  ByonoyAbsorbance96Backend,
   ByonoyAbsorbanceBaseUnit,
   byonoy_a96a,
   byonoy_a96a_detection_unit,
@@ -22,9 +21,9 @@ from .driver import (
   Lum96IntegrationMode,
   encode_well_bitmask,
 )
+from .results import AbsorbanceResult, LuminescenceResult
 from .luminescence_96 import (
   ByonoyLuminescence96,
-  ByonoyLuminescence96Backend,
   ByonoyLuminescenceBaseUnit,
   byonoy_l96,
   byonoy_l96_base_unit,

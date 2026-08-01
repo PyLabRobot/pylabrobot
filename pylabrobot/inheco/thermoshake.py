@@ -2,29 +2,44 @@ import asyncio
 import logging
 from typing import Optional
 
-from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
-from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
-from pylabrobot.capabilities.temperature_controlling import TemperatureController
-from pylabrobot.device import Device
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .control_box import InhecoTECControlBox
-from .cpac import InhecoTemperatureControllerBackend
+from .temperature_controller import InhecoTemperatureController
 
 logger = logging.getLogger(__name__)
 
 
-class InhecoThermoshakeBackend(
-  InhecoTemperatureControllerBackend, ShakerBackend, HasContinuousShaking
-):
-  """Backend for Inheco Thermoshake devices.
+class InhecoThermoShake(ResourceHolder, InhecoTemperatureController):
+  """Inheco ThermoShake: a temperature-controlled, shaking plate holder addressed by index on a
+  control box.
 
   https://www.inheco.com/thermoshake-ac.html
   """
 
-  async def stop(self):
-    await self.stop_shaking()
-    await super().stop()
+  def __init__(
+    self,
+    index: int,
+    control_box: InhecoTECControlBox,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    child_location: Coordinate,
+    category: str = "heating_shaking",
+    model: Optional[str] = None,
+  ):
+    ResourceHolder.__init__(
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      child_location=child_location,
+      category=category,
+      model=model,
+    )
+    InhecoTemperatureController.__init__(self, index=index, interface=control_box)
 
   async def _start_shaking_command(self):
     return await self.interface.send_command(f"{self.index}ASE1")
@@ -57,67 +72,12 @@ class InhecoThermoshakeBackend(
     await self.set_shaker_shape(shape=shape)
     await self._start_shaking_command()
 
-  async def shake(self, speed: float, duration: float, backend_params=None):
+  async def shake(self, speed: float, duration: float):
     await self.start_shaking(speed=speed)
     try:
       await asyncio.sleep(duration)
     finally:
       await self.stop_shaking()
-
-  @property
-  def supports_locking(self) -> bool:
-    return False
-
-  async def lock_plate(self):
-    raise NotImplementedError("Locking is not supported on Inheco ThermoShake devices.")
-
-  async def unlock_plate(self):
-    raise NotImplementedError("Unlocking is not supported on Inheco ThermoShake devices.")
-
-
-class InhecoThermoShake(ResourceHolder, Device):
-  """Inheco ThermoShake: combined temperature control and shaking.
-
-  Example:
-    >>> from pylabrobot.inheco import InhecoThermoShake, inheco_thermoshake
-    >>> ts = inheco_thermoshake("ts", control_box=box, index=1)
-    >>> await ts.setup()
-    >>> await ts.tc.set_temperature(37.0)
-    >>> await ts.shaking.shake(speed=300)
-  """
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    driver: InhecoThermoshakeBackend,
-    child_location: Coordinate,
-    category: str = "heating_shaking",
-    model: Optional[str] = None,
-  ):
-    ResourceHolder.__init__(
-      self,
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      child_location=child_location,
-      category=category,
-      model=model,
-    )
-    Device.__init__(self, driver=driver)
-    self.driver: InhecoThermoshakeBackend = driver
-    self.tc = TemperatureController(backend=driver)
-    self.shaker = Shaker(backend=driver)
-    self._capabilities = [self.tc, self.shaker]
-
-  def serialize(self) -> dict:
-    return {
-      **Device.serialize(self),
-      **ResourceHolder.serialize(self),
-    }
 
 
 def inheco_thermoshake_ac(
@@ -134,7 +94,8 @@ def inheco_thermoshake_ac(
 
   return InhecoThermoShake(
     name=name,
-    driver=InhecoThermoshakeBackend(control_box=control_box, index=index),
+    control_box=control_box,
+    index=index,
     size_x=147,  # from spec
     size_y=104,  # from spec
     size_z=115.9,  # from spec
@@ -153,7 +114,8 @@ def inheco_thermoshake(
 
   return InhecoThermoShake(
     name=name,
-    driver=InhecoThermoshakeBackend(control_box=control_box, index=index),
+    control_box=control_box,
+    index=index,
     size_x=147,  # from spec
     size_y=104,  # from spec
     size_z=118,  # from spec
@@ -175,7 +137,8 @@ def inheco_thermoshake_rm(
 
   return InhecoThermoShake(
     name=name,
-    driver=InhecoThermoshakeBackend(control_box=control_box, index=index),
+    control_box=control_box,
+    index=index,
     size_x=147,  # from spec
     size_y=104,  # from spec
     size_z=116,  # from spec

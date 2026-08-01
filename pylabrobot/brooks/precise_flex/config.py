@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Dict, Literal
 
-from pylabrobot.capabilities.arms.standard import JointPose
+from pylabrobot.brooks.precise_flex.kinematics import JointPose
 
 from . import kinematics
 from .kinematics import WorkEnvelope

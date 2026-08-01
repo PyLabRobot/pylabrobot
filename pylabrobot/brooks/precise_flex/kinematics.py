@@ -17,9 +17,8 @@ Sign conventions follow right-hand rule about +Z (CCW positive looking down).
 
 from dataclasses import dataclass
 from math import atan2, cos, degrees, hypot, pi, radians, sin
-from typing import Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
-from pylabrobot.capabilities.arms.standard import CartesianPose, JointPose
 from pylabrobot.resources import Coordinate, Rotation
 
 # ---------------------------------------------------------------------------
@@ -27,11 +26,20 @@ from pylabrobot.resources import Coordinate, Rotation
 # ---------------------------------------------------------------------------
 
 
+# Joint positions keyed by firmware axis number (see the `Axis` enum).
+JointPose = Dict[int, float]
+
+
+@dataclass
+class CartesianPose:
+  """Location and rotation of the gripper."""
+
+  location: Coordinate
+  rotation: Rotation
+
+
 ElbowOrientation = Literal["right", "left"]
 Wrist = Literal["cw", "ccw"]
-
-
-# -- value types, device params & errors -----------------------------------
 
 
 @dataclass
