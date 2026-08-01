@@ -22,7 +22,8 @@ sila = ["zeroconf>=0.131.0", "grpcio"]
 cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila,pico,xarm]"]
+canopen = ["canopen"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila,pico,xarm,canopen]"]
 test = [
   "pytest",
   "pytest-timeout",
