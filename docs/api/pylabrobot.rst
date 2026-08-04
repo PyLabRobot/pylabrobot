@@ -24,6 +24,7 @@ Manufacturers
     pylabrobot.big_bear
     pylabrobot.brooks
     pylabrobot.byonoy
+    pylabrobot.cole_parmer
     pylabrobot.curiox
     pylabrobot.hamilton
     pylabrobot.high_res
