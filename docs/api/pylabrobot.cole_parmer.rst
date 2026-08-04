@@ -1,7 +1,7 @@
 .. currentmodule:: pylabrobot.cole_parmer
 
 pylabrobot.cole_parmer package
-=============================
+==============================
 
 .. currentmodule:: pylabrobot.cole_parmer.genogrinder
 

@@ -52,14 +52,14 @@ class GenoGrinder:
   mixes it for a fixed duration at a fixed speed.
 
   Product page:
-    - https://www.coleparmer.com/i/cole-parmer-sampleprep-hg-600-230-geno-grinder-2010-
-      tissue-homogenizer-and-cell-lyser-230-vac-50-hz/0457684
+    https://www.coleparmer.com/i/cole-parmer-sampleprep-hg-600-230-geno-grinder-2010-tissue-homogenizer-and-cell-lyser-230-vac-50-hz/0457684
 
   Serial settings:
     9600 baud, 8 data bits, no parity, 1 stop bit, "\\r" terminator.
 
   Commands are ``*NN*`` frames; each is acknowledged with a reply whose text
-  identifies the reached state:
+  identifies the reached state::
+
     *01*              status poll (Standby / Running Sample / Locking / Mixing /
                       Unlocking / Run Complete)
     *02,<sss>,<ssss>* set run parameters (duration seconds, speed rpm)
@@ -70,6 +70,7 @@ class GenoGrinder:
     *10*              home the clamp
     *11* / *12*       open / close the clamp
     *15*              clamp status
+
   A command that does not reach its expected state clears the error (*05*) and
   raises ``GenoGrinderError``.
 
