@@ -210,12 +210,12 @@ class ByonoyLuminescence96(Resource, ByonoyDriver):
         f"{self.name} luminescence read produced {len(all_rows)} values "
         f"(expected a positive multiple of 96)"
       )
-    plate = all_rows[0:96]
+    plane0 = all_rows[0:96]
 
     # Firmware zero-fills wells outside the mask. Convert those to None per
     # the LuminescenceResult contract ("None for unmeasured wells") — 0.0 is
     # a legitimate measurement (baseline subtraction can yield ~0 or negative).
-    masked: List[Optional[float]] = [v if m else None for v, m in zip(plate, mask_bools)]
+    masked: List[Optional[float]] = [v if m else None for v, m in zip(plane0, mask_bools)]
 
     return [
       LuminescenceResult(
