@@ -74,7 +74,7 @@ class MantisDiaphragmDispenserBackend(DiaphragmDispenserBackend):
     )
 
     if not (self._driver.current_chip == chip_number and self._driver.is_primed):
-      await self._driver.prime_chip(chip_number, volume=backend_params.prime_volume)
+      await self._driver.prime_chip(chip_number, return_chip=False)
 
     try:
       c_type = self._driver.get_chip_type(chip_number)
@@ -113,7 +113,7 @@ class MantisDiaphragmDispenserBackend(DiaphragmDispenserBackend):
     chip_number = (
       backend_params.chip if backend_params.chip is not None else self._driver.default_chip()
     )
-    await self._driver.prime_chip(chip_number, volume=backend_params.volume)
+    await self._driver.prime_chip(chip_number)
 
   @staticmethod
   def _container_to_machine_coord(

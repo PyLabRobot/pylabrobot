@@ -15,7 +15,7 @@ The conversions mirror the vendor ``FopleyMotorToMotorAdapter`` /
 
 and the post-home walk is ``MantisKinematics.xy_to_theta(PostHomingPosition)``
 fed through :meth:`MotorConfig.to_packet_units` (vendor ``ThetaMotorOffset`` is 0).
-All of this was verified byte-exact against coldstart/warmstart captures.
+All of this was verified byte-exact against the vendor homing sequence.
 """
 
 from __future__ import annotations
@@ -46,8 +46,8 @@ class HomeArgs:
 class MantisHomingConfig:
   """Homing calibration in firmware packet units.
 
-  Constructing ``MantisHomingConfig()`` yields the validated values for the
-  reference machine (M-001294) as an offline fallback; prefer
+  Constructing ``MantisHomingConfig()`` yields the validated values for a
+  reference machine as an offline fallback; prefer
   :meth:`from_robotarm_config` so the values come from the actual machine's
   vendor install.
   """

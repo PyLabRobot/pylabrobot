@@ -245,5 +245,60 @@ class TestMantisDiaphragmCoordinates(unittest.TestCase):
       MantisDiaphragmDispenserBackend._container_to_machine_coord(orphan, dispense_z=44.0)
 
 
+class TestStageTransform(unittest.TestCase):
+  """The exact vendor plate->arm transform, locked to the vendor dispense ground truth.
+
+  Parameters are the real per-machine vendor values (SBS Adapter origin, Device.config
+  matrix + offsets, PT3-96-Assay plate geometry). The expected arm coords come from the
+  vendor dispense sequence, so this guards byte-exact reproduction of
+  StagePositionCalculator / MantisMicroplate.GetAbsolutePosition.
+  """
+
+  def _transform(self):
+    from pylabrobot.formulatrix.mantis.mantis_stage_config import StageTransform
+
+    return StageTransform(
+      origin=(-46.453, 43.205, 52.806),
+      matrix=[
+        [0.99246149016129015, 0.026358655250032892, -1.3585290754514148],
+        [-0.024225908891680432, 0.98635034625359053, -0.38825879442043743],
+        [7.7381493486286946e-05, -0.00020268975269721254, 1.01904881773503],
+      ],
+      offset_x=(-0.012, -0.031, 0.005),
+      offset_y=(0.030, 0.000, -0.003),
+      left_top=(15.380, 11.240, -5.000),
+      pitch_col=9.0,
+      pitch_row=9.0,
+    )
+
+  def test_well_arm_xyz_matches_vendor(self):
+    st = self._transform()
+    # (row, col) -> arm (x, y, z) from the vendor dispense sequence.
+    expected = {
+      (0, 0): (-30.591, 53.765, 47.849),  # A1
+      (1, 1): (-21.496, 62.446, 47.867),  # B2
+      (3, 3): (-3.247, 79.866, 47.903),  # D4
+      (7, 7): (33.500, 114.943, 47.975),  # H8
+    }
+    for (row, col), (ex, ey, ez) in expected.items():
+      x, y, z = st.well_arm_xyz(row, col)
+      self.assertAlmostEqual(x, ex, places=2)
+      self.assertAlmostEqual(y, ey, places=2)
+      self.assertAlmostEqual(z, ez, places=2)
+
+  def test_z_tilt_is_not_flat(self):
+    # The affine Z term must produce a real per-well gradient (not a constant).
+    st = self._transform()
+    z_a1 = st.well_arm_xyz(0, 0)[2]
+    z_h8 = st.well_arm_xyz(7, 7)[2]
+    self.assertGreater(abs(z_h8 - z_a1), 0.1)
+
+  def test_well_name_to_rc(self):
+    from pylabrobot.formulatrix.mantis.mantis_stage_config import well_name_to_rc
+
+    self.assertEqual(well_name_to_rc("A1"), (0, 0))
+    self.assertEqual(well_name_to_rc("H12"), (7, 11))
+
+
 if __name__ == "__main__":
   unittest.main()

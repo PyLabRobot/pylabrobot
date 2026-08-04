@@ -83,6 +83,7 @@ from .mantis_kinematics import (
 )
 from .mantis_chipchanger_config import load_attach_path, load_waste_path
 from .mantis_robotarm_config import HomeArgs, MantisHomingConfig
+from .mantis_stage_config import StageTransform
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,11 @@ DEFAULT_CHIP_TYPE_MAP: Dict[int, str] = {
 # (MoveAbsolute(step + live_position)), so it self-corrects from any start pose —
 # a hardcoded absolute enforce is what crashed intermittently on warm starts.
 _PREHOME_MAX_PASSES = 8  # retract passes before giving up seeking the hard stop
+
+# One ~1uL dispense PPI group for the chip (vendor dispense vals; the
+# contributor's PPI_SEQUENCES had a different chip's vals here). The per-well XYZ
+# (incl. the stage-tilt Z) now comes from StageTransform, validated byte-exact.
+_DISPENSE_1UL = [(34, 40, [22]), (14, 40, [23]), (15, 40, [21]), (21, 40, [29]), (13, 40, [31])]
 
 
 class MantisDriver(Driver):
@@ -348,7 +354,7 @@ class MantisDriver(Driver):
 
     The vendor detach is ``ReverseSequence`` of the attach: press the chip back
     onto the nest, hold ``dwell_s`` so the nest's magnet recaptures it, then lift
-    away. Verified against the chip-3 detach in homethenprime.pcap."""
+    away. Verified against the vendor chip-detach sequence."""
     if self._current_chip != chip_number:
       logger.warning(
         "Requested to detach chip %d but current chip is %s", chip_number, self._current_chip
@@ -408,13 +414,22 @@ class MantisDriver(Driver):
       await self._queue_move_xy(wp)
     await self._wait_queue_drained(baseline)
 
-  async def prime_chip(self, chip_number: int, cycles: int = 2) -> None:
+  async def _queue_move_raw(self, triplets) -> int:
+    """Queue a coordinated move with EXACT firmware packet triplets
+    ``[[pos,vel,acc] x3]`` (motors 0,1,Z), bypassing kinematics. Used to replay a
+    captured dispense byte-for-byte, including Z-hold (vel=0) moves."""
+    return await self.fmlx.queue_move_item(False, True, triplets)
+
+  async def prime_chip(
+    self, chip_number: int, cycles: int = 2, return_chip: bool = True
+  ) -> None:
     """Prime a chip the way the vendor does: pick it up, travel to the waste
     station, run the PPI prime pulses there, return, and put the chip back.
 
     All geometry is config-driven — the chip dock and the waste-travel path load
-    from the vendor install. The PPI ``primepump`` sequence matches the pcap, run
-    ``cycles`` times (homethenprime uses 2 per chip) plus the closing pulse. Prime
+    from the vendor install. The PPI ``primepump`` sequence matches the vendor
+    sequence, run ``cycles`` times (the vendor prime uses 2 per chip) plus the
+    closing pulse. Prime
     pressures: vacuum (sensor 2) −12.5, dispense (sensor 1) 12.0.
     """
     if self._install_root is None:
@@ -435,7 +450,7 @@ class MantisDriver(Driver):
     waste = load_waste_path(self._install_root)
     await self._run_move_path(waste)
 
-    # Prime pulses at the waste station, then the closing pulse (pcap: dur136 v17).
+    # Prime pulses at the waste station, then the closing pulse (vendor: dur136 v17).
     c_type = self.get_chip_type(chip_number)
     primepump = PPI_SEQUENCES[c_type]["primepump"]
     baseline = self._seq_drain_count
@@ -445,10 +460,83 @@ class MantisDriver(Driver):
     await self.fmlx.queue_write_ppi(136, 40, [17])
     await self._wait_queue_drained(baseline)
 
-    # Return from the waste station, then put the chip back.
+    # Return from the waste station, then put the chip back (unless asked to keep
+    # it on the head, e.g. to dispense right after priming).
     await self._run_move_path(list(reversed(waste)))
-    await self.detach_chip(chip_number)
+    if return_chip:
+      await self.detach_chip(chip_number)
     self._is_primed = True
+
+  async def dispense(
+    self,
+    well_volumes: Dict[str, float],
+    chip_number: Optional[int] = None,
+    plate: str = "PT3-96-Assay",
+    dispense_z: Optional[float] = None,
+    hover_z: Optional[float] = None,
+  ) -> None:
+    """Config-driven dispense to plate wells (Mantis-native; no PLR).
+
+    ``well_volumes`` maps well names to volumes in uL, e.g. ``{"A1": 1.0, "D4": 4.0}``.
+    Each well's arm-frame (X, Y, Z) is computed EXACTLY as the vendor does
+    (:class:`StageTransform`: the ``Device.config`` projective matrix for XY plus the
+    affine Z-tilt, the ``SBS Adapter.ad.txt`` origin, and the ``<plate>.pd.txt``
+    geometry) — validated byte-exact against the vendor dispense sequence, so Z follows the real
+    per-well stage tilt rather than a flat value. Dispense PPI comes from the validated
+    capture. Mirrors the vendor: pick up & prime the chip, descend to working height at
+    the center, traverse the wells firing pulses, lift, detach.
+
+    ``dispense_z`` optionally overrides Z with a single flat height (mm). ``hover_z``
+    overrides Z with a higher/safe flat height AND skips dispensing — for validating
+    the XY transform over the plate.
+    """
+    if self._install_root is None:
+      raise RuntimeError("dispense needs the vendor install (install_root=)")
+    chip_number = chip_number if chip_number is not None else self.default_chip()
+    stage = StageTransform.from_install(self._install_root, plate)
+    recharge = PPI_SEQUENCES[self.get_chip_type(chip_number)]["primepump"]
+
+    def well_xyz(name: str) -> Tuple[float, float, float]:
+      x, y, z = stage.well_arm_xyz_name(name)
+      if hover_z is not None:
+        z = hover_z
+      elif dispense_z is not None:
+        z = dispense_z
+      return x, y, z
+
+    if hover_z is None and not (self._current_chip == chip_number and self._is_primed):
+      await self.prime_chip(chip_number, return_chip=False)
+    elif hover_z is not None and self._current_chip != chip_number:
+      await self.attach_chip(chip_number)
+
+    try:
+      targets = {w: well_xyz(w) for w in well_volumes}
+      # Descend to working height at the center first (as the vendor does); the center
+      # (15, 31.17) sits in front of the plate, so this descent is over open stage.
+      z0 = next(iter(targets.values()))[2]
+      await self._run_move_path([(15.0, 31.17, z0)])
+      for well, vol in well_volumes.items():
+        x, y, z = targets[well]
+        logger.info("Dispense %s -> arm (%.3f, %.3f, %.3f) vol=%.1fuL", well, x, y, z, vol)
+        await self._run_move_path([(x, y, z)])
+        if hover_z is not None:
+          await asyncio.sleep(2.5)
+          continue
+        # Fire ~vol pulses (one ~1uL group each), then a recharge to keep the chip charged.
+        baseline = self._seq_drain_count
+        for _ in range(max(1, round(vol))):
+          for dur, addr, vals in _DISPENSE_1UL:
+            await self.fmlx.queue_write_ppi(dur, addr, vals)
+        for dur, addr, vals in recharge:
+          await self.fmlx.queue_write_ppi(dur, addr, vals)
+        await self._wait_queue_drained(baseline)
+      # Lift clear of the plate.
+      await self._run_move_path([(15.0, 31.17, -1.5)])
+    finally:
+      if self._current_chip == chip_number:
+        await self.detach_chip(chip_number)
+    if hover_z is None:
+      self._is_primed = False
 
   async def execute_ppi_sequence(self, chip_number: int, sequence_name: str) -> None:
     c_type = self.get_chip_type(chip_number)

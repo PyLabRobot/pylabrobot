@@ -11,8 +11,8 @@ This composes a chip's ATTACH (pickup) path in the same order the vendor
 resolving each ``MoveSequenceItem`` (absolute ``X/Y/Z`` or relative ``dX/dY/dZ``,
 unspecified axes hold their running value). The head is pressed to the Origin
 plunge depth and HELD ``ATTACH_DWELL_S`` (a passive magnet captures the chip — no
-valve/PPI fires; verified against homethenprime.pcap). Composition verified
-byte-exact against that capture.
+valve/PPI fires; verified against the vendor prime sequence). Composition verified
+byte-exact against that sequence.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ _ATTACH_ORDER = (
 )
 
 # Hold at the Origin plunge for the passive magnet to capture the chip. Observed
-# ~1.43 s in homethenprime.pcap; rounded slightly up for margin.
+# ~1.43 s in the vendor prime sequence; rounded slightly up for margin.
 ATTACH_DWELL_S = 1.45
 
 _CONFIG_REL = os.path.join("Data", "Device", "Configs", "ChipChanger.config")
@@ -136,7 +136,7 @@ def _dedup(wps: List[Waypoint]) -> List[Waypoint]:
 
 
 # The Mantis idle / ready XY. A waste-station MoveSequenceItem that specifies only
-# Z (no X/Y) returns the arm to idle XY (verified against homethenprime.pcap: this
+# Z (no X/Y) returns the arm to idle XY (verified against the vendor prime sequence: this
 # is the center via-point that keeps the long waste swing clear of the tubing).
 _IDLE_XY: Tuple[float, float] = (15.0, 31.17)
 _WASTE_REL = os.path.join("Data", "System", "Sequences", "Common", "MoveToWasteStation.seq.txt")
@@ -145,7 +145,7 @@ _WASTE_REL = os.path.join("Data", "System", "Sequences", "Common", "MoveToWasteS
 def load_waste_path(install_root: str) -> List[Waypoint]:
   """Load the move-to-waste-station path (the prime travel route) from the vendor
   ``MoveToWasteStation.seq.txt``. Z-only lines return to idle XY (a safe center
-  via-point). Verified byte-exact against homethenprime.pcap."""
+  via-point). Verified byte-exact against the vendor prime sequence."""
   path = os.path.join(install_root, _WASTE_REL)
   x, y, z = _IDLE_XY[0], _IDLE_XY[1], 0.0
   wps: List[Waypoint] = []
