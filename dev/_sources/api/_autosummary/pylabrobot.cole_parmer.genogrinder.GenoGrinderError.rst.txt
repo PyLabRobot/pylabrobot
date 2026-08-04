@@ -1,0 +1,6 @@
+﻿pylabrobot.cole\_parmer.genogrinder.GenoGrinderError
+====================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.genogrinder
+
+.. autoexception:: GenoGrinderError

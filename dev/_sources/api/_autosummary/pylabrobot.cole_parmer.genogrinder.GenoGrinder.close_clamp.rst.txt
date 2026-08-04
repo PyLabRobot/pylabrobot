@@ -1,0 +1,6 @@
+pylabrobot.cole\_parmer.genogrinder.GenoGrinder.close\_clamp
+============================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.genogrinder
+
+.. automethod:: GenoGrinder.close_clamp

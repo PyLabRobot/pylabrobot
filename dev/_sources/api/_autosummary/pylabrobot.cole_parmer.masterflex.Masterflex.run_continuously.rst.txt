@@ -1,0 +1,6 @@
+pylabrobot.cole\_parmer.masterflex.Masterflex.run\_continuously
+===============================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.masterflex
+
+.. automethod:: Masterflex.run_continuously

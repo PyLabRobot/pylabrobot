@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.cole\_parmer.genogrinder.GenoGrinder
+===============================================
+
+.. currentmodule:: pylabrobot.cole_parmer.genogrinder
+
+.. autoclass:: GenoGrinder
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GenoGrinder.__init__
+      ~GenoGrinder.close_clamp
+      ~GenoGrinder.home_clamp
+      ~GenoGrinder.open_clamp
+      ~GenoGrinder.request_clamp_state
+      ~GenoGrinder.request_status
+      ~GenoGrinder.setup
+      ~GenoGrinder.shake
+      ~GenoGrinder.stop
+      ~GenoGrinder.stop_shaking
+   
+   

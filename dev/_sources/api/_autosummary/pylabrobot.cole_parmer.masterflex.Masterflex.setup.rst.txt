@@ -1,0 +1,6 @@
+pylabrobot.cole\_parmer.masterflex.Masterflex.setup
+===================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.masterflex
+
+.. automethod:: Masterflex.setup

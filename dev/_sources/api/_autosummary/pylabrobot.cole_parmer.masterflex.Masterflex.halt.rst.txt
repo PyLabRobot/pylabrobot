@@ -1,0 +1,6 @@
+pylabrobot.cole\_parmer.masterflex.Masterflex.halt
+==================================================
+
+.. currentmodule:: pylabrobot.cole_parmer.masterflex
+
+.. automethod:: Masterflex.halt
