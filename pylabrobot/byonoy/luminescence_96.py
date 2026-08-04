@@ -198,15 +198,24 @@ class ByonoyLuminescence96(Resource, ByonoyDriver):
         f"(chunk flags: {[f'0x{f:02x}' for f in chunk_flags]})"
       )
     self._warn_chunk_flags(chunk_flags)
-    if len(all_rows) != 96:
+    # The firmware streams the plate as one or more concatenated 96-well "tables"
+    # (planes): seq_len chunks of 12 => seq_len / 8 tables. Some units return a
+    # single plane (seq_len == 8), others return several (e.g. seq_len == 64 => 8
+    # planes / 768 values). Only the first table is the reportable measurement —
+    # this mirrors the vendor library, whose lum96_measure copies results[0] and
+    # discards the rest (the extra planes are firmware-internal gain/diagnostic
+    # data). Keep plane 0.
+    if len(all_rows) == 0 or len(all_rows) % 96 != 0:
       raise RuntimeError(
-        f"{self.name} luminescence read produced {len(all_rows)} values (expected 96)"
+        f"{self.name} luminescence read produced {len(all_rows)} values "
+        f"(expected a positive multiple of 96)"
       )
+    plane0 = all_rows[0:96]
 
     # Firmware zero-fills wells outside the mask. Convert those to None per
     # the LuminescenceResult contract ("None for unmeasured wells") — 0.0 is
     # a legitimate measurement (baseline subtraction can yield ~0 or negative).
-    masked: List[Optional[float]] = [v if m else None for v, m in zip(all_rows, mask_bools)]
+    masked: List[Optional[float]] = [v if m else None for v, m in zip(plane0, mask_bools)]
 
     return [
       LuminescenceResult(
