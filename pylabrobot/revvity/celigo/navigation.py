@@ -87,10 +87,11 @@ def galvo_field_of_view_offsets_mm(
   calibration: CalibrationConfig,
   navigation: NavigationConfig,
 ) -> List[Coordinate2D]:
-  """Galvo FOV-center offsets (mm, relative to FOR center) in serpentine order.
+  """Sample-relative FOV-center offsets (mm) in serpentine order.
 
   :meth:`pylabrobot.revvity.celigo.galvo.Galvo.voltages_for_offset` combines each offset with
-  the calibrated imaging center and logical-filter correction.
+  the calibrated imaging center and logical-filter correction, including the conversion
+  to the galvo calibration frame.
   """
   columns, rows = fields_of_view_per_field_of_reference(calibration, navigation)
   effective_x_mm, effective_y_mm = effective_fov_mm(calibration, navigation)

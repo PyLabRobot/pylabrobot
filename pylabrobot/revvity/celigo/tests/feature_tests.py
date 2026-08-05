@@ -5,6 +5,7 @@ import ctypes
 import struct
 import threading
 import unittest
+import zlib
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.revvity.celigo.camera import CameraError, CameraFrame, LumeneraCamera
@@ -789,6 +790,25 @@ class TestCameraFrame(unittest.TestCase):
     self.assertEqual(flat.statistics(), (5, 5, 5.0))
     self.assertEqual(flat.sharpness(sample_step=1), 0.0)
     self.assertGreater(sharp.sharpness(sample_step=1), 0.0)
+
+  def test_dependency_free_png_encoding(self):
+    frame = CameraFrame(bytes((0, 127, 255, 64)), 2, 2, 8, 1.0, 0.0, 0.0)
+    encoded = frame.to_png_bytes()
+
+    self.assertEqual(encoded[:8], b"\x89PNG\r\n\x1a\n")
+    ihdr_length = struct.unpack(">I", encoded[8:12])[0]
+    self.assertEqual(encoded[12:16], b"IHDR")
+    self.assertEqual(struct.unpack(">IIBBBBB", encoded[16 : 16 + ihdr_length]), (2, 2, 8, 0, 0, 0, 0))
+    idat_offset = 16 + ihdr_length + 4
+    idat_length = struct.unpack(">I", encoded[idat_offset : idat_offset + 4])[0]
+    self.assertEqual(encoded[idat_offset + 4 : idat_offset + 8], b"IDAT")
+    compressed = encoded[idat_offset + 8 : idat_offset + 8 + idat_length]
+    self.assertEqual(zlib.decompress(compressed), b"\x00\x00\x7f\x00\xff\x40")
+
+    thumbnail = CameraFrame(bytes(range(24)), 6, 4, 8, 1.0, 0.0, 0.0).to_png_bytes(
+      maximum_size=3
+    )
+    self.assertEqual(struct.unpack(">II", thumbnail[16:24]), (3, 2))
 
 
 class _FakeLucamLibrary:

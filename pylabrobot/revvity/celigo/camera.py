@@ -14,9 +14,11 @@ import ctypes.util
 import functools
 import os
 import queue
+import struct
 import sys
 import threading
 import time
+import zlib
 from array import array
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Protocol, Tuple, TypeVar
@@ -169,6 +171,81 @@ class CameraFrame:
     with open(path, "wb") as output:
       output.write(f"P5\n{self.width} {self.height}\n{maximum}\n".encode("ascii"))
       output.write(body)
+
+  def to_png_bytes(self, maximum_size: Optional[int] = None) -> bytes:
+    """Encode the frame as a PNG, optionally downsampling it to a bounding square."""
+    if maximum_size is not None and (
+      isinstance(maximum_size, bool) or not isinstance(maximum_size, int) or maximum_size <= 0
+    ):
+      raise ValueError("maximum_size must be a positive integer")
+    bytes_per_pixel = 2 if self.bit_depth > 8 else 1
+    expected_bytes = self.pixel_count * bytes_per_pixel
+    if len(self.data) != expected_bytes:
+      raise CameraError(
+        f"Frame contains {len(self.data)} bytes; expected {expected_bytes} for "
+        f"{self.width}x{self.height} at {self.bit_depth}-bit"
+      )
+    body = self.data
+    if self.bit_depth > 8 and sys.byteorder == "little":
+      values = self.pixels()
+      values.byteswap()
+      body = values.tobytes()
+    output_width = self.width
+    output_height = self.height
+    if maximum_size is not None and max(self.width, self.height) > maximum_size:
+      scale = maximum_size / max(self.width, self.height)
+      output_width = max(1, round(self.width * scale))
+      output_height = max(1, round(self.height * scale))
+      source_stride = self.width * bytes_per_pixel
+      rows = []
+      for output_y in range(output_height):
+        source_y = min(self.height - 1, output_y * self.height // output_height)
+        source_row = body[source_y * source_stride : (source_y + 1) * source_stride]
+        rows.append(
+          b"".join(
+            source_row[source_x * bytes_per_pixel : (source_x + 1) * bytes_per_pixel]
+            for source_x in (
+              min(self.width - 1, output_x * self.width // output_width)
+              for output_x in range(output_width)
+            )
+          )
+        )
+      body = b"".join(rows)
+    stride = output_width * bytes_per_pixel
+    scanlines = b"".join(
+      b"\x00" + body[offset : offset + stride] for offset in range(0, len(body), stride)
+    )
+
+    def chunk(name: bytes, payload: bytes) -> bytes:
+      checksum = zlib.crc32(name + payload) & 0xFFFFFFFF
+      return (
+        struct.pack(">I", len(payload))
+        + name
+        + payload
+        + struct.pack(">I", checksum)
+      )
+
+    header = struct.pack(
+      ">IIBBBBB",
+      output_width,
+      output_height,
+      16 if self.bit_depth > 8 else 8,
+      0,
+      0,
+      0,
+      0,
+    )
+    return (
+      b"\x89PNG\r\n\x1a\n"
+      + chunk(b"IHDR", header)
+      + chunk(b"IDAT", zlib.compress(scanlines))
+      + chunk(b"IEND", b"")
+    )
+
+  def save_png(self, path: str, maximum_size: Optional[int] = None) -> None:
+    """Save the raw frame as a browser-compatible grayscale PNG image."""
+    with open(path, "wb") as output:
+      output.write(self.to_png_bytes(maximum_size=maximum_size))
 
 
 class CeligoCamera(Protocol):

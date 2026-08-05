@@ -33,7 +33,7 @@ class TestGalvoPolynomial(unittest.TestCase):
       {"LinearXTerm": (1.0 / 1.3, 0.0), "LinearYTerm": (0.0, 1.0 / 1.3)},
       (1.3, 2.6),
     )
-    self.assertAlmostEqual(x_voltage, 1.0)
+    self.assertAlmostEqual(x_voltage, -1.0)
     self.assertAlmostEqual(y_voltage, 2.0)
 
   def test_offset_and_cross_terms(self):
@@ -46,7 +46,7 @@ class TestGalvoPolynomial(unittest.TestCase):
       },
       (2.0, 1.0),
     )
-    self.assertAlmostEqual(x_voltage, 4.7)
+    self.assertAlmostEqual(x_voltage, -3.7)
     self.assertAlmostEqual(y_voltage, 2.5)
 
   def test_cubic_terms(self):
@@ -54,7 +54,7 @@ class TestGalvoPolynomial(unittest.TestCase):
       {"CubicXTerm": (1.0, 0.0), "QuadraticXLinearYTerm": (0.0, 1.0)},
       (2.0, 3.0),
     )
-    self.assertAlmostEqual(x_voltage, 8.0)
+    self.assertAlmostEqual(x_voltage, -8.0)
     self.assertAlmostEqual(y_voltage, 12.0)
 
   def test_unknown_polynomial_term_is_rejected(self):

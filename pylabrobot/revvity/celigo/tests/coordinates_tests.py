@@ -9,7 +9,10 @@ from pylabrobot.revvity.celigo.config import (
   CalibrationConfig,
   HardwareDefaultConfig,
 )
-from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
+from pylabrobot.revvity.celigo.coordinates import (
+  CoordinateSystems,
+  sample_offset_mm_to_galvo_offset_mm,
+)
 from pylabrobot.revvity.celigo.tests.helpers import (
   make_calibration_config,
   make_hardware_default_config,
@@ -132,6 +135,15 @@ class TestAffineIdentityCase(unittest.TestCase):
     x, y = cs.sample_mm_to_stage_mm(0.0, 0.0)
     self.assertAlmostEqual(x, 2.159)
     self.assertAlmostEqual(y, 3.492)
+
+
+class TestGalvoCoordinateConvention(unittest.TestCase):
+  def test_sample_x_is_reversed_once_at_the_galvo_boundary(self):
+    self.assertEqual(sample_offset_mm_to_galvo_offset_mm(2.5, -1.25), (-2.5, -1.25))
+
+  def test_non_finite_offsets_are_rejected(self):
+    with self.assertRaisesRegex(ValueError, "finite"):
+      sample_offset_mm_to_galvo_offset_mm(float("nan"), 0)
 
 
 class TestAffineRoundTrips(unittest.TestCase):

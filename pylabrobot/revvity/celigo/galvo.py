@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
 from pylabrobot.revvity.celigo.config import Calibrated2DPolynomialTransform, GalvoConfig
+from pylabrobot.revvity.celigo.coordinates import sample_offset_mm_to_galvo_offset_mm
 from pylabrobot.revvity.celigo.errors import CeligoError
 from pylabrobot.revvity.celigo.protocol import require_payload_length
 
@@ -214,10 +215,11 @@ class Galvo:
     logical_filter: int,
     offset_mm: Tuple[float, float] = (0.0, 0.0),
   ) -> Tuple[float, float]:
-    """Return absolute logical galvo targets for a calibrated field offset."""
+    """Return galvo targets for an X-right/Y-down sample-relative field offset."""
     delta_x = delta_y = 0.0
     if logical_filter in self._celigo.config.galvo_calibrations:
-      delta_x, delta_y = _mm_to_volts(self._calibration(logical_filter), *offset_mm)
+      galvo_offset_mm = sample_offset_mm_to_galvo_offset_mm(*offset_mm)
+      delta_x, delta_y = _mm_to_volts(self._calibration(logical_filter), *galvo_offset_mm)
     elif offset_mm != (0.0, 0.0):
       raise CeligoError(f"No galvo calibration is configured for logical filter {logical_filter}")
     magnification = self._celigo.config.magnification

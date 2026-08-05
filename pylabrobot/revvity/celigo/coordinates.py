@@ -27,6 +27,17 @@ Coordinate2D = Tuple[float, float]
 Matrix2x2 = Tuple[float, float, float, float]
 
 
+def sample_offset_mm_to_galvo_offset_mm(x: float, y: float) -> Coordinate2D:
+  """Convert a sample-relative FOV offset to the Celigo galvo calibration frame.
+
+  Sample X increases from left to right. The Celigo's calibrated X-galvo frame increases
+  in the opposite physical direction; Y has the same orientation in both frames.
+  """
+  if not math.isfinite(x) or not math.isfinite(y):
+    raise ValueError("sample offset coordinates must be finite")
+  return (-x, y)
+
+
 class _CoordinateFrame:
   """A rotated frame relative to an optional base frame."""
 

@@ -31,8 +31,9 @@ import math
 import struct
 import time
 from dataclasses import dataclass
+from datetime import timedelta
 from functools import partial
-from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tuple, cast
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Sequence, Tuple, cast
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
@@ -56,14 +57,23 @@ from pylabrobot.revvity.celigo.motion import (
   MagnificationChanger,
   MotorController,
 )
-from pylabrobot.revvity.celigo.navigation import (
-  galvo_field_of_view_offsets_mm,
-  well_to_sample_mm,
-  well_to_stage_mm,
-)
+from pylabrobot.revvity.celigo.navigation import well_to_sample_mm, well_to_stage_mm
 from pylabrobot.revvity.celigo.protocol import (
   complete_cleanup,
   require_payload_length,
+)
+from pylabrobot.revvity.celigo.scan import (
+  AutofocusMethod,
+  BlockShape,
+  FrameResult,
+  PlannedFrame,
+  ScanBlock,
+  ScanEstimateModel,
+  ScanPlan,
+  ScanPosition,
+  ScanResult,
+  ScanSpec,
+  build_scan_plan,
 )
 
 logger = logging.getLogger(__name__)
@@ -205,7 +215,7 @@ class FocusResult:
 class AcquisitionResult:
   """A captured frame plus motion/optical metadata used for the acquisition."""
 
-  well: str
+  label: str
   channel: str
   x_mm: float
   y_mm: float
@@ -1608,9 +1618,13 @@ class Celigo:
     require_lamp_ready: bool = False,
     galvo_offset_mm: Tuple[float, float] = (0.0, 0.0),
     machine_auto_exposure: bool = False,
+    positioned_stage_mm: Optional[Tuple[float, float]] = None,
   ) -> AcquisitionResult:
     """Navigate, select optics, optionally focus, and capture one calibrated FOV."""
-    x_mm, y_mm = await self.move_to_well(well, retract_z=True)
+    if positioned_stage_mm is None:
+      x_mm, y_mm = await self.move_to_well(well, retract_z=True)
+    else:
+      x_mm, y_mm = positioned_stage_mm
     channel_config = self._require_channel_config(channel)
     target_z_mm = z_mm
     if target_z_mm is None:
@@ -1644,7 +1658,7 @@ class Celigo:
     frame = focus_result.frame if focus_result is not None else await camera.capture(flush_frames=2)
     self._validate_frame_geometry(frame)
     return AcquisitionResult(
-      well=well,
+      label=well,
       channel=channel,
       x_mm=x_mm,
       y_mm=y_mm,
@@ -1686,57 +1700,166 @@ class Celigo:
     await complete_cleanup(self.turn_off_illumination())
     return result
 
-  async def acquire_scan(
+  async def _acquire_scan_position(
     self,
-    wells: List[str],
-    channels: List[IlluminationChannelName],
+    position: ScanPosition,
+    label: str,
+    channel: IlluminationChannelName,
+    exposure_ms: Optional[float],
+    gain: Optional[float],
+    autofocus: Optional[Literal["image", "hardware"]],
+    z_mm: Optional[float],
+    settled_stage_position_mm: Tuple[float, float],
+    machine_auto_exposure: bool = False,
+  ) -> AcquisitionResult:
+    """Acquire one compiled scan position and extinguish illumination afterward."""
+    try:
+      result = await self._acquire_field(
+        well=label,
+        channel=channel,
+        exposure_ms=exposure_ms,
+        gain=gain,
+        autofocus=autofocus,
+        z_mm=z_mm,
+        galvo_offset_mm=(
+          position.galvo_offset_x_mm,
+          position.galvo_offset_y_mm,
+        ),
+        positioned_stage_mm=settled_stage_position_mm,
+        machine_auto_exposure=machine_auto_exposure,
+      )
+    except BaseException:
+      with contextlib.suppress(Exception):
+        await complete_cleanup(self.turn_off_illumination())
+      raise
+    await complete_cleanup(self.turn_off_illumination())
+    return result
+
+  async def _move_to_scan_block(self, block: ScanBlock) -> Tuple[float, float]:
+    """Move safely to one compiled coarse stage position."""
+    await self.turn_off_illumination()
+    await self.z_axis.move_to(self.z_axis.config.min_position)
+    settled_x_mm = await self.x_axis.move_to(block.stage_x_mm)
+    settled_y_mm = await self.y_axis.move_to(block.stage_y_mm)
+    return settled_x_mm, settled_y_mm
+
+  def plan(
+    self,
+    spec: ScanSpec,
+    *,
+    estimate_model: Optional[ScanEstimateModel] = None,
+  ) -> ScanPlan:
+    """Compile a complete scan specification without moving hardware."""
+    return build_scan_plan(
+      self.config,
+      spec,
+      estimate_model=estimate_model,
+    )
+
+  async def execute(self, plan: ScanPlan) -> ScanResult:
+    """Execute the exact frame operations in a compiled scan plan."""
+    return await self._execute_scan_plan(plan)
+
+  async def _execute_scan_plan(
+    self,
+    plan: ScanPlan,
+    on_frame: Optional[Callable[[FrameResult], Awaitable[None]]] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
+  ) -> ScanResult:
+    """Execute a plan, optionally reporting each completed frame to an internal consumer."""
+    if not isinstance(plan, ScanPlan):
+      raise TypeError("plan must be a ScanPlan")
+
+    started_at = time.monotonic()
+    frame_results: List[FrameResult] = []
+    frames_by_block: Dict[int, List[PlannedFrame]] = {
+      block.index: [] for block in plan.blocks
+    }
+    for planned_frame in plan.frames:
+      try:
+        frames_by_block[planned_frame.block.index].append(planned_frame)
+      except KeyError as exc:
+        raise ValueError(
+          f"Planned frame {planned_frame.index} references unknown block "
+          f"{planned_frame.block.index}"
+        ) from exc
+
+    for block in plan.blocks:
+      settled_stage_position_mm = await self._move_to_scan_block(block)
+      focused_brightfield_z_mm = initial_brightfield_z_mm
+      label = block.label if block.label is not None else f"block-{block.index}"
+      for frame_index, planned_frame in enumerate(frames_by_block[block.index]):
+        capture = planned_frame.capture
+        channel_config = self._require_channel_config(capture.channel)
+        channel_z_mm = (
+          None
+          if focused_brightfield_z_mm is None
+          else focused_brightfield_z_mm + channel_config.z_offset_to_brightfield_mm
+        )
+        acquisition = await self._acquire_scan_position(
+          position=planned_frame.position,
+          label=label,
+          channel=capture.channel,
+          exposure_ms=capture.exposure_ms,
+          gain=capture.gain,
+          autofocus=plan.spec.autofocus if frame_index == 0 else None,
+          z_mm=channel_z_mm,
+          settled_stage_position_mm=settled_stage_position_mm,
+        )
+        if acquisition.focus is not None:
+          focused_brightfield_z_mm = (
+            acquisition.z_mm - channel_config.z_offset_to_brightfield_mm
+          )
+        frame_result = FrameResult(
+          planned=planned_frame,
+          frame=acquisition.frame,
+          actual_stage_mm=(acquisition.x_mm, acquisition.y_mm),
+          actual_z_mm=acquisition.z_mm,
+          galvo_hardware_voltages=acquisition.galvo_hardware_voltages,
+          focus=acquisition.focus,
+        )
+        frame_results.append(frame_result)
+        if on_frame is not None:
+          await on_frame(frame_result)
+
+    return ScanResult(
+      plan=plan,
+      frames=tuple(frame_results),
+      elapsed=timedelta(seconds=time.monotonic() - started_at),
+    )
+
+  async def scan(
+    self,
+    spec: ScanSpec,
+    *,
+    estimate_model: Optional[ScanEstimateModel] = None,
+  ) -> ScanResult:
+    """Compile and execute a scan specification."""
+    return await self.execute(self.plan(spec, estimate_model=estimate_model))
+
+  async def scan_wells(
+    self,
+    plate: Plate,
+    wells: Sequence[str],
+    *,
+    channel: str,
+    block_shape: BlockShape = (1, 1),
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
-    autofocus: Optional[Literal["image", "hardware"]] = None,
-    scan_fovs: bool = False,
-  ) -> List[AcquisitionResult]:
-    """Acquire a well/channel plan, optionally scanning every configured galvo FOV."""
-    if not wells or not channels:
-      return []
-    if scan_fovs:
-      base_offsets = galvo_field_of_view_offsets_mm(
-        self.config.calibration,
-        self.config.navigation,
-      )
-    else:
-      base_offsets = [(0.0, 0.0)]
-    results: List[AcquisitionResult] = []
-    focused_brightfield_z_mm: Optional[float] = None
-    for well in wells:
-      for channel in channels:
-        channel_config = self._require_channel_config(channel)
-        offsets = [
-          (
-            offset[0] * channel_config.mm_per_pixel_x_correction_to_brightfield,
-            offset[1] * channel_config.mm_per_pixel_y_correction_to_brightfield,
-          )
-          for offset in base_offsets
-        ]
-        for index, offset in enumerate(offsets):
-          focus_mode = autofocus if index == 0 else None
-          channel_z_mm = (
-            None
-            if focused_brightfield_z_mm is None
-            else focused_brightfield_z_mm + channel_config.z_offset_to_brightfield_mm
-          )
-          result = await self.acquire(
-            well=well,
-            channel=channel,
-            exposure_ms=exposure_ms,
-            gain=gain,
-            autofocus=focus_mode,
-            z_mm=channel_z_mm,
-            galvo_offset_mm=offset,
-          )
-          if result.focus is not None:
-            focused_brightfield_z_mm = result.z_mm - channel_config.z_offset_to_brightfield_mm
-          results.append(result)
-    return results
+    autofocus: Optional[AutofocusMethod] = None,
+    estimate_model: Optional[ScanEstimateModel] = None,
+  ) -> ScanResult:
+    """Scan named wells with one capture per planned position."""
+    spec = ScanSpec.wells(
+      plate,
+      wells,
+      block_shape=block_shape,
+      channel=channel,
+      exposure_ms=exposure_ms,
+      gain=gain,
+      autofocus=autofocus,
+    )
+    return await self.scan(spec, estimate_model=estimate_model)
 
   # -- camera synchronization -------------------------------------------------
 
