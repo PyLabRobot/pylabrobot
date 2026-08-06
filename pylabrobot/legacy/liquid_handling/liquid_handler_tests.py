@@ -28,6 +28,7 @@ from pylabrobot.resources import (
   Plate,
   Resource,
   ResourceNotFoundError,
+  ResourceHolder,
   ResourceStack,
   TipRack,
   cor_96_wellplate_360uL_Fb,
@@ -41,6 +42,7 @@ from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
 )
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.hamilton import (
   STARLetDeck,
   hamilton_96_tiprack_300uL_filter,
@@ -1230,6 +1232,27 @@ class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
 
     # 1 arm, no resource picked up
     self.assertEqual(state["arm_state"], {0: None})
+
+  async def test_resource_drop_uses_pose_and_width_captured_at_pickup(self):
+    source = ResourceHolder("rotated_source", size_x=130, size_y=90, size_z=0)
+    source.rotation = Rotation(z=90)
+    destination = ResourceHolder("destination", size_x=130, size_y=90, size_z=0)
+    self.plate.unassign()
+    self.deck.assign_child_resource(source, location=Coordinate(100, 100, 0))
+    self.deck.assign_child_resource(destination, location=Coordinate(300, 100, 0))
+    source.assign_child_resource(self.plate, location=Coordinate.zero())
+
+    width_at_pickup = self.plate.get_absolute_size_x()
+    rotation_at_pickup = self.plate.get_absolute_rotation()
+    self.assertNotEqual(width_at_pickup, self.plate.get_size_x())
+
+    await self.lh.pick_up_resource(self.plate, direction=GripDirection.FRONT)
+    self.assertIsNone(self.plate.parent)
+    await self.lh.drop_resource(destination, direction=GripDirection.FRONT)
+
+    drop = self.backend.drop_resource.call_args.kwargs["drop"]
+    self.assertEqual(drop.resource_absolute_rotation_at_pickup, rotation_at_pickup)
+    self.assertAlmostEqual(drop.resource_width_at_pickup, width_at_pickup)
 
   async def test_serialize_state_no_head96(self):
     backend = _create_mock_backend(num_channels=8)

@@ -5049,11 +5049,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # This means that the center vector has to be rotated from the child local space by the
     # new child absolute rotation. The moved resource's rotation will be the original child
     # rotation plus the rotation applied by the movement.
-    # The resource is moved by drop.rotation
-    # The new resource absolute location is
-    # drop.resource.get_absolute_rotation().z + drop.rotation
+    # The resource is detached immediately after pickup. Use its captured
+    # parent-derived rotation rather than asking the detached resource tree.
+    resource_absolute_rotation_at_pickup = (
+      drop.resource_absolute_rotation_at_pickup or drop.resource.get_absolute_rotation()
+    )
+    resource_absolute_rotation_after_move = resource_absolute_rotation_at_pickup + Rotation(
+      z=drop.rotation
+    )
     center_in_absolute_space = drop.resource.center().rotated(
-      Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation)
+      resource_absolute_rotation_after_move
     )
     x, y, z = drop.destination + center_in_absolute_space + drop.offset
 
@@ -5063,15 +5068,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
       z_position_at_the_command_end = z_position_at_the_command_end or self._iswap_traversal_height
       assert (
-        drop.resource.get_absolute_rotation().x == 0
-        and drop.resource.get_absolute_rotation().y == 0
+        resource_absolute_rotation_at_pickup.x == 0
+        and resource_absolute_rotation_at_pickup.y == 0
       )
-      assert drop.resource.get_absolute_rotation().z % 90 == 0
+      assert resource_absolute_rotation_at_pickup.z % 90 == 0
 
-      # Use the pickup direction to determine how wide the plate is gripped.
-      # Note that the plate is still in the original orientation at this point,
-      # so get_absolute_size_{x,y}() will return the size of the plate in the original orientation.
-      if (
+      # Keep the release width captured before detaching the resource. Recomputing
+      # its absolute size after pickup can select the long-side plate width.
+      if drop.resource_width_at_pickup is not None:
+        plate_width = drop.resource_width_at_pickup
+      elif (
         drop.pickup_direction == GripDirection.FRONT or drop.pickup_direction == GripDirection.BACK
       ):
         plate_width = drop.resource.get_absolute_size_x()
