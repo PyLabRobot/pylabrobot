@@ -7,8 +7,11 @@ import unittest
 import unittest.mock
 from typing import Literal, cast
 
+import anyio
+import pytest
+
 from pylabrobot.arms.standard import CartesianCoords
-from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.concurrency import AsyncExitStackWithShielding, MachineConnectionClosedError
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import GripDirection, Mix, Pickup
 from pylabrobot.plate_reading import PlateReader
@@ -629,6 +632,80 @@ class TestSTARUSBComms(AnyioTestBase):
     self.star.io.read.side_effect = lambda: b"this is plaintext"
     with self.assertRaises(TimeoutError):
       await self.star.send_command("C0", command="QM", fmt="id####")
+
+  @pytest.mark.timeout(30)
+  async def test_send_command_cancellation_shield(self):
+    star = STARBackend(read_timeout=1, packet_read_timeout=1)
+    star.set_deck(STARLetDeck())
+    star.io = MockIO()  # type: ignore
+    star._enter_lifespan = lambda stack, **kwargs: HamiltonLiquidHandler._enter_lifespan(
+      star, stack
+    )
+    star.io.read.side_effect = [b"C0QMid0001"]
+
+    with anyio.CancelScope() as cancel_scope:
+      async with star:
+        try:
+          cancel_scope.cancel()
+          with pytest.raises(anyio.get_cancelled_exc_class()):
+            await anyio.sleep(0.1)
+        finally:
+          # even when the scope is cancelled,
+          # the communication channel remains open
+          assert star._wakeup_reader_loop is not None
+          with anyio.CancelScope(shield=True):
+            resp = await star.send_command("C0", command="QM", fmt="id####")
+            assert resp == {"id": 1}
+
+    assert star._wakeup_reader_loop is None
+
+  @pytest.mark.timeout(30)
+  async def test_send_command_reader_loop_dead(self):
+    star = STARBackend(read_timeout=1, packet_read_timeout=1)
+    star.set_deck(STARLetDeck())
+    star.io = MockIO()  # type: ignore
+    star._enter_lifespan = lambda stack, **kwargs: HamiltonLiquidHandler._enter_lifespan(
+      star, stack
+    )
+
+    # need a way to stop the _continuous_read loop
+    def failing_read() -> bytes:
+      raise RuntimeError("This killed the loop")
+
+    star.io.read.side_effect = failing_read
+
+    async with contextlib.AsyncExitStack() as stack:
+      # Manually managing the star context manager
+      # so that we can observe the exception from the failed
+      # reading loop come out of __aexit__ without
+      # accidentally capturing exceptions from the
+      # lifespan body.
+      await star.__aenter__()
+
+      @stack.push_async_exit
+      async def exit(*args, **kw):
+        with pytest.raises(Exception) as excinfo:
+          await star.__aexit__(*args, **kw)
+        assert "This killed the loop" in repr(excinfo.value)
+
+      # the reader loop should be alive still
+      assert star._wakeup_reader_loop is not None
+
+      # this one will fail trying to communicate; killing the _continuous_read loop
+      with pytest.raises(MachineConnectionClosedError):
+        await star.send_command("C0", command="QM", fmt="id####")
+
+      # the reader loop should be dead now
+      assert star._wakeup_reader_loop is None
+
+      # all further commands should fail
+      # (shielding is needed, because the failing read is now
+      # triggering the cancellation of the lifespan of the
+      # star, so the follow-up command may never be attempted
+      # without shielding)
+      with anyio.CancelScope(shield=True):
+        with pytest.raises(MachineConnectionClosedError):
+          await star.send_command("C0", command="QM", fmt="id####")
 
 
 class STARCommandCatcher(STARBackend):

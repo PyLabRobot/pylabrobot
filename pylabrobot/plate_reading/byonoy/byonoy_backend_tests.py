@@ -2,7 +2,6 @@ import contextlib
 import unittest.mock
 
 import anyio
-import pytest
 
 from pylabrobot.plate_reading.byonoy.byonoy_backend import ByonoyAbsorbance96AutomateBackend
 from pylabrobot.testing.concurrency import AnyioTestBase
@@ -19,7 +18,6 @@ class TestByonoyBackend(AnyioTestBase):
     )
     self.backend.initialize_measurements = unittest.mock.AsyncMock()  # type: ignore[method-assign]
 
-  @pytest.mark.parametrize("backend", ["asyncio", "trio"])
   async def test_setup(self):
 
     async with self.backend:

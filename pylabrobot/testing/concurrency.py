@@ -88,6 +88,7 @@ class AnyioTestBase(_AsyncResourceBase):
         return anyio.run(async_wrapper, backend=backend, backend_options=backend_options)
 
     sync_wrapper.original_func = wrapped
+    sync_wrapper.pytestmark = getattr(wrapped, "pytestmark", []) + sync_wrapper.pytestmark
     return sync_wrapper
 
   def __init_subclass__(cls):

@@ -5,7 +5,6 @@ from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestAccess2Backend(AnyioTestBase):
-
   async def test_load_grip_steps_validation(self):
     backend = Access2Backend(device_id="dummy")
     backend.send_command = AsyncMock(return_value=b"\x00")  # type: ignore[method-assign]

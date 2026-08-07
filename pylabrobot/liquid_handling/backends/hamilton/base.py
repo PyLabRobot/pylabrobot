@@ -118,9 +118,24 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     self._wakeup_reader_loop = anyio.Event()
     tg = await stack.enter_async_context(anyio.create_task_group())
-    # Put canceling the reader loop on top of the stack; it goes first
-    stack.callback(tg.cancel_scope.cancel)
-    tg.start_soon(self._continuously_read)
+    shield_scope = anyio.CancelScope(shield=True)
+    # Important: `shield_scope.cancel` has to pushed *after* entering
+    # the task group `tg`, so that it executes *before* leaving the
+    # task group - otherwise, the shielded `shield_scope` never exits,
+    # preventing the task group from closing and thus deadlock occurs.
+    stack.callback(shield_scope.cancel)
+
+    # We need to shield `_continuously_read`; this scope may be cancelled
+    # from outside, which cancels the task group and all nested tasks.
+    # however, we do want to let `_continuously_read` continue to run,
+    # so that clean-up actions (themselves in shielded contexts) still
+    # can run. When this lifespan itself is ending, we cancel `shield_scope`
+    # directly, so that `_continuously_read` then finally tears down.
+    async def read_wrap():
+      with shield_scope:
+        await self._continuously_read()
+
+    tg.start_soon(read_wrap)
 
   def serialize(self) -> dict:
     usb_serialized = self.io.serialize()
@@ -289,6 +304,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       await self.io.write(cmd.encode(), timeout=write_timeout)
       return None
 
+    if self._wakeup_reader_loop is None:
+      raise MachineConnectionClosedError("Reader loop is not running.")
+
     done_evt = anyio.Event()
     task = HamiltonTask(id_=id_, cmd=cmd, done_event=done_evt, response=None)
     cmd_prefix = cmd[: self.module_id_length + 2]
@@ -301,8 +319,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         if self._waiting_tasks_with_id.setdefault(id_, task) is not task:
           raise RuntimeError("Another task with this ID is already pending")
       if idle:
-        assert self._wakeup_reader_loop is not None
         self._wakeup_reader_loop.set()
+
       await self.io.write(cmd.encode(), timeout=write_timeout)
 
       # Attempt to read packets until timeout, or when we identify the right id.
@@ -393,14 +411,15 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     finally:
       # Abort all remaining tasks
       for task in self._waiting_tasks_with_id.values():
-        task.response = MachineConnectionClosedError()
+        task.response = MachineConnectionClosedError("Reader loop is exiting")
         task.done_event.set()
       for tasks in self._waiting_tasks_idless.values():
         for task in tasks:
-          task.response = MachineConnectionClosedError()
+          task.response = MachineConnectionClosedError("Reader loop is exiting")
           task.done_event.set()
       self._waiting_tasks_with_id.clear()
       self._waiting_tasks_idless.clear()
+      self._wakeup_reader_loop = None
 
   def _ops_to_fw_positions(
     self, ops: Sequence[PipettingOp], use_channels: List[int]
