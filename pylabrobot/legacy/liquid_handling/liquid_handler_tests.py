@@ -657,6 +657,62 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(operation["plate"]["name"], "plate")
     self.assertEqual(operation["volume_ul"], 10.0)
 
+  async def test_tip_pickup_and_discard_emit_direct_tip_resources(self):
+    tip_spot = self.tip_rack.get_item("A1")
+    trash = self.deck.get_trash_area()
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await self.lh.pick_up_tips([tip_spot])
+      await self.lh.discard_tips()
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "liquid_handler.tip_pickup.started",
+        "liquid_handler.tip_pickup.completed",
+        "liquid_handler.tip_drop.started",
+        "liquid_handler.tip_drop.completed",
+      ],
+    )
+    pickup = events[0].context
+    self.assertEqual(pickup["resources"][0]["name"], tip_spot.name)
+    self.assertEqual(pickup["resources"][0]["type"], "TipSpot")
+    self.assertTrue(
+      any(
+        ancestor["name"] == self.tip_rack.name and ancestor["type"] == "TipRack"
+        for ancestor in pickup["resources"][0]["ancestors"]
+      )
+    )
+    self.assertEqual(pickup["tip_operations"], [{"channel": 0, "resource": pickup["resources"][0]}])
+    discard = events[2].context
+    self.assertEqual(discard["resources"][0]["name"], trash.name)
+    self.assertEqual(discard["resources"][0]["type"], "Trash")
+    self.assertEqual(discard["tip_operations"][0]["resource"], discard["resources"][0])
+
+  async def test_96_head_tip_operations_emit_direct_rack_resources(self):
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await self.lh.pick_up_tips96(self.tip_rack)
+      await self.lh.drop_tips96(self.tip_rack)
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "liquid_handler.tip_pickup_96.started",
+        "liquid_handler.tip_pickup_96.completed",
+        "liquid_handler.tip_drop_96.started",
+        "liquid_handler.tip_drop_96.completed",
+      ],
+    )
+    self.assertEqual(events[0].context["resources"][0]["name"], self.tip_rack.name)
+    self.assertEqual(events[0].context["resources"][0]["type"], "TipRack")
+
   async def test_return_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
     tip = tip_spot.get_tip()

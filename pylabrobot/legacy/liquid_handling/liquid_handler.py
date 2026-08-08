@@ -184,6 +184,53 @@ def _liquid_operation_event_context(
   }
 
 
+def _tip_operation_event_context(
+  liquid_handler: "LiquidHandler",
+  tip_spots: Sequence[Union[TipSpot, Trash]],
+  use_channels: Optional[List[int]] = None,
+  **_: Any,
+) -> Dict[str, Any]:
+  """Describe channel tip operations using their direct pickup/drop resources."""
+
+  resources: List[Dict[str, Any]] = []
+  seen_resource_keys: Set[Tuple[Any, Any]] = set()
+  for tip_spot in tip_spots:
+    reference = resource_reference(tip_spot)
+    if reference is None:
+      continue
+    key = (reference.get("type"), reference.get("name"))
+    if key in seen_resource_keys:
+      continue
+    seen_resource_keys.add(key)
+    resources.append(reference)
+
+  channels = use_channels or liquid_handler._default_use_channels or list(range(len(tip_spots)))
+  tip_operations = [
+    {"channel": channel, "resource": resource_reference(tip_spot)}
+    for channel, tip_spot in zip(channels, tip_spots)
+  ]
+  return {
+    "device": resource_reference(liquid_handler),
+    "resources": resources,
+    "tip_operations": tip_operations,
+  }
+
+
+def _tip_rack_operation_event_context(
+  liquid_handler: "LiquidHandler",
+  tip_rack: Optional[TipRack] = None,
+  resource: Optional[Union[TipRack, Trash]] = None,
+  **_: Any,
+) -> Dict[str, Any]:
+  """Describe a 96-head operation by its directly operated rack or trash resource."""
+
+  operation_resource = tip_rack if tip_rack is not None else resource
+  return {
+    "device": resource_reference(liquid_handler),
+    "resources": [] if operation_resource is None else [resource_reference(operation_resource)],
+  }
+
+
 class BlowOutVolumeError(Exception):
   pass
 
@@ -530,6 +577,7 @@ class LiquidHandler(Resource, Machine):
       return None
     return self._resource_pickup.resource
 
+  @evented_operation("liquid_handler.tip_pickup", _tip_operation_event_context)
   @need_setup_finished
   async def pick_up_tips(
     self,
@@ -679,6 +727,7 @@ class LiquidHandler(Resource, Machine):
     """
     return [tracker.get_tip() if tracker.has_tip else None for tracker in self.head.values()]
 
+  @evented_operation("liquid_handler.tip_drop", _tip_operation_event_context)
   @need_setup_finished
   async def drop_tips(
     self,
@@ -1543,6 +1592,7 @@ class LiquidHandler(Resource, Machine):
       else:
         await self.return_tips(use_channels=channels)
 
+  @evented_operation("liquid_handler.tip_pickup_96", _tip_rack_operation_event_context)
   async def pick_up_tips96(
     self,
     tip_rack: TipRack,
@@ -1612,6 +1662,7 @@ class LiquidHandler(Resource, Machine):
           tip_spot.tracker.commit()
         self.head96[i].commit()
 
+  @evented_operation("liquid_handler.tip_drop_96", _tip_rack_operation_event_context)
   async def drop_tips96(
     self,
     resource: Union[TipRack, Trash],
