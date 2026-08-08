@@ -119,6 +119,73 @@ def _resource_drop_event_context(
   return context
 
 
+def _liquid_operation_plate(resource: Container) -> Resource:
+  """Return the plate that owns a well, or the container itself when it is not plate-backed."""
+
+  current: Optional[Resource] = resource
+  while current is not None:
+    if isinstance(current, Plate):
+      return current
+    current = current.parent
+  return resource
+
+
+def _safe_event_volume(value: Any) -> Any:
+  """Normalize a volume for event consumers without changing liquid-handler validation."""
+
+  try:
+    return float(value)
+  except (TypeError, ValueError):
+    return repr(value)
+
+
+def _liquid_operation_event_context(
+  liquid_handler: "LiquidHandler",
+  resources: Sequence[Container],
+  vols: Sequence[Any],
+  use_channels: Optional[List[int]] = None,
+  **_: Any,
+) -> Dict[str, Any]:
+  """Describe requested liquid operations using plate lanes and per-channel well detail."""
+
+  resource_list = list(resources)
+  channels = use_channels or liquid_handler._default_use_channels or list(range(len(resource_list)))
+  operation_resources = resource_list
+  if len(operation_resources) == 1 and len(channels) > 1:
+    operation_resources = operation_resources * len(channels)
+
+  plate_resources = [_liquid_operation_plate(resource) for resource in resource_list]
+  unique_plate_resources: List[Dict[str, Any]] = []
+  seen_plate_names: Set[str] = set()
+  for plate_resource in plate_resources:
+    reference = resource_reference(plate_resource)
+    if reference is None:
+      continue
+    name = reference.get("name")
+    if not isinstance(name, str) or name in seen_plate_names:
+      continue
+    seen_plate_names.add(name)
+    unique_plate_resources.append(reference)
+
+  liquid_operations = []
+  for channel, resource, volume in zip(channels, operation_resources, vols):
+    liquid_operations.append(
+      {
+        "channel": channel,
+        "resource": resource_reference(resource),
+        "plate": resource_reference(_liquid_operation_plate(resource)),
+        "volume_ul": _safe_event_volume(volume),
+      }
+    )
+
+  return {
+    "device": resource_reference(liquid_handler),
+    # Gantt lanes are plate-level; exact well information remains available per channel below.
+    "resources": unique_plate_resources,
+    "liquid_operations": liquid_operations,
+  }
+
+
 class BlowOutVolumeError(Exception):
   pass
 
@@ -905,6 +972,7 @@ class LiquidHandler(Resource, Machine):
     if len(not_containers) > 0:
       raise TypeError(f"Resources must be `Container`s, got {not_containers}")
 
+  @evented_operation("liquid_handler.aspirate", _liquid_operation_event_context)
   @need_setup_finished
   async def aspirate(
     self,
@@ -1097,6 +1165,7 @@ class LiquidHandler(Resource, Machine):
     if error is not None:
       raise error
 
+  @evented_operation("liquid_handler.dispense", _liquid_operation_event_context)
   @need_setup_finished
   async def dispense(
     self,

@@ -7,6 +7,7 @@ from unittest.mock import PropertyMock
 
 import pytest
 
+from pylabrobot.events import EventBus, use_event_bus
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.legacy.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
 from pylabrobot.legacy.liquid_handling.channel_positioning import (
@@ -619,6 +620,35 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       use_channels=[0],
       ops=[_make_disp(well, vol=10, offset=Coordinate(x=1, y=1, z=1), tip=t)],
     )
+
+  async def test_aspirate_and_dispense_emit_plate_aware_events(self):
+    well = self.plate.get_item("A1")
+    well.tracker.set_volume(20)
+    self.lh.update_head_state({0: self.tip_rack.get_item("A1").get_tip()})
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await self.lh.aspirate([well], vols=[10])
+      await self.lh.dispense([well], vols=[10])
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "liquid_handler.aspirate.started",
+        "liquid_handler.aspirate.completed",
+        "liquid_handler.dispense.started",
+        "liquid_handler.dispense.completed",
+      ],
+    )
+    context = events[0].context
+    self.assertEqual([resource["name"] for resource in context["resources"]], ["plate"])
+    operation = context["liquid_operations"][0]
+    self.assertEqual(operation["channel"], 0)
+    self.assertEqual(operation["resource"]["name"], well.name)
+    self.assertEqual(operation["plate"]["name"], "plate")
+    self.assertEqual(operation["volume_ul"], 10.0)
 
   async def test_return_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
