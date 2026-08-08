@@ -1,7 +1,14 @@
 import json
 import unittest
 
-from pylabrobot.events import EventBus, emit_event, event_context, evented_operation, use_event_bus
+from pylabrobot.events import (
+  EventBus,
+  emit_event,
+  event_context,
+  event_operation,
+  evented_operation,
+  use_event_bus,
+)
 from pylabrobot.resources import Coordinate, Resource
 
 
@@ -42,6 +49,40 @@ class TestEventBus(unittest.TestCase):
 
 
 class TestEventedOperation(unittest.IsolatedAsyncioTestCase):
+  def test_block_operation_emits_a_correlated_lifecycle(self):
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus), event_operation("device.action", device="device-1"):
+      emit_event("firmware.command.started", command="AB")
+
+    self.assertEqual(
+      [event.name for event in events],
+      ["device.action.started", "firmware.command.started", "device.action.completed"],
+    )
+    operation_id = events[0].context["operation_id"]
+    self.assertEqual(events[1].context["operation_id"], operation_id)
+    self.assertEqual(events[2].context["operation_id"], operation_id)
+
+  def test_block_operation_can_capture_final_completion_data(self):
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+    location = {"name": "source"}
+
+    with use_event_bus(event_bus), event_operation(
+      "resource.transfer",
+      resources=[{"name": "plate", "location": location["name"]}],
+      completed_data_factory=lambda: {
+        "resources": [{"name": "plate", "location": location["name"]}],
+      },
+    ):
+      location["name"] = "destination"
+
+    self.assertEqual(events[0].data["resources"][0]["location"], "source")
+    self.assertEqual(events[1].data["resources"][0]["location"], "destination")
+
   async def test_operation_context_is_inherited_by_nested_events(self):
     events = []
     event_bus = EventBus()

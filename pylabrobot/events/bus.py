@@ -42,6 +42,7 @@ class PLREvent:
 
 EventListener = Callable[[PLREvent], None]
 OperationContextFactory = Callable[..., Dict[str, Any]]
+CompletionDataFactory = Callable[[], Dict[str, Any]]
 
 
 class EventBus:
@@ -200,6 +201,43 @@ def coordinate_reference(coordinate: Any) -> Optional[Dict[str, float]]:
   return {"x": coordinate.x, "y": coordinate.y, "z": coordinate.z}
 
 
+@contextmanager
+def event_operation(
+  name: str,
+  *,
+  completed_data_factory: CompletionDataFactory | None = None,
+  **operation_data: Any,
+) -> Iterator[None]:
+  """Emit correlated lifecycle events around a semantic operation block.
+
+  This is the block-oriented counterpart to :func:`evented_operation`, for
+  integrations whose operation spans several frontend calls rather than one
+  decorated method. ``completed_data_factory`` can capture the final resource
+  state after a successful operation; the started event always describes the
+  invocation state.
+  """
+
+  if not is_event_bus_active():
+    yield
+    return
+
+  operation_id = uuid.uuid4().hex
+  with event_context(operation=name, operation_id=operation_id, **operation_data):
+    emit_event(f"{name}.started", **operation_data)
+    try:
+      yield
+    except BaseException as error:
+      emit_event(
+        f"{name}.failed",
+        **operation_data,
+        error_type=type(error).__name__,
+        error_message=str(error),
+      )
+      raise
+    completed_data = completed_data_factory() if completed_data_factory is not None else operation_data
+    emit_event(f"{name}.completed", **completed_data)
+
+
 def evented_operation(
   name: str, context_factory: OperationContextFactory
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
@@ -216,21 +254,8 @@ def evented_operation(
         return await func(*args, **kwargs)
 
       operation_data = context_factory(*args, **kwargs)
-      operation_id = uuid.uuid4().hex
-      with event_context(operation=name, operation_id=operation_id, **operation_data):
-        emit_event(f"{name}.started", **operation_data)
-        try:
-          result = await func(*args, **kwargs)
-        except BaseException as error:
-          emit_event(
-            f"{name}.failed",
-            **operation_data,
-            error_type=type(error).__name__,
-            error_message=str(error),
-          )
-          raise
-        emit_event(f"{name}.completed", **operation_data)
-        return result
+      with event_operation(name, **operation_data):
+        return await func(*args, **kwargs)
 
     return wrapper
 
