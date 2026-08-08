@@ -99,10 +99,17 @@ _event_context: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
 )
 
 
-def set_default_event_bus(event_bus: Optional[EventBus]) -> None:
-  """Install or clear the process-wide event bus for code without an explicit scope."""
+def get_default_event_bus() -> Optional[EventBus]:
+  """Return the process-wide fallback event bus, if one is installed."""
+  return _default_event_bus
+
+
+def set_default_event_bus(event_bus: Optional[EventBus]) -> Optional[EventBus]:
+  """Install or clear the process-wide event bus and return the previous one."""
   global _default_event_bus
+  previous_event_bus = _default_event_bus
   _default_event_bus = event_bus
+  return previous_event_bus
 
 
 def get_event_bus() -> Optional[EventBus]:
