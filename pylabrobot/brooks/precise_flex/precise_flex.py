@@ -10,6 +10,7 @@ from typing import Callable, ClassVar, Dict, List, Literal, NamedTuple, Optional
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.config import Axis, PreciseFlexConfiguration
 from pylabrobot.brooks.precise_flex.kinematics import JointPose
+from pylabrobot.events import coordinate_reference, emit_event, evented_operation
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.rotation import Rotation
@@ -31,6 +32,42 @@ logger = logging.getLogger(__name__)
 
 # InRange sentinel that lets the controller blend through waypoints instead of stopping at each one.
 BLEND_IN_RANGE = -1
+
+
+def _controller_reference(controller: "PreciseFlex") -> dict[str, object]:
+  """Return the stable controller identity used by structured execution events."""
+  return {
+    "name": "precise_flex",
+    "type": type(controller).__name__,
+    "host": controller.io._host,
+    "port": controller.io._port,
+  }
+
+
+def _joint_pose_reference(position: JointPose) -> dict[str, float]:
+  """Convert an axis-keyed joint pose into a JSON-friendly target description."""
+  return {
+    (axis.name.lower() if isinstance(axis, Axis) else str(axis)): float(value)
+    for axis, value in position.items()
+  }
+
+
+def _cartesian_target_reference(
+  location: Coordinate,
+  direction: float,
+  *,
+  orientation: Optional["ElbowOrientation"] = None,
+  wrist: Optional["Wrist"] = None,
+  rail_position: Optional[float] = None,
+) -> dict[str, object]:
+  """Describe a Cartesian controller target without serializing a full pose object."""
+  return {
+    "location": coordinate_reference(location),
+    "direction": float(direction),
+    "orientation": orientation,
+    "wrist": wrist,
+    "rail_position": rail_position,
+  }
 
 
 class MotionProfile(NamedTuple):
@@ -189,9 +226,26 @@ class PreciseFlex:
   # -- communication ---------------------------------------------------------
 
   async def send_command(self, command: str) -> str:
-    await self.io.write(command.encode("utf-8") + b"\n")
-    reply = await self.io.readline()
-    return self._parse_reply_ensure_successful(reply)
+    """Send one firmware command while retaining its enclosing operation context."""
+    event_data = {
+      "device": _controller_reference(self),
+      "command": command,
+    }
+    emit_event("precise_flex.firmware_command.started", **event_data)
+    try:
+      await self.io.write(command.encode("utf-8") + b"\n")
+      reply = await self.io.readline()
+      result = self._parse_reply_ensure_successful(reply)
+    except BaseException as error:
+      emit_event(
+        "precise_flex.firmware_command.failed",
+        **event_data,
+        error_type=type(error).__name__,
+        error_message=str(error),
+      )
+      raise
+    emit_event("precise_flex.firmware_command.completed", **event_data, response=result)
+    return result
 
   def _parse_reply_ensure_successful(self, reply: bytes) -> str:
     """Parse reply from Precise Flex.
@@ -215,6 +269,13 @@ class PreciseFlex:
 
   # -- lifecycle -------------------------------------------------------------
 
+  @evented_operation(
+    "precise_flex.setup",
+    lambda self, skip_home=False: {
+      "device": _controller_reference(self),
+      "skip_home": skip_home,
+    },
+  )
   async def setup(self, skip_home: bool = False):
     """Initialize the PreciseFlex driver.
 
@@ -251,6 +312,10 @@ class PreciseFlex:
     self._assess_configuration(self._configuration)
     await self._handle_out_of_range_axes()
 
+  @evented_operation(
+    "precise_flex.stop",
+    lambda self: {"device": _controller_reference(self)},
+  )
   async def stop(self):
     """Stop the PreciseFlex driver."""
     await self.detach()
@@ -307,6 +372,10 @@ class PreciseFlex:
     """
     return int(await self.send_command("sysState"))
 
+  @evented_operation(
+    "precise_flex.power_on",
+    lambda self: {"device": _controller_reference(self)},
+  )
   async def power_on_robot(self):
     """Power on the robot."""
     error: Optional[PreciseFlexError] = None
@@ -323,6 +392,10 @@ class PreciseFlex:
       raise error
     raise RuntimeError("Failed to power on robot after 3 attempts for unknown reasons.")
 
+  @evented_operation(
+    "precise_flex.recover_from_fault",
+    lambda self: {"device": _controller_reference(self)},
+  )
   async def recover_from_fault(self) -> None:
     """Recover after a collision / fault that stopped the arm and dropped power, leaving it usable.
 
@@ -348,6 +421,10 @@ class PreciseFlex:
     await self.attach(1)
     await self.home()
 
+  @evented_operation(
+    "precise_flex.power_off",
+    lambda self: {"device": _controller_reference(self)},
+  )
   async def power_off_robot(self):
     """Power off the robot."""
     await self.set_power(False)
@@ -402,6 +479,10 @@ class PreciseFlex:
     """Detach the robot."""
     await self.attach(0)
 
+  @evented_operation(
+    "precise_flex.home",
+    lambda self: {"device": _controller_reference(self)},
+  )
   async def home(self) -> None:
     """Home the robot associated with this thread.
 
@@ -1134,6 +1215,13 @@ class PreciseFlex:
     else:
       await self.send_command("zeroTorque 0")
 
+  @evented_operation(
+    "precise_flex.start_freedrive",
+    lambda self, free_axes=None: {
+      "device": _controller_reference(self),
+      "free_axes": [int(axis) for axis in free_axes] if free_axes is not None else None,
+    },
+  )
   async def start_freedrive_mode(self, free_axes: Optional[List[int]] = None) -> None:
     """Enter freedrive mode, allowing manual movement of the specified joints.
 
@@ -1154,10 +1242,18 @@ class PreciseFlex:
     for axis in free_axes:
       await self.send_command(f"freemode {axis}")
 
+  @evented_operation(
+    "precise_flex.stop_freedrive",
+    lambda self: {"device": _controller_reference(self)},
+  )
   async def stop_freedrive_mode(self) -> None:
     """Exit freedrive mode for all axes."""
     await self.send_command("freemode -1")
 
+  @evented_operation(
+    "precise_flex.halt",
+    lambda self: {"device": _controller_reference(self)},
+  )
   async def halt(self):
     """Stops the current robot immediately but leaves power on."""
     await self.send_command("halt")
@@ -1941,6 +2037,14 @@ class PreciseFlex:
       raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
     return self._parse_angles_response(parts)
 
+  @evented_operation(
+    "precise_flex.move_to_joint_position",
+    lambda self, position, speed_pct=None: {
+      "device": _controller_reference(self),
+      "target_joint_position": _joint_pose_reference(position),
+      "speed_pct": speed_pct,
+    },
+  )
   async def move_to_joint_position(
     self,
     position: JointPose,
@@ -1965,6 +2069,26 @@ class PreciseFlex:
 
   # -- cartesian motion ---------------------------------------------------------------------
 
+  @evented_operation(
+    "precise_flex.move_to_location",
+    lambda self,
+    location,
+    direction,
+    speed_pct=None,
+    orientation=None,
+    wrist=None,
+    rail_position=None: {
+      "device": _controller_reference(self),
+      "target": _cartesian_target_reference(
+        location,
+        direction,
+        orientation=orientation,
+        wrist=wrist,
+        rail_position=rail_position,
+      ),
+      "speed_pct": speed_pct,
+    },
+  )
   async def move_to_location(
     self,
     location: Coordinate,
@@ -2045,6 +2169,37 @@ class PreciseFlex:
       prev_pose = cart
     return targets
 
+  @evented_operation(
+    "precise_flex.move_through_cartesian_poses",
+    lambda self, poses, speed_pct=None, blend=True: {
+      "device": _controller_reference(self),
+      "waypoint_count": len(poses),
+      "start_target": (
+        _cartesian_target_reference(
+          poses[0].location,
+          poses[0].rotation.z,
+          orientation=poses[0].orientation,
+          wrist=poses[0].wrist,
+          rail_position=poses[0].rail_position,
+        )
+        if poses
+        else None
+      ),
+      "end_target": (
+        _cartesian_target_reference(
+          poses[-1].location,
+          poses[-1].rotation.z,
+          orientation=poses[-1].orientation,
+          wrist=poses[-1].wrist,
+          rail_position=poses[-1].rail_position,
+        )
+        if poses
+        else None
+      ),
+      "speed_pct": speed_pct,
+      "blend": blend,
+    },
+  )
   async def move_through_cartesian_poses(
     self,
     poses: Sequence[PreciseFlexCartesianPose],
@@ -2175,6 +2330,14 @@ class PreciseFlex:
   _gripper_soft_min: Optional[float] = None
   _gripper_soft_max: Optional[float] = None
 
+  @evented_operation(
+    "precise_flex.move_gripper",
+    lambda self, width, force_sensing=False: {
+      "device": _controller_reference(self),
+      "width_mm": float(width),
+      "force_sensing": force_sensing,
+    },
+  )
   async def move_gripper(
     self,
     width: float,
@@ -2215,6 +2378,31 @@ class PreciseFlex:
       await self._set_grip_open_pos(units)
       await self.send_command("gripper 1")
 
+  @evented_operation(
+    "precise_flex.move_gripper_joint_position",
+    lambda self, position, force_sensing=False: {
+      "device": _controller_reference(self),
+      "gripper_joint_position": float(position),
+      "force_sensing": force_sensing,
+    },
+  )
+  async def move_gripper_joint_position(
+    self,
+    position: float,
+    force_sensing: bool = False,
+  ) -> None:
+    """Move the gripper to a controller-native joint position.
+
+    This is the counterpart to :meth:`move_gripper` for integrations with
+    taught joint-space routes. The caller owns the joint calibration.
+    """
+    if force_sensing:
+      await self._set_grip_close_pos(position)
+      await self.send_command("gripper 2")
+    else:
+      await self._set_grip_open_pos(position)
+      await self.send_command("gripper 1")
+
   async def is_gripper_closed(self) -> bool:
     """(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.
 
@@ -2238,6 +2426,13 @@ class PreciseFlex:
 
   # -- rail ---------------------------------------------------------------------------------
 
+  @evented_operation(
+    "precise_flex.move_rail",
+    lambda self, rail_position: {
+      "device": _controller_reference(self),
+      "rail_position": float(rail_position),
+    },
+  )
   async def move_rail(self, rail_position: float) -> None:
     """Move the rail to the specified position.
 
@@ -2254,6 +2449,16 @@ class PreciseFlex:
 
   # -- pick & place -------------------------------------------------------------------------
 
+  @evented_operation(
+    "precise_flex.pick_up_at_joint_position",
+    lambda self, position, resource_width, finger_speed_pct=50.0, grasp_force=10.0: {
+      "device": _controller_reference(self),
+      "target_joint_position": _joint_pose_reference(position),
+      "resource_width_mm": float(resource_width),
+      "finger_speed_pct": float(finger_speed_pct),
+      "grasp_force": float(grasp_force),
+    },
+  )
   async def pick_up_at_joint_position(
     self,
     position: JointPose,
@@ -2282,6 +2487,14 @@ class PreciseFlex:
     )
     await self._pick_plate_j(position)
 
+  @evented_operation(
+    "precise_flex.drop_at_joint_position",
+    lambda self, position, resource_width: {
+      "device": _controller_reference(self),
+      "target_joint_position": _joint_pose_reference(position),
+      "resource_width_mm": float(resource_width),
+    },
+  )
   async def drop_at_joint_position(
     self,
     position: JointPose,
@@ -2301,6 +2514,30 @@ class PreciseFlex:
     )
     await self._place_plate_j(position)
 
+  @evented_operation(
+    "precise_flex.pick_up_at_location",
+    lambda self,
+    location,
+    direction,
+    resource_width,
+    finger_speed_pct=50.0,
+    grasp_force=10.0,
+    orientation=None,
+    wrist=None,
+    rail_position=None: {
+      "device": _controller_reference(self),
+      "target": _cartesian_target_reference(
+        location,
+        direction,
+        orientation=orientation,
+        wrist=wrist,
+        rail_position=rail_position,
+      ),
+      "resource_width_mm": float(resource_width),
+      "finger_speed_pct": float(finger_speed_pct),
+      "grasp_force": float(grasp_force),
+    },
+  )
   async def pick_up_at_location(
     self,
     location: Coordinate,
@@ -2353,6 +2590,26 @@ class PreciseFlex:
     )
     await self._pick_plate_c(cartesian_position=coords)
 
+  @evented_operation(
+    "precise_flex.drop_at_location",
+    lambda self,
+    location,
+    direction,
+    resource_width,
+    orientation=None,
+    wrist=None,
+    rail_position=None: {
+      "device": _controller_reference(self),
+      "target": _cartesian_target_reference(
+        location,
+        direction,
+        orientation=orientation,
+        wrist=wrist,
+        rail_position=rail_position,
+      ),
+      "resource_width_mm": float(resource_width),
+    },
+  )
   async def drop_at_location(
     self,
     location: Coordinate,
@@ -2442,6 +2699,10 @@ class PreciseFlex:
       self._validate_parking_position(position)
     self._parking_position: Optional[JointPose] = dict(position) if position is not None else None
 
+  @evented_operation(
+    "precise_flex.park",
+    lambda self: {"device": _controller_reference(self)},
+  )
   async def park(self) -> None:
     """Move to ``self.parking_position``; defaults at setup, reassignable at runtime.
 
