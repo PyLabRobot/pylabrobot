@@ -24,6 +24,7 @@ from typing import (
   cast,
 )
 
+from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.legacy.liquid_handling.channel_positioning import (
   compute_channel_offsets,
 )
@@ -86,6 +87,36 @@ TipPresenceProbingMethod = Callable[
   [List[TipSpot], Optional[List[int]]],
   Awaitable[Dict[str, bool]],
 ]
+
+
+def _resource_pickup_event_context(
+  liquid_handler: "LiquidHandler", resource: Resource, **_: Any
+) -> Dict[str, Any]:
+  return {
+    "device": resource_reference(liquid_handler),
+    "resources": [resource_reference(resource)],
+  }
+
+
+def _picked_resource_event_context(liquid_handler: "LiquidHandler", **_: Any) -> Dict[str, Any]:
+  pickup = liquid_handler._resource_pickup
+  return {
+    "device": resource_reference(liquid_handler),
+    "resources": [] if pickup is None else [resource_reference(pickup.resource)],
+  }
+
+
+def _resource_drop_event_context(
+  liquid_handler: "LiquidHandler",
+  destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
+  **_: Any,
+) -> Dict[str, Any]:
+  context = _picked_resource_event_context(liquid_handler)
+  if isinstance(destination, Resource):
+    context["destination"] = resource_reference(destination)
+  else:
+    context["destination"] = repr(destination)
+  return context
 
 
 class BlowOutVolumeError(Exception):
@@ -2035,6 +2066,7 @@ class LiquidHandler(Resource, Machine):
     await self.aspirate96(resource=source, volume=volume, flow_rate=aspiration_flow_rate)
     await self.dispense96(resource=source, volume=volume, flow_rate=dispense_flow_rate)
 
+  @evented_operation("liquid_handler.resource_pickup", _resource_pickup_event_context)
   async def pick_up_resource(
     self,
     resource: Resource,
@@ -2093,6 +2125,7 @@ class LiquidHandler(Resource, Machine):
 
     self._state_updated()
 
+  @evented_operation("liquid_handler.resource_move", _picked_resource_event_context)
   async def move_picked_up_resource(
     self,
     to: Coordinate,
@@ -2129,6 +2162,7 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
+  @evented_operation("liquid_handler.resource_drop", _resource_drop_event_context)
   async def drop_resource(
     self,
     destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
