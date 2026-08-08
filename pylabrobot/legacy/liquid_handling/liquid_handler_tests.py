@@ -621,7 +621,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ops=[_make_disp(well, vol=10, offset=Coordinate(x=1, y=1, z=1), tip=t)],
     )
 
-  async def test_aspirate_and_dispense_emit_plate_aware_events(self):
+  async def test_aspirate_and_dispense_emit_well_accurate_events(self):
     well = self.plate.get_item("A1")
     well.tracker.set_volume(20)
     self.lh.update_head_state({0: self.tip_rack.get_item("A1").get_tip()})
@@ -643,7 +643,14 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ],
     )
     context = events[0].context
-    self.assertEqual([resource["name"] for resource in context["resources"]], ["plate"])
+    self.assertEqual([resource["name"] for resource in context["resources"]], [well.name])
+    self.assertEqual(context["resources"][0]["type"], "Well")
+    self.assertTrue(
+      any(
+        ancestor["name"] == "plate" and ancestor["type"] == "Plate"
+        for ancestor in context["resources"][0]["ancestors"]
+      )
+    )
     operation = context["liquid_operations"][0]
     self.assertEqual(operation["channel"], 0)
     self.assertEqual(operation["resource"]["name"], well.name)

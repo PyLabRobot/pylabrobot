@@ -146,7 +146,7 @@ def _liquid_operation_event_context(
   use_channels: Optional[List[int]] = None,
   **_: Any,
 ) -> Dict[str, Any]:
-  """Describe requested liquid operations using plate lanes and per-channel well detail."""
+  """Describe requested liquid operations using their directly operated containers."""
 
   resource_list = list(resources)
   channels = use_channels or liquid_handler._default_use_channels or list(range(len(resource_list)))
@@ -154,18 +154,17 @@ def _liquid_operation_event_context(
   if len(operation_resources) == 1 and len(channels) > 1:
     operation_resources = operation_resources * len(channels)
 
-  plate_resources = [_liquid_operation_plate(resource) for resource in resource_list]
-  unique_plate_resources: List[Dict[str, Any]] = []
-  seen_plate_names: Set[str] = set()
-  for plate_resource in plate_resources:
-    reference = resource_reference(plate_resource)
+  unique_operation_resources: List[Dict[str, Any]] = []
+  seen_resource_keys: Set[Tuple[Any, Any]] = set()
+  for operation_resource in operation_resources:
+    reference = resource_reference(operation_resource)
     if reference is None:
       continue
-    name = reference.get("name")
-    if not isinstance(name, str) or name in seen_plate_names:
+    key = (reference.get("type"), reference.get("name"))
+    if key in seen_resource_keys:
       continue
-    seen_plate_names.add(name)
-    unique_plate_resources.append(reference)
+    seen_resource_keys.add(key)
+    unique_operation_resources.append(reference)
 
   liquid_operations = []
   for channel, resource, volume in zip(channels, operation_resources, vols):
@@ -180,8 +179,7 @@ def _liquid_operation_event_context(
 
   return {
     "device": resource_reference(liquid_handler),
-    # Gantt lanes are plate-level; exact well information remains available per channel below.
-    "resources": unique_plate_resources,
+    "resources": unique_operation_resources,
     "liquid_operations": liquid_operations,
   }
 

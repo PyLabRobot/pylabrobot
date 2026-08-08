@@ -154,7 +154,12 @@ def emit_event(name: str, **data: Any) -> Optional[PLREvent]:
 
 
 def resource_reference(resource: Any) -> Optional[Dict[str, Any]]:
-  """Return a compact resource identity without serializing its full subtree."""
+  """Return a compact resource identity and its assigned-resource ancestry.
+
+  The reference always identifies the resource directly involved in an operation. Its
+  ancestry is structural context only: consumers can, for example, present a well on
+  the lane for its owning plate without replacing the well in the event payload.
+  """
   if resource is None:
     return None
   result: Dict[str, Any] = {
@@ -171,6 +176,20 @@ def resource_reference(resource: Any) -> Optional[Dict[str, Any]]:
       "y": rotation.y,
       "z": rotation.z,
     }
+  ancestors = []
+  current = getattr(resource, "parent", None)
+  while current is not None:
+    ancestor: Dict[str, Any] = {
+      "name": getattr(current, "name", None),
+      "type": type(current).__name__,
+    }
+    ancestor_model = getattr(current, "model", None)
+    if ancestor_model is not None:
+      ancestor["model"] = str(ancestor_model)
+    ancestors.append(ancestor)
+    current = getattr(current, "parent", None)
+  if ancestors:
+    result["ancestors"] = ancestors
   return result
 
 
