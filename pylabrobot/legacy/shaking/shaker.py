@@ -1,10 +1,27 @@
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
+from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .backend import ShakerBackend
+
+
+def _shaker_event_context(
+  shaker: "Shaker",
+  speed: Optional[float] = None,
+  duration: Optional[float] = None,
+  **_: Any,
+) -> dict[str, Any]:
+  """Describe a shaker operation without inferring a plate association."""
+
+  context: dict[str, Any] = {"device": resource_reference(shaker)}
+  if speed is not None:
+    context["speed_rpm"] = float(speed)
+  if duration is not None:
+    context["duration_seconds"] = float(duration)
+  return context
 
 
 class Shaker(ResourceHolder, Machine):
@@ -34,6 +51,7 @@ class Shaker(ResourceHolder, Machine):
     Machine.__init__(self, backend=backend)
     self.backend: ShakerBackend = backend  # fix type
 
+  @evented_operation("shaker.shake", _shaker_event_context)
   async def shake(self, speed: float, duration: Optional[float] = None, **backend_kwargs):
     """Shake the shaker at the given speed
 
@@ -53,6 +71,7 @@ class Shaker(ResourceHolder, Machine):
     if self.backend.supports_locking:
       await self.backend.unlock_plate()
 
+  @evented_operation("shaker.stop_shaking", _shaker_event_context)
   async def stop_shaking(self, **backend_kwargs):
     await self.backend.stop_shaking(**backend_kwargs)
 

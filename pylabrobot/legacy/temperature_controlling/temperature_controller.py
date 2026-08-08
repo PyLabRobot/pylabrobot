@@ -1,11 +1,35 @@
 import asyncio
 import time
-from typing import Optional
+from typing import Any, Optional
 
+from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .backend import TemperatureControllerBackend
+
+
+def _temperature_event_context(
+  temperature_controller: "TemperatureController",
+  temperature: Optional[float] = None,
+  passive: Optional[bool] = None,
+  timeout: Optional[float] = None,
+  tolerance: Optional[float] = None,
+  **_: Any,
+) -> dict[str, Any]:
+  """Describe a thermal-device command without inferring a plate association."""
+
+  context: dict[str, Any] = {"device": resource_reference(temperature_controller)}
+  target_temperature = temperature_controller.target_temperature if temperature is None else temperature
+  if target_temperature is not None:
+    context["target_temperature_c"] = float(target_temperature)
+  if passive is not None:
+    context["passive"] = passive
+  if timeout is not None:
+    context["timeout_seconds"] = float(timeout)
+  if tolerance is not None:
+    context["tolerance_c"] = float(tolerance)
+  return context
 
 
 class TemperatureController(ResourceHolder, Machine):
@@ -36,6 +60,7 @@ class TemperatureController(ResourceHolder, Machine):
     self.backend: TemperatureControllerBackend = backend  # fix type
     self.target_temperature: Optional[float] = None
 
+  @evented_operation("temperature_controller.set_temperature", _temperature_event_context)
   async def set_temperature(self, temperature: float, passive: bool = False):
     """Set the temperature of the temperature controller.
 
@@ -68,6 +93,7 @@ class TemperatureController(ResourceHolder, Machine):
     """Get the current temperature of the temperature controller in Celsius."""
     return await self.backend.get_current_temperature()
 
+  @evented_operation("temperature_controller.wait_for_temperature", _temperature_event_context)
   async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5) -> None:
     """Wait for the temperature to reach the target temperature. The target temperature must be
     set by `set_temperature()`.
@@ -86,6 +112,7 @@ class TemperatureController(ResourceHolder, Machine):
       await asyncio.sleep(1.0)
     raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
 
+  @evented_operation("temperature_controller.deactivate", _temperature_event_context)
   async def deactivate(self):
     """Deactivate the temperature controller. This will stop the heating or cooling, and return
     the temperature to ambient temperature. The target temperature will be reset to `None`.

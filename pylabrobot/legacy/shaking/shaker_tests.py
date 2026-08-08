@@ -1,5 +1,6 @@
 import unittest
 
+from pylabrobot.events import EventBus, use_event_bus
 from pylabrobot.legacy.shaking import Shaker, ShakerChatterboxBackend
 from pylabrobot.resources.coordinate import Coordinate
 
@@ -18,3 +19,35 @@ class ShakerTests(unittest.TestCase):
     serialized = s.serialize()
     deserialized = Shaker.deserialize(serialized)
     self.assertEqual(s, deserialized)
+
+
+class ShakerEventTests(unittest.IsolatedAsyncioTestCase):
+  async def test_shake_and_stop_emit_device_scoped_events(self):
+    shaker = Shaker(
+      name="test_shaker",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      backend=ShakerChatterboxBackend(),
+      child_location=Coordinate.zero(),
+    )
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await shaker.shake(speed=900, duration=0)
+      await shaker.stop_shaking()
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "shaker.shake.started",
+        "shaker.shake.completed",
+        "shaker.stop_shaking.started",
+        "shaker.stop_shaking.completed",
+      ],
+    )
+    self.assertEqual(events[0].context["device"]["name"], "test_shaker")
+    self.assertEqual(events[0].context["speed_rpm"], 900.0)
+    self.assertEqual(events[0].context["duration_seconds"], 0.0)
