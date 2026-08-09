@@ -168,9 +168,7 @@ class PrepHead8:
 
   def get_mounted_tips(self) -> List[Optional[Tip]]:
     """Tips currently mounted on the 8MPH (``None`` if empty)."""
-    return [
-      self.head[i].get_tip() if self.head[i].has_tip else None for i in range(NUM_PROBES)
-    ]
+    return [self.head[i].get_tip() if self.head[i].has_tip else None for i in range(NUM_PROBES)]
 
   async def _finalize_head8_command(
     self,
@@ -882,7 +880,9 @@ class PrepHead8:
     tadm: Optional[PrepCmd.TadmParameters] = None,
     container_segments: Optional[List[PrepCmd.SegmentDescriptor]] = None,
     auto_container_geometry: bool = False,
-    hamilton_liquid_classes: Optional[Union[HamiltonLiquidClass, List[Optional[HamiltonLiquidClass]]]] = None,
+    hamilton_liquid_classes: Optional[
+      Union[HamiltonLiquidClass, List[Optional[HamiltonLiquidClass]]]
+    ] = None,
     disable_volume_correction: bool = False,
     read_timeout: Optional[float] = None,
     command_version: Optional[Literal["v1", "v2"]] = None,
@@ -912,15 +912,11 @@ class PrepHead8:
     tip_vol = _TipVol(tip, float(volume))
     hlcs = resolve_hamilton_liquid_classes(explicit, [tip_vol], jet=False, blow_out=False)
     hlc = hlcs[0]
-    corrected = corrected_volumes_for_ops(
-      [tip_vol], hlcs, [disable_volume_correction]
-    )[0]
+    corrected = corrected_volumes_for_ops([tip_vol], hlcs, [disable_volume_correction])[0]
 
     traverse_z = self._resolve_traverse_height()
     final_z_resolved = (
-      z_final
-      if z_final is not None
-      else traverse_z - (tip.total_tip_length - tip.fitting_depth)
+      z_final if z_final is not None else traverse_z - (tip.total_tip_length - tip.fitting_depth)
     )
 
     if container is not None:
@@ -939,7 +935,9 @@ class PrepHead8:
       if len(wells_list) != NUM_PROBES:
         raise ValueError(f"aspirate8 requires {NUM_PROBES} wells, got {len(wells_list)}")
       self._resolve_probe_positions(wells_list)
-      resource_name = wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
+      resource_name = (
+        wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
+      )
       op_targets = [w.name.rsplit("_", 1)[-1] for w in wells_list]
       ref_loc = wells_list[0].get_absolute_location("c", "c", "cavity_bottom")
       ref_x, ref_y = ref_loc.x, ref_loc.y
@@ -1066,9 +1064,7 @@ class PrepHead8:
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
 
-    await self._finalize_head8_command(
-      use_channels, volume_intents=volume_intents, send=_send
-    )
+    await self._finalize_head8_command(use_channels, volume_intents=volume_intents, send=_send)
 
   async def dispense8(
     self,
@@ -1096,7 +1092,9 @@ class PrepHead8:
     c_lld: Optional[PrepCmd.CLldParameters] = None,
     container_segments: Optional[List[PrepCmd.SegmentDescriptor]] = None,
     auto_container_geometry: bool = False,
-    hamilton_liquid_classes: Optional[Union[HamiltonLiquidClass, List[Optional[HamiltonLiquidClass]]]] = None,
+    hamilton_liquid_classes: Optional[
+      Union[HamiltonLiquidClass, List[Optional[HamiltonLiquidClass]]]
+    ] = None,
     disable_volume_correction: bool = False,
     read_timeout: Optional[float] = None,
     command_version: Optional[Literal["v1", "v2"]] = None,
@@ -1127,15 +1125,11 @@ class PrepHead8:
     tip_vol = _TipVol(tip, float(volume))
     hlcs = resolve_hamilton_liquid_classes(explicit, [tip_vol], jet=False, blow_out=False)
     hlc = hlcs[0]
-    corrected = corrected_volumes_for_ops(
-      [tip_vol], hlcs, [disable_volume_correction]
-    )[0]
+    corrected = corrected_volumes_for_ops([tip_vol], hlcs, [disable_volume_correction])[0]
 
     traverse_z = self._resolve_traverse_height()
     final_z_resolved = (
-      z_final
-      if z_final is not None
-      else traverse_z - (tip.total_tip_length - tip.fitting_depth)
+      z_final if z_final is not None else traverse_z - (tip.total_tip_length - tip.fitting_depth)
     )
 
     if container is not None:
@@ -1154,7 +1148,9 @@ class PrepHead8:
       if len(wells_list) != NUM_PROBES:
         raise ValueError(f"dispense8 requires {NUM_PROBES} wells, got {len(wells_list)}")
       self._resolve_probe_positions(wells_list)
-      resource_name = wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
+      resource_name = (
+        wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
+      )
       op_targets = [w.name.rsplit("_", 1)[-1] for w in wells_list]
       ref_loc = wells_list[0].get_absolute_location("c", "c", "cavity_bottom")
       ref_x, ref_y = ref_loc.x, ref_loc.y
@@ -1196,9 +1192,7 @@ class PrepHead8:
       else (hlc.dispense_stop_flow_rate if hlc is not None else 100.0)
     )
     resolved_flow = (
-      flow_rate
-      if flow_rate is not None
-      else (hlc.dispense_flow_rate if hlc is not None else 100.0)
+      flow_rate if flow_rate is not None else (hlc.dispense_flow_rate if hlc is not None else 100.0)
     )
 
     logger.info(
@@ -1278,9 +1272,7 @@ class PrepHead8:
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
 
-    await self._finalize_head8_command(
-      use_channels, volume_intents=volume_intents, send=_send
-    )
+    await self._finalize_head8_command(use_channels, volume_intents=volume_intents, send=_send)
 
   # ---------------------------------------------------------------------------
   # Tip presence sensing

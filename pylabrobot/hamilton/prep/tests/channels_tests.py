@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from pylabrobot.hamilton.prep import Prep
 from pylabrobot.hamilton.prep.channels import PrepChannels, PrepPIPChannel
+from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck, hamilton_96_tiprack_50uL_NTR
 from pylabrobot.resources.tip_tracker import set_tip_tracking
+from pylabrobot.resources.volume_tracker import set_volume_tracking
 
 
 def _run(coro):
@@ -77,5 +81,61 @@ def test_channels_tip_trackers_pick_and_drop():
       await p.stop()
     finally:
       set_tip_tracking(False)
+
+  _run(_t())
+
+
+def test_channels_volume_trackers_aspirate_dispense():
+  """aspirate/dispense update well and tip VolumeTrackers when volume tracking is on."""
+
+  async def _t():
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+    try:
+      deck = PrepDeck()
+      tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
+      plate = deck[0] = cor_axy_96_wellplate_500uL_Ub("plate")
+      p = Prep(deck=deck, chatterbox=True)
+      await p.setup()
+      assert p.channels is not None
+      n = min(2, p.channels.num_channels)
+      spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")][:n]
+      use = list(range(n))
+      src = plate["A1:B1"][:n]
+      dst = plate["A7:B7"][:n]
+      vols = [20.0] * n
+      for well in src:
+        well.tracker.set_volume(100.0)
+
+      await p.channels.pick_up_tips(spots, use_channels=use)
+      await p.channels.aspirate(
+        src,
+        vols=vols,
+        use_channels=use,
+        disable_volume_correction=[True] * n,
+      )
+      for well in src:
+        assert well.tracker.get_used_volume() == pytest.approx(80.0)
+      for ch in use:
+        tip = p.channels.head[ch].get_tip()
+        assert tip.tracker.get_used_volume() == pytest.approx(20.0)
+
+      await p.channels.dispense(
+        dst,
+        vols=vols,
+        use_channels=use,
+        disable_volume_correction=[True] * n,
+      )
+      for well in dst:
+        assert well.tracker.get_used_volume() == pytest.approx(20.0)
+      for ch in use:
+        tip = p.channels.head[ch].get_tip()
+        assert tip.tracker.get_used_volume() == pytest.approx(0.0)
+
+      await p.channels.drop_tips(spots, use_channels=use)
+      await p.stop()
+    finally:
+      set_tip_tracking(False)
+      set_volume_tracking(False)
 
   _run(_t())

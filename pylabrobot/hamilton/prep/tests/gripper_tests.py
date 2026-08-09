@@ -214,9 +214,7 @@ def test_pick_up_tool_default_pre_position_moves_then_picks():
     await p.pick_up_core_grippers()
 
     seq = [
-      c
-      for c in captured
-      if isinstance(c, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepPickUpTool))
+      c for c in captured if isinstance(c, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepPickUpTool))
     ]
     assert len(seq) >= 2
     assert isinstance(seq[0], PrepCmd.PrepMoveToPosition)

@@ -1061,9 +1061,7 @@ class PrepChannels:
       assert max(use_channels) < self.num_channels, (
         f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
       )
-    offsets_list = (
-      list(offsets) if offsets is not None else [Coordinate.zero()] * len(tip_spots)
-    )
+    offsets_list = list(offsets) if offsets is not None else [Coordinate.zero()] * len(tip_spots)
     if len(offsets_list) != len(tip_spots):
       raise ValueError("len(offsets) must equal len(tip_spots)")
 
@@ -1106,7 +1104,9 @@ class PrepChannels:
 
     if pre_position:
       traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
-      locs = [indexed[ch][0].get_absolute_location("c", "c", "t") + indexed[ch][2] for ch in use_channels]
+      locs = [
+        indexed[ch][0].get_absolute_location("c", "c", "t") + indexed[ch][2] for ch in use_channels
+      ]
       await self.move_to_position(
         x=locs[0].x,
         y=[loc.y for loc in locs],
@@ -1172,9 +1172,7 @@ class PrepChannels:
         f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
       )
     tips = self._require_mounted_tips(use_channels)
-    offsets_list = (
-      list(offsets) if offsets is not None else [Coordinate.zero()] * len(destinations)
-    )
+    offsets_list = list(offsets) if offsets is not None else [Coordinate.zero()] * len(destinations)
     if len(offsets_list) != len(destinations):
       raise ValueError("len(offsets) must equal len(destinations)")
 
@@ -1863,7 +1861,12 @@ class PrepChannels:
     lhs = list(liquid_height) if liquid_height is not None else [None] * n
     frs = list(flow_rates) if flow_rates is not None else [None] * n
     bavs = list(blow_out_air_volume) if blow_out_air_volume is not None else [None] * n
-    for name, seq in (("offsets", offs), ("liquid_height", lhs), ("flow_rates", frs), ("blow_out_air_volume", bavs)):
+    for name, seq in (
+      ("offsets", offs),
+      ("liquid_height", lhs),
+      ("flow_rates", frs),
+      ("blow_out_air_volume", bavs),
+    ):
       if len(seq) != n:
         raise ValueError(f"{name} length must match use_channels ({n})")
     return [
@@ -1963,9 +1966,7 @@ class PrepChannels:
         channel=ch,
         container=op.resource,
         tip=op.tip,
-        volume_ul=next(
-          k.common.liquid_volume for k in kits if k.channel == _CHANNEL_INDEX[ch]
-        ),
+        volume_ul=next(k.common.liquid_volume for k in kits if k.channel == _CHANNEL_INDEX[ch]),
         direction="aspirate",
       )
       for ch, op in zip(use_channels, ops)
@@ -1975,9 +1976,7 @@ class PrepChannels:
     async def _send() -> None:
       await self._send_aspirate(kits, effective_lld, is_tadm, use_v2, lld_read_timeout)
 
-    await self._finalize_channel_command(
-      use_channels, volume_intents=volume_intents, send=_send
-    )
+    await self._finalize_channel_command(use_channels, volume_intents=volume_intents, send=_send)
 
   async def dispense(
     self,
@@ -2063,9 +2062,7 @@ class PrepChannels:
         channel=ch,
         container=op.resource,
         tip=op.tip,
-        volume_ul=next(
-          k.common.liquid_volume for k in kits if k.channel == _CHANNEL_INDEX[ch]
-        ),
+        volume_ul=next(k.common.liquid_volume for k in kits if k.channel == _CHANNEL_INDEX[ch]),
         direction="dispense",
       )
       for ch, op in zip(use_channels, ops)
@@ -2075,9 +2072,7 @@ class PrepChannels:
     async def _send() -> None:
       await self._send_dispense(kits, effective_lld, use_v2, lld_read_timeout)
 
-    await self._finalize_channel_command(
-      use_channels, volume_intents=volume_intents, send=_send
-    )
+    await self._finalize_channel_command(use_channels, volume_intents=volume_intents, send=_send)
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     """Check if the tip can be picked up by the specified channel.

@@ -56,9 +56,7 @@ class TestResourceStateTips(unittest.TestCase):
     spot = _spot()
     channel = TipTracker(thing="ch0")
     tip = spot.get_tip()
-    intents = [
-      TipPickupIntent(channel=0, tip_spot=spot, tip=tip, channel_tracker=channel)
-    ]
+    intents = [TipPickupIntent(channel=0, tip_spot=spot, tip=tip, channel_tracker=channel)]
     queue_tip_pickups(intents)
     finalize_tip_ops(intents, {0: True})
     self.assertFalse(spot.has_tip())
@@ -69,9 +67,7 @@ class TestResourceStateTips(unittest.TestCase):
     spot = _spot()
     channel = TipTracker(thing="ch0")
     tip = spot.get_tip()
-    intents = [
-      TipPickupIntent(channel=0, tip_spot=spot, tip=tip, channel_tracker=channel)
-    ]
+    intents = [TipPickupIntent(channel=0, tip_spot=spot, tip=tip, channel_tracker=channel)]
     queue_tip_pickups(intents)
     finalize_tip_ops(intents, {0: False})
     self.assertTrue(spot.has_tip())
@@ -87,9 +83,7 @@ class TestResourceStateTips(unittest.TestCase):
     queue_tip_pickups(pick)
     finalize_tip_ops(pick, {0: True})
 
-    drop_spot = [
-      TipDropIntent(channel=0, destination=dest, tip=tip, channel_tracker=channel)
-    ]
+    drop_spot = [TipDropIntent(channel=0, destination=dest, tip=tip, channel_tracker=channel)]
     queue_tip_drops(drop_spot)
     finalize_tip_ops(drop_spot, {0: True})
     self.assertTrue(dest.has_tip())
@@ -99,9 +93,7 @@ class TestResourceStateTips(unittest.TestCase):
     pick2 = [TipPickupIntent(channel=0, tip_spot=dest, tip=tip2, channel_tracker=channel)]
     queue_tip_pickups(pick2)
     finalize_tip_ops(pick2, {0: True})
-    drop_trash = [
-      TipDropIntent(channel=0, destination=trash, tip=tip2, channel_tracker=channel)
-    ]
+    drop_trash = [TipDropIntent(channel=0, destination=trash, tip=tip2, channel_tracker=channel)]
     queue_tip_drops(drop_trash)
     finalize_tip_ops(drop_trash, {0: True})
     self.assertFalse(channel.has_tip)
