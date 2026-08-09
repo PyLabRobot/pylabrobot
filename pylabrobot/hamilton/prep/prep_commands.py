@@ -1233,16 +1233,15 @@ _UNRESOLVED = Address(-1, -1, -1)
 class PrepCommand(TCPCommand):
   """Base for all Prep instrument commands.
 
-  Subclasses are dataclasses with optional ``dest: Address`` (kw-only,
-  defaulted) plus any ``Annotated`` payload fields. ``build_parameters()``
-  is inherited from ``TCPCommand`` and serialises only ``Annotated`` fields
-  via ``HoiParams.from_struct``, so ``dest`` is automatically excluded from
-  the wire payload.
+  Subclasses are dataclasses with ``Annotated`` payload fields.
+  ``build_parameters()`` is inherited from ``TCPCommand`` and serialises only
+  ``Annotated`` fields via ``HoiParams.from_struct``.
 
-  Firmware target is declared via the class-level ``firmware_path`` attribute;
-  ``PrepClient.send_command`` resolves it JIT. Polymorphic-dest commands (e.g.
-  ``PrepGetPositions`` on MPH vs pipettor) can set ``firmware_path = None``
-  and require callers to pass an explicit ``dest=``.
+  Destination defaults to :data:`_UNRESOLVED` in :meth:`__post_init__` (not a
+  dataclass field — ``field(kw_only=...)`` needs Python 3.10+ and this package
+  supports 3.9). Callers that need ``dest=`` at construction declare
+  ``dest: Address`` (required or defaulted) on that concrete subclass.
+  ``PrepClient.send_command`` resolves ``_UNRESOLVED`` from ``firmware_path``.
   """
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -1254,7 +1253,10 @@ class PrepCommand(TCPCommand):
   # Aggregates populated by ``__init_subclass__`` at import time (unique paths for chatterbox seeding).
   _ALL_PATHS: ClassVar[Set[str]] = set()
 
-  dest: Address = field(default=_UNRESOLVED, kw_only=True)
+  # Instance field so dataclasses generate ``__init__`` (shadowing TCPCommand's
+  # ``__init__(dest)`` for typecheckers). ``init=False`` keeps it out of
+  # constructors and avoids Python 3.9 field-ordering errors on subclasses.
+  _prep_command_base: None = field(default=None, init=False, repr=False, compare=False)
 
   def __init_subclass__(cls, **kwargs):
     super().__init_subclass__(**kwargs)
@@ -1264,6 +1266,8 @@ class PrepCommand(TCPCommand):
     PrepCommand._ALL_PATHS.add(path)
 
   def __post_init__(self):
+    if not hasattr(self, "dest"):
+      self.dest = _UNRESOLVED
     super().__init__(self.dest)
 
   def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
@@ -1985,6 +1989,7 @@ class PrepGetIsInitialized(PrepStatusRequest):
 
   command_id = 2
   firmware_path = "MLPrepRoot.MLPrep"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:
@@ -2261,6 +2266,7 @@ class PrepGetIsEnclosurePresent(PrepStatusRequest):
 
   command_id = 21
   firmware_path = "MLPrepRoot.MLPrep"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:
@@ -2273,6 +2279,7 @@ class PrepGetSafeSpeedsEnabled(PrepStatusRequest):
 
   command_id = 28
   firmware_path = "MLPrepRoot.MLPrep"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:
@@ -2285,6 +2292,7 @@ class PrepGetDefaultTraverseHeight(PrepStatusRequest):
 
   command_id = 10
   firmware_path = "MLPrepRoot.MLPrep"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:
@@ -2302,6 +2310,7 @@ class PrepGetTipAndNeedleDefinitions(PrepStatusRequest):
 
   command_id = 11
   firmware_path = "MLPrepRoot.MLPrep"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:
@@ -2314,6 +2323,7 @@ class PrepGetDeckBounds(PrepStatusRequest):
 
   command_id = 1
   firmware_path = "MLPrepRoot.MLPrepCalibration.DeckConfiguration"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:
@@ -2352,6 +2362,7 @@ class PrepGetDeckSiteDefinitions(PrepStatusRequest):
 
   command_id = 7
   firmware_path = "MLPrepRoot.MLPrepCalibration.DeckConfiguration"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:
@@ -2369,6 +2380,7 @@ class PrepGetWasteSiteDefinitions(PrepStatusRequest):
 
   command_id = 12
   firmware_path = "MLPrepRoot.MLPrepCalibration.DeckConfiguration"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:
@@ -2402,6 +2414,7 @@ class PrepGetPresentChannels(PrepStatusRequest):
 
   command_id = 17
   firmware_path = "MLPrepRoot.MLPrepService"
+  dest: Address = _UNRESOLVED
 
   @dataclass(frozen=True)
   class Response:

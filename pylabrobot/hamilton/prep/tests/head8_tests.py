@@ -30,6 +30,7 @@ from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_deck():
   deck = PrepDeck()
   tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)

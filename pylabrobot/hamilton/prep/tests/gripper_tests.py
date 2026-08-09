@@ -13,7 +13,7 @@ from pylabrobot.hamilton.prep import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.gripper import PrepGripper, PrepGripperArm
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
-from pylabrobot.resources.hamilton import PrepDeck
+from pylabrobot.resources.hamilton import HamiltonCoreGrippers, PrepDeck
 
 
 def _record_send(prep: Prep) -> list[Any]:
@@ -237,6 +237,7 @@ def test_pick_up_tool_pre_position_false_skips_move():
     captured = _record_send(p)
 
     mount = deck.get_resource("core_grippers")
+    assert isinstance(mount, HamiltonCoreGrippers)
     loc = mount.get_location_wrt(deck)
     await p.gripper.pick_up_tool(
       tool_position_x=loc.x,

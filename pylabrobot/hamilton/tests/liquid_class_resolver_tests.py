@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, Dict
 
 import pytest
 
@@ -16,8 +17,8 @@ from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.liquid import Liquid
 
 
-def _hlc(**overrides: float) -> HamiltonLiquidClass:
-  base = dict(
+def _hlc(**overrides: Any) -> HamiltonLiquidClass:
+  base: Dict[str, Any] = dict(
     curve={0.0: 0.0, 1000.0: 1000.0},
     aspiration_flow_rate=1.0,
     aspiration_mix_flow_rate=2.0,
