@@ -39,6 +39,7 @@ from .plate_adapter import PlateAdapter
 from .porvair import *
 from .powder import Powder
 from .resource import Resource
+from .resource_stack import ResourceStack
 from .resource_state import (
   TipDropIntent,
   TipPickupIntent,
@@ -52,7 +53,6 @@ from .resource_state import (
   queue_volume_transfers,
   successes_from_failed_channels,
 )
-from .resource_stack import ResourceStack
 from .revvity import *
 from .rotation import Rotation
 from .sergi import *
