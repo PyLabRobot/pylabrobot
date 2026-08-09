@@ -57,15 +57,15 @@ class TipTracker(SerializableMixin):
     return self._pending_tip is not None
 
   def get_tip(self) -> "Tip":
-    """Get the tip. Note that does includes pending operations.
+    """Get the tip. Note that this includes pending operations.
 
     Raises:
       NoTipError: If the tip spot does not have a tip.
     """
 
-    if self._tip is None:
+    if self._pending_tip is None:
       raise NoTipError(f"{self.thing} does not have a tip.")
-    return self._tip
+    return self._pending_tip
 
   def disable(self) -> None:
     """Disable the tip tracker."""
