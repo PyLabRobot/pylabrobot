@@ -153,12 +153,26 @@ class PrepGripper:
     tool_x_radius: float = 2.0,
     tool_y_radius: float = 2.0,
     tip_definition: Optional[PrepCmd.TipPickupParameters] = None,
+    pre_position: bool = True,
   ) -> None:
-    """Pick up CoRe gripper tool (PrepPickUpTool, cmd=15). Moves channels to safe Z after."""
+    """Pick up CoRe gripper tool (PrepPickUpTool, cmd=15).
+
+    When ``pre_position`` is True (default), moves both channels to the tool XY at
+    traverse height before the firmware pickup (same pattern as tip pickup).
+    After pickup, moves channels to safe Z.
+    """
     if tool_seek is None:
       tool_seek = tool_position_z + 10.0
     if tip_definition is None:
       tip_definition = PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
+    if pre_position:
+      traverse_h = self._channels._resolve_traverse_height()
+      await self._channels.move_to_position(
+        x=tool_position_x,
+        y=[rear_channel_position_y, front_channel_position_y],
+        z=traverse_h,
+        use_channels=[0, 1],
+      )
     await self._client.send_command(
       PrepCmd.PrepPickUpTool(
         tip_definition=tip_definition,

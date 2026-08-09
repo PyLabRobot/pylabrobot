@@ -8,10 +8,24 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pylabrobot.hamilton.prep import Prep
+from pylabrobot.hamilton.prep import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.gripper import PrepGripper, PrepGripperArm
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck
+
+
+def _record_send(prep: Prep) -> list[Any]:
+  captured: list[Any] = []
+  orig_send = prep.client.send_command
+
+  async def recording(command, **kw):
+    captured.append(command)
+    return await orig_send(command, **kw)
+
+  prep.client.send_command = recording  # type: ignore[method-assign, assignment]
+  return captured
 
 
 def _make_arm(deck: PrepDeck) -> PrepGripperArm:
@@ -183,5 +197,62 @@ def test_drop_resource_applies_offset_to_firmware_location():
     assert dropped_loc.x == pytest.approx(expected.x)
     assert dropped_loc.y == pytest.approx(expected.y)
     assert dropped_loc.z == pytest.approx(expected.z)
+
+  asyncio.run(_run())
+
+
+def test_pick_up_tool_default_pre_position_moves_then_picks():
+  """Default pre_position=True issues PrepMoveToPosition before PrepPickUpTool."""
+
+  async def _run() -> None:
+    deck = PrepDeck(with_core_grippers=True)
+    p = Prep(deck=deck, chatterbox=True)
+    await p.setup()
+    assert p.gripper is not None
+    captured = _record_send(p)
+
+    await p.pick_up_core_grippers()
+
+    seq = [
+      c
+      for c in captured
+      if isinstance(c, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepPickUpTool))
+    ]
+    assert len(seq) >= 2
+    assert isinstance(seq[0], PrepCmd.PrepMoveToPosition)
+    assert isinstance(seq[1], PrepCmd.PrepPickUpTool)
+
+    await p.return_core_grippers()
+    await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_pick_up_tool_pre_position_false_skips_move():
+  """Explicit pre_position=False sends PrepPickUpTool without a prior PrepMoveToPosition."""
+
+  async def _run() -> None:
+    deck = PrepDeck(with_core_grippers=True)
+    p = Prep(deck=deck, chatterbox=True)
+    await p.setup()
+    assert p.gripper is not None
+    captured = _record_send(p)
+
+    mount = deck.get_resource("core_grippers")
+    loc = mount.get_location_wrt(deck)
+    await p.gripper.pick_up_tool(
+      tool_position_x=loc.x,
+      tool_position_z=loc.z,
+      front_channel_position_y=loc.y + mount.front_channel_y_center,
+      rear_channel_position_y=loc.y + mount.back_channel_y_center,
+      pre_position=False,
+    )
+
+    moves = [c for c in captured if isinstance(c, PrepCmd.PrepMoveToPosition)]
+    pickups = [c for c in captured if isinstance(c, PrepCmd.PrepPickUpTool)]
+    assert moves == []
+    assert len(pickups) >= 1
+
+    await p.stop()
 
   asyncio.run(_run())
