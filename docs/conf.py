@@ -66,14 +66,6 @@ exclude_patterns = [
   "Thumbs.db",
   ".DS_Store",
   "jupyter_execute",
-  # Local Prep investigation notebooks (not published); keep basic demo in toctree.
-  "user_guide/00_liquid-handling/hamilton-prep/260629_testing.ipynb",
-  "user_guide/00_liquid-handling/hamilton-prep/prep_additional_probes_investigation.ipynb",
-  "user_guide/00_liquid-handling/hamilton-prep/prep_basic_demo_v0_reference.ipynb",
-  "user_guide/00_liquid-handling/hamilton-prep/prep_channel_introspection.ipynb",
-  "user_guide/00_liquid-handling/hamilton-prep/prep_features_demo.ipynb",
-  "user_guide/00_liquid-handling/hamilton-prep/prep_head8_demo.ipynb",
-  "user_guide/00_liquid-handling/hamilton-prep/prep_head8_mph_introspection.ipynb",
 ]
 
 autodoc_default_options = {
