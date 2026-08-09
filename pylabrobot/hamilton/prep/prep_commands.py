@@ -39,8 +39,6 @@ from pylabrobot.hamilton.transport.tcp.wire_types import (
   Enum as WEnum,
 )
 
-from .standard import Aspiration
-
 # =============================================================================
 # Enums (mirrored from Prep protocol spec)
 # =============================================================================
@@ -474,19 +472,19 @@ class AspirateParameters:
   blowout_volume: F32
 
   @classmethod
-  def for_op(
+  def from_location(
     cls,
     loc,
-    op: Aspiration,
+    *,
     prewet_volume: float = 0.0,
-    blowout_volume: Optional[float] = None,
+    blowout_volume: float = 0.0,
   ) -> AspirateParameters:
     return cls(
       default_values=False,
       x_position=loc.x,
       y_position=loc.y,
       prewet_volume=prewet_volume,
-      blowout_volume=(op.blow_out_air_volume or 0.0) if blowout_volume is None else blowout_volume,
+      blowout_volume=blowout_volume,
     )
 
 

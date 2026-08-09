@@ -38,17 +38,11 @@ from pylabrobot.hamilton.liquid_class_resolver import (
   corrected_volumes_for_ops,
   resolve_hamilton_liquid_classes,
 )
-from pylabrobot.hamilton.prep.standard import (
-  Aspiration,
-  Dispense,
-  Pickup,
-  TipDrop,
-)
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
-from pylabrobot.resources import Coordinate, Tip
+from pylabrobot.resources import Container, Coordinate, Tip
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 from pylabrobot.resources.tip_rack import TipSpot
@@ -67,7 +61,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
-_OpT = TypeVar("_OpT", Aspiration, Dispense)
+
+
+@dataclass
+class _PipetteTransfer:
+  """Private snapshot for aspirate/dispense resolution (not a public standard op)."""
+
+  resource: Container
+  tip: Tip
+  volume: float
+  offset: Coordinate
+  liquid_height: Optional[float] = None
+  flow_rate: Optional[float] = None
+  blow_out_air_volume: Optional[float] = None
+
+
+_OpT = TypeVar("_OpT", bound=_PipetteTransfer)
 
 
 # =============================================================================
@@ -796,6 +805,7 @@ class PrepChannels:
     self._supports_v2_pipetting: Optional[bool] = None
     self.setup_finished: bool = False
     self.channels: List[PrepPIPChannel] = []
+    self._mounted_tips: dict[int, Tip] = {}
 
   def set_default_traverse_height(self, value: float) -> None:
     """Set the default traverse height (mm) used when final_z is not passed to pick_up_tips/drop_tips.
@@ -954,11 +964,21 @@ class PrepChannels:
   # Tip / aspirate / dispense API
   # ---------------------------------------------------------------------------
 
+  def _require_mounted_tips(self, use_channels: List[int]) -> List[Tip]:
+    tips: List[Tip] = []
+    for ch in use_channels:
+      tip = self._mounted_tips.get(ch)
+      if tip is None:
+        raise RuntimeError(f"No tip mounted on channel {ch}; call pick_up_tips first.")
+      tips.append(tip)
+    return tips
+
   async def pick_up_tips(
     self,
-    ops: List[Pickup],
-    use_channels: List[int],
+    tip_spots: Sequence[TipSpot],
+    use_channels: Optional[List[int]] = None,
     *,
+    offsets: Optional[Sequence[Coordinate]] = None,
     final_z: Optional[float] = None,
     seek_speed: float = 15.0,
     z_seek_offset: Optional[float] = None,
@@ -968,47 +988,68 @@ class PrepChannels:
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     pre_position: bool = True,
   ):
-    """Pick up tips.
+    """Pick up tips from tip spots.
 
     The arm moves to z_seek during lateral XY approach, then descends to z_position
     to engage the tip. Default z_seek = z_position + fitting_depth + 5mm (tip-type-
     aware; avoids descending into the rack during approach).
     """
-    assert len(ops) == len(use_channels)
+    tip_spots = list(tip_spots)
+    use_channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
+    if len(tip_spots) != len(use_channels):
+      raise ValueError(
+        f"len(tip_spots) must equal len(use_channels): {len(tip_spots)} != {len(use_channels)}"
+      )
     if use_channels:
       assert max(use_channels) < self.num_channels, (
         f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
       )
+    offsets_list = (
+      list(offsets) if offsets is not None else [Coordinate.zero()] * len(tip_spots)
+    )
+    if len(offsets_list) != len(tip_spots):
+      raise ValueError("len(offsets) must equal len(tip_spots)")
 
+    tips = [spot.get_tip() for spot in tip_spots]
     resolved_final_z = self._resolve_traverse_height(final_z)
 
-    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
+    indexed = {
+      ch: (spot, tip, off)
+      for ch, spot, tip, off in zip(use_channels, tip_spots, tips, offsets_list)
+    }
     tip_positions: List[PrepCmd.TipPositionParameters] = []
     for ch in range(self.num_channels):
-      if ch not in indexed_ops:
+      if ch not in indexed:
         continue
-      op = indexed_ops[ch]
-      loc = op.resource.get_absolute_location("c", "c", "t")
-      params = PrepCmd.TipPositionParameters.for_op(
-        _CHANNEL_INDEX[ch], loc, op.resource.get_tip(), z_seek_offset=z_seek_offset
+      spot, tip, off = indexed[ch]
+      loc = spot.get_absolute_location("c", "c", "t") + off
+      tip_positions.append(
+        PrepCmd.TipPositionParameters.for_op(
+          _CHANNEL_INDEX[ch], loc, tip, z_seek_offset=z_seek_offset
+        )
       )
-      tip_positions.append(params)
 
-    assert len(set(op.tip for op in ops)) == 1, "All ops must use the same tip type"
-    tip = ops[0].tip
+    tip0 = tips[0]
+    if any(
+      t.maximal_volume != tip0.maximal_volume
+      or t.has_filter != tip0.has_filter
+      or (t.total_tip_length - t.fitting_depth) != (tip0.total_tip_length - tip0.fitting_depth)
+      for t in tips
+    ):
+      raise ValueError("All tip spots must use the same tip type")
     tip_definition = PrepCmd.TipPickupParameters(
       default_values=False,
-      volume=tip.maximal_volume,
-      length=tip.total_tip_length - tip.fitting_depth,
+      volume=tip0.maximal_volume,
+      length=tip0.total_tip_length - tip0.fitting_depth,
       tip_type=PrepCmd.TipTypes.StandardVolume,
-      has_filter=tip.has_filter,
+      has_filter=tip0.has_filter,
       is_needle=False,
       is_tool=False,
     )
 
     if pre_position:
       traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
-      locs = [indexed_ops[ch].resource.get_absolute_location("c", "c", "t") for ch in use_channels]
+      locs = [indexed[ch][0].get_absolute_location("c", "c", "t") + indexed[ch][2] for ch in use_channels]
       await self.move_to_position(
         x=locs[0].x,
         y=[loc.y for loc in locs],
@@ -1027,48 +1068,64 @@ class PrepChannels:
         dispenser_speed=dispenser_speed,
       )
     )
+    for ch, tip in zip(use_channels, tips):
+      self._mounted_tips[ch] = tip
 
   async def drop_tips(
     self,
-    ops: List[TipDrop],
-    use_channels: List[int],
+    destinations: Sequence[Union[TipSpot, Trash]],
+    use_channels: Optional[List[int]] = None,
     *,
+    offsets: Optional[Sequence[Coordinate]] = None,
     final_z: Optional[float] = None,
     seek_speed: float = 15.0,
     z_seek_offset: Optional[float] = None,
     drop_type: PrepCmd.TipDropType = PrepCmd.TipDropType.FixedHeight,
     tip_roll_off_distance: float = 0.0,
   ):
-    """Drop tips.
+    """Drop tips to tip spots or trash.
 
     The arm moves to z_seek during lateral XY approach (tip is on pipette, so tip
     bottom is at z_seek - (total_tip_length - fitting_depth)). z_position uses
     fitting depth so the tip bottom lands at the spot surface; default z_seek =
     z_position + 10mm so the tip bottom stays above adjacent tips in the rack.
     """
-    assert len(ops) == len(use_channels)
+    destinations = list(destinations)
+    use_channels = use_channels if use_channels is not None else list(range(len(destinations)))
+    if len(destinations) != len(use_channels):
+      raise ValueError(
+        f"len(destinations) must equal len(use_channels): "
+        f"{len(destinations)} != {len(use_channels)}"
+      )
     if use_channels:
       assert max(use_channels) < self.num_channels, (
         f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
       )
+    tips = self._require_mounted_tips(use_channels)
+    offsets_list = (
+      list(offsets) if offsets is not None else [Coordinate.zero()] * len(destinations)
+    )
+    if len(offsets_list) != len(destinations):
+      raise ValueError("len(offsets) must equal len(destinations)")
 
-    all_trash = all(isinstance(op.resource, Trash) for op in ops)
-    all_tip_spots = all(isinstance(op.resource, TipSpot) for op in ops)
+    all_trash = all(isinstance(d, Trash) for d in destinations)
+    all_tip_spots = all(isinstance(d, TipSpot) for d in destinations)
     if not (all_trash or all_tip_spots):
       raise ValueError("Cannot mix waste (Trash) and tip spots in a single drop_tips call.")
 
     resolved_final_z = self._resolve_traverse_height(final_z)
     roll_off = 3.0 if (all_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
-    # Use Stall when dropping to waste so the pipette detects contact before release.
     resolved_drop_type = PrepCmd.TipDropType.Stall if all_trash else drop_type
 
-    indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
+    indexed = {
+      ch: (dest, tip, off)
+      for ch, dest, tip, off in zip(use_channels, destinations, tips, offsets_list)
+    }
     tip_positions: List[PrepCmd.TipDropParameters] = []
     for ch in range(self.num_channels):
-      if ch not in indexed_ops:
+      if ch not in indexed:
         continue
-      op = indexed_ops[ch]
-      tip = op.tip
+      dest, tip, off = indexed[ch]
       if all_trash:
         if self.deck is None:
           raise ValueError(
@@ -1082,11 +1139,12 @@ class PrepChannels:
           )
         loc = self.deck.get_resource(waste_name).get_absolute_location("c", "c", "t")
       else:
-        loc = op.resource.get_absolute_location("c", "c", "t") + op.offset
-      params = PrepCmd.TipDropParameters.for_op(
-        _CHANNEL_INDEX[ch], loc, tip, z_seek_offset=z_seek_offset, drop_type=resolved_drop_type
+        loc = dest.get_absolute_location("c", "c", "t") + off
+      tip_positions.append(
+        PrepCmd.TipDropParameters.for_op(
+          _CHANNEL_INDEX[ch], loc, tip, z_seek_offset=z_seek_offset, drop_type=resolved_drop_type
+        )
       )
-      tip_positions.append(params)
 
     await self._client.send_command(
       PrepCmd.PrepDropTips(
@@ -1096,6 +1154,8 @@ class PrepChannels:
         tip_roll_off_distance=roll_off,
       )
     )
+    for ch in use_channels:
+      self._mounted_tips.pop(ch, None)
 
   # ---------------------------------------------------------------------------
   # V1/V2 aspirate/dispense dispatch helpers
@@ -1251,7 +1311,7 @@ class PrepChannels:
 
   def _resolve_aspirate_channels(
     self,
-    ops: List[Aspiration],
+    ops: List[_PipetteTransfer],
     use_channels: List[int],
     effective_lld: bool,
     *,
@@ -1328,8 +1388,8 @@ class PrepChannels:
       kits.append(
         _AspirateChannelKit(
           channel=_CHANNEL_INDEX[ch],
-          aspirate=PrepCmd.AspirateParameters.for_op(
-            loc, asp, prewet_volume=prewet_volume[idx], blowout_volume=blowout_volumes[idx]
+          aspirate=PrepCmd.AspirateParameters.from_location(
+            loc, prewet_volume=prewet_volume[idx], blowout_volume=blowout_volumes[idx]
           ),
           common=PrepCmd.CommonParameters.for_op(
             ctx.volumes[idx],
@@ -1513,7 +1573,7 @@ class PrepChannels:
 
   def _resolve_dispense_channels(
     self,
-    ops: List[Dispense],
+    ops: List[_PipetteTransfer],
     use_channels: List[int],
     effective_lld: bool,
     *,
@@ -1700,11 +1760,53 @@ class PrepChannels:
   # Public aspirate / dispense orchestrators
   # ---------------------------------------------------------------------------
 
-  async def aspirate(
+  def _build_transfers(
     self,
-    ops: List[Aspiration],
+    resources: Sequence[Container],
+    vols: Sequence[float],
     use_channels: List[int],
     *,
+    offsets: Optional[Sequence[Coordinate]] = None,
+    liquid_height: Optional[Sequence[Optional[float]]] = None,
+    flow_rates: Optional[Sequence[Optional[float]]] = None,
+    blow_out_air_volume: Optional[Sequence[Optional[float]]] = None,
+  ) -> List[_PipetteTransfer]:
+    resources = list(resources)
+    vols = [float(v) for v in vols]
+    if len(resources) != len(use_channels) or len(vols) != len(use_channels):
+      raise ValueError("resources, vols, and use_channels must have the same length")
+    tips = self._require_mounted_tips(use_channels)
+    n = len(use_channels)
+    offs = list(offsets) if offsets is not None else [Coordinate.zero()] * n
+    lhs = list(liquid_height) if liquid_height is not None else [None] * n
+    frs = list(flow_rates) if flow_rates is not None else [None] * n
+    bavs = list(blow_out_air_volume) if blow_out_air_volume is not None else [None] * n
+    for name, seq in (("offsets", offs), ("liquid_height", lhs), ("flow_rates", frs), ("blow_out_air_volume", bavs)):
+      if len(seq) != n:
+        raise ValueError(f"{name} length must match use_channels ({n})")
+    return [
+      _PipetteTransfer(
+        resource=r,
+        tip=t,
+        volume=v,
+        offset=o,
+        liquid_height=lh,
+        flow_rate=fr,
+        blow_out_air_volume=bav,
+      )
+      for r, t, v, o, lh, fr, bav in zip(resources, tips, vols, offs, lhs, frs, bavs)
+    ]
+
+  async def aspirate(
+    self,
+    resources: Sequence[Container],
+    vols: Sequence[float],
+    use_channels: Optional[List[int]] = None,
+    *,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
     z_final: Optional[List[float]] = None,
     z_fluid: Optional[List[float]] = None,
     z_air: Optional[List[float]] = None,
@@ -1726,31 +1828,22 @@ class PrepChannels:
     read_timeout: Optional[float] = None,
     command_version: Optional[Literal["v1", "v2"]] = None,
   ):
-    """Aspirate, dispatching to the appropriate command variant and version.
+    """Aspirate from containers using mounted tips.
 
-    Selects the command variant based on ``lld_mode`` (LLD on/off) and
-    ``tadm`` presence (Monitoring vs TADM).  Z/geometry parameters (z_final,
-    z_fluid, z_air, z_minimum, z_bottom_search_offset): None = use defaults for all
-    channels (derived from well geometry, STAR-aligned). Otherwise pass a list of
-    length len(ops) with one value per channel (no None in list). For per-channel
-    defaults, build the list from liquid class or constants.
-
-    Liquid-class-derived parameters (settling_time, transport_air_volume,
-    z_liquid_exit_speed, prewet_volume): None = use defaults for all channels (HLC
-    or fallback per channel). Otherwise pass a list of length len(ops) with one
-    value per channel (no None in list).
-
-    Args:
-      ops: :class:`~pylabrobot.hamilton.prep.standard.Aspiration` ops
-        (``mix`` uses :class:`~pylabrobot.hamilton.prep.standard.Mix`).
-
-    Example::
-
-      await channels.aspirate(ops, [0], z_final=[95.0], settling_time=[2.0])
-      await channels.aspirate(ops, [0], lld_mode=[LLDMode.CAPACITIVE])
-      await channels.aspirate(ops, [0], tadm=PrepCmd.TadmParameters.default())
-      await channels.aspirate(ops, [0], command_version="v1")
+    Explicit kwargs override Hamilton liquid-class defaults; HLC supplies
+    unspecified fields and the volume correction curve unless disabled.
     """
+    resources = list(resources)
+    use_channels = use_channels if use_channels is not None else list(range(len(resources)))
+    ops = self._build_transfers(
+      resources,
+      vols,
+      use_channels,
+      offsets=offsets,
+      liquid_height=liquid_height,
+      flow_rates=flow_rates,
+      blow_out_air_volume=blow_out_air_volume,
+    )
     effective_lld = self._resolve_effective_lld(lld_mode, lld, len(ops))
     is_tadm = tadm is not None
     use_v2 = self._resolve_command_version(command_version)
@@ -1787,9 +1880,14 @@ class PrepChannels:
 
   async def dispense(
     self,
-    ops: List[Dispense],
-    use_channels: List[int],
+    resources: Sequence[Container],
+    vols: Sequence[float],
+    use_channels: Optional[List[int]] = None,
     *,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
     z_final: Optional[List[float]] = None,
     z_fluid: Optional[List[float]] = None,
     z_air: Optional[List[float]] = None,
@@ -1810,23 +1908,22 @@ class PrepChannels:
     read_timeout: Optional[float] = None,
     command_version: Optional[Literal["v1", "v2"]] = None,
   ):
-    """Dispense, dispatching to the appropriate command variant and version.
+    """Dispense to containers using mounted tips.
 
-    The Prep firmware has 2 dispense commands (NoLld, Lld) — unlike aspirate which
-    splits into 4 (NoLld+Monitoring, NoLld+Tadm, Lld+Monitoring, Lld+Tadm). Both
-    dispense structs always carry a TADM field (sent with ``default_values=True``
-    when not explicitly configured), so TADM is always available on dispense
-    regardless of whether ``tadm=`` is passed.
-
-    Args:
-      ops: :class:`~pylabrobot.hamilton.prep.standard.Dispense` ops.
-
-    Example::
-
-      await channels.dispense(ops, [0], z_final=[95.0], settling_time=[0.5])
-      await channels.dispense(ops, [0], lld_mode=[LLDMode.CAPACITIVE])
-      await channels.dispense(ops, [0], command_version="v1")
+    Explicit kwargs override Hamilton liquid-class defaults; HLC supplies
+    unspecified fields and the volume correction curve unless disabled.
     """
+    resources = list(resources)
+    use_channels = use_channels if use_channels is not None else list(range(len(resources)))
+    ops = self._build_transfers(
+      resources,
+      vols,
+      use_channels,
+      offsets=offsets,
+      liquid_height=liquid_height,
+      flow_rates=flow_rates,
+      blow_out_air_volume=blow_out_air_volume,
+    )
     _DISPENSE_ALLOWED_LLD = frozenset({LLDMode.CAPACITIVE})
     effective_lld = self._resolve_effective_lld(
       lld_mode, lld, len(ops), allowed_modes=_DISPENSE_ALLOWED_LLD

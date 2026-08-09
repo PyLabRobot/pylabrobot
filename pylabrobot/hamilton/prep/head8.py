@@ -22,9 +22,16 @@ from __future__ import annotations
 
 import logging
 import struct as _struct
-from typing import TYPE_CHECKING, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Union
 
-from pylabrobot.resources import Trash
+from pylabrobot.hamilton.liquid_class_resolver import (
+  corrected_volumes_for_ops,
+  resolve_hamilton_liquid_classes,
+)
+from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
+from pylabrobot.resources import Container, Coordinate, Tip, Trash
+from pylabrobot.resources.tip_rack import TipSpot
+from pylabrobot.resources.well import Well
 
 from . import prep_commands as PrepCmd
 from .channels import (
@@ -50,14 +57,6 @@ from .channels import (
   resolve_command_version as _resolve_command_version_fn,
 )
 from .client import MPH_OBJECT_PATH
-from .standard import (
-  Head8AspirationContainer,
-  Head8AspirationWells,
-  Head8DispenseContainer,
-  Head8DispenseWells,
-  Head8TipDrop,
-  Head8TipPickup,
-)
 
 if TYPE_CHECKING:
   from .client import PrepClient
@@ -115,6 +114,7 @@ class PrepHead8:
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self.channels: list = []  # populated by build_prep_channels after construction
     self._supports_v2_pipetting: Optional[bool] = None
+    self._mounted_tips: list[Tip] = []
 
   # ---------------------------------------------------------------------------
   # Setup / V2 probing
@@ -147,6 +147,7 @@ class PrepHead8:
 
   async def _on_stop(self) -> None:
     self._supports_v2_pipetting = None
+    self._mounted_tips = []
 
   # ---------------------------------------------------------------------------
   # Internal helpers
@@ -653,10 +654,17 @@ class PrepHead8:
   # Tip / aspirate / dispense
   # ---------------------------------------------------------------------------
 
+  def _require_mounted_tip(self) -> Tip:
+    if not self._mounted_tips:
+      raise RuntimeError("No tips mounted on head8; call pick_up_tips8 first.")
+    return self._mounted_tips[0]
+
   async def pick_up_tips8(
     self,
-    op: Head8TipPickup,
+    tip_spots: Sequence[TipSpot],
+    use_channels: Optional[Sequence[int]] = None,
     *,
+    offset: Coordinate = Coordinate.zero(),
     final_z: Optional[float] = None,
     seek_speed: float = 15.0,
     z_seek_offset: Optional[float] = None,
@@ -666,30 +674,28 @@ class PrepHead8:
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     pre_position: bool = True,
   ) -> None:
-    use_channels = list(op.use_channels)
+    tip_spots = list(tip_spots)
+    use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(use_channels, "pick_up_tips8")
+    if len(tip_spots) != NUM_PROBES:
+      raise ValueError(f"pick_up_tips8 requires {NUM_PROBES} tip spots, got {len(tip_spots)}")
     resolved_final_z = self._resolve_traverse_height(final_z)
 
-    ref_spot = op.tip_spots[0]
+    tips = [s.get_tip() for s in tip_spots]
+    ref_spot = tip_spots[0]
+    tip = tips[0]
     rack = ref_spot.parent
     logger.info(
       "[Prep MPH] pick_up_tips: rack=%s, tip_spots=%s",
       rack.name if rack is not None else ref_spot.name,
-      [s.name.rsplit("_", 1)[-1] for s in op.tip_spots],
+      [s.name.rsplit("_", 1)[-1] for s in tip_spots],
     )
-    # Use the tip from the struct — the spot tracker is already cleared by Head8 before
-    # this method is invoked, so ref_spot.get_tip() would fail.
-    tip = op.tips[0]
-    if tip is None:
-      raise RuntimeError("pick_up_tips8: first spot has no tip")
-    loc = ref_spot.get_absolute_location("c", "c", "t")
+    loc = ref_spot.get_absolute_location("c", "c", "t") + offset
 
-    # Pre-position uses the same absolute frame as tip_position below (probe 0 / row A).
     if pre_position:
       traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
       await self.move_to_position(loc.x, loc.y, traverse_h)
 
-    # tip_spots[0] is always row-A (probe 0, highest Y) since all 8 channels are required.
     tip_position = PrepCmd.TipPositionParameters.for_op(
       PrepCmd.ChannelIndex.MPHChannel, loc, tip, z_seek_offset=z_seek_offset
     )
@@ -714,37 +720,39 @@ class PrepHead8:
         tip_mask=_FULL_TIP_MASK,
       )
     )
+    self._mounted_tips = tips
 
   async def drop_tips8(
     self,
-    op: Head8TipDrop,
+    destinations: Sequence[Union[TipSpot, Trash]],
+    use_channels: Optional[Sequence[int]] = None,
     *,
+    offset: Coordinate = Coordinate.zero(),
     final_z: Optional[float] = None,
     seek_speed: float = 15.0,
     z_seek_offset: Optional[float] = None,
     tip_roll_off_distance: float = 0.0,
   ) -> None:
-    use_channels = list(op.use_channels)
+    destinations = list(destinations)
+    use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(use_channels, "drop_tips8")
+    if len(destinations) != NUM_PROBES:
+      raise ValueError(f"drop_tips8 requires {NUM_PROBES} destinations, got {len(destinations)}")
+    tip = self._require_mounted_tip()
     resolved_final_z = self._resolve_traverse_height(final_z)
 
-    ref_spot = op.resources[0]
+    ref_spot = destinations[0]
     is_trash = isinstance(ref_spot, Trash)
     dest = ref_spot if is_trash else ref_spot.parent
     logger.info(
       "[Prep MPH] drop_tips: dest=%s, resources=%s",
       dest.name if dest is not None else ref_spot.name,
-      [s.name.rsplit("_", 1)[-1] for s in op.resources],
+      [s.name.rsplit("_", 1)[-1] for s in destinations],
     )
-    tip = op.tips[0]
-    if tip is None:
-      raise RuntimeError("drop_tips8: no tip on first channel")
 
-    # resources[0] = probe 0 (row A, highest Y). Use "c","c","t" consistently for
-    # both tip spots and trash — matches PrepChannels.drop_tips and TipDropParameters.for_op.
     loc = ref_spot.get_absolute_location("c", "c", "t")
     if not is_trash:
-      loc = loc + op.offset
+      loc = loc + offset
     drop_type = PrepCmd.TipDropType.Stall if is_trash else PrepCmd.TipDropType.FixedHeight
 
     tip_position = PrepCmd.TipDropParameters.for_op(
@@ -763,11 +771,19 @@ class PrepHead8:
         tip_roll_off_distance=roll_off,
       )
     )
+    self._mounted_tips = []
 
   async def aspirate8(
     self,
-    op: Union[Head8AspirationWells, Head8AspirationContainer],
+    wells: Optional[Sequence[Well]] = None,
     *,
+    container: Optional[Container] = None,
+    volume: float,
+    use_channels: Optional[Sequence[int]] = None,
+    offset: Coordinate = Coordinate.zero(),
+    liquid_height: Optional[float] = None,
+    flow_rate: Optional[float] = None,
+    blow_out_air_volume: Optional[float] = None,
     z_final: Optional[float] = None,
     z_fluid: Optional[float] = None,
     z_air: Optional[float] = None,
@@ -784,46 +800,72 @@ class PrepHead8:
     tadm: Optional[PrepCmd.TadmParameters] = None,
     container_segments: Optional[List[PrepCmd.SegmentDescriptor]] = None,
     auto_container_geometry: bool = False,
+    hamilton_liquid_classes: Optional[Union[HamiltonLiquidClass, List[Optional[HamiltonLiquidClass]]]] = None,
+    disable_volume_correction: bool = False,
     read_timeout: Optional[float] = None,
     command_version: Optional[Literal["v1", "v2"]] = None,
   ) -> None:
-    use_channels = list(op.use_channels)
+    del offset  # geometry uses well/container absolute locations
+    use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(use_channels, "aspirate8")
-    tip = next((t for t in op.tips if t is not None), None)
+    if (wells is None) == (container is None):
+      raise ValueError("aspirate8 requires exactly one of wells= or container=")
+    tip = self._require_mounted_tip()
+
+    explicit: Optional[List[Optional[HamiltonLiquidClass]]]
+    if isinstance(hamilton_liquid_classes, HamiltonLiquidClass) or hamilton_liquid_classes is None:
+      explicit = None if hamilton_liquid_classes is None else [hamilton_liquid_classes]
+    else:
+      explicit = list(hamilton_liquid_classes)
+      if len(explicit) == NUM_PROBES:
+        explicit = [explicit[0]]
+      elif len(explicit) != 1:
+        raise ValueError("hamilton_liquid_classes must be a single HLC or length-8 list")
+
+    class _TipVol:
+      def __init__(self, tip: Tip, volume: float):
+        self.tip = tip
+        self.volume = volume
+
+    tip_vol = _TipVol(tip, float(volume))
+    hlcs = resolve_hamilton_liquid_classes(explicit, [tip_vol], jet=False, blow_out=False)
+    hlc = hlcs[0]
+    corrected = corrected_volumes_for_ops(
+      [tip_vol], hlcs, [disable_volume_correction]
+    )[0]
+
     traverse_z = self._resolve_traverse_height()
-    final_z = (
+    final_z_resolved = (
       z_final
       if z_final is not None
-      else (
-        traverse_z - (tip.total_tip_length - tip.fitting_depth) if tip is not None else traverse_z
-      )
+      else traverse_z - (tip.total_tip_length - tip.fitting_depth)
     )
 
-    op_targets: Union[str, List[str]]
-    if isinstance(op, Head8AspirationContainer):
-      container = op.container
+    if container is not None:
       self._validate_container_span(container)
       resource_name = container.parent.name if container.parent is not None else container.name
-      op_targets = container.name
+      op_targets: Union[str, List[str]] = container.name
       loc = container.get_absolute_location("c", "c", "cavity_bottom")
       ref_x, ref_y = loc.x, loc.y + 3.5 * PROBE_PITCH_MM
-      wg = _absolute_z_from_well(container, op.liquid_height)
+      wg = _absolute_z_from_well(container, liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(container) if auto_container_geometry else []
       )
       ref_resource = container
     else:
-      wells = op.wells
-      self._resolve_probe_positions(wells)  # validates 9mm pitch; raises on mismatch
-      resource_name = wells[0].parent.name if wells[0].parent is not None else wells[0].name
-      op_targets = [w.name.rsplit("_", 1)[-1] for w in wells]
-      ref_loc = wells[0].get_absolute_location("c", "c", "cavity_bottom")
+      wells_list = list(wells)  # type: ignore[arg-type]
+      if len(wells_list) != NUM_PROBES:
+        raise ValueError(f"aspirate8 requires {NUM_PROBES} wells, got {len(wells_list)}")
+      self._resolve_probe_positions(wells_list)
+      resource_name = wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
+      op_targets = [w.name.rsplit("_", 1)[-1] for w in wells_list]
+      ref_loc = wells_list[0].get_absolute_location("c", "c", "cavity_bottom")
       ref_x, ref_y = ref_loc.x, ref_loc.y
-      wg = _absolute_z_from_well(wells[0], op.liquid_height)
+      wg = _absolute_z_from_well(wells_list[0], liquid_height)
       ref_segments = container_segments or (
-        _build_container_segments(wells[0]) if auto_container_geometry else []
+        _build_container_segments(wells_list[0]) if auto_container_geometry else []
       )
-      ref_resource = wells[0]
+      ref_resource = wells_list[0]
 
     resolved_z_fluid = z_fluid if z_fluid is not None else wg.liquid_surface
     resolved_z_air = z_air if z_air is not None else wg.z_air
@@ -831,20 +873,43 @@ class PrepHead8:
     resolved_z_bottom_search_offset = (
       z_bottom_search_offset if z_bottom_search_offset is not None else 2.0
     )
-    resolved_settling_time = settling_time if settling_time is not None else 1.0
-    resolved_transport_air_volume = (
-      transport_air_volume if transport_air_volume is not None else 0.0
+    resolved_settling_time = (
+      settling_time
+      if settling_time is not None
+      else (hlc.aspiration_settling_time if hlc is not None else 1.0)
     )
-    resolved_z_liquid_exit_speed = z_liquid_exit_speed if z_liquid_exit_speed is not None else 10.0
-    resolved_prewet_volume = prewet_volume if prewet_volume is not None else 0.0
-    blowout_volume = op.blow_out_air_volume or 0.0
+    resolved_transport_air_volume = (
+      transport_air_volume
+      if transport_air_volume is not None
+      else (hlc.aspiration_air_transport_volume if hlc is not None else 0.0)
+    )
+    resolved_z_liquid_exit_speed = (
+      z_liquid_exit_speed
+      if z_liquid_exit_speed is not None
+      else (hlc.aspiration_swap_speed if hlc is not None else 10.0)
+    )
+    resolved_prewet_volume = (
+      prewet_volume
+      if prewet_volume is not None
+      else (hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0)
+    )
+    resolved_flow = (
+      flow_rate
+      if flow_rate is not None
+      else (hlc.aspiration_flow_rate if hlc is not None else 100.0)
+    )
+    blowout_volume = (
+      blow_out_air_volume
+      if blow_out_air_volume is not None
+      else (hlc.aspiration_blow_out_volume if hlc is not None else 0.0)
+    )
 
     logger.info(
       "[Prep MPH] aspirate: resource=%s, wells=%s, volume=%.3f, flow_rate=%s",
       resource_name,
       op_targets,
-      op.volume,
-      round(op.flow_rate, 3) if op.flow_rate is not None else None,
+      corrected,
+      round(resolved_flow, 3),
     )
 
     tube_radius = _effective_radius(ref_resource)
@@ -860,9 +925,9 @@ class PrepHead8:
     param_struct = assemble(
       ref_x=ref_x,
       ref_y=ref_y,
-      volume=op.volume,
+      volume=corrected,
       tube_radius=tube_radius,
-      final_z=final_z,
+      final_z=final_z_resolved,
       z_minimum=resolved_z_minimum,
       z_fluid=resolved_z_fluid,
       z_air=resolved_z_air,
@@ -872,7 +937,7 @@ class PrepHead8:
       z_liquid_exit_speed=resolved_z_liquid_exit_speed,
       prewet_volume=resolved_prewet_volume,
       blowout_volume=blowout_volume,
-      flow_rate=op.flow_rate,
+      flow_rate=resolved_flow,
       segments=ref_segments,
       effective_lld=effective_lld,
       is_tadm=is_tadm,
@@ -894,8 +959,15 @@ class PrepHead8:
 
   async def dispense8(
     self,
-    op: Union[Head8DispenseWells, Head8DispenseContainer],
+    wells: Optional[Sequence[Well]] = None,
     *,
+    container: Optional[Container] = None,
+    volume: float,
+    use_channels: Optional[Sequence[int]] = None,
+    offset: Coordinate = Coordinate.zero(),
+    liquid_height: Optional[float] = None,
+    flow_rate: Optional[float] = None,
+    blow_out_air_volume: Optional[float] = None,
     z_final: Optional[float] = None,
     z_fluid: Optional[float] = None,
     z_air: Optional[float] = None,
@@ -911,46 +983,73 @@ class PrepHead8:
     c_lld: Optional[PrepCmd.CLldParameters] = None,
     container_segments: Optional[List[PrepCmd.SegmentDescriptor]] = None,
     auto_container_geometry: bool = False,
+    hamilton_liquid_classes: Optional[Union[HamiltonLiquidClass, List[Optional[HamiltonLiquidClass]]]] = None,
+    disable_volume_correction: bool = False,
     read_timeout: Optional[float] = None,
     command_version: Optional[Literal["v1", "v2"]] = None,
   ) -> None:
-    use_channels = list(op.use_channels)
+    del offset
+    del blow_out_air_volume  # dispense blowout not on Prep dispense wire path today
+    use_channels = list(use_channels) if use_channels is not None else list(range(NUM_PROBES))
     self._require_all_channels(use_channels, "dispense8")
-    tip = next((t for t in op.tips if t is not None), None)
+    if (wells is None) == (container is None):
+      raise ValueError("dispense8 requires exactly one of wells= or container=")
+    tip = self._require_mounted_tip()
+
+    explicit: Optional[List[Optional[HamiltonLiquidClass]]]
+    if isinstance(hamilton_liquid_classes, HamiltonLiquidClass) or hamilton_liquid_classes is None:
+      explicit = None if hamilton_liquid_classes is None else [hamilton_liquid_classes]
+    else:
+      explicit = list(hamilton_liquid_classes)
+      if len(explicit) == NUM_PROBES:
+        explicit = [explicit[0]]
+      elif len(explicit) != 1:
+        raise ValueError("hamilton_liquid_classes must be a single HLC or length-8 list")
+
+    class _TipVol:
+      def __init__(self, tip: Tip, volume: float):
+        self.tip = tip
+        self.volume = volume
+
+    tip_vol = _TipVol(tip, float(volume))
+    hlcs = resolve_hamilton_liquid_classes(explicit, [tip_vol], jet=False, blow_out=False)
+    hlc = hlcs[0]
+    corrected = corrected_volumes_for_ops(
+      [tip_vol], hlcs, [disable_volume_correction]
+    )[0]
+
     traverse_z = self._resolve_traverse_height()
-    final_z = (
+    final_z_resolved = (
       z_final
       if z_final is not None
-      else (
-        traverse_z - (tip.total_tip_length - tip.fitting_depth) if tip is not None else traverse_z
-      )
+      else traverse_z - (tip.total_tip_length - tip.fitting_depth)
     )
 
-    op_targets: Union[str, List[str]]
-    if isinstance(op, Head8DispenseContainer):
-      container = op.container
+    if container is not None:
       self._validate_container_span(container)
       resource_name = container.parent.name if container.parent is not None else container.name
-      op_targets = container.name
+      op_targets: Union[str, List[str]] = container.name
       loc = container.get_absolute_location("c", "c", "cavity_bottom")
       ref_x, ref_y = loc.x, loc.y + 3.5 * PROBE_PITCH_MM
-      wg = _absolute_z_from_well(container, op.liquid_height)
+      wg = _absolute_z_from_well(container, liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(container) if auto_container_geometry else []
       )
       ref_resource = container
     else:
-      wells = op.wells
-      self._resolve_probe_positions(wells)  # validates 9mm pitch; raises on mismatch
-      resource_name = wells[0].parent.name if wells[0].parent is not None else wells[0].name
-      op_targets = [w.name.rsplit("_", 1)[-1] for w in wells]
-      ref_loc = wells[0].get_absolute_location("c", "c", "cavity_bottom")
+      wells_list = list(wells)  # type: ignore[arg-type]
+      if len(wells_list) != NUM_PROBES:
+        raise ValueError(f"dispense8 requires {NUM_PROBES} wells, got {len(wells_list)}")
+      self._resolve_probe_positions(wells_list)
+      resource_name = wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
+      op_targets = [w.name.rsplit("_", 1)[-1] for w in wells_list]
+      ref_loc = wells_list[0].get_absolute_location("c", "c", "cavity_bottom")
       ref_x, ref_y = ref_loc.x, ref_loc.y
-      wg = _absolute_z_from_well(wells[0], op.liquid_height)
+      wg = _absolute_z_from_well(wells_list[0], liquid_height)
       ref_segments = container_segments or (
-        _build_container_segments(wells[0]) if auto_container_geometry else []
+        _build_container_segments(wells_list[0]) if auto_container_geometry else []
       )
-      ref_resource = wells[0]
+      ref_resource = wells_list[0]
 
     resolved_z_fluid = z_fluid if z_fluid is not None else wg.liquid_surface
     resolved_z_air = z_air if z_air is not None else wg.z_air
@@ -958,20 +1057,43 @@ class PrepHead8:
     resolved_z_bottom_search_offset = (
       z_bottom_search_offset if z_bottom_search_offset is not None else 2.0
     )
-    resolved_settling_time = settling_time if settling_time is not None else 0.0
-    resolved_transport_air_volume = (
-      transport_air_volume if transport_air_volume is not None else 0.0
+    resolved_settling_time = (
+      settling_time
+      if settling_time is not None
+      else (hlc.dispense_settling_time if hlc is not None else 0.0)
     )
-    resolved_z_liquid_exit_speed = z_liquid_exit_speed if z_liquid_exit_speed is not None else 10.0
-    resolved_stop_back_volume = stop_back_volume if stop_back_volume is not None else 0.0
-    resolved_cutoff_speed = cutoff_speed if cutoff_speed is not None else 100.0
+    resolved_transport_air_volume = (
+      transport_air_volume
+      if transport_air_volume is not None
+      else (hlc.dispense_air_transport_volume if hlc is not None else 0.0)
+    )
+    resolved_z_liquid_exit_speed = (
+      z_liquid_exit_speed
+      if z_liquid_exit_speed is not None
+      else (hlc.dispense_swap_speed if hlc is not None else 10.0)
+    )
+    resolved_stop_back_volume = (
+      stop_back_volume
+      if stop_back_volume is not None
+      else (hlc.dispense_stop_back_volume if hlc is not None else 0.0)
+    )
+    resolved_cutoff_speed = (
+      cutoff_speed
+      if cutoff_speed is not None
+      else (hlc.dispense_stop_flow_rate if hlc is not None else 100.0)
+    )
+    resolved_flow = (
+      flow_rate
+      if flow_rate is not None
+      else (hlc.dispense_flow_rate if hlc is not None else 100.0)
+    )
 
     logger.info(
       "[Prep MPH] dispense: resource=%s, wells=%s, volume=%.3f, flow_rate=%s",
       resource_name,
       op_targets,
-      op.volume,
-      round(op.flow_rate, 3) if op.flow_rate is not None else None,
+      corrected,
+      round(resolved_flow, 3),
     )
 
     tube_radius = _effective_radius(ref_resource)
@@ -986,9 +1108,9 @@ class PrepHead8:
     param_struct = assemble(
       ref_x=ref_x,
       ref_y=ref_y,
-      volume=op.volume,
+      volume=corrected,
       tube_radius=tube_radius,
-      final_z=final_z,
+      final_z=final_z_resolved,
       z_minimum=resolved_z_minimum,
       z_fluid=resolved_z_fluid,
       z_air=resolved_z_air,
@@ -998,7 +1120,7 @@ class PrepHead8:
       z_liquid_exit_speed=resolved_z_liquid_exit_speed,
       stop_back_volume=resolved_stop_back_volume,
       cutoff_speed=resolved_cutoff_speed,
-      flow_rate=op.flow_rate,
+      flow_rate=resolved_flow,
       segments=ref_segments,
       effective_lld=effective_lld,
       lld_params=lld_params,

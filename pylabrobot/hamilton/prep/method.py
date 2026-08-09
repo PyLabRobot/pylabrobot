@@ -42,8 +42,8 @@ class PrepMethodLifecycle:
     Usage::
 
       async with prep.method.run():
-        await prep.pip.pick_up_tips(...)
-        await prep.pip.aspirate(...)
+        await prep.channels.pick_up_tips(...)
+        await prep.channels.aspirate(...)
     """
     await self.begin(automatic_pause=automatic_pause)
     try:

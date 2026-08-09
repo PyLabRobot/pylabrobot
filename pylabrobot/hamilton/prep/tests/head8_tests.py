@@ -10,7 +10,7 @@ Covers core logic that must survive refactors:
 from __future__ import annotations
 
 import asyncio
-from typing import Any, List, Sequence, Tuple
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,23 +22,13 @@ from pylabrobot.hamilton.prep.channels import (
   _build_pipettor_gantry_move_parameters,
 )
 from pylabrobot.hamilton.prep.head8 import PROBE_PITCH_MM, PrepHead8
-from pylabrobot.hamilton.prep.standard import (
-  Head8AspirationWells,
-  Head8DispenseWells,
-  Head8TipDrop,
-  Head8TipPickup,
-)
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import Cor_Axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
-from pylabrobot.resources.tip_rack import TipSpot
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_ALL8: Tuple[int, ...] = (0, 1, 2, 3, 4, 5, 6, 7)
-
 
 def _make_deck():
   deck = PrepDeck()
@@ -46,73 +36,6 @@ def _make_deck():
   src_plate = deck[0] = Cor_Axy_96_wellplate_500uL_Ub("src")
   dst_plate = deck[4] = Cor_Axy_96_wellplate_500uL_Ub("dst")
   return deck, tip_rack, src_plate, dst_plate
-
-
-def _tips_from_spots(tip_spots: Sequence[TipSpot]) -> List[Any]:
-  return [s.get_tip() for s in tip_spots]
-
-
-def _pickup_op(
-  tip_spots: Sequence[TipSpot],
-  use_channels: Tuple[int, ...] = _ALL8,
-) -> Head8TipPickup:
-  return Head8TipPickup(
-    tip_spots=list(tip_spots),
-    use_channels=use_channels,
-    offset=Coordinate.zero(),
-    tips=_tips_from_spots(tip_spots),
-  )
-
-
-def _drop_op(
-  resources: Sequence[TipSpot],
-  tips: Sequence[Any],
-  use_channels: Tuple[int, ...] = _ALL8,
-) -> Head8TipDrop:
-  return Head8TipDrop(
-    resources=list(resources),
-    use_channels=use_channels,
-    offset=Coordinate.zero(),
-    tips=tips,
-  )
-
-
-def _asp_wells_op(
-  wells: Sequence[Any],
-  tips: Sequence[Any],
-  volume: float,
-  use_channels: Tuple[int, ...] = _ALL8,
-) -> Head8AspirationWells:
-  return Head8AspirationWells(
-    wells=list(wells),
-    use_channels=use_channels,
-    offset=Coordinate.zero(),
-    tips=tips,
-    volume=volume,
-    flow_rate=None,
-    liquid_height=None,
-    blow_out_air_volume=None,
-    mix=None,
-  )
-
-
-def _disp_wells_op(
-  wells: Sequence[Any],
-  tips: Sequence[Any],
-  volume: float,
-  use_channels: Tuple[int, ...] = _ALL8,
-) -> Head8DispenseWells:
-  return Head8DispenseWells(
-    wells=list(wells),
-    use_channels=use_channels,
-    offset=Coordinate.zero(),
-    tips=tips,
-    volume=volume,
-    flow_rate=None,
-    liquid_height=None,
-    blow_out_air_volume=None,
-    mix=None,
-  )
 
 
 def _make_head8() -> PrepHead8:
@@ -213,7 +136,7 @@ def test_partial_channel_pickup_raises_value_error():
 
     spots = tip_rack.column(1)[4:]  # E2, F2, G2, H2
     with pytest.raises(ValueError, match="fully-ganged head"):
-      await p.head8.pick_up_tips8(_pickup_op(spots, use_channels=(4, 5, 6, 7)))
+      await p.head8.pick_up_tips8(spots, use_channels=(4, 5, 6, 7))
 
     await p.stop()
 
@@ -242,11 +165,10 @@ def test_head8_full_flow():
     assert p.head8 is not None
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
-    await p.head8.aspirate8(_asp_wells_op(src_plate.column(0), tips, volume=20))
-    await p.head8.dispense8(_disp_wells_op(dst_plate.column(0), tips, volume=20))
-    await p.head8.drop_tips8(_drop_op(spots, tips))
+    await p.head8.pick_up_tips8(spots)
+    await p.head8.aspirate8(wells=src_plate.column(0), volume=20)
+    await p.head8.dispense8(wells=dst_plate.column(0), volume=20)
+    await p.head8.drop_tips8(spots)
 
     await p.stop()
 
@@ -317,7 +239,7 @@ def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
 
     captured, _ = _record_send(p)
 
-    await p.head8.pick_up_tips8(_pickup_op(tip_rack.column(0)))
+    await p.head8.pick_up_tips8(tip_rack.column(0))
 
     mph_seq = [
       c for c in captured if isinstance(c, (PrepCmd.MphMoveToPosition, PrepCmd.MphPickupTips))
@@ -342,7 +264,7 @@ def test_pick_up_tips_pre_position_false_skips_mph_move():
 
     captured, _ = _record_send(p)
 
-    await p.head8.pick_up_tips8(_pickup_op(tip_rack.column(1)), pre_position=False)
+    await p.head8.pick_up_tips8(tip_rack.column(1), pre_position=False)
 
     mph_moves = [c for c in captured if isinstance(c, PrepCmd.MphMoveToPosition)]
     pickups = [c for c in captured if isinstance(c, PrepCmd.MphPickupTips)]
@@ -364,17 +286,13 @@ def test_head8_partial_channel_aspirate_raises_value_error():
     assert p.head8 is not None
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
+    await p.head8.pick_up_tips8(spots)
 
     with pytest.raises(ValueError, match="fully-ganged head"):
       await p.head8.aspirate8(
-        _asp_wells_op(
-          src_plate.column(0)[:4],
-          tips[:4],
-          volume=10,
-          use_channels=(0, 1, 2, 3),
-        )
+        wells=src_plate.column(0)[:4],
+        volume=10,
+        use_channels=(0, 1, 2, 3),
       )
 
     await p.stop()
@@ -399,9 +317,8 @@ def test_head8_v2_aspirate_sends_mphaspiratenolldmonitoring2():
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
-    await p.head8.aspirate8(_asp_wells_op(src_plate.column(0), tips, volume=10))
+    await p.head8.pick_up_tips8(spots)
+    await p.head8.aspirate8(wells=src_plate.column(0), volume=10)
 
     asp_cmds = [c for c in captured if isinstance(c, PrepCmd.MphAspirateNoLldMonitoring2)]
     v1_cmds = [
@@ -433,10 +350,9 @@ def test_head8_v2_dispense_sends_mphdispensetnolld2():
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
-    await p.head8.aspirate8(_asp_wells_op(src_plate.column(0), tips, volume=10))
-    await p.head8.dispense8(_disp_wells_op(dst_plate.column(0), tips, volume=10))
+    await p.head8.pick_up_tips8(spots)
+    await p.head8.aspirate8(wells=src_plate.column(0), volume=10)
+    await p.head8.dispense8(wells=dst_plate.column(0), volume=10)
 
     disp_cmds = [c for c in captured if isinstance(c, PrepCmd.MphDispenseNoLld2)]
     v1_cmds = [
@@ -464,10 +380,9 @@ def test_head8_v1_fallback_when_use_v1_flag_set():
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
-    await p.head8.aspirate8(_asp_wells_op(src_plate.column(0), tips, volume=10))
-    await p.head8.dispense8(_disp_wells_op(dst_plate.column(0), tips, volume=10))
+    await p.head8.pick_up_tips8(spots)
+    await p.head8.aspirate8(wells=src_plate.column(0), volume=10)
+    await p.head8.dispense8(wells=dst_plate.column(0), volume=10)
 
     v2_asp = [c for c in captured if isinstance(c, PrepCmd.MphAspirateNoLldMonitoring2)]
     v2_disp = [c for c in captured if isinstance(c, PrepCmd.MphDispenseNoLld2)]
@@ -510,10 +425,10 @@ def test_head8_aspirate_tadm_sends_mphaspirate_tadm2():
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
+    await p.head8.pick_up_tips8(spots)
     await p.head8.aspirate8(
-      _asp_wells_op(src_plate.column(0), tips, volume=10),
+      wells=src_plate.column(0),
+      volume=10,
       tadm=PrepCmd.TadmParameters.default(),
     )
 
@@ -539,10 +454,10 @@ def test_head8_aspirate_clld_sends_mphaspirate_with_lld2():
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
+    await p.head8.pick_up_tips8(spots)
     await p.head8.aspirate8(
-      _asp_wells_op(src_plate.column(0), tips, volume=10),
+      wells=src_plate.column(0),
+      volume=10,
       lld_mode=LLDMode.CAPACITIVE,
     )
 
@@ -566,10 +481,10 @@ def test_head8_aspirate_lld_and_tadm_sends_mphaspirate_with_lld_tadm2():
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
+    await p.head8.pick_up_tips8(spots)
     await p.head8.aspirate8(
-      _asp_wells_op(src_plate.column(0), tips, volume=10),
+      wells=src_plate.column(0),
+      volume=10,
       lld_mode=LLDMode.CAPACITIVE,
       tadm=PrepCmd.TadmParameters.default(),
     )
@@ -592,13 +507,13 @@ def test_head8_dispense_lld_pressure_raises():
     assert p.head8 is not None
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
-    await p.head8.aspirate8(_asp_wells_op(src_plate.column(0), tips, volume=10))
+    await p.head8.pick_up_tips8(spots)
+    await p.head8.aspirate8(wells=src_plate.column(0), volume=10)
 
     with pytest.raises(ValueError, match="PRESSURE"):
       await p.head8.dispense8(
-        _disp_wells_op(dst_plate.column(0), tips, volume=10),
+        wells=dst_plate.column(0),
+        volume=10,
         lld_mode=LLDMode.PRESSURE,
       )
 
@@ -619,14 +534,15 @@ def test_head8_command_version_override_v1():
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    tips = _tips_from_spots(spots)
-    await p.head8.pick_up_tips8(_pickup_op(spots))
+    await p.head8.pick_up_tips8(spots)
     await p.head8.aspirate8(
-      _asp_wells_op(src_plate.column(0), tips, volume=10),
+      wells=src_plate.column(0),
+      volume=10,
       command_version="v1",
     )
     await p.head8.dispense8(
-      _disp_wells_op(dst_plate.column(0), tips, volume=10),
+      wells=dst_plate.column(0),
+      volume=10,
       command_version="v1",
     )
 
