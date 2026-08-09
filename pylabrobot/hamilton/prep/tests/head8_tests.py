@@ -175,6 +175,33 @@ def test_head8_full_flow():
   asyncio.run(_run())
 
 
+def test_head8_tip_trackers_pick_and_drop():
+  """8 TipTrackers stay in sync across pick_up_tips8 / drop_tips8 with tip tracking on."""
+  from pylabrobot.resources.tip_tracker import set_tip_tracking
+
+  async def _run() -> None:
+    set_tip_tracking(True)
+    try:
+      deck, tip_rack, _, _ = _make_deck()
+      p = Prep(deck=deck, chatterbox=True)
+      await p.setup()
+      assert p.head8 is not None
+      spots = tip_rack.column(0)
+      assert all(s.has_tip() for s in spots)
+      await p.head8.pick_up_tips8(spots)
+      assert all(not s.has_tip() for s in spots)
+      assert all(p.head8.head[i].has_tip for i in range(8))
+      assert all(t is not None for t in p.head8.get_mounted_tips())
+      await p.head8.drop_tips8(spots)
+      assert all(s.has_tip() for s in spots)
+      assert all(not p.head8.head[i].has_tip for i in range(8))
+      await p.stop()
+    finally:
+      set_tip_tracking(False)
+
+  asyncio.run(_run())
+
+
 def test_mph_move_to_position_command_metadata():
   move = PrepCmd.MphMoveToPosition(x_position=1.5, y_position=2.5, z_position=120.0)
   assert move.firmware_path == "MLPrepRoot.MphRoot.MPH"

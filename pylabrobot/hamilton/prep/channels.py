@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from typing import (
   TYPE_CHECKING,
   Any,
+  Awaitable,
+  Callable,
   Generic,
   List,
   Literal,
@@ -45,7 +47,20 @@ from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import Hamil
 from pylabrobot.resources import Container, Coordinate, Tip
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
+from pylabrobot.resources.resource_state import (
+  TipDropIntent,
+  TipPickupIntent,
+  VolumeTransferIntent,
+  all_channels_succeeded,
+  finalize_tip_ops,
+  finalize_volume_ops,
+  queue_tip_drops,
+  queue_tip_pickups,
+  queue_volume_transfers,
+  successes_from_failed_channels,
+)
 from pylabrobot.resources.tip_rack import TipSpot
+from pylabrobot.resources.tip_tracker import TipTracker
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
 
@@ -805,7 +820,7 @@ class PrepChannels:
     self._supports_v2_pipetting: Optional[bool] = None
     self.setup_finished: bool = False
     self.channels: List[PrepPIPChannel] = []
-    self._mounted_tips: dict[int, Tip] = {}
+    self.head: dict[int, TipTracker] = {}
 
   def set_default_traverse_height(self, value: float) -> None:
     """Set the default traverse height (mm) used when final_z is not passed to pick_up_tips/drop_tips.
@@ -889,10 +904,25 @@ class PrepChannels:
       self._supports_v2_pipetting = True
       logger.info("V2 aspirate/dispense support: True")
 
+    self._ensure_head()
     self.setup_finished = True
 
   async def _on_stop(self):
-    pass
+    for tracker in self.head.values():
+      tracker.clear()
+
+  def _ensure_head(self) -> None:
+    """Ensure pipette-side TipTrackers exist for each dual-channel index."""
+    for i in range(self.num_channels):
+      if i not in self.head:
+        self.head[i] = TipTracker(thing=f"Channel {i}")
+
+  def get_mounted_tips(self) -> List[Optional[Tip]]:
+    """Tips currently mounted on the dual-channel head (``None`` if empty)."""
+    self._ensure_head()
+    return [
+      self.head[i].get_tip() if self.head[i].has_tip else None for i in range(self.num_channels)
+    ]
 
   async def discover_channel_drives(self) -> ChannelDriveMap:
     """Re-walk the firmware tree and return a fresh :class:`ChannelDriveMap`.
@@ -965,13 +995,40 @@ class PrepChannels:
   # ---------------------------------------------------------------------------
 
   def _require_mounted_tips(self, use_channels: List[int]) -> List[Tip]:
+    self._ensure_head()
     tips: List[Tip] = []
     for ch in use_channels:
-      tip = self._mounted_tips.get(ch)
-      if tip is None:
+      tracker = self.head[ch]
+      if not tracker.has_tip:
         raise RuntimeError(f"No tip mounted on channel {ch}; call pick_up_tips first.")
-      tips.append(tip)
+      tips.append(tracker.get_tip())
     return tips
+
+  async def _finalize_channel_command(
+    self,
+    use_channels: Sequence[int],
+    *,
+    tip_intents: Optional[Sequence[Union[TipPickupIntent, TipDropIntent]]] = None,
+    volume_intents: Optional[Sequence[VolumeTransferIntent]] = None,
+    send: Callable[[], Awaitable[None]],
+  ) -> None:
+    """Send a Prep command and commit/rollback queued tip or volume intents."""
+    error: Optional[BaseException] = None
+    try:
+      await send()
+      successes = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      error = e
+      successes = successes_from_failed_channels(use_channels, e.errors)
+    except BaseException as e:
+      error = e
+      successes = {ch: False for ch in use_channels}
+    if tip_intents is not None:
+      finalize_tip_ops(tip_intents, successes)
+    if volume_intents is not None:
+      finalize_volume_ops(volume_intents, successes)
+    if error is not None:
+      raise error
 
   async def pick_up_tips(
     self,
@@ -1057,19 +1114,32 @@ class PrepChannels:
         use_channels=use_channels,
       )
 
-    await self._client.send_command(
-      PrepCmd.PrepPickUpTips(
-        tip_positions=tip_positions,
-        final_z=resolved_final_z,
-        seek_speed=seek_speed,
-        tip_definition=tip_definition,
-        enable_tadm=enable_tadm,
-        dispenser_volume=dispenser_volume,
-        dispenser_speed=dispenser_speed,
+    self._ensure_head()
+    tip_intents = [
+      TipPickupIntent(
+        channel=ch,
+        tip_spot=spot,
+        tip=tip,
+        channel_tracker=self.head[ch],
       )
-    )
-    for ch, tip in zip(use_channels, tips):
-      self._mounted_tips[ch] = tip
+      for ch, spot, tip in zip(use_channels, tip_spots, tips)
+    ]
+    queue_tip_pickups(tip_intents)
+
+    async def _send() -> None:
+      await self._client.send_command(
+        PrepCmd.PrepPickUpTips(
+          tip_positions=tip_positions,
+          final_z=resolved_final_z,
+          seek_speed=seek_speed,
+          tip_definition=tip_definition,
+          enable_tadm=enable_tadm,
+          dispenser_volume=dispenser_volume,
+          dispenser_speed=dispenser_speed,
+        )
+      )
+
+    await self._finalize_channel_command(use_channels, tip_intents=tip_intents, send=_send)
 
   async def drop_tips(
     self,
@@ -1146,16 +1216,28 @@ class PrepChannels:
         )
       )
 
-    await self._client.send_command(
-      PrepCmd.PrepDropTips(
-        tip_positions=tip_positions,
-        final_z=resolved_final_z,
-        seek_speed=seek_speed,
-        tip_roll_off_distance=roll_off,
+    tip_intents = [
+      TipDropIntent(
+        channel=ch,
+        destination=dest,
+        tip=tip,
+        channel_tracker=self.head[ch],
       )
-    )
-    for ch in use_channels:
-      self._mounted_tips.pop(ch, None)
+      for ch, dest, tip in zip(use_channels, destinations, tips)
+    ]
+    queue_tip_drops(tip_intents)
+
+    async def _send() -> None:
+      await self._client.send_command(
+        PrepCmd.PrepDropTips(
+          tip_positions=tip_positions,
+          final_z=resolved_final_z,
+          seek_speed=seek_speed,
+          tip_roll_off_distance=roll_off,
+        )
+      )
+
+    await self._finalize_channel_command(use_channels, tip_intents=tip_intents, send=_send)
 
   # ---------------------------------------------------------------------------
   # V1/V2 aspirate/dispense dispatch helpers
@@ -1876,7 +1958,26 @@ class PrepChannels:
       min_z_min = min(k.common.z_minimum for k in kits)
       lld_read_timeout = lld_seek_timeout(kits[0].lld, min_z_min)
 
-    await self._send_aspirate(kits, effective_lld, is_tadm, use_v2, lld_read_timeout)
+    volume_intents = [
+      VolumeTransferIntent(
+        channel=ch,
+        container=op.resource,
+        tip=op.tip,
+        volume_ul=next(
+          k.common.liquid_volume for k in kits if k.channel == _CHANNEL_INDEX[ch]
+        ),
+        direction="aspirate",
+      )
+      for ch, op in zip(use_channels, ops)
+    ]
+    queue_volume_transfers(volume_intents)
+
+    async def _send() -> None:
+      await self._send_aspirate(kits, effective_lld, is_tadm, use_v2, lld_read_timeout)
+
+    await self._finalize_channel_command(
+      use_channels, volume_intents=volume_intents, send=_send
+    )
 
   async def dispense(
     self,
@@ -1957,7 +2058,26 @@ class PrepChannels:
       min_z_min = min(k.common.z_minimum for k in kits)
       lld_read_timeout = lld_seek_timeout(kits[0].lld, min_z_min)
 
-    await self._send_dispense(kits, effective_lld, use_v2, lld_read_timeout)
+    volume_intents = [
+      VolumeTransferIntent(
+        channel=ch,
+        container=op.resource,
+        tip=op.tip,
+        volume_ul=next(
+          k.common.liquid_volume for k in kits if k.channel == _CHANNEL_INDEX[ch]
+        ),
+        direction="dispense",
+      )
+      for ch, op in zip(use_channels, ops)
+    ]
+    queue_volume_transfers(volume_intents)
+
+    async def _send() -> None:
+      await self._send_dispense(kits, effective_lld, use_v2, lld_read_timeout)
+
+    await self._finalize_channel_command(
+      use_channels, volume_intents=volume_intents, send=_send
+    )
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     """Check if the tip can be picked up by the specified channel.

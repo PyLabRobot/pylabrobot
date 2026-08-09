@@ -22,15 +22,29 @@ from __future__ import annotations
 
 import logging
 import struct as _struct
-from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Awaitable, Callable, List, Literal, Optional, Sequence, Union
 
 from pylabrobot.hamilton.liquid_class_resolver import (
   corrected_volumes_for_ops,
   resolve_hamilton_liquid_classes,
 )
+from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
 from pylabrobot.resources import Container, Coordinate, Tip, Trash
+from pylabrobot.resources.resource_state import (
+  TipDropIntent,
+  TipPickupIntent,
+  VolumeTransferIntent,
+  all_channels_succeeded,
+  finalize_tip_ops,
+  finalize_volume_ops,
+  queue_tip_drops,
+  queue_tip_pickups,
+  queue_volume_transfers,
+  successes_from_failed_channels,
+)
 from pylabrobot.resources.tip_rack import TipSpot
+from pylabrobot.resources.tip_tracker import TipTracker
 from pylabrobot.resources.well import Well
 
 from . import prep_commands as PrepCmd
@@ -114,7 +128,9 @@ class PrepHead8:
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self.channels: list = []  # populated by build_prep_channels after construction
     self._supports_v2_pipetting: Optional[bool] = None
-    self._mounted_tips: list[Tip] = []
+    self.head: dict[int, TipTracker] = {
+      i: TipTracker(thing=f"Head8 channel {i}") for i in range(NUM_PROBES)
+    }
 
   # ---------------------------------------------------------------------------
   # Setup / V2 probing
@@ -147,7 +163,39 @@ class PrepHead8:
 
   async def _on_stop(self) -> None:
     self._supports_v2_pipetting = None
-    self._mounted_tips = []
+    for tracker in self.head.values():
+      tracker.clear()
+
+  def get_mounted_tips(self) -> List[Optional[Tip]]:
+    """Tips currently mounted on the 8MPH (``None`` if empty)."""
+    return [
+      self.head[i].get_tip() if self.head[i].has_tip else None for i in range(NUM_PROBES)
+    ]
+
+  async def _finalize_head8_command(
+    self,
+    use_channels: Sequence[int],
+    *,
+    tip_intents: Optional[Sequence[Union[TipPickupIntent, TipDropIntent]]] = None,
+    volume_intents: Optional[Sequence[VolumeTransferIntent]] = None,
+    send: Callable[[], Awaitable[None]],
+  ) -> None:
+    error: Optional[BaseException] = None
+    try:
+      await send()
+      successes = all_channels_succeeded(use_channels)
+    except ChannelizedError as e:
+      error = e
+      successes = successes_from_failed_channels(use_channels, e.errors)
+    except BaseException as e:
+      error = e
+      successes = {ch: False for ch in use_channels}
+    if tip_intents is not None:
+      finalize_tip_ops(tip_intents, successes)
+    if volume_intents is not None:
+      finalize_volume_ops(volume_intents, successes)
+    if error is not None:
+      raise error
 
   # ---------------------------------------------------------------------------
   # Internal helpers
@@ -654,10 +702,17 @@ class PrepHead8:
   # Tip / aspirate / dispense
   # ---------------------------------------------------------------------------
 
+  def _require_mounted_tips(self) -> List[Tip]:
+    tips: List[Tip] = []
+    for i in range(NUM_PROBES):
+      tracker = self.head[i]
+      if not tracker.has_tip:
+        raise RuntimeError("No tips mounted on head8; call pick_up_tips8 first.")
+      tips.append(tracker.get_tip())
+    return tips
+
   def _require_mounted_tip(self) -> Tip:
-    if not self._mounted_tips:
-      raise RuntimeError("No tips mounted on head8; call pick_up_tips8 first.")
-    return self._mounted_tips[0]
+    return self._require_mounted_tips()[0]
 
   async def pick_up_tips8(
     self,
@@ -708,19 +763,32 @@ class PrepHead8:
       is_needle=False,
       is_tool=False,
     )
-    await self._client.send_command(
-      PrepCmd.MphPickupTips(
-        tip_position=tip_position,
-        final_z=resolved_final_z,
-        seek_speed=seek_speed,
-        tip_definition=tip_definition,
-        enable_tadm=enable_tadm,
-        dispenser_volume=dispenser_volume,
-        dispenser_speed=dispenser_speed,
-        tip_mask=_FULL_TIP_MASK,
+    tip_intents = [
+      TipPickupIntent(
+        channel=ch,
+        tip_spot=spot,
+        tip=t,
+        channel_tracker=self.head[ch],
       )
-    )
-    self._mounted_tips = tips
+      for ch, spot, t in zip(use_channels, tip_spots, tips)
+    ]
+    queue_tip_pickups(tip_intents)
+
+    async def _send() -> None:
+      await self._client.send_command(
+        PrepCmd.MphPickupTips(
+          tip_position=tip_position,
+          final_z=resolved_final_z,
+          seek_speed=seek_speed,
+          tip_definition=tip_definition,
+          enable_tadm=enable_tadm,
+          dispenser_volume=dispenser_volume,
+          dispenser_speed=dispenser_speed,
+          tip_mask=_FULL_TIP_MASK,
+        )
+      )
+
+    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
 
   async def drop_tips8(
     self,
@@ -763,15 +831,29 @@ class PrepHead8:
       drop_type=drop_type,
     )
     roll_off = 3.0 if (is_trash and tip_roll_off_distance == 0.0) else tip_roll_off_distance
-    await self._client.send_command(
-      PrepCmd.MphDropTips(
-        tip_position=tip_position,
-        final_z=resolved_final_z,
-        seek_speed=seek_speed,
-        tip_roll_off_distance=roll_off,
+    mounted = self._require_mounted_tips()
+    tip_intents = [
+      TipDropIntent(
+        channel=ch,
+        destination=dest,
+        tip=mounted[ch],
+        channel_tracker=self.head[ch],
       )
-    )
-    self._mounted_tips = []
+      for ch, dest in zip(use_channels, destinations)
+    ]
+    queue_tip_drops(tip_intents)
+
+    async def _send() -> None:
+      await self._client.send_command(
+        PrepCmd.MphDropTips(
+          tip_position=tip_position,
+          final_z=resolved_final_z,
+          seek_speed=seek_speed,
+          tip_roll_off_distance=roll_off,
+        )
+      )
+
+    await self._finalize_head8_command(use_channels, tip_intents=tip_intents, send=_send)
 
   async def aspirate8(
     self,
@@ -952,9 +1034,40 @@ class PrepHead8:
     if resolved_read_timeout is None and effective_lld:
       resolved_read_timeout = _lld_seek_timeout(lld_params, resolved_z_minimum)
 
-    await self._client.send_command(
-      cmd_cls(aspirate_parameters=[param_struct]),  # type: ignore[arg-type]
-      read_timeout=resolved_read_timeout if effective_lld else None,
+    mounted = self._require_mounted_tips()
+    if container is not None:
+      volume_intents = [
+        VolumeTransferIntent(
+          channel=ch,
+          container=container,
+          tip=mounted[ch],
+          volume_ul=corrected,
+          direction="aspirate",
+        )
+        for ch in use_channels
+      ]
+    else:
+      wells_list = list(wells)  # type: ignore[arg-type]
+      volume_intents = [
+        VolumeTransferIntent(
+          channel=ch,
+          container=well,
+          tip=mounted[ch],
+          volume_ul=corrected,
+          direction="aspirate",
+        )
+        for ch, well in zip(use_channels, wells_list)
+      ]
+    queue_volume_transfers(volume_intents)
+
+    async def _send() -> None:
+      await self._client.send_command(
+        cmd_cls(aspirate_parameters=[param_struct]),  # type: ignore[arg-type]
+        read_timeout=resolved_read_timeout if effective_lld else None,
+      )
+
+    await self._finalize_head8_command(
+      use_channels, volume_intents=volume_intents, send=_send
     )
 
   async def dispense8(
@@ -1133,9 +1246,40 @@ class PrepHead8:
     if resolved_read_timeout is None and effective_lld:
       resolved_read_timeout = _lld_seek_timeout(lld_params, resolved_z_minimum)
 
-    await self._client.send_command(
-      cmd_cls(dispense_parameters=[param_struct]),  # type: ignore[arg-type]
-      read_timeout=resolved_read_timeout if effective_lld else None,
+    mounted = self._require_mounted_tips()
+    if container is not None:
+      volume_intents = [
+        VolumeTransferIntent(
+          channel=ch,
+          container=container,
+          tip=mounted[ch],
+          volume_ul=corrected,
+          direction="dispense",
+        )
+        for ch in use_channels
+      ]
+    else:
+      wells_list = list(wells)  # type: ignore[arg-type]
+      volume_intents = [
+        VolumeTransferIntent(
+          channel=ch,
+          container=well,
+          tip=mounted[ch],
+          volume_ul=corrected,
+          direction="dispense",
+        )
+        for ch, well in zip(use_channels, wells_list)
+      ]
+    queue_volume_transfers(volume_intents)
+
+    async def _send() -> None:
+      await self._client.send_command(
+        cmd_cls(dispense_parameters=[param_struct]),  # type: ignore[arg-type]
+        read_timeout=resolved_read_timeout if effective_lld else None,
+      )
+
+    await self._finalize_head8_command(
+      use_channels, volume_intents=volume_intents, send=_send
     )
 
   # ---------------------------------------------------------------------------

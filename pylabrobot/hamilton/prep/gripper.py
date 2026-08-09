@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.resource_state import place_resource
 
 from . import prep_commands as PrepCmd
 
@@ -360,11 +361,7 @@ class PrepGripperArm:
       acceleration_scale_x=acceleration_scale_x,
     )
     self._clear_held_state()
-    held.unassign()
-    if isinstance(destination, ResourceHolder):
-      destination.assign_child_resource(held)
-    else:
-      destination.assign_child_resource(held, location=Coordinate.zero())
+    place_resource(held, destination)
 
   async def drop_at_location(
     self,
