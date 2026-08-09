@@ -9,7 +9,6 @@ Focused on high-value invariants:
 
 from __future__ import annotations
 
-import asyncio
 import struct
 import unittest
 from dataclasses import dataclass
@@ -290,14 +289,16 @@ class TestTCPCommandBehavior(unittest.TestCase):
     self.assertEqual(result.value, 42)
 
 
-class TestTransportApiAlignment(unittest.TestCase):
-  def test_resolve_target_accepts_address_passthrough(self):
+class TestTransportApiAlignment(unittest.IsolatedAsyncioTestCase):
+  """Client construction needs a running loop on Python 3.9 (``asyncio.Lock`` in ``Socket``)."""
+
+  async def test_resolve_target_accepts_address_passthrough(self):
     client = HamiltonTCPClient(host="127.0.0.1", port=0)
     addr = Address(1, 1, 257)
-    got = asyncio.run(client.resolve_target(addr))
+    got = await client.resolve_target(addr)
     self.assertEqual(got, addr)
 
-  def test_resolve_target_applies_aliases(self):
+  async def test_resolve_target_applies_aliases(self):
     client = HamiltonTCPClient(host="127.0.0.1", port=0)
 
     async def _fake_resolve_path(path: str) -> Address:
@@ -305,12 +306,12 @@ class TestTransportApiAlignment(unittest.TestCase):
       return Address(1, 1, 999)
 
     client.resolve_path = _fake_resolve_path  # type: ignore[method-assign]
-    got = asyncio.run(
-      client.resolve_target("pipettor_service", aliases={"pipettor_service": "Root.Child"})
+    got = await client.resolve_target(
+      "pipettor_service", aliases={"pipettor_service": "Root.Child"}
     )
     self.assertEqual(got, Address(1, 1, 999))
 
-  def test_send_query_returns_hoi_payload_tuple(self):
+  async def test_send_query_returns_hoi_payload_tuple(self):
     class Cmd(TCPCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 0
@@ -338,12 +339,12 @@ class TestTransportApiAlignment(unittest.TestCase):
 
     client = FakeClient(host="127.0.0.1", port=0)
     client.client_address = Address(2, 1, 65535)
-    raw = asyncio.run(client.send_query(Cmd(Address(1, 1, 257))))
+    raw = await client.send_query(Cmd(Address(1, 1, 257)))
     assert raw is not None
     self.assertIsInstance(raw, tuple)
     self.assertEqual(raw[0], HoiParams().add(123, I32).build())
 
-  def test_get_firmware_tree_uses_cache_and_refresh(self):
+  async def test_get_firmware_tree_uses_cache_and_refresh(self):
     registry = ObjectRegistry()
     registry.set_root_address(Address(1, 1, 100))
 
@@ -378,9 +379,9 @@ class TestTransportApiAlignment(unittest.TestCase):
     intro.get_supported_interface0_method_ids = fake_get_supported  # type: ignore[method-assign, assignment]
     intro.get_subobject_address = fake_get_subobject_address  # type: ignore[method-assign, assignment]
 
-    t1 = asyncio.run(intro.get_firmware_tree())
-    t2 = asyncio.run(intro.get_firmware_tree())
-    t3 = asyncio.run(intro.get_firmware_tree(refresh=True))
+    t1 = await intro.get_firmware_tree()
+    t2 = await intro.get_firmware_tree()
+    t3 = await intro.get_firmware_tree(refresh=True)
 
     self.assertIs(t1, t2)
     self.assertIsNot(t1, t3)
@@ -403,7 +404,7 @@ class TestTransportApiAlignment(unittest.TestCase):
     flat = flatten_firmware_tree(root)
     self.assertEqual([p for p, _, _ in flat], ["R", "R.child", "R.other"])
 
-  def test_get_firmware_tree_flat_delegates_to_flatten(self):
+  async def test_get_firmware_tree_flat_delegates_to_flatten(self):
     client = HamiltonTCPClient(host="127.0.0.1", port=0)
     a0 = Address(1, 1, 20)
     o0 = ObjectInfo(name="only", version="v", method_count=0, subobject_count=0, address=a0)
@@ -414,7 +415,7 @@ class TestTransportApiAlignment(unittest.TestCase):
       return root
 
     client.introspection.get_firmware_tree = fake_get_firmware_tree  # type: ignore[method-assign]
-    got = asyncio.run(client.introspection.get_firmware_tree_flat())
+    got = await client.introspection.get_firmware_tree_flat()
     self.assertEqual(len(got), 1)
     self.assertEqual(got[0][0], "Only")
     self.assertEqual(got[0][1], a0)
