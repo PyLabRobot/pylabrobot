@@ -548,11 +548,20 @@ class HamiltonSTARDeck(HamiltonDeck):
     return Coordinate(x=x, y=63, z=100)
 
   def get_trash_area96(self) -> Trash:
-    if self._trash96 is None:
-      raise RuntimeError(
-        "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
-      )
-    return self._trash96
+    # `_trash96` is only set in `__init__`, so it is stale whenever the deck was rebuilt from a
+    # serialized layout (which encodes the trash as a child and passes `with_trash96=False`) or the
+    # trash was unassigned. Resolve against the child tree instead, and only trust the cached
+    # reference while it is still assigned to this deck.
+    if self._trash96 is not None and self._trash96.parent is self:
+      return self._trash96
+
+    if self.has_resource("trash_core96"):
+      self._trash96 = cast(Trash, self.get_resource("trash_core96"))
+      return self._trash96
+
+    raise RuntimeError(
+      "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
+    )
 
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""
