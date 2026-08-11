@@ -15,9 +15,9 @@ Do not represent every serial, USB, transport, or firmware command as a *semanti
 
 The current EventBus also supports a separate diagnostic layer. Instrumented transports emit
 `io.read` and `io.write`, and the Hamilton USB transport emits `firmware.command.started`,
-`.completed`, and `.failed`. These records are useful for correlation and diagnostics, but are
-not a replacement for semantic frontend events. Consumers should normally filter them from
-operator timelines and high-level notifications.
+`.completed`, and `.failed`. Semantic and diagnostic events are complementary: semantic events
+describe PLR-level operations, while diagnostic events describe the transport and controller
+activity performed to execute them.
 
 An instrumented method remains a no-op with respect to events unless an EventBus with at least
 one subscriber is active. Use one of these helpers:
