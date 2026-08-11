@@ -11,8 +11,13 @@ not a control mechanism: listener failures must never affect hardware control fl
 
 Instrument **semantic public operations**: an operation that a protocol author would recognize
 as one action, such as fetching a plate, aspirating, shaking, or moving an arm to a location.
-Do not instrument every serial, USB, transport, or firmware command as a semantic event.
-Those lower-level details remain available through normal device logging for diagnostics.
+Do not represent every serial, USB, transport, or firmware command as a *semantic* operation.
+
+The current EventBus also supports a separate diagnostic layer. Instrumented transports emit
+`io.read` and `io.write`, and the Hamilton USB transport emits `firmware.command.started`,
+`.completed`, and `.failed`. These records are useful for correlation and diagnostics, but are
+not a replacement for semantic frontend events. Consumers should normally filter them from
+operator timelines and high-level notifications.
 
 An instrumented method remains a no-op with respect to events unless an EventBus with at least
 one subscriber is active. Use one of these helpers:
@@ -20,6 +25,10 @@ one subscriber is active. Use one of these helpers:
 - `@evented_operation(...)` for one public async method.
 - `with event_operation(...):` for one logical operation implemented by several calls.
 - `emit_event(...)` only for a meaningful state transition that is not an operation lifecycle.
+
+Use a low-level diagnostic event only when the transport boundary itself is useful to observe.
+Diagnostic events may inherit the enclosing semantic operation context, but do not define a new
+protocol-level action or resource-transfer meaning.
 
 ## Universal event contract
 
