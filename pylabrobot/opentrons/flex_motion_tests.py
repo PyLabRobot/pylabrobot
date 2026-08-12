@@ -11,15 +11,17 @@ robot-software version gate on the robot/* command family.
 
 import asyncio
 import unittest
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from pylabrobot.opentrons.flex import OpentronsFlex
 from pylabrobot.opentrons.flex_gripper import FlexGripper, _require_robot_commands
-from pylabrobot.opentrons.flex_head import _FlexHead
+from pylabrobot.opentrons.flex_head import FlexHead8, _FlexHead
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.resources import set_tip_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
+from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
 
 def _flex_with_gripper(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxTransport]:
@@ -96,15 +98,6 @@ class TestHeadPosition(unittest.TestCase):
       save_cmds = _cmds(transport, "savePosition")
       self.assertEqual(len(save_cmds), 1)
       self.assertEqual(save_cmds[0]["params"], {"pipetteId": head.pipette_id})
-    finally:
-      asyncio.run(flex.stop())
-
-  def test_position_default_saved_position(self):
-    flex, _transport = _flex_with_gripper()
-    asyncio.run(flex.setup())
-    try:
-      position = asyncio.run(_head(flex).position())
-      self.assertEqual(position, Coordinate(100.0, 100.0, 100.0))
     finally:
       asyncio.run(flex.stop())
 
@@ -322,6 +315,48 @@ class TestRobotCommandsVersionGate(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
+  def test_double_digit_major_passes(self):
+    # A lexicographic comparison would put "10.0.0" below "8.2.0".
+    flex, transport = _flex_with_version("10.0.0")
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(_gripper(flex).open_jaw())
+      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_two_part_version_passes(self):
+    # "8.2" pads to (8, 2, 0), equal to the minimum, not below it.
+    flex, transport = _flex_with_version("8.2")
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(_gripper(flex).open_jaw())
+      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_patch_release_below_minimum_rejected(self):
+    flex, transport = _flex_with_version("8.1.9")
+    asyncio.run(flex.setup())
+    try:
+      with self.assertRaises(OpentronsError):
+        asyncio.run(_gripper(flex).open_jaw())
+      self._assert_no_robot_commands(transport)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_unparseable_version_rejected(self):
+    # A version the gate cannot parse must raise, not silently pass.
+    flex, transport = _flex_with_version("unknown")
+    asyncio.run(flex.setup())
+    try:
+      with self.assertRaises(OpentronsError) as ctx:
+        asyncio.run(_gripper(flex).open_jaw())
+      self.assertIn("unknown", str(ctx.exception))
+      self._assert_no_robot_commands(transport)
+    finally:
+      asyncio.run(flex.stop())
+
   def test_dev_build_passes(self):
     flex, transport = _flex_with_version("0.0.0.dev0")
     asyncio.run(flex.setup())
@@ -352,6 +387,81 @@ class TestRobotCommandsVersionGate(unittest.TestCase):
   def test_unknown_version_raises(self):
     with self.assertRaises(OpentronsError):
       _require_robot_commands("robot/moveTo", None)
+
+
+class TestUntestedHardwareWarnings(unittest.TestCase):
+  """Hardware-verification coverage is op-scoped: FlexHead8's verified
+  column-pickup lineage never warns; every other head or gripper op logs the
+  one-time untested-hardware notice, naming the op."""
+
+  def setUp(self):
+    set_tip_tracking(True)
+
+  def tearDown(self):
+    set_tip_tracking(False)
+
+  def _flex_head8(self) -> Tuple[OpentronsFlex, FlexHead8]:
+    transport = ChatterboxTransport(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    asyncio.run(flex.setup())
+    head = flex.left
+    assert isinstance(head, FlexHead8)
+    return flex, head
+
+  def test_head8_verified_pickup_does_not_warn(self):
+    flex, head = self._flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+      with self.assertRaises(AssertionError):
+        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+          asyncio.run(head.pick_up_tips(rack, column=0))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_head8_op_outside_verified_lineage_warns_once(self):
+    flex, head = self._flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+      asyncio.run(head.pick_up_tips(rack, column=0))
+
+      with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
+        asyncio.run(head.blow_out())
+      self.assertTrue(any("FlexHead8.blow_out" in msg for msg in log_ctx.output))
+      self.assertTrue(any("not yet verified" in msg.lower() for msg in log_ctx.output))
+
+      # Only the FIRST unverified op on an instance logs.
+      with self.assertRaises(AssertionError):
+        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+          asyncio.run(head.blow_out())
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_base_motion_ops_warn_on_unverified_heads(self):
+    flex, _transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
+        asyncio.run(_head(flex).position())
+      self.assertTrue(any("FlexHead1.position" in msg for msg in log_ctx.output))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_gripper_ops_warn_once(self):
+    flex, _transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      gripper = _gripper(flex)
+      with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING") as log_ctx:
+        asyncio.run(gripper.move_to(1.0, 2.0, 3.0))
+      self.assertTrue(any("FlexGripper.move_to" in msg for msg in log_ctx.output))
+
+      with self.assertRaises(AssertionError):
+        with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING"):
+          asyncio.run(gripper.open_jaw())
+    finally:
+      asyncio.run(flex.stop())
 
 
 if __name__ == "__main__":

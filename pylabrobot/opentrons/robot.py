@@ -16,6 +16,25 @@ class OpentronsError(Exception):
     super().__init__(f"{title}: {message}" if message else title)
 
 
+class OpentronsCommandError(RuntimeError):
+  """A robot-server command completed with status "failed".
+
+  Carries the command's error payload (the robot-server's ErrorOccurrence
+  dict) so callers can react to defined errors by ``error_type`` (e.g.
+  ``"liquidNotFound"``) instead of parsing the message string.
+  """
+
+  def __init__(self, command_type: str, error: Dict[str, Any]) -> None:
+    super().__init__(f"Opentrons command '{command_type}' failed: {error.get('detail', error)}")
+    self.command_type = command_type
+    self.error = error
+
+  @property
+  def error_type(self) -> Optional[str]:
+    """The machine-readable error identifier, e.g. "liquidNotFound"."""
+    return cast(Optional[str], self.error.get("errorType"))
+
+
 @dataclass
 class PipetteInfo:
   mount: str
@@ -185,7 +204,8 @@ class OpentronsRobot(abc.ABC):
       The completed command data dict (includes "result" field).
 
     Raises:
-      RuntimeError: If the command fails or times out.
+      OpentronsCommandError: If the command reports status "failed".
+      RuntimeError: If the command times out.
     """
     assert self.run_id is not None, "No active run. Call create_run() first."
     payload = {
@@ -214,10 +234,7 @@ class OpentronsRobot(abc.ABC):
       if status == "succeeded":
         return cmd_data
       elif status == "failed":
-        error = cmd_data.get("error", {})
-        raise RuntimeError(
-          f"Opentrons command '{command_type}' failed: {error.get('detail', error)}"
-        )
+        raise OpentronsCommandError(command_type, cmd_data.get("error", {}))
       await asyncio.sleep(0.2)
 
     raise RuntimeError(f"Opentrons command '{command_type}' timed out after {timeout}s")

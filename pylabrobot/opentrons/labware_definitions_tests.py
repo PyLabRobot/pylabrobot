@@ -1,17 +1,17 @@
 """Tests for custom Opentrons labware definition building and uploading.
 
 Builder-level tests pin the definition content produced from PLR geometry
-(dimensions, well positions, the PLR front-left vs Opentrons back-left y-flip,
+(dimensions, well positions and shapes, the shared front-left slot anchoring,
 grip height). Flex-level tests drive ``OpentronsFlex._ensure_labware_loaded``
 with an injected ``ChatterboxTransport`` and assert labware without an
-official Opentrons definition is uploaded once and then loaded by the
-uploaded definition's namespace/loadName/version, while official-name labware
-keeps loading with zero uploads.
+official Opentrons definition is uploaded and then loaded by the uploaded
+definition's namespace/loadName/version, that the run-scoped caches reset
+with the run, and that official-name labware keeps loading with zero uploads.
 """
 
 import asyncio
 import unittest
-from typing import Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from pylabrobot.opentrons.flex import OpentronsFlex
 from pylabrobot.opentrons.labware_definitions import (
@@ -20,16 +20,30 @@ from pylabrobot.opentrons.labware_definitions import (
   build_plate_definition,
   build_tip_rack_definition,
 )
-from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
-from pylabrobot.resources import Plate, Resource, TipRack, TipSpot, Trough, Well
+from pylabrobot.resources import (
+  CrossSectionType,
+  Plate,
+  Resource,
+  TipRack,
+  TipSpot,
+  Trough,
+  Well,
+  WellBottomType,
+)
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
-def _plate(name: str = "Black Plate-1") -> Plate:
-  """A 2x2-well plate with hand-picked geometry so expected numbers are exact."""
+def _plate(
+  name: str = "Black Plate-1",
+  num_items_x: int = 2,
+  num_items_y: int = 2,
+  cross_section_type: CrossSectionType = CrossSectionType.CIRCLE,
+  bottom_type: WellBottomType = WellBottomType.UNKNOWN,
+) -> Plate:
+  """A plate with hand-picked geometry so expected numbers are exact."""
   return Plate(
     name=name,
     size_x=127.0,
@@ -37,8 +51,8 @@ def _plate(name: str = "Black Plate-1") -> Plate:
     size_z=14.0,
     ordered_items=create_ordered_items_2d(
       Well,
-      num_items_x=2,
-      num_items_y=2,
+      num_items_x=num_items_x,
+      num_items_y=num_items_y,
       dx=10.0,
       dy=8.0,
       dz=1.0,
@@ -48,12 +62,16 @@ def _plate(name: str = "Black Plate-1") -> Plate:
       size_y=6.0,
       size_z=10.0,
       max_volume=360.0,
+      cross_section_type=cross_section_type,
+      bottom_type=bottom_type,
     ),
   )
 
 
-def _tip_rack(name: str = "hamilton tips 300") -> TipRack:
-  """A 2x2-spot tip rack with hand-picked geometry and a pinned prototype tip."""
+def _tip_rack(
+  name: str = "hamilton tips 300", num_items_x: int = 2, num_items_y: int = 2
+) -> TipRack:
+  """A tip rack with hand-picked geometry and a pinned prototype tip."""
 
   def make_tip(name: str) -> Tip:
     return Tip(
@@ -71,8 +89,8 @@ def _tip_rack(name: str = "hamilton tips 300") -> TipRack:
     size_z=90.0,
     ordered_items=create_ordered_items_2d(
       TipSpot,
-      num_items_x=2,
-      num_items_y=2,
+      num_items_x=num_items_x,
+      num_items_y=num_items_y,
       dx=10.0,
       dy=8.0,
       dz=0.0,
@@ -89,6 +107,24 @@ def _trough(name: str = "hamilton trough") -> Trough:
   return Trough(name=name, size_x=120.0, size_y=80.0, size_z=40.0, max_volume=290000.0)
 
 
+class TestDefinitionLoadNames(unittest.TestCase):
+  """Load names are the sanitized PLR name plus a digest of the raw name, so
+  distinct names that sanitize identically never share a definitionUri."""
+
+  def test_load_name_is_sanitized_name_plus_digest(self):
+    definition = build_plate_definition(_plate())
+    self.assertEqual(definition["parameters"]["loadName"], "black_plate_1_e2a464")
+
+  def test_colliding_sanitized_names_get_distinct_load_names(self):
+    a = build_plate_definition(_plate(name="My Plate"))
+    b = build_plate_definition(_plate(name="my plate"))
+    self.assertEqual(a["parameters"]["loadName"], "my_plate_3f2f85")
+    self.assertEqual(b["parameters"]["loadName"], "my_plate_1aa3c7")
+    self.assertNotEqual(a["parameters"]["loadName"], b["parameters"]["loadName"])
+    for definition in (a, b):
+      self.assertRegex(definition["parameters"]["loadName"], r"^[a-z0-9._]+$")
+
+
 class TestBuildPlateDefinition(unittest.TestCase):
   """build_plate_definition maps PLR plate geometry into a wellPlate definition."""
 
@@ -99,7 +135,7 @@ class TestBuildPlateDefinition(unittest.TestCase):
     self.assertEqual(definition["schemaVersion"], 2)
     self.assertEqual(definition["metadata"]["displayCategory"], "wellPlate")
     self.assertEqual(definition["metadata"]["displayName"], "Black Plate-1")
-    self.assertEqual(definition["parameters"]["loadName"], "black_plate_1")
+    self.assertEqual(definition["parameters"]["loadName"], "black_plate_1_e2a464")
     self.assertFalse(definition["parameters"]["isTiprack"])
     self.assertEqual(
       definition["dimensions"],
@@ -110,11 +146,11 @@ class TestBuildPlateDefinition(unittest.TestCase):
     definition = build_plate_definition(_plate())
     self.assertEqual(definition["ordering"], [["A1", "B1"], ["A2", "B2"]])
 
-  def test_corner_offset_y_flip(self):
-    # PLR anchors at the slot's front-left, Opentrons at the back-left: an
-    # 80 mm-deep plate in an 86 mm-deep slot sits 6 mm toward the back.
+  def test_corner_offset_is_zero_front_left_anchor(self):
+    # PLR and Opentrons schema-2 definitions both anchor labware at the
+    # slot's front-left-bottom corner, so no frame conversion applies.
     definition = build_plate_definition(_plate())
-    self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 6.0, "z": 0})
+    self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 0, "z": 0})
 
   def test_well_geometry_carries_depth_volume_and_centers(self):
     definition = build_plate_definition(_plate())
@@ -135,6 +171,36 @@ class TestBuildPlateDefinition(unittest.TestCase):
     self.assertEqual(definition["wells"]["B1"]["y"], 11.0)
     self.assertEqual(definition["groups"][0]["wells"], ["A1", "B1", "A2", "B2"])
 
+  def test_rectangular_wells_carry_x_y_dimensions(self):
+    definition = build_plate_definition(_plate(cross_section_type=CrossSectionType.RECTANGLE))
+    well = definition["wells"]["A1"]
+    self.assertEqual(well["shape"], "rectangular")
+    self.assertEqual(well["xDimension"], 6.0)
+    self.assertEqual(well["yDimension"], 6.0)
+    self.assertNotIn("diameter", well)
+
+  def test_well_bottom_shape_maps_from_plr_bottom_type(self):
+    self.assertEqual(
+      build_plate_definition(_plate(bottom_type=WellBottomType.V))["groups"][0]["metadata"],
+      {"wellBottomShape": "v"},
+    )
+    self.assertEqual(
+      build_plate_definition(_plate(bottom_type=WellBottomType.U))["groups"][0]["metadata"],
+      {"wellBottomShape": "u"},
+    )
+    # UNKNOWN falls back to flat, the schema's safest default.
+    self.assertEqual(
+      build_plate_definition(_plate())["groups"][0]["metadata"],
+      {"wellBottomShape": "flat"},
+    )
+
+  def test_format_derives_from_grid(self):
+    self.assertEqual(build_plate_definition(_plate())["parameters"]["format"], "irregular")
+    plate_96 = _plate(num_items_x=12, num_items_y=8)
+    self.assertEqual(build_plate_definition(plate_96)["parameters"]["format"], "96Standard")
+    plate_384 = _plate(num_items_x=24, num_items_y=16)
+    self.assertEqual(build_plate_definition(plate_384)["parameters"]["format"], "384Standard")
+
   def test_grip_height_from_grip_distance(self):
     self.assertNotIn("gripHeightFromLabwareBottom", build_plate_definition(_plate()))
     definition = build_plate_definition(_plate(), grip_distance_from_top=4.0)
@@ -149,15 +215,19 @@ class TestBuildTipRackDefinition(unittest.TestCase):
   def test_tip_parameters_come_from_prototype_tip(self):
     definition = build_tip_rack_definition(_tip_rack())
     self.assertEqual(definition["metadata"]["displayCategory"], "tipRack")
-    self.assertEqual(definition["parameters"]["format"], "96Standard")
+    self.assertEqual(definition["parameters"]["format"], "irregular")  # 2x2 is not an SBS grid
     self.assertTrue(definition["parameters"]["isTiprack"])
     self.assertEqual(definition["parameters"]["tipLength"], 50.0)
     self.assertEqual(definition["parameters"]["tipOverlap"], 8.0)
-    self.assertEqual(definition["parameters"]["loadName"], "hamilton_tips_300")
+    self.assertEqual(definition["parameters"]["loadName"], "hamilton_tips_300_0558ff")
 
-  def test_spot_geometry_and_y_flip(self):
+  def test_full_rack_format_is_96standard(self):
+    definition = build_tip_rack_definition(_tip_rack(num_items_x=12, num_items_y=8))
+    self.assertEqual(definition["parameters"]["format"], "96Standard")
+
+  def test_spot_geometry_and_zero_corner_offset(self):
     definition = build_tip_rack_definition(_tip_rack())
-    self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 4.0, "z": 0})  # 86 - 82
+    self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 0, "z": 0})
     self.assertEqual(definition["ordering"], [["A1", "B1"], ["A2", "B2"]])
     # A1 spot origin (10, 17, 0), 5 mm square: center (12.5, 19.5).
     self.assertEqual(
@@ -186,9 +256,9 @@ class TestBuildContainerDefinition(unittest.TestCase):
     definition = build_container_definition(_trough())
     self.assertEqual(definition["namespace"], "pylabrobot")
     self.assertEqual(definition["metadata"]["displayCategory"], "reservoir")
-    self.assertEqual(definition["parameters"]["loadName"], "hamilton_trough")
+    self.assertEqual(definition["parameters"]["loadName"], "hamilton_trough_9544de")
     self.assertEqual(definition["ordering"], [["A1"]])
-    self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 6.0, "z": 0})  # 86 - 80
+    self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 0, "z": 0})
     self.assertEqual(
       definition["dimensions"],
       {"xDimension": 120.0, "yDimension": 80.0, "zDimension": 40.0},
@@ -210,6 +280,18 @@ class TestBuildContainerDefinition(unittest.TestCase):
     )
     self.assertEqual(definition["groups"][0]["wells"], ["A1"])
 
+  def test_center_multichannel_quirk_matches_shipped_reservoirs(self):
+    # Every shipped Opentrons 1-well reservoir carries this quirk; the engine
+    # centers a multi-channel nozzle array on the cavity because of it, so
+    # container ops send no manual centering offsets.
+    definition = build_container_definition(_trough())
+    self.assertEqual(definition["parameters"]["quirks"], ["centerMultichannelOnWells"])
+
+  def test_grip_height_from_grip_distance(self):
+    self.assertNotIn("gripHeightFromLabwareBottom", build_container_definition(_trough()))
+    definition = build_container_definition(_trough(), grip_distance_from_top=10.0)
+    self.assertEqual(definition["gripHeightFromLabwareBottom"], 30.0)  # 40 - 10
+
 
 class TestBuildMovableLabwareDefinition(unittest.TestCase):
   """build_movable_labware_definition builds the minimal gripper-move stub."""
@@ -218,7 +300,7 @@ class TestBuildMovableLabwareDefinition(unittest.TestCase):
     resource = Resource(name="lid stack", size_x=100.0, size_y=90.0, size_z=20.0)
     definition = build_movable_labware_definition(resource, grip_distance_from_top=5.0)
     self.assertEqual(definition["namespace"], "pylabrobot")
-    self.assertEqual(definition["parameters"]["loadName"], "lid_stack")
+    self.assertEqual(definition["parameters"]["loadName"], "lid_stack_2196eb")
     self.assertEqual(definition["ordering"], [["A1"]])
     self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 0, "z": 0})
     self.assertEqual(
@@ -244,20 +326,65 @@ class TestBuildMovableLabwareDefinition(unittest.TestCase):
       },
     )
 
+  def test_grip_height_omitted_without_grip_distance(self):
+    resource = Resource(name="lid stack", size_x=100.0, size_y=90.0, size_z=20.0)
+    definition = build_movable_labware_definition(resource)
+    self.assertNotIn("gripHeightFromLabwareBottom", definition)
+
   def test_grip_height_clamped_at_labware_bottom(self):
     resource = Resource(name="shim", size_x=10.0, size_y=10.0, size_z=3.0)
     definition = build_movable_labware_definition(resource, grip_distance_from_top=7.0)
     self.assertEqual(definition["gripHeightFromLabwareBottom"], 0.0)
 
 
-def _flex_with_transport() -> Tuple[OpentronsFlex, ChatterboxTransport]:
-  transport = ChatterboxTransport(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
+def _flex_with_transport(
+  transport: Optional[ChatterboxTransport] = None,
+) -> Tuple[OpentronsFlex, ChatterboxTransport]:
+  transport = transport or ChatterboxTransport(
+    pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right"
+  )
   flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
   return flex, transport
 
 
 def _load_labware_commands(transport: ChatterboxTransport) -> list:
   return [c for c in transport.commands if c["commandType"] == "loadLabware"]
+
+
+class _FailFirstUploadTransport(ChatterboxTransport):
+  """Chatterbox whose FIRST labware-definition upload raises; retries succeed."""
+
+  def __init__(self, **kwargs) -> None:
+    super().__init__(**kwargs)
+    self._upload_failed_once = False
+
+  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    if path.endswith("/labware_definitions") and not self._upload_failed_once:
+      self._upload_failed_once = True
+      raise RuntimeError("simulated definition upload failure")
+    return await super().post(path, json)
+
+
+class _FailFirstLoadTransport(ChatterboxTransport):
+  """Chatterbox whose FIRST loadLabware command fails at the robot; retries succeed."""
+
+  def __init__(self, **kwargs) -> None:
+    super().__init__(**kwargs)
+    self._load_failed_once = False
+
+  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    result = await super().post(path, json)
+    data = (json or {}).get("data", {})
+    if (
+      path.endswith("/commands")
+      and data.get("commandType") == "loadLabware"
+      and not self._load_failed_once
+    ):
+      self._load_failed_once = True
+      cmd_data = result["data"]
+      cmd_data["status"] = "failed"
+      cmd_data["error"] = {"detail": "simulated loadLabware failure"}
+    return result
 
 
 class TestCustomLabwareLoadFlow(unittest.TestCase):
@@ -281,7 +408,7 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       self.assertEqual(params["loadName"], definition["parameters"]["loadName"])
       self.assertEqual(params["version"], definition["version"])
       self.assertEqual(params["namespace"], "pylabrobot")
-      self.assertEqual(params["loadName"], "black_plate_1")
+      self.assertEqual(params["loadName"], "black_plate_1_e2a464")
       self.assertEqual(params["version"], 1)
       self.assertEqual(params["location"], {"slotName": "C1"})
     finally:
@@ -302,7 +429,10 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_reload_after_off_deck_reuses_uploaded_definition(self):
+  def test_reload_after_off_deck_reuploads_definition(self):
+    # The definition-identity cache is evicted with the departed labware: a
+    # different same-named resource re-added later must not inherit the old
+    # geometry, so the re-add re-uploads.
     flex, transport = _flex_with_transport()
     asyncio.run(flex.setup())
     try:
@@ -310,14 +440,79 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       flex.deck.assign_child_at_slot(plate, "C1")
       asyncio.run(flex._ensure_labware_loaded(plate))
       asyncio.run(flex.labware_moved_off_deck(plate))
+      self.assertNotIn(plate.name, flex._defined_labware)
+
       flex.deck.assign_child_at_slot(plate, "D2")
       asyncio.run(flex._ensure_labware_loaded(plate))
 
-      # A fresh loadLabware at the new slot, but the definition uploads once per run.
-      self.assertEqual(len(transport.labware_definitions), 1)
+      self.assertEqual(len(transport.labware_definitions), 2)
       load_cmds = _load_labware_commands(transport)
       self.assertEqual(len(load_cmds), 2)
       self.assertEqual(load_cmds[1]["params"]["location"], {"slotName": "D2"})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_second_setup_clears_run_scoped_caches(self):
+    # labwareIds and uploaded definitions are both run-scoped server-side, so
+    # a new run (new setup) must re-upload and re-load.
+    flex, transport = _flex_with_transport()
+    asyncio.run(flex.setup())
+    try:
+      plate = _plate()
+      flex.deck.assign_child_at_slot(plate, "C1")
+      asyncio.run(flex._ensure_labware_loaded(plate))
+      self.assertEqual(len(transport.labware_definitions), 1)
+
+      asyncio.run(flex.setup())  # new run
+      self.assertEqual(flex._loaded_labware, {})
+      self.assertEqual(flex._defined_labware, {})
+
+      asyncio.run(flex._ensure_labware_loaded(plate))
+      self.assertEqual(len(transport.labware_definitions), 2)
+      self.assertEqual(len(_load_labware_commands(transport)), 2)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_failed_upload_leaves_caches_clean_and_retry_works(self):
+    flex, transport = _flex_with_transport(
+      _FailFirstUploadTransport(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
+    )
+    asyncio.run(flex.setup())
+    try:
+      plate = _plate()
+      flex.deck.assign_child_at_slot(plate, "C1")
+
+      with self.assertRaises(RuntimeError):
+        asyncio.run(flex._ensure_labware_loaded(plate))
+      self.assertNotIn(plate.name, flex._defined_labware)
+      self.assertNotIn(plate.name, flex._loaded_labware)
+
+      asyncio.run(flex._ensure_labware_loaded(plate))
+      self.assertEqual(len(transport.labware_definitions), 1)
+      self.assertEqual(len(_load_labware_commands(transport)), 1)
+      self.assertIn(plate.name, flex._loaded_labware)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_failed_load_leaves_no_labware_id_and_retry_reuses_definition(self):
+    flex, transport = _flex_with_transport(
+      _FailFirstLoadTransport(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
+    )
+    asyncio.run(flex.setup())
+    try:
+      plate = _plate()
+      flex.deck.assign_child_at_slot(plate, "C1")
+
+      with self.assertRaises(RuntimeError):
+        asyncio.run(flex._ensure_labware_loaded(plate))
+      self.assertNotIn(plate.name, flex._loaded_labware)
+
+      asyncio.run(flex._ensure_labware_loaded(plate))
+      # The upload succeeded the first time, so the retry re-loads without a
+      # duplicate upload.
+      self.assertEqual(len(transport.labware_definitions), 1)
+      self.assertEqual(len(_load_labware_commands(transport)), 2)
+      self.assertIn(plate.name, flex._loaded_labware)
     finally:
       asyncio.run(flex.stop())
 
@@ -353,7 +548,7 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       self.assertEqual(list(definition["wells"]), ["A1"])
       params = _load_labware_commands(transport)[0]["params"]
       self.assertEqual(params["namespace"], "pylabrobot")
-      self.assertEqual(params["loadName"], "hamilton_trough")
+      self.assertEqual(params["loadName"], "hamilton_trough_9544de")
     finally:
       asyncio.run(flex.stop())
 
@@ -368,19 +563,27 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       self.assertEqual(len(transport.labware_definitions), 1)
       self.assertTrue(transport.labware_definitions[0]["parameters"]["isTiprack"])
       params = _load_labware_commands(transport)[0]["params"]
-      self.assertEqual(params["loadName"], "hamilton_tips_300")
+      self.assertEqual(params["loadName"], "hamilton_tips_300_0558ff")
     finally:
       asyncio.run(flex.stop())
 
-  def test_unbuildable_resource_still_raises_loudly(self):
+  def test_bare_resource_uploads_movable_stub(self):
+    # A resource that is not a Plate/TipRack/Container routes to the
+    # non-pipettable movable stub so the gripper can still move it.
     flex, transport = _flex_with_transport()
     asyncio.run(flex.setup())
     try:
       widget = Resource(name="widget", size_x=100.0, size_y=90.0, size_z=20.0)
       flex.deck.assign_child_at_slot(widget, "C1")
-      with self.assertRaises(OpentronsError):
-        asyncio.run(flex._ensure_labware_loaded(widget))
-      self.assertEqual(len(transport.labware_definitions), 0)
-      self.assertEqual(len(_load_labware_commands(transport)), 0)
+      asyncio.run(flex._ensure_labware_loaded(widget, grip_distance_from_top=5.0))
+
+      self.assertEqual(len(transport.labware_definitions), 1)
+      definition = transport.labware_definitions[0]
+      self.assertEqual(definition["ordering"], [["A1"]])
+      self.assertEqual(definition["wells"]["A1"]["depth"], 0)
+      self.assertEqual(definition["gripHeightFromLabwareBottom"], 15.0)  # 20 - 5
+      params = _load_labware_commands(transport)[0]["params"]
+      self.assertEqual(params["namespace"], "pylabrobot")
+      self.assertEqual(params["loadName"], "widget_ff700e")
     finally:
       asyncio.run(flex.stop())

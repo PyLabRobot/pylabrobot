@@ -107,6 +107,7 @@ class ChatterboxTransport:
     simulate_failed_pickup: bool = False,
     simulate_stuck_tip: bool = False,
     liquid_probe_z: Optional[float] = None,
+    simulate_liquid_probe_not_found: bool = False,
     gripper: bool = False,
     saved_position: Optional[Dict[str, float]] = None,
   ) -> None:
@@ -137,6 +138,11 @@ class ChatterboxTransport:
       command reports as ``z_position`` in its result. Default None: the key
       is omitted from the result entirely (not set to null), matching the
       real robot-server's shape when no liquid is found.
+    simulate_liquid_probe_not_found: if True, a ``liquidProbe`` command FAILS
+      with the engine's defined "liquidNotFound" error -- the real-hardware
+      behavior when no liquid is detected -- instead of succeeding with the
+      ``z_position`` key absent. ``tryLiquidProbe`` is unaffected: it
+      genuinely succeeds with the key absent. Default False.
     gripper: if True, ``/instruments`` also reports a gripper on the extension
       mount, so tests can drive gripper discovery. Default False: no gripper
       mounted (existing behavior).
@@ -160,6 +166,7 @@ class ChatterboxTransport:
     self.simulate_failed_pickup = simulate_failed_pickup
     self.simulate_stuck_tip = simulate_stuck_tip
     self.liquid_probe_z = liquid_probe_z
+    self.simulate_liquid_probe_not_found = simulate_liquid_probe_not_found
     self.saved_position = saved_position
     # Per-mount simulated hardware tip-presence sensor state (Flex reports
     # ONE bool per pipette, not per nozzle -- see /instruments below).
@@ -253,6 +260,20 @@ class ChatterboxTransport:
           pos = self.saved_position or {"x": 100.0, "y": 100.0, "z": 100.0}
           result = {"position": dict(pos)}
       cmd_data = {"id": cmd_id, "commandType": ctype, "status": "succeeded", "result": result}
+      if ctype == "liquidProbe" and self.simulate_liquid_probe_not_found:
+        # The real robot-server fails the command with a defined
+        # ErrorOccurrence when the probe finds no liquid.
+        cmd_data = {
+          "id": cmd_id,
+          "commandType": ctype,
+          "status": "failed",
+          "error": {
+            "errorType": "liquidNotFound",
+            "errorCode": "2017",
+            "detail": "No liquid detected during the liquid probe process.",
+            "isDefined": True,
+          },
+        }
       self._cmds[cmd_id] = cmd_data
       self._log("Chatterbox: %s %s", ctype, params)
       return {"data": cmd_data}
