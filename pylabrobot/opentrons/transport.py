@@ -105,6 +105,8 @@ class ChatterboxTransport:
     log: Optional[Callable[..., None]] = None,
     simulate_failed_pickup: bool = False,
     simulate_stuck_tip: bool = False,
+    liquid_probe_z: Optional[float] = None,
+    gripper: bool = False,
   ) -> None:
     """Args:
     pipette: the simulated mounted pipette as ``(name, channels, min_vol, max_vol)``.
@@ -129,12 +131,20 @@ class ChatterboxTransport:
       stuck to the nozzle after a drop, so ``_FlexHead._confirm_tips_cleared()``
       sees ``tipDetected: True`` and logs a warning. Default False: a drop
       always clears the sensor (existing behavior).
+    liquid_probe_z: the liquid height (mm) a ``liquidProbe``/``tryLiquidProbe``
+      command reports as ``z_position`` in its result. Default None: the key
+      is omitted from the result entirely (not set to null), matching the
+      real robot-server's shape when no liquid is found.
+    gripper: if True, ``/instruments`` also reports a gripper on the extension
+      mount, so tests can drive gripper discovery. Default False: no gripper
+      mounted (existing behavior).
     """
     if pipettes is not None:
       self._pipettes: List[Tuple[str, int, float, float, str]] = list(pipettes)
     else:
       name, channels, min_v, max_v = pipette
       self._pipettes = [(name, channels, min_v, max_v, mount)]
+    self._gripper = gripper
     self._log = log or logger.info
     self._cmds: Dict[str, Dict[str, Any]] = {}  # cmd_id -> full command data
     self._n = 0
@@ -143,6 +153,7 @@ class ChatterboxTransport:
     self.commands: List[Dict[str, Any]] = []  # every command, in send order: {commandType, params}
     self.simulate_failed_pickup = simulate_failed_pickup
     self.simulate_stuck_tip = simulate_stuck_tip
+    self.liquid_probe_z = liquid_probe_z
     # Per-mount simulated hardware tip-presence sensor state (Flex reports
     # ONE bool per pipette, not per nozzle -- see /instruments below).
     self._tip_detected: Dict[str, bool] = {mount: False for *_rest, mount in self._pipettes}
@@ -154,19 +165,28 @@ class ChatterboxTransport:
     if path == "/health":
       return {"api_version": "dry-run", "robot_model": "OT-3 Standard", "name": "chatterbox"}
     if path == "/instruments":
-      return {
-        "data": [
+      instruments: List[Dict[str, Any]] = [
+        {
+          "instrumentType": "pipette",
+          "mount": mount,
+          "instrumentName": name,
+          "instrumentModel": name,
+          "data": {"channels": channels, "min_volume": min_v, "max_volume": max_v},
+          "state": {"tipDetected": self._tip_detected.get(mount, False)},
+        }
+        for name, channels, min_v, max_v, mount in self._pipettes
+      ]
+      if self._gripper:
+        instruments.append(
           {
-            "instrumentType": "pipette",
-            "mount": mount,
-            "instrumentName": name,
-            "instrumentModel": name,
-            "data": {"channels": channels, "min_volume": min_v, "max_volume": max_v},
-            "state": {"tipDetected": self._tip_detected.get(mount, False)},
+            "instrumentType": "gripper",
+            "mount": "extension",
+            "instrumentName": "flexGripper",
+            "instrumentModel": "gripperV1.3",
+            "data": {"jawState": "unhomed"},
           }
-          for name, channels, min_v, max_v, mount in self._pipettes
-        ]
-      }
+        )
+      return {"data": instruments}
     if "/commands/" in path:  # a poll for one command's status
       cmd_id = path.rsplit("/", 1)[-1]
       cmd_data = self._cmds.get(
@@ -203,6 +223,9 @@ class ChatterboxTransport:
           mount = self._pipette_id_to_mount.get(params.get("pipetteId"))
           if mount is not None:
             self._tip_detected[mount] = self.simulate_stuck_tip
+        elif ctype in ("liquidProbe", "tryLiquidProbe"):
+          if self.liquid_probe_z is not None:
+            result = {"z_position": self.liquid_probe_z}
       cmd_data = {"id": cmd_id, "commandType": ctype, "status": "succeeded", "result": result}
       self._cmds[cmd_id] = cmd_data
       self._log("Chatterbox: %s %s", ctype, params)
