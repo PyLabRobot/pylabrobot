@@ -1,7 +1,8 @@
 import logging
 import uuid
-from typing import Dict, List, Optional, Type, cast
+from typing import Any, Dict, List, Optional, Type, cast
 
+from pylabrobot.opentrons.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
 from pylabrobot.opentrons.robot import OpentronsError, OpentronsRobot
 from pylabrobot.opentrons.transport import OpentronsTransport
@@ -55,6 +56,7 @@ class OpentronsFlex(OpentronsRobot):
     self.left: Optional[_FlexHead] = None
     self.right: Optional[_FlexHead] = None
     self.head96: Optional[_FlexHead] = None
+    self.gripper: Optional[FlexGripper] = None
     self._heads: List[_FlexHead] = []
 
   async def _model_setup(self) -> None:
@@ -99,6 +101,25 @@ class OpentronsFlex(OpentronsRobot):
 
     for head in self._heads:
       await head._on_setup()
+
+    # The gripper (extension mount) is optional: compose it when discovery
+    # reports one, leave ``self.gripper`` None otherwise.
+    gripper_model = self._parse_gripper(instruments_data)
+    if gripper_model is not None:
+      self.gripper = FlexGripper(self, gripper_model)
+      logger.info("Discovered gripper on the extension mount (model: %s)", gripper_model)
+
+  def _parse_gripper(self, instruments_data: Dict[str, Any]) -> Optional[str]:
+    """Parse the /instruments response for a mounted gripper.
+
+    Returns the gripper's model string, or ``None`` when none is mounted.
+    Separate from ``_parse_pipettes``, which filters to
+    ``instrumentType == 'pipette'`` and knows nothing about grippers.
+    """
+    for instrument in instruments_data.get("data", []):
+      if instrument.get("instrumentType") == "gripper":
+        return cast(str, instrument.get("instrumentModel", "unknown"))
+    return None
 
   async def stop(self) -> None:
     # Drop any mounted tips to the trash BEFORE parking/disconnecting, so the
@@ -161,6 +182,32 @@ class OpentronsFlex(OpentronsRobot):
       load_name,
     )
     return labware_id
+
+  async def labware_moved_off_deck(self, resource: Resource) -> None:
+    """Tell the robot an EXTERNAL agent (human or lab transporter) removed labware.
+
+    A logical move, not a gripper motion: ``moveLabware`` with strategy
+    ``manualMoveWithoutPause`` drops the labware from the robot-server's deck
+    model, freeing its slot. Without this the slot stays occupied server-side
+    and a later load into it fails with ``LocationIsOccupiedError``. The
+    PLR-side deck slot is freed too. No wire command is sent for labware that
+    was never loaded into the run; a re-add later loads fresh at its new slot.
+    """
+    name = getattr(resource, "name", str(resource))
+    if name in self._loaded_labware:
+      await self._execute_command(
+        "moveLabware",
+        {
+          "labwareId": self._loaded_labware[name],
+          "newLocation": "offDeck",
+          "strategy": "manualMoveWithoutPause",
+        },
+      )
+      del self._loaded_labware[name]
+    slot = self.deck.get_slot(resource)
+    if slot is not None:
+      self.deck.unassign_child_at_slot(slot)
+    logger.info("Labware '%s' marked moved off-deck", name)
 
   @staticmethod
   def _ot_load_name(resource: Resource) -> str:

@@ -100,6 +100,21 @@ class _FlexHead:
     """Discard all mounted tips into ``trash``. Implemented by each head."""
     raise NotImplementedError
 
+  async def blow_out(self, flow_rate: Optional[float] = None) -> None:
+    """Blow out at the current position -- one ``blowOutInPlace`` command.
+
+    Pushes the plunger past its dispense-bottom to expel residual liquid
+    from the tip(s) wherever the pipette currently is (no well addressing --
+    position with a dispense/move first). ``flow_rate`` (uL/s) defaults to
+    the dispense default. Blowing out leaves the plunger at the blow-out
+    position, so the next aspirate is preceded by a fresh
+    ``prepareToAspirate`` (same priming rule as after a tip pickup). No
+    trackers are involved.
+    """
+    rate = flow_rate if flow_rate is not None else _DEFAULT_BLOW_OUT_FLOW_RATE
+    await self._execute("blowOutInPlace", {"pipetteId": self.pipette_id, "flowRate": rate})
+    self._prepared = False
+
   async def has_tip_on_hardware(self) -> Optional[bool]:
     """Query the Flex's hardware tip-presence sensor for THIS head's pipette.
 
@@ -265,6 +280,64 @@ class _FlexHead:
     )
     await self._execute("dropTipInPlace", {"pipetteId": self.pipette_id})
 
+  # --- Fine-pipetting shared helpers ---
+
+  def _require_mounted_tip(self) -> None:
+    """Raise if no channel holds a tip -- pre-wire guard for tip-motion ops.
+
+    ``touch_tip``/``liquid_probe`` move the mounted tip itself into the
+    well, so issuing them without a tip would drive the bare nozzle into
+    the labware. Checked before any wire command is sent.
+    """
+    if all(tip is None for tip in self._channel_tips):
+      raise OpentronsError(
+        "NoTipError",
+        "No tip mounted; pick up a tip first.",
+      )
+
+  def _touch_tip_params(
+    self,
+    labware_id: str,
+    well_name: str,
+    radius: float,
+    offset: Optional[Coordinate],
+  ) -> Dict[str, Any]:
+    """Build the ``touchTip`` params dict shared by every head's ``touch_tip``.
+
+    The ``wellLocation`` rides at origin "bottom" with a zero default
+    offset -- ``touchTip`` addresses the height of the wall-touch motion,
+    not a liquid position, so the liquid ops' +1mm clearance default does
+    not apply. ``radius`` is the fraction of the well radius the tip moves
+    toward (1.0 = the wall).
+    """
+    o = offset if offset is not None else Coordinate.zero()
+    return {
+      "pipetteId": self.pipette_id,
+      "labwareId": labware_id,
+      "wellName": well_name,
+      "wellLocation": {"origin": "bottom", "offset": {"x": o.x, "y": o.y, "z": o.z}},
+      "radius": radius,
+    }
+
+  async def _probe_z(self, command_type: str, labware_id: str, well_name: str) -> Optional[float]:
+    """Send a ``liquidProbe``/``tryLiquidProbe`` command; return the found liquid z (mm).
+
+    The robot-server OMITS ``z_position`` from the command result entirely
+    (rather than reporting null) when no liquid is detected, so absence is
+    read with ``.get()`` and surfaced as ``None`` -- callers decide whether
+    that raises (``liquid_probe``) or passes through (``try_liquid_probe``).
+    """
+    result = await self._execute(
+      command_type,
+      {
+        "pipetteId": self.pipette_id,
+        "labwareId": labware_id,
+        "wellName": well_name,
+        "wellLocation": {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 0}},
+      },
+    )
+    return cast(Optional[float], result.get("result", {}).get("z_position"))
+
   async def _on_setup(self) -> None:
     """Hook for head-specific post-discovery setup. Default: no-op."""
 
@@ -332,6 +405,9 @@ _NUM_CHANNELS = 8
 # the Flex applies the same defaults regardless of channel count.
 _DEFAULT_ASPIRATE_FLOW_RATE = 35.0
 _DEFAULT_DISPENSE_FLOW_RATE = 57.0
+
+# The p50_multi_v3.5's default blow-out rate equals its dispense rate.
+_DEFAULT_BLOW_OUT_FLOW_RATE = _DEFAULT_DISPENSE_FLOW_RATE
 
 # Default aspirate/dispense position: 1mm above the well bottom, matching the
 # Opentrons Python-API default. The raw Protocol-Engine /commands API defaults
@@ -532,6 +608,54 @@ class FlexHead1(_FlexHead):
       params["wellLocation"] = well_location
 
     await self._execute_liquid_op("dispense", params, staged_trackers)
+
+  async def touch_tip(
+    self,
+    well: Well,
+    radius: float = 1.0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Touch the mounted tip to the sides of ``well`` -- one ``touchTip`` command.
+
+    ``radius`` is the fraction of the well radius the tip moves toward
+    (1.0 = the wall). Requires a mounted tip (checked before any wire
+    command). No trackers are involved.
+    """
+    self._warn_untested_hardware()
+    self._require_mounted_tip()
+    parent = self._require_itemized_parent(well)
+    labware_id = await self.flex._ensure_labware_loaded(parent)
+    well_name = parent.get_child_identifier(well)
+    await self._execute("touchTip", self._touch_tip_params(labware_id, well_name, radius, offset))
+
+  async def liquid_probe(self, well: Well) -> float:
+    """Probe downward in ``well`` until the pressure sensor detects liquid; return its z (mm).
+
+    One ``liquidProbe`` command naming ``well``. Requires a mounted tip
+    (checked before any wire command). Raises ``OpentronsError`` if no
+    liquid is found; use ``try_liquid_probe`` for the non-raising variant.
+    """
+    self._warn_untested_hardware()
+    self._require_mounted_tip()
+    parent = self._require_itemized_parent(well)
+    labware_id = await self.flex._ensure_labware_loaded(parent)
+    well_name = parent.get_child_identifier(well)
+    z = await self._probe_z("liquidProbe", labware_id, well_name)
+    if z is None:
+      raise OpentronsError(
+        "LiquidNotFoundError",
+        f"liquid_probe found no liquid in well {well.name!r}.",
+      )
+    return z
+
+  async def try_liquid_probe(self, well: Well) -> Optional[float]:
+    """Like ``liquid_probe`` but return ``None`` instead of raising when no liquid is found."""
+    self._warn_untested_hardware()
+    self._require_mounted_tip()
+    parent = self._require_itemized_parent(well)
+    labware_id = await self.flex._ensure_labware_loaded(parent)
+    well_name = parent.get_child_identifier(well)
+    return await self._probe_z("tryLiquidProbe", labware_id, well_name)
 
 
 class FlexHead8(_FlexHead):
@@ -798,6 +922,56 @@ class FlexHead8(_FlexHead):
 
     await self._execute_liquid_op("dispense", params, staged_trackers)
 
+  async def touch_tip(
+    self,
+    plate: Plate,
+    column: int,
+    radius: float = 1.0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Touch the mounted tips to their well walls -- one ``touchTip`` command
+    anchored at the column's A-row well.
+
+    ``radius`` is the fraction of the well radius each tip moves toward
+    (1.0 = the wall). Requires at least one mounted tip (checked before any
+    wire command) and ALL nozzle mode (reset first if a single-tip op left
+    the layout otherwise). No trackers are involved.
+    """
+    self._require_mounted_tip()
+    await self._ensure_all_mode()
+    labware_id = await self.flex._ensure_labware_loaded(plate)
+    well_name = _COLUMN_WELL_NAMES[column]
+    await self._execute("touchTip", self._touch_tip_params(labware_id, well_name, radius, offset))
+
+  async def liquid_probe(self, plate: Plate, column: int) -> float:
+    """Probe for liquid in a column -- one ``liquidProbe`` command anchored at
+    the A-row well; return the found liquid z (mm).
+
+    Requires at least one mounted tip (checked before any wire command) and
+    ALL nozzle mode (reset first if a single-tip op left the layout
+    otherwise). Raises ``OpentronsError`` if no liquid is found; use
+    ``try_liquid_probe`` for the non-raising variant.
+    """
+    self._require_mounted_tip()
+    await self._ensure_all_mode()
+    labware_id = await self.flex._ensure_labware_loaded(plate)
+    well_name = _COLUMN_WELL_NAMES[column]
+    z = await self._probe_z("liquidProbe", labware_id, well_name)
+    if z is None:
+      raise OpentronsError(
+        "LiquidNotFoundError",
+        f"liquid_probe found no liquid in column {column} of {plate.name!r}.",
+      )
+    return z
+
+  async def try_liquid_probe(self, plate: Plate, column: int) -> Optional[float]:
+    """Like ``liquid_probe`` but return ``None`` instead of raising when no liquid is found."""
+    self._require_mounted_tip()
+    await self._ensure_all_mode()
+    labware_id = await self.flex._ensure_labware_loaded(plate)
+    well_name = _COLUMN_WELL_NAMES[column]
+    return await self._probe_z("tryLiquidProbe", labware_id, well_name)
+
   # --- Single-tip cherry-pick ---
 
   @staticmethod
@@ -988,6 +1162,10 @@ class FlexHead96(_FlexHead):
   commit/rollback flow and hardware tip-presence verification -- the same
   machinery ``FlexHead8`` uses for its column ops, applied to the whole
   plate/rack instead of one column.
+
+  Liquid probing (``liquid_probe``/``try_liquid_probe``) is not implemented
+  on this head -- only the mount heads (``FlexHead1``/``FlexHead8``)
+  expose it.
 
   Coded but **not yet verified on real 96-channel Flex hardware** --
   Vincent's bench Flex carries an 8-channel pipette, not a 96-channel head.
@@ -1202,3 +1380,24 @@ class FlexHead96(_FlexHead):
       params["wellLocation"] = well_location
 
     await self._execute_liquid_op("dispense", params, staged_trackers)
+
+  async def touch_tip(
+    self,
+    plate: Plate,
+    radius: float = 1.0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Touch the mounted tips to their well walls -- one ``touchTip`` command
+    anchored at "A1", fanned to all 96 channels.
+
+    ``radius`` is the fraction of the well radius each tip moves toward
+    (1.0 = the wall). Requires at least one mounted tip and a 96-position
+    plate (both checked before any wire command). No trackers are involved.
+    """
+    self._warn_untested_hardware()
+    self._require_mounted_tip()
+    self._check_full_coverage(plate)
+    labware_id = await self.flex._ensure_labware_loaded(plate)
+    await self._execute(
+      "touchTip", self._touch_tip_params(labware_id, self._ANCHOR_WELL_NAME, radius, offset)
+    )
