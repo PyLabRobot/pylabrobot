@@ -1,12 +1,17 @@
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Type, cast
+from typing import Any, Dict, List, Optional, Tuple, Type, cast
 
 from pylabrobot.opentrons.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
+from pylabrobot.opentrons.labware_definitions import (
+  build_container_definition,
+  build_plate_definition,
+  build_tip_rack_definition,
+)
 from pylabrobot.opentrons.robot import OpentronsError, OpentronsRobot
 from pylabrobot.opentrons.transport import OpentronsTransport
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Container, Plate, Resource, TipRack
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.trash import Trash
 
@@ -53,6 +58,8 @@ class OpentronsFlex(OpentronsRobot):
     super().__init__(host=host, port=port, transport=transport)
     self.deck = deck
     self._loaded_labware: Dict[str, str] = {}
+    # resource.name -> (namespace, load_name, version) of an uploaded custom definition.
+    self._defined_labware: Dict[str, Tuple[str, str, int]] = {}
     self.left: Optional[_FlexHead] = None
     self.right: Optional[_FlexHead] = None
     self.head96: Optional[_FlexHead] = None
@@ -157,7 +164,13 @@ class OpentronsFlex(OpentronsRobot):
         f"'{name}' is not on a deck slot. Use deck.assign_child_at_slot(resource, slot='C1').",
       )
 
-    load_name = self._ot_load_name(resource)
+    try:
+      load_name = self._ot_load_name(resource)
+      namespace, version = _OT_NAMESPACE, _OT_VERSION
+    except OpentronsError:
+      # No official Opentrons definition: build one from the resource's PLR
+      # geometry, upload it, and load by the uploaded definition's identity.
+      namespace, load_name, version = await self._define_custom_labware(resource)
     labware_id = uuid.uuid4().hex[:12]
 
     result = await self._execute_command(
@@ -165,8 +178,8 @@ class OpentronsFlex(OpentronsRobot):
       {
         "loadName": load_name,
         "location": {"slotName": slot},
-        "namespace": _OT_NAMESPACE,
-        "version": _OT_VERSION,
+        "namespace": namespace,
+        "version": version,
         "labwareId": labware_id,
         "displayName": name,
       },
@@ -228,4 +241,42 @@ class OpentronsFlex(OpentronsRobot):
       "Cannot determine Opentrons load name",
       f"'{name_lower}' — set resource.ot_load_name = 'opentrons_flex_96_tiprack_50ul' "
       f"or use a standard Flex labware name.",
+    )
+
+  async def _define_custom_labware(self, resource: Resource) -> Tuple[str, str, int]:
+    """Upload a geometry-derived definition for labware with no official Opentrons definition.
+
+    Returns the uploaded definition's (namespace, load_name, version), parsed
+    from the robot-server's ``definitionUri`` so the subsequent ``loadLabware``
+    references exactly what the server stored. Uploads once per resource per
+    run: the parsed identity is cached separately from ``_loaded_labware``, so
+    a re-load (e.g. after ``labware_moved_off_deck``) skips the re-upload.
+    """
+    name = resource.name
+    if name in self._defined_labware:
+      return self._defined_labware[name]
+
+    definition = self._build_labware_definition(resource)
+    assert self.run_id is not None, "No active run. Call setup() first."
+    data = await self._post(f"/runs/{self.run_id}/labware_definitions", {"data": definition})
+    uri = cast(str, data["data"]["definitionUri"])
+    namespace, load_name, version = uri.split("/")
+    self._defined_labware[name] = (namespace, load_name, int(version))
+    logger.info("Uploaded custom labware definition for '%s': %s", name, uri)
+    return self._defined_labware[name]
+
+  @staticmethod
+  def _build_labware_definition(resource: Resource) -> dict:
+    """Build the definition matching the resource's type, or raise for unbuildable labware."""
+    if isinstance(resource, Plate):
+      return build_plate_definition(resource)
+    if isinstance(resource, TipRack):
+      return build_tip_rack_definition(resource)
+    if isinstance(resource, Container):
+      return build_container_definition(resource)
+    raise OpentronsError(
+      "Cannot build an Opentrons labware definition",
+      f"'{resource.name}' ({type(resource).__name__}) has no Opentrons load name, and a "
+      "definition can only be built from the geometry of a Plate, TipRack, or Container. "
+      "Set resource.ot_load_name to an official Opentrons load name.",
     )
