@@ -27,6 +27,8 @@ from pylabrobot.resources import (
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.rotation import Rotation
 
 
 class _FailingAspirateTransport(ChatterboxTransport):
@@ -452,10 +454,121 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
 
       aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
       self.assertEqual(len(aspirate_cmds), 1)
+      # A lateral-only offset keeps the default bottom clearance: its z is 0
+      # because the caller said nothing about z, not to ask for the floor.
       self.assertEqual(
         aspirate_cmds[0]["params"]["wellLocation"]["offset"],
-        {"x": 0, "y": 4, "z": 0.0},
+        {"x": 0, "y": 4, "z": 1.0},
       )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_zero_offset_keeps_the_default_bottom_clearance(self):
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      trough = _make_trough()
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(trough, "C2")
+      trough.tracker.set_volume(10000.0)
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_container(trough, volume=10, offset=Coordinate.zero()))
+
+      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+      self.assertEqual(
+        aspirate_cmds[0]["params"]["wellLocation"]["offset"],
+        {"x": 0, "y": 0, "z": 1.0},
+        "a no-op offset must not move the tip to the cavity floor",
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_too_small_container_message_names_no_offset_when_none_was_passed(self):
+    flex, _transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      narrow = _make_trough(name="narrow", size_y=40.0, max_volume=50000.0)
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(narrow, "C2")
+      narrow.tracker.set_volume(10000.0)
+      asyncio.run(head.pick_up_tips(rack, column=0))
+
+      with self.assertRaises(OpentronsError) as no_offset:
+        asyncio.run(head.aspirate_container(narrow, volume=50))
+      self.assertNotIn("offset", str(no_offset.exception))
+
+      with self.assertRaises(OpentronsError) as with_offset:
+        asyncio.run(head.aspirate_container(narrow, volume=50, offset=Coordinate(y=3)))
+      self.assertIn("offset", str(with_offset.exception))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_rotated_cavity_is_guarded_on_the_axis_the_robot_sees(self):
+    # 40 x 70 mm rotated a quarter turn is a 70 x 40 mm cavity to the robot,
+    # which is the footprint the uploaded definition carries.
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      rotated = _make_trough(name="rotated", size_x=40.0, size_y=70.0, max_volume=50000.0)
+      rotated.rotation = Rotation(z=90)
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(rotated, "C2")
+      rotated.tracker.set_volume(10000.0)
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.aspirate_container(rotated, volume=50))
+
+      self.assertEqual(len(transport.commands), commands_before)
+      self.assertAlmostEqual(rotated.tracker.volume, 10000.0)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_rotated_cavity_deep_enough_for_the_row_is_accepted(self):
+    # The mirror case: 110 x 60 mm rotated presents 110 mm front-to-back, so
+    # the 63 mm row fits and reading the pre-rotation 60 mm would refuse it.
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      rotated = _make_trough(name="rotated", size_x=110.0, size_y=60.0, max_volume=50000.0)
+      rotated.rotation = Rotation(z=90)
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(rotated, "C2")
+      rotated.tracker.set_volume(10000.0)
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_container(rotated, volume=50))
+
+      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+      self.assertEqual(len(aspirate_cmds), 1)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_rotated_parent_rotates_the_cavity_too(self):
+    # The guard reads the COMPOSED rotation, so a plain container inside a
+    # rotated carrier is guarded on the same axis the robot will see.
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      carrier = Resource(name="carrier", size_x=70.0, size_y=40.0, size_z=25.0)
+      carrier.rotation = Rotation(z=90)
+      inner = _make_trough(name="inner", size_x=40.0, size_y=70.0, max_volume=50000.0)
+      carrier.assign_child_resource(inner, location=Coordinate.zero())
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(carrier, "C2")
+      inner.tracker.set_volume(10000.0)
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError) as raised:
+        asyncio.run(head.aspirate_container(inner, volume=50))
+
+      # Name the guard: reading the container's own y (70 mm) would let this
+      # through, and it would then fail later for an unrelated reason.
+      self.assertEqual(raised.exception.title, "Container too small")
+      self.assertEqual(len(transport.commands), commands_before)
     finally:
       asyncio.run(flex.stop())
 
@@ -639,8 +752,33 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       self.assertEqual(len(aspirate_cmds), 1)
       self.assertEqual(
         aspirate_cmds[0]["params"]["wellLocation"]["offset"],
-        {"x": 4, "y": 4, "z": 0.0},
+        {"x": 4, "y": 4, "z": 1.0},
       )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_rotated_cavity_is_guarded_on_the_axis_the_robot_sees(self):
+    # 107 x 71 mm rotated a quarter turn is 71 mm left-to-right to the robot,
+    # too narrow for the grid's 99 mm x span, though unrotated it fits.
+    flex, transport, head = _flex_head96()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      rotated = _make_trough(name="rotated")
+      rotated.rotation = Rotation(z=90)
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(rotated, "C2")
+      rotated.tracker.set_volume(100000.0)
+
+      asyncio.run(head.pick_up_tips(rack))
+      for op in (
+        lambda: head.aspirate(rotated, volume=50),
+        lambda: head.dispense(rotated, volume=50),
+      ):
+        commands_before = len(transport.commands)
+        with self.assertRaises(OpentronsError):
+          asyncio.run(op())
+        self.assertEqual(len(transport.commands), commands_before)
+      self.assertAlmostEqual(rotated.tracker.volume, 100000.0)
     finally:
       asyncio.run(flex.stop())
 

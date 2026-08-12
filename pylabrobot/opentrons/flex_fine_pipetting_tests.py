@@ -7,7 +7,10 @@ recording ``ChatterboxTransport``. Two no-liquid signals are modeled: the
 ``liquid_probe_z`` kwarg omits the ``z_position`` result key entirely (a
 succeeding transport's shape), and ``simulate_liquid_probe_not_found`` fails
 the ``liquidProbe`` command with the engine's defined "liquidNotFound" error
-(the real-hardware behavior).
+(the real-hardware behavior). Also pins the shared well-position rule the
+liquid ops build on -- a caller offset shifts the head from the default
+position rather than replacing it -- and the one place that deliberately
+does not follow it, ``touch_tip``.
 """
 
 import asyncio
@@ -22,6 +25,7 @@ from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import (
   biorad_384_wellplate_50uL_Vb,
   cor_96_wellplate_360uL_Fb,
+  cor_cos_24_wellplate_3470uL_Fb,
   set_tip_tracking,
   set_volume_tracking,
 )
@@ -612,9 +616,58 @@ class TestHead8ColumnValidation(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_384_well_plate_rejects_column_ops_pre_wire(self):
-    # A 16-row plate cannot be column-addressed by the 8-channel head; the
-    # old fixed name table raised bare IndexError for column >= 12.
+  def test_384_well_plate_addresses_two_interleaved_row_sets_per_physical_column(self):
+    # The nozzles hold their 9 mm pitch, so on a 16-row plate they cover
+    # every other row: two sets of 8 per physical column, indexed in turn.
+    flex, transport, head, rack, _plate = self._bench()
+    try:
+      plate_384 = biorad_384_wellplate_50uL_Vb(name="plate384")
+      flex.deck.assign_child_at_slot(plate_384, "C3")
+      asyncio.run(head.pick_up_tips(rack, column=0))
+
+      for column, expected in ((0, "A1"), (1, "B1"), (2, "A2"), (47, "B24")):
+        anchor, items = head._column_anchor_and_items(plate_384, column)
+        self.assertEqual(anchor, expected, f"column {column}")
+        self.assertEqual(len(items), 8)
+      # Column 0 covers the rear-row set the engine's own coverage math
+      # reports for a full 8-channel configuration anchored at A1.
+      _anchor, items = head._column_anchor_and_items(plate_384, 0)
+      self.assertEqual(
+        [plate_384.get_child_identifier(item) for item in items],
+        ["A1", "C1", "E1", "G1", "I1", "K1", "M1", "O1"],
+      )
+      _anchor, items = head._column_anchor_and_items(plate_384, 1)
+      self.assertEqual(
+        [plate_384.get_child_identifier(item) for item in items],
+        ["B1", "D1", "F1", "H1", "J1", "L1", "N1", "P1"],
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_384_well_plate_column_op_reaches_the_wire_at_its_anchor_well(self):
+    flex, transport, head, rack, _plate = self._bench()
+    try:
+      plate_384 = biorad_384_wellplate_50uL_Vb(name="plate384")
+      flex.deck.assign_child_at_slot(plate_384, "C3")
+      for well in plate_384.get_all_items():
+        well.tracker.set_volume(40.0)
+      asyncio.run(head.pick_up_tips(rack, column=0))
+
+      asyncio.run(head.aspirate(plate_384, column=3, volume=10))
+
+      aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+      self.assertEqual(len(aspirate_cmds), 1)
+      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "B2")
+      # Only the 8 wells the nozzles actually reach lose liquid.
+      touched = ["B2", "D2", "F2", "H2", "J2", "L2", "N2", "P2"]
+      for name in touched:
+        self.assertAlmostEqual(plate_384.get_item(name).tracker.volume, 30.0, msg=name)
+      self.assertAlmostEqual(plate_384.get_item("A2").tracker.volume, 40.0)
+      self.assertAlmostEqual(plate_384.get_item("C2").tracker.volume, 40.0)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_384_well_plate_rejects_out_of_range_column_pre_wire(self):
     flex, transport, head, rack, _plate = self._bench()
     try:
       plate_384 = biorad_384_wellplate_50uL_Vb(name="plate384")
@@ -623,13 +676,113 @@ class TestHead8ColumnValidation(unittest.TestCase):
 
       n_before = len(transport.commands)
       for op in (
-        lambda: head.aspirate(plate_384, column=15, volume=10),
-        lambda: head.liquid_probe(plate_384, column=15),
-        lambda: head.touch_tip(plate_384, column=2),
+        lambda: head.aspirate(plate_384, column=48, volume=10),
+        lambda: head.liquid_probe(plate_384, column=100),
+        lambda: head.touch_tip(plate_384, column=-1),
       ):
         with self.assertRaises(ValueError):
           asyncio.run(op())
       self.assertEqual(len(transport.commands), n_before, "rejection must not reach the wire")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_row_count_that_is_not_a_multiple_of_eight_still_rejects_pre_wire(self):
+    # A 4-row (24-well) plate has no set of 8 evenly spaced rows, so the
+    # narrowing that protects hardware survives the 384 widening.
+    flex, transport, head, rack, _plate = self._bench()
+    try:
+      plate_24 = cor_cos_24_wellplate_3470uL_Fb(name="plate24")
+      flex.deck.assign_child_at_slot(plate_24, "C3")
+      asyncio.run(head.pick_up_tips(rack, column=0))
+
+      n_before = len(transport.commands)
+      with self.assertRaises(ValueError):
+        asyncio.run(head.touch_tip(plate_24, column=0))
+      self.assertEqual(len(transport.commands), n_before, "rejection must not reach the wire")
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestWellPositionOffsets(unittest.TestCase):
+  """A caller offset SHIFTS the head from the default liquid position (1 mm
+  above the well bottom, or ``liquid_height`` above it), never replaces it:
+  a Coordinate carries z=0 when the caller only meant to nudge x/y, so a
+  replacing offset would put the tip on the well floor."""
+
+  def setUp(self):
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+
+  def tearDown(self):
+    set_tip_tracking(False)
+    set_volume_tracking(False)
+
+  def _bench(self):
+    flex, transport, head = _flex_head8()
+    rack = flex_96_tiprack_50ul(name="rack")
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    flex.deck.assign_child_at_slot(rack, "C1")
+    flex.deck.assign_child_at_slot(plate, "C2")
+    for well in plate.get_all_items():
+      well.tracker.set_volume(100.0)
+    asyncio.run(head.pick_up_tips(rack, column=0))
+    return flex, transport, head, plate
+
+  def _aspirate_well_location(self, transport: ChatterboxTransport) -> dict:
+    aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
+    self.assertEqual(len(aspirate_cmds), 1)
+    well_location: dict = aspirate_cmds[0]["params"]["wellLocation"]
+    return well_location
+
+  def test_lateral_offset_on_a_plate_column_keeps_the_bottom_clearance(self):
+    flex, transport, head, plate = self._bench()
+    try:
+      asyncio.run(head.aspirate(plate, column=0, volume=10, offset=Coordinate(x=1, y=2)))
+      self.assertEqual(
+        self._aspirate_well_location(transport),
+        {"origin": "bottom", "offset": {"x": 1, "y": 2, "z": 1.0}},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_zero_offset_keeps_the_bottom_clearance(self):
+    flex, transport, head, plate = self._bench()
+    try:
+      asyncio.run(head.aspirate(plate, column=0, volume=10, offset=Coordinate.zero()))
+      self.assertEqual(
+        self._aspirate_well_location(transport),
+        {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_liquid_height_is_the_base_the_offset_rides_on(self):
+    # liquid_height is already measured from the bottom, so it replaces the
+    # clearance as the base; the offset still adds on top of whichever base.
+    flex, transport, head, plate = self._bench()
+    try:
+      asyncio.run(
+        head.aspirate(plate, column=0, volume=10, offset=Coordinate(x=2, z=0.5), liquid_height=3)
+      )
+      self.assertEqual(
+        self._aspirate_well_location(transport),
+        {"origin": "bottom", "offset": {"x": 2, "y": 0, "z": 3.5}},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_touch_tip_offset_replaces_the_default_touch_height(self):
+    # touch_tip's z IS the touch height, mirroring the Opentrons Python API's
+    # absolute v_offset; dropping the default moves the tip up, not down.
+    flex, transport, head, plate = self._bench()
+    try:
+      asyncio.run(head.touch_tip(plate, column=0, offset=Coordinate(x=1)))
+      touch_cmds = [c for c in transport.commands if c["commandType"] == "touchTip"]
+      self.assertEqual(
+        touch_cmds[0]["params"]["wellLocation"],
+        {"origin": "top", "offset": {"x": 1, "y": 0, "z": 0}},
+      )
     finally:
       asyncio.run(flex.stop())
 

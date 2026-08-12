@@ -15,7 +15,7 @@ directly -- well positions included.
 
 import hashlib
 import re
-from typing import Optional, cast
+from typing import Optional, Tuple, cast
 
 from pylabrobot.resources import (
   Container,
@@ -60,6 +60,18 @@ def _format_from_grid(num_items_x: int, num_items_y: int) -> str:
   if (num_items_x, num_items_y) == (24, 16):
     return "384Standard"
   return "irregular"
+
+
+def container_cavity_footprint(container: Container) -> Tuple[float, float]:
+  """The cavity's x/y footprint in the deck frame, as the robot sees it.
+
+  Rotation-aware: a rotated container (or one under a rotated parent) presents
+  its bounding box to the robot, which has no notion of PLR's rotation. Ops
+  that reason about whether a nozzle array fits the cavity must read this
+  rather than the container's own ``get_size_x``/``get_size_y``, so the
+  guard and the uploaded definition below can never disagree.
+  """
+  return container.get_absolute_size_x(), container.get_absolute_size_y()
 
 
 def _well_shape(well: Well) -> dict:
@@ -212,8 +224,7 @@ def build_container_definition(
   a multi-channel nozzle array on the cavity itself, so ops send no manual
   centering offsets.
   """
-  size_x = container.get_absolute_size_x()
-  size_y = container.get_absolute_size_y()
+  size_x, size_y = container_cavity_footprint(container)
   size_z = container.get_absolute_size_z()
   definition: dict = {
     "schemaVersion": _SCHEMA_VERSION,

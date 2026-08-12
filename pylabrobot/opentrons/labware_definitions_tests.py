@@ -14,24 +14,30 @@ import unittest
 from typing import Any, Dict, Optional, Tuple
 
 from pylabrobot.opentrons.flex import OpentronsFlex
+from pylabrobot.opentrons.flex_head import FlexHead8
 from pylabrobot.opentrons.labware_definitions import (
   build_container_definition,
   build_movable_labware_definition,
   build_plate_definition,
   build_tip_rack_definition,
+  container_cavity_footprint,
 )
+from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import (
   CrossSectionType,
   Plate,
   Resource,
+  ResourceHolder,
   TipRack,
   TipSpot,
   Trough,
+  TubeRack,
   Well,
   WellBottomType,
 )
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.utils import create_ordered_items_2d
 
@@ -105,6 +111,34 @@ def _tip_rack(
 
 def _trough(name: str = "hamilton trough") -> Trough:
   return Trough(name=name, size_x=120.0, size_y=80.0, size_z=40.0, max_volume=290000.0)
+
+
+def _tube_rack(name: str = "tube rack") -> TubeRack:
+  """A 12x8 tube rack: deck-assignable and column-shaped, but not pipettable.
+
+  The rack's holders are not wells, so no well-bearing definition can be
+  built from it -- the mainstream labware type that reaches the unbuildable
+  path through a pipetting op.
+  """
+  return TubeRack(
+    name=name,
+    size_x=127.0,
+    size_y=86.0,
+    size_z=45.0,
+    ordered_items=create_ordered_items_2d(
+      ResourceHolder,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.0,
+      dy=8.0,
+      dz=0.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=8.0,
+      size_y=8.0,
+      size_z=40.0,
+    ),
+  )
 
 
 class TestDefinitionLoadNames(unittest.TestCase):
@@ -280,6 +314,19 @@ class TestBuildContainerDefinition(unittest.TestCase):
     )
     self.assertEqual(definition["groups"][0]["wells"], ["A1"])
 
+  def test_rotated_cavity_uploads_the_shared_deck_frame_footprint(self):
+    # The uploaded rectangle and the ops' fit guard must read the same
+    # helper, or a rotated cavity is guarded on the wrong axis.
+    trough = _trough()
+    trough.rotation = Rotation(z=90)
+    definition = build_container_definition(trough)
+    cavity_x, cavity_y = container_cavity_footprint(trough)
+    self.assertEqual((cavity_x, cavity_y), (80.0, 120.0))
+    self.assertEqual(definition["dimensions"]["xDimension"], cavity_x)
+    self.assertEqual(definition["dimensions"]["yDimension"], cavity_y)
+    self.assertEqual(definition["wells"]["A1"]["xDimension"], cavity_x)
+    self.assertEqual(definition["wells"]["A1"]["yDimension"], cavity_y)
+
   def test_center_multichannel_quirk_matches_shipped_reservoirs(self):
     # Every shipped Opentrons 1-well reservoir carries this quirk; the engine
     # centers a multi-channel nozzle array on the cavity because of it, so
@@ -347,6 +394,17 @@ def _flex_with_transport(
   return flex, transport
 
 
+def _flex_head8_with_gripper() -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead8]:
+  """A set-up Flex with an 8-channel head AND a gripper, so one bench can
+  drive both the gripper-intent and pipetting-intent load paths."""
+  transport = ChatterboxTransport(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")], gripper=True)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  asyncio.run(flex.setup())
+  head = flex.left
+  assert isinstance(head, FlexHead8)
+  return flex, transport, head
+
+
 def _load_labware_commands(transport: ChatterboxTransport) -> list:
   return [c for c in transport.commands if c["commandType"] == "loadLabware"]
 
@@ -385,6 +443,80 @@ class _FailFirstLoadTransport(ChatterboxTransport):
       cmd_data["status"] = "failed"
       cmd_data["error"] = {"detail": "simulated loadLabware failure"}
     return result
+
+
+class TestUnbuildableLabwareGuard(unittest.TestCase):
+  """Labware no well-bearing definition can be built from is gripper-movable
+  but never pipettable: the movable stub's single fake well is zero-depth and
+  sits at the labware's own bottom, so pipetting it would drive a tip at the
+  deck. Pipetting callers are refused before any wire command."""
+
+  def test_pipetting_a_tube_rack_raises_before_any_wire_command(self):
+    flex, transport, head = _flex_head8_with_gripper()
+    try:
+      rack = _tube_rack()
+      flex.deck.assign_child_at_slot(rack, "C1")
+
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        # An untyped script can hand a rack to a Plate parameter; that is
+        # exactly the caller this guard exists for.
+        asyncio.run(head.aspirate(rack, column=0, volume=20))  # type: ignore[arg-type]
+
+      self.assertEqual(len(transport.labware_definitions), 0)
+      self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_gripper_move_of_the_same_rack_still_works(self):
+    flex, transport, head = _flex_head8_with_gripper()
+    try:
+      rack = _tube_rack()
+      flex.deck.assign_child_at_slot(rack, "C1")
+      gripper = flex.gripper
+      assert gripper is not None
+
+      asyncio.run(gripper.move_labware(rack, "C2"))
+
+      self.assertEqual(len(transport.labware_definitions), 1)
+      self.assertEqual(transport.labware_definitions[0]["wells"]["A1"]["depth"], 0)
+      self.assertEqual(flex.deck.get_slot(rack), "C2")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_pipetting_after_a_gripper_move_still_raises_on_the_load_cache_hit(self):
+    # The load cache returns before any type dispatch, so the stub-loaded
+    # names are tracked separately for the pipetting refusal to see them.
+    flex, transport, head = _flex_head8_with_gripper()
+    try:
+      rack = _tube_rack()
+      flex.deck.assign_child_at_slot(rack, "C1")
+      gripper = flex.gripper
+      assert gripper is not None
+      asyncio.run(gripper.move_labware(rack, "C2"))
+
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.aspirate(rack, column=0, volume=20))  # type: ignore[arg-type]
+
+      self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_off_deck_clears_the_stub_record(self):
+    flex, _transport, head = _flex_head8_with_gripper()
+    try:
+      rack = _tube_rack()
+      flex.deck.assign_child_at_slot(rack, "C1")
+      gripper = flex.gripper
+      assert gripper is not None
+      asyncio.run(gripper.move_labware(rack, "C2"))
+      self.assertIn(rack.name, flex._stub_labware)
+
+      asyncio.run(flex.labware_moved_off_deck(rack))
+      self.assertNotIn(rack.name, flex._stub_labware)
+    finally:
+      asyncio.run(flex.stop())
 
 
 class TestCustomLabwareLoadFlow(unittest.TestCase):
@@ -516,6 +648,28 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
+  def test_definition_cache_hit_logs_the_ignored_grip_distance(self):
+    # The upload survives a failed load, so the retry reuses the stored
+    # definition -- and the grip height it already carries.
+    flex, transport = _flex_with_transport(
+      _FailFirstLoadTransport(pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right")
+    )
+    asyncio.run(flex.setup())
+    try:
+      plate = _plate()
+      flex.deck.assign_child_at_slot(plate, "C1")
+      with self.assertRaises(RuntimeError):
+        asyncio.run(flex._ensure_labware_loaded(plate, grip_distance_from_top=4.0))
+
+      with self.assertLogs("pylabrobot.opentrons.flex", level="WARNING") as logs:
+        asyncio.run(flex._ensure_labware_loaded(plate, grip_distance_from_top=8.0))
+
+      self.assertEqual(len(transport.labware_definitions), 1)
+      self.assertEqual(transport.labware_definitions[0]["gripHeightFromLabwareBottom"], 10.0)
+      self.assertTrue(any("grip_distance_from_top=8.0" in line for line in logs.output))
+    finally:
+      asyncio.run(flex.stop())
+
   def test_official_name_labware_loads_with_zero_uploads(self):
     flex, transport = _flex_with_transport()
     asyncio.run(flex.setup())
@@ -569,13 +723,13 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
 
   def test_bare_resource_uploads_movable_stub(self):
     # A resource that is not a Plate/TipRack/Container routes to the
-    # non-pipettable movable stub so the gripper can still move it.
+    # non-pipettable movable stub, which only allow_stub callers may ask for.
     flex, transport = _flex_with_transport()
     asyncio.run(flex.setup())
     try:
       widget = Resource(name="widget", size_x=100.0, size_y=90.0, size_z=20.0)
       flex.deck.assign_child_at_slot(widget, "C1")
-      asyncio.run(flex._ensure_labware_loaded(widget, grip_distance_from_top=5.0))
+      asyncio.run(flex._ensure_labware_loaded(widget, allow_stub=True, grip_distance_from_top=5.0))
 
       self.assertEqual(len(transport.labware_definitions), 1)
       definition = transport.labware_definitions[0]
