@@ -203,6 +203,55 @@ class TestMoveLabware(unittest.TestCase):
       asyncio.run(flex.stop())
 
 
+class TestGripDistanceDiscarded(unittest.TestCase):
+  """grip_distance_from_top only shapes a definition pylabrobot uploads, so
+  the paths that cannot honor it say so instead of dropping it silently."""
+
+  def test_catalogue_labware_logs_the_ignored_grip_distance(self):
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      plate = _plate()  # resolves to an official Opentrons load name
+      flex.deck.assign_child_at_slot(plate, "C1")
+      gripper = flex.gripper
+      assert gripper is not None
+
+      with self.assertLogs("pylabrobot.opentrons.flex", level="WARNING") as logs:
+        asyncio.run(gripper.move_labware(plate, "C2", grip_distance_from_top=5.0))
+
+      # Nothing is uploaded, so there is nowhere to put the requested height:
+      # the robot grips at the catalogue definition's own.
+      self.assertEqual(len(transport.labware_definitions), 0)
+      load_cmds = [c for c in transport.commands if c["commandType"] == "loadLabware"]
+      self.assertEqual(load_cmds[0]["params"]["namespace"], "opentrons")
+      self.assertTrue(any("grip_distance_from_top=5.0" in line for line in logs.output))
+      self.assertTrue(
+        any("corning_96_wellplate_360ul_flat" in line for line in logs.output),
+        logs.output,
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_second_move_logs_the_grip_distance_the_loaded_labware_ignores(self):
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      lid = Resource(name="lid stack", size_x=100.0, size_y=90.0, size_z=20.0)
+      flex.deck.assign_child_at_slot(lid, "C1")
+      gripper = flex.gripper
+      assert gripper is not None
+      asyncio.run(gripper.move_labware(lid, "C2", grip_distance_from_top=5.0))
+
+      with self.assertLogs("pylabrobot.opentrons.flex", level="WARNING") as logs:
+        asyncio.run(gripper.move_labware(lid, "C3", grip_distance_from_top=9.0))
+
+      self.assertEqual(len(transport.labware_definitions), 1)
+      self.assertEqual(transport.labware_definitions[0]["gripHeightFromLabwareBottom"], 15.0)
+      self.assertTrue(any("grip_distance_from_top=9.0" in line for line in logs.output))
+    finally:
+      asyncio.run(flex.stop())
+
+
 class TestMoveLabwarePreWireRejections(unittest.TestCase):
   """Invalid moves raise OpentronsError BEFORE any wire command is sent."""
 

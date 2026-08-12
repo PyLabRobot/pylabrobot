@@ -154,11 +154,17 @@ class FlexGripper:
       resource: A resource currently placed on the deck.
       to_slot: Destination slot, e.g. ``"C2"`` (standard) or ``"B4"`` (staging).
       grip_distance_from_top: How far below the labware's top the paddles
-        grab (mm), baked into an uploaded custom definition's grip height.
-        Honored on the labware's FIRST load in the run only; once the robot
-        holds a definition for it, later values are ignored. ``None`` keeps
-        the definition's grip height (the robot's mid-height default for
-        custom definitions built without one).
+        grab (mm), baked into the grip height of a custom definition
+        pylabrobot uploads. It therefore applies ONLY to labware pylabrobot
+        uploads a definition for: a resource resolving to an official
+        Opentrons load name (``ot_load_name`` set, a standard tip-rack name,
+        or a name starting with "opentrons_") loads the catalogue definition
+        instead, which carries the vendor's own grip height, and this value
+        is ignored. Honored on the labware's FIRST load in the run only;
+        once the robot holds a definition for it, later values are ignored
+        too. Every ignored value is logged. ``None`` keeps the definition's
+        grip height (the robot's mid-height default for custom definitions
+        built without one).
 
     Raises:
       OpentronsError: If the resource is not on the deck, or ``to_slot`` is
@@ -188,7 +194,7 @@ class FlexGripper:
       )
 
     labware_id = await self.flex._ensure_labware_loaded(
-      resource, grip_distance_from_top=grip_distance_from_top
+      resource, allow_stub=True, grip_distance_from_top=grip_distance_from_top
     )
     await self.flex._execute_command(
       "moveLabware",

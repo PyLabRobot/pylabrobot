@@ -23,6 +23,7 @@ layout differ per head.
 import logging
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Tuple, Union, cast
 
+from pylabrobot.opentrons.labware_definitions import container_cavity_footprint
 from pylabrobot.opentrons.robot import OpentronsCommandError, OpentronsError
 from pylabrobot.resources import (
   Container,
@@ -315,9 +316,17 @@ class _FlexHead:
     ``touchTip`` addresses the height of the wall-touch motion, not a liquid
     position, so the ``wellLocation`` is TOP-relative: the default touches
     1 mm below the rim (the Opentrons Python API's ``v_offset`` default), and
-    a caller ``offset`` replaces it, also read against the well top.
+    a caller ``offset`` REPLACES it, also read against the well top.
     ``radius`` is the fraction of the well radius the tip moves toward
     (1.0 = the wall).
+
+    Replacing rather than shifting is deliberate, unlike the liquid position
+    ``_well_location`` builds. This z IS the touch height (the Opentrons
+    Python API's own ``v_offset``, where a caller's number is likewise
+    absolute), so shifting would make the same argument mean a different
+    height here than in that API. And dropping this default moves the tip
+    UP toward the rim, away from the labware, where dropping the liquid
+    clearance moves it down onto the well floor.
     """
     o = offset if offset is not None else Coordinate(z=_DEFAULT_TOUCH_TIP_Z_OFFSET)
     return {
@@ -401,28 +410,32 @@ class _FlexHead:
   ) -> Optional[dict]:
     """Build the Flex ``wellLocation`` param from an offset and/or liquid height.
 
-    Merges an explicit x/y/z offset with ``liquid_height`` (added to z).
+    The default liquid position is ``_DEFAULT_WELL_BOTTOM_CLEARANCE`` above
+    the well bottom, or ``liquid_height`` above it when one is given. A
+    caller ``offset`` SHIFTS the head from that position rather than
+    replacing it: a ``Coordinate`` carries a z of 0 when the caller only
+    meant to nudge x/y, so a replacing offset would silently drop the
+    clearance and drive the tip onto the well floor.
+
     ``origin`` defaults to ``"bottom"`` (aspirate/dispense); tip-pickup
     callers must pass ``origin="top"`` -- a tip-rack well's "bottom" is deep
-    inside the tip, not the pickup engagement point. Returns ``None`` if
-    neither offset nor liquid height is given.
+    inside the tip, not the pickup engagement point -- and the "top" origin
+    carries no clearance of its own, so there the offset is the whole
+    position. Returns ``None`` on a non-bottom origin when neither offset nor
+    liquid height is given.
     """
-    offset = None
-    if offsets is not None and offsets[0] is not None:
-      o = offsets[0]
-      offset = {"x": o.x, "y": o.y, "z": o.z}
-    if liquid_height is not None and liquid_height[0] is not None:
-      offset = offset or {"x": 0, "y": 0, "z": 0}
-      offset["z"] += liquid_height[0]
-    if offset is None:
-      if origin == "bottom":
-        # No explicit position given: default to just above the well bottom
-        # rather than let the Protocol Engine fall back to origin "top" (the
-        # rim, above the liquid). Pickup callers (origin "top") keep None.
-        offset = {"x": 0, "y": 0, "z": _DEFAULT_WELL_BOTTOM_CLEARANCE}
-      else:
-        return None
-    return {"origin": origin, "offset": offset}
+    o = offsets[0] if offsets is not None else None
+    height = liquid_height[0] if liquid_height is not None else None
+    # A bottom origin always sends a position: an omitted wellLocation makes
+    # the Protocol Engine fall back to the rim, above the liquid.
+    if o is None and height is None and origin != "bottom":
+      return None
+    if height is not None:
+      base_z = height
+    else:
+      base_z = _DEFAULT_WELL_BOTTOM_CLEARANCE if origin == "bottom" else 0.0
+    x, y, z = (o.x, o.y, o.z) if o is not None else (0.0, 0.0, 0.0)
+    return {"origin": origin, "offset": {"x": x, "y": y, "z": base_z + z}}
 
   # --- Single-cavity container (trough/reservoir) shared helpers ---
 
@@ -468,17 +481,24 @@ class _FlexHead:
     The engine centers the array on the cavity (the definition's
     ``centerMultichannelOnWells`` quirk) and the caller's ``offset`` then
     shifts it, so the shifted span must still fit inside the cavity's
-    footprint on each axis.
+    footprint on each axis. The footprint is the deck-frame one the uploaded
+    definition carries (``container_cavity_footprint``), not the container's
+    own x/y: a rotated container presents its axes to the robot swapped, and
+    guarding the pre-rotation axis passes an array that overhangs the real
+    cavity.
     """
     o = offset if offset is not None else Coordinate.zero()
+    cavity_x, cavity_y = container_cavity_footprint(container)
     required_x = x_span + 2 * abs(o.x)
     required_y = y_span + 2 * abs(o.y)
-    if required_x > container.get_size_x() or required_y > container.get_size_y():
+    if required_x > cavity_x or required_y > cavity_y:
+      detail = f"The nozzle array spans {x_span} x {y_span} mm"
+      if o.x or o.y:
+        detail += f" and the offset ({o.x}, {o.y}) shifts it off-center"
       raise OpentronsError(
         "Container too small",
-        f"The nozzle array spans {x_span} x {y_span} mm and the offset ({o.x}, {o.y}) shifts "
-        f"it off-center, which does not fit inside '{container.name}' "
-        f"({container.get_size_x()} x {container.get_size_y()} mm). "
+        f"{detail}, which does not fit inside '{container.name}' "
+        f"({cavity_x} x {cavity_y} mm as the robot sees it). "
         "Aim it at a container that holds the whole array.",
       )
 
@@ -828,12 +848,19 @@ class FlexHead1(_FlexHead):
 class FlexHead8(_FlexHead):
   """8-channel pipette head, column-addressed (anchor-well fan-out).
 
-  Every op sends exactly ONE robot-server command anchored at the column's
-  A-row well (e.g. column 2 -> wellName "A3"); the Flex hardware fans that
-  single command out to all 8 physical nozzles. Tip/volume trackers are
-  committed only for the channels/wells actually actuated, skipping ``None``
-  (inactive) channels (None-skip) -- and only after the wire command
-  succeeds.
+  Every op sends exactly ONE robot-server command anchored at the rearmost
+  well the nozzle row covers (on a 96-format plate, column 2 -> wellName
+  "A3"); the Flex hardware fans that single command out to all 8 physical
+  nozzles. Tip/volume trackers are committed only for the channels/wells
+  actually actuated, skipping ``None`` (inactive) channels (None-skip) --
+  and only after the wire command succeeds.
+
+  ``column`` indexes the sets of 8 rows the nozzles can cover, which on a
+  96-format plate is just the physical columns (0-11). A denser layout has
+  more than one such set per physical column, since the nozzles skip rows to
+  hold their 9 mm pitch: a 384 plate takes ``column`` 0-47, where 0 covers
+  A1/C1/E1/../O1 and 1 covers B1/D1/../P1. See
+  ``_column_anchor_and_items``.
 
   Single-tip cherry-pick (``pick_up_single_tip``/``aspirate_single``/
   ``dispense_single``/``drop_single_tip``) switches the pipette to SINGLE
@@ -875,27 +902,40 @@ class FlexHead8(_FlexHead):
 
   @staticmethod
   def _column_anchor_and_items(itemized: ItemizedResource, column: int) -> Tuple[str, List[Any]]:
-    """Validate ``column`` against the labware's real grid; return the A-row
-    anchor well name plus the 8 column resources (row order A..H).
+    """Validate ``column`` against the labware's real grid; return the anchor
+    well name plus the 8 resources the nozzle row covers, rearmost first.
 
     Every column op calls this BEFORE any wire command (including
     ``configureNozzleLayout`` and ``loadLabware``) so a rejected op ships
     nothing. PLR itemized resources are column-major (item 0 is A1, item 1
     is B1, ...), and the anchor name comes from the resource itself rather
     than a fixed name table, so any column count is addressed safely.
+
+    The 8 nozzles sit at a 9 mm pitch, so on a denser layout they cover
+    every ``row_stride``-th row rather than adjacent rows: a 16-row (384)
+    plate has two interleaved sets of 8 (A,C,E,.. and B,D,F,..) per physical
+    column, matching the engine's own multi-channel coverage math. Those
+    sets are addressed as consecutive ``column`` indices, so a 384 plate
+    takes ``column`` 0-47 (physical column ``column // 2``, rear-row set
+    when even). A row count that is not a multiple of 8 has no such set and
+    is rejected.
     """
-    if itemized.num_items_y != _NUM_CHANNELS:
+    rows = itemized.num_items_y
+    row_stride, remainder = divmod(rows, _NUM_CHANNELS)
+    if row_stride < 1 or remainder:
       raise ValueError(
-        f"'{itemized.name}' has {itemized.num_items_y} rows; 8-channel column ops "
-        f"require an 8-row layout."
+        f"'{itemized.name}' has {rows} rows; the 8 nozzles cover 8 evenly spaced rows, "
+        f"so column ops need a row count that is a multiple of {_NUM_CHANNELS}."
       )
-    num_columns = itemized.num_items_x
+    num_columns = itemized.num_items_x * row_stride
     if not 0 <= column < num_columns:
       raise ValueError(
         f"Column {column} out of range for resource with {num_columns} columns "
         f"(0-{num_columns - 1})."
       )
-    column_items = itemized.get_all_items()[column * _NUM_CHANNELS : (column + 1) * _NUM_CHANNELS]
+    physical_column, row_phase = divmod(column, row_stride)
+    start = physical_column * rows + row_phase
+    column_items = itemized.get_all_items()[start : start + rows : row_stride]
     return itemized.get_child_identifier(column_items[0]), column_items
 
   # --- Column tip operations ---
@@ -908,7 +948,7 @@ class FlexHead8(_FlexHead):
   ) -> None:
     """Pick up a full column (8 tips) with a single ``pickUpTip`` command.
 
-    Anchored at the column's A-row well; the hardware fans the pickup motion
+    Anchored at the column's rearmost spot; the hardware fans the pickup motion
     out to all 8 physical nozzles. Follows stage -> validate -> wire ->
     verify -> commit/rollback: the column index and the double-pickup guard
     (fix #4) are validated before ANY wire command, tip trackers are staged
@@ -1023,7 +1063,7 @@ class FlexHead8(_FlexHead):
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
   ) -> None:
-    """Aspirate a column -- one ``aspirate`` command anchored at the A-row well.
+    """Aspirate a column -- one ``aspirate`` command anchored at its rearmost well.
 
     Follows stage -> validate -> wire -> commit/rollback: ``Well.tracker``
     (``remove_liquid``) is staged for every well whose channel actually
@@ -1070,7 +1110,7 @@ class FlexHead8(_FlexHead):
     offset: Optional[Coordinate] = None,
     liquid_height: Optional[float] = None,
   ) -> None:
-    """Dispense a column -- one ``dispense`` command anchored at the A-row well.
+    """Dispense a column -- one ``dispense`` command anchored at its rearmost well.
 
     Follows stage -> validate -> wire -> commit/rollback: ``Well.tracker``
     (``add_liquid``) is staged for every well whose channel actually holds
@@ -1205,7 +1245,7 @@ class FlexHead8(_FlexHead):
     offset: Optional[Coordinate] = None,
   ) -> None:
     """Touch the mounted tips to their well walls -- one ``touchTip`` command
-    anchored at the column's A-row well.
+    anchored at the column's rearmost well.
 
     ``radius`` is the fraction of the well radius each tip moves toward
     (1.0 = the wall). Requires at least one mounted tip and a valid column
@@ -1221,7 +1261,7 @@ class FlexHead8(_FlexHead):
 
   async def liquid_probe(self, plate: Plate, column: int) -> float:
     """Probe for liquid in a column -- one ``liquidProbe`` command anchored at
-    the A-row well; return the found liquid z (mm).
+    its rearmost well; return the found liquid z (mm).
 
     Requires at least one mounted tip and a valid column (both checked
     before any wire command) and ALL nozzle mode (reset first if a
