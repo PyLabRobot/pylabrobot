@@ -125,8 +125,8 @@ class OpentronsFlex(OpentronsRobot):
     return run_id
 
   async def _model_setup(self) -> None:
-    await self.home()
-
+    """Discover and compose heads. Homing is setup()'s own step, so that a
+    caller can ask what is mounted without moving the robot."""
     # Discover ALL mounted pipettes (not just the first — _discover_pipette
     # only surfaces one) and compose the matching head per mount. The base
     # setup() no longer discovers/loads a pipette itself (that would double
