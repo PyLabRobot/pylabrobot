@@ -15,7 +15,7 @@ definition for the loaded ``loadName``; PLR does not upload one.
 """
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.resources.resource import Resource
@@ -29,12 +29,71 @@ logger = logging.getLogger(__name__)
 # them far more headroom than the 30s ``_execute_command`` default.
 _MOVE_LABWARE_TIMEOUT = 120.0
 
+# The robot/* direct-motion command family (robot/moveTo,
+# robot/openGripperJaw, robot/closeGripperJaw) landed in robot-server 8.2.0.
+_ROBOT_COMMANDS_MIN_VERSION = "8.2.0"
+
+# Grip-force bounds (Newtons) the robot-server accepts for closeGripperJaw.
+_GRIPPER_MIN_FORCE = 2.0
+_GRIPPER_MAX_FORCE = 30.0
+
+
+def _version_tuple(version: str) -> Tuple[int, ...]:
+  """Parse a dotted robot-software version into comparable integers.
+
+  Comparing these as strings puts "10.0.0" below "7.1.0", so the version gate
+  compares numerically. Each dotted segment contributes its leading integer
+  ("0-beta" -> 0); a segment with no leading digit stops the parse. Only used
+  to gate at coarse major.minor granularity, where the exact handling of a
+  pre-release suffix does not change the outcome.
+  """
+  parts: List[int] = []
+  for part in version.split("."):
+    digits = ""
+    for char in part:
+      if not char.isdigit():
+        break
+      digits += char
+    if digits == "":
+      break
+    parts.append(int(digits))
+  return tuple(parts)
+
+
+def _require_robot_commands(command: str, api_version: Optional[str]) -> None:
+  """Raise unless the robot's software supports the robot/* command family.
+
+  ``api_version`` is the ``GET /health`` ``api_version`` the owning robot
+  stored at setup (``flex.api_version``). Released builds report a plain
+  numeric version and are gated against ``_ROBOT_COMMANDS_MIN_VERSION``;
+  dev/simulator builds ("0.0.0.dev0") and offline stand-in transports report
+  non-release strings but run current code, so they pass.
+  """
+  if api_version is None:
+    raise OpentronsError(
+      "Robot version unknown",
+      f"{command} requires setup() to have run, to read the robot's version.",
+    )
+  if "dev" in api_version:
+    return
+  version = _version_tuple(api_version)
+  if version and version < _version_tuple(_ROBOT_COMMANDS_MIN_VERSION):
+    raise OpentronsError(
+      "Robot software too old",
+      f"{command} requires Opentrons robot software {_ROBOT_COMMANDS_MIN_VERSION} or newer, "
+      f"but this robot reports {api_version}.",
+    )
+
 
 class FlexGripper:
   """The Opentrons Flex gripper (extension mount).
 
   Constructed by ``OpentronsFlex._model_setup()`` when instrument discovery
   reports a gripper; access it as ``flex.gripper``.
+
+  The Flex gripper has NO rotation capability (a hardware limitation, not a
+  missing API): labware keeps its orientation through every gripper motion,
+  so a plate cannot be re-oriented between slots.
   """
 
   def __init__(self, flex: "OpentronsFlex", gripper_model: str) -> None:
@@ -102,3 +161,55 @@ class FlexGripper:
     recover the plate by hand.
     """
     await self.flex._execute_command("unsafe/ungripLabware", {})
+
+  # --- robot/*: direct gripper motion and jaw control ---
+
+  async def move_to(self, x: float, y: float, z: float, speed: Optional[float] = None) -> None:
+    """Move the gripper to an absolute deck-frame position, in mm.
+
+    Uses ``robot/moveTo`` with the extension mount rather than the
+    ``robot/moveAxes*`` family: those infer the mount from the axis map, and
+    the server's offset table has no gripper entry, so an ``extensionZ``
+    target fails on the robot with ``KeyError: Mount.EXTENSION``. The gripper
+    also has a lower z ceiling than the pipette mounts, so a z a pipette
+    accepts can still be out of bounds. ``speed`` is in mm/s (robot default
+    if None).
+    """
+    _require_robot_commands("robot/moveTo", self.flex.api_version)
+    # The robot/* commands take snake_case params, unlike the rest of the API.
+    params: Dict[str, Any] = {"mount": "extension", "destination": {"x": x, "y": y, "z": z}}
+    if speed is not None:
+      params["speed"] = speed
+    await self.flex._execute_command("robot/moveTo", params)
+
+  async def grip(self, force: Optional[float] = None) -> None:
+    """Close the gripper jaw around whatever sits between its paddles.
+
+    Args:
+      force: Grip force in Newtons, between 2.0 and 30.0. The robot applies
+        its own default when None. There is no jaw-width parameter; the jaw
+        closes until it grips.
+
+    Raises:
+      OpentronsError: If ``force`` is outside the accepted range -- raised
+        before any wire command is sent.
+    """
+    _require_robot_commands("robot/closeGripperJaw", self.flex.api_version)
+    params: Dict[str, Any] = {}
+    if force is not None:
+      if not _GRIPPER_MIN_FORCE <= force <= _GRIPPER_MAX_FORCE:
+        raise OpentronsError(
+          "Invalid grip force",
+          f"Grip force must be between {_GRIPPER_MIN_FORCE} and {_GRIPPER_MAX_FORCE} Newtons, "
+          f"got {force}.",
+        )
+      params["force"] = force
+    await self.flex._execute_command("robot/closeGripperJaw", params)
+
+  async def open_jaw(self) -> None:
+    """Open the gripper jaw -- the robot opens by HOMING the jaw to fully open.
+
+    Releases anything held; there is no partial-open width parameter.
+    """
+    _require_robot_commands("robot/openGripperJaw", self.flex.api_version)
+    await self.flex._execute_command("robot/openGripperJaw", {})
