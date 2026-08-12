@@ -2,10 +2,13 @@
 
 A bare PLR ``Container`` is a single-cavity resource with ONE volume tracker;
 robot-side single-cavity labware definitions expose exactly one well, named
-"A1". These tests pin the wire shape (wellName "A1" plus the head-centering
-``wellLocation`` math), the one-tracker staging semantics (each channel
-holding a tip moves ``volume``; the summed delta commits/rolls back as one
-op), the pre-wire rejections, and that the plate/column paths are unchanged.
+"A1", and carry the ``centerMultichannelOnWells`` quirk, so the ENGINE
+centers the nozzle array in the cavity. These tests pin the wire shape
+(wellName "A1", no manual centering offsets -- only the caller's
+offset/liquid_height ride the wire), the one-tracker staging semantics (each
+channel holding a tip moves ``volume``; the summed delta commits/rolls back
+as one op), and the pre-wire rejections (no tip, array or offset-shifted
+array overhanging the cavity).
 """
 
 import asyncio
@@ -18,7 +21,6 @@ from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import (
   Container,
-  cor_96_wellplate_360uL_Fb,
   set_tip_tracking,
   set_volume_tracking,
 )
@@ -34,6 +36,15 @@ class _FailingAspirateTransport(ChatterboxTransport):
   async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     if path.endswith("/commands") and (json or {}).get("data", {}).get("commandType") == "aspirate":
       raise RuntimeError("simulated aspirate wire failure")
+    return await super().post(path, json)
+
+
+class _FailingDispenseTransport(ChatterboxTransport):
+  """Like ``_FailingAspirateTransport`` but for ``dispense`` commands."""
+
+  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    if path.endswith("/commands") and (json or {}).get("data", {}).get("commandType") == "dispense":
+      raise RuntimeError("simulated dispense wire failure")
     return await super().post(path, json)
 
 
@@ -159,11 +170,61 @@ class TestFlexHead1ContainerOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
+  def test_aspirate_container_without_tip_rejects_before_any_wire_command(self):
+    flex, transport, head = _flex_head1()
+    try:
+      trough = _make_trough()
+      flex.deck.assign_child_at_slot(trough, "C2")
+      trough.tracker.set_volume(1000.0)
+
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.aspirate(trough, volume=50))
+
+      self.assertEqual(len(transport.commands), commands_before)
+      self.assertAlmostEqual(trough.tracker.volume, 1000.0)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_dispense_container_without_tip_rejects_before_any_wire_command(self):
+    flex, transport, head = _flex_head1()
+    try:
+      trough = _make_trough()
+      flex.deck.assign_child_at_slot(trough, "C2")
+
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.dispense(trough, volume=30))
+
+      self.assertEqual(len(transport.commands), commands_before)
+      self.assertAlmostEqual(trough.tracker.volume, 0.0)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_wire_failure_rolls_back_container_tracker(self):
+    flex, _transport, head = _flex_head1(transport_cls=_FailingAspirateTransport)
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      trough = _make_trough()
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(trough, "C2")
+      trough.tracker.set_volume(1000.0)
+
+      asyncio.run(head.pick_up_tips(rack.get_item("A1")))
+      with self.assertRaises(RuntimeError):
+        asyncio.run(head.aspirate(trough, volume=50))
+
+      self.assertAlmostEqual(trough.tracker.volume, 1000.0)
+      self.assertAlmostEqual(trough.tracker.get_used_volume(), 1000.0)
+    finally:
+      asyncio.run(flex.stop())
+
 
 class TestFlexHead8ContainerOps(unittest.TestCase):
   """FlexHead8 aspirate_container/dispense_container fan all 8 nozzles into
-  one cavity: ONE command at well "A1" with a wellLocation centering the
-  63 mm nozzle row, and the container's single tracker moves
+  one cavity: ONE command at well "A1" with no manual centering (the
+  definition's centerMultichannelOnWells quirk makes the engine center the
+  63 mm nozzle row), and the container's single tracker moves
   volume * (channels holding tips) as one committed/rolled-back op.
   """
 
@@ -175,7 +236,7 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  def test_aspirate_container_sends_one_centered_command_at_a1(self):
+  def test_aspirate_container_sends_one_uncentered_command_at_a1(self):
     flex, transport, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
@@ -192,11 +253,12 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       params = aspirate_cmds[0]["params"]
       self.assertEqual(params["wellName"], "A1")
       self.assertEqual(params["volume"], 50)
-      # The anchor (channel A) nozzle sits half the 63 mm row span back (+y)
-      # of the cavity center, so the row is centered front-to-back.
+      # No manual x/y centering: the engine centers the nozzle row on the
+      # cavity itself (centerMultichannelOnWells). Only the default bottom
+      # clearance rides the wire.
       self.assertEqual(
         params["wellLocation"],
-        {"origin": "bottom", "offset": {"x": 0.0, "y": 31.5, "z": 1.0}},
+        {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
 
       cmd_types = [c["commandType"] for c in transport.commands]
@@ -252,13 +314,13 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       self.assertEqual(params["wellName"], "A1")
       self.assertEqual(
         params["wellLocation"],
-        {"origin": "bottom", "offset": {"x": 0.0, "y": 31.5, "z": 1.0}},
+        {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
       self.assertAlmostEqual(trough.tracker.volume, 320.0)
     finally:
       asyncio.run(flex.stop())
 
-  def test_container_well_location_merges_offset_and_liquid_height(self):
+  def test_offset_and_liquid_height_merge_into_well_location(self):
     flex, transport, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
@@ -275,11 +337,11 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       )
 
       aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
-      # The caller's offset rides on top of the centering; liquid_height adds
-      # to z, replacing the default clearance.
+      # Only the caller's offset rides the wire (centering is engine-side);
+      # liquid_height adds to z, replacing the default clearance.
       self.assertEqual(
         aspirate_cmds[0]["params"]["wellLocation"],
-        {"origin": "bottom", "offset": {"x": 2.0, "y": 30.5, "z": 3.5}},
+        {"origin": "bottom", "offset": {"x": 2, "y": -1, "z": 3.5}},
       )
     finally:
       asyncio.run(flex.stop())
@@ -343,39 +405,85 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_column_aspirate_on_plate_unchanged(self):
+  def test_dispense_container_without_tip_rejects_before_any_wire_command(self):
+    flex, transport, head = _flex_head8()
+    try:
+      trough = _make_trough()
+      flex.deck.assign_child_at_slot(trough, "C2")
+
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.dispense_container(trough, volume=40))
+
+      self.assertEqual(len(transport.commands), commands_before)
+      self.assertAlmostEqual(trough.tracker.volume, 0.0)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_dispense_container_wire_failure_rolls_back_container_tracker(self):
+    flex, _transport, head = _flex_head8(transport_cls=_FailingDispenseTransport)
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      trough = _make_trough()
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(trough, "C2")
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      with self.assertRaises(RuntimeError):
+        asyncio.run(head.dispense_container(trough, volume=40))
+
+      # The staged 8 * 40 uL is rolled back in full.
+      self.assertAlmostEqual(trough.tracker.volume, 0.0)
+      self.assertAlmostEqual(trough.tracker.get_used_volume(), 0.0)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_offset_that_keeps_row_inside_cavity_passes(self):
     flex, transport, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
-      plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      trough = _make_trough()  # 71 mm front-to-back; 63 mm row + 2*4 = 71 fits
       flex.deck.assign_child_at_slot(rack, "C1")
-      flex.deck.assign_child_at_slot(plate, "C2")
-
-      wells = plate.get_all_items()
-      for well in wells:
-        well.tracker.set_volume(100.0)
+      flex.deck.assign_child_at_slot(trough, "C2")
+      trough.tracker.set_volume(10000.0)
 
       asyncio.run(head.pick_up_tips(rack, column=0))
-      asyncio.run(head.aspirate(plate, column=2, volume=50))
+      asyncio.run(head.aspirate_container(trough, volume=10, offset=Coordinate(y=4)))
 
       aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A3")
+      self.assertEqual(
+        aspirate_cmds[0]["params"]["wellLocation"]["offset"],
+        {"x": 0, "y": 4, "z": 0.0},
+      )
+    finally:
+      asyncio.run(flex.stop())
 
-      column_2 = set(wells[16:24])
-      for well in wells:
-        expected = 50.0 if well in column_2 else 100.0
-        self.assertAlmostEqual(well.tracker.volume, expected, msg=well.name)
+  def test_offset_that_shifts_row_past_cavity_wall_rejects_pre_wire(self):
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      trough = _make_trough()  # 71 mm front-to-back; 63 mm row + 2*5 = 73 overhangs
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(trough, "C2")
+      trough.tracker.set_volume(10000.0)
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.aspirate_container(trough, volume=10, offset=Coordinate(y=-5)))
+
+      self.assertEqual(len(transport.commands), commands_before)
+      self.assertAlmostEqual(trough.tracker.volume, 10000.0)
     finally:
       asyncio.run(flex.stop())
 
 
 class TestFlexHead96ContainerOps(unittest.TestCase):
   """FlexHead96 aspirate/dispense accept a bare Container: ONE command at
-  well "A1" whose wellLocation puts the back-left (A1) anchor nozzle at
-  (-49.5, +31.5) from the cavity center so the 12x8 grid is centered, and
-  the container's single tracker moves volume * (channels holding tips).
+  well "A1" with no manual centering (the definition's
+  centerMultichannelOnWells quirk makes the engine center the 12x8 grid),
+  and the container's single tracker moves volume * (channels holding tips).
   """
 
   def setUp(self):
@@ -386,7 +494,7 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  def test_aspirate_container_centers_grid_and_tracks_96_channels(self):
+  def test_aspirate_container_no_manual_centering_and_tracks_96_channels(self):
     flex, transport, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
@@ -402,11 +510,11 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       self.assertEqual(len(aspirate_cmds), 1)
       params = aspirate_cmds[0]["params"]
       self.assertEqual(params["wellName"], "A1")
-      # Back-left anchor nozzle at (-99/2, +63/2) from the cavity center
-      # centers the whole 12x8 grid.
+      # No manual x/y centering: the engine centers the 12x8 grid on the
+      # cavity itself (centerMultichannelOnWells).
       self.assertEqual(
         params["wellLocation"],
-        {"origin": "bottom", "offset": {"x": -49.5, "y": 31.5, "z": 1.0}},
+        {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
 
       self.assertAlmostEqual(trough.tracker.volume, 100000.0 - 96 * 50.0)
@@ -414,7 +522,7 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_dispense_container_centers_grid_and_adds_96x(self):
+  def test_dispense_container_no_manual_centering_and_adds_96x(self):
     flex, transport, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
@@ -431,7 +539,7 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
       self.assertEqual(params["wellName"], "A1")
       self.assertEqual(
         params["wellLocation"],
-        {"origin": "bottom", "offset": {"x": -49.5, "y": 31.5, "z": 1.0}},
+        {"origin": "bottom", "offset": {"x": 0, "y": 0, "z": 1.0}},
       )
       self.assertAlmostEqual(trough.tracker.volume, 96 * 20.0)
     finally:
@@ -494,25 +602,64 @@ class TestFlexHead96ContainerOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_plate_aspirate_unchanged(self):
+  def test_aspirate_container_rejects_cavity_shallower_than_grid_y_span(self):
     flex, transport, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
-      plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      shallow = _make_trough(name="shallow", size_y=50.0, max_volume=50000.0)
       flex.deck.assign_child_at_slot(rack, "C1")
-      flex.deck.assign_child_at_slot(plate, "C2")
-      for well in plate.get_all_items():
-        well.tracker.set_volume(100.0)
+      flex.deck.assign_child_at_slot(shallow, "C2")
+      shallow.tracker.set_volume(10000.0)
 
       asyncio.run(head.pick_up_tips(rack))
-      asyncio.run(head.aspirate(plate, volume=50))
+
+      # 50 mm front-to-back cannot contain the grid's 63 mm y span.
+      commands_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.aspirate(shallow, volume=50))
+
+      self.assertEqual(len(transport.commands), commands_before)
+      self.assertAlmostEqual(shallow.tracker.volume, 10000.0)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_offset_that_keeps_grid_inside_cavity_passes(self):
+    flex, transport, head = _flex_head96()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      trough = _make_trough()  # 107 x 71 mm; grid 99 x 63 + 2*4 on each axis fits
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(trough, "C2")
+      trough.tracker.set_volume(100000.0)
+
+      asyncio.run(head.pick_up_tips(rack))
+      asyncio.run(head.aspirate(trough, volume=10, offset=Coordinate(x=4, y=4)))
 
       aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
       self.assertEqual(len(aspirate_cmds), 1)
-      self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A1")
-      for well in plate.get_all_items():
-        self.assertAlmostEqual(well.tracker.volume, 50.0, msg=well.name)
+      self.assertEqual(
+        aspirate_cmds[0]["params"]["wellLocation"]["offset"],
+        {"x": 4, "y": 4, "z": 0.0},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_offset_that_shifts_grid_past_cavity_wall_rejects_pre_wire(self):
+    flex, transport, head = _flex_head96()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      trough = _make_trough()  # 107 x 71 mm: x 99 + 2*4.5 = 108 and y 63 + 2*4.5 = 72 overhang
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(trough, "C2")
+      trough.tracker.set_volume(100000.0)
+
+      asyncio.run(head.pick_up_tips(rack))
+      for offset in (Coordinate(x=4.5), Coordinate(y=4.5)):
+        commands_before = len(transport.commands)
+        with self.assertRaises(OpentronsError):
+          asyncio.run(head.aspirate(trough, volume=10, offset=offset))
+        self.assertEqual(len(transport.commands), commands_before)
+      self.assertAlmostEqual(trough.tracker.volume, 100000.0)
     finally:
       asyncio.run(flex.stop())
 

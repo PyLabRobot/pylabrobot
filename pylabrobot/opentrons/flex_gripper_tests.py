@@ -16,7 +16,7 @@ from pylabrobot.opentrons.flex import OpentronsFlex
 from pylabrobot.opentrons.flex_gripper import FlexGripper
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
-from pylabrobot.resources import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources import Resource, cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.plate import Plate
 
@@ -137,7 +137,9 @@ class TestMoveLabware(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_move_to_staging_slot(self):
+  def test_move_to_staging_slot_uses_addressable_area_form(self):
+    # The robot-server's DeckSlotName has no A4-D4: staging slots are
+    # addressable areas, so {"slotName": "B4"} would be rejected there.
     flex, transport = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
@@ -150,8 +152,53 @@ class TestMoveLabware(unittest.TestCase):
 
       move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
       self.assertEqual(len(move_cmds), 1)
-      self.assertEqual(move_cmds[0]["params"]["newLocation"], {"slotName": "B4"})
+      self.assertEqual(move_cmds[0]["params"]["newLocation"], {"addressableAreaName": "B4"})
       self.assertEqual(flex.deck.get_slot(plate), "B4")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_move_back_from_staging_slot_uses_slot_name_form(self):
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      plate = _plate()
+      flex.deck.assign_child_at_slot(plate, "A4")
+      gripper = flex.gripper
+      assert gripper is not None
+
+      asyncio.run(gripper.move_labware(plate, "C2"))
+
+      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      self.assertEqual(move_cmds[0]["params"]["newLocation"], {"slotName": "C2"})
+      # The load at the staging slot itself also needs the addressable-area form.
+      load_cmds = [c for c in transport.commands if c["commandType"] == "loadLabware"]
+      self.assertEqual(load_cmds[0]["params"]["location"], {"addressableAreaName": "A4"})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_move_bare_resource_uploads_stub_with_grip_geometry(self):
+    # A resource with no pipettable geometry (lid, adapter) rides the movable
+    # stub definition; grip_distance_from_top shapes its grip height.
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      lid = Resource(name="lid stack", size_x=100.0, size_y=90.0, size_z=20.0)
+      flex.deck.assign_child_at_slot(lid, "C1")
+      gripper = flex.gripper
+      assert gripper is not None
+
+      asyncio.run(gripper.move_labware(lid, "C2", grip_distance_from_top=5.0))
+
+      self.assertEqual(len(transport.labware_definitions), 1)
+      definition = transport.labware_definitions[0]
+      self.assertEqual(definition["ordering"], [["A1"]])
+      self.assertEqual(definition["gripHeightFromLabwareBottom"], 15.0)  # 20 - 5
+      load_cmds = [c for c in transport.commands if c["commandType"] == "loadLabware"]
+      self.assertEqual(load_cmds[0]["params"]["namespace"], "pylabrobot")
+      self.assertEqual(load_cmds[0]["params"]["loadName"], "lid_stack_2196eb")
+      move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
+      self.assertEqual(len(move_cmds), 1)
+      self.assertEqual(flex.deck.get_slot(lid), "C2")
     finally:
       asyncio.run(flex.stop())
 

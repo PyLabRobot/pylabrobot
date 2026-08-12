@@ -2,10 +2,11 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Type, cast
 
-from pylabrobot.opentrons.flex_gripper import FlexGripper
+from pylabrobot.opentrons.flex_gripper import FlexGripper, _slot_wire_location
 from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
 from pylabrobot.opentrons.labware_definitions import (
   build_container_definition,
+  build_movable_labware_definition,
   build_plate_definition,
   build_tip_rack_definition,
 )
@@ -65,6 +66,14 @@ class OpentronsFlex(OpentronsRobot):
     self.head96: Optional[_FlexHead] = None
     self.gripper: Optional[FlexGripper] = None
     self._heads: List[_FlexHead] = []
+
+  async def _create_run(self) -> str:
+    # labwareIds and uploaded definitions are both run-scoped server-side, so
+    # a new run must not serve cached identities from a previous one.
+    run_id = await super()._create_run()
+    self._loaded_labware.clear()
+    self._defined_labware.clear()
+    return run_id
 
   async def _model_setup(self) -> None:
     await self.home()
@@ -151,8 +160,16 @@ class OpentronsFlex(OpentronsRobot):
       await head._on_stop()
     await super().stop()  # homes the gantry, then cancels the run + disconnects
 
-  async def _ensure_labware_loaded(self, resource: Resource) -> str:
-    """Load labware into the Flex run if not already loaded."""
+  async def _ensure_labware_loaded(
+    self, resource: Resource, grip_distance_from_top: Optional[float] = None
+  ) -> str:
+    """Load labware into the Flex run if not already loaded.
+
+    ``grip_distance_from_top`` feeds an uploaded custom definition's grip
+    height and is honored on the FIRST load only; a cache hit (already
+    loaded, or definition already uploaded) reuses the stored identity
+    unchanged.
+    """
     name = getattr(resource, "name", str(resource))
     if name in self._loaded_labware:
       return self._loaded_labware[name]
@@ -170,14 +187,16 @@ class OpentronsFlex(OpentronsRobot):
     except OpentronsError:
       # No official Opentrons definition: build one from the resource's PLR
       # geometry, upload it, and load by the uploaded definition's identity.
-      namespace, load_name, version = await self._define_custom_labware(resource)
+      namespace, load_name, version = await self._define_custom_labware(
+        resource, grip_distance_from_top
+      )
     labware_id = uuid.uuid4().hex[:12]
 
     result = await self._execute_command(
       "loadLabware",
       {
         "loadName": load_name,
-        "location": {"slotName": slot},
+        "location": _slot_wire_location(slot),
         "namespace": namespace,
         "version": version,
         "labwareId": labware_id,
@@ -204,7 +223,9 @@ class OpentronsFlex(OpentronsRobot):
     model, freeing its slot. Without this the slot stays occupied server-side
     and a later load into it fails with ``LocationIsOccupiedError``. The
     PLR-side deck slot is freed too. No wire command is sent for labware that
-    was never loaded into the run; a re-add later loads fresh at its new slot.
+    was never loaded into the run; a re-add later loads fresh at its new slot
+    and re-uploads its definition -- a different same-named resource must not
+    inherit the departed labware's geometry.
     """
     name = getattr(resource, "name", str(resource))
     if name in self._loaded_labware:
@@ -217,6 +238,7 @@ class OpentronsFlex(OpentronsRobot):
         },
       )
       del self._loaded_labware[name]
+    self._defined_labware.pop(name, None)
     slot = self.deck.get_slot(resource)
     if slot is not None:
       self.deck.unassign_child_at_slot(slot)
@@ -243,20 +265,24 @@ class OpentronsFlex(OpentronsRobot):
       f"or use a standard Flex labware name.",
     )
 
-  async def _define_custom_labware(self, resource: Resource) -> Tuple[str, str, int]:
+  async def _define_custom_labware(
+    self, resource: Resource, grip_distance_from_top: Optional[float] = None
+  ) -> Tuple[str, str, int]:
     """Upload a geometry-derived definition for labware with no official Opentrons definition.
 
     Returns the uploaded definition's (namespace, load_name, version), parsed
     from the robot-server's ``definitionUri`` so the subsequent ``loadLabware``
-    references exactly what the server stored. Uploads once per resource per
-    run: the parsed identity is cached separately from ``_loaded_labware``, so
-    a re-load (e.g. after ``labware_moved_off_deck``) skips the re-upload.
+    references exactly what the server stored. The parsed identity is cached
+    (separately from ``_loaded_labware``) until the labware leaves the deck or
+    a new run starts, so repeat calls within a stay on deck skip the
+    re-upload -- which also means ``grip_distance_from_top`` only shapes the
+    FIRST upload.
     """
     name = resource.name
     if name in self._defined_labware:
       return self._defined_labware[name]
 
-    definition = self._build_labware_definition(resource)
+    definition = self._build_labware_definition(resource, grip_distance_from_top)
     assert self.run_id is not None, "No active run. Call setup() first."
     data = await self._post(f"/runs/{self.run_id}/labware_definitions", {"data": definition})
     uri = cast(str, data["data"]["definitionUri"])
@@ -266,17 +292,19 @@ class OpentronsFlex(OpentronsRobot):
     return self._defined_labware[name]
 
   @staticmethod
-  def _build_labware_definition(resource: Resource) -> dict:
-    """Build the definition matching the resource's type, or raise for unbuildable labware."""
+  def _build_labware_definition(
+    resource: Resource, grip_distance_from_top: Optional[float] = None
+  ) -> dict:
+    """Build the definition matching the resource's type.
+
+    Pipettable types get real-geometry definitions; any other resource (lid,
+    adapter, ...) gets the non-pipettable movable stub so the gripper can
+    still move it.
+    """
     if isinstance(resource, Plate):
-      return build_plate_definition(resource)
+      return build_plate_definition(resource, grip_distance_from_top)
     if isinstance(resource, TipRack):
-      return build_tip_rack_definition(resource)
+      return build_tip_rack_definition(resource, grip_distance_from_top)
     if isinstance(resource, Container):
-      return build_container_definition(resource)
-    raise OpentronsError(
-      "Cannot build an Opentrons labware definition",
-      f"'{resource.name}' ({type(resource).__name__}) has no Opentrons load name, and a "
-      "definition can only be built from the geometry of a Plate, TipRack, or Container. "
-      "Set resource.ot_load_name to an official Opentrons load name.",
-    )
+      return build_container_definition(resource, grip_distance_from_top)
+    return build_movable_labware_definition(resource, grip_distance_from_top)
