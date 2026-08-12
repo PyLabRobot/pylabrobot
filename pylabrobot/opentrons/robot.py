@@ -74,18 +74,63 @@ class OpentronsRobot(abc.ABC):
     self.robot_model: Optional[str] = None
 
   async def setup(self) -> None:
-    await self._connect()
-    await self._create_run()
-    await self._model_setup()
+    """Bring the robot fully up, PyLabRobot's usual one-call lifecycle entry.
+
+    Composed of the steps below so a caller who needs only some of them (talk to
+    the robot without moving it, hand it back without homing it) can take them
+    one at a time.
+    """
+    await self.connect()
+    await self.create_run()
+    await self.home()
+    await self.initialize()
 
   async def stop(self) -> None:
-    # Always home before releasing the robot so the gantry parks in a known
-    # pose. Done inside the run (before cancel); a failure here must not block
-    # disconnect.
+    """Park the gantry and release the robot, PyLabRobot's usual teardown."""
+    # Home inside the run (before cancelling it) so the gantry parks in a known
+    # pose; a failure here must not block the release that follows.
     try:
       await self.home()
     except Exception:
-      logger.warning("home() before stop failed; continuing to disconnect", exc_info=True)
+      logger.warning("home() before stop failed; continuing to release", exc_info=True)
+    await self.cancel_run()
+    await self.disconnect()
+
+  async def connect(self) -> None:
+    """Open the link and confirm the robot answers. Starts no run, moves nothing."""
+    await self._connect()
+
+  async def create_run(self) -> None:
+    """Start a control session.
+
+    The robot reports itself as in use and refuses its own touchscreen for as
+    long as a run is current, so this is the step that takes it from the
+    operator, not ``connect``.
+    """
+    await self._create_run()
+
+  async def initialize(self) -> None:
+    """Discover what is mounted and get it ready to command. Moves nothing.
+
+    Homing is ``home()``, deliberately not folded in here: a caller that wants
+    to know what is on the robot should not have to move it to find out.
+    """
+    await self._model_setup()
+
+  async def cancel_run(self) -> None:
+    """End the control session, handing the robot back to its own touchscreen.
+
+    Safe with no run open. This, not ``disconnect``, is what frees local
+    control: the run is what the robot holds, and it outlives our link.
+    """
+    await self._cancel_run()
+
+  async def disconnect(self) -> None:
+    """Drop the link, moving nothing.
+
+    Cancels an open run first, since a run left current keeps the robot locked
+    out of its own controls with nothing left to release it.
+    """
     await self._cancel_run()
     await self._disconnect()
 

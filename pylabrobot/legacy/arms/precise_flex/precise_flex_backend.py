@@ -91,16 +91,37 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return arr
 
   async def setup(self, skip_home: bool = False):
-    """Initialize the PreciseFlex backend."""
-    await self.io.setup()
-    await self.set_response_mode("pc")
-    await self.power_on_robot()
-    await self.attach(1)
+    """Bring the arm fully up: link, power, control, and (unless skipped) home."""
+    await self.connect()
+    await self.initialize()
     if not skip_home:
       await self.home()
 
+  async def connect(self):
+    """Open the link and agree the response protocol. Powers nothing, moves nothing."""
+    await self.io.setup()
+    await self.set_response_mode("pc")
+
+  async def initialize(self):
+    """Raise high power and take control, so the arm accepts commands. Moves nothing.
+
+    Homing is ``home()``, deliberately separate: it sweeps the arm through its
+    whole envelope, which is not something to do just to read a position.
+    """
+    await self.power_on_robot()
+    await self.attach(1)
+
   async def stop(self):
     """Stop the PreciseFlex backend."""
+    await self.disconnect()
+
+  async def disconnect(self):
+    """Hand the arm back, moving nothing.
+
+    Drops high power (``hp 0``) as well as releasing the link, because
+    ``connect`` is what turned it on. Unlike the Flex there is nothing to park
+    first: this arm's teardown never moved it.
+    """
     await self.detach()
     await self.power_off_robot()
     await self.exit()

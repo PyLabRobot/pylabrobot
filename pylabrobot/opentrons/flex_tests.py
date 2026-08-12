@@ -42,6 +42,80 @@ def _flex_with_transport(
   return flex, transport
 
 
+class TestLifecycleHalves(unittest.TestCase):
+  """``setup``/``stop`` are the two halves run together; each half is callable alone.
+
+  The split exists because taking the robot and moving it are separate acts. An
+  operator reclaiming the touchscreen wants the session ended and nothing else;
+  homing an arm over a deck someone is reaching into is the thing to avoid.
+  """
+
+  def test_connect_opens_the_link_but_starts_no_run(self):
+    """The run is what the robot holds against its touchscreen, so taking the
+    robot is create_run's doing, not connect's."""
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+
+    asyncio.run(flex.connect())
+    try:
+      self.assertIsNone(flex.run_id)
+      self.assertEqual([c for c in transport.commands if c["commandType"] == "home"], [])
+    finally:
+      asyncio.run(flex.disconnect())
+
+  def test_initialize_discovers_without_moving(self):
+    """Asking what is mounted must not require moving the robot to find out."""
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    asyncio.run(flex.connect())
+    asyncio.run(flex.create_run())
+
+    asyncio.run(flex.initialize())
+    try:
+      self.assertIsInstance(flex.left, FlexHead8)
+      self.assertEqual([c for c in transport.commands if c["commandType"] == "home"], [])
+    finally:
+      asyncio.run(flex.disconnect())
+
+  def test_cancel_run_frees_local_control_without_dropping_the_link(self):
+    """The operator's 'give me the robot back' action: end the session, stay connected."""
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    asyncio.run(flex.setup())
+    homes_from_setup = len([c for c in transport.commands if c["commandType"] == "home"])
+
+    asyncio.run(flex.cancel_run())
+    try:
+      self.assertIsNone(flex.run_id)
+      self.assertEqual(
+        len([c for c in transport.commands if c["commandType"] == "home"]), homes_from_setup
+      )
+    finally:
+      asyncio.run(flex.disconnect())
+
+  def test_disconnect_ends_the_run_without_homing(self):
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    asyncio.run(flex.setup())
+    homes_from_setup = len([c for c in transport.commands if c["commandType"] == "home"])
+
+    asyncio.run(flex.disconnect())
+
+    self.assertIsNone(flex.run_id)
+    self.assertEqual(
+      len([c for c in transport.commands if c["commandType"] == "home"]), homes_from_setup
+    )
+
+  def test_stop_still_homes_before_releasing(self):
+    """The one-call teardown keeps parking the gantry; only disconnect skips it."""
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    asyncio.run(flex.setup())
+    homes_from_setup = len([c for c in transport.commands if c["commandType"] == "home"])
+
+    asyncio.run(flex.stop())
+
+    self.assertEqual(
+      len([c for c in transport.commands if c["commandType"] == "home"]), homes_from_setup + 1
+    )
+    self.assertIsNone(flex.run_id)
+
+
 class TestHeadDiscovery(unittest.TestCase):
   """setup() discovers mounted pipettes and composes the matching head per mount."""
 
