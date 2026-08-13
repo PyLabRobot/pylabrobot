@@ -839,6 +839,28 @@ class TestFlexHead8HardwareTipPresence(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
+  def test_tip_presence_is_read_as_a_run_command_never_over_the_instruments_route(self):
+    """The tip check must not touch ``GET /instruments`` once a run is live.
+
+    That REST read re-caches the attached pipettes, which clears the run's
+    record of the attached tip, so the next pipetting command fails with
+    "cannot perform PREPARE_ASPIRATE without a tip attached". Reproduced
+    against the Opentrons robot-server simulator.
+    """
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+      reads_after_setup = transport.instrument_reads
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.drop_tips(rack, column=0))
+
+      self.assertEqual(transport.instrument_reads, reads_after_setup)
+      self.assertIn("getTipPresence", [c["commandType"] for c in transport.commands])
+    finally:
+      asyncio.run(flex.stop())
+
   def test_simulated_stuck_tip_after_drop_logs_warning(self):
     flex, _transport, head = _flex_head8(simulate_stuck_tip=True)
     try:
