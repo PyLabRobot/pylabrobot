@@ -54,33 +54,10 @@ def _cmds(transport: ChatterboxTransport, command_type: str) -> List[Dict[str, A
   return [c for c in transport.commands if c["commandType"] == command_type]
 
 
-class _VersionedTransport(ChatterboxTransport):
-  """Chatterbox whose ``/health`` reports a caller-chosen robot software
-  version, so tests can drive the robot/* version gate.
-  """
-
-  def __init__(self, api_version: str, **kwargs) -> None:
-    super().__init__(**kwargs)
-    self._api_version = api_version
-
-  async def get(self, path: str) -> Dict[str, Any]:
-    if path == "/health":
-      return {
-        "api_version": self._api_version,
-        "robot_model": "OT-3 Standard",
-        "name": "chatterbox",
-      }
-    return await super().get(path)
-
-
 def _flex_with_version(api_version: str) -> Tuple[OpentronsFlex, ChatterboxTransport]:
-  transport = _VersionedTransport(
-    api_version,
-    pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")],
-    gripper=True,
-  )
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
-  return flex, transport
+  """A gripper-equipped Flex whose ``/health`` reports ``api_version``, so a
+  test can drive the robot/* version gate."""
+  return _flex_with_gripper(api_version=api_version)
 
 
 class TestHeadPosition(unittest.TestCase):
@@ -359,6 +336,28 @@ class TestRobotCommandsVersionGate(unittest.TestCase):
 
   def test_dev_build_passes(self):
     flex, transport = _flex_with_version("0.0.0.dev0")
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(_gripper(flex).open_jaw())
+      self.assertEqual(len(_cmds(transport, "robot/openGripperJaw")), 1)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_dev_build_cut_off_a_too_old_tag_is_still_gated(self):
+    # An untagged build reports 0.0.0.dev*; a build cut off a release tag
+    # reports that tag plus a dev suffix, and is as old as the tag says.
+    flex, transport = _flex_with_version("8.1.0.dev5")
+    asyncio.run(flex.setup())
+    try:
+      with self.assertRaises(OpentronsError) as ctx:
+        asyncio.run(_gripper(flex).open_jaw())
+      self.assertIn("8.2.0", str(ctx.exception))
+      self._assert_no_robot_commands(transport)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_dev_build_cut_off_a_new_enough_tag_passes(self):
+    flex, transport = _flex_with_version("8.2.0.dev3")
     asyncio.run(flex.setup())
     try:
       asyncio.run(_gripper(flex).open_jaw())

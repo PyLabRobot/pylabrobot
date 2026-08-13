@@ -10,7 +10,9 @@ the ``liquidProbe`` command with the engine's defined "liquidNotFound" error
 (the real-hardware behavior). Also pins the shared well-position rule the
 liquid ops build on -- a caller offset shifts the head from the default
 position rather than replacing it -- and the one place that deliberately
-does not follow it, ``touch_tip``.
+does not follow it, ``touch_tip``; plus the two rules the single-nozzle
+cherry-pick runs under: which nozzles an 8-channel Flex can anchor on, and
+that no nozzle layout changes while a tip is mounted.
 """
 
 import asyncio
@@ -772,17 +774,127 @@ class TestWellPositionOffsets(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_touch_tip_offset_replaces_the_default_touch_height(self):
-    # touch_tip's z IS the touch height, mirroring the Opentrons Python API's
-    # absolute v_offset; dropping the default moves the tip up, not down.
+  def test_touch_tip_offset_replaces_while_aspirate_offset_shifts(self):
+    # The same Coordinate(x=1) means different things on the two calls, which
+    # is why both public docstrings spell the rule out: touch_tip's z IS the
+    # touch height (the Opentrons Python API's absolute v_offset).
     flex, transport, head, plate = self._bench()
     try:
+      asyncio.run(head.aspirate(plate, column=0, volume=10, offset=Coordinate(x=1)))
       asyncio.run(head.touch_tip(plate, column=0, offset=Coordinate(x=1)))
       touch_cmds = [c for c in transport.commands if c["commandType"] == "touchTip"]
+      self.assertEqual(
+        self._aspirate_well_location(transport),
+        {"origin": "bottom", "offset": {"x": 1, "y": 0, "z": 1.0}},
+      )
       self.assertEqual(
         touch_cmds[0]["params"]["wellLocation"],
         {"origin": "top", "offset": {"x": 1, "y": 0, "z": 0}},
       )
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestSingleNozzleLayout(unittest.TestCase):
+  """An 8-channel Flex can anchor a SINGLE nozzle layout on its "A1" or "H1"
+  nozzle and nothing else: the engine's primaryNozzle is a literal of those
+  (plus the 12-column ends a 96-head uses), and the pipette's own
+  validNozzleMaps carry only SingleA1/SingleH1. The engine also refuses ANY
+  nozzle reconfiguration, "ALL" included, while a tip is attached."""
+
+  def setUp(self):
+    set_tip_tracking(True)
+
+  def tearDown(self):
+    set_tip_tracking(False)
+
+  def _bench(self):
+    flex, transport, head = _flex_head8()
+    rack = flex_96_tiprack_50ul(name="rack")
+    flex.deck.assign_child_at_slot(rack, "C1")
+    return flex, transport, head, rack
+
+  def _nozzle_params(self, transport: ChatterboxTransport) -> list:
+    return [
+      c["params"]["configurationParams"]
+      for c in transport.commands
+      if c["commandType"] == "configureNozzleLayout"
+    ]
+
+  def test_a_middle_row_well_needs_an_explicit_nozzle(self):
+    # Deriving the nozzle from the row letter builds "C1", which the
+    # robot-server rejects at body validation before the command exists.
+    flex, transport, head, rack = self._bench()
+    try:
+      commands_before = len(transport.commands)
+      with self.assertRaises(ValueError) as caught:
+        asyncio.run(head.pick_up_single_tip(rack, well="C3"))
+      self.assertIn("primary_nozzle", str(caught.exception))
+      self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_explicit_nozzle_reaches_a_middle_row_well_on_its_own_channel(self):
+    # In a SINGLE layout the engine moves the chosen nozzle over whatever
+    # well is named, so the tip lands on that nozzle's channel, not the
+    # well's row.
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_single_tip(rack, well="C3", primary_nozzle="H1"))
+
+      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "H1")
+      pickups = [c for c in transport.commands if c["commandType"] == "pickUpTip"]
+      self.assertEqual(pickups[-1]["params"]["wellName"], "C3")
+      self.assertIsNotNone(head.get_mounted_tips()[7])
+      self.assertTrue(all(tip is None for i, tip in enumerate(head.get_mounted_tips()) if i != 7))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_row_letter_default_picks_that_rows_nozzle(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_single_tip(rack, well="A2"))
+      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "A1")
+      self.assertIsNotNone(head.get_mounted_tips()[0])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_an_unanchorable_nozzle_is_rejected_pre_wire(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      commands_before = len(transport.commands)
+      with self.assertRaises(ValueError):
+        asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="B1"))
+      self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_reconfiguring_the_layout_while_a_tip_is_mounted_is_refused(self):
+    flex, transport, head, rack = self._bench()
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    flex.deck.assign_child_at_slot(plate, "C2")
+    try:
+      asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+      commands_before = len(transport.commands)
+
+      # A column op resets the layout to ALL, which the robot refuses while
+      # the single tip is still on.
+      with self.assertRaises(OpentronsError) as caught:
+        asyncio.run(head.aspirate(plate, column=1, volume=10))
+      self.assertIn("nozzle layout", str(caught.exception))
+      self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_dropping_the_single_tip_restores_all_mode(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+      asyncio.run(head.drop_single_tip(flex.deck.get_trash_area()))
+
+      self.assertEqual(self._nozzle_params(transport)[-1], {"style": "ALL"})
+      self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
     finally:
       asyncio.run(flex.stop())
 

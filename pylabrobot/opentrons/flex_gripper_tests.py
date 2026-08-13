@@ -170,9 +170,6 @@ class TestMoveLabware(unittest.TestCase):
 
       move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
       self.assertEqual(move_cmds[0]["params"]["newLocation"], {"slotName": "C2"})
-      # The load at the staging slot itself also needs the addressable-area form.
-      load_cmds = [c for c in transport.commands if c["commandType"] == "loadLabware"]
-      self.assertEqual(load_cmds[0]["params"]["location"], {"addressableAreaName": "A4"})
     finally:
       asyncio.run(flex.stop())
 

@@ -20,11 +20,12 @@ from pylabrobot.opentrons.labware_definitions import (
   build_movable_labware_definition,
   build_plate_definition,
   build_tip_rack_definition,
-  container_cavity_footprint,
+  container_footprint,
 )
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import (
+  Container,
   CrossSectionType,
   Plate,
   Resource,
@@ -32,11 +33,17 @@ from pylabrobot.resources import (
   TipRack,
   TipSpot,
   Trough,
+  TroughBottomType,
   TubeRack,
   Well,
   WellBottomType,
 )
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources.hamilton import hamilton_1_trough_60mL_Vb
+from pylabrobot.resources.opentrons import opentrons_96_filtertiprack_200ul
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
+from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -48,8 +55,14 @@ def _plate(
   num_items_y: int = 2,
   cross_section_type: CrossSectionType = CrossSectionType.CIRCLE,
   bottom_type: WellBottomType = WellBottomType.UNKNOWN,
+  material_z_thickness: Optional[float] = 0.5,
 ) -> Plate:
-  """A plate with hand-picked geometry so expected numbers are exact."""
+  """A plate with hand-picked geometry so expected numbers are exact.
+
+  ``material_z_thickness`` is the wall between a well's own bottom and the
+  cavity floor liquid ops are anchored at; ``None`` builds the wells without
+  one, which is the shape the builder refuses.
+  """
   return Plate(
     name=name,
     size_x=127.0,
@@ -67,6 +80,7 @@ def _plate(
       size_x=6.0,
       size_y=6.0,
       size_z=10.0,
+      material_z_thickness=material_z_thickness,
       max_volume=360.0,
       cross_section_type=cross_section_type,
       bottom_type=bottom_type,
@@ -75,9 +89,16 @@ def _plate(
 
 
 def _tip_rack(
-  name: str = "hamilton tips 300", num_items_x: int = 2, num_items_y: int = 2
+  name: str = "hamilton tips 300",
+  num_items_x: int = 2,
+  num_items_y: int = 2,
+  dz: float = 0.0,
 ) -> TipRack:
-  """A tip rack with hand-picked geometry and a pinned prototype tip."""
+  """A tip rack with hand-picked geometry and a pinned prototype tip.
+
+  ``dz`` is where the seated tips' ends sit relative to the rack's own base;
+  a negative one models the Hamilton-style racks whose tips hang below it.
+  """
 
   def make_tip(name: str) -> Tip:
     return Tip(
@@ -99,7 +120,7 @@ def _tip_rack(
       num_items_y=num_items_y,
       dx=10.0,
       dy=8.0,
-      dz=0.0,
+      dz=dz,
       item_dx=9.0,
       item_dy=9.0,
       size_x=5.0,
@@ -109,8 +130,21 @@ def _tip_rack(
   )
 
 
-def _trough(name: str = "hamilton trough") -> Trough:
-  return Trough(name=name, size_x=120.0, size_y=80.0, size_z=40.0, max_volume=290000.0)
+def _trough(
+  name: str = "hamilton trough",
+  material_z_thickness: Optional[float] = 1.5,
+  bottom_type: TroughBottomType = TroughBottomType.UNKNOWN,
+) -> Trough:
+  """A single-cavity trough; ``material_z_thickness`` is its floor thickness."""
+  return Trough(
+    name=name,
+    size_x=120.0,
+    size_y=80.0,
+    size_z=40.0,
+    material_z_thickness=material_z_thickness,
+    bottom_type=bottom_type,
+    max_volume=290000.0,
+  )
 
 
 def _tube_rack(name: str = "tube rack") -> TubeRack:
@@ -189,13 +223,15 @@ class TestBuildPlateDefinition(unittest.TestCase):
   def test_well_geometry_carries_depth_volume_and_centers(self):
     definition = build_plate_definition(_plate())
     # A1 (back-left well): origin (10, 17, 1), 6 mm square, so center (13, 20).
+    # Its z is the CAVITY floor: the well's own bottom (1.0) plus the 0.5 mm
+    # of plastic beneath it, matching how Opentrons reads a well's z.
     self.assertEqual(
       definition["wells"]["A1"],
       {
         "depth": 10.0,
         "x": 13.0,
         "y": 20.0,
-        "z": 1.0,
+        "z": 1.5,
         "shape": "circular",
         "diameter": 6.0,
         "totalLiquidVolume": 360.0,
@@ -204,6 +240,46 @@ class TestBuildPlateDefinition(unittest.TestCase):
     # B1 is one 9 mm pitch toward the front: center y = 8 + 3 = 11.
     self.assertEqual(definition["wells"]["B1"]["y"], 11.0)
     self.assertEqual(definition["groups"][0]["wells"], ["A1", "B1", "A2", "B2"])
+
+  def test_well_z_is_the_cavity_floor_not_the_wells_outer_bottom(self):
+    # The default liquid position is 1 mm above a well's z, so a z at the
+    # well's outer bottom aims it into the plastic. PLR's corning plate: A1
+    # bottom 3.03 + 0.5 mm wall; Opentrons ships z = 3.55 for that plate.
+    definition = build_plate_definition(cor_96_wellplate_360uL_Fb(name="corning"))
+    self.assertAlmostEqual(definition["wells"]["A1"]["z"], 3.53)
+    self.assertAlmostEqual(definition["wells"]["A1"]["depth"], 10.67)
+    # z + depth is the real rim, which is what touchTip and liquidProbe ride.
+    self.assertAlmostEqual(
+      definition["wells"]["A1"]["z"] + definition["wells"]["A1"]["depth"],
+      definition["dimensions"]["zDimension"],
+    )
+
+  def test_plate_without_material_thickness_is_refused(self):
+    # No cavity floor to anchor liquid ops at, and no safe default: falling
+    # back to zero is what aims them at the plastic.
+    with self.assertRaises(ValueError) as caught:
+      build_plate_definition(_plate(material_z_thickness=None))
+    self.assertIn("material_z_thickness", str(caught.exception))
+    self.assertIn("Black Plate-1", str(caught.exception))
+
+  def test_rotated_plate_is_refused(self):
+    # An Opentrons definition positions wells from the slot's front-left
+    # corner and cannot express a rotation, so a rotated plate would upload
+    # unrotated well coordinates inside a rotated bounding box.
+    for angle in (90, 180):
+      plate = _plate()
+      plate.rotation = Rotation(z=angle)
+      with self.assertRaises(ValueError) as caught:
+        build_plate_definition(plate)
+      self.assertIn("rotation", str(caught.exception))
+
+  def test_plate_under_a_rotated_parent_is_refused(self):
+    holder = ResourceHolder(name="holder", size_x=130.0, size_y=90.0, size_z=1.0)
+    holder.rotation = Rotation(z=90)
+    plate = _plate()
+    holder.assign_child_resource(plate, location=Coordinate.zero())
+    with self.assertRaises(ValueError):
+      build_plate_definition(plate)
 
   def test_rectangular_wells_carry_x_y_dimensions(self):
     definition = build_plate_definition(_plate(cross_section_type=CrossSectionType.RECTANGLE))
@@ -263,11 +339,13 @@ class TestBuildTipRackDefinition(unittest.TestCase):
     definition = build_tip_rack_definition(_tip_rack())
     self.assertEqual(definition["cornerOffsetFromSlot"], {"x": 0, "y": 0, "z": 0})
     self.assertEqual(definition["ordering"], [["A1", "B1"], ["A2", "B2"]])
-    # A1 spot origin (10, 17, 0), 5 mm square: center (12.5, 19.5).
+    # A1 spot origin (10, 17, 0), 5 mm square: center (12.5, 19.5). The depth
+    # is the prototype tip's length: a TipSpot has no height of its own, and
+    # a pickUpTip descends to z + depth, the seated tip's top.
     self.assertEqual(
       definition["wells"]["A1"],
       {
-        "depth": 0,
+        "depth": 50.0,
         "x": 12.5,
         "y": 19.5,
         "z": 0.0,
@@ -276,6 +354,29 @@ class TestBuildTipRackDefinition(unittest.TestCase):
         "totalLiquidVolume": 200.0,
       },
     )
+
+  def test_well_depth_reproduces_a_shipped_opentrons_rack(self):
+    # PLR builds this rack BY loading Opentrons' own definition, so the
+    # rebuilt one must carry that file's numbers back: z 5.39, depth 59.3,
+    # tipLength 59.3.
+    definition = build_tip_rack_definition(opentrons_96_filtertiprack_200ul(name="ot rack"))
+    self.assertAlmostEqual(definition["wells"]["A1"]["z"], 5.39)
+    self.assertAlmostEqual(definition["wells"]["A1"]["depth"], 59.3)
+    self.assertAlmostEqual(definition["parameters"]["tipLength"], 59.3)
+
+  def test_rack_whose_tips_hang_below_its_base_is_refused(self):
+    # The robot-server's schema declares well z non-negative, so this uploads
+    # as a 422 per well; refuse it here, naming the rack and the spot.
+    with self.assertRaises(ValueError) as caught:
+      build_tip_rack_definition(_tip_rack(dz=-50.5))
+    self.assertIn("hamilton tips 300", str(caught.exception))
+    self.assertIn("50.5 mm BELOW", str(caught.exception))
+
+  def test_rotated_tip_rack_is_refused(self):
+    rack = _tip_rack()
+    rack.rotation = Rotation(z=90)
+    with self.assertRaises(ValueError):
+      build_tip_rack_definition(rack)
 
   def test_grip_height_from_grip_distance(self):
     self.assertNotIn("gripHeightFromLabwareBottom", build_tip_rack_definition(_tip_rack()))
@@ -297,14 +398,16 @@ class TestBuildContainerDefinition(unittest.TestCase):
       definition["dimensions"],
       {"xDimension": 120.0, "yDimension": 80.0, "zDimension": 40.0},
     )
+    # The cavity floor sits on the 1.5 mm of plastic under it, and the depth
+    # loses the same, so the well's top stays at the container's real rim.
     self.assertEqual(
       definition["wells"],
       {
         "A1": {
-          "depth": 40.0,
+          "depth": 38.5,
           "x": 60.0,
           "y": 40.0,
-          "z": 0,
+          "z": 1.5,
           "shape": "rectangular",
           "xDimension": 120.0,
           "yDimension": 80.0,
@@ -314,13 +417,47 @@ class TestBuildContainerDefinition(unittest.TestCase):
     )
     self.assertEqual(definition["groups"][0]["wells"], ["A1"])
 
+  def test_cavity_floor_sits_on_the_wall_thickness(self):
+    # Pinned against real labware: hamilton_1_trough_60mL_Vb is 65.5 mm tall
+    # with a 1.58 mm floor, and every shipped Opentrons reservoir likewise
+    # has z + depth == zDimension with a non-zero z.
+    definition = build_container_definition(hamilton_1_trough_60mL_Vb(name="trough"))
+    well = definition["wells"]["A1"]
+    self.assertAlmostEqual(well["z"], 1.58)
+    self.assertAlmostEqual(well["depth"], 63.92)
+    self.assertAlmostEqual(well["z"] + well["depth"], definition["dimensions"]["zDimension"])
+
+  def test_container_without_material_thickness_is_refused(self):
+    with self.assertRaises(ValueError) as caught:
+      build_container_definition(_trough(material_z_thickness=None))
+    self.assertIn("material_z_thickness", str(caught.exception))
+    self.assertIn("hamilton trough", str(caught.exception))
+
+  def test_well_bottom_shape_maps_from_the_troughs_bottom_type(self):
+    # The enum's own values are "U"/"V"/"unknown", which the robot-server's
+    # Literal["flat", "u", "v"] rejects, so the mapping must lower-case them.
+    for bottom_type, expected in (
+      (TroughBottomType.V, "v"),
+      (TroughBottomType.U, "u"),
+      (TroughBottomType.FLAT, "flat"),
+      (TroughBottomType.UNKNOWN, "flat"),
+    ):
+      definition = build_container_definition(_trough(bottom_type=bottom_type))
+      self.assertEqual(definition["groups"][0]["metadata"], {"wellBottomShape": expected})
+    # A plain Container carries no bottom shape at all.
+    plain = Container(name="plain", size_x=10.0, size_y=10.0, size_z=10.0, material_z_thickness=1.0)
+    self.assertEqual(
+      build_container_definition(plain)["groups"][0]["metadata"],
+      {"wellBottomShape": "flat"},
+    )
+
   def test_rotated_cavity_uploads_the_shared_deck_frame_footprint(self):
     # The uploaded rectangle and the ops' fit guard must read the same
     # helper, or a rotated cavity is guarded on the wrong axis.
     trough = _trough()
     trough.rotation = Rotation(z=90)
     definition = build_container_definition(trough)
-    cavity_x, cavity_y = container_cavity_footprint(trough)
+    cavity_x, cavity_y = container_footprint(trough)
     self.assertEqual((cavity_x, cavity_y), (80.0, 120.0))
     self.assertEqual(definition["dimensions"]["xDimension"], cavity_x)
     self.assertEqual(definition["dimensions"]["yDimension"], cavity_y)
@@ -409,6 +546,13 @@ def _load_labware_commands(transport: ChatterboxTransport) -> list:
   return [c for c in transport.commands if c["commandType"] == "loadLabware"]
 
 
+def _mount_tips(flex: OpentronsFlex, head: FlexHead8) -> None:
+  """Pick up a column of tips, so a liquid op reaches past the mounted-tip guard."""
+  rack = flex_96_tiprack_50ul(name=f"tips for {head.mount}")
+  flex.deck.assign_child_at_slot(rack, "D1")
+  asyncio.run(head.pick_up_tips(rack, column=0))
+
+
 class _FailFirstUploadTransport(ChatterboxTransport):
   """Chatterbox whose FIRST labware-definition upload raises; retries succeed."""
 
@@ -456,6 +600,7 @@ class TestUnbuildableLabwareGuard(unittest.TestCase):
     try:
       rack = _tube_rack()
       flex.deck.assign_child_at_slot(rack, "C1")
+      _mount_tips(flex, head)
 
       commands_before = len(transport.commands)
       with self.assertRaises(OpentronsError):
@@ -494,6 +639,7 @@ class TestUnbuildableLabwareGuard(unittest.TestCase):
       gripper = flex.gripper
       assert gripper is not None
       asyncio.run(gripper.move_labware(rack, "C2"))
+      _mount_tips(flex, head)
 
       commands_before = len(transport.commands)
       with self.assertRaises(OpentronsError):
@@ -543,6 +689,21 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       self.assertEqual(params["loadName"], "black_plate_1_e2a464")
       self.assertEqual(params["version"], 1)
       self.assertEqual(params["location"], {"slotName": "C1"})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_load_into_a_staging_slot_uses_the_addressable_area_form(self):
+    # The robot-server's DeckSlotName covers only the A1-D3 grid, so the
+    # column-4 staging slots ride a different location key.
+    flex, transport = _flex_with_transport()
+    asyncio.run(flex.setup())
+    try:
+      plate = _plate()
+      flex.deck.assign_child_at_slot(plate, "A4")
+      asyncio.run(flex._ensure_labware_loaded(plate))
+
+      params = _load_labware_commands(transport)[0]["params"]
+      self.assertEqual(params["location"], {"addressableAreaName": "A4"})
     finally:
       asyncio.run(flex.stop())
 
@@ -685,7 +846,30 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       params = load_cmds[0]["params"]
       self.assertEqual(params["namespace"], "opentrons")
       self.assertEqual(params["loadName"], "corning_96_wellplate_360ul_flat")
-      self.assertEqual(params["version"], 1)
+      # Revision 2, not 1: version 1 of this plate declares no gripper grip
+      # height, and 2 adds it without moving a single well.
+      self.assertEqual(params["version"], 2)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_catalogue_version_falls_back_to_1_and_a_resource_can_override_it(self):
+    flex, transport = _flex_with_transport()
+    asyncio.run(flex.setup())
+    try:
+      rack = _tip_rack()
+      # Flex tip racks ship one revision, so they stay at 1.
+      rack.ot_load_name = "opentrons_flex_96_tiprack_50ul"  # type: ignore[attr-defined]
+      flex.deck.assign_child_at_slot(rack, "C1")
+      asyncio.run(flex._ensure_labware_loaded(rack))
+
+      pinned = _plate(name="pinned plate")
+      pinned.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      pinned.ot_version = 4  # type: ignore[attr-defined]
+      flex.deck.assign_child_at_slot(pinned, "C2")
+      asyncio.run(flex._ensure_labware_loaded(pinned))
+
+      versions = [c["params"]["version"] for c in _load_labware_commands(transport)]
+      self.assertEqual(versions, [1, 4])
     finally:
       asyncio.run(flex.stop())
 

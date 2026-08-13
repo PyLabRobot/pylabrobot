@@ -2,8 +2,9 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple, Type, cast
 
-from pylabrobot.opentrons.flex_gripper import FlexGripper, _slot_wire_location
+from pylabrobot.opentrons.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
+from pylabrobot.opentrons.flex_wire import slot_wire_location
 from pylabrobot.opentrons.labware_definitions import (
   build_container_definition,
   build_movable_labware_definition,
@@ -19,7 +20,24 @@ from pylabrobot.resources.trash import Trash
 logger = logging.getLogger(__name__)
 
 _OT_NAMESPACE = "opentrons"
+
+# Catalogue definition revision per load name -- see _ot_catalogue_identity.
 _OT_VERSION = 1
+_OT_CATALOGUE_VERSIONS = {
+  "appliedbiosystemsmicroamp_384_wellplate_40ul": 3,
+  "armadillo_96_wellplate_200ul_pcr_full_skirt": 2,
+  "biorad_384_wellplate_50ul": 2,
+  "biorad_96_wellplate_200ul_pcr": 2,
+  "corning_12_wellplate_6.9ml_flat": 2,
+  "corning_384_wellplate_112ul_flat": 2,
+  "corning_48_wellplate_1.6ml_flat": 2,
+  "corning_96_wellplate_360ul_flat": 2,
+  "nest_1_reservoir_195ml": 2,
+  "nest_96_wellplate_100ul_pcr_full_skirt": 2,
+  "nest_96_wellplate_200ul_flat": 2,
+  "nest_96_wellplate_2ml_deep": 2,
+  "opentrons_96_wellplate_200ul_pcr_full_skirt": 2,
+}
 
 _TIP_RACK_MAP = {
   "flex_96_tiprack_50ul": "opentrons_flex_96_tiprack_50ul",
@@ -235,7 +253,7 @@ class OpentronsFlex(OpentronsRobot):
       )
 
     try:
-      load_name = self._ot_load_name(resource)
+      load_name, version = self._ot_catalogue_identity(resource)
     except OpentronsError:
       # No official Opentrons definition: build one from the resource's PLR
       # geometry, upload it, and load by the uploaded definition's identity.
@@ -243,12 +261,12 @@ class OpentronsFlex(OpentronsRobot):
         resource, grip_distance_from_top, allow_stub
       )
     else:
-      namespace, version = _OT_NAMESPACE, _OT_VERSION
+      namespace = _OT_NAMESPACE
       _warn_grip_distance_discarded(
         name,
         grip_distance_from_top,
-        f"it loads the Opentrons catalogue definition '{load_name}', whose grip height the "
-        "robot owns",
+        f"it loads the Opentrons catalogue definition '{load_name}', whose grip height is "
+        "the vendor's to state (the robot grips at mid-height when it states none)",
       )
     labware_id = uuid.uuid4().hex[:12]
 
@@ -256,7 +274,7 @@ class OpentronsFlex(OpentronsRobot):
       "loadLabware",
       {
         "loadName": load_name,
-        "location": _slot_wire_location(slot),
+        "location": slot_wire_location(slot),
         "namespace": namespace,
         "version": version,
         "labwareId": labware_id,
@@ -306,25 +324,42 @@ class OpentronsFlex(OpentronsRobot):
     logger.info("Labware '%s' marked moved off-deck", name)
 
   @staticmethod
-  def _ot_load_name(resource: Resource) -> str:
-    """Resolve a PLR resource to its Opentrons labware load name."""
+  def _ot_catalogue_identity(resource: Resource) -> Tuple[str, int]:
+    """Resolve a PLR resource to its Opentrons load name and definition version.
+
+    Catalogue definitions are versioned per load name, and version 1 is the
+    OLDEST revision -- for much of the catalogue it predates the Flex and
+    declares no gripper grip height, so the robot grips at the labware's
+    mid-height rather than where the vendor says. ``_OT_CATALOGUE_VERSIONS``
+    therefore pins the EARLIEST revision that states one. Earliest, not
+    newest: a robot only holds the revisions its own software shipped with,
+    and these have shipped since API 2.14, while their well geometry is
+    identical to version 1's -- so the bump changes the grip and nothing else.
+    Load names outside that map (every Flex tip rack among them, which ships
+    one revision) stay at 1. A resource can override the version for its own
+    load name by carrying an ``ot_version``.
+    """
     if hasattr(resource, "ot_load_name"):
-      return cast(str, resource.ot_load_name)
+      load_name = cast(str, resource.ot_load_name)
+    else:
+      name_lower = getattr(resource, "name", "").lower()
+      for key, ot_name in _TIP_RACK_MAP.items():
+        if key in name_lower:
+          load_name = ot_name
+          break
+      else:
+        if not name_lower.startswith("opentrons_"):
+          raise OpentronsError(
+            "Cannot determine Opentrons load name",
+            f"'{name_lower}' — set resource.ot_load_name = 'opentrons_flex_96_tiprack_50ul' "
+            f"or use a standard Flex labware name.",
+          )
+        load_name = name_lower
 
-    name_lower = getattr(resource, "name", "").lower()
-
-    for key, ot_name in _TIP_RACK_MAP.items():
-      if key in name_lower:
-        return ot_name
-
-    if name_lower.startswith("opentrons_"):
-      return name_lower
-
-    raise OpentronsError(
-      "Cannot determine Opentrons load name",
-      f"'{name_lower}' — set resource.ot_load_name = 'opentrons_flex_96_tiprack_50ul' "
-      f"or use a standard Flex labware name.",
-    )
+    version = getattr(resource, "ot_version", None)
+    if version is None:
+      version = _OT_CATALOGUE_VERSIONS.get(load_name, _OT_VERSION)
+    return load_name, cast(int, version)
 
   async def _define_custom_labware(
     self,
@@ -374,13 +409,19 @@ class OpentronsFlex(OpentronsRobot):
     Pipettable types get real-geometry definitions. Any other resource (lid,
     adapter, tube rack, ...) has no wells the robot can pipette, so it builds
     only as the non-pipettable movable stub, which ``allow_stub`` opts into.
+    Geometry an Opentrons definition cannot describe (a rotated plate, a
+    cavity floor the resource never declared) is refused here, before any
+    wire command, rather than uploaded for the robot to act on.
     """
-    if isinstance(resource, Plate):
-      return build_plate_definition(resource, grip_distance_from_top)
-    if isinstance(resource, TipRack):
-      return build_tip_rack_definition(resource, grip_distance_from_top)
-    if isinstance(resource, Container):
-      return build_container_definition(resource, grip_distance_from_top)
+    try:
+      if isinstance(resource, Plate):
+        return build_plate_definition(resource, grip_distance_from_top)
+      if isinstance(resource, TipRack):
+        return build_tip_rack_definition(resource, grip_distance_from_top)
+      if isinstance(resource, Container):
+        return build_container_definition(resource, grip_distance_from_top)
+    except ValueError as e:
+      raise OpentronsError("Cannot build an Opentrons labware definition", str(e)) from e
     if not allow_stub:
       raise _not_pipettable_error(resource)
     return build_movable_labware_definition(resource, grip_distance_from_top)
