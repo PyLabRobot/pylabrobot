@@ -340,12 +340,14 @@ class OpentronsFlex(OpentronsRobot):
     the resource tree.
     """
     labware_id = await self._ensure_labware_loaded(tip_rack)
-    present: List[str] = []
-    absent: List[str] = []
+    # The robot grades a tip-rack well "clean"/"used"/"empty". PyLabRobot only
+    # records whether a tip is there, so an occupied spot maps to "clean".
+    occupied: List[str] = []
+    empty: List[str] = []
     for spot in tip_rack.get_all_items():
-      (present if spot.has_tip() else absent).append(tip_rack.get_child_identifier(spot))
+      (occupied if spot.has_tip() else empty).append(tip_rack.get_child_identifier(spot))
 
-    for well_names, state in ((present, "tipPresent"), (absent, "tipAbsent")):
+    for well_names, state in ((occupied, "clean"), (empty, "empty")):
       if not well_names:
         continue
       await self._execute_command(
@@ -353,10 +355,10 @@ class OpentronsFlex(OpentronsRobot):
         {"labwareId": labware_id, "wellNames": well_names, "tipWellState": state},
       )
     logger.info(
-      "Synced '%s' tip state to the robot: %d present, %d absent",
+      "Synced '%s' tip state to the robot: %d with a tip, %d empty",
       tip_rack.name,
-      len(present),
-      len(absent),
+      len(occupied),
+      len(empty),
     )
 
   async def labware_moved_off_deck(self, resource: Resource) -> None:

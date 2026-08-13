@@ -56,6 +56,29 @@ _MODELS_BY_NAME = {
 }
 
 
+# Enum-valued command params, with what the robot-server accepts. A fake that
+# takes any string lets a driver ship a value the real robot answers 422 to.
+_COMMAND_ENUMS = {
+  ("setTipState", "tipWellState"): frozenset({"clean", "used", "empty"}),
+  ("verifyTipPresence", "expectedState"): frozenset({"present", "absent"}),
+  ("moveLabware", "strategy"): frozenset(
+    {"usingGripper", "manualMoveWithPause", "manualMoveWithoutPause"}
+  ),
+}
+
+
+def _reject_unknown_enum_values(command_type: str, params: Dict[str, Any]) -> None:
+  """Refuse a param value the real robot-server would reject."""
+  for (ctype, key), allowed in _COMMAND_ENUMS.items():
+    if ctype != command_type or key not in params:
+      continue
+    if params[key] not in allowed:
+      raise ValueError(
+        f"{command_type} param {key}={params[key]!r} is not one of {sorted(allowed)}; "
+        "the robot-server answers 422 to this."
+      )
+
+
 @runtime_checkable
 class OpentronsTransport(Protocol):
   """Wire-level seam: the subset of HTTP that ``OpentronsRobot`` needs.
@@ -317,6 +340,7 @@ class ChatterboxTransport:
       data = (json or {}).get("data", {})
       ctype = data.get("commandType", "?")
       params = data.get("params", {})
+      _reject_unknown_enum_values(ctype, params)
       self._n += 1
       cmd_id = f"cmd-{self._n}"
       self.commands.append({"commandType": ctype, "params": dict(params)})

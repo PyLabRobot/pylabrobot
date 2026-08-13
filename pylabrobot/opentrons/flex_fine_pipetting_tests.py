@@ -1055,6 +1055,40 @@ class TestInPlaceLiquidOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
+  def test_a_dispense_unprimes_the_plunger_so_the_next_aspirate_primes_again(self):
+    """A dispense drives the plunger past its bottom, so the robot refuses the
+    next aspirate until a prepareToAspirate resets it. Without this the ordinary
+    aspirate/dispense/aspirate transfer loop fails on its second aspirate.
+    Confirmed against the Opentrons robot-server simulator.
+    """
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_in_place(volume=15))
+      asyncio.run(head.dispense_in_place(volume=15))
+      asyncio.run(head.aspirate_in_place(volume=15))
+
+      sent = [c["commandType"] for c in transport.commands]
+      self.assertEqual(sent.count("prepareToAspirate"), 2)
+      last_aspirate = len(sent) - 1 - sent[::-1].index("aspirateInPlace")
+      self.assertEqual(sent[last_aspirate - 1], "prepareToAspirate")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_blow_out_unprimes_the_plunger_too(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_in_place(volume=15))
+      asyncio.run(head.blow_out())
+      asyncio.run(head.aspirate_in_place(volume=15))
+
+      self.assertEqual(
+        [c["commandType"] for c in transport.commands].count("prepareToAspirate"), 2
+      )
+    finally:
+      asyncio.run(flex.stop())
+
   def test_dispense_in_place_sends_the_dispense_default_and_omits_push_out(self):
     flex, transport, head, rack = self._bench()
     try:
