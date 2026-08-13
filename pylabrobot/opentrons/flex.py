@@ -135,6 +135,18 @@ class OpentronsFlex(OpentronsRobot):
     self.gripper: Optional[FlexGripper] = None
     self._heads: List[_FlexHead] = []
 
+  def attach_deck(self, deck: FlexDeck) -> None:
+    """Swap in a new deck, so a caller can describe the deck without rebuilding
+    the robot (and losing the link and the run with it).
+
+    Clears the labware caches: their ids describe the deck being replaced, and
+    serving one for the new deck would address the wrong slot.
+    """
+    self.deck = deck
+    self._loaded_labware.clear()
+    self._defined_labware.clear()
+    self._stub_labware.clear()
+
   async def _create_run(self) -> str:
     # labwareIds and uploaded definitions are both run-scoped server-side, so
     # a new run must not serve cached identities from a previous one.
