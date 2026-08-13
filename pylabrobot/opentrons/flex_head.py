@@ -139,7 +139,6 @@ class _FlexHead:
     self._warn_untested_hardware("blow_out")
     rate = flow_rate if flow_rate is not None else self.default_flow_rates().blow_out
     await self._execute("blowOutInPlace", {"pipetteId": self.pipette_id, "flowRate": rate})
-    self._prepared = False
 
   async def has_tip_on_hardware(self) -> Optional[bool]:
     """Query the Flex's hardware tip-presence sensor for THIS head's pipette.
@@ -449,7 +448,10 @@ class _FlexHead:
 
   async def _execute(self, command_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """Issue a robot-server command through the owning device's shared transport."""
-    return await self.flex._execute_command(command_type, params)
+    result = await self.flex._execute_command(command_type, params)
+    if command_type in _UNPRIMING_COMMANDS:
+      self._prepared = False
+    return result
 
   @staticmethod
   def _require_itemized_parent(item: Resource) -> ItemizedResource:
@@ -833,7 +835,6 @@ class _FlexHead:
       "unsafe/blowOutInPlace",
       {"pipetteId": self.pipette_id, "flowRate": flow_rate},
     )
-    self._prepared = False
 
 
 # Default minimumZHeight (mm) for moveToCoordinates jogs: the head keeps at
@@ -845,6 +846,12 @@ _TRAVERSAL_HEIGHT = 120.0
 _WELL_ORIGINS = frozenset({"top", "bottom", "center", "meniscus"})
 
 _MOVE_AXES = frozenset({"x", "y", "z"})
+
+# After these the plunger is unprimed and the robot refuses the next aspirate:
+# a dispense or blow-out drives it past its bottom, a fresh tip never primed.
+_UNPRIMING_COMMANDS = frozenset(
+  {"dispense", "dispenseInPlace", "blowOutInPlace", "unsafe/blowOutInPlace", "pickUpTip"}
+)
 
 # What verify_tip_presence can assert. The sensor itself can also read
 # "unknown", but that is a reading, not something to check against.
@@ -963,7 +970,6 @@ class FlexHead1(_FlexHead):
 
     await self._execute_pickup("pickUpTip", params, staged_trackers)
     self._channel_tips[0] = tip
-    self._prepared = False
 
   async def drop_tips(
     self,
@@ -1304,7 +1310,6 @@ class FlexHead8(_FlexHead):
     await self._execute_pickup("pickUpTip", params, staged_trackers)
     for i, tip in enumerate(tips):
       self._channel_tips[i] = tip
-    self._prepared = False
 
   async def drop_tips(
     self,
@@ -1773,7 +1778,6 @@ class FlexHead8(_FlexHead):
 
     await self._execute_pickup("pickUpTip", params, staged_trackers)
     self._channel_tips[channel] = tip
-    self._prepared = False
 
   async def aspirate_single(
     self,
@@ -1959,7 +1963,6 @@ class FlexHead96(_FlexHead):
     await self._execute_pickup("pickUpTip", params, staged_trackers)
     for i, tip in enumerate(tips):
       self._channel_tips[i] = tip
-    self._prepared = False
 
   async def drop_tips(
     self,

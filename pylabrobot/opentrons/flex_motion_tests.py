@@ -618,8 +618,8 @@ class TestSyncTipsToRobot(unittest.TestCase):
 
       cmds = _cmds(transport, "setTipState")
       by_state = {c["params"]["tipWellState"]: c["params"]["wellNames"] for c in cmds}
-      self.assertEqual(by_state["tipPresent"], ["A1", "B1"])
-      self.assertEqual(len(by_state["tipAbsent"]), 94)
+      self.assertEqual(by_state["clean"], ["A1", "B1"])
+      self.assertEqual(len(by_state["empty"]), 94)
     finally:
       asyncio.run(flex.stop())
 
@@ -632,6 +632,6 @@ class TestSyncTipsToRobot(unittest.TestCase):
       asyncio.run(flex.sync_tips_to_robot(rack))
 
       states = {c["params"]["tipWellState"] for c in _cmds(transport, "setTipState")}
-      self.assertEqual(states, {"tipPresent"})
+      self.assertEqual(states, {"clean"})
     finally:
       asyncio.run(flex.stop())
