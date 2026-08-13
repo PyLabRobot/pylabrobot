@@ -124,7 +124,13 @@ class OpentronsRobot(abc.ABC):
     The robot reports itself as in use and refuses its own touchscreen for as
     long as a run is current, so this is the step that takes it from the
     operator, not ``connect``.
+
+    Cancels a run this object already holds before opening the next one.
+    ``run_id`` is the only handle we have on a run, so overwriting it strands
+    the old one on the robot, still current, with nothing left able to release
+    it: the touchscreen stays locked and a power cycle is the only way out.
     """
+    await self._cancel_run()
     await self._create_run()
 
   async def initialize(self) -> None:
