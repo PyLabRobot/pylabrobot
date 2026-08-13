@@ -32,6 +32,17 @@ logger = logging.getLogger(__name__)
 # string, so a caller gating on robot software can tell offline from any robot.
 OFFLINE_API_VERSION = "dry-run"
 
+# /instruments serves a versioned model, and flow-rate defaults differ between
+# versions of the same pipette, so the fake cannot just echo the name back.
+_MODELS_BY_NAME = {
+  "p50_single_flex": "p50_single_v3.5",
+  "p50_multi_flex": "p50_multi_v3.5",
+  "p1000_single_flex": "p1000_single_v3.5",
+  "p1000_multi_flex": "p1000_multi_v3.5",
+  "p1000_96": "p1000_96_v3.5",
+  "p200_96": "p200_96_v3.3",
+}
+
 
 @runtime_checkable
 class OpentronsTransport(Protocol):
@@ -198,7 +209,7 @@ class ChatterboxTransport:
           "instrumentType": "pipette",
           "mount": mount,
           "instrumentName": name,
-          "instrumentModel": name,
+          "instrumentModel": _MODELS_BY_NAME.get(name, name),
           "data": {"channels": channels, "min_volume": min_v, "max_volume": max_v},
           "state": {"tipDetected": self._tip_detected.get(mount, False)},
         }

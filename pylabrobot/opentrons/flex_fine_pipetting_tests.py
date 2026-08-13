@@ -20,7 +20,7 @@ import unittest
 from typing import Any, Dict, Optional
 
 from pylabrobot.opentrons.flex import OpentronsFlex
-from pylabrobot.opentrons.flex_head import _DEFAULT_BLOW_OUT_FLOW_RATE, FlexHead1
+from pylabrobot.opentrons.flex_head import FlexHead1
 from pylabrobot.opentrons.flex_tests import _flex_head1, _flex_head8, _flex_head96
 from pylabrobot.opentrons.robot import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
@@ -60,9 +60,10 @@ class TestBlowOut(unittest.TestCase):
 
       blow_cmds = [c for c in transport.commands if c["commandType"] == "blowOutInPlace"]
       self.assertEqual(len(blow_cmds), 1)
+      # p50_multi_v3.5 on a 50uL tip, per Opentrons' shipped pipette data.
       self.assertEqual(
         blow_cmds[0]["params"],
-        {"pipetteId": head.pipette_id, "flowRate": _DEFAULT_BLOW_OUT_FLOW_RATE},
+        {"pipetteId": head.pipette_id, "flowRate": 57.0},
       )
     finally:
       asyncio.run(flex.stop())
@@ -124,9 +125,11 @@ class TestBlowOut(unittest.TestCase):
 
       blow_cmds = [c for c in transport.commands if c["commandType"] == "blowOutInPlace"]
       self.assertEqual(len(blow_cmds), 1)
+      # p1000_single_v3.5 on a 50uL tip: a different pipette blows out at its own
+      # rate, not the p50's 57.
       self.assertEqual(
         blow_cmds[0]["params"],
-        {"pipetteId": head.pipette_id, "flowRate": _DEFAULT_BLOW_OUT_FLOW_RATE},
+        {"pipetteId": head.pipette_id, "flowRate": 478.0},
       )
       cmd_types = [c["commandType"] for c in transport.commands]
       prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
