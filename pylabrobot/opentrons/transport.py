@@ -17,16 +17,28 @@ PLR-native checks layered on top of it — can run with no network.
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast, runtime_checkable
+from pathlib import Path
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  List,
+  Optional,
+  Protocol,
+  Tuple,
+  Union,
+  cast,
+  runtime_checkable,
+)
 
-try:
-  import httpx  # type: ignore[import-not-found]
-
-  _HAS_HTTPX = True
-except ImportError:
-  _HAS_HTTPX = False
+from pylabrobot.io.capture import CaptureReader
+from pylabrobot.io.http import HTTP, HTTPValidator
 
 logger = logging.getLogger(__name__)
+
+# The robot-server rejects a request that does not name the API version it
+# should be read as.
+DEFAULT_HEADERS = {"opentrons-version": "3"}
 
 # ChatterboxTransport's default /health version: deliberately not a version
 # string, so a caller gating on robot software can tell offline from any robot.
@@ -52,6 +64,8 @@ class OpentronsTransport(Protocol):
   raising for non-2xx status is the transport's job, not the robot's.
   """
 
+  async def setup(self) -> None: ...
+
   async def get(self, path: str) -> Dict[str, Any]: ...
 
   async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]: ...
@@ -62,7 +76,12 @@ class OpentronsTransport(Protocol):
 
 
 class HttpxTransport:
-  """Real transport: wraps an ``httpx.AsyncClient`` against the robot-server."""
+  """Real transport, over the :class:`~pylabrobot.io.http.HTTP` io.
+
+  Going through the io rather than a bare ``httpx.AsyncClient`` is what puts
+  every robot-server exchange in PyLabRobot's capture log, so a run wrapped in
+  ``start_capture()`` can later be replayed by :class:`ReplayTransport`.
+  """
 
   def __init__(
     self,
@@ -70,31 +89,64 @@ class HttpxTransport:
     timeout: float = 30.0,
     headers: Optional[Dict[str, str]] = None,
   ) -> None:
-    if not _HAS_HTTPX:
-      raise RuntimeError("httpx is required. Install with: pip install httpx")
-    self._client = httpx.AsyncClient(
-      base_url=base_url,
-      timeout=timeout,
-      headers=headers or {"opentrons-version": "3"},
-    )
+    self.io = HTTP(base_url=base_url, timeout=timeout, headers=headers or DEFAULT_HEADERS)
+
+  async def setup(self) -> None:
+    await self.io.setup()
 
   async def get(self, path: str) -> Dict[str, Any]:
-    response = await self._client.get(path)
-    response.raise_for_status()
-    return cast(Dict[str, Any], response.json())
+    return cast(Dict[str, Any], await self.io.get(path))
 
   async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    response = await self._client.post(path, json=json or {})
-    response.raise_for_status()
-    return cast(Dict[str, Any], response.json())
+    return cast(Dict[str, Any], await self.io.post(path, json=json or {}))
 
   async def delete(self, path: str) -> Dict[str, Any]:
-    response = await self._client.delete(path)
-    response.raise_for_status()
-    return cast(Dict[str, Any], response.json())
+    return cast(Dict[str, Any], await self.io.delete(path))
 
   async def close(self) -> None:
-    await self._client.aclose()
+    await self.io.stop()
+
+
+class ReplayTransport:
+  """Offline transport that replays a capture file recorded from a real robot.
+
+  Where :class:`ChatterboxTransport` returns responses we wrote by hand, this
+  returns the ones an actual robot gave, in the order it gave them, and raises
+  the same refusal on an exchange that failed. Nothing reaches the network.
+
+  Build the capture file by wrapping a live run in ``start_capture()`` /
+  ``stop_capture()``. Call :meth:`assert_fully_replayed` at the end of a test:
+  it fails when the protocol stopped short of the recording, which is what
+  catches a dropped command.
+  """
+
+  def __init__(
+    self,
+    capture_file: Union[str, Path],
+    base_url: str,
+    headers: Optional[Dict[str, str]] = None,
+  ) -> None:
+    self._cr = CaptureReader(path=str(capture_file))
+    self.io = HTTPValidator(self._cr, base_url=base_url, headers=headers or DEFAULT_HEADERS)
+
+  async def setup(self) -> None:
+    await self.io.setup()
+
+  async def get(self, path: str) -> Dict[str, Any]:
+    return cast(Dict[str, Any], await self.io.get(path))
+
+  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    return cast(Dict[str, Any], await self.io.post(path, json=json or {}))
+
+  async def delete(self, path: str) -> Dict[str, Any]:
+    return cast(Dict[str, Any], await self.io.delete(path))
+
+  async def close(self) -> None:
+    await self.io.stop()
+
+  def assert_fully_replayed(self) -> None:
+    """Raise unless every recorded exchange was consumed."""
+    self._cr.done()
 
 
 class ChatterboxTransport:
@@ -195,6 +247,9 @@ class ChatterboxTransport:
     # pipetteId (as returned by loadPipette) -> mount, so a later
     # pickUpTip/dropTip command's pipetteId can be resolved back to a mount.
     self._pipette_id_to_mount: Dict[str, str] = {}
+
+  async def setup(self) -> None:
+    """No connection to open."""
 
   async def get(self, path: str) -> Dict[str, Any]:
     if path == "/health":
