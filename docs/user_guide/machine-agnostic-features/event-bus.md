@@ -133,9 +133,9 @@ locations and per-channel `tip_operations`.
 
 ### Shaker and TemperatureController
 
-Shaker events include `speed_rpm` and optional `duration_s`. Temperature-controller events
-include `temperature_c` where applicable. A resource is listed only when the frontend call
-directly operates on one.
+Shaker events include `speed_rpm` and optional `duration_seconds`. Temperature-controller events
+include `target_temperature_c` where applicable. Both frontends are `ResourceHolder`s: when a
+resource is loaded at operation start, it is included as the direct resource in `resources`.
 
 ### Brooks PreciseFlex
 

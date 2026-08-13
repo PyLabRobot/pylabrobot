@@ -7,6 +7,7 @@ from pylabrobot.legacy.temperature_controlling import (
 )
 from pylabrobot.legacy.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource import Resource
 
 
 class TemperatureControllerTests(unittest.TestCase):
@@ -87,6 +88,26 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[0].context["target_temperature_c"], 37.0)
     self.assertEqual(events[2].context["timeout_seconds"], 1.0)
     self.assertEqual(events[2].context["tolerance_c"], 0.5)
+
+  async def test_temperature_events_include_currently_loaded_resource(self):
+    temperature_controller = TemperatureController(
+      name="test_temperature_module",
+      size_x=1,
+      size_y=1,
+      size_z=1,
+      backend=TemperatureControllerChatterboxBackend(dummy_temperature=20.0),
+      child_location=Coordinate.zero(),
+    )
+    plate = Resource("plate", size_x=1, size_y=1, size_z=1)
+    temperature_controller.assign_child_resource(plate)
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await temperature_controller.set_temperature(37.0)
+
+    self.assertEqual(events[0].context["resources"][0]["name"], "plate")
 
 
 class _FakeBackend(TemperatureControllerBackend):

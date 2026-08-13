@@ -166,15 +166,17 @@ include `tip_operations` with the channel and direct resource.
 
 ### Thermal and shaking operations
 
-Represent the issuing controller as `device`. Include an operated resource only when the PLR API
-has one. Use explicit unit-suffixed fields for operation parameters:
+Represent the issuing controller as `device`. A `ResourceHolder` controller should include its
+currently loaded direct resource in `resources` when one is assigned at operation start. Do not
+infer a resource from broader deck state. Use explicit unit-suffixed fields for operation
+parameters:
 
 ```python
 {
   "device": resource_reference(controller),
-  "resources": [],
+  "resources": [resource_reference(controller.resource)],  # only when loaded
   "temperature_c": 37.0,
-  "duration_s": 300.0,
+  "duration_seconds": 300.0,
   "speed_rpm": 800.0,
 }
 ```

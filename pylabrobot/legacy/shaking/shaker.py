@@ -14,9 +14,11 @@ def _shaker_event_context(
   duration: Optional[float] = None,
   **_: Any,
 ) -> dict[str, Any]:
-  """Describe a shaker operation without inferring a plate association."""
+  """Describe a shaker operation and its directly loaded resource, when present."""
 
   context: dict[str, Any] = {"device": resource_reference(shaker)}
+  if shaker.resource is not None:
+    context["resources"] = [resource_reference(shaker.resource)]
   if speed is not None:
     context["speed_rpm"] = float(speed)
   if duration is not None:
