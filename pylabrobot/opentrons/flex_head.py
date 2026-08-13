@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Tuple, U
 
 from pylabrobot.opentrons.flex_wire import UNTESTED_HARDWARE_WARNING
 from pylabrobot.opentrons.labware_definitions import container_footprint
+from pylabrobot.opentrons.pipette_defaults import FlowRates, flow_rates
 from pylabrobot.opentrons.robot import OpentronsCommandError, OpentronsError
 from pylabrobot.resources import (
   Container,
@@ -61,11 +62,19 @@ class _FlexHead:
   # triggers the one-time untested-hardware notice.
   _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset()
 
-  def __init__(self, flex: "OpentronsFlex", mount: str, pipette_id: str, channels: int) -> None:
+  def __init__(
+    self,
+    flex: "OpentronsFlex",
+    mount: str,
+    pipette_id: str,
+    channels: int,
+    pipette_model: str,
+  ) -> None:
     self.flex = flex
     self.mount = mount
     self.pipette_id = pipette_id
     self.channels = channels
+    self.pipette_model = pipette_model
     self._channel_tips: List[Optional[Tip]] = [None] * channels
     # Whether the plunger has been prepared (primed) since the last tip
     # pickup. The Flex requires an explicit `prepareToAspirate` command
@@ -97,6 +106,21 @@ class _FlexHead:
     """
     return list(self._channel_tips)
 
+  def default_flow_rates(self) -> FlowRates:
+    """The robot's own defaults for this pipette and the tip currently on it.
+
+    Tip-dependent, so it cannot be resolved before a pickup: the same p1000
+    eight-channel defaults to 478 uL/s on a 50 uL tip and 716 on a 200.
+    """
+    mounted = [tip for tip in self._channel_tips if tip is not None]
+    if not mounted:
+      raise OpentronsError(
+        "NoTipMounted",
+        f"'{self.mount}' has no tip, so its default flow rate is undefined. Pick up a "
+        "tip first, or pass an explicit flow_rate.",
+      )
+    return flow_rates(self.pipette_model, mounted[0].maximal_volume)
+
   async def discard_tips(self, trash: Trash) -> None:
     """Discard all mounted tips into ``trash``. Implemented by each head."""
     raise NotImplementedError
@@ -113,7 +137,7 @@ class _FlexHead:
     trackers are involved.
     """
     self._warn_untested_hardware("blow_out")
-    rate = flow_rate if flow_rate is not None else _DEFAULT_BLOW_OUT_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().blow_out
     await self._execute("blowOutInPlace", {"pipetteId": self.pipette_id, "flowRate": rate})
     self._prepared = False
 
@@ -595,15 +619,6 @@ _ROBOT_REAR_LIMIT = 493.8 - 169.42
 
 _NUM_CHANNELS = 8
 
-# Flex-managed positioning flow-rate defaults (uL/s), matching the
-# p50_multi_v3.5 pipette defaults. Shared by FlexHead1/FlexHead8/FlexHead96 --
-# the Flex applies the same defaults regardless of channel count.
-_DEFAULT_ASPIRATE_FLOW_RATE = 35.0
-_DEFAULT_DISPENSE_FLOW_RATE = 57.0
-
-# The p50_multi_v3.5's default blow-out rate equals its dispense rate.
-_DEFAULT_BLOW_OUT_FLOW_RATE = _DEFAULT_DISPENSE_FLOW_RATE
-
 # Default aspirate/dispense position: 1mm above the well bottom, matching the
 # Opentrons Python-API default. The raw Protocol-Engine /commands API defaults
 # an OMITTED wellLocation to origin "top" (the well rim -- above the liquid),
@@ -774,7 +789,7 @@ class FlexHead1(_FlexHead):
     else:
       labware_id = await self.flex._ensure_labware_loaded(target)
       well_name = _CONTAINER_WELL_NAME
-    rate = flow_rate if flow_rate is not None else _DEFAULT_ASPIRATE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
 
     staged_trackers = self._stage_container_aspirate(target, volume)
 
@@ -817,7 +832,7 @@ class FlexHead1(_FlexHead):
     else:
       labware_id = await self.flex._ensure_labware_loaded(target)
       well_name = _CONTAINER_WELL_NAME
-    rate = flow_rate if flow_rate is not None else _DEFAULT_DISPENSE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
 
     staged_trackers = self._stage_container_dispense(target, volume)
 
@@ -912,8 +927,15 @@ class FlexHead8(_FlexHead):
 
   _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset({"pick_up_tips"})
 
-  def __init__(self, flex: "OpentronsFlex", mount: str, pipette_id: str, channels: int) -> None:
-    super().__init__(flex, mount, pipette_id, channels)
+  def __init__(
+    self,
+    flex: "OpentronsFlex",
+    mount: str,
+    pipette_id: str,
+    channels: int,
+    pipette_model: str,
+  ) -> None:
+    super().__init__(flex, mount, pipette_id, channels, pipette_model)
     self._nozzle_layout: str = "ALL"  # "ALL" | "SINGLE"
 
   # --- Nozzle layout guard ---
@@ -1124,7 +1146,7 @@ class FlexHead8(_FlexHead):
     well_name, column_wells = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    rate = flow_rate if flow_rate is not None else _DEFAULT_ASPIRATE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
 
     tracking = does_volume_tracking()
     staged_trackers: List[Any] = []
@@ -1170,7 +1192,7 @@ class FlexHead8(_FlexHead):
     well_name, column_wells = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    rate = flow_rate if flow_rate is not None else _DEFAULT_DISPENSE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
 
     tracking = does_volume_tracking()
     staged_trackers: List[Any] = []
@@ -1227,7 +1249,7 @@ class FlexHead8(_FlexHead):
     self._require_span_fits_container(container, 0.0, _EIGHT_CHANNEL_Y_SPAN, offset)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(container)
-    rate = flow_rate if flow_rate is not None else _DEFAULT_ASPIRATE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
 
     mounted = sum(1 for tip in self._channel_tips if tip is not None)
     staged_trackers = self._stage_container_aspirate(container, volume * mounted)
@@ -1268,7 +1290,7 @@ class FlexHead8(_FlexHead):
     self._require_span_fits_container(container, 0.0, _EIGHT_CHANNEL_Y_SPAN, offset)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(container)
-    rate = flow_rate if flow_rate is not None else _DEFAULT_DISPENSE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
 
     mounted = sum(1 for tip in self._channel_tips if tip is not None)
     staged_trackers = self._stage_container_dispense(container, volume * mounted)
@@ -1518,7 +1540,7 @@ class FlexHead8(_FlexHead):
     self._active_single_channel()
     self._require_reach_in_single_layout(plate, well)
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    rate = flow_rate if flow_rate is not None else _DEFAULT_ASPIRATE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
     params: Dict[str, Any] = {
       "pipetteId": self.pipette_id,
       "labwareId": labware_id,
@@ -1552,7 +1574,7 @@ class FlexHead8(_FlexHead):
     self._active_single_channel()
     self._require_reach_in_single_layout(plate, well)
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    rate = flow_rate if flow_rate is not None else _DEFAULT_DISPENSE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
     params: Dict[str, Any] = {
       "pipetteId": self.pipette_id,
       "labwareId": labware_id,
@@ -1763,7 +1785,7 @@ class FlexHead96(_FlexHead):
     """
     self._warn_untested_hardware("aspirate")
     self._require_mounted_tip()
-    rate = flow_rate if flow_rate is not None else _DEFAULT_ASPIRATE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
     staged_trackers: List[Any] = []
     if isinstance(target, Plate):
       wells = self._check_full_coverage(target)
@@ -1820,7 +1842,7 @@ class FlexHead96(_FlexHead):
     """
     self._warn_untested_hardware("dispense")
     self._require_mounted_tip()
-    rate = flow_rate if flow_rate is not None else _DEFAULT_DISPENSE_FLOW_RATE
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
     staged_trackers: List[Any] = []
     if isinstance(target, Plate):
       wells = self._check_full_coverage(target)
