@@ -1075,6 +1075,22 @@ class TestInPlaceLiquidOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
+  def test_configure_for_volume_unprimes_the_plunger(self):
+    """Switching volume mode resets the robot's ready-to-aspirate flag, so the
+    next aspirate needs a fresh prepare. Confirmed against the simulator."""
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_in_place(volume=15))
+      asyncio.run(head.configure_for_volume(10.0))
+      asyncio.run(head.aspirate_in_place(volume=5))
+
+      self.assertEqual(
+        [c["commandType"] for c in transport.commands].count("prepareToAspirate"), 2
+      )
+    finally:
+      asyncio.run(flex.stop())
+
   def test_a_blow_out_unprimes_the_plunger_too(self):
     flex, transport, head, rack = self._bench()
     try:

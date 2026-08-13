@@ -119,7 +119,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """Hand the arm back, moving nothing.
 
     Drops high power (``hp 0``) as well as releasing the link, because
-    ``connect`` is what turned it on. Unlike the Flex there is nothing to park
+    ``initialize`` is what raised it. Unlike the Flex there is nothing to park
     first: this arm's teardown never moved it.
     """
     await self.detach()

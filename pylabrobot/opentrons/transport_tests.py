@@ -177,6 +177,30 @@ class TestChatterboxTransportMultiplePipettes(unittest.TestCase):
     self.assertEqual(len(transport.load_pipette_commands), 2)
 
 
+class TestTransportIsBuiltBeforeCaptureCanBeArmed(unittest.TestCase):
+  """A robot builds its transport in __init__, not on connect.
+
+  Every pylabrobot io refuses construction while a capture is active, so
+  building it on connect made the documented recording recipe (construct,
+  start_capture, setup) die with "Cannot create a new HTTP object while
+  capture or validation is active" unless the caller passed a transport in.
+  """
+
+  def test_a_robot_built_with_no_transport_still_has_one(self):
+    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test")
+    self.assertIsInstance(flex._transport, HttpxTransport)
+
+  def test_arming_a_capture_after_construction_does_not_refuse_the_io(self):
+    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test")
+    with tempfile.TemporaryDirectory() as tmp:
+      pylabrobot.start_capture(Path(tmp) / "c.json")
+      try:
+        # The io already exists, so nothing here needs to construct one.
+        self.assertIsInstance(flex._transport, HttpxTransport)
+      finally:
+        pylabrobot.stop_capture()
+
+
 class RecordAndReplayTests(unittest.IsolatedAsyncioTestCase):
   """A recorded Flex lifecycle replays with nothing on the network.
 

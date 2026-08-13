@@ -11,9 +11,7 @@ for almost every pipette.
 
 from typing import Dict, NamedTuple, Tuple
 
-from opentrons_shared_data.pipette.load_data import load_liquid_model
-from opentrons_shared_data.pipette.pipette_load_name_conversions import convert_pipette_model
-from opentrons_shared_data.pipette.types import PipetteModel, PipetteOEMType
+from pylabrobot.opentrons.shared_data import require_shared_data
 
 
 class FlowRates(NamedTuple):
@@ -36,6 +34,11 @@ def _rates_by_tip(pipette_model: str) -> Dict[str, FlowRates]:
     # An empty model resolves to a p1000 single-channel rather than raising, which
     # would silently pipette a p50 at up to 716 uL/s.
     raise ValueError("No pipette model given, so its default flow rates are unknown.")
+
+  require_shared_data()
+  from opentrons_shared_data.pipette.load_data import load_liquid_model
+  from opentrons_shared_data.pipette.pipette_load_name_conversions import convert_pipette_model
+  from opentrons_shared_data.pipette.types import PipetteModel, PipetteOEMType
 
   version = convert_pipette_model(PipetteModel(pipette_model))
   liquid_model = load_liquid_model(
