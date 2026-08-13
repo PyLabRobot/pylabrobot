@@ -194,10 +194,18 @@ def resource_reference(resource: Any) -> Optional[Dict[str, Any]]:
   return result
 
 
-def coordinate_reference(coordinate: Any) -> Optional[Dict[str, float]]:
-  """Return a JSON-friendly coordinate, or ``None`` for an unlocated resource."""
+def coordinate_reference(coordinate: Any) -> Optional[Dict[str, Any]]:
+  """Return PLR's serialized coordinate representation, or ``None`` when absent.
+
+  ``Coordinate`` already has a stable serialization contract. Reusing it preserves the
+  explicit ``type`` discriminator that consumers need to distinguish geometric targets
+  from generic ``x``/``y``/``z`` mappings.
+  """
   if coordinate is None:
     return None
+  serialize = getattr(coordinate, "serialize", None)
+  if callable(serialize):
+    return serialize()
   return {"x": coordinate.x, "y": coordinate.y, "z": coordinate.z}
 
 

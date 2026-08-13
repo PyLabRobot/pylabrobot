@@ -1,8 +1,8 @@
-# EventBus Operation Semantics
+# EventBus Contributor Guide
 
-The PLR EventBus provides optional, structured execution events for applications that need
-observability without parsing device logs. This guide defines the contract for contributors
-instrumenting a frontend or driver.
+This guide defines the implementation contract for contributors instrumenting a PLR frontend or
+driver. For subscription, event consumption, and the current frontend coverage, see the
+[user EventBus guide](../user_guide/machine-agnostic-features/event-bus.md).
 
 The EventBus is intentionally in-process and synchronous. It is an observation mechanism,
 not a control mechanism: listener failures must never affect hardware control flow.
@@ -30,7 +30,7 @@ Use a low-level diagnostic event only when the transport boundary itself is usef
 Diagnostic events may inherit the enclosing semantic operation context, but do not define a new
 protocol-level action or resource-transfer meaning.
 
-## Universal event contract
+## Event contract
 
 A `PLREvent` always contains:
 
@@ -91,7 +91,8 @@ the event's meaning.
 
 Use `source` and `destination` only when the operation genuinely transfers a resource between
 physical locations. Represent a resource endpoint with `resource_reference()`. Use
-`coordinate_reference()` for a geometric endpoint when no PLR resource exists.
+`coordinate_reference()` for a geometric endpoint when no PLR resource exists. It preserves the
+underlying object's PLR serialization contract, including `Coordinate.type`.
 
 Avoid adding fields solely to simplify one consumer. An event should describe what the PLR API
 actually did; dashboards, logs, and integrations can derive their own views from the structured
@@ -112,8 +113,6 @@ async def setup(self, **backend_kwargs):
   ...
 ```
 
-Current example: `legacy.machines.Machine.setup` and `.stop`.
-
 ### Resource transfer
 
 Use for a plate, lid, carrier, or other resource transfer. The direct moved resource is listed in
@@ -129,12 +128,6 @@ with event_operation(
 ):
   await self.backend.fetch_plate_to_loading_tray(plate)
 ```
-
-Current examples:
-
-- `legacy.storage.Incubator.fetch_plate_to_loading_tray`
-- `legacy.storage.Incubator.take_in_plate`
-- `legacy.liquid_handling.LiquidHandler.resource_pickup`, `.resource_move`, and `.resource_drop`
 
 For pickup and drop, record the resource's invocation state in `.started`. A
 `completed_data_factory` may capture its final assignment or pose for `.completed`.
@@ -158,8 +151,6 @@ when applicable, and `volume_ul`.
 }
 ```
 
-Current examples: `legacy.liquid_handling.LiquidHandler.aspirate` and `.dispense`.
-
 ### Tip handling
 
 Report each direct `TipSpot`, `TipRack`, or `Trash` resource. For channelized tip actions,
@@ -172,9 +163,6 @@ include `tip_operations` with the channel and direct resource.
   "tip_operations": [{"channel": 0, "resource": resource_reference(tip_spot)}],
 }
 ```
-
-Current examples: `LiquidHandler.pick_up_tips`, `.drop_tips`, `.pick_up_tips96`, and
-`.drop_tips96`.
 
 ### Thermal and shaking operations
 
@@ -191,21 +179,12 @@ has one. Use explicit unit-suffixed fields for operation parameters:
 }
 ```
 
-Current examples:
-
-- `legacy.shaking.Shaker.shake` and `.stop_shaking`
-- `legacy.temperature_controlling.TemperatureController.set_temperature`,
-  `.wait_for_temperature`, and `.deactivate`
-
 ### Arm/controller motion
 
 Public controller operations should identify the controller in `device` and use explicit,
 unit-bearing motion arguments where relevant. Low-level controller operations can be useful to a
 diagnostic listener, but higher-level resource-aware wrappers should emit the resource-transfer
 events when an arm is actually approaching, picking up, moving, or dropping a PLR resource.
-
-Current examples: `brooks.precise_flex.PreciseFlex` lifecycle, joint/cartesian/rail/gripper
-motion, pick/drop, and park operations.
 
 ## Failure events
 
@@ -237,6 +216,6 @@ When adding EventBus support to a frontend or driver:
 8. Verify no EventBus listener is required for normal device operation and that listener failures
    cannot alter hardware control flow.
 
-The first implementation instruments a limited set of shared and legacy frontends. New or
-existing drivers should adopt these conventions incrementally at their public semantic API
-boundaries.
+New or existing drivers should adopt these conventions incrementally at their public semantic API
+boundaries. Update the user EventBus coverage reference when adding a newly instrumented frontend
+or changing an emitted public operation.

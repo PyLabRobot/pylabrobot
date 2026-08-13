@@ -3,6 +3,7 @@ import unittest
 
 from pylabrobot.events import (
   EventBus,
+  coordinate_reference,
   emit_event,
   event_context,
   event_operation,
@@ -13,6 +14,12 @@ from pylabrobot.resources import Coordinate, Resource
 
 
 class TestEventBus(unittest.TestCase):
+  def test_coordinate_reference_preserves_coordinate_serialization(self):
+    self.assertEqual(
+      coordinate_reference(Coordinate(1.25, 2.5, 3.75)),
+      {"x": 1.25, "y": 2.5, "z": 3.75, "type": "Coordinate"},
+    )
+
   def test_context_is_attached_to_events(self):
     events = []
     event_bus = EventBus()
@@ -42,7 +49,7 @@ class TestEventBus(unittest.TestCase):
     self.assertEqual(assigned.context["run_id"], "run-1")
     self.assertEqual(assigned.data["resource"]["name"], "child")
     self.assertEqual(assigned.data["parent"]["name"], "parent")
-    self.assertEqual(assigned.data["location"], {"x": 1, "y": 2, "z": 3})
+    self.assertEqual(assigned.data["location"], {"x": 1, "y": 2, "z": 3, "type": "Coordinate"})
     self.assertEqual(unassigned.name, "resource.unassigned")
     self.assertEqual(unassigned.data["previous_parent"]["name"], "parent")
     self.assertEqual(assigned.data["resource"]["rotation"], {"x": 0, "y": 0, "z": 0})
