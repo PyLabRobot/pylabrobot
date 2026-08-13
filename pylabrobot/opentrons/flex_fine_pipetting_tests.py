@@ -13,6 +13,12 @@ position rather than replacing it -- and the one place that deliberately
 does not follow it, ``touch_tip``; plus the two rules the single-nozzle
 cherry-pick runs under: which nozzles an 8-channel Flex can anchor on, and
 that no nozzle layout changes while a tip is mounted.
+
+Also covers the base-class ops every head inherits: the in-place liquid ops
+(``aspirate_in_place``/``dispense_in_place``/``air_gap_in_place``), which name
+no well and move no tracker; the two tip-presence commands
+(``get_tip_presence`` reports, ``verify_tip_presence`` makes the robot fail on
+a mismatch); ``configure_for_volume``; and the ``unsafe_*`` recovery pair.
 """
 
 import asyncio
@@ -983,6 +989,360 @@ class TestSingleNozzleLayout(unittest.TestCase):
 
     self.assertIn("dropTipInPlace", [c["commandType"] for c in transport.commands])
     self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
+
+
+class TestInPlaceLiquidOps(unittest.TestCase):
+  """The in-place ops act where the head already is: one command each, naming
+  no labware and no well, carrying the flow-rate default of the motion they
+  are (aspirate for the air gap too). Each requires a mounted tip, refused
+  before the wire, and an unprimed plunger is primed first, since the robot
+  requires a prepareToAspirate before any aspirate, in place or not."""
+
+  def setUp(self):
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+
+  def tearDown(self):
+    set_tip_tracking(False)
+    set_volume_tracking(False)
+
+  def _bench(self):
+    flex, transport, head = _flex_head8()
+    rack = flex_96_tiprack_50ul(name="rack")
+    flex.deck.assign_child_at_slot(rack, "C1")
+    return flex, transport, head, rack
+
+  def _params(self, transport: ChatterboxTransport, command_type: str) -> dict:
+    cmds = [c for c in transport.commands if c["commandType"] == command_type]
+    self.assertEqual(len(cmds), 1)
+    params: dict = cmds[0]["params"]
+    return params
+
+  def test_aspirate_in_place_sends_volume_and_the_aspirate_default_flow_rate(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_in_place(volume=15))
+
+      self.assertEqual(
+        self._params(transport, "aspirateInPlace"),
+        {"pipetteId": head.pipette_id, "volume": 15, "flowRate": 35.0},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_aspirate_in_place_accepts_a_flow_rate_override(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_in_place(volume=15, flow_rate=3.5))
+
+      self.assertEqual(self._params(transport, "aspirateInPlace")["flowRate"], 3.5)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_aspirate_in_place_primes_the_unprimed_plunger_first_and_only_once(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_in_place(volume=15))
+      asyncio.run(head.aspirate_in_place(volume=15))
+
+      sent = [c["commandType"] for c in transport.commands]
+      self.assertEqual(sent.count("prepareToAspirate"), 1)
+      self.assertEqual(sent.count("aspirateInPlace"), 2)
+      self.assertEqual(sent[sent.index("aspirateInPlace") - 1], "prepareToAspirate")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_dispense_in_place_sends_the_dispense_default_and_omits_push_out(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.dispense_in_place(volume=15))
+
+      self.assertEqual(
+        self._params(transport, "dispenseInPlace"),
+        {"pipetteId": head.pipette_id, "volume": 15, "flowRate": 57.0},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_dispense_in_place_carries_push_out_only_when_given(self):
+    # Omitted rather than sent as null, so the robot picks its own push-out
+    # for the mounted tip and volume.
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.dispense_in_place(volume=15, flow_rate=8.0, push_out=2.5))
+
+      self.assertEqual(
+        self._params(transport, "dispenseInPlace"),
+        {"pipetteId": head.pipette_id, "volume": 15, "flowRate": 8.0, "pushOut": 2.5},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_air_gap_in_place_uses_the_aspirate_default_flow_rate(self):
+    # The air gap IS an aspirate motion, so it takes the aspirate default,
+    # not the dispense one.
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.air_gap_in_place(volume=5))
+
+      self.assertEqual(
+        self._params(transport, "airGapInPlace"),
+        {"pipetteId": head.pipette_id, "volume": 5, "flowRate": 35.0},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_air_gap_in_place_accepts_a_flow_rate_override(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.air_gap_in_place(volume=5, flow_rate=1.25))
+
+      self.assertEqual(self._params(transport, "airGapInPlace")["flowRate"], 1.25)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_every_in_place_op_without_a_tip_raises_and_sends_nothing(self):
+    flex, transport, head, _rack = self._bench()
+    try:
+      for op in (
+        lambda: head.aspirate_in_place(volume=15),
+        lambda: head.dispense_in_place(volume=15),
+        lambda: head.air_gap_in_place(volume=5),
+      ):
+        n_before = len(transport.commands)
+        with self.assertRaises(OpentronsError):
+          asyncio.run(op())
+        self.assertEqual(len(transport.commands), n_before, "rejection must not reach the wire")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_head1_and_head96_inherit_the_in_place_ops(self):
+    # They live on the base class, so every head issues them identically.
+    flex1, transport1, head1 = _flex_head1()
+    try:
+      rack1 = flex_96_tiprack_50ul(name="rack1")
+      flex1.deck.assign_child_at_slot(rack1, "C1")
+      asyncio.run(head1.pick_up_tips(rack1.get_item("A1")))
+      asyncio.run(head1.aspirate_in_place(volume=15))
+      asyncio.run(head1.dispense_in_place(volume=15))
+
+      # Each head carries its OWN pipette's default, not one shared number:
+      # p1000_single_v3.5 on a 50uL tip against the 96-head's 6.0 below.
+      self.assertEqual(
+        self._params(transport1, "aspirateInPlace"),
+        {"pipetteId": head1.pipette_id, "volume": 15, "flowRate": 478.0},
+      )
+      self.assertEqual(self._params(transport1, "dispenseInPlace")["volume"], 15)
+    finally:
+      asyncio.run(flex1.stop())
+
+    flex96, transport96, head96 = _flex_head96()
+    try:
+      rack96 = flex_96_tiprack_50ul(name="rack96")
+      flex96.deck.assign_child_at_slot(rack96, "C1")
+      asyncio.run(head96.pick_up_tips(rack96))
+      asyncio.run(head96.air_gap_in_place(volume=5))
+
+      self.assertEqual(
+        self._params(transport96, "airGapInPlace"),
+        {"pipetteId": head96.pipette_id, "volume": 5, "flowRate": 6.0},
+      )
+    finally:
+      asyncio.run(flex96.stop())
+
+
+class _TipPresenceTransport(ChatterboxTransport):
+  """Answers getTipPresence with a fixed sensor reading."""
+
+  def __init__(self, status: str, **kwargs):
+    super().__init__(**kwargs)
+    self.status = status
+
+  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    result = await super().post(path, json)
+    data = (json or {}).get("data", {})
+    if path.endswith("/commands") and data.get("commandType") == "getTipPresence":
+      result["data"]["result"] = {"status": self.status}
+    return result
+
+
+class TestTipPresenceCommands(unittest.TestCase):
+  """get_tip_presence returns the sensor reading from the command result and
+  leaves the judgement to the caller; verify_tip_presence hands the robot the
+  state to check against, and refuses a state that is neither "present" nor
+  "absent" before anything reaches the wire."""
+
+  def setUp(self):
+    set_tip_tracking(True)
+
+  def tearDown(self):
+    set_tip_tracking(False)
+
+  def _head1_with_status(self, status: str):
+    transport = _TipPresenceTransport(
+      status, pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")]
+    )
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    asyncio.run(flex.setup())
+    head = flex.right
+    assert isinstance(head, FlexHead1)
+    return flex, transport, head
+
+  def test_get_tip_presence_returns_the_reported_status(self):
+    flex, transport, head = self._head1_with_status("present")
+    try:
+      self.assertEqual(asyncio.run(head.get_tip_presence()), "present")
+
+      presence_cmds = [c for c in transport.commands if c["commandType"] == "getTipPresence"]
+      self.assertEqual(len(presence_cmds), 1)
+      self.assertEqual(presence_cmds[0]["params"], {"pipetteId": head.pipette_id})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_get_tip_presence_reports_absent_without_raising(self):
+    flex, _transport, head = self._head1_with_status("absent")
+    try:
+      self.assertEqual(asyncio.run(head.get_tip_presence()), "absent")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_verify_tip_presence_sends_the_expected_state(self):
+    flex, transport, head = _flex_head8()
+    try:
+      asyncio.run(head.verify_tip_presence("absent"))
+      asyncio.run(head.verify_tip_presence("present"))
+
+      verify_cmds = [c for c in transport.commands if c["commandType"] == "verifyTipPresence"]
+      self.assertEqual(
+        [c["params"] for c in verify_cmds],
+        [
+          {"pipetteId": head.pipette_id, "expectedState": "absent"},
+          {"pipetteId": head.pipette_id, "expectedState": "present"},
+        ],
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_verify_tip_presence_rejects_any_other_state_and_sends_nothing(self):
+    # "unknown" is a reading the sensor can return, not a state worth
+    # asserting, so it is refused with the rest.
+    flex, transport, head = _flex_head8()
+    try:
+      for state in ("unknown", "Present", "", "yes"):
+        n_before = len(transport.commands)
+        with self.assertRaises(ValueError):
+          asyncio.run(head.verify_tip_presence(state))
+        self.assertEqual(len(transport.commands), n_before, "rejection must not reach the wire")
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestConfigureForVolume(unittest.TestCase):
+  """configure_for_volume names the volume the pipette should be set up for.
+  It runs with no tip mounted on purpose: the robot refuses a mode change
+  while a tip is attached, so it belongs before the pickup."""
+
+  def test_configure_for_volume_sends_pipette_id_and_volume_before_any_pickup(self):
+    flex, transport, head = _flex_head8()
+    try:
+      asyncio.run(head.configure_for_volume(5.0))
+
+      configure_cmds = [c for c in transport.commands if c["commandType"] == "configureForVolume"]
+      self.assertEqual(len(configure_cmds), 1)
+      self.assertEqual(configure_cmds[0]["params"], {"pipetteId": head.pipette_id, "volume": 5.0})
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestUnsafeRecoveryOps(unittest.TestCase):
+  """The unsafe/ ops are the recovery path: one command each, no labware, no
+  trackers. The drop clears this head's per-channel tip bookkeeping (the tip
+  goes back to no rack), and the blow-out leaves the plunger unprimed the way
+  the ordinary blow_out does. Both require a mounted tip."""
+
+  def setUp(self):
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+
+  def tearDown(self):
+    set_tip_tracking(False)
+    set_volume_tracking(False)
+
+  def _bench(self):
+    flex, transport, head = _flex_head8()
+    rack = flex_96_tiprack_50ul(name="rack")
+    flex.deck.assign_child_at_slot(rack, "C1")
+    return flex, transport, head, rack
+
+  def test_unsafe_drop_tip_in_place_sends_pipette_id_and_clears_mounted_tips(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.unsafe_drop_tip_in_place())
+
+      drop_cmds = [c for c in transport.commands if c["commandType"] == "unsafe/dropTipInPlace"]
+      self.assertEqual(len(drop_cmds), 1)
+      self.assertEqual(drop_cmds[0]["params"], {"pipetteId": head.pipette_id})
+      self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_unsafe_drop_tip_in_place_returns_no_tip_to_the_rack(self):
+    # The tip falls where the head is, so the spot it came from stays empty.
+    flex, _transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.unsafe_drop_tip_in_place())
+
+      self.assertFalse(rack.get_item("A1").has_tip())
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_unsafe_blow_out_in_place_sends_the_given_flow_rate(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.unsafe_blow_out_in_place(flow_rate=20.0))
+
+      blow_cmds = [c for c in transport.commands if c["commandType"] == "unsafe/blowOutInPlace"]
+      self.assertEqual(len(blow_cmds), 1)
+      self.assertEqual(blow_cmds[0]["params"], {"pipetteId": head.pipette_id, "flowRate": 20.0})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_next_aspirate_reprimes_after_an_unsafe_blow_out(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_in_place(volume=10))
+      asyncio.run(head.unsafe_blow_out_in_place(flow_rate=20.0))
+      asyncio.run(head.aspirate_in_place(volume=10))
+
+      sent = [c["commandType"] for c in transport.commands]
+      self.assertEqual(sent.count("prepareToAspirate"), 2, "a blow-out must require a new prepare")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_unsafe_ops_without_a_tip_raise_and_send_nothing(self):
+    flex, transport, head, _rack = self._bench()
+    try:
+      for op in (
+        head.unsafe_drop_tip_in_place,
+        lambda: head.unsafe_blow_out_in_place(flow_rate=20.0),
+      ):
+        n_before = len(transport.commands)
+        with self.assertRaises(OpentronsError):
+          asyncio.run(op())
+        self.assertEqual(len(transport.commands), n_before, "rejection must not reach the wire")
+    finally:
+      asyncio.run(flex.stop())
 
 
 if __name__ == "__main__":

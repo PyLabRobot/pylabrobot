@@ -1,11 +1,11 @@
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, cast
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
 
 from pylabrobot.opentrons.flex_gripper import FlexGripper
 from pylabrobot.opentrons.catalogue import is_catalogue_labware
 from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
-from pylabrobot.opentrons.flex_wire import slot_wire_location
+from pylabrobot.opentrons.flex_wire import ROBOT_AXES, _require_robot_commands, slot_wire_location
 from pylabrobot.opentrons.labware_definitions import (
   build_container_definition,
   build_movable_labware_definition,
@@ -40,6 +40,9 @@ _OT_CATALOGUE_VERSIONS = {
   "opentrons_96_wellplate_200ul_pcr_full_skirt": 2,
 }
 
+# Seconds of polling a command gets on top of a wait it was told to perform.
+_COMMAND_POLL_HEADROOM = 30.0
+
 # Discovered pipette channel count -> matching head class.
 _CHANNELS_TO_HEAD: Dict[int, Type[_FlexHead]] = {
   1: FlexHead1,
@@ -73,6 +76,37 @@ def _warn_grip_distance_discarded(
   logger.warning(
     "grip_distance_from_top=%s ignored for '%s': %s.", grip_distance_from_top, name, why
   )
+
+
+def _validate_axes(axes: Iterable[str]) -> None:
+  """Raise for any axis name the robot does not address."""
+  unknown = sorted(set(axes) - ROBOT_AXES)
+  if unknown:
+    raise ValueError(
+      f"unknown axes: {', '.join(unknown)}. Valid axes are: {', '.join(sorted(ROBOT_AXES))}."
+    )
+
+
+def _reported_axis_position(command: Dict[str, Any]) -> Dict[str, float]:
+  """The axis positions a completed robot/moveAxes* command reports."""
+  return cast(Dict[str, float], command.get("result", {}).get("position", {}))
+
+
+def _axis_motion_params(
+  axis_map: Dict[str, float],
+  speed: Optional[float],
+  critical_point: Optional[Dict[str, float]] = None,
+) -> Dict[str, Any]:
+  """The snake_case payload a robot/moveAxes* command takes (unlike the rest of
+  the API, which is camelCase), with every axis name validated first."""
+  _validate_axes(axis_map)
+  params: Dict[str, Any] = {"axis_map": axis_map}
+  if critical_point is not None:
+    _validate_axes(critical_point)
+    params["critical_point"] = critical_point
+  if speed is not None:
+    params["speed"] = speed
+  return params
 
 
 class OpentronsFlex(OpentronsRobot):
@@ -283,6 +317,45 @@ class OpentronsFlex(OpentronsRobot):
     )
     return labware_id
 
+  async def sync_tips_to_robot(self, tip_rack: TipRack) -> None:
+    """Make the robot's tip-rack model agree with PyLabRobot's.
+
+    The robot keeps its own record of which spots in a tip rack still hold a
+    tip, and it is only ever changed by pickups and drops it performed itself.
+    So anything that changes the rack outside a run -- a human taking tips, a
+    rack swapped for a partly-used one, state restored from a database --
+    leaves the two records disagreeing, with no symptom until the robot picks
+    up from a spot it believes is full.
+
+    This pushes PyLabRobot's record onto the robot in one ``setTipState`` per
+    state, taking the resource tree as the truth. Set the tip layout first
+    (``tip_rack.set_tip_state(...)``), then call this.
+
+    There is no equivalent for liquid. ``loadLiquid`` is the robot's only way
+    in, and it refuses any liquid the run did not already define, which a run
+    created without a protocol never does. Well volumes therefore live only in
+    the resource tree.
+    """
+    labware_id = await self._ensure_labware_loaded(tip_rack)
+    present: List[str] = []
+    absent: List[str] = []
+    for spot in tip_rack.get_all_items():
+      (present if spot.has_tip() else absent).append(tip_rack.get_child_identifier(spot))
+
+    for well_names, state in ((present, "tipPresent"), (absent, "tipAbsent")):
+      if not well_names:
+        continue
+      await self._execute_command(
+        "setTipState",
+        {"labwareId": labware_id, "wellNames": well_names, "tipWellState": state},
+      )
+    logger.info(
+      "Synced '%s' tip state to the robot: %d present, %d absent",
+      tip_rack.name,
+      len(present),
+      len(absent),
+    )
+
   async def labware_moved_off_deck(self, resource: Resource) -> None:
     """Tell the robot an EXTERNAL agent (human or lab transporter) removed labware.
 
@@ -312,6 +385,86 @@ class OpentronsFlex(OpentronsRobot):
     if slot is not None:
       self.deck.unassign_child_at_slot(slot)
     logger.info("Labware '%s' marked moved off-deck", name)
+
+  async def reload_labware(self, resource: Resource) -> None:
+    """Re-read the labware's position after a human moved it in its own slot.
+
+    For labware nudged or re-seated where it already sits: the robot re-applies
+    its labware offset, keeping the slot. Use ``gripper.move_labware`` to move
+    it to another slot, and ``labware_moved_off_deck`` when it leaves the deck.
+    """
+    labware_id = await self._ensure_labware_loaded(resource)
+    await self._execute_command("reloadLabware", {"labwareId": labware_id})
+
+  # --- Robot-level commands: axis motion, status surfaces, run log ---
+
+  async def move_axes_to(
+    self,
+    axis_map: Dict[str, float],
+    critical_point: Optional[Dict[str, float]] = None,
+    speed: Optional[float] = None,
+  ) -> Dict[str, float]:
+    """Move the named axes to absolute deck-frame positions (mm), returning where they land.
+
+    Every axis the map does not name holds its current position.
+    ``critical_point`` offsets the point on the mount that is driven to those
+    positions, also as a per-axis map. ``speed`` is in mm/s (robot default if
+    None).
+
+    Raises:
+      ValueError: If any axis is not one the robot addresses. Raised before
+        any wire command is sent.
+    """
+    _require_robot_commands("robot/moveAxesTo", self.api_version)
+    params = _axis_motion_params(axis_map, speed, critical_point)
+    return _reported_axis_position(await self._execute_command("robot/moveAxesTo", params))
+
+  async def move_axes_relative(
+    self, axis_map: Dict[str, float], speed: Optional[float] = None
+  ) -> Dict[str, float]:
+    """Jog the named axes by distances (mm) from where they are, returning where they land.
+
+    Raises:
+      ValueError: If any axis is not one the robot addresses. Raised before
+        any wire command is sent.
+    """
+    _require_robot_commands("robot/moveAxesRelative", self.api_version)
+    params = _axis_motion_params(axis_map, speed)
+    return _reported_axis_position(await self._execute_command("robot/moveAxesRelative", params))
+
+  async def retract_axis(self, axis: str) -> None:
+    """Retract ``axis`` to its home position, clearing the deck below it.
+
+    Raises:
+      ValueError: If ``axis`` is not one the robot addresses. Raised before
+        any wire command is sent.
+    """
+    _validate_axes([axis])
+    await self._execute_command("retractAxis", {"axis": axis})
+
+  async def set_status_bar(self, animation: str) -> None:
+    """Play a built-in light-bar animation: "idle", "confirm", "updating", "disco" or "off".
+
+    An animation is all the status bar takes: the robot owns the colours and
+    the timing, so there is nothing per-light to address.
+    """
+    await self._execute_command("setStatusBar", {"animation": animation})
+
+  async def set_rail_lights(self, on: bool) -> None:
+    """Turn the deck rail lights on or off."""
+    await self._execute_command("setRailLights", {"on": on})
+
+  async def add_comment(self, message: str) -> None:
+    """Record ``message`` in the run's command log; the robot does nothing else with it."""
+    await self._execute_command("comment", {"message": message})
+
+  async def wait_for_duration(self, seconds: float) -> None:
+    """Hold the run for ``seconds`` before the next command runs."""
+    # The command only completes once the robot finishes waiting, so the poll
+    # gets the wait itself plus the usual command headroom.
+    await self._execute_command(
+      "waitForDuration", {"seconds": seconds}, timeout=seconds + _COMMAND_POLL_HEADROOM
+    )
 
   @staticmethod
   def _ot_catalogue_identity(resource: Resource) -> Tuple[str, int]:

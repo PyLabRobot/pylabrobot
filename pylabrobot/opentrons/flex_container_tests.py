@@ -1,4 +1,5 @@
-"""Tests for container (trough/reservoir) ops on the Flex heads.
+"""Tests for container (trough/reservoir) ops on the Flex heads, and for the
+robot-level commands that belong to the device rather than to a head.
 
 A bare PLR ``Container`` is a single-cavity resource with ONE volume tracker;
 robot-side single-cavity labware definitions expose exactly one well, named
@@ -9,16 +10,21 @@ offset/liquid_height ride the wire), the one-tracker staging semantics (each
 channel holding a tip moves ``volume``; the summed delta commits/rolls back
 as one op), and the pre-wire rejections (no tip, array or offset-shifted
 array overhanging the cavity).
+
+The robot-level tests pin the wire shape of the device's own commands: the
+snake_case params the robot/* family takes (unlike the rest of the API), the
+axis-name and version-gate refusals that must send nothing, and the exact
+params of the status, comment, wait and reload commands.
 """
 
 import asyncio
 import unittest
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from pylabrobot.opentrons.flex import OpentronsFlex
 from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96
 from pylabrobot.opentrons.robot import OpentronsError
-from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.opentrons.transport import OFFLINE_API_VERSION, ChatterboxTransport
 from pylabrobot.resources import (
   Container,
   cor_96_wellplate_360uL_Fb,
@@ -875,6 +881,247 @@ class TestLiquidOpsRequireAMountedTip(unittest.TestCase):
       self._assert_refused_pre_wire(flex, transport, lambda: head.aspirate(plate, volume=10))
       self._assert_refused_pre_wire(flex, transport, lambda: head.dispense(plate, volume=10))
       self.assertAlmostEqual(plate.get_item("A1").tracker.volume, 100.0)
+    finally:
+      asyncio.run(flex.stop())
+
+
+class _AxisPositionTransport(ChatterboxTransport):
+  """Chatterbox whose robot/moveAxes* commands report the axis positions they
+  reached, as the real robot-server does. The dict it hands back is the one the
+  completion poll reads, so setting the result here is what the caller sees."""
+
+  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    response = await super().post(path, json)
+    command_type = (json or {}).get("data", {}).get("commandType")
+    if command_type in ("robot/moveAxesTo", "robot/moveAxesRelative"):
+      response["data"]["result"] = {"position": {"x": 11.0, "y": 22.0, "leftZ": 33.0}}
+    return response
+
+
+def _flex_device(
+  api_version: str = OFFLINE_API_VERSION,
+  transport_cls: Type[ChatterboxTransport] = ChatterboxTransport,
+) -> Tuple[OpentronsFlex, ChatterboxTransport]:
+  """A set-up ``OpentronsFlex`` plus its transport, for the robot-level
+  commands that belong to the device rather than to a head. ``api_version`` is
+  what ``/health`` reports, which is what the robot/* version gate reads.
+  """
+  transport = transport_cls(
+    pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], api_version=api_version
+  )
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  asyncio.run(flex.setup())
+  return flex, transport
+
+
+def _cmds(transport: ChatterboxTransport, command_type: str) -> List[Dict[str, Any]]:
+  return [c for c in transport.commands if c["commandType"] == command_type]
+
+
+class TestFlexAxisMotion(unittest.TestCase):
+  """move_axes_to/move_axes_relative send the robot/* family's snake_case
+  params and return the axis positions the command reports."""
+
+  def test_move_axes_to_sends_snake_case_axis_map_only(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.move_axes_to({"x": 100.0, "leftZ": 250.0}))
+
+      (cmd,) = _cmds(transport, "robot/moveAxesTo")
+      self.assertEqual(cmd["params"], {"axis_map": {"x": 100.0, "leftZ": 250.0}})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_move_axes_to_sends_critical_point_and_speed_snake_case(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.move_axes_to({"x": 1.0}, critical_point={"rightZ": 5.0}, speed=40.0))
+
+      (cmd,) = _cmds(transport, "robot/moveAxesTo")
+      self.assertEqual(
+        cmd["params"],
+        {"axis_map": {"x": 1.0}, "critical_point": {"rightZ": 5.0}, "speed": 40.0},
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_move_axes_relative_sends_snake_case_axis_map_and_speed(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.move_axes_relative({"y": -5.0}, speed=20.0))
+
+      (cmd,) = _cmds(transport, "robot/moveAxesRelative")
+      self.assertEqual(cmd["params"], {"axis_map": {"y": -5.0}, "speed": 20.0})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_speed_omitted_when_not_given(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.move_axes_relative({"y": -5.0}))
+
+      (cmd,) = _cmds(transport, "robot/moveAxesRelative")
+      self.assertNotIn("speed", cmd["params"])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_both_moves_return_the_reported_position(self):
+    flex, _transport = _flex_device(transport_cls=_AxisPositionTransport)
+    try:
+      reached = {"x": 11.0, "y": 22.0, "leftZ": 33.0}
+      self.assertEqual(asyncio.run(flex.move_axes_to({"x": 11.0})), reached)
+      self.assertEqual(asyncio.run(flex.move_axes_relative({"x": 1.0})), reached)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_unknown_axis_refused_before_any_wire_command(self):
+    flex, transport = _flex_device()
+    try:
+      for op in (
+        lambda: flex.move_axes_to({"x": 1.0, "zed": 2.0}),
+        lambda: flex.move_axes_relative({"zed": 2.0}),
+      ):
+        commands_before = len(transport.commands)
+        with self.assertRaises(ValueError) as caught:
+          asyncio.run(op())
+        # The refusal names what was wrong AND what would have been right.
+        self.assertIn("zed", str(caught.exception))
+        self.assertIn("extensionJaw", str(caught.exception))
+        self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_unknown_critical_point_axis_refused_before_any_wire_command(self):
+    flex, transport = _flex_device()
+    try:
+      commands_before = len(transport.commands)
+      with self.assertRaises(ValueError):
+        asyncio.run(flex.move_axes_to({"x": 1.0}, critical_point={"zed": 2.0}))
+
+      self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_retract_axis_refuses_an_unknown_axis_before_the_wire(self):
+    flex, transport = _flex_device()
+    try:
+      commands_before = len(transport.commands)
+      with self.assertRaises(ValueError):
+        asyncio.run(flex.retract_axis("zed"))
+
+      self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestFlexAxisMotionVersionGate(unittest.TestCase):
+  """The robot/* moveAxes commands need robot software 8.2.0+; retractAxis
+  predates that family and is not gated."""
+
+  def test_old_release_refuses_both_moves_and_sends_nothing(self):
+    flex, transport = _flex_device(api_version="8.1.0")
+    try:
+      for op in (
+        lambda: flex.move_axes_to({"x": 1.0}),
+        lambda: flex.move_axes_relative({"x": 1.0}),
+      ):
+        with self.assertRaises(OpentronsError) as caught:
+          asyncio.run(op())
+        self.assertIn("8.2.0", str(caught.exception))
+
+      robot_cmds = [c for c in transport.commands if c["commandType"].startswith("robot/")]
+      self.assertEqual(robot_cmds, [])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_retract_axis_is_not_gated(self):
+    flex, transport = _flex_device(api_version="8.1.0")
+    try:
+      asyncio.run(flex.retract_axis("leftZ"))
+      self.assertEqual(len(_cmds(transport, "retractAxis")), 1)
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestFlexRobotCommands(unittest.TestCase):
+  """The device's one-shot commands: exact params, no extras."""
+
+  def test_retract_axis(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.retract_axis("extensionJaw"))
+
+      (cmd,) = _cmds(transport, "retractAxis")
+      self.assertEqual(cmd["params"], {"axis": "extensionJaw"})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_set_status_bar(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.set_status_bar("disco"))
+
+      (cmd,) = _cmds(transport, "setStatusBar")
+      self.assertEqual(cmd["params"], {"animation": "disco"})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_set_rail_lights_carries_the_boolean_both_ways(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.set_rail_lights(True))
+      asyncio.run(flex.set_rail_lights(False))
+
+      cmds = _cmds(transport, "setRailLights")
+      self.assertEqual([c["params"] for c in cmds], [{"on": True}, {"on": False}])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_add_comment(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.add_comment("starting plate 3"))
+
+      (cmd,) = _cmds(transport, "comment")
+      self.assertEqual(cmd["params"], {"message": "starting plate 3"})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_wait_for_duration(self):
+    flex, transport = _flex_device()
+    try:
+      asyncio.run(flex.wait_for_duration(2.5))
+
+      (cmd,) = _cmds(transport, "waitForDuration")
+      self.assertEqual(cmd["params"], {"seconds": 2.5})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_reload_labware_names_the_id_the_labware_was_loaded_under(self):
+    flex, transport = _flex_device()
+    try:
+      trough = _make_trough()
+      flex.deck.assign_child_at_slot(trough, "C2")
+
+      asyncio.run(flex.reload_labware(trough))
+
+      (load_cmd,) = _cmds(transport, "loadLabware")
+      (reload_cmd,) = _cmds(transport, "reloadLabware")
+      self.assertEqual(reload_cmd["params"], {"labwareId": load_cmd["params"]["labwareId"]})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_reload_labware_of_loaded_labware_does_not_load_it_again(self):
+    flex, transport = _flex_device()
+    try:
+      trough = _make_trough()
+      flex.deck.assign_child_at_slot(trough, "C2")
+
+      asyncio.run(flex.reload_labware(trough))
+      asyncio.run(flex.reload_labware(trough))
+
+      self.assertEqual(len(_cmds(transport, "loadLabware")), 1)
+      self.assertEqual(len(_cmds(transport, "reloadLabware")), 2)
     finally:
       asyncio.run(flex.stop())
 
