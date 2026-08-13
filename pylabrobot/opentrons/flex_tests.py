@@ -1131,5 +1131,75 @@ class TestFlexHead96Ops(unittest.TestCase):
     self.assertNotIn("Validated on real", doc)
 
 
+class TrashAddressableAreaTests(unittest.TestCase):
+  """A Flex takes a movable trash in any of eight slots, not just A3."""
+
+  def test_the_drop_follows_the_trash_to_another_slot(self):
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+      trash = flex.deck.get_trash_area()
+      flex.deck.unassign_child_at_slot("A3")
+      flex.deck.assign_child_at_slot(trash, "B3")
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.discard_tips(trash))
+
+      move_cmd = next(
+        c for c in transport.commands if c["commandType"] == "moveToAddressableAreaForDropTip"
+      )
+      self.assertEqual(move_cmd["params"]["addressableAreaName"], "movableTrashB3")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_trash_outside_a_trash_slot_is_refused(self):
+    flex, _transport, head = _flex_head8()
+    try:
+      trash = flex.deck.get_trash_area()
+      flex.deck.unassign_child_at_slot("A3")
+      flex.deck.assign_child_at_slot(trash, "C2")
+      with self.assertRaises(OpentronsError):
+        head._trash_addressable_area(trash)
+    finally:
+      asyncio.run(flex.stop())
+
+
+class CatalogueIdentityTests(unittest.TestCase):
+  """How a PLR resource resolves to an Opentrons load name."""
+
+  def test_a_resource_resolves_on_its_model(self):
+    # The model IS the load name on Opentrons' own factories, so nothing needs
+    # to be declared and the resource's instance name is irrelevant.
+    plate = cor_96_wellplate_360uL_Fb(name="anything at all")
+    plate.model = "corning_96_wellplate_360ul_flat"
+    load_name, _version = OpentronsFlex._ot_catalogue_identity(plate)
+    self.assertEqual(load_name, "corning_96_wellplate_360ul_flat")
+
+  def test_a_declared_load_name_outside_the_catalogue_is_a_hard_error(self):
+    # Must NOT raise OpentronsError: the caller treats that as "synthesize one",
+    # which would silently ship geometry the operator never asked for.
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.ot_load_name = "corning_96_wellplate_360ul_flatt"
+    with self.assertRaises(ValueError) as caught:
+      OpentronsFlex._ot_catalogue_identity(plate)
+    self.assertNotIsInstance(caught.exception, OpentronsError)
+    self.assertIn("corning_96_wellplate_360ul_flatt", str(caught.exception))
+
+  def test_an_unresolvable_resource_asks_for_a_synthesized_definition(self):
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.model = None
+    with self.assertRaises(OpentronsError):
+      OpentronsFlex._ot_catalogue_identity(plate)
+
+  def test_the_instance_name_never_decides_the_load_name(self):
+    # It is a user-chosen label, so naming a plate after a tip rack must not
+    # load a tip rack.
+    plate = cor_96_wellplate_360uL_Fb(name="flex_96_tiprack_50ul")
+    plate.model = None
+    with self.assertRaises(OpentronsError):
+      OpentronsFlex._ot_catalogue_identity(plate)
+
+
 if __name__ == "__main__":
   unittest.main()

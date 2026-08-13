@@ -3,6 +3,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple, Type, cast
 
 from pylabrobot.opentrons.flex_gripper import FlexGripper
+from pylabrobot.opentrons.catalogue import is_catalogue_labware
 from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
 from pylabrobot.opentrons.flex_wire import slot_wire_location
 from pylabrobot.opentrons.labware_definitions import (
@@ -37,17 +38,6 @@ _OT_CATALOGUE_VERSIONS = {
   "nest_96_wellplate_200ul_flat": 2,
   "nest_96_wellplate_2ml_deep": 2,
   "opentrons_96_wellplate_200ul_pcr_full_skirt": 2,
-}
-
-_TIP_RACK_MAP = {
-  "flex_96_tiprack_50ul": "opentrons_flex_96_tiprack_50ul",
-  "flex_96_tiprack_200ul": "opentrons_flex_96_tiprack_200ul",
-  "flex_96_tiprack_1000ul": "opentrons_flex_96_tiprack_1000ul",
-  "flex_96_tiprack_20ul": "opentrons_flex_96_tiprack_20ul",
-  "flex_96_filtertiprack_50ul": "opentrons_flex_96_filtertiprack_50ul",
-  "flex_96_filtertiprack_200ul": "opentrons_flex_96_filtertiprack_200ul",
-  "flex_96_filtertiprack_1000ul": "opentrons_flex_96_filtertiprack_1000ul",
-  "flex_96_filtertiprack_20ul": "opentrons_flex_96_filtertiprack_20ul",
 }
 
 # Discovered pipette channel count -> matching head class.
@@ -339,22 +329,25 @@ class OpentronsFlex(OpentronsRobot):
     one revision) stay at 1. A resource can override the version for its own
     load name by carrying an ``ot_version``.
     """
-    if hasattr(resource, "ot_load_name"):
-      load_name = cast(str, resource.ot_load_name)
+    declared = getattr(resource, "ot_load_name", None)
+    if declared is not None:
+      load_name = cast(str, declared)
+      if not is_catalogue_labware(load_name):
+        # Not an OpentronsError: that is the caller's signal to synthesize, which
+        # would hide a typo behind geometry the operator never asked for.
+        raise ValueError(
+          f"'{resource.name}' declares ot_load_name '{load_name}', which Opentrons' labware "
+          "catalogue does not define. Correct the load name, or drop the attribute to have a "
+          "definition built from the resource's own geometry."
+        )
+    elif resource.model is not None and is_catalogue_labware(resource.model):
+      load_name = resource.model
     else:
-      name_lower = getattr(resource, "name", "").lower()
-      for key, ot_name in _TIP_RACK_MAP.items():
-        if key in name_lower:
-          load_name = ot_name
-          break
-      else:
-        if not name_lower.startswith("opentrons_"):
-          raise OpentronsError(
-            "Cannot determine Opentrons load name",
-            f"'{name_lower}' — set resource.ot_load_name = 'opentrons_flex_96_tiprack_50ul' "
-            f"or use a standard Flex labware name.",
-          )
-        load_name = name_lower
+      raise OpentronsError(
+        "Cannot determine Opentrons load name",
+        f"'{resource.name}' has no ot_load_name, and its model "
+        f"{resource.model!r} is not in Opentrons' catalogue.",
+      )
 
     version = getattr(resource, "ot_version", None)
     if version is None:
