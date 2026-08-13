@@ -1216,7 +1216,13 @@ class TestTipPresenceCommands(unittest.TestCase):
   def test_verify_tip_presence_sends_the_expected_state(self):
     flex, transport, head = _flex_head8()
     try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+
+      # Each state is asserted while it actually holds: the robot fails the
+      # command on a mismatch, so a bare pair would be checking a lie.
       asyncio.run(head.verify_tip_presence("absent"))
+      asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.verify_tip_presence("present"))
 
       verify_cmds = [c for c in transport.commands if c["commandType"] == "verifyTipPresence"]

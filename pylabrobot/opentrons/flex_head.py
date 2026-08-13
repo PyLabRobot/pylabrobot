@@ -144,26 +144,32 @@ class _FlexHead:
   async def has_tip_on_hardware(self) -> Optional[bool]:
     """Query the Flex's hardware tip-presence sensor for THIS head's pipette.
 
-    The Flex reports tip presence as one boolean per pipette (mount), not
-    per nozzle/channel: ``GET /instruments`` -> ``data[i].state.tipDetected``.
-    This is the aggregate hardware ground truth, used to verify/reconcile
-    the per-channel ``_channel_tips`` bookkeeping -- it cannot tell you
-    *which* channel(s) hold a tip.
+    The Flex reports tip presence as one reading per pipette (mount), not per
+    nozzle/channel. This is the aggregate hardware ground truth, used to
+    verify/reconcile the per-channel ``_channel_tips`` bookkeeping -- it
+    cannot tell you *which* channel(s) hold a tip.
+
+    Asked for with the ``getTipPresence`` run command rather than the
+    ``GET /instruments`` REST read, which reports the same bit but re-caches
+    the attached instruments as a side effect. On a Flex that re-cache
+    clears the run's record of the attached tip, so reading the sensor over
+    REST between a pickup and the next pipetting command makes that command
+    fail with "cannot perform PREPARE_ASPIRATE without a tip attached".
 
     Returns:
-      ``True``/``False`` if a pipette is found on ``self.mount`` and reports
-      a tip-detection state, ``None`` if unknown (no ``state`` field) or no
-      pipette is found on this mount.
+      ``True``/``False`` when the sensor reads present/absent, ``None`` when
+      it reads unknown or reports no status.
     """
-    instruments_data = await self.flex._get_instruments()
-    for instrument in instruments_data.get("data", []):
-      if instrument.get("instrumentType") != "pipette":
-        continue
-      if instrument.get("mount") != self.mount:
-        continue
-      state = instrument.get("state", {})
-      return cast(Optional[bool], state.get("tipDetected"))
+    status = await self._read_tip_presence()
+    if status == "present":
+      return True
+    if status == "absent":
+      return False
     return None
+
+  async def _read_tip_presence(self) -> Optional[str]:
+    result = await self._execute("getTipPresence", {"pipetteId": self.pipette_id})
+    return cast(Optional[str], result.get("result", {}).get("status"))
 
   async def _verify_tips_seated(self) -> None:
     """Raise if the hardware tip-presence sensor reports no tip after a pickup.
@@ -763,13 +769,11 @@ class _FlexHead:
   async def get_tip_presence(self) -> Optional[str]:
     """Read this head's tip sensor: "present", "absent" or "unknown".
 
-    One reading per pipette, not per channel -- the same aggregate state
-    ``has_tip_on_hardware()`` reads from ``GET /instruments``, asked for as a
-    run command instead. ``None`` when the command reports no status.
+    One reading per pipette, not per channel. ``has_tip_on_hardware()`` is
+    the same reading as a bool. ``None`` when the command reports no status.
     """
     self._warn_untested_hardware("get_tip_presence")
-    result = await self._execute("getTipPresence", {"pipetteId": self.pipette_id})
-    return cast(Optional[str], result.get("result", {}).get("status"))
+    return await self._read_tip_presence()
 
   async def verify_tip_presence(self, expected_state: str) -> None:
     """Have the robot fail the command unless its tip sensor reads ``expected_state``.

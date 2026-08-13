@@ -195,13 +195,13 @@ class ChatterboxTransport:
     simulate_failed_pickup: if True, a ``pickUpTip`` command does NOT flip the
       issuing pipette's simulated tip-presence sensor to detected -- models a
       hardware pickup that moved through the motion but never seated a tip,
-      so ``_FlexHead._verify_tips_seated()`` sees ``tipDetected: False`` and
-      raises. Default False: a pickup always seats a tip (existing behavior).
+      so ``_FlexHead._verify_tips_seated()`` reads "absent" and raises.
+      Default False: a pickup always seats a tip (existing behavior).
     simulate_stuck_tip: if True, ``dropTip``/``dropTipInPlace`` do NOT clear
       the issuing pipette's simulated tip-presence sensor -- models a tip
       stuck to the nozzle after a drop, so ``_FlexHead._confirm_tips_cleared()``
-      sees ``tipDetected: True`` and logs a warning. Default False: a drop
-      always clears the sensor (existing behavior).
+      reads "present" and logs a warning. Default False: a drop always clears
+      the sensor (existing behavior).
     liquid_probe_z: the liquid height (mm) a ``liquidProbe``/``tryLiquidProbe``
       command reports as ``z_position`` in its result. Default None: the key
       is omitted from the result entirely (not set to null), matching the
@@ -233,9 +233,14 @@ class ChatterboxTransport:
     self._cmds: Dict[str, Dict[str, Any]] = {}  # cmd_id -> full command data
     self._n = 0
     self._pipette_load_count = 0
+    self._labware_load_count = 0
     self.load_pipette_commands: List[Dict[str, Any]] = []  # recorded loadPipette params
     self.commands: List[Dict[str, Any]] = []  # every command, in send order: {commandType, params}
+    # Reading GET /instruments re-caches the pipettes, which clears the run's
+    # record of the attached tip, so it must not happen mid-run.
+    self.instrument_reads = 0
     self.labware_definitions: List[Dict[str, Any]] = []  # recorded custom definition uploads
+    self.labware_ids: Dict[str, str] = {}  # displayName -> the id this transport assigned it
     self.simulate_failed_pickup = simulate_failed_pickup
     self.simulate_stuck_tip = simulate_stuck_tip
     self.liquid_probe_z = liquid_probe_z
@@ -259,6 +264,7 @@ class ChatterboxTransport:
         "name": "chatterbox",
       }
     if path == "/instruments":
+      self.instrument_reads += 1
       instruments: List[Dict[str, Any]] = [
         {
           "instrumentType": "pipette",
@@ -323,6 +329,11 @@ class ChatterboxTransport:
         mount = params.get("mount")
         if mount is not None:
           self._pipette_id_to_mount[pipette_id] = mount
+      elif ctype == "loadLabware":
+        self._labware_load_count += 1
+        labware_id = f"chatterbox-labware-{self._labware_load_count}"
+        result = {"labwareId": labware_id}
+        self.labware_ids[str(params.get("displayName"))] = labware_id
       else:
         result = {}
         if ctype == "pickUpTip":
@@ -333,6 +344,10 @@ class ChatterboxTransport:
           mount = self._pipette_id_to_mount.get(params.get("pipetteId"))
           if mount is not None:
             self._tip_detected[mount] = self.simulate_stuck_tip
+        elif ctype in ("getTipPresence", "verifyTipPresence"):
+          mount = self._pipette_id_to_mount.get(params.get("pipetteId"))
+          detected = self._tip_detected.get(mount, False) if mount is not None else False
+          result = {"status": "present" if detected else "absent"}
         elif ctype in ("liquidProbe", "tryLiquidProbe"):
           if self.liquid_probe_z is not None:
             result = {"z_position": self.liquid_probe_z}
@@ -351,6 +366,19 @@ class ChatterboxTransport:
             "errorType": "liquidNotFound",
             "errorCode": "2017",
             "detail": "No liquid detected during the liquid probe process.",
+            "isDefined": True,
+          },
+        }
+      if ctype == "verifyTipPresence" and result.get("status") != params.get("expectedState"):
+        # The point of verifyTipPresence over getTipPresence: the robot, not
+        # the caller, refuses the mismatch.
+        cmd_data = {
+          "id": cmd_id,
+          "commandType": ctype,
+          "status": "failed",
+          "error": {
+            "errorType": "tipPresenceMismatch",
+            "detail": f"Expected tip to be {params.get('expectedState')}.",
             "isDefined": True,
           },
         }
