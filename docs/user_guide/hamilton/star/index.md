@@ -1,5 +1,11 @@
 # Hamilton STAR
 
+```{device-card} hamilton-star
+```
+
+```{device-card} hamilton-starlet
+```
+
 ```{toctree}
 :maxdepth: 1
 
