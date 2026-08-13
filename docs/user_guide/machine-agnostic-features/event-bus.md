@@ -106,6 +106,8 @@ events.
 | `legacy.liquid_handling.LiquidHandler` | resource pickup/move/drop; tip pickup/drop; 96-head tip pickup/drop; aspirate; dispense |
 | `legacy.shaking.Shaker` | `shaker.shake`, `shaker.stop_shaking` |
 | `legacy.temperature_controlling.TemperatureController` | set temperature, wait for temperature, deactivate |
+| `agilent.vspin.VSpin` | `centrifuge.spin` |
+| `agilent.vspin.Access2` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
 | `brooks.precise_flex.PreciseFlex` | lifecycle, fault/home/freedrive, joint/cartesian/rail/gripper motion, pick/drop, park |
 
 Detailed operation references:
@@ -114,6 +116,7 @@ Detailed operation references:
 - [Incubator](event-bus/incubator.md)
 - [LiquidHandler](event-bus/liquid-handler.md)
 - [Shaker and temperature controller](event-bus/thermal-and-shaking.md)
+- [Agilent VSpin and Access2](event-bus/vspin.md)
 - [Brooks PreciseFlex](event-bus/precise-flex.md)
 - [Diagnostic transports](event-bus/diagnostic-transports.md)
 

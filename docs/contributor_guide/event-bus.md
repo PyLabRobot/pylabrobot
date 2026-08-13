@@ -184,6 +184,31 @@ parameters:
 }
 ```
 
+### Centrifuge and loader operations
+
+Use `centrifuge.spin` for one requested centrifuge cycle. Include every directly loaded
+resource, including one bucket holder reference per loaded resource when the frontend exposes
+individual buckets. Use explicit physical parameters:
+
+```python
+{
+  "device": resource_reference(centrifuge),
+  "resources": [resource_reference(plate)],
+  "bucket_resources": [{
+    "holder": resource_reference(bucket),
+    "resource": resource_reference(plate),
+  }],
+  "relative_centrifugal_force_g": 500.0,
+  "duration_seconds": 60.0,
+  "acceleration_fraction": 0.8,
+  "deceleration_fraction": 0.8,
+}
+```
+
+Use `centrifuge_loader.load` and `centrifuge_loader.unload` for a loader's physical transfer
+between its staging holder and a centrifuge bucket. List the direct plate in `resources`, and use
+the actual staging holder and bucket as `source` and `destination`.
+
 ### Arm/controller motion
 
 Public controller operations should identify the controller in `device` and use explicit,
