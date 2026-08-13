@@ -1,5 +1,4 @@
 import logging
-import uuid
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
 
 from pylabrobot.opentrons.flex_gripper import FlexGripper
@@ -292,8 +291,8 @@ class OpentronsFlex(OpentronsRobot):
         f"it loads the Opentrons catalogue definition '{load_name}', whose grip height is "
         "the vendor's to state (the robot grips at mid-height when it states none)",
       )
-    labware_id = uuid.uuid4().hex[:12]
-
+    # The robot assigns the id. Proposing one here would only make the
+    # request body differ run to run, which is what breaks a replayed capture.
     result = await self._execute_command(
       "loadLabware",
       {
@@ -301,11 +300,15 @@ class OpentronsFlex(OpentronsRobot):
         "location": slot_wire_location(slot),
         "namespace": namespace,
         "version": version,
-        "labwareId": labware_id,
         "displayName": name,
       },
     )
-    labware_id = cast(str, result.get("result", {}).get("labwareId", labware_id))
+    labware_id = result.get("result", {}).get("labwareId")
+    if not isinstance(labware_id, str):
+      raise OpentronsError(
+        "Labware load returned no id",
+        f"loadLabware for '{name}' succeeded but reported no labwareId to address it by.",
+      )
 
     self._loaded_labware[name] = labware_id
     logger.info(

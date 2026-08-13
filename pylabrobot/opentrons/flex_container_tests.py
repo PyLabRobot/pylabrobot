@@ -159,7 +159,7 @@ class TestFlexHead1ContainerOps(unittest.TestCase):
       aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
       self.assertEqual(len(aspirate_cmds), 1)
       self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A1")
-      self.assertEqual(aspirate_cmds[0]["params"]["labwareId"], load_cmds[0]["params"]["labwareId"])
+      self.assertEqual(aspirate_cmds[0]["params"]["labwareId"], transport.labware_ids["trough"])
       # A single nozzle goes to the cavity center: no x/y centering offset,
       # just the default bottom clearance.
       self.assertEqual(
@@ -1105,9 +1105,9 @@ class TestFlexRobotCommands(unittest.TestCase):
 
       asyncio.run(flex.reload_labware(trough))
 
-      (load_cmd,) = _cmds(transport, "loadLabware")
+      (_load_cmd,) = _cmds(transport, "loadLabware")
       (reload_cmd,) = _cmds(transport, "reloadLabware")
-      self.assertEqual(reload_cmd["params"], {"labwareId": load_cmd["params"]["labwareId"]})
+      self.assertEqual(reload_cmd["params"], {"labwareId": transport.labware_ids["trough"]})
     finally:
       asyncio.run(flex.stop())
 
