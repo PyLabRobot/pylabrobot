@@ -23,7 +23,8 @@ layout differ per head.
 import logging
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Tuple, Union, cast
 
-from pylabrobot.opentrons.labware_definitions import container_cavity_footprint
+from pylabrobot.opentrons.flex_wire import UNTESTED_HARDWARE_WARNING
+from pylabrobot.opentrons.labware_definitions import container_footprint
 from pylabrobot.opentrons.robot import OpentronsCommandError, OpentronsError
 from pylabrobot.resources import (
   Container,
@@ -45,14 +46,6 @@ if TYPE_CHECKING:
   from pylabrobot.opentrons.flex import OpentronsFlex
 
 logger = logging.getLogger(__name__)
-
-# Shared by the heads and the gripper so the notice reads identically
-# everywhere; each module logs it through its own logger.
-_UNTESTED_HARDWARE_WARNING = (
-  "%s.%s is coded but NOT YET VERIFIED on real Opentrons Flex hardware -- "
-  "tested only against ChatterboxTransport/simulated transport. Verify behavior "
-  "on real hardware before relying on it in a production protocol."
-)
 
 
 class _FlexHead:
@@ -90,7 +83,7 @@ class _FlexHead:
     if op in self._HARDWARE_VERIFIED_OPS or self._untested_hardware_warned:
       return
     self._untested_hardware_warned = True
-    logger.warning(_UNTESTED_HARDWARE_WARNING, type(self).__name__, op)
+    logger.warning(UNTESTED_HARDWARE_WARNING, type(self).__name__, op)
 
   def get_mounted_tips(self) -> List[Optional[Tip]]:
     """Per-channel tip state (Case-2: no private-attribute peeking by consumers).
@@ -294,15 +287,39 @@ class _FlexHead:
   def _require_mounted_tip(self) -> None:
     """Raise if no channel holds a tip -- pre-wire guard for tip-motion ops.
 
-    ``touch_tip``/``liquid_probe`` move the mounted tip itself into the
-    well, so issuing them without a tip would drive the bare nozzle into
-    the labware. Checked before any wire command is sent.
+    Every liquid-handling op moves the mounted tip into the labware, so
+    issuing one without a tip would drive the bare NOZZLE there instead --
+    roughly a tip length lower than the pose the command describes. The
+    engine rejects a tipless op, but ``dispense`` moves to the well first and
+    only then checks, so the collision happens before the rejection. Checked
+    before any wire command is sent.
     """
     if all(tip is None for tip in self._channel_tips):
       raise OpentronsError(
         "NoTipError",
         "No tip mounted; pick up a tip first.",
       )
+
+  async def _configure_nozzle_layout(self, configuration_params: Dict[str, Any]) -> None:
+    """Send ``configureNozzleLayout``, refusing while any channel holds a tip.
+
+    The engine rejects EVERY nozzle reconfiguration, "ALL" included, while a
+    tip is attached ("Cannot configure nozzle layout ... while it has tips
+    attached"), because the layout decides which physical nozzles the pipette
+    drives. Refused here instead, so the caller reads which tips are in the
+    way rather than a mid-op command failure from the robot.
+    """
+    if any(tip is not None for tip in self._channel_tips):
+      held = [i for i, tip in enumerate(self._channel_tips) if tip is not None]
+      raise OpentronsError(
+        "HasTipError",
+        f"The nozzle layout cannot change while channel(s) {held} hold a tip; the robot "
+        "refuses the reconfiguration. Drop the mounted tip(s) first.",
+      )
+    await self._execute(
+      "configureNozzleLayout",
+      {"pipetteId": self.pipette_id, "configurationParams": configuration_params},
+    )
 
   def _touch_tip_params(
     self,
@@ -476,19 +493,22 @@ class _FlexHead:
     y_span: float,
     offset: Optional[Coordinate],
   ) -> None:
-    """Raise pre-wire if the nozzle array would overhang the cavity.
+    """Raise pre-wire if the nozzle array would overhang the container.
 
     The engine centers the array on the cavity (the definition's
     ``centerMultichannelOnWells`` quirk) and the caller's ``offset`` then
-    shifts it, so the shifted span must still fit inside the cavity's
-    footprint on each axis. The footprint is the deck-frame one the uploaded
-    definition carries (``container_cavity_footprint``), not the container's
-    own x/y: a rotated container presents its axes to the robot swapped, and
-    guarding the pre-rotation axis passes an array that overhangs the real
-    cavity.
+    shifts it, so the shifted span must still fit on each axis. The footprint
+    read here is the deck-frame one the uploaded definition carries
+    (``container_footprint``), not the container's own x/y: a rotated
+    container presents its axes to the robot swapped, and guarding the
+    pre-rotation axis passes an array that overhangs it.
+
+    That footprint is the container's OUTER box, so this guard is as loose as
+    the definition is: PLR carries no cavity x/y, so an array that fits the
+    shell but not the cavity inside it passes both.
     """
     o = offset if offset is not None else Coordinate.zero()
-    cavity_x, cavity_y = container_cavity_footprint(container)
+    cavity_x, cavity_y = container_footprint(container)
     required_x = x_span + 2 * abs(o.x)
     required_y = y_span + 2 * abs(o.y)
     if required_x > cavity_x or required_y > cavity_y:
@@ -557,9 +577,10 @@ class _FlexHead:
 # least this z while traveling, clearing any labware on the deck.
 _TRAVERSAL_HEIGHT = 120.0
 
-# Row letters front-to-back as the Flex API names single nozzles ("H1" is the
-# frontmost/primary nozzle, "A1" the rearmost).
-_ROW_LETTERS = "ABCDEFGH"
+# The only nozzles an 8-channel Flex can anchor a SINGLE layout on ("A1" is
+# the rearmost, "H1" the frontmost), mapped to the channel each one is.
+_SINGLE_NOZZLES = {"A1": 0, "H1": 7}
+_SINGLE_NOZZLE_ROWS = frozenset(nozzle[0] for nozzle in _SINGLE_NOZZLES)
 
 _NUM_CHANNELS = 8
 
@@ -726,20 +747,20 @@ class FlexHead1(_FlexHead):
     ``Container`` (trough/reservoir) is its own robot-side labware whose
     single-cavity definition exposes exactly one well, named "A1", so the
     command names the container's labware id and well "A1"; the volume is
-    tracked against the container's own tracker, and a mounted tip is
-    required (checked before any wire command). Either way: stage ->
-    validate -> wire -> commit/rollback -- the tracker (``remove_liquid``)
-    is staged BEFORE the wire command, so an infeasible aspirate raises
-    before any hardware motion. A ``prepareToAspirate`` command is sent
-    first if this is the first aspirate since the last tip pickup.
+    tracked against the container's own tracker. Either way a mounted tip is
+    required (checked before any wire command), and: stage -> validate ->
+    wire -> commit/rollback -- the tracker (``remove_liquid``) is staged
+    BEFORE the wire command, so an infeasible aspirate raises before any
+    hardware motion. A ``prepareToAspirate`` command is sent first if this is
+    the first aspirate since the last tip pickup.
     """
     self._warn_untested_hardware("aspirate")
+    self._require_mounted_tip()
     if isinstance(target, Well):
       parent = self._require_itemized_parent(target)
       labware_id = await self.flex._ensure_labware_loaded(parent)
       well_name = parent.get_child_identifier(target)
     else:
-      self._require_mounted_tip()
       labware_id = await self.flex._ensure_labware_loaded(target)
       well_name = _CONTAINER_WELL_NAME
     rate = flow_rate if flow_rate is not None else _DEFAULT_ASPIRATE_FLOW_RATE
@@ -771,18 +792,18 @@ class FlexHead1(_FlexHead):
 
     A ``Well`` is addressed through its plate parent by well name; a bare
     ``Container`` (trough/reservoir) is addressed as its own labware at
-    its sole robot-side well "A1" and requires a mounted tip (see
-    ``aspirate``). Either way: stage -> validate -> wire -> commit/rollback
-    -- the tracker (``add_liquid``) is staged BEFORE the wire command, so
-    an infeasible dispense raises before any hardware motion.
+    its sole robot-side well "A1". Either way a mounted tip is required (see
+    ``aspirate``), and: stage -> validate -> wire -> commit/rollback -- the
+    tracker (``add_liquid``) is staged BEFORE the wire command, so an
+    infeasible dispense raises before any hardware motion.
     """
     self._warn_untested_hardware("dispense")
+    self._require_mounted_tip()
     if isinstance(target, Well):
       parent = self._require_itemized_parent(target)
       labware_id = await self.flex._ensure_labware_loaded(parent)
       well_name = parent.get_child_identifier(target)
     else:
-      self._require_mounted_tip()
       labware_id = await self.flex._ensure_labware_loaded(target)
       well_name = _CONTAINER_WELL_NAME
     rate = flow_rate if flow_rate is not None else _DEFAULT_DISPENSE_FLOW_RATE
@@ -811,8 +832,12 @@ class FlexHead1(_FlexHead):
     """Touch the mounted tip to the sides of ``well`` -- one ``touchTip`` command.
 
     ``radius`` is the fraction of the well radius the tip moves toward
-    (1.0 = the wall). Requires a mounted tip (checked before any wire
-    command). No trackers are involved.
+    (1.0 = the wall). ``offset`` IS the touch position, read from the well
+    top (the Opentrons Python API's absolute ``v_offset``): it REPLACES the
+    1 mm below the rim this touches at by default rather than shifting it the
+    way an ``aspirate``/``dispense`` offset does, so ``Coordinate(x=1)``
+    touches level with the rim. Requires a mounted tip (checked before any
+    wire command). No trackers are involved.
     """
     self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()
@@ -888,14 +913,12 @@ class FlexHead8(_FlexHead):
     A prior single-tip op may have left the pipette in SINGLE mode. Column
     ops always address all 8 physical channels, so they must not silently
     run under a stale single-nozzle configuration -- if the layout isn't
-    already ALL, reset it first.
+    already ALL, reset it first. The reset is refused while the single tip
+    from that op is still mounted, since the robot refuses it too.
     """
     if self._nozzle_layout == "ALL":
       return
-    await self._execute(
-      "configureNozzleLayout",
-      {"pipetteId": self.pipette_id, "configurationParams": {"style": "ALL"}},
-    )
+    await self._configure_nozzle_layout({"style": "ALL"})
     self._nozzle_layout = "ALL"
 
   # --- Column helpers ---
@@ -1065,15 +1088,16 @@ class FlexHead8(_FlexHead):
   ) -> None:
     """Aspirate a column -- one ``aspirate`` command anchored at its rearmost well.
 
-    Follows stage -> validate -> wire -> commit/rollback: ``Well.tracker``
-    (``remove_liquid``) is staged for every well whose channel actually
-    holds a tip (None-skip; wells outside ``column`` are never touched --
-    the Case-1 regression guard) BEFORE the wire command, so an infeasible
-    aspirate (e.g. ``TooLittleLiquidError``) raises before any hardware
-    motion. A ``prepareToAspirate`` command is sent first if this is the
-    first aspirate since the last tip pickup.
+    Requires at least one mounted tip. Follows stage -> validate -> wire ->
+    commit/rollback: ``Well.tracker`` (``remove_liquid``) is staged for
+    every well whose channel actually holds a tip (None-skip; wells outside
+    ``column`` are never touched -- the Case-1 regression guard) BEFORE the
+    wire command, so an infeasible aspirate (e.g. ``TooLittleLiquidError``)
+    raises before any hardware motion. A ``prepareToAspirate`` command is
+    sent first if this is the first aspirate since the last tip pickup.
     """
     self._warn_untested_hardware("aspirate")
+    self._require_mounted_tip()
     well_name, column_wells = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(plate)
@@ -1112,12 +1136,14 @@ class FlexHead8(_FlexHead):
   ) -> None:
     """Dispense a column -- one ``dispense`` command anchored at its rearmost well.
 
-    Follows stage -> validate -> wire -> commit/rollback: ``Well.tracker``
-    (``add_liquid``) is staged for every well whose channel actually holds
-    a tip (None-skip) BEFORE the wire command, so an infeasible dispense
-    (e.g. ``TooLittleVolumeError``) raises before any hardware motion.
+    Requires at least one mounted tip. Follows stage -> validate -> wire ->
+    commit/rollback: ``Well.tracker`` (``add_liquid``) is staged for every
+    well whose channel actually holds a tip (None-skip) BEFORE the wire
+    command, so an infeasible dispense (e.g. ``TooLittleVolumeError``)
+    raises before any hardware motion.
     """
     self._warn_untested_hardware("dispense")
+    self._require_mounted_tip()
     well_name, column_wells = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(plate)
@@ -1248,9 +1274,14 @@ class FlexHead8(_FlexHead):
     anchored at the column's rearmost well.
 
     ``radius`` is the fraction of the well radius each tip moves toward
-    (1.0 = the wall). Requires at least one mounted tip and a valid column
-    (both checked before any wire command) and ALL nozzle mode (reset first
-    if a single-tip op left the layout otherwise). No trackers are involved.
+    (1.0 = the wall). ``offset`` IS the touch position, read from the well
+    top (the Opentrons Python API's absolute ``v_offset``): it REPLACES the
+    1 mm below the rim this touches at by default rather than shifting it the
+    way an ``aspirate``/``dispense`` offset does, so ``Coordinate(x=1)``
+    touches level with the rim. Requires at least one mounted tip and a valid
+    column (both checked before any wire command) and ALL nozzle mode (reset
+    first if a single-tip op left the layout otherwise). No trackers are
+    involved.
     """
     self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()
@@ -1288,13 +1319,23 @@ class FlexHead8(_FlexHead):
   # --- Single-tip cherry-pick ---
 
   @staticmethod
-  def _channel_for_well(well: str) -> int:
-    """Map a well name's row letter to its physical channel index (A=0..H=7)."""
-    row_letter = well[0].upper()
-    try:
-      return _ROW_LETTERS.index(row_letter)
-    except ValueError:
-      raise ValueError(f"'{well}' has no recognized row letter (expected A-H).") from None
+  def _nozzle_for_well_row(well: str) -> str:
+    """The single nozzle to anchor on when the caller named only a well.
+
+    An 8-channel Flex can anchor a SINGLE layout on its A1 or H1 nozzle and
+    nothing else (the engine's ``primaryNozzle`` literal, and the pipette's
+    own ``validNozzleMaps``), so only the two rows those nozzles sit in have
+    an obvious anchor. Any other row needs the caller to say which end of the
+    row to reach with.
+    """
+    row_letter = well[:1].upper()
+    if row_letter not in _SINGLE_NOZZLE_ROWS:
+      raise ValueError(
+        f"'{well}' is in row {row_letter or '?'}, and an 8-channel Flex can pick up single "
+        f"tips only with its {' or '.join(_SINGLE_NOZZLES)} nozzle. Pass "
+        'primary_nozzle="A1" or "H1" to reach this well with that nozzle.'
+      )
+    return f"{row_letter}1"
 
   def _active_single_channel(self) -> int:
     """Return the sole channel holding a tip in single-tip mode.
@@ -1316,38 +1357,42 @@ class FlexHead8(_FlexHead):
     tip_rack: TipRack,
     well: str,
     offset: Optional[Coordinate] = None,
+    primary_nozzle: Optional[str] = None,
   ) -> None:
     """Pick up one tip in SINGLE nozzle mode.
 
     Switches to SINGLE layout (``configureNozzleLayout``) before the
-    ``pickUpTip`` command. The physical nozzle engaged is the one whose row
-    matches ``well``'s row letter (e.g. well "H2" -> nozzle "H1" -> channel
-    7); only that channel's tip state changes. Raises ``OpentronsError`` if
-    that channel already holds a tip (fix #4) -- checked before any wire
-    command. Tip tracker changes are staged (``commit=False``) before the
-    wire command, then, after the wire command succeeds, the hardware
-    tip-presence sensor is checked (``_verify_tips_seated()``) -- the
-    tracker and ``_channel_tips`` are committed only if that verification
-    passes, and rolled back (with no ``_channel_tips`` mutation) if the
-    sensor reports a missed pickup (stage -> validate -> wire -> verify ->
-    commit/rollback).
+    ``pickUpTip`` command. In that layout the pipette drives ONE nozzle, and
+    the engine moves it over whatever well is named -- so the nozzle, not the
+    well, decides which channel ends up holding the tip. An 8-channel Flex
+    can anchor on its "A1" or "H1" nozzle only (channel 0 or channel 7);
+    ``primary_nozzle`` picks between them, and defaults to the one sitting in
+    ``well``'s own row, which needs ``well`` to be in row A or H. Raises
+    ``OpentronsError`` if that channel already holds a tip -- checked, like
+    the nozzle itself, before any wire command. Tip tracker changes are
+    staged (``commit=False``) before the wire command, then, after the wire
+    command succeeds, the hardware tip-presence sensor is checked
+    (``_verify_tips_seated()``) -- the tracker and ``_channel_tips`` are
+    committed only if that verification passes, and rolled back (with no
+    ``_channel_tips`` mutation) if the sensor reports a missed pickup (stage
+    -> validate -> wire -> verify -> commit/rollback).
     """
     self._warn_untested_hardware("pick_up_single_tip")
-    channel = self._channel_for_well(well)
+    if primary_nozzle is None:
+      primary_nozzle = self._nozzle_for_well_row(well)
+    elif primary_nozzle not in _SINGLE_NOZZLES:
+      raise ValueError(
+        f"primary_nozzle={primary_nozzle!r}: an 8-channel Flex can anchor a single-nozzle "
+        f"layout only on {' or '.join(_SINGLE_NOZZLES)}."
+      )
+    channel = _SINGLE_NOZZLES[primary_nozzle]
     if self._channel_tips[channel] is not None:
       raise OpentronsError(
         "HasTipError",
         f"Channel {channel} already holds a tip; drop it before picking up another.",
       )
 
-    primary_nozzle = f"{_ROW_LETTERS[channel]}1"
-    await self._execute(
-      "configureNozzleLayout",
-      {
-        "pipetteId": self.pipette_id,
-        "configurationParams": {"style": "SINGLE", "primaryNozzle": primary_nozzle},
-      },
-    )
+    await self._configure_nozzle_layout({"style": "SINGLE", "primaryNozzle": primary_nozzle})
     self._nozzle_layout = "SINGLE"
 
     labware_id = await self.flex._ensure_labware_loaded(tip_rack)
@@ -1456,10 +1501,7 @@ class FlexHead8(_FlexHead):
     self._channel_tips[channel] = None
     await self._confirm_tips_cleared()
 
-    await self._execute(
-      "configureNozzleLayout",
-      {"pipetteId": self.pipette_id, "configurationParams": {"style": "ALL"}},
-    )
+    await self._configure_nozzle_layout({"style": "ALL"})
     self._nozzle_layout = "ALL"
 
 
@@ -1533,10 +1575,7 @@ class FlexHead96(_FlexHead):
           f"Channel {i} already holds a tip; drop it before picking up another.",
         )
 
-    await self._execute(
-      "configureNozzleLayout",
-      {"pipetteId": self.pipette_id, "configurationParams": {"style": "ALL"}},
-    )
+    await self._configure_nozzle_layout({"style": "ALL"})
 
     labware_id = await self.flex._ensure_labware_loaded(tip_rack)
     tracking = does_tip_tracking()
@@ -1628,17 +1667,18 @@ class FlexHead96(_FlexHead):
     (None-skip). A bare ``Container`` (trough/reservoir) is its own
     robot-side labware whose single-cavity definition exposes exactly one
     well, named "A1": the engine centers the 12x8 nozzle grid in the
-    cavity itself (the definition's ``centerMultichannelOnWells`` quirk),
-    at least one mounted tip and a cavity footprint containing the grid's
-    99 x 63 mm span even after the offset shifts it are required (checked
-    before any wire command), and the container's single tracker is staged
-    with ``volume * (channels holding tips)``. Either way: stage ->
-    validate -> wire -> commit/rollback, with an infeasible aspirate
-    raising before any hardware motion, and a ``prepareToAspirate``
-    command sent first if this is the first aspirate since the last tip
-    pickup.
+    cavity itself (the definition's ``centerMultichannelOnWells`` quirk), a
+    footprint containing the grid's 99 x 63 mm span even after the offset
+    shifts it is required, and the container's single tracker is staged
+    with ``volume * (channels holding tips)``. Either way at least one
+    mounted tip is required, and: stage -> validate -> wire ->
+    commit/rollback, with an infeasible aspirate raising before any
+    hardware motion (every check above runs before any wire command), and a
+    ``prepareToAspirate`` command sent first if this is the first aspirate
+    since the last tip pickup.
     """
     self._warn_untested_hardware("aspirate")
+    self._require_mounted_tip()
     rate = flow_rate if flow_rate is not None else _DEFAULT_ASPIRATE_FLOW_RATE
     staged_trackers: List[Any] = []
     if isinstance(target, Plate):
@@ -1652,7 +1692,6 @@ class FlexHead96(_FlexHead):
           well.tracker.remove_liquid(volume=volume)  # stages + validates
           staged_trackers.append(well.tracker)
     else:
-      self._require_mounted_tip()
       self._require_span_fits_container(
         target, _NINETY_SIX_HEAD_X_SPAN, _NINETY_SIX_HEAD_Y_SPAN, offset
       )
@@ -1688,14 +1727,15 @@ class FlexHead96(_FlexHead):
     ``Well.tracker`` (``add_liquid``) staged per tip-holding channel
     (None-skip); a bare ``Container`` is addressed at its sole robot-side
     well "A1" with the engine centering the nozzle grid in the cavity
-    (the ``centerMultichannelOnWells`` quirk), the same pre-wire guards
-    (mounted tip, offset-shifted grid fits the cavity footprint), and
-    the container's single tracker staged with ``volume * (channels
-    holding tips)``. Either way: stage -> validate -> wire ->
+    (the ``centerMultichannelOnWells`` quirk), the same pre-wire footprint
+    guard (offset-shifted grid fits), and the container's single tracker
+    staged with ``volume * (channels holding tips)``. Either way at least
+    one mounted tip is required, and: stage -> validate -> wire ->
     commit/rollback, with an infeasible dispense raising before any
     hardware motion.
     """
     self._warn_untested_hardware("dispense")
+    self._require_mounted_tip()
     rate = flow_rate if flow_rate is not None else _DEFAULT_DISPENSE_FLOW_RATE
     staged_trackers: List[Any] = []
     if isinstance(target, Plate):
@@ -1709,7 +1749,6 @@ class FlexHead96(_FlexHead):
           well.tracker.add_liquid(volume=volume)  # stages + validates
           staged_trackers.append(well.tracker)
     else:
-      self._require_mounted_tip()
       self._require_span_fits_container(
         target, _NINETY_SIX_HEAD_X_SPAN, _NINETY_SIX_HEAD_Y_SPAN, offset
       )
@@ -1741,8 +1780,13 @@ class FlexHead96(_FlexHead):
     anchored at "A1", fanned to all 96 channels.
 
     ``radius`` is the fraction of the well radius each tip moves toward
-    (1.0 = the wall). Requires at least one mounted tip and a 96-position
-    plate (both checked before any wire command). No trackers are involved.
+    (1.0 = the wall). ``offset`` IS the touch position, read from the well
+    top (the Opentrons Python API's absolute ``v_offset``): it REPLACES the
+    1 mm below the rim this touches at by default rather than shifting it the
+    way an ``aspirate``/``dispense`` offset does, so ``Coordinate(x=1)``
+    touches level with the rim. Requires at least one mounted tip and a
+    96-position plate (both checked before any wire command). No trackers are
+    involved.
     """
     self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()

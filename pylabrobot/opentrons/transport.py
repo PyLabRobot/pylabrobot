@@ -28,6 +28,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# ChatterboxTransport's default /health version: deliberately not a version
+# string, so a caller gating on robot software can tell offline from any robot.
+OFFLINE_API_VERSION = "dry-run"
+
 
 @runtime_checkable
 class OpentronsTransport(Protocol):
@@ -110,6 +114,7 @@ class ChatterboxTransport:
     simulate_liquid_probe_not_found: bool = False,
     gripper: bool = False,
     saved_position: Optional[Dict[str, float]] = None,
+    api_version: str = OFFLINE_API_VERSION,
   ) -> None:
     """Args:
     pipette: the simulated mounted pipette as ``(name, channels, min_vol, max_vol)``.
@@ -149,6 +154,10 @@ class ChatterboxTransport:
     saved_position: the position a ``savePosition`` command reports in its
       result, as an ``{"x", "y", "z"}`` dict. Default None: report
       ``{"x": 100.0, "y": 100.0, "z": 100.0}``.
+    api_version: the robot software version ``/health`` reports. Defaults to
+      the ``OFFLINE_API_VERSION`` sentinel, which no real robot returns; pass
+      a real version string (e.g. ``"8.1.0"``) to drive a caller's own
+      version gating without subclassing.
     """
     if pipettes is not None:
       self._pipettes: List[Tuple[str, int, float, float, str]] = list(pipettes)
@@ -156,6 +165,7 @@ class ChatterboxTransport:
       name, channels, min_v, max_v = pipette
       self._pipettes = [(name, channels, min_v, max_v, mount)]
     self._gripper = gripper
+    self.api_version = api_version
     self._log = log or logger.info
     self._cmds: Dict[str, Dict[str, Any]] = {}  # cmd_id -> full command data
     self._n = 0
@@ -177,7 +187,11 @@ class ChatterboxTransport:
 
   async def get(self, path: str) -> Dict[str, Any]:
     if path == "/health":
-      return {"api_version": "dry-run", "robot_model": "OT-3 Standard", "name": "chatterbox"}
+      return {
+        "api_version": self.api_version,
+        "robot_model": "OT-3 Standard",
+        "name": "chatterbox",
+      }
     if path == "/instruments":
       instruments: List[Dict[str, Any]] = [
         {
