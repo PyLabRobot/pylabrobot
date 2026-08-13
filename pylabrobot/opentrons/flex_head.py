@@ -607,10 +607,244 @@ class _FlexHead:
       params["speed"] = speed
     await self._execute("moveToCoordinates", params)
 
+  async def move_to_well(
+    self,
+    target: Union[Well, Container],
+    offset: Optional[Coordinate] = None,
+    origin: str = "top",
+    minimum_z_height: Optional[float] = None,
+    speed: Optional[float] = None,
+  ) -> None:
+    """Move to a well, named rather than measured -- ONE ``moveToWell`` command.
+
+    Prefer this over :meth:`move_to` for anything positioned relative to
+    labware. The robot owns the geometry, so naming the well lets it work out
+    where that is and refuse a move it cannot make, the same way it checks an
+    aspirate. ``move_to`` sends raw deck coordinates, which nothing on either
+    side bounds-checks.
+
+    ``origin`` is where the offset is measured from: "top", "bottom",
+    "center", or "meniscus" (the last needs the robot to have a liquid level
+    for the well). So 10 mm above the well is ``origin="top"`` with
+    ``offset=Coordinate(z=10)``.
+
+    No mounted tip is required: the target is the tip bottom when one is
+    mounted, the nozzle when none is.
+    """
+    self._warn_untested_hardware("move_to_well")
+    if origin not in _WELL_ORIGINS:
+      raise ValueError(f"origin must be one of {sorted(_WELL_ORIGINS)}, got {origin!r}")
+    if isinstance(target, Well):
+      parent = self._require_itemized_parent(target)
+      labware_id = await self.flex._ensure_labware_loaded(parent)
+      well_name = parent.get_child_identifier(target)
+    else:
+      labware_id = await self.flex._ensure_labware_loaded(target)
+      well_name = _CONTAINER_WELL_NAME
+
+    o = offset or Coordinate(0, 0, 0)
+    params: Dict[str, Any] = {
+      "pipetteId": self.pipette_id,
+      "labwareId": labware_id,
+      "wellName": well_name,
+      "wellLocation": {"origin": origin, "offset": {"x": o.x, "y": o.y, "z": o.z}},
+      "minimumZHeight": minimum_z_height if minimum_z_height is not None else _TRAVERSAL_HEIGHT,
+    }
+    if speed is not None:
+      params["speed"] = speed
+    await self._execute("moveToWell", params)
+
+  async def move_relative(self, axis: str, distance: float) -> None:
+    """Jog one axis by ``distance`` mm from wherever the head is now.
+
+    ``axis`` is "x", "y" or "z". A negative distance moves the other way.
+    Relative to the head's current position, so unlike :meth:`move_to` it
+    needs no reading first.
+    """
+    self._warn_untested_hardware("move_relative")
+    if axis not in _MOVE_AXES:
+      raise ValueError(f"axis must be one of {sorted(_MOVE_AXES)}, got {axis!r}")
+    await self._execute(
+      "moveRelative",
+      {"pipetteId": self.pipette_id, "axis": axis, "distance": distance},
+    )
+
+  async def move_to_addressable_area(
+    self,
+    addressable_area_name: str,
+    offset: Optional[Coordinate] = None,
+    minimum_z_height: Optional[float] = None,
+    speed: Optional[float] = None,
+    stay_at_max_height: bool = False,
+  ) -> None:
+    """Move to a named fixture on the deck rather than to labware.
+
+    An addressable area is somewhere the deck itself provides: a trash bin, a
+    waste chute, a staging slot. Named, so the robot resolves the position.
+    """
+    self._warn_untested_hardware("move_to_addressable_area")
+    o = offset or Coordinate(0, 0, 0)
+    params: Dict[str, Any] = {
+      "pipetteId": self.pipette_id,
+      "addressableAreaName": addressable_area_name,
+      "offset": {"x": o.x, "y": o.y, "z": o.z},
+      "stayAtHighestPossibleZ": stay_at_max_height,
+      "minimumZHeight": minimum_z_height if minimum_z_height is not None else _TRAVERSAL_HEIGHT,
+    }
+    if speed is not None:
+      params["speed"] = speed
+    await self._execute("moveToAddressableArea", params)
+
+  # --- In-place pipetting (acts where the head already is) ---
+
+  async def aspirate_in_place(self, volume: float, flow_rate: Optional[float] = None) -> None:
+    """Aspirate ``volume`` uL where the head already is -- one ``aspirateInPlace`` command.
+
+    Names no well, so no ``Well``/``Container`` tracker moves with it:
+    position the head first (``move_to_well``/``move_to``) and account for the
+    liquid yourself. ``flow_rate`` (uL/s) defaults to the aspirate default. A
+    ``prepareToAspirate`` command is sent first when the plunger is unprimed
+    (after a tip pickup or a blow-out), which the robot requires before any
+    aspirate, in place or not.
+    """
+    self._warn_untested_hardware("aspirate_in_place")
+    self._require_mounted_tip()
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
+    await self._execute_with_prepare(
+      "aspirateInPlace",
+      {"pipetteId": self.pipette_id, "volume": volume, "flowRate": rate},
+      [],
+    )
+
+  async def dispense_in_place(
+    self,
+    volume: float,
+    flow_rate: Optional[float] = None,
+    push_out: Optional[float] = None,
+  ) -> None:
+    """Dispense ``volume`` uL where the head already is -- one ``dispenseInPlace`` command.
+
+    Names no well, so no tracker moves with it (see ``aspirate_in_place``).
+    ``push_out`` (uL) pushes the plunger past its dispense bottom to clear the
+    last drops; left out of the command entirely when None, so the robot
+    applies its own default for the mounted tip and volume.
+    """
+    self._warn_untested_hardware("dispense_in_place")
+    self._require_mounted_tip()
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
+    params: Dict[str, Any] = {
+      "pipetteId": self.pipette_id,
+      "volume": volume,
+      "flowRate": rate,
+    }
+    if push_out is not None:
+      params["pushOut"] = push_out
+    await self._execute("dispenseInPlace", params)
+
+  async def air_gap_in_place(self, volume: float, flow_rate: Optional[float] = None) -> None:
+    """Draw a ``volume`` uL air gap where the head already is -- one ``airGapInPlace`` command.
+
+    The same plunger motion as ``aspirate_in_place``, but the robot books the
+    volume as air, so park the tip above the liquid first. ``flow_rate``
+    (uL/s) defaults to the aspirate default, and the same priming rule
+    applies. No tracker is involved.
+    """
+    self._warn_untested_hardware("air_gap_in_place")
+    self._require_mounted_tip()
+    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
+    await self._execute_with_prepare(
+      "airGapInPlace",
+      {"pipetteId": self.pipette_id, "volume": volume, "flowRate": rate},
+      [],
+    )
+
+  # --- Tip-presence sensor (command form) ---
+
+  async def get_tip_presence(self) -> Optional[str]:
+    """Read this head's tip sensor: "present", "absent" or "unknown".
+
+    One reading per pipette, not per channel -- the same aggregate state
+    ``has_tip_on_hardware()`` reads from ``GET /instruments``, asked for as a
+    run command instead. ``None`` when the command reports no status.
+    """
+    self._warn_untested_hardware("get_tip_presence")
+    result = await self._execute("getTipPresence", {"pipetteId": self.pipette_id})
+    return cast(Optional[str], result.get("result", {}).get("status"))
+
+  async def verify_tip_presence(self, expected_state: str) -> None:
+    """Have the robot fail the command unless its tip sensor reads ``expected_state``.
+
+    ``expected_state`` is "present" or "absent". Where ``get_tip_presence``
+    reports and leaves the judgement to the caller, this one raises the
+    mismatch from the robot side, so it reads as a checkpoint in a sequence.
+    """
+    self._warn_untested_hardware("verify_tip_presence")
+    if expected_state not in _TIP_PRESENCE_STATES:
+      raise ValueError(
+        f"expected_state must be one of {sorted(_TIP_PRESENCE_STATES)}, got {expected_state!r}"
+      )
+    await self._execute(
+      "verifyTipPresence",
+      {"pipetteId": self.pipette_id, "expectedState": expected_state},
+    )
+
+  async def configure_for_volume(self, volume: float) -> None:
+    """Put the pipette in the volume mode that suits ``volume`` uL.
+
+    A Flex pipette only reaches its stated accuracy at small volumes in its
+    low-volume mode, which this picks for the volume given. Call it before
+    picking up tips: the robot refuses a mode change while a tip is attached.
+    """
+    self._warn_untested_hardware("configure_for_volume")
+    await self._execute("configureForVolume", {"pipetteId": self.pipette_id, "volume": volume})
+
+  # --- Recovery ops ---
+
+  async def unsafe_drop_tip_in_place(self) -> None:
+    """Drop the mounted tip where the head is, skipping the engine's own checks.
+
+    The "unsafe/" commands are the recovery path: they still run once the
+    engine has put the run into an error state, where the ordinary
+    ``dropTipInPlace`` is refused. The tip falls wherever the head happens to
+    be, so move somewhere it can be retrieved from first. Clears this head's
+    per-channel tip bookkeeping; no tip tracker is touched, since the tip
+    goes back to no rack.
+    """
+    self._warn_untested_hardware("unsafe_drop_tip_in_place")
+    self._require_mounted_tip()
+    await self._execute("unsafe/dropTipInPlace", {"pipetteId": self.pipette_id})
+    self._channel_tips = [None] * self.channels
+
+  async def unsafe_blow_out_in_place(self, flow_rate: float) -> None:
+    """Blow out where the head is, skipping the engine's own checks.
+
+    The recovery counterpart to ``blow_out`` (see ``unsafe_drop_tip_in_place``
+    for what "unsafe/" buys). ``flow_rate`` is in uL/s and has no default
+    here, the recovery path being an explicit one. Leaves the plunger at the
+    blow-out position, so the next aspirate re-primes.
+    """
+    self._warn_untested_hardware("unsafe_blow_out_in_place")
+    self._require_mounted_tip()
+    await self._execute(
+      "unsafe/blowOutInPlace",
+      {"pipetteId": self.pipette_id, "flowRate": flow_rate},
+    )
+    self._prepared = False
+
 
 # Default minimumZHeight (mm) for moveToCoordinates jogs: the head keeps at
 # least this z while traveling, clearing any labware on the deck.
 _TRAVERSAL_HEIGHT = 120.0
+
+# Where a wellLocation offset is measured from. "meniscus" needs the robot to
+# hold a liquid level for the well, which only a liquid probe gives it.
+_WELL_ORIGINS = frozenset({"top", "bottom", "center", "meniscus"})
+
+_MOVE_AXES = frozenset({"x", "y", "z"})
+
+# What verify_tip_presence can assert. The sensor itself can also read
+# "unknown", but that is a reading, not something to check against.
+_TIP_PRESENCE_STATES = frozenset({"present", "absent"})
 
 # The only nozzles an 8-channel Flex can anchor a SINGLE layout on ("A1" is
 # the rearmost, "H1" the frontmost), mapped to the channel each one is.

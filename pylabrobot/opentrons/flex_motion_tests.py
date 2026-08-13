@@ -21,6 +21,7 @@ from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import set_tip_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
+from pylabrobot.resources.opentrons.flex_plates import corning_96_wellplate_360ul_flat
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
 
@@ -465,3 +466,172 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
 
 if __name__ == "__main__":
   unittest.main()
+
+
+class TestMoveToWell(unittest.TestCase):
+  """move_to_well names the well and lets the robot resolve where that is."""
+
+  def _flex_with_plate(self):
+    flex, transport = _flex_with_gripper()
+    plate = corning_96_wellplate_360ul_flat(name="plate")
+    flex.deck.assign_child_at_slot(plate, "C1")
+    return flex, transport, plate
+
+  def test_names_the_well_and_defaults_to_the_top_origin(self):
+    flex, transport, plate = self._flex_with_plate()
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(_head(flex).move_to_well(plate.get_item("D2")))
+
+      (cmd,) = _cmds(transport, "moveToWell")
+      self.assertEqual(cmd["params"]["wellName"], "D2")
+      self.assertEqual(
+        cmd["params"]["wellLocation"],
+        {"origin": "top", "offset": {"x": 0, "y": 0, "z": 0}},
+      )
+      self.assertNotIn("coordinates", cmd["params"])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_offset_above_the_well_rides_the_top_origin(self):
+    """'10 mm above the D2 well' is an offset from the top, not a coordinate."""
+    flex, transport, plate = self._flex_with_plate()
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(
+        _head(flex).move_to_well(plate.get_item("D2"), offset=Coordinate(0, 0, 10), speed=50.0)
+      )
+
+      (cmd,) = _cmds(transport, "moveToWell")
+      self.assertEqual(cmd["params"]["wellLocation"]["origin"], "top")
+      self.assertEqual(cmd["params"]["wellLocation"]["offset"]["z"], 10)
+      self.assertEqual(cmd["params"]["speed"], 50.0)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_unknown_origin_is_refused_before_any_wire_command(self):
+    flex, transport, plate = self._flex_with_plate()
+    asyncio.run(flex.setup())
+    try:
+      with self.assertRaisesRegex(ValueError, "origin must be one of"):
+        asyncio.run(_head(flex).move_to_well(plate.get_item("A1"), origin="sideways"))
+      self.assertEqual(_cmds(transport, "moveToWell"), [])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_no_mounted_tip_required(self):
+    """Jogging to a well is for teaching and recovery, so it must not need a tip."""
+    flex, transport, plate = self._flex_with_plate()
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(_head(flex).move_to_well(plate.get_item("A1")))
+      self.assertEqual(len(_cmds(transport, "moveToWell")), 1)
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestMoveRelative(unittest.TestCase):
+  """move_relative jogs one axis without reading the position first."""
+
+  def test_sends_axis_and_distance_only(self):
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(_head(flex).move_relative("z", -5.0))
+
+      (cmd,) = _cmds(transport, "moveRelative")
+      self.assertEqual(cmd["params"]["axis"], "z")
+      self.assertEqual(cmd["params"]["distance"], -5.0)
+      self.assertEqual(_cmds(transport, "savePosition"), [])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_unknown_axis_is_refused_before_any_wire_command(self):
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      with self.assertRaisesRegex(ValueError, "axis must be one of"):
+        asyncio.run(_head(flex).move_relative("w", 1.0))
+      self.assertEqual(_cmds(transport, "moveRelative"), [])
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestMoveToAddressableArea(unittest.TestCase):
+  """move_to_addressable_area targets a deck fixture by name."""
+
+  def test_names_the_area_and_carries_the_offset(self):
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(
+        _head(flex).move_to_addressable_area("movableTrashA3", offset=Coordinate(0, 0, 5))
+      )
+
+      (cmd,) = _cmds(transport, "moveToAddressableArea")
+      self.assertEqual(cmd["params"]["addressableAreaName"], "movableTrashA3")
+      self.assertEqual(cmd["params"]["offset"], {"x": 0, "y": 0, "z": 5})
+      self.assertFalse(cmd["params"]["stayAtHighestPossibleZ"])
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestSendCommandEscapeHatch(unittest.TestCase):
+  """send_command reaches commands the driver wraps no method around."""
+
+  def test_passes_command_type_and_params_through_untouched(self):
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      params = {"moduleId": "abc", "celsius": 37.0}
+      asyncio.run(flex.send_command("heaterShaker/setTargetTemperature", params))
+
+      (cmd,) = _cmds(transport, "heaterShaker/setTargetTemperature")
+      self.assertEqual(cmd["params"], params)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_defaults_params_to_an_empty_payload(self):
+    flex, transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(flex.send_command("unsafe/engageAxes"))
+      (cmd,) = _cmds(transport, "unsafe/engageAxes")
+      self.assertEqual(cmd["params"], {})
+    finally:
+      asyncio.run(flex.stop())
+
+
+class TestSyncTipsToRobot(unittest.TestCase):
+  """sync_tips_to_robot pushes PyLabRobot's tip layout onto the robot."""
+
+  def test_splits_present_and_absent_into_one_command_each(self):
+    flex, transport = _flex_with_gripper()
+    rack = flex_96_tiprack_50ul(name="tips")
+    flex.deck.assign_child_at_slot(rack, "C1")
+    asyncio.run(flex.setup())
+    try:
+      rack.set_tip_state({spot.get_identifier(): False for spot in rack.get_all_items()})
+      rack.set_tip_state({"A1": True, "B1": True})
+
+      asyncio.run(flex.sync_tips_to_robot(rack))
+
+      cmds = _cmds(transport, "setTipState")
+      by_state = {c["params"]["tipWellState"]: c["params"]["wellNames"] for c in cmds}
+      self.assertEqual(by_state["tipPresent"], ["A1", "B1"])
+      self.assertEqual(len(by_state["tipAbsent"]), 94)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_uniform_rack_sends_only_the_state_it_has(self):
+    flex, transport = _flex_with_gripper()
+    rack = flex_96_tiprack_50ul(name="tips")
+    flex.deck.assign_child_at_slot(rack, "C1")
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(flex.sync_tips_to_robot(rack))
+
+      states = {c["params"]["tipWellState"] for c in _cmds(transport, "setTipState")}
+      self.assertEqual(states, {"tipPresent"})
+    finally:
+      asyncio.run(flex.stop())
