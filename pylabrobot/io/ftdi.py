@@ -35,8 +35,9 @@ logger = logging.getLogger(__name__)
 class FTDICommand(Command):
   data: str
 
-  def __init__(self, device_id: str, action: str, data: str):
-    super().__init__(module="ftdi", device_id=device_id, action=action)
+  def __init__(self, device_id: str, action: str, data: str, module: str = "ftdi"):
+    super().__init__(module=module, device_id=device_id, action=action)
+    self.data = data
 
 
 class FTDI(IOBase):
@@ -85,6 +86,9 @@ class FTDI(IOBase):
     # Will be resolved in setup()
     self._dev: Optional[Device] = None
     self._executor: Optional[ThreadPoolExecutor] = None
+    # Bytes off the wire that no read has taken yet, and the read still in flight, if any.
+    self._unread = bytearray()
+    self._pending_read: Optional["asyncio.Future"] = None
 
     if get_capture_or_validation_active():
       raise RuntimeError(
@@ -272,6 +276,7 @@ class FTDI(IOBase):
   async def usb_reset(self):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_reset())
+    self._discard_reads()
     logger.log(LOG_LEVEL_IO, "[%s] usb_reset", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_reset", data=""))
 
@@ -310,6 +315,7 @@ class FTDI(IOBase):
   async def usb_purge_rx_buffer(self):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer())
+    self._discard_reads()
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_rx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_purge_rx_buffer", data=""))
 
@@ -340,13 +346,41 @@ class FTDI(IOBase):
       await loop.run_in_executor(self._executor, self.dev.close)
       self._dev = None
     self._shutdown_executor()
+    self._discard_reads()
+
+  def _discard_reads(self) -> None:
+    """Drop read data buffered here and in flight, once the caller has declared it stale."""
+    self._unread.clear()
+    self._pending_read = None
+
+  def _keep(self, chunk) -> None:
+    """Add what came off the wire to the buffer that read() serves from.
+
+    pylibftdi returns str, decoded with latin-1, when the device was opened in text mode. setup()
+    opens it in byte mode, but latin-1 round-trips every byte value, so encoding back gives
+    exactly what was on the wire either way.
+    """
+    self._unread.extend(chunk if isinstance(chunk, bytes) else chunk.encode("latin-1"))
+
+  def _buffer_read(self, future: "asyncio.Future") -> None:
+    """Keep the bytes of a read whose caller was cancelled, for the next read to take."""
+    if future is not self._pending_read:
+      return  # a purge, reset or close has since declared everything in flight stale
+    self._pending_read = None
+    if future.cancelled() or future.exception() is not None:
+      return
+    self._keep(future.result())
 
   async def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self.device_id, action="write", data=data.hex()))
     loop = asyncio.get_running_loop()
-    bytes_written = cast(int, await loop.run_in_executor(self._executor, self.dev.write, data))
+    # shield: a call handed to the worker cannot be recalled, so cancelling the caller would
+    # otherwise leave the device holding a partial command, or none, with no way to tell which.
+    bytes_written = cast(
+      int, await asyncio.shield(loop.run_in_executor(self._executor, self.dev.write, data))
+    )
     emit_event(
       "io.write",
       transport="ftdi",
@@ -357,40 +391,71 @@ class FTDI(IOBase):
     return bytes_written
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    loop = asyncio.get_running_loop()
-    data = await loop.run_in_executor(self._executor, self.dev.read, num_bytes)
+    if not self._unread:
+      pending = self._pending_read
+      if pending is None or pending.done():
+        loop = asyncio.get_running_loop()
+        pending = loop.run_in_executor(self._executor, self.dev.read, num_bytes)
+        self._pending_read = pending
+      try:
+        # shield: the worker keeps going after the caller is gone, so its bytes are held for the
+        # next read instead of being dropped part-way through a response.
+        chunk = await asyncio.shield(pending)
+      except asyncio.CancelledError:
+        pending.add_done_callback(self._buffer_read)
+        raise
+      if pending is self._pending_read:
+        self._pending_read = None
+        self._keep(chunk)
+    data = bytes(self._unread[:num_bytes])
+    del self._unread[:num_bytes]
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
-      capturer.record(
-        FTDICommand(
-          device_id=self.device_id,
-          action="read",
-          data=data if isinstance(data, str) else data.hex(),
-        )
-      )
+      capturer.record(FTDICommand(device_id=self.device_id, action="read", data=data.hex()))
       emit_event(
         "io.read",
         transport="ftdi",
         device=self.human_readable_device_name,
         device_id=self.device_id,
-        data=data if isinstance(data, str) else data.hex(),
+        data=data.hex(),
       )
-    return cast(bytes, data)
+    return data
 
-  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(  # type: ignore # very dumb it's reading from pyserial
+    self, terminator: bytes = b"\n", timeout: Optional[float] = None
+  ) -> bytes:
+    """Read until `terminator`, returning the line with the terminator still on it.
+
+    Assembled from single-byte reads: pylibftdi's own `readline` raises `TypeError` unless the
+    device was opened in text mode, and `setup` opens it in byte mode.
+
+    Args:
+      terminator: byte sequence that ends the line.
+      timeout: seconds to wait for a complete line. None waits indefinitely.
+
+    Raises:
+      ValueError: if `terminator` is empty.
+      TimeoutError: if no complete line arrives within `timeout`.
+    """
+    if not terminator:
+      raise ValueError("terminator must be at least one byte")
     loop = asyncio.get_running_loop()
-    data = await loop.run_in_executor(self._executor, self.dev.readline)
-    if len(data) != 0:
-      logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
-      capturer.record(FTDICommand(device_id=self.device_id, action="readline", data=data.hex()))
-      emit_event(
-        "io.read",
-        transport="ftdi",
-        device=self.human_readable_device_name,
-        device_id=self.device_id,
-        data=data if isinstance(data, str) else data.hex(),
-      )
-    return cast(bytes, data)
+    deadline = None if timeout is None else loop.time() + timeout
+    line = bytearray()
+    while not line.endswith(terminator):
+      chunk = await self.read(1)
+      if chunk:
+        line.extend(chunk)
+        continue
+      if deadline is not None and loop.time() >= deadline:
+        raise TimeoutError(
+          f"'{self.human_readable_device_name}' sent no complete line within {timeout} s; "
+          f"received {bytes(line)!r} so far."
+        )
+      # An empty read already cost a latency-timer period, so yield without adding delay.
+      await asyncio.sleep(0)
+    logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, bytes(line))
+    return bytes(line)
 
   def serialize(self):
     return {
@@ -537,19 +602,11 @@ class FTDIValidator(FTDI):
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
       and next_command.action == "read"
-      and len(next_command.data) == num_bytes
+      # data is hex, so two characters per byte, and a short read is normal.
+      and len(next_command.data) <= num_bytes * 2
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI read {self._device_id}")
     return bytes.fromhex(next_command.data)
 
-  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    next_command = FTDICommand(**self.cr.next_command())
-    if not (
-      next_command.module == "ftdi"
-      and next_command.device_id == self._device_id
-      and next_command.action == "readline"
-    ):
-      raise ValidationError(
-        f"Next line is {next_command}, expected FTDI readline {self._device_id}"
-      )
-    return bytes.fromhex(next_command.data)
+  # readline is inherited: it assembles the line from read(), so a replay goes through the
+  # recorded reads rather than a "readline" command that is no longer recorded.
