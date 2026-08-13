@@ -105,6 +105,9 @@ class STARChatterboxBackend(STARBackend):
     self._num_channels = num_channels
     self._iswap_parked = True
     self._sim_iswap_information = iswap_information  # None means use default at setup
+    # Absolute heights latched by simulated LLD, one per channel. See
+    # `request_pip_height_last_lld`; `_run_lld_on_channel_batch` writes them.
+    self._last_lld_absolute_heights = [0.0] * num_channels
 
     if core96_head_installed is not None or iswap_installed is not None:
       extended_configuration = copy.deepcopy(extended_configuration)
@@ -484,8 +487,14 @@ class STARChatterboxBackend(STARBackend):
   async def position_channels_in_y_direction(self, ys, make_space=True):
     logger.info("positioning channels in y: %s make_space: %s", ys, make_space)
 
-  async def request_pip_height_last_lld(self):
-    return list(range(12))
+  async def request_pip_height_last_lld(self) -> List[float]:
+    """Return the absolute heights latched by simulated LLD, one per channel.
+
+    `_run_lld_on_channel_batch` records each simulated measurement by physical
+    channel. Values remain latched until another simulated LLD updates that channel.
+    Channels with no recorded simulated LLD are initialized to 0.0.
+    """
+    return list(self._last_lld_absolute_heights)
 
   async def _run_lld_on_channel_batch(
     self,
@@ -503,9 +512,13 @@ class STARChatterboxBackend(STARBackend):
     Empty containers report the cavity-bottom Z (relative height 0). Non-empty
     containers report ``cavity_bottom + compute_height_from_volume(volume)`` so the
     parent ``probe_liquid_heights`` can subtract ``z_cavity_bottom`` consistently.
+
+    Each reading is also latched per physical channel for ``request_pip_height_last_lld``.
     """
     measurements: Dict[int, List[Optional[float]]] = {}
-    for orig_idx in batch.indices:
+    # ``indices`` are job indices and ``channels`` the physical channels running them; they are
+    # parallel, so a job's reading is latched at its channel, not at its position in the batch.
+    for orig_idx, channel_idx in zip(batch.indices, batch.channels):
       container = containers[orig_idx]
       volume = container.tracker.get_used_volume()
       if volume == 0:
@@ -513,4 +526,5 @@ class STARChatterboxBackend(STARBackend):
       else:
         absolute_height = z_cavity_bottom[orig_idx] + container.compute_height_from_volume(volume)
       measurements[orig_idx] = [absolute_height] * n_replicates
+      self._last_lld_absolute_heights[channel_idx] = absolute_height
     return measurements
