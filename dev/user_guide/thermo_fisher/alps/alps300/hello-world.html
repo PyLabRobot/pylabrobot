@@ -33,6 +33,7 @@
     <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plr_devices.css?v=b0ac04d7" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
@@ -46,6 +47,7 @@
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../../_static/plr_devices.js?v=2dde28f2"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/thermo_fisher/alps/alps300/hello-world';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
@@ -741,7 +743,19 @@
 <p>This driver has NOT been tested against hardware in PyLabRobot. If you verify
 it on a sealer, please open a PR to remove the not-tested warning.</p>
 </div>
-<section id="physical-setup">
+<div class="plr-device-card" id="device-thermo-fisher-alps-300">
+  <div class="plr-device-card__head">
+    <div>
+      <div class="plr-device-card__vendor">Thermo Fisher</div>
+      <div class="plr-device-card__name">ALPS 300</div>
+    </div>
+    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--mostly">Mostly</span><span class="plr-device-api-version">v1</span></div>
+  </div>
+  <div class="plr-device-card__kind">sealer</div>
+  <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 178">sealing</span></div>
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.thermo_fisher.alps.ThermoScientificALPS300</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
+  <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/thermo_fisher/alps"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a></div>
+</div><section id="physical-setup">
 <h2>Physical setup<a class="headerlink" href="#physical-setup" title="Link to this heading">#</a></h2>
 <p>Connect the sealer’s RS-232 port to your computer, typically through a USB-to-serial adapter. Make sure the sealer’s serial parameters match the driver defaults (9600 baud, 8 data bits, no parity, 1 stop bit, no handshake).</p>
 </section>

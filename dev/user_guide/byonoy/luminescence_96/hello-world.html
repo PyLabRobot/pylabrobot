@@ -33,6 +33,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_devices.css?v=b0ac04d7" />
     <link rel="stylesheet" type="text/css" href="../../../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
@@ -46,6 +47,7 @@
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/plr_devices.js?v=2dde28f2"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/byonoy/luminescence_96/hello-world';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
@@ -714,7 +716,31 @@
 <h1>Byonoy Luminescence 96 — lab guide<a class="headerlink" href="#byonoy-luminescence-96-lab-guide" title="Link to this heading">#</a></h1>
 <p>Run a luminescence assay on the Byonoy L96 from PyLabRobot. Assumes the device is plugged in via USB and you’ve installed <code class="docutils literal notranslate"><span class="pre">pylabrobot</span></code> (with <code class="docutils literal notranslate"><span class="pre">hid</span></code> and <code class="docutils literal notranslate"><span class="pre">hidapi</span></code>).</p>
 <p>The L96 is a 96-well luminescence-only plate reader. It reads emitted light per well, no excitation source. Communicates over USB HID (vid <code class="docutils literal notranslate"><span class="pre">0x16D0</span></code>, pid <code class="docutils literal notranslate"><span class="pre">0x119B</span></code>).</p>
-<section id="connect">
+<div class="plr-device-card" id="device-byonoy-luminescence-96">
+  <div class="plr-device-card__head">
+    <div>
+      <div class="plr-device-card__vendor">Byonoy</div>
+      <div class="plr-device-card__name">Luminescence 96</div>
+    </div>
+    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--full">Full</span><span class="plr-device-api-version">v1</span></div>
+  </div>
+  <div class="plr-device-card__kind">plate reader</div>
+  <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 297">luminescence</span></div>
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.byonoy.ByonoyLuminescence96</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
+  <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/byonoy"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://byonoy.com/luminescence-96/" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
+</div><div class="plr-device-card" id="device-byonoy-luminescence-96-automate">
+  <div class="plr-device-card__head">
+    <div>
+      <div class="plr-device-card__vendor">Byonoy</div>
+      <div class="plr-device-card__name">Luminescence 96 Automate</div>
+    </div>
+    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--full">Full</span><span class="plr-device-api-version">v1</span></div>
+  </div>
+  <div class="plr-device-card__kind">plate reader</div>
+  <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 297">luminescence</span></div>
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.byonoy.ByonoyLuminescence96</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
+  <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/byonoy"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://byonoy.com/luminescence-96-automate/" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
+</div><section id="connect">
 <h2>1. Connect<a class="headerlink" href="#connect" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">base</span></code> is a resource (a plate goes here); <code class="docutils literal notranslate"><span class="pre">reader</span></code> is both a resource and a device (the detector unit). After <code class="docutils literal notranslate"><span class="pre">setup()</span></code> the HID handle is open.</p>
 <blockquote>

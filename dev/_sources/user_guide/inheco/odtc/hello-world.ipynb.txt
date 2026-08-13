@@ -18,6 +18,15 @@
     "\n",
     "See the [Inheco ODTC product page](https://www.inheco.com/odtc.html) for hardware details."
    ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "```{device-card} inheco-odtc\n",
+    "```"
+   ],
+   "id": "device-card"
   }
  ],
  "metadata": {

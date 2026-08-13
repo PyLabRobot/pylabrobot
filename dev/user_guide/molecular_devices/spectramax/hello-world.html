@@ -33,6 +33,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_devices.css?v=b0ac04d7" />
     <link rel="stylesheet" type="text/css" href="../../../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
@@ -46,6 +47,7 @@
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/plr_devices.js?v=2dde28f2"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/molecular_devices/spectramax/hello-world';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
@@ -742,7 +744,31 @@
 </table>
 </div>
 <p>Connect the reader to your computer via an RS-232 serial cable (or USB-to-serial adapter). Note the serial port name (e.g. <code class="docutils literal notranslate"><span class="pre">COM3</span></code> on Windows, <code class="docutils literal notranslate"><span class="pre">/dev/ttyUSB0</span></code> on Linux).</p>
-<section id="setup">
+<div class="plr-device-card" id="device-molecular-devices-spectramax-m5">
+  <div class="plr-device-card__head">
+    <div>
+      <div class="plr-device-card__vendor">Molecular Devices</div>
+      <div class="plr-device-card__name">SpectraMax M5e</div>
+    </div>
+    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--full">Full</span><span class="plr-device-api-version">v1</span></div>
+  </div>
+  <div class="plr-device-card__kind">plate reader</div>
+  <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 29">absorbance</span><span class="plr-device-badge" style="--plr-badge-hue: 260">fluorescence</span><span class="plr-device-badge" style="--plr-badge-hue: 297">luminescence</span><span class="plr-device-badge" style="--plr-badge-hue: 212">time-resolved fluorescence</span><span class="plr-device-badge" style="--plr-badge-hue: 254">fluorescence polarization</span></div>
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.molecular_devices.spectramax.SpectraMaxM5</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
+  <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/molecular_devices/spectramax"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
+</div><div class="plr-device-card" id="device-molecular-devices-spectramax-384plus">
+  <div class="plr-device-card__head">
+    <div>
+      <div class="plr-device-card__vendor">Molecular Devices</div>
+      <div class="plr-device-card__name">SpectraMax 384 Plus</div>
+    </div>
+    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--full">Full</span><span class="plr-device-api-version">v1</span></div>
+  </div>
+  <div class="plr-device-card__kind">plate reader</div>
+  <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 29">absorbance</span></div>
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.molecular_devices.spectramax.SpectraMax384Plus</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
+  <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/molecular_devices/spectramax"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://www.moleculardevices.com/products/microplate-readers/absorbance-readers" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
+</div><section id="setup">
 <h2>Setup<a class="headerlink" href="#setup" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">

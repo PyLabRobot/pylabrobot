@@ -8,6 +8,15 @@
   },
   {
    "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "```{device-card} big-bear-orbital-shaker\n",
+    "```"
+   ],
+   "id": "device-card"
+  },
+  {
+   "cell_type": "markdown",
    "id": "bigbear-daisy-md",
    "source": "## Daisy chaining\n\nMultiple shaker units share one serial connection: the host talks to the first unit, which is wired to the second, and so on down the chain. Each unit is a **nest** with a 1-based address.\n\nEvery command is addressed with an `@<id>` prefix, where `<id>` is the nest number written in **hexadecimal** -- so nest 10 is `@A` and nest 16 is `@10`. A command reaches only the nest it names; the others ignore it. This lets one port run up to 16 shakers with independent speed, direction, and start/stop.\n\nAt `setup()` the driver:\n\n1. sends `U` to put the chain into daisy-chain (addressing) mode,\n2. sends `~` to ask how many units are present, and\n3. checks that the reported count matches the `num_shakers` you passed.\n\nIf the counts disagree (a unit is off, unplugged, or `num_shakers` is wrong) setup raises a `BigBearError`. Set `num_shakers` to the number of physical units on the chain.",
    "metadata": {}
