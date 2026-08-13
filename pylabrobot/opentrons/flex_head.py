@@ -615,7 +615,7 @@ class _FlexHead:
 
   async def move_to_well(
     self,
-    target: Union[Well, Container],
+    target: Union[Well, TipSpot, Container],
     offset: Optional[Coordinate] = None,
     origin: str = "top",
     minimum_z_height: Optional[float] = None,
@@ -636,11 +636,15 @@ class _FlexHead:
 
     No mounted tip is required: the target is the tip bottom when one is
     mounted, the nozzle when none is.
+
+    A tip spot is a valid target: the robot addresses a tip rack's wells by
+    the same names, so this is how you look at where a pickup would descend
+    before committing to it.
     """
     self._warn_untested_hardware("move_to_well")
     if origin not in _WELL_ORIGINS:
       raise ValueError(f"origin must be one of {sorted(_WELL_ORIGINS)}, got {origin!r}")
-    if isinstance(target, Well):
+    if isinstance(target, (Well, TipSpot)):
       parent = self._require_itemized_parent(target)
       labware_id = await self.flex._ensure_labware_loaded(parent)
       well_name = parent.get_child_identifier(target)

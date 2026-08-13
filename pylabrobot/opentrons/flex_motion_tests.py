@@ -477,6 +477,23 @@ class TestMoveToWell(unittest.TestCase):
     flex.deck.assign_child_at_slot(plate, "C1")
     return flex, transport, plate
 
+  def test_a_tip_spot_is_a_valid_target(self):
+    """Looking at where a pickup would descend, before committing to it. The
+    robot addresses a tip rack's wells by the same names a plate's use."""
+    flex, transport = _flex_with_gripper()
+    rack = flex_96_tiprack_50ul(name="tips")
+    flex.deck.assign_child_at_slot(rack, "C1")
+    asyncio.run(flex.setup())
+    try:
+      asyncio.run(_head(flex).move_to_well(rack.get_item("A1"), offset=Coordinate(0, 0, 20)))
+
+      (cmd,) = _cmds(transport, "moveToWell")
+      self.assertEqual(cmd["params"]["wellName"], "A1")
+      self.assertEqual(cmd["params"]["labwareId"], transport.labware_ids["tips"])
+      self.assertEqual(cmd["params"]["wellLocation"]["offset"]["z"], 20)
+    finally:
+      asyncio.run(flex.stop())
+
   def test_names_the_well_and_defaults_to_the_top_origin(self):
     flex, transport, plate = self._flex_with_plate()
     asyncio.run(flex.setup())
