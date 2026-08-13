@@ -131,6 +131,9 @@ with event_operation(
 
 For pickup and drop, record the resource's invocation state in `.started`. A
 `completed_data_factory` may capture its final assignment or pose for `.completed`.
+For a pickup, capture `resource.parent` as `source` before the frontend unassigns the moved
+resource. Omit `source` if the resource is not currently assigned; do not infer one from a caller
+or a physical-deck assumption.
 
 ### Liquid handling
 

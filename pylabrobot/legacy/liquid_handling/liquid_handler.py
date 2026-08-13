@@ -92,10 +92,13 @@ TipPresenceProbingMethod = Callable[
 def _resource_pickup_event_context(
   liquid_handler: "LiquidHandler", resource: Resource, **_: Any
 ) -> Dict[str, Any]:
-  return {
+  context = {
     "device": resource_reference(liquid_handler),
     "resources": [resource_reference(resource)],
   }
+  if resource.parent is not None:
+    context["source"] = resource_reference(resource.parent)
+  return context
 
 
 def _picked_resource_event_context(liquid_handler: "LiquidHandler", **_: Any) -> Dict[str, Any]:

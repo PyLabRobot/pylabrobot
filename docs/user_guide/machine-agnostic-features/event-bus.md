@@ -126,8 +126,9 @@ Detailed operation references:
 
 ### LiquidHandler
 
-Resource transfer events include the direct moved resource. Aspirate and dispense events include
-direct operated resources plus `liquid_operations`, one record per channel, with `channel`,
+Resource pickup events include the source holder when the moved resource is assigned at invocation
+time; resource-drop events include their destination. Aspirate and dispense events include direct
+operated resources plus `liquid_operations`, one record per channel, with `channel`,
 `resource`, optional owning `plate`, and `volume_ul`. Tip events similarly include direct tip
 locations and per-channel `tip_operations`.
 
