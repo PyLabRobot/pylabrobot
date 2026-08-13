@@ -289,7 +289,18 @@ class _FlexHead:
       for tracker in staged_trackers:
         tracker.commit()
 
-  async def _execute_trash_drop(self) -> None:
+  def _trash_addressable_area(self, trash: Trash) -> str:
+    """The movable-trash addressable area for the slot this trash sits in."""
+    slot = self.flex.deck.get_slot(trash)
+    if slot not in _MOVABLE_TRASH_SLOTS:
+      raise OpentronsError(
+        "Trash is not in a trash slot",
+        f"'{trash.name}' is in slot {slot!r}. A Flex accepts a movable trash only in "
+        f"{', '.join(sorted(_MOVABLE_TRASH_SLOTS))}.",
+      )
+    return f"movableTrash{slot}"
+
+  async def _execute_trash_drop(self, trash: Trash) -> None:
     """Send the two-command addressable-area trash-drop sequence.
 
     Shared by every ``discard_tips``/``drop_single_tip`` variant. No tracker
@@ -300,7 +311,7 @@ class _FlexHead:
       "moveToAddressableAreaForDropTip",
       {
         "pipetteId": self.pipette_id,
-        "addressableAreaName": "movableTrashA3",
+        "addressableAreaName": self._trash_addressable_area(trash),
         "alternateDropLocation": True,
       },
     )
@@ -619,6 +630,9 @@ _ROBOT_REAR_LIMIT = 493.8 - 169.42
 
 _NUM_CHANNELS = 8
 
+# The slots a Flex accepts a movable trash in (shared-data ot3_standard.json).
+_MOVABLE_TRASH_SLOTS = frozenset({"A1", "B1", "C1", "D1", "A3", "B3", "C3", "D3"})
+
 # Default aspirate/dispense position: 1mm above the well bottom, matching the
 # Opentrons Python-API default. The raw Protocol-Engine /commands API defaults
 # an OMITTED wellLocation to origin "top" (the well rim -- above the liquid),
@@ -729,7 +743,7 @@ class FlexHead1(_FlexHead):
     self._warn_untested_hardware("drop_tips")
 
     if isinstance(target, Trash):
-      await self._execute_trash_drop()
+      await self._execute_trash_drop(target)
       self._channel_tips[0] = None
       await self._confirm_tips_cleared()
       return
@@ -1077,7 +1091,7 @@ class FlexHead8(_FlexHead):
     self._warn_untested_hardware("drop_tips")
 
     if isinstance(target, Trash):
-      await self._execute_trash_drop()
+      await self._execute_trash_drop(target)
       self._channel_tips = [None] * self.channels
       await self._confirm_tips_cleared()
       await self._ensure_all_mode()
@@ -1605,7 +1619,7 @@ class FlexHead8(_FlexHead):
     """
     self._warn_untested_hardware("drop_single_tip")
     channel = self._active_single_channel()
-    await self._execute_trash_drop()
+    await self._execute_trash_drop(trash)
     self._channel_tips[channel] = None
     await self._confirm_tips_cleared()
     await self._ensure_all_mode()
@@ -1726,7 +1740,7 @@ class FlexHead96(_FlexHead):
     self._warn_untested_hardware("drop_tips")
 
     if isinstance(target, Trash):
-      await self._execute_trash_drop()
+      await self._execute_trash_drop(target)
       self._channel_tips = [None] * self.channels
       await self._confirm_tips_cleared()
       return
