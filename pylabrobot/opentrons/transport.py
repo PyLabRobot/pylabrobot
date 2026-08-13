@@ -138,9 +138,19 @@ class ReplayTransport:
   the same refusal on an exchange that failed. Nothing reaches the network.
 
   Build the capture file by wrapping a live run in ``start_capture()`` /
-  ``stop_capture()``. Call :meth:`assert_fully_replayed` at the end of a test:
-  it fails when the protocol stopped short of the recording, which is what
-  catches a dropped command.
+  ``stop_capture()``. Construct the robot BEFORE arming the capture: every
+  pylabrobot io refuses construction while one is active, and the robot builds
+  its transport in ``__init__`` for exactly that reason.
+
+      flex = OpentronsFlex(deck=deck, host=host)   # transport built here
+      pylabrobot.start_capture(path)
+      await flex.setup()
+      ...
+      pylabrobot.stop_capture()
+
+  Call :meth:`assert_fully_replayed` at the end of a test: it fails when the
+  protocol stopped short of the recording, which is what catches a dropped
+  command.
   """
 
   def __init__(

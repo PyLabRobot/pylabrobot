@@ -9,6 +9,22 @@ from pylabrobot.opentrons.transport import HttpxTransport, OpentronsTransport
 
 logger = logging.getLogger(__name__)
 
+# Seconds of polling a command gets on top of however long its own motion takes.
+COMMAND_POLL_HEADROOM = 30.0
+
+
+def _plunger_seconds(params: Dict[str, Any]) -> float:
+  """How long a command's own plunger travel takes, from its volume and rate.
+
+  A 1000 uL aspirate at a viscous-liquid flow rate outlasts any fixed poll
+  timeout, and giving up mid-command rolls the trackers back while the robot
+  keeps pipetting.
+  """
+  volume, flow_rate = params.get("volume"), params.get("flowRate")
+  if not isinstance(volume, (int, float)) or not isinstance(flow_rate, (int, float)):
+    return 0.0
+  return abs(volume) / flow_rate if flow_rate > 0 else 0.0
+
 
 class OpentronsError(Exception):
   def __init__(self, title: str, message: Optional[str] = None) -> None:
@@ -67,7 +83,9 @@ class OpentronsRobot(abc.ABC):
   ) -> None:
     self.host, self.port = host, port
     self.base_url = f"http://{host}:{port}"
-    self._transport: Optional[OpentronsTransport] = transport
+    # Built here rather than on connect: a pylabrobot io refuses construction
+    # once a capture is armed, so a robot built first can still be recorded.
+    self._transport: OpentronsTransport = transport or HttpxTransport(base_url=self.base_url)
     self.run_id: Optional[str] = None
     self.pipette: Optional[PipetteInfo] = None
     self.api_version: Optional[str] = None
@@ -150,13 +168,11 @@ class OpentronsRobot(abc.ABC):
   # --- Connection Lifecycle ---
 
   async def _connect(self) -> None:
-    """Create the transport (unless one was injected) and verify connectivity.
+    """Open the transport and verify connectivity.
 
     Sends a health check to confirm the robot is reachable and the robot
     server is running (not in Jupyter/Python API mode).
     """
-    if self._transport is None:
-      self._transport = HttpxTransport(base_url=self.base_url)
     await self._transport.setup()
     health = await self._get("/health")
     self.api_version = health.get("api_version")
@@ -172,10 +188,12 @@ class OpentronsRobot(abc.ABC):
     )
 
   async def _disconnect(self) -> None:
-    """Close the transport."""
-    if self._transport is not None:
-      await self._transport.close()
-      self._transport = None
+    """Close the transport, keeping the object so a reconnect can reopen it.
+
+    Discarding it here would mean rebuilding an io on the next connect, which
+    a capture armed in the meantime refuses.
+    """
+    await self._transport.close()
 
   async def send_command(
     self,
@@ -205,17 +223,14 @@ class OpentronsRobot(abc.ABC):
 
   async def _get(self, path: str) -> Dict[str, Any]:
     """Wire GET, return parsed JSON."""
-    assert self._transport is not None, "Not connected. Call connect() first."
     return await self._transport.get(path)
 
   async def _post(self, path: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Wire POST, return parsed JSON."""
-    assert self._transport is not None, "Not connected. Call connect() first."
     return await self._transport.post(path, json=data or {})
 
   async def _delete(self, path: str) -> Dict[str, Any]:
     """Wire DELETE, return parsed JSON."""
-    assert self._transport is not None, "Not connected. Call connect() first."
     return await self._transport.delete(path)
 
   # --- Run Management ---
@@ -278,6 +293,7 @@ class OpentronsRobot(abc.ABC):
       RuntimeError: If the command times out.
     """
     assert self.run_id is not None, "No active run. Call create_run() first."
+    timeout = max(timeout, _plunger_seconds(params) + COMMAND_POLL_HEADROOM)
     payload = {
       "data": {
         "commandType": command_type,

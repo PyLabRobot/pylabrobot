@@ -274,17 +274,13 @@ class _FlexHead:
     """``prepareToAspirate`` (if pending) -> wire -> commit/rollback.
 
     Shared by every ``aspirate``/``aspirate_single`` variant. Sends
-    ``prepareToAspirate`` first if this is the first aspirate since the last
-    tip pickup (``self._prepared`` False), then the aspirate command itself.
-    A successful prepare sets ``self._prepared = True`` immediately -- even
-    if the following aspirate then fails and trackers roll back -- since
-    priming is physical plunger state, not tracker state, and is not
-    reversed by a tracker rollback.
+    ``prepareToAspirate`` first when the plunger is not primed, then the
+    aspirate itself. Priming is physical plunger state, so a tracker rollback
+    on a failed aspirate does not undo it: ``_execute`` records it.
     """
     try:
       if not self._prepared:
         await self._execute("prepareToAspirate", {"pipetteId": self.pipette_id})
-        self._prepared = True
       await self._execute(command_type, params)
     except Exception:
       for tracker in staged_trackers:
@@ -451,6 +447,8 @@ class _FlexHead:
     result = await self.flex._execute_command(command_type, params)
     if command_type in _UNPRIMING_COMMANDS:
       self._prepared = False
+    elif command_type in _PRIMING_COMMANDS:
+      self._prepared = True
     return result
 
   @staticmethod
@@ -847,11 +845,19 @@ _WELL_ORIGINS = frozenset({"top", "bottom", "center", "meniscus"})
 
 _MOVE_AXES = frozenset({"x", "y", "z"})
 
-# After these the plunger is unprimed and the robot refuses the next aspirate:
-# a dispense or blow-out drives it past its bottom, a fresh tip never primed.
+# Wider than the robot's own rule (it primes on pickUpTip, and a dispense
+# unprimes only when it pushes out or empties): a redundant prepare is accepted.
 _UNPRIMING_COMMANDS = frozenset(
-  {"dispense", "dispenseInPlace", "blowOutInPlace", "unsafe/blowOutInPlace", "pickUpTip"}
+  {
+    "dispense",
+    "dispenseInPlace",
+    "blowOutInPlace",
+    "unsafe/blowOutInPlace",
+    "configureForVolume",
+    "pickUpTip",
+  }
 )
+_PRIMING_COMMANDS = frozenset({"prepareToAspirate"})
 
 # What verify_tip_presence can assert. The sensor itself can also read
 # "unknown", but that is a reading, not something to check against.
@@ -1748,6 +1754,11 @@ class FlexHead8(_FlexHead):
     """
     self._warn_untested_hardware("pick_up_single_tip")
     primary_nozzle = self._anchor_for(tip_rack, well, primary_nozzle)
+    # The anchor only settles that the pipette stays inside the robot. The 7
+    # idle nozzles still hang over the neighbouring slot, which is a crash.
+    slot = self.flex.deck.get_slot(tip_rack)
+    if slot is not None:
+      self.flex.deck.check_single_nozzle_clearance(slot, primary_nozzle)
     channel = _SINGLE_NOZZLES[primary_nozzle]
     if self._channel_tips[channel] is not None:
       raise OpentronsError(

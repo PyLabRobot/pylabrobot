@@ -7,7 +7,12 @@ from pylabrobot.opentrons.robot import (
   OpentronsRobot,
   PipetteInfo,
 )
-from pylabrobot.opentrons.transport import ChatterboxTransport, HttpxTransport, OpentronsTransport
+from pylabrobot.opentrons.transport import (
+  ChatterboxTransport,
+  HttpxTransport,
+  OpentronsTransport,
+  ReplayTransport,
+)
 
 __all__ = [
   "ChatterboxTransport",
@@ -17,6 +22,7 @@ __all__ = [
   "FlexHead96",
   "HttpxTransport",
   "OpentronsCommandError",
+  "ReplayTransport",
   "OpentronsError",
   "OpentronsFlex",
   "OpentronsRobot",

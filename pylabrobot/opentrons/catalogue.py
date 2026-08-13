@@ -8,12 +8,15 @@ client-side warning. Checking here turns that into an error the caller can read.
 from functools import lru_cache
 from typing import FrozenSet
 
-from opentrons_shared_data.labware import list_definitions
+from pylabrobot.opentrons.shared_data import require_shared_data
 
 
 @lru_cache(maxsize=1)
 def catalogue_load_names() -> FrozenSet[str]:
   """Every load name the shipped catalogue defines, across schema versions."""
+  require_shared_data()
+  from opentrons_shared_data.labware import list_definitions
+
   return frozenset(load_name for load_name, _version, _schema in list_definitions())
 
 

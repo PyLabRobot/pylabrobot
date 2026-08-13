@@ -11,7 +11,7 @@ from pylabrobot.opentrons.labware_definitions import (
   build_plate_definition,
   build_tip_rack_definition,
 )
-from pylabrobot.opentrons.robot import OpentronsError, OpentronsRobot
+from pylabrobot.opentrons.robot import COMMAND_POLL_HEADROOM, OpentronsError, OpentronsRobot
 from pylabrobot.opentrons.transport import OpentronsTransport
 from pylabrobot.resources import Container, Plate, Resource, TipRack
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
@@ -38,9 +38,6 @@ _OT_CATALOGUE_VERSIONS = {
   "nest_96_wellplate_2ml_deep": 2,
   "opentrons_96_wellplate_200ul_pcr_full_skirt": 2,
 }
-
-# Seconds of polling a command gets on top of a wait it was told to perform.
-_COMMAND_POLL_HEADROOM = 30.0
 
 # Discovered pipette channel count -> matching head class.
 _CHANNELS_TO_HEAD: Dict[int, Type[_FlexHead]] = {
@@ -155,6 +152,12 @@ class OpentronsFlex(OpentronsRobot):
     # setup() no longer discovers/loads a pipette itself (that would double
     # `loadPipette` the first mount), so this is the only place a Flex loads
     # its pipettes.
+    # Discovery is re-runnable: drop whatever a previous setup composed rather
+    # than stacking a second set of heads onto dead pipette ids.
+    self.left = self.right = self.head96 = None
+    self.gripper = None
+    self._heads.clear()
+
     instruments_data = await self._get_instruments()
     pipettes = self._parse_pipettes(instruments_data)
 
@@ -468,7 +471,7 @@ class OpentronsFlex(OpentronsRobot):
     # The command only completes once the robot finishes waiting, so the poll
     # gets the wait itself plus the usual command headroom.
     await self._execute_command(
-      "waitForDuration", {"seconds": seconds}, timeout=seconds + _COMMAND_POLL_HEADROOM
+      "waitForDuration", {"seconds": seconds}, timeout=seconds + COMMAND_POLL_HEADROOM
     )
 
   @staticmethod
