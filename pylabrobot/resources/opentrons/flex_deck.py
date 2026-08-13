@@ -15,7 +15,7 @@ the adjacent slot's airspace and could hit tall labware.
 from __future__ import annotations
 
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
@@ -156,6 +156,36 @@ class FlexDeck(Deck):
 
   # --- Slot Access ---
 
+  @property
+  def slots(self) -> Dict[str, Optional[Resource]]:
+    """The labware in each slot (standard and staging), or ``None`` for empty slots.
+
+    The Flex counterpart of :attr:`OTDeck.slots`, keyed by slot name rather than by position.
+    """
+    return {slot: holder.resource for slot, holder in self._slot_holders.items()}
+
+  @property
+  def slot_locations(self) -> Dict[str, Coordinate]:
+    """The front-left corner of each slot in the robot frame, keyed by slot name."""
+    return {slot: cast(Coordinate, holder.location) for slot, holder in self._slot_holders.items()}
+
+  def get_slot_holder(self, slot: str) -> ResourceHolder:
+    """The ResourceHolder for a slot, e.g. as a ``move_plate`` gripper destination."""
+    slot = self._validate_slot(slot)
+    return self._slot_holders[slot]
+
+  def get_slot_at_location(self, location: Coordinate, tolerance: float = 2.0) -> Optional[str]:
+    """The slot whose front-left corner matches ``location`` (x/y within ``tolerance`` mm).
+
+    The gripper receives a destination as a deck-frame coordinate (the LFB of the moved labware),
+    never a slot name, so a move resolves its target slot by matching that corner here.
+    """
+    for slot, holder in self._slot_holders.items():
+      corner = cast(Coordinate, holder.location)
+      if abs(corner.x - location.x) <= tolerance and abs(corner.y - location.y) <= tolerance:
+        return slot
+    return None
+
   def get_slot_location(self, slot: str) -> Dict[str, float]:
     """Get the XYZ coordinate for a slot."""
     slot = self._validate_slot(slot)
@@ -164,6 +194,53 @@ class FlexDeck(Deck):
     if slot in STAGING_LOCATIONS:
       return STAGING_LOCATIONS[slot]
     raise ValueError(f"Unknown slot '{slot}'.")
+
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True,
+  ) -> None:
+    """Assign a slot holder to the deck, or route labware into its slot.
+
+    The deck's direct children are the slot holders created in ``__init__``; deserialization
+    re-assigns those holders by name, replacing the placeholder with the loaded one. Labware is
+    normally placed with :meth:`assign_child_at_slot`. A gripper ``move_plate`` to a bare
+    :class:`~pylabrobot.resources.Coordinate` also lands here, because the liquid handler assigns
+    the moved plate to the deck at the destination coordinate; such a resource is routed into the
+    slot whose corner matches that coordinate, keeping the robot and the resource tree in sync.
+    """
+
+    existing = next((child for child in self.children if child.name == resource.name), None)
+    if existing is not None:
+      if not reassign:
+        raise ValueError(f"Resource '{resource.name}' already assigned to deck")
+      super().unassign_child_resource(existing)
+      for occupied_slot, holder in self._slot_holders.items():
+        if holder is existing:
+          self._slot_holders[occupied_slot] = cast(ResourceHolder, resource)
+          break
+      super().assign_child_resource(resource, location=location, reassign=reassign)
+      return
+
+    if isinstance(resource, ResourceHolder):
+      super().assign_child_resource(resource, location=location, reassign=reassign)
+      return
+
+    slot = self.get_slot_at_location(location) if location is not None else None
+    if slot is None:
+      raise ValueError(
+        f"Cannot assign '{resource.name}' to the deck at {location}: it matches no Flex slot. "
+        "Place labware with assign_child_at_slot, or move it to a slot holder or slot location."
+      )
+    self.assign_child_at_slot(resource, slot)
+
+  def unassign_child_resource(self, resource: Resource) -> None:
+    for holder in self._slot_holders.values():
+      if holder.resource is resource:
+        holder.unassign_child_resource(resource)
+        return
+    super().unassign_child_resource(resource)
 
   def assign_child_at_slot(self, resource: Resource, slot: str) -> None:
     """Place a resource at a named slot.
@@ -207,6 +284,10 @@ class FlexDeck(Deck):
       if isinstance(holder.resource, Trash):
         return holder.resource
     raise ValueError("No trash area configured on this deck.")
+
+  def get_trash_area96(self) -> Trash:
+    # The Flex has one movable trash bin; the 96 head discards into the same bin as the others.
+    return self.get_trash_area()
 
   # --- OT-2 Conversion ---
 

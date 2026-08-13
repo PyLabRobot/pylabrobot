@@ -668,6 +668,36 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     _ = self._pipette_id_for_channel(channel)
 
+  async def get_channel_position(self, channel: int) -> Coordinate:
+    """Where a channel is right now, in deck coordinates."""
+
+    _, current = self._current_channel_position(channel)
+    return current
+
+  async def move_channel_to(
+    self,
+    channel: int,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+    z: Optional[float] = None,
+  ):
+    """Move a channel to an absolute position, holding the axes left out.
+
+    One coordinated move rather than the per-axis calls chained: the robot lifts to the traversal
+    height and travels once, where three separate moves each descend and can clip labware between
+    them.
+    """
+
+    pipette_id, current = self._current_channel_position(channel)
+    target = Coordinate(
+      x=current.x if x is None else x,
+      y=current.y if y is None else y,
+      z=current.z if z is None else z,
+    )
+    await self.move_pipette_head(
+      location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
+    )
+
   async def move_channel_x(self, channel: int, x: float):
     """Move a channel to an absolute x coordinate using savePosition to seed pose."""
 
