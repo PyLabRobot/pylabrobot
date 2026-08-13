@@ -808,10 +808,10 @@ class TestSingleNozzleLayout(unittest.TestCase):
   def tearDown(self):
     set_tip_tracking(False)
 
-  def _bench(self):
+  def _bench(self, slot="C1"):
     flex, transport, head = _flex_head8()
     rack = flex_96_tiprack_50ul(name="rack")
-    flex.deck.assign_child_at_slot(rack, "C1")
+    flex.deck.assign_child_at_slot(rack, slot)
     return flex, transport, head, rack
 
   def _nozzle_params(self, transport: ChatterboxTransport) -> list:
@@ -821,16 +821,16 @@ class TestSingleNozzleLayout(unittest.TestCase):
       if c["commandType"] == "configureNozzleLayout"
     ]
 
-  def test_a_middle_row_well_needs_an_explicit_nozzle(self):
-    # Deriving the nozzle from the row letter builds "C1", which the
-    # robot-server rejects at body validation before the command exists.
+  def test_a_middle_row_well_anchors_on_a_nozzle_that_can_reach_it(self):
+    # The row letter names no anchor ("C1" is not a primaryNozzle the
+    # robot-server accepts), so the reachable end is chosen instead.
     flex, transport, head, rack = self._bench()
     try:
-      commands_before = len(transport.commands)
-      with self.assertRaises(ValueError) as caught:
-        asyncio.run(head.pick_up_single_tip(rack, well="C3"))
-      self.assertIn("primary_nozzle", str(caught.exception))
-      self.assertEqual(len(transport.commands), commands_before)
+      asyncio.run(head.pick_up_single_tip(rack, well="C3"))
+      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "A1")
+      pickups = [c for c in transport.commands if c["commandType"] == "pickUpTip"]
+      self.assertEqual(pickups[-1]["params"]["wellName"], "C3")
+      self.assertIsNotNone(head.get_mounted_tips()[0])
     finally:
       asyncio.run(flex.stop())
 
@@ -897,6 +897,89 @@ class TestSingleNozzleLayout(unittest.TestCase):
       self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
     finally:
       asyncio.run(flex.stop())
+
+  def test_discarding_a_cherry_picked_tip_drops_it_then_restores_all_mode(self):
+    # A trash drop addresses no channel, so it must not wait on a layout
+    # reset the robot refuses while the tip is still on.
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+      asyncio.run(head.discard_tips(flex.deck.get_trash_area()))
+
+      self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
+      sent = [c["commandType"] for c in transport.commands]
+      self.assertLess(sent.index("dropTipInPlace"), len(sent) - 1)
+      self.assertEqual(sent[-1], "configureNozzleLayout")
+      self.assertEqual(self._nozzle_params(transport)[-1], {"style": "ALL"})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_returning_a_cherry_picked_tip_to_a_rack_column_names_the_op_that_works(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+      commands_before = len(transport.commands)
+
+      with self.assertRaises(OpentronsError) as caught:
+        asyncio.run(head.drop_tips(rack, column=0))
+      self.assertIn("drop_single_tip", str(caught.exception))
+      self.assertEqual(len(transport.commands), commands_before)
+
+      asyncio.run(head.drop_single_tip(flex.deck.get_trash_area()))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_front_row_slot_puts_the_rear_anchor_out_of_reach(self):
+    # Anchoring A1 over D1's front rows leaves the mount ahead of the robot's
+    # own front limit: the pipette body reaches 95mm forward of it.
+    flex, _, head, rack = self._bench(slot="D1")
+    try:
+      self.assertEqual(head.reachable_single_nozzles(rack, "A1"), ("A1", "H1"))
+      self.assertEqual(head.reachable_single_nozzles(rack, "F1"), ("H1",))
+      self.assertEqual(head.reachable_single_nozzles(rack, "H1"), ("H1",))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_front_row_well_anchors_on_the_nozzle_that_reaches_it(self):
+    flex, transport, head, rack = self._bench(slot="D1")
+    try:
+      asyncio.run(head.pick_up_single_tip(rack, well="F1"))
+      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "H1")
+      self.assertIsNotNone(head.get_mounted_tips()[7])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_an_explicit_out_of_reach_anchor_is_refused_naming_the_one_that_works(self):
+    # An explicit choice is never silently swapped.
+    flex, transport, head, rack = self._bench(slot="D1")
+    try:
+      commands_before = len(transport.commands)
+      with self.assertRaises(ValueError) as caught:
+        asyncio.run(head.pick_up_single_tip(rack, well="F1", primary_nozzle="A1"))
+      self.assertIn("H1", str(caught.exception))
+      self.assertEqual(len(transport.commands), commands_before)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_every_flex_slot_well_is_reachable_by_one_anchor_or_the_other(self):
+    # No slot the deck accepts leaves a well unpickable; A3 holds the trash.
+    for slot in [f"{row}{col}" for row in "ABCD" for col in "123" if f"{row}{col}" != "A3"]:
+      flex, _, head, rack = self._bench(slot=slot)
+      try:
+        for well_row in "ABCDEFGH":
+          reachable = head.reachable_single_nozzles(rack, f"{well_row}1")
+          self.assertTrue(reachable, f"{slot} {well_row}1 unreachable both ways")
+      finally:
+        asyncio.run(flex.stop())
+
+  def test_stop_leaves_no_cherry_picked_tip_on_the_pipette(self):
+    flex, transport, head, rack = self._bench()
+    asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+
+    asyncio.run(flex.stop())
+
+    self.assertIn("dropTipInPlace", [c["commandType"] for c in transport.commands])
+    self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
 
 
 if __name__ == "__main__":
