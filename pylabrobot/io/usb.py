@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Callable, List, Optional
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
-from pylabrobot.io.io import IOBase, _wait_for_executor_future
+from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 try:
@@ -465,32 +465,25 @@ class USB(IOBase):
 
     loop = asyncio.get_running_loop()
     setup_future = loop.run_in_executor(self._read_executor, self._setup_sync, empty_buffer)
-    setup_error: Optional[BaseException] = None
     try:
       await asyncio.shield(setup_future)
     except BaseException as exc:
-      setup_error = exc
-      if not setup_future.done():
+      if isinstance(exc, asyncio.CancelledError):
         try:
-          await _wait_for_executor_future(setup_future)
+          await setup_future
         except BaseException:
           pass
-
-    if setup_error is not None:
-      if self.dev is not None and self._read_executor is not None:
+      if self.dev is not None:
         dev = self.dev
-        dispose_future = loop.run_in_executor(
-          self._read_executor, lambda: usb.util.dispose_resources(dev)
-        )
         try:
-          await _wait_for_executor_future(dispose_future)
+          await loop.run_in_executor(self._read_executor, lambda: usb.util.dispose_resources(dev))
         except Exception:
           logger.warning("Failed to dispose USB device after setup failure", exc_info=True)
-      self.dev = None
-      self.read_endpoint = None
-      self.write_endpoint = None
+        self.dev = None
+        self.read_endpoint = None
+        self.write_endpoint = None
       self._shutdown_executors()
-      raise setup_error
+      raise
 
   def _shutdown_executors(self) -> None:
     for executor in (self._read_executor, self._write_executor):

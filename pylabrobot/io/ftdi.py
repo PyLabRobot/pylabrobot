@@ -25,7 +25,6 @@ except ImportError as e:
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
-from pylabrobot.io.io import _wait_for_executor_future
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 logger = logging.getLogger(__name__)
@@ -183,19 +182,28 @@ class FTDI(IOBase):
     """Resolve and open the device. Runs on the executor that owns all device calls."""
     if self._dev is not None and not self._dev.closed:
       self._dev.close()
+    self._dev = None
 
     # Resolve which device to connect to
     self._device_id = self._resolve_device_serial()
 
     # Create and open device
-    self._dev = Device(
+    dev = Device(
       lazy_open=True,
       device_id=self.device_id,
       pid=self._pid,
       vid=self._vid,
       interface_select=self._interface_select,
     )
-    self._dev.open()
+    try:
+      dev.open()
+    except BaseException:
+      try:
+        dev.close()
+      except Exception:
+        logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
+      raise
+    self._dev = dev
 
   async def setup(self):
     """Initialize the FTDI device connection with device resolution."""
@@ -203,33 +211,28 @@ class FTDI(IOBase):
       self._executor = ThreadPoolExecutor(max_workers=1)
     loop = asyncio.get_running_loop()
     setup_future = loop.run_in_executor(self._executor, self._setup_sync)
-    setup_error: Optional[BaseException] = None
     try:
       await asyncio.shield(setup_future)
     except BaseException as exc:
-      setup_error = exc
-      if not setup_future.done():
+      if isinstance(exc, asyncio.CancelledError):
         try:
-          await _wait_for_executor_future(setup_future)
+          await setup_future
         except BaseException:
           pass
-
-    if setup_error is not None:
-      if self._dev is not None and self._executor is not None:
-        close_future = loop.run_in_executor(self._executor, self._dev.close)
+      if self._dev is not None:
         try:
-          await _wait_for_executor_future(close_future)
+          await loop.run_in_executor(self._executor, self._dev.close)
         except Exception:
           logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
-      self._dev = None
+        self._dev = None
       self._shutdown_executor()
-      if isinstance(setup_error, FtdiError):
+      if isinstance(exc, FtdiError):
         raise RuntimeError(
-          f"Failed to open FTDI device for '{self.human_readable_device_name}': {setup_error}. "
+          f"Failed to open FTDI device for '{self.human_readable_device_name}': {exc}. "
           "Is the device connected? Is it in use by another process? "
           "Try restarting the kernel."
-        ) from setup_error
-      raise setup_error
+        ) from exc
+      raise
     logger.info(f"Successfully opened FTDI device: {self.device_id}")
 
   def _shutdown_executor(self) -> None:

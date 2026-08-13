@@ -25,6 +25,10 @@ class _DisposableDevice:
     self.setup_thread: Optional[int] = None
     self.dispose_thread: Optional[int] = None
 
+  def set_configuration(self) -> None:
+    self.setup_thread = threading.get_ident()
+    raise RuntimeError("configuration failed")
+
 
 class ExecutorSetupTests(unittest.IsolatedAsyncioTestCase):
   async def _wait_for_task(self, task: "asyncio.Task[None]") -> None:
@@ -170,16 +174,11 @@ class ExecutorSetupTests(unittest.IsolatedAsyncioTestCase):
     )
     device = _DisposableDevice()
 
-    def setup_sync(empty_buffer: bool) -> None:
-      device.setup_thread = threading.get_ident()
-      io.dev = device  # type: ignore[assignment]
-      raise RuntimeError("configuration failed")
-
     def dispose_resources(dev: object) -> None:
       self.assertIs(dev, device)
       device.dispose_thread = threading.get_ident()
 
-    io._setup_sync = setup_sync  # type: ignore[method-assign]
+    io.get_available_devices = mock.Mock(return_value=[device])  # type: ignore[method-assign]
     fake_usb = SimpleNamespace(util=SimpleNamespace(dispose_resources=dispose_resources))
     with (
       mock.patch.object(usb_module, "USE_USB", True),
