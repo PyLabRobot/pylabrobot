@@ -69,12 +69,16 @@ class _FlexHead:
     pipette_id: str,
     channels: int,
     pipette_model: str,
+    max_volume: float,
   ) -> None:
     self.flex = flex
     self.mount = mount
     self.pipette_id = pipette_id
     self.channels = channels
     self.pipette_model = pipette_model
+    # The pipette's own capacity, not the mounted tip's. Carried here so a caller
+    # describing the head does not have to re-read /instruments to get it.
+    self.max_volume = max_volume
     self._channel_tips: List[Optional[Tip]] = [None] * channels
     # Whether the plunger has been prepared (primed) since the last tip
     # pickup. The Flex requires an explicit `prepareToAspirate` command
@@ -1202,8 +1206,9 @@ class FlexHead8(_FlexHead):
     pipette_id: str,
     channels: int,
     pipette_model: str,
+    max_volume: float,
   ) -> None:
-    super().__init__(flex, mount, pipette_id, channels, pipette_model)
+    super().__init__(flex, mount, pipette_id, channels, pipette_model, max_volume)
     self._nozzle_layout: str = "ALL"  # "ALL" | "SINGLE"
 
   # --- Nozzle layout guard ---
