@@ -18,6 +18,7 @@ except ImportError as e:
   _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
+from pylabrobot.io.io import _wait_for_executor_future
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 logger = logging.getLogger(__name__)
@@ -147,11 +148,29 @@ class Serial(IOBase):
     loop = asyncio.get_running_loop()
     self._executor = ThreadPoolExecutor(max_workers=1)
 
+    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    setup_error: Optional[BaseException] = None
     try:
-      self._port = await loop.run_in_executor(self._executor, self._setup_sync)
-    except BaseException:
+      resolved_port = await asyncio.shield(setup_future)
+      self._port = resolved_port
+    except BaseException as exc:
+      setup_error = exc
+      if not setup_future.done():
+        try:
+          await _wait_for_executor_future(setup_future)
+        except BaseException:
+          pass
+
+    if setup_error is not None:
+      if self._ser is not None and self._executor is not None:
+        close_future = loop.run_in_executor(self._executor, self._ser.close)
+        try:
+          await _wait_for_executor_future(close_future)
+        except Exception:
+          logger.warning("Failed to close serial port after setup failure", exc_info=True)
+      self._ser = None
       self._shutdown_executor()
-      raise
+      raise setup_error
 
     assert self._ser is not None
 

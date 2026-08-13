@@ -5,7 +5,7 @@ from typing import Optional, cast
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
-from pylabrobot.io.io import IOBase
+from pylabrobot.io.io import IOBase, _wait_for_executor_future
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 try:
@@ -107,11 +107,28 @@ class HID(IOBase):
 
     self._executor = ThreadPoolExecutor(max_workers=1)
     loop = asyncio.get_running_loop()
+    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    setup_error: Optional[BaseException] = None
     try:
-      await loop.run_in_executor(self._executor, self._setup_sync)
-    except BaseException:
+      await asyncio.shield(setup_future)
+    except BaseException as exc:
+      setup_error = exc
+      if not setup_future.done():
+        try:
+          await _wait_for_executor_future(setup_future)
+        except BaseException:
+          pass
+
+    if setup_error is not None:
+      if self.device is not None and self._executor is not None:
+        close_future = loop.run_in_executor(self._executor, self.device.close)
+        try:
+          await _wait_for_executor_future(close_future)
+        except Exception:
+          logger.warning("Failed to close HID device after setup failure", exc_info=True)
+      self.device = None
       self._shutdown_executor()
-      raise
+      raise setup_error
 
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))
