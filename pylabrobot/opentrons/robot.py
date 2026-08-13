@@ -157,6 +157,7 @@ class OpentronsRobot(abc.ABC):
     """
     if self._transport is None:
       self._transport = HttpxTransport(base_url=self.base_url)
+    await self._transport.setup()
     health = await self._get("/health")
     self.api_version = health.get("api_version")
     self.robot_model = health.get("robot_model", "")
@@ -175,6 +176,30 @@ class OpentronsRobot(abc.ABC):
     if self._transport is not None:
       await self._transport.close()
       self._transport = None
+
+  async def send_command(
+    self,
+    command_type: str,
+    params: Optional[Dict[str, Any]] = None,
+    wait: bool = True,
+    timeout: float = 30.0,
+  ) -> Dict[str, Any]:
+    """Send any robot command by name, for the parts of the robot this class does not wrap.
+
+    The robot accepts far more commands than this driver exposes as methods:
+    the module families (heater-shaker, thermocycler, temperature, magnetic,
+    absorbance reader, vacuum, Flex Stacker), calibration, and whatever a
+    later robot software release adds. ``command_type`` is the robot's own
+    command name (``"moveToWell"``, ``"heaterShaker/setTargetTemperature"``)
+    and ``params`` its payload; both are passed through untouched, and the
+    returned dict is the completed command including its ``result``.
+
+    Prefer a typed method where one exists. This one validates nothing and
+    updates no resource-tree state, so a command that moves labware or changes
+    tip or liquid state leaves PyLabRobot's own trackers describing the state
+    before it ran.
+    """
+    return await self._execute_command(command_type, params or {}, wait=wait, timeout=timeout)
 
   # --- Low-Level Wire Calls ---
 
