@@ -9,6 +9,7 @@ from pylabrobot.manual_operator import (
   OperatorActionRequest,
   OperatorActionResult,
 )
+from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 
 
 class RecordingProvider:
@@ -19,6 +20,16 @@ class RecordingProvider:
   async def request(self, action: OperatorActionRequest) -> OperatorActionResult:
     self.requests.append(action)
     return self.result
+
+
+class CallbackProvider:
+  def __init__(self, callback):
+    self.callback = callback
+    self.requests = []
+
+  async def request(self, action: OperatorActionRequest) -> OperatorActionResult:
+    self.requests.append(action)
+    return self.callback(action)
 
 
 class TestManualOperator(unittest.IsolatedAsyncioTestCase):
@@ -79,6 +90,144 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     details["duration_seconds"] = 120
 
     self.assertEqual(request.details["duration_seconds"], 60)
+
+  async def test_move_resource_reassigns_only_after_completion(self):
+    source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder(
+      "destination",
+      size_x=100,
+      size_y=100,
+      size_z=10,
+      child_location=Coordinate(4, 5, 6),
+    )
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    source.assign_child_resource(plate)
+
+    def complete_while_model_is_unchanged(request):
+      self.assertIs(plate.parent, source)
+      self.assertIs(source.resource, plate)
+      self.assertIsNone(destination.resource)
+      self.assertEqual(request.action, "resource.move")
+      return OperatorActionResult.completed(confirmed_by="operator-1")
+
+    provider = CallbackProvider(complete_while_model_is_unchanged)
+    result = await ManualOperator(provider).move_resource(
+      resource=plate,
+      source=source,
+      destination=destination,
+    )
+
+    self.assertEqual(result.confirmed_by, "operator-1")
+    self.assertIsNone(source.resource)
+    self.assertIs(destination.resource, plate)
+    self.assertEqual(plate.location, Coordinate(4, 5, 6))
+    request = provider.requests[0]
+    self.assertEqual(
+      request.details,
+      {"resource": "plate", "source": "source", "destination": "destination"},
+    )
+
+  async def test_move_resource_uses_explicit_destination_location(self):
+    source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
+    destination = Resource("destination", size_x=100, size_y=100, size_z=10)
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    source.assign_child_resource(plate)
+    location = Coordinate(1, 2, 3)
+    provider = RecordingProvider(OperatorActionResult.completed())
+
+    await ManualOperator(provider).move_resource(
+      resource=plate,
+      source=source,
+      destination=destination,
+      destination_location=location,
+      details={"reason": "manual handoff", "source": "ignored override"},
+    )
+
+    self.assertIs(plate.parent, destination)
+    self.assertEqual(plate.location, location)
+    self.assertEqual(provider.requests[0].details["reason"], "manual handoff")
+    self.assertEqual(provider.requests[0].details["source"], "source")
+    self.assertEqual(
+      provider.requests[0].details["destination_location"],
+      {"x": 1, "y": 2, "z": 3, "type": "Coordinate"},
+    )
+
+  async def test_move_resource_cancellation_leaves_model_unchanged(self):
+    source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder("destination", size_x=100, size_y=100, size_z=10)
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    source.assign_child_resource(plate)
+    provider = RecordingProvider(OperatorActionResult.cancelled())
+
+    with self.assertRaises(OperatorActionCancelledError):
+      await ManualOperator(provider).move_resource(
+        resource=plate,
+        source=source,
+        destination=destination,
+      )
+
+    self.assertIs(source.resource, plate)
+    self.assertIsNone(destination.resource)
+
+  async def test_move_resource_rejects_incorrect_source_before_prompt(self):
+    actual_source = ResourceHolder("actual_source", size_x=100, size_y=100, size_z=10)
+    stated_source = ResourceHolder("stated_source", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder("destination", size_x=100, size_y=100, size_z=10)
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    actual_source.assign_child_resource(plate)
+    provider = RecordingProvider(OperatorActionResult.completed())
+
+    with self.assertRaisesRegex(ValueError, "not source 'stated_source'"):
+      await ManualOperator(provider).move_resource(
+        resource=plate,
+        source=stated_source,
+        destination=destination,
+      )
+
+    self.assertEqual(provider.requests, [])
+    self.assertIs(plate.parent, actual_source)
+
+  async def test_move_resource_rejects_occupied_destination_before_prompt(self):
+    source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder("destination", size_x=100, size_y=100, size_z=10)
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    other_plate = Resource("other_plate", size_x=80, size_y=60, size_z=15)
+    source.assign_child_resource(plate)
+    destination.assign_child_resource(other_plate)
+    provider = RecordingProvider(OperatorActionResult.completed())
+
+    with self.assertRaisesRegex(RuntimeError, "already has a resource"):
+      await ManualOperator(provider).move_resource(
+        resource=plate,
+        source=source,
+        destination=destination,
+      )
+
+    self.assertEqual(provider.requests, [])
+    self.assertIs(source.resource, plate)
+    self.assertIs(destination.resource, other_plate)
+
+  async def test_move_resource_detects_model_change_while_pending(self):
+    source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder("destination", size_x=100, size_y=100, size_z=10)
+    unexpected = ResourceHolder("unexpected", size_x=100, size_y=100, size_z=10)
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    source.assign_child_resource(plate)
+
+    def change_model_then_complete(_request):
+      unexpected.assign_child_resource(plate)
+      return OperatorActionResult.completed()
+
+    provider = CallbackProvider(change_model_then_complete)
+    with self.assertRaisesRegex(RuntimeError, "model changed while the manual move was pending"):
+      await ManualOperator(provider).move_resource(
+        resource=plate,
+        source=source,
+        destination=destination,
+      )
+
+    self.assertIs(plate.parent, unexpected)
+    self.assertIsNone(destination.resource)
 
 
 class TestConsoleOperatorActionProvider(unittest.IsolatedAsyncioTestCase):

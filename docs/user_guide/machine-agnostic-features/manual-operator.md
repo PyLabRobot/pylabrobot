@@ -42,3 +42,26 @@ Providers return one of three explicit outcomes:
 An acknowledgement records what the operator reported. It does not prove that the physical work
 occurred. Protocol-specific validation and resource-model reconciliation should happen before or
 after `perform()` as appropriate.
+
+## Moving a resource
+
+Use `move_resource()` when the manual action transfers a modeled PLR resource between two modeled
+locations:
+
+```python
+await operator.move_resource(
+  resource=sample_plate,
+  source=centrifuge_loader,
+  destination=handover_nest,
+)
+```
+
+The method validates the source and destination before prompting, but leaves the resource assigned
+to its source while the operator works. After the provider reports completion, it validates the
+model again and assigns the resource to the destination using PLR's normal resource-assignment
+machinery. A `ResourceHolder` supplies its normal child location; other destinations can use an
+explicit `destination_location=Coordinate(...)`.
+
+Cancellation, reported failure, and provider exceptions do not modify the resource model. If the
+model changes while the operator request is pending, the method raises an error rather than
+overwriting the newer state.
