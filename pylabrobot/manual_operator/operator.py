@@ -1,7 +1,8 @@
 """Protocol-facing frontend for awaiting manual operator actions."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
+from pylabrobot.events import event_operation, resource_reference
 from pylabrobot.resources import Coordinate, Resource
 
 from .provider import OperatorActionProvider
@@ -31,6 +32,9 @@ class ManualOperator:
     instructions: str,
     confirmation_text: str = "Confirm action completed",
     details: Optional[Dict[str, Any]] = None,
+    resources: Optional[Sequence[Resource]] = None,
+    source: Optional[Resource] = None,
+    destination: Optional[Resource] = None,
   ) -> OperatorActionResult:
     """Await one operator action and return its successful acknowledgement.
 
@@ -46,16 +50,47 @@ class ManualOperator:
       confirmation_text=confirmation_text,
       details={} if details is None else details,
     )
-    result = await self.provider.request(request)
+    operation_data: Dict[str, Any] = {
+      "device": resource_reference(self),
+      "resources": [resource_reference(resource) for resource in resources or ()],
+      "manual_action": request.action,
+      "title": request.title,
+      "instructions": request.instructions,
+      "confirmation_text": request.confirmation_text,
+      "details": request.details.copy(),
+    }
+    if source is not None:
+      operation_data["source"] = resource_reference(source)
+    if destination is not None:
+      operation_data["destination"] = resource_reference(destination)
 
-    if not isinstance(result, OperatorActionResult):
-      raise TypeError("OperatorActionProvider.request() must return OperatorActionResult")
-    if result.status == OperatorActionStatus.CANCELLED:
-      raise OperatorActionCancelledError(request, result)
-    if result.status == OperatorActionStatus.FAILED:
-      raise OperatorActionFailedError(request, result)
-    if result.status != OperatorActionStatus.COMPLETED:
-      raise ValueError(f"Unsupported operator action status: {result.status!r}")
+    result: Optional[OperatorActionResult] = None
+
+    def completed_data() -> Dict[str, Any]:
+      assert result is not None
+      data = operation_data.copy()
+      if result.message is not None:
+        data["result_message"] = result.message
+      if result.confirmed_by is not None:
+        data["confirmed_by"] = result.confirmed_by
+      return data
+
+    with event_operation(
+      f"manual_operator.{request.action}",
+      completed_data_factory=completed_data,
+      **operation_data,
+    ):
+      result = await self.provider.request(request)
+
+      if not isinstance(result, OperatorActionResult):
+        raise TypeError("OperatorActionProvider.request() must return OperatorActionResult")
+      if result.status == OperatorActionStatus.CANCELLED:
+        raise OperatorActionCancelledError(request, result)
+      if result.status == OperatorActionStatus.FAILED:
+        raise OperatorActionFailedError(request, result)
+      if result.status != OperatorActionStatus.COMPLETED:
+        raise ValueError(f"Unsupported operator action status: {result.status!r}")
+    assert result is not None
     return result
 
   async def move_resource(
@@ -113,6 +148,9 @@ class ManualOperator:
       or f"Move {resource.name} from {source.name} to {destination.name}.",
       confirmation_text=confirmation_text,
       details=move_details,
+      resources=[resource],
+      source=source,
+      destination=destination,
     )
 
     try:

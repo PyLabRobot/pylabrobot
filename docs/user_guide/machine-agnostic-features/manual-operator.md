@@ -65,3 +65,25 @@ explicit `destination_location=Coordinate(...)`.
 Cancellation, reported failure, and provider exceptions do not modify the resource model. If the
 model changes while the operator request is pending, the method raises an error rather than
 overwriting the newer state.
+
+## EventBus integration
+
+When an EventBus subscriber is active, each awaited action emits one correlated lifecycle using
+the requested action as its semantic subtype:
+
+```text
+manual_operator.centrifuge.spin.started
+manual_operator.centrifuge.spin.completed
+```
+
+The event identifies the `ManualOperator` as `device`, includes any direct PLR `resources` passed
+to `perform()`, and preserves the request's title, instructions, confirmation text, and structured
+details. The completed event adds `confirmed_by` and the provider's result message when supplied.
+Cancellation, reported failure, invalid provider results, and provider exceptions emit `.failed`
+with the normal EventBus error fields.
+
+Use stable action identifiers such as `centrifuge.spin`, `plate_reader.read`, or
+`quality_control.inspect`. `move_resource()` emits `manual_operator.resource.move.*` with the
+direct moved resource plus its true `source` and `destination` resource references. The normal
+`resource.unassigned` and `resource.assigned` state-transition events record the subsequent model
+update.

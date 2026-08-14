@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 
+from pylabrobot.events import EventBus, use_event_bus
 from pylabrobot.manual_operator import (
   ConsoleOperatorActionProvider,
   ManualOperator,
@@ -228,6 +229,99 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
 
     self.assertIs(plate.parent, unexpected)
     self.assertIsNone(destination.resource)
+
+  async def test_perform_emits_action_specific_lifecycle_events(self):
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    provider = RecordingProvider(
+      OperatorActionResult.completed(message="Spin verified", confirmed_by="operator-1")
+    )
+    event_bus = EventBus()
+    events = []
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await ManualOperator(provider, name="cell_operator").perform(
+        action="centrifuge.spin",
+        title="Spin sample plate",
+        instructions="Spin plate at 300 x g for 180 seconds.",
+        details={"relative_centrifugal_force_g": 300, "duration_seconds": 180},
+        resources=[plate],
+      )
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "manual_operator.centrifuge.spin.started",
+        "manual_operator.centrifuge.spin.completed",
+      ],
+    )
+    self.assertEqual(events[0].context["operation"], "manual_operator.centrifuge.spin")
+    self.assertEqual(events[0].context["operation_id"], events[1].context["operation_id"])
+    self.assertEqual(
+      events[0].data["device"],
+      {"name": "cell_operator", "type": "ManualOperator"},
+    )
+    self.assertEqual(events[0].data["resources"][0]["name"], "plate")
+    self.assertEqual(events[0].data["manual_action"], "centrifuge.spin")
+    self.assertEqual(events[0].data["details"]["relative_centrifugal_force_g"], 300)
+    self.assertNotIn("confirmed_by", events[0].data)
+    self.assertEqual(events[1].data["confirmed_by"], "operator-1")
+    self.assertEqual(events[1].data["result_message"], "Spin verified")
+
+  async def test_perform_emits_failed_event_for_reported_failure(self):
+    provider = RecordingProvider(OperatorActionResult.failed(message="Inspection failed"))
+    event_bus = EventBus()
+    events = []
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      with self.assertRaises(OperatorActionFailedError):
+        await ManualOperator(provider).perform(
+          action="quality_control.inspect",
+          title="Inspect sample",
+          instructions="Inspect the sample.",
+        )
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "manual_operator.quality_control.inspect.started",
+        "manual_operator.quality_control.inspect.failed",
+      ],
+    )
+    self.assertEqual(events[1].data["error_type"], "OperatorActionFailedError")
+    self.assertEqual(events[1].data["error_message"], "Inspection failed")
+
+  async def test_move_resource_emits_resource_and_endpoint_context(self):
+    source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder("destination", size_x=100, size_y=100, size_z=10)
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    source.assign_child_resource(plate)
+    provider = RecordingProvider(OperatorActionResult.completed())
+    event_bus = EventBus()
+    events = []
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await ManualOperator(provider).move_resource(
+        resource=plate,
+        source=source,
+        destination=destination,
+      )
+
+    manual_events = [event for event in events if event.name.startswith("manual_operator.")]
+    self.assertEqual(
+      [event.name for event in manual_events],
+      ["manual_operator.resource.move.started", "manual_operator.resource.move.completed"],
+    )
+    self.assertEqual(manual_events[0].data["resources"][0]["name"], "plate")
+    self.assertEqual(manual_events[0].data["source"]["name"], "source")
+    self.assertEqual(manual_events[0].data["destination"]["name"], "destination")
+    self.assertEqual(
+      [event.name for event in events if event.name.startswith("resource.")],
+      ["resource.unassigned", "resource.assigned"],
+    )
+    self.assertIs(plate.parent, destination)
 
 
 class TestConsoleOperatorActionProvider(unittest.IsolatedAsyncioTestCase):
