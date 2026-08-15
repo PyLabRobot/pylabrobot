@@ -6,12 +6,14 @@ Each listed semantic operation emits `started`, `completed`, or `failed` lifecyc
 
 | Operation | Primary fields |
 | --- | --- |
-| `centrifuge.spin` | `device`, loaded `resources`, `bucket_resources`, `relative_centrifugal_force_g`, `duration_seconds`, `acceleration_fraction`, `deceleration_fraction` |
+| `centrifuge.spin` | `device`, loaded `resources`, `bucket_resources`, `relative_centrifugal_force`, `duration`, `acceleration_fraction`, `deceleration_fraction` |
 
 `resources` includes each plate currently loaded in a VSpin bucket when the spin starts.
 `bucket_resources` preserves which physical bucket holds each plate. The event reports the
-requested cycle parameters; it does not infer an actual measured force or completed duration
-outside the frontend call's success or failure lifecycle.
+requested cycle parameters. `relative_centrifugal_force` is the dimensionless multiple of
+standard gravity conventionally written as x g, PLR's default unit for relative centrifugal
+force. The event does not infer an actual measured force or completed duration outside the
+frontend call's success or failure lifecycle.
 
 ## Access2 loader
 

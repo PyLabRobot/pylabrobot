@@ -16,7 +16,7 @@ Each operation emits `started`, `completed`, or `failed` lifecycle records.
 | `liquid_handler.dispense` | `device`, direct `resources`, `liquid_operations` |
 
 `liquid_operations` carries a record for each channel with `channel`, direct `resource`, optional
-owning `plate`, and `volume_ul`. `tip_operations` similarly carries each channel and direct tip
+owning `plate`, and `volume`. `tip_operations` similarly carries each channel and direct tip
 location. The direct tip or well is never substituted with a parent rack or plate; structural
 ancestors are available in the resource reference when needed.
 

@@ -176,7 +176,7 @@ def _liquid_operation_event_context(
         "channel": channel,
         "resource": resource_reference(resource),
         "plate": resource_reference(_liquid_operation_plate(resource)),
-        "volume_ul": _safe_event_volume(volume),
+        "volume": _safe_event_volume(volume),
       }
     )
 

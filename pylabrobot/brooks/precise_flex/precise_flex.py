@@ -2334,7 +2334,7 @@ class PreciseFlex:
     "precise_flex.move_gripper",
     lambda self, width, force_sensing=False: {
       "device": _controller_reference(self),
-      "width_mm": float(width),
+      "width": float(width),
       "force_sensing": force_sensing,
     },
   )
@@ -2454,7 +2454,7 @@ class PreciseFlex:
     lambda self, position, resource_width, finger_speed_pct=50.0, grasp_force=10.0: {
       "device": _controller_reference(self),
       "target_joint_position": _joint_pose_reference(position),
-      "resource_width_mm": float(resource_width),
+      "resource_width": float(resource_width),
       "finger_speed_pct": float(finger_speed_pct),
       "grasp_force": float(grasp_force),
     },
@@ -2492,7 +2492,7 @@ class PreciseFlex:
     lambda self, position, resource_width: {
       "device": _controller_reference(self),
       "target_joint_position": _joint_pose_reference(position),
-      "resource_width_mm": float(resource_width),
+      "resource_width": float(resource_width),
     },
   )
   async def drop_at_joint_position(
@@ -2533,7 +2533,7 @@ class PreciseFlex:
         wrist=wrist,
         rail_position=rail_position,
       ),
-      "resource_width_mm": float(resource_width),
+      "resource_width": float(resource_width),
       "finger_speed_pct": float(finger_speed_pct),
       "grasp_force": float(grasp_force),
     },
@@ -2607,7 +2607,7 @@ class PreciseFlex:
         wrist=wrist,
         rail_position=rail_position,
       ),
-      "resource_width_mm": float(resource_width),
+      "resource_width": float(resource_width),
     },
   )
   async def drop_at_location(

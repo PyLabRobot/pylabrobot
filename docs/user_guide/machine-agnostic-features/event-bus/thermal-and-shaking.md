@@ -8,7 +8,7 @@ The instrumented `legacy.shaking.Shaker` frontend emits:
 
 | Operation | Primary fields |
 | --- | --- |
-| `shaker.shake` | `device`, loaded `resources`, `speed_rpm`, optional `duration_seconds` |
+| `shaker.shake` | `device`, loaded `resources`, `speed_rpm`, optional `duration` |
 | `shaker.stop_shaking` | `device`, loaded `resources` |
 
 ## TemperatureController
@@ -17,9 +17,9 @@ The instrumented `legacy.temperature_controlling.TemperatureController` frontend
 
 | Operation | Primary fields |
 | --- | --- |
-| `temperature_controller.set_temperature` | `device`, loaded `resources`, `target_temperature_c`, `passive` |
-| `temperature_controller.wait_for_temperature` | `device`, loaded `resources`, `target_temperature_c`, `timeout_seconds`, `tolerance_c` |
-| `temperature_controller.hold_temperature` | `device`, loaded `resources`, `duration_s`, configured `target_temperature_c` when known |
+| `temperature_controller.set_temperature` | `device`, loaded `resources`, `target_temperature`, `passive` |
+| `temperature_controller.wait_for_temperature` | `device`, loaded `resources`, `target_temperature`, `timeout`, `tolerance` |
+| `temperature_controller.hold_temperature` | `device`, loaded `resources`, `duration`, configured `target_temperature` when known |
 | `temperature_controller.deactivate` | `device`, loaded `resources` |
 
 `hold_temperature` records a protocol-requested dwell while the controller remains at its existing

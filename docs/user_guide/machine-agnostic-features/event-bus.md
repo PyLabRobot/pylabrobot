@@ -65,6 +65,10 @@ that view from the reference rather than replacing the operated resource in the 
 Geometric targets use PLR's serialized `Coordinate` representation, for example
 `{"x": 12.5, "y": 8.0, "z": 42.0, "type": "Coordinate"}`.
 
+Quantitative fields use PLR's [default units](../getting-started/units.md) without repeating the
+unit in the field name. A suffix is used only when a value deliberately differs from the default,
+such as rotational `speed_rpm` instead of PLR's default linear speed.
+
 ## Add application context
 
 Applications may attach their own execution context around PLR calls. This is useful for run or
@@ -132,13 +136,13 @@ Detailed operation references:
 Resource pickup events include the source holder when the moved resource is assigned at invocation
 time; resource-drop events include their destination. Aspirate and dispense events include direct
 operated resources plus `liquid_operations`, one record per channel, with `channel`,
-`resource`, optional owning `plate`, and `volume_ul`. Tip events similarly include direct tip
+`resource`, optional owning `plate`, and `volume`. Tip events similarly include direct tip
 locations and per-channel `tip_operations`.
 
 ### Shaker and TemperatureController
 
-Shaker events include `speed_rpm` and optional `duration_seconds`. Temperature-controller events
-include `target_temperature_c` where applicable. Both frontends are `ResourceHolder`s: when a
+Shaker events include `speed_rpm` and optional `duration`. Temperature-controller events include
+`target_temperature` where applicable. Both frontends are `ResourceHolder`s: when a
 resource is loaded at operation start, it is included as the direct resource in `resources`.
 
 ### Brooks PreciseFlex

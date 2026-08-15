@@ -15,7 +15,7 @@ def _temperature_event_context(
   passive: Optional[bool] = None,
   timeout: Optional[float] = None,
   tolerance: Optional[float] = None,
-  duration_s: Optional[float] = None,
+  duration: Optional[float] = None,
   **_: Any,
 ) -> dict[str, Any]:
   """Describe a thermal-device command and its directly loaded resource, when present."""
@@ -25,15 +25,15 @@ def _temperature_event_context(
     context["resources"] = [resource_reference(temperature_controller.resource)]
   target_temperature = temperature_controller.target_temperature if temperature is None else temperature
   if target_temperature is not None:
-    context["target_temperature_c"] = float(target_temperature)
+    context["target_temperature"] = float(target_temperature)
   if passive is not None:
     context["passive"] = passive
   if timeout is not None:
-    context["timeout_seconds"] = float(timeout)
+    context["timeout"] = float(timeout)
   if tolerance is not None:
-    context["tolerance_c"] = float(tolerance)
-  if duration_s is not None:
-    context["duration_s"] = float(duration_s)
+    context["tolerance"] = float(tolerance)
+  if duration is not None:
+    context["duration"] = float(duration)
   return context
 
 
@@ -118,7 +118,7 @@ class TemperatureController(ResourceHolder, Machine):
     raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
 
   @evented_operation("temperature_controller.hold_temperature", _temperature_event_context)
-  async def hold_temperature(self, duration_s: float) -> None:
+  async def hold_temperature(self, duration: float) -> None:
     """Hold the currently configured thermal condition for a requested dwell.
 
     This operation intentionally does not issue a new hardware temperature command or verify
@@ -126,12 +126,12 @@ class TemperatureController(ResourceHolder, Machine):
     dwell while the controller remains in its existing state.
 
     Args:
-      duration_s: Dwell duration in seconds. Zero is allowed for callers that conditionally
+      duration: Dwell duration in seconds. Zero is allowed for callers that conditionally
         elide a dwell; negative values are invalid.
     """
-    if duration_s < 0:
+    if duration < 0:
       raise ValueError("Temperature hold duration must not be negative.")
-    await asyncio.sleep(duration_s)
+    await asyncio.sleep(duration)
 
   @evented_operation("temperature_controller.deactivate", _temperature_event_context)
   async def deactivate(self):

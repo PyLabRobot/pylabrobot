@@ -89,6 +89,18 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
 
 
 class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
+  async def test_gripper_event_uses_default_length_unit_field(self):
+    arm = _make_arm()
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await arm.move_gripper(width=80.0)
+
+    self.assertEqual(events[0].data["width"], 80.0)
+    self.assertNotIn("width_mm", events[0].data)
+
   async def test_gripper_event_and_nested_firmware_commands_inherit_resource_context(self):
     arm = PreciseFlex(
       host="localhost",

@@ -86,9 +86,12 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
       ],
     )
     self.assertEqual(events[0].context["device"]["name"], "test_temperature_module")
-    self.assertEqual(events[0].context["target_temperature_c"], 37.0)
-    self.assertEqual(events[2].context["timeout_seconds"], 1.0)
-    self.assertEqual(events[2].context["tolerance_c"], 0.5)
+    self.assertEqual(events[0].context["target_temperature"], 37.0)
+    self.assertEqual(events[2].context["timeout"], 1.0)
+    self.assertEqual(events[2].context["tolerance"], 0.5)
+    self.assertNotIn("target_temperature_c", events[0].context)
+    self.assertNotIn("timeout_seconds", events[2].context)
+    self.assertNotIn("tolerance_c", events[2].context)
 
   async def test_temperature_events_include_currently_loaded_resource(self):
     temperature_controller = TemperatureController(
@@ -133,7 +136,7 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
       new_callable=AsyncMock,
     ) as sleep:
       with use_event_bus(event_bus):
-        await temperature_controller.hold_temperature(duration_s=120.0)
+        await temperature_controller.hold_temperature(duration=120.0)
 
     self.assertEqual(
       [event.name for event in events],
@@ -145,8 +148,9 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[0].context["operation_id"], events[1].context["operation_id"])
     self.assertEqual(events[0].context["device"]["name"], "test_temperature_module")
     self.assertEqual(events[0].context["resources"][0]["name"], "plate")
-    self.assertEqual(events[0].context["duration_s"], 120.0)
-    self.assertEqual(events[0].context["target_temperature_c"], 37.0)
+    self.assertEqual(events[0].context["duration"], 120.0)
+    self.assertEqual(events[0].context["target_temperature"], 37.0)
+    self.assertNotIn("duration_s", events[0].context)
     sleep.assert_awaited_once_with(120.0)
     backend.set_temperature.assert_not_awaited()
 
@@ -165,7 +169,7 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
 
     with use_event_bus(event_bus):
       with self.assertRaisesRegex(ValueError, "must not be negative"):
-        await temperature_controller.hold_temperature(duration_s=-1.0)
+        await temperature_controller.hold_temperature(duration=-1.0)
 
     self.assertEqual(
       [event.name for event in events],
@@ -175,8 +179,8 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
       ],
     )
     self.assertEqual(events[0].context["operation_id"], events[1].context["operation_id"])
-    self.assertEqual(events[0].context["duration_s"], -1.0)
-    self.assertNotIn("target_temperature_c", events[0].context)
+    self.assertEqual(events[0].context["duration"], -1.0)
+    self.assertNotIn("target_temperature", events[0].context)
     self.assertEqual(events[1].data["error_type"], "ValueError")
 
 

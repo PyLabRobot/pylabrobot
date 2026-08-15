@@ -149,7 +149,7 @@ or a physical-deck assumption.
 
 Use the direct operated containers in `resources`, plus one `liquid_operations` record per
 channel. Each item should include the channel, direct resource reference, owning plate reference
-when applicable, and `volume_ul`.
+when applicable, and `volume`.
 
 ```python
 {
@@ -159,7 +159,7 @@ when applicable, and `volume_ul`.
     "channel": 0,
     "resource": resource_reference(well),
     "plate": resource_reference(well.parent),
-    "volume_ul": 50.0,
+    "volume": 50.0,
   }],
 }
 ```
@@ -181,21 +181,24 @@ include `tip_operations` with the channel and direct resource.
 
 Represent the issuing controller as `device`. A `ResourceHolder` controller should include its
 currently loaded direct resource in `resources` when one is assigned at operation start. Do not
-infer a resource from broader deck state. Use explicit unit-suffixed fields for operation
-parameters:
+infer a resource from broader deck state. Event fields use PLR's
+[default units](../user_guide/getting-started/units.md), so their names do not repeat those units:
 
 ```python
 {
   "device": resource_reference(controller),
   "resources": [resource_reference(controller.resource)],  # only when loaded
-  "temperature_c": 37.0,
-  "duration_seconds": 300.0,
+  "target_temperature": 37.0,
+  "duration": 300.0,
   "speed_rpm": 800.0,
 }
 ```
 
+The `speed_rpm` suffix is explicit because rotational speed differs from PLR's default linear
+speed in millimeters per second.
+
 For a protocol-requested temperature dwell, use `temperature_controller.hold_temperature` with
-`duration_s` and the controller's configured `target_temperature_c` when known. The operation
+`duration` and the controller's configured `target_temperature` when known. The operation
 must not reissue `set_temperature()` or claim that an attached resource reached target
 temperature. New direct vendor frontends should emit this same semantic operation independently;
 they do not need to inherit from the legacy temperature-controller frontend.
@@ -214,12 +217,16 @@ individual buckets. Use explicit physical parameters:
     "holder": resource_reference(bucket),
     "resource": resource_reference(plate),
   }],
-  "relative_centrifugal_force_g": 500.0,
-  "duration_seconds": 60.0,
+  "relative_centrifugal_force": 500.0,
+  "duration": 60.0,
   "acceleration_fraction": 0.8,
   "deceleration_fraction": 0.8,
 }
 ```
+
+`relative_centrifugal_force` is the dimensionless multiple of standard gravity conventionally
+written as x g, which PLR defines as the default unit for relative centrifugal force; it is not a
+mass in grams or a force in Newtons.
 
 Use `centrifuge_loader.load` and `centrifuge_loader.unload` for a loader's physical transfer
 between its staging holder and a centrifuge bucket. List the direct plate in `resources`, and use
@@ -227,8 +234,9 @@ the actual staging holder and bucket as `source` and `destination`.
 
 ### Arm/controller motion
 
-Public controller operations should identify the controller in `device` and use explicit,
-unit-bearing motion arguments where relevant. Low-level controller operations can be useful to a
+Public controller operations should identify the controller in `device` and use PLR's default
+units for motion arguments. Add a unit suffix only when a field deliberately differs from the
+default, such as a percentage-based speed. Low-level controller operations can be useful to a
 diagnostic listener, but higher-level resource-aware wrappers should emit the resource-transfer
 events when an arm is actually approaching, picking up, moving, or dropping a PLR resource.
 
@@ -255,8 +263,8 @@ When adding EventBus support to a frontend or driver:
 2. Use a stable `<component>.<operation>` name and one event scope per logical action.
 3. Include `device` and direct `resources` in the context factory.
 4. Preserve PLR resource semantics; use ancestry for context rather than substituting resources.
-5. Use explicit units in quantitative field names, such as `volume_ul`, `duration_s`, and
-   `temperature_c`.
+5. Use PLR's default units without repeating them in field names. Add a suffix only when a value
+   deliberately uses a different unit or representation, such as `speed_rpm` or `speed_pct`.
 6. Include `source` and `destination` only for actual resource transfers.
 7. Add tests for `.started`, `.completed`, and `.failed`, including operation-ID correlation.
 8. Verify no EventBus listener is required for normal device operation and that listener failures

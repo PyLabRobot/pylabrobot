@@ -22,7 +22,7 @@ def _shaker_event_context(
   if speed is not None:
     context["speed_rpm"] = float(speed)
   if duration is not None:
-    context["duration_seconds"] = float(duration)
+    context["duration"] = float(duration)
   return context
 
 

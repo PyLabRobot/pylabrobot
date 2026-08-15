@@ -76,8 +76,8 @@ def _vspin_event_context(
     "device": device_reference(vspin, name=vspin.name),
     "resources": [bucket["resource"] for bucket in bucket_resources],
     "bucket_resources": bucket_resources,
-    "relative_centrifugal_force_g": g,
-    "duration_seconds": duration,
+    "relative_centrifugal_force": g,
+    "duration": duration,
     "acceleration_fraction": acceleration,
     "deceleration_fraction": deceleration,
   }

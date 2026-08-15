@@ -655,7 +655,8 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(operation["channel"], 0)
     self.assertEqual(operation["resource"]["name"], well.name)
     self.assertEqual(operation["plate"]["name"], "plate")
-    self.assertEqual(operation["volume_ul"], 10.0)
+    self.assertEqual(operation["volume"], 10.0)
+    self.assertNotIn("volume_ul", operation)
 
   async def test_tip_pickup_and_discard_emit_direct_tip_resources(self):
     tip_spot = self.tip_rack.get_item("A1")

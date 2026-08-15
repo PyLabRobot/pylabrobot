@@ -51,7 +51,8 @@ class ShakerEventTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(events[0].context["device"]["name"], "test_shaker")
     self.assertEqual(events[0].context["speed_rpm"], 900.0)
-    self.assertEqual(events[0].context["duration_seconds"], 0.0)
+    self.assertEqual(events[0].context["duration"], 0.0)
+    self.assertNotIn("duration_seconds", events[0].context)
 
   async def test_shake_includes_currently_loaded_resource(self):
     shaker = Shaker(

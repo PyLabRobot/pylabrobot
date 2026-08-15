@@ -40,10 +40,12 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(started.data["device"]["name"], "centrifuge")
     self.assertEqual(started.data["resources"][0]["name"], "plate_1")
     self.assertEqual(started.data["bucket_resources"][0]["holder"]["name"], "centrifuge_bucket1")
-    self.assertEqual(started.data["relative_centrifugal_force_g"], 500)
-    self.assertEqual(started.data["duration_seconds"], 1)
+    self.assertEqual(started.data["relative_centrifugal_force"], 500)
+    self.assertEqual(started.data["duration"], 1)
     self.assertEqual(started.data["acceleration_fraction"], 0.5)
     self.assertEqual(started.data["deceleration_fraction"], 0.6)
+    self.assertNotIn("relative_centrifugal_force_g", started.data)
+    self.assertNotIn("duration_seconds", started.data)
 
   async def test_spin_failure_emits_requested_parameters(self):
     vspin = VSpin(name="centrifuge", device_id="test")
