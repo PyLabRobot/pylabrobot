@@ -51,6 +51,10 @@ make typecheck
 
 PyLabRobot uses [pre-commit](https://pre-commit.com/) to run the above commands before every commit. To install pre-commit, run `pip install pre-commit` and then `pre-commit install`.
 
+## API conventions
+
+Use PyLabRobot's [default units](../user_guide/getting-started/units.md) in public APIs. Omit the unit from a parameter or attribute name when it uses the PyLabRobot default—for example, use `temperature`, not `temperature_celsius`. Deviate from the default only for a compelling reason, make the alternative unit explicit, and document why it is necessary. Convert device-native units internally.
+
 ## Writing documentation
 
 It is important that you write documentation for your code. As a rule of thumb, all functions and classes, whether public or private, are required to have a docstring. PyLabRobot uses [Google Style Python Docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html). In addition, PyLabRobot uses [type hints](https://docs.python.org/3/library/typing.html) to document the types of variables.

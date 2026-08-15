@@ -641,6 +641,10 @@ make<span class="w"> </span>format-check
 <p>PyLabRobot uses <a class="reference external" href="https://pre-commit.com/">pre-commit</a> to run the above commands before every commit. To install pre-commit, run <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">pre-commit</span></code> and then <code class="docutils literal notranslate"><span class="pre">pre-commit</span> <span class="pre">install</span></code>.</p>
 </section>
 </section>
+<section id="api-conventions">
+<h2>API conventions<a class="headerlink" href="#api-conventions" title="Link to this heading">#</a></h2>
+<p>Use PyLabRobot’s <a class="reference internal" href="../user_guide/getting-started/units.html"><span class="std std-doc">default units</span></a> in public APIs. Omit the unit from a parameter or attribute name when it uses the PyLabRobot default—for example, use <code class="docutils literal notranslate"><span class="pre">temperature</span></code>, not <code class="docutils literal notranslate"><span class="pre">temperature_celsius</span></code>. Deviate from the default only for a compelling reason, make the alternative unit explicit, and document why it is necessary. Convert device-native units internally.</p>
+</section>
 <section id="writing-documentation">
 <h2>Writing documentation<a class="headerlink" href="#writing-documentation" title="Link to this heading">#</a></h2>
 <p>It is important that you write documentation for your code. As a rule of thumb, all functions and classes, whether public or private, are required to have a docstring. PyLabRobot uses <a class="reference external" href="https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html">Google Style Python Docstrings</a>. In addition, PyLabRobot uses <a class="reference external" href="https://docs.python.org/3/library/typing.html">type hints</a> to document the types of variables.</p>
@@ -727,6 +731,7 @@ make<span class="w"> </span>format-check
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pre-commit-hooks">Pre-commit hooks</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-conventions">API conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-documentation">Writing documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#common-tasks">Common Tasks</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fixing-a-bug">Fixing a bug</a></li>
