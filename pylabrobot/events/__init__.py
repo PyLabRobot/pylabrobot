@@ -1,9 +1,13 @@
 """Structured, opt-in execution events for PyLabRobot."""
 
 from .bus import (
+  CoordinateReference,
+  DeviceReference,
   EventBus,
   PLREvent,
+  ResourceReference,
   coordinate_reference,
+  device_reference,
   emit_event,
   event_context,
   event_operation,
@@ -17,9 +21,13 @@ from .bus import (
 )
 
 __all__ = [
+  "CoordinateReference",
+  "DeviceReference",
   "EventBus",
   "PLREvent",
+  "ResourceReference",
   "coordinate_reference",
+  "device_reference",
   "emit_event",
   "event_context",
   "event_operation",

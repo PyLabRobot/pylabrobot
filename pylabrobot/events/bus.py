@@ -14,9 +14,69 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional
+from typing import (
+  TYPE_CHECKING,
+  Any,
+  Awaitable,
+  Callable,
+  Dict,
+  Iterator,
+  List,
+  Optional,
+  TypedDict,
+  cast,
+)
+
+if TYPE_CHECKING:
+  from pylabrobot.resources.coordinate import Coordinate
+  from pylabrobot.resources.resource import Resource
 
 logger = logging.getLogger(__name__)
+
+
+class DeviceReference(TypedDict):
+  """Serialized identity for a device frontend that is not necessarily a PLR resource."""
+
+  name: str
+  type: str
+
+
+class RotationReference(TypedDict):
+  """Serialized resource rotation."""
+
+  x: float
+  y: float
+  z: float
+
+
+class ResourceIdentityReference(TypedDict):
+  """Fields shared by direct resources and their ancestors."""
+
+  name: str
+  type: str
+
+
+class ResourceAncestorReference(ResourceIdentityReference, total=False):
+  """Compact identity for one resource ancestor."""
+
+  model: str
+
+
+class ResourceReference(ResourceIdentityReference, total=False):
+  """Compact identity and structural context for a PLR resource."""
+
+  model: str
+  rotation: RotationReference
+  ancestors: List[ResourceAncestorReference]
+
+
+class CoordinateReference(TypedDict):
+  """Serialized PLR coordinate."""
+
+  x: float
+  y: float
+  z: float
+  type: str
 
 
 @dataclass(frozen=True)
@@ -154,7 +214,13 @@ def emit_event(name: str, **data: Any) -> Optional[PLREvent]:
   return event_bus.emit(name, context=_event_context.get(), **data)
 
 
-def resource_reference(resource: Any) -> Optional[Dict[str, Any]]:
+def device_reference(device: object, *, name: str) -> DeviceReference:
+  """Return the explicit identity of a device frontend that is not a PLR resource."""
+
+  return {"name": name, "type": type(device).__name__}
+
+
+def resource_reference(resource: Optional["Resource"]) -> Optional[ResourceReference]:
   """Return a compact resource identity and its assigned-resource ancestry.
 
   The reference always identifies the resource directly involved in an operation. Its
@@ -163,38 +229,34 @@ def resource_reference(resource: Any) -> Optional[Dict[str, Any]]:
   """
   if resource is None:
     return None
-  result: Dict[str, Any] = {
-    "name": getattr(resource, "name", None),
+  result: ResourceReference = {
+    "name": resource.name,
     "type": type(resource).__name__,
   }
-  model = getattr(resource, "model", None)
-  if model is not None:
-    result["model"] = str(model)
-  rotation = getattr(resource, "rotation", None)
-  if rotation is not None:
-    result["rotation"] = {
-      "x": rotation.x,
-      "y": rotation.y,
-      "z": rotation.z,
-    }
-  ancestors = []
-  current = getattr(resource, "parent", None)
+  if resource.model is not None:
+    result["model"] = resource.model
+  result["rotation"] = {
+    "x": resource.rotation.x,
+    "y": resource.rotation.y,
+    "z": resource.rotation.z,
+  }
+  ancestors: List[ResourceAncestorReference] = []
+  current = resource.parent
   while current is not None:
-    ancestor: Dict[str, Any] = {
-      "name": getattr(current, "name", None),
+    ancestor: ResourceAncestorReference = {
+      "name": current.name,
       "type": type(current).__name__,
     }
-    ancestor_model = getattr(current, "model", None)
-    if ancestor_model is not None:
-      ancestor["model"] = str(ancestor_model)
+    if current.model is not None:
+      ancestor["model"] = current.model
     ancestors.append(ancestor)
-    current = getattr(current, "parent", None)
+    current = current.parent
   if ancestors:
     result["ancestors"] = ancestors
   return result
 
 
-def coordinate_reference(coordinate: Any) -> Optional[Dict[str, Any]]:
+def coordinate_reference(coordinate: Optional["Coordinate"]) -> Optional[CoordinateReference]:
   """Return PLR's serialized coordinate representation, or ``None`` when absent.
 
   ``Coordinate`` already has a stable serialization contract. Reusing it preserves the
@@ -203,10 +265,7 @@ def coordinate_reference(coordinate: Any) -> Optional[Dict[str, Any]]:
   """
   if coordinate is None:
     return None
-  serialize = getattr(coordinate, "serialize", None)
-  if callable(serialize):
-    return serialize()
-  return {"x": coordinate.x, "y": coordinate.y, "z": coordinate.z}
+  return cast(CoordinateReference, coordinate.serialize())
 
 
 @contextmanager

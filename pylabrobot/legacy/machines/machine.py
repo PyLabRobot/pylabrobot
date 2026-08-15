@@ -5,8 +5,9 @@ import sys
 from abc import ABC
 from typing import Any, Awaitable, Callable, TypeVar
 
-from pylabrobot.events import evented_operation, resource_reference
+from pylabrobot.events import device_reference, evented_operation, resource_reference
 from pylabrobot.legacy.machines.backend import MachineBackend
+from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import SerializableMixin
 
 if sys.version_info < (3, 10):
@@ -19,8 +20,13 @@ _R = TypeVar("_R", bound=Awaitable[Any])
 
 
 def _machine_event_context(machine: "Machine", **_: Any) -> dict:
+  device = (
+    resource_reference(machine)
+    if isinstance(machine, Resource)
+    else device_reference(machine, name=type(machine).__name__)
+  )
   return {
-    "device": resource_reference(machine),
+    "device": device,
     "backend": type(machine.backend).__name__,
   }
 

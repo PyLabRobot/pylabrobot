@@ -8,7 +8,7 @@ import time
 import warnings
 from typing import Optional
 
-from pylabrobot.events import evented_operation, resource_reference
+from pylabrobot.events import device_reference, evented_operation, resource_reference
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -73,7 +73,7 @@ def _vspin_event_context(
     if bucket.resource is not None
   ]
   return {
-    "device": resource_reference(vspin),
+    "device": device_reference(vspin, name=vspin.name),
     "resources": [bucket["resource"] for bucket in bucket_resources],
     "bucket_resources": bucket_resources,
     "relative_centrifugal_force_g": g,

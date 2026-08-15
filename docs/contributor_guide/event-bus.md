@@ -80,7 +80,10 @@ identifier or protocol run identifier. Device code must not invent protocol-spec
 
 Every instrumented hardware operation should provide:
 
-- `device`: `resource_reference()` for the device or controller issuing the operation.
+- `device`: the identity of the device or controller issuing the operation. Use
+  `resource_reference()` when the frontend is a PLR `Resource`. For a frontend that is not a
+  resource, use `device_reference()` with an explicit stable name or provide an equally typed,
+  frontend-specific device reference.
 - `resources`: direct PLR resources acted on by the operation, represented with
   `resource_reference()`.
 
@@ -107,11 +110,18 @@ Use for `setup()` and `stop()` on a public PLR machine frontend.
 ```python
 @evented_operation(
   "machine.setup",
-  lambda self, **_: {"device": resource_reference(self), "resources": []},
+  lambda self, **_: {
+    "device": device_reference(self, name="plate_reader"),
+    "resources": [],
+  },
 )
 async def setup(self, **backend_kwargs):
   ...
 ```
+
+If the machine frontend itself inherits `Resource`, use `resource_reference(self)` instead.
+Do not pass arbitrary controller objects to `resource_reference()` merely because they expose a
+`name` attribute.
 
 ### Resource transfer
 
@@ -198,7 +208,7 @@ individual buckets. Use explicit physical parameters:
 
 ```python
 {
-  "device": resource_reference(centrifuge),
+  "device": device_reference(centrifuge, name=centrifuge.name),
   "resources": [resource_reference(plate)],
   "bucket_resources": [{
     "holder": resource_reference(bucket),

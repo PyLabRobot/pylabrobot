@@ -4,20 +4,49 @@ import unittest
 from pylabrobot.events import (
   EventBus,
   coordinate_reference,
+  device_reference,
   emit_event,
   event_context,
   event_operation,
   evented_operation,
+  resource_reference,
   use_event_bus,
 )
 from pylabrobot.resources import Coordinate, Resource
 
 
 class TestEventBus(unittest.TestCase):
+  def test_device_reference_supports_non_resource_frontends(self):
+    class Controller:
+      pass
+
+    self.assertEqual(
+      device_reference(Controller(), name="centrifuge"),
+      {"name": "centrifuge", "type": "Controller"},
+    )
+
   def test_coordinate_reference_preserves_coordinate_serialization(self):
     self.assertEqual(
       coordinate_reference(Coordinate(1.25, 2.5, 3.75)),
       {"x": 1.25, "y": 2.5, "z": 3.75, "type": "Coordinate"},
+    )
+
+  def test_resource_reference_preserves_typed_resource_context(self):
+    parent = Resource("parent", size_x=10, size_y=10, size_z=1, model="parent-model")
+    child = Resource("child", size_x=5, size_y=5, size_z=1, model="child-model")
+    parent.assign_child_resource(child, location=Coordinate.zero())
+
+    self.assertEqual(
+      resource_reference(child),
+      {
+        "name": "child",
+        "type": "Resource",
+        "model": "child-model",
+        "rotation": {"x": 0, "y": 0, "z": 0},
+        "ancestors": [
+          {"name": "parent", "type": "Resource", "model": "parent-model"},
+        ],
+      },
     )
 
   def test_context_is_attached_to_events(self):
