@@ -46,6 +46,16 @@ Cell rules:
 - **One concept per code cell.** If a physical action happens between steps, that's two cells: `move_tray_out()` → place plate → `move_tray_in()`. Every code cell gets a preceding markdown cell.
 - **Notebook JSON:** edit with a notebook-aware tool (plain-text replace is blocked on `.ipynb`); code cells `execution_count: null`, empty `outputs`; `nbformat: 4`, `nbformat_minor: 5`; every cell has an `id`; validate it parses.
 
+### Register the device and its guide
+
+Add or update the device's object in `docs/_static/devices.json` in the same change. Follow the [device registry guide](device-registry.md) for the schema. A driver and hello-world change is not complete until its registry entry has:
+
+- `api`, `api_version`, and `code_slug` pointing to the driver;
+- `doc_slug` pointing to the hello-world notebook, relative to `docs/user_guide/` and without `.ipynb`; and
+- an `id` matching the notebook's `{device-card}` directive.
+
+When the device is already registered, edit its existing object instead of adding a duplicate. In particular, add `doc_slug` when a guide is added to a device that previously had no documentation page.
+
 ## 5. Verify & ship
 
 - **Lint + type-check:** ruff + mypy, 2-space indent.

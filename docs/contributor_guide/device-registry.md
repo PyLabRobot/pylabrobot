@@ -55,6 +55,33 @@ The two slugs exist so entries stay short and the prefixes stay in one place. `d
 resolved against `plr_devices_doc_prefix`, and `code_slug` against `plr_devices_code_root` and the
 repository and branch in `html_context` — the same ones the theme's "edit this page" links use.
 
+### Adding a guide to an existing device
+
+If a device already has a registry object, update that object rather than appending another one:
+
+1. Set `doc_slug` to the guide's path relative to `docs/user_guide/`, without `.md` or `.ipynb`.
+2. Add the guide to its manufacturer's `{toctree}`.
+3. Put a `{device-card}` directive in the guide using the registry object's `id`.
+
+For example, a notebook at `docs/user_guide/agilent/vspin/hello-world.ipynb` uses:
+
+```json
+"doc_slug": "agilent/vspin/hello-world"
+```
+
+and its card is:
+
+````md
+```{device-card} agilent-vspin
+```
+````
+
+Validate registry changes with:
+
+```bash
+python -m pytest docs/_exts/plr_devices/registry_tests.py
+```
+
 ## Rendering a table
 
 A bare `device-table` renders every device, with a search box and filter chips:
