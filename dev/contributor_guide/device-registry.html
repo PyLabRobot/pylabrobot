@@ -696,6 +696,28 @@ filter chips. Terms that nothing uses are removed, and a test enforces both dire
 <p>The two slugs exist so entries stay short and the prefixes stay in one place. <code class="docutils literal notranslate"><span class="pre">doc_slug</span></code> is
 resolved against <code class="docutils literal notranslate"><span class="pre">plr_devices_doc_prefix</span></code>, and <code class="docutils literal notranslate"><span class="pre">code_slug</span></code> against <code class="docutils literal notranslate"><span class="pre">plr_devices_code_root</span></code> and the
 repository and branch in <code class="docutils literal notranslate"><span class="pre">html_context</span></code> — the same ones the theme’s “edit this page” links use.</p>
+<section id="adding-a-guide-to-an-existing-device">
+<h3>Adding a guide to an existing device<a class="headerlink" href="#adding-a-guide-to-an-existing-device" title="Link to this heading">#</a></h3>
+<p>If a device already has a registry object, update that object rather than appending another one:</p>
+<ol class="arabic simple">
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">doc_slug</span></code> to the guide’s path relative to <code class="docutils literal notranslate"><span class="pre">docs/user_guide/</span></code>, without <code class="docutils literal notranslate"><span class="pre">.md</span></code> or <code class="docutils literal notranslate"><span class="pre">.ipynb</span></code>.</p></li>
+<li><p>Add the guide to its manufacturer’s <code class="docutils literal notranslate"><span class="pre">{toctree}</span></code>.</p></li>
+<li><p>Put a <code class="docutils literal notranslate"><span class="pre">{device-card}</span></code> directive in the guide using the registry object’s <code class="docutils literal notranslate"><span class="pre">id</span></code>.</p></li>
+</ol>
+<p>For example, a notebook at <code class="docutils literal notranslate"><span class="pre">docs/user_guide/agilent/vspin/hello-world.ipynb</span></code> uses:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;doc_slug&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agilent/vspin/hello-world&quot;</span>
+</pre></div>
+</div>
+<p>and its card is:</p>
+<div class="highlight-md notranslate"><div class="highlight"><pre><span></span>```{device-card} agilent-vspin
+```
+</pre></div>
+</div>
+<p>Validate registry changes with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>docs/_exts/plr_devices/registry_tests.py
+</pre></div>
+</div>
+</section>
 </section>
 <section id="rendering-a-table">
 <h2>Rendering a table<a class="headerlink" href="#rendering-a-table" title="Link to this heading">#</a></h2>
@@ -784,7 +806,10 @@ change.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-device">Adding a device</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-device">Adding a device</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-guide-to-an-existing-device">Adding a guide to an existing device</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rendering-a-table">Rendering a table</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rendering-a-card">Rendering a card</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#styling">Styling</a></li>

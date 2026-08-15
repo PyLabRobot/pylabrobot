@@ -648,6 +648,16 @@
 <li><p><strong>One concept per code cell.</strong> If a physical action happens between steps, that’s two cells: <code class="docutils literal notranslate"><span class="pre">move_tray_out()</span></code> → place plate → <code class="docutils literal notranslate"><span class="pre">move_tray_in()</span></code>. Every code cell gets a preceding markdown cell.</p></li>
 <li><p><strong>Notebook JSON:</strong> edit with a notebook-aware tool (plain-text replace is blocked on <code class="docutils literal notranslate"><span class="pre">.ipynb</span></code>); code cells <code class="docutils literal notranslate"><span class="pre">execution_count:</span> <span class="pre">null</span></code>, empty <code class="docutils literal notranslate"><span class="pre">outputs</span></code>; <code class="docutils literal notranslate"><span class="pre">nbformat:</span> <span class="pre">4</span></code>, <code class="docutils literal notranslate"><span class="pre">nbformat_minor:</span> <span class="pre">5</span></code>; every cell has an <code class="docutils literal notranslate"><span class="pre">id</span></code>; validate it parses.</p></li>
 </ul>
+<section id="register-the-device-and-its-guide">
+<h3>Register the device and its guide<a class="headerlink" href="#register-the-device-and-its-guide" title="Link to this heading">#</a></h3>
+<p>Add or update the device’s object in <code class="docutils literal notranslate"><span class="pre">docs/_static/devices.json</span></code> in the same change. Follow the <a class="reference internal" href="device-registry.html"><span class="std std-doc">device registry guide</span></a> for the schema. A driver and hello-world change is not complete until its registry entry has:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">api</span></code>, <code class="docutils literal notranslate"><span class="pre">api_version</span></code>, and <code class="docutils literal notranslate"><span class="pre">code_slug</span></code> pointing to the driver;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">doc_slug</span></code> pointing to the hello-world notebook, relative to <code class="docutils literal notranslate"><span class="pre">docs/user_guide/</span></code> and without <code class="docutils literal notranslate"><span class="pre">.ipynb</span></code>; and</p></li>
+<li><p>an <code class="docutils literal notranslate"><span class="pre">id</span></code> matching the notebook’s <code class="docutils literal notranslate"><span class="pre">{device-card}</span></code> directive.</p></li>
+</ul>
+<p>When the device is already registered, edit its existing object instead of adding a duplicate. In particular, add <code class="docutils literal notranslate"><span class="pre">doc_slug</span></code> when a guide is added to a device that previously had no documentation page.</p>
+</section>
 </section>
 <section id="verify-ship">
 <h2>5. Verify &amp; ship<a class="headerlink" href="#verify-ship" title="Link to this heading">#</a></h2>
@@ -720,7 +730,10 @@
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-style">3. Code style</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hello-world-notebook">4. Hello-world notebook</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hello-world-notebook">4. Hello-world notebook</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#register-the-device-and-its-guide">Register the device and its guide</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-ship">5. Verify &amp; ship</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#working-style">6. Working style</a></li>
 </ul>
