@@ -184,6 +184,12 @@ parameters:
 }
 ```
 
+For a protocol-requested temperature dwell, use `temperature_controller.hold_temperature` with
+`duration_s` and the controller's configured `target_temperature_c` when known. The operation
+must not reissue `set_temperature()` or claim that an attached resource reached target
+temperature. New direct vendor frontends should emit this same semantic operation independently;
+they do not need to inherit from the legacy temperature-controller frontend.
+
 ### Centrifuge and loader operations
 
 Use `centrifuge.spin` for one requested centrifuge cycle. Include every directly loaded

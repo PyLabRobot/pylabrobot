@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.events import EventBus, use_event_bus
 from pylabrobot.legacy.temperature_controlling import (
@@ -108,6 +109,75 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
       await temperature_controller.set_temperature(37.0)
 
     self.assertEqual(events[0].context["resources"][0]["name"], "plate")
+
+  async def test_hold_temperature_emits_loaded_resource_without_reissuing_target(self):
+    backend = TemperatureControllerChatterboxBackend(dummy_temperature=20.0)
+    temperature_controller = TemperatureController(
+      name="test_temperature_module",
+      size_x=1,
+      size_y=1,
+      size_z=1,
+      backend=backend,
+      child_location=Coordinate.zero(),
+    )
+    plate = Resource("plate", size_x=1, size_y=1, size_z=1)
+    temperature_controller.assign_child_resource(plate)
+    temperature_controller.target_temperature = 37.0
+    backend.set_temperature = AsyncMock()
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with patch(
+      "pylabrobot.legacy.temperature_controlling.temperature_controller.asyncio.sleep",
+      new_callable=AsyncMock,
+    ) as sleep:
+      with use_event_bus(event_bus):
+        await temperature_controller.hold_temperature(duration_s=120.0)
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "temperature_controller.hold_temperature.started",
+        "temperature_controller.hold_temperature.completed",
+      ],
+    )
+    self.assertEqual(events[0].context["operation_id"], events[1].context["operation_id"])
+    self.assertEqual(events[0].context["device"]["name"], "test_temperature_module")
+    self.assertEqual(events[0].context["resources"][0]["name"], "plate")
+    self.assertEqual(events[0].context["duration_s"], 120.0)
+    self.assertEqual(events[0].context["target_temperature_c"], 37.0)
+    sleep.assert_awaited_once_with(120.0)
+    backend.set_temperature.assert_not_awaited()
+
+  async def test_hold_temperature_failure_emits_invocation_context(self):
+    temperature_controller = TemperatureController(
+      name="test_temperature_module",
+      size_x=1,
+      size_y=1,
+      size_z=1,
+      backend=TemperatureControllerChatterboxBackend(dummy_temperature=20.0),
+      child_location=Coordinate.zero(),
+    )
+    events = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      with self.assertRaisesRegex(ValueError, "must not be negative"):
+        await temperature_controller.hold_temperature(duration_s=-1.0)
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "temperature_controller.hold_temperature.started",
+        "temperature_controller.hold_temperature.failed",
+      ],
+    )
+    self.assertEqual(events[0].context["operation_id"], events[1].context["operation_id"])
+    self.assertEqual(events[0].context["duration_s"], -1.0)
+    self.assertNotIn("target_temperature_c", events[0].context)
+    self.assertEqual(events[1].data["error_type"], "ValueError")
 
 
 class _FakeBackend(TemperatureControllerBackend):

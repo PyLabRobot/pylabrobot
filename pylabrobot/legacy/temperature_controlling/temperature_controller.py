@@ -15,6 +15,7 @@ def _temperature_event_context(
   passive: Optional[bool] = None,
   timeout: Optional[float] = None,
   tolerance: Optional[float] = None,
+  duration_s: Optional[float] = None,
   **_: Any,
 ) -> dict[str, Any]:
   """Describe a thermal-device command and its directly loaded resource, when present."""
@@ -31,6 +32,8 @@ def _temperature_event_context(
     context["timeout_seconds"] = float(timeout)
   if tolerance is not None:
     context["tolerance_c"] = float(tolerance)
+  if duration_s is not None:
+    context["duration_s"] = float(duration_s)
   return context
 
 
@@ -113,6 +116,22 @@ class TemperatureController(ResourceHolder, Machine):
         return
       await asyncio.sleep(1.0)
     raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
+
+  @evented_operation("temperature_controller.hold_temperature", _temperature_event_context)
+  async def hold_temperature(self, duration_s: float) -> None:
+    """Hold the currently configured thermal condition for a requested dwell.
+
+    This operation intentionally does not issue a new hardware temperature command or verify
+    that a loaded resource reached the configured target. It records the protocol-requested
+    dwell while the controller remains in its existing state.
+
+    Args:
+      duration_s: Dwell duration in seconds. Zero is allowed for callers that conditionally
+        elide a dwell; negative values are invalid.
+    """
+    if duration_s < 0:
+      raise ValueError("Temperature hold duration must not be negative.")
+    await asyncio.sleep(duration_s)
 
   @evented_operation("temperature_controller.deactivate", _temperature_event_context)
   async def deactivate(self):
