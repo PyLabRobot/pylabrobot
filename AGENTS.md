@@ -4,6 +4,7 @@ Orientation for agents (and humans) working in this repo.
 
 ## Guides
 
+- **General contribution guidelines:** [`docs/contributor_guide/contributing.md`](docs/contributor_guide/contributing.md)
 - **Writing a device driver + its hello-world notebook:** [`docs/contributor_guide/device-driver-guide.md`](docs/contributor_guide/device-driver-guide.md)
 
 ## Working principles
