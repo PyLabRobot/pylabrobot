@@ -1209,6 +1209,20 @@
     "oem": "https://lifesciences.tecan.com/multimode-plate-reader"
   },
   {
+    "id": "thermo-fisher-nanodrop-1000",
+    "vendor": "Thermo Fisher",
+    "name": "NanoDrop 1000",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance"
+    ],
+    "status": "basic",
+    "api": "pylabrobot.thermo_fisher.nanodrop_1000.ThermoFisherNanoDrop1000",
+    "api_version": "v1",
+    "code_slug": "thermo_fisher/nanodrop_1000",
+    "doc_slug": "thermo_fisher/nanodrop_1000/index"
+  },
+  {
     "id": "thermo-fisher-alps-300",
     "vendor": "Thermo Fisher",
     "name": "ALPS 300",
