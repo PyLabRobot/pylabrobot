@@ -13,8 +13,8 @@ await operator.perform(
   title="Spin sample plate",
   instructions="Spin plate_1 at 300 x g for 180 seconds, then return it to the handover nest.",
   details={
-    "relative_centrifugal_force_g": 300,
-    "duration_seconds": 180,
+    "relative_centrifugal_force": 300,
+    "duration": 180,
   },
 )
 ```
@@ -83,7 +83,9 @@ Cancellation, reported failure, invalid provider results, and provider exception
 with the normal EventBus error fields.
 
 Use stable action identifiers such as `centrifuge.spin`, `plate_reader.read`, or
-`quality_control.inspect`. `move_resource()` emits `manual_operator.resource.move.*` with the
-direct moved resource plus its true `source` and `destination` resource references. The normal
+`quality_control.inspect`. When the manual action has an automated counterpart, use that
+operation's canonical field names and PLR default units inside `details`. `move_resource()` emits
+`manual_operator.resource.move.*` with the direct moved resource plus its true `source` and
+`destination` resource references. The normal
 `resource.unassigned` and `resource.assigned` state-transition events record the subsequent model
 update.

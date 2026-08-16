@@ -43,7 +43,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
       title="Spin sample plate",
       instructions="Spin plate_1 at 300 x g for 180 seconds.",
       confirmation_text="Confirm spin completed",
-      details={"relative_centrifugal_force_g": 300, "duration_seconds": 180},
+      details={"relative_centrifugal_force": 300, "duration": 180},
     )
 
     self.assertEqual(result.confirmed_by, "operator-1")
@@ -51,7 +51,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     request = provider.requests[0]
     self.assertEqual(request.operator_name, "cell_operator")
     self.assertEqual(request.action, "centrifuge.spin")
-    self.assertEqual(request.details["duration_seconds"], 180)
+    self.assertEqual(request.details["duration"], 180)
 
   async def test_cancelled_result_raises_specific_error(self):
     provider = RecordingProvider(OperatorActionResult.cancelled(message="Protocol stopped"))
@@ -79,7 +79,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
       )
 
   async def test_request_copies_details(self):
-    details = {"duration_seconds": 60}
+    details = {"duration": 60}
     request = OperatorActionRequest(
       operator_name="operator",
       action="centrifuge.spin",
@@ -88,9 +88,9 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
       details=details,
     )
 
-    details["duration_seconds"] = 120
+    details["duration"] = 120
 
-    self.assertEqual(request.details["duration_seconds"], 60)
+    self.assertEqual(request.details["duration"], 60)
 
   async def test_move_resource_reassigns_only_after_completion(self):
     source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
@@ -244,7 +244,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
         action="centrifuge.spin",
         title="Spin sample plate",
         instructions="Spin plate at 300 x g for 180 seconds.",
-        details={"relative_centrifugal_force_g": 300, "duration_seconds": 180},
+        details={"relative_centrifugal_force": 300, "duration": 180},
         resources=[plate],
       )
 
@@ -263,7 +263,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(events[0].data["resources"][0]["name"], "plate")
     self.assertEqual(events[0].data["manual_action"], "centrifuge.spin")
-    self.assertEqual(events[0].data["details"]["relative_centrifugal_force_g"], 300)
+    self.assertEqual(events[0].data["details"]["relative_centrifugal_force"], 300)
     self.assertNotIn("confirmed_by", events[0].data)
     self.assertEqual(events[1].data["confirmed_by"], "operator-1")
     self.assertEqual(events[1].data["result_message"], "Spin verified")

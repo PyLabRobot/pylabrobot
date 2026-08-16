@@ -198,8 +198,9 @@ Do not create an undocumented vendor-local alias for an existing concept.
 Manual operations use `manual_operator.<action>` so the event records both the manual executor and
 the semantic work requested. Represent the `ManualOperator` as `device`, list any direct modeled
 resources in `resources`, and preserve action-specific request data without substituting inferred
-deck resources. A genuine manual resource transfer additionally includes its actual `source` and
-`destination` resource references.
+deck resources. When an automated counterpart defines canonical parameter names and units, reuse
+them inside the manual operation's `details`. A genuine manual resource transfer additionally
+includes its actual `source` and `destination` resource references.
 
 ```python
 {
@@ -208,8 +209,8 @@ deck resources. A genuine manual resource transfer additionally includes its act
   "manual_action": "centrifuge.spin",
   "title": "Spin sample plate",
   "details": {
-    "relative_centrifugal_force_g": 300,
-    "duration_seconds": 180,
+    "relative_centrifugal_force": 300,
+    "duration": 180,
   },
 }
 ```
