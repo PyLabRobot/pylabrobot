@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from io import IOBase
 from typing import Iterator, Optional, cast
 
+from pylabrobot.events import emit_event
 from pylabrobot.io.errors import ValidationError
 
 try:
@@ -240,6 +241,13 @@ class Serial(IOBase):
     capturer.record(
       SerialCommand(device_id=self.port, action="write", data=data.decode("unicode_escape"))
     )
+    emit_event(
+      "io.write",
+      transport="serial",
+      device=self.human_readable_device_name,
+      device_id=self.port,
+      data=data.decode("utf-8", errors="backslashreplace"),
+    )
 
   async def read(self, num_bytes: int = 1) -> bytes:
     """Read data from the serial device."""
@@ -254,6 +262,13 @@ class Serial(IOBase):
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
       capturer.record(
         SerialCommand(device_id=self.port, action="read", data=data.decode("unicode_escape"))
+      )
+      emit_event(
+        "io.read",
+        transport="serial",
+        device=self.human_readable_device_name,
+        device_id=self.port,
+        data=data.decode("utf-8", errors="backslashreplace"),
       )
 
     return cast(bytes, data)
@@ -271,6 +286,13 @@ class Serial(IOBase):
       logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
       capturer.record(
         SerialCommand(device_id=self.port, action="readline", data=data.decode("unicode_escape"))
+      )
+      emit_event(
+        "io.read",
+        transport="serial",
+        device=self.human_readable_device_name,
+        device_id=self.port,
+        data=data.decode("utf-8", errors="backslashreplace"),
       )
 
     return cast(bytes, data)
