@@ -5,6 +5,5 @@
 
 cytomat/hello-world
 multidrop_combi/hello-world
-nanodrop_1000/hello-world
-nanodrop_1000/setup
+nanodrop_1000/index
 ```

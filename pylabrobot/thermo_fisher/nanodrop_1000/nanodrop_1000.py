@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import math
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from pylabrobot.io.usb import USB
 
