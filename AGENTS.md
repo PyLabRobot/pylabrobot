@@ -2,16 +2,27 @@
 
 Orientation for agents (and humans) working in this repo.
 
-## Guides
+## Scope
 
-- **General contribution guidelines:** [`docs/contributor_guide/contributing.md`](docs/contributor_guide/contributing.md)
-- **Writing a device driver + its hello-world notebook:** [`docs/contributor_guide/device-driver-guide.md`](docs/contributor_guide/device-driver-guide.md)
-- **Registering devices and linking their docs:** [`docs/contributor_guide/device-registry.md`](docs/contributor_guide/device-registry.md)
+Make the requested change and nothing else. Do not include unrelated rewrites or documentation and
+configuration side projects.
 
-## Working principles
+## Safety
 
-- **Scope tightly.** Make the change that was asked for and nothing else — no drive-by rewrites of comments, constants, or logic, no unrequested docs/config side-quests.
-- **Code documents what it does, not its history.** No diary/changelog comments ("NEW", "now", "previously"), no provenance/origin stories in code, commits, or PRs. Describe what the thing *is*.
-- **Keep the repo permanent.** No one-time/backfill/migration scripts committed — run those ad-hoc.
-- **Lint before shipping:** ruff + mypy (2-space indent), matching the repo's config.
-- **Never drive real hardware without explicit, per-run approval.**
+**Never drive real hardware without explicit, per-run approval.** Approval from a previous run does
+not carry over.
+
+## Required reading
+
+Before making any change, read the
+[`general contribution and style guide`](docs/contributor_guide/contributing.md).
+
+Read the additional guide when the task involves:
+
+- **New device drivers or hello-world notebooks:**
+  [`docs/contributor_guide/device-driver-guide.md`](docs/contributor_guide/device-driver-guide.md)
+- **Device registry, tables, and cards:**
+  [`docs/contributor_guide/device-registry.md`](docs/contributor_guide/device-registry.md)
+
+The linked contributor guides are the source of truth. Update them rather than duplicating their
+rules here.
