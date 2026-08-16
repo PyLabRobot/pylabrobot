@@ -5,6 +5,7 @@ import copy
 import datetime
 import unittest
 import unittest.mock
+from dataclasses import replace
 from typing import Literal, cast
 
 import anyio
@@ -36,12 +37,13 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
-from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.resources.hamilton import STARDeck, STARLetDeck, hamilton_96_tiprack_300uL_filter
 from pylabrobot.testing.concurrency import AnyioTestBase, lifespan_kwargs
 from pylabrobot.testing.mock_io import MockIO
 
 from .STAR_backend import (
   CommandSyntaxError,
+  DriveConfiguration,
   HamiltonLiquidHandler,
   HamiltonNoTipError,
   HardwareError,
@@ -2055,13 +2057,22 @@ class STARFoilTests(AnyioTestBase):
 
     self.star._num_channels = 8
     self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
-    self.star._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    # setup() is mocked out below, so seed the left X-drive geometry it would normally
+    # resolve; the foil ops move channels in X, which is now bounds-checked against x_range.
+    self.star._extended_conf = replace(
+      _DEFAULT_EXTENDED_CONFIGURATION,
+      left_x_drive=replace(
+        _DEFAULT_EXTENDED_CONFIGURATION.left_x_drive,
+        width=370.0,
+        x_range=(95.0, 1337.5),
+        workspace_range=(-323.2, 1337.5),
+      ),
+    )
 
     async def mock_enter_lifespan(stack, **kwargs):
       pass
 
     self.star._enter_lifespan = mock_enter_lifespan
-
     self.star._core_parked = True
     self.star._iswap_parked = True
     await stack.enter_async_context(self.lh)
@@ -2699,3 +2710,115 @@ class TestProbeLiquidHeights(STARTestBase):
     self.assertEqual(len(result), 2)
     self.assertAlmostEqual(result[0], 0 - well_a.get_absolute_location("c", "c", "cavity_bottom").z)
     self.assertAlmostEqual(result[1], 0 - well_b.get_absolute_location("c", "c", "cavity_bottom").z)
+
+
+class TestXArmGeometry(AnyioTestBase):
+  """setup() resolves QM/RU/UA firmware onto the X-drive DriveConfigurations."""
+
+  async def _enter_lifespan(self, stack):
+    self.lh = LiquidHandler(STARChatterboxBackend(), deck=STARLetDeck())
+    await stack.enter_async_context(self.lh)
+
+  async def test_single_left_arm(self):
+    self.assertIsNotNone(self.lh.backend.extended_conf.left_x_drive.workspace_range)
+    self.assertIsNone(self.lh.backend.extended_conf.right_x_drive)
+
+  async def test_left_arm_fields(self):
+    left = self.lh.backend.extended_conf.left_x_drive
+    self.assertEqual(left.reference_point, "center")  # QM width -> center rail
+    # x_range comes from RU, workspace_range from UA: request_extended_configuration routes
+    # the two firmware sources into distinct slots (not covered by the parse/branch tests).
+    assert left.x_range is not None and left.workspace_range is not None
+    self.assertEqual(left.x_range[0], 95.0)
+    self.assertEqual(left.workspace_range[0], -323.2)
+
+  def test_model_and_reference_by_width(self):
+    dual = DriveConfiguration(width=370.0)
+    self.assertEqual(dual.model, "hamilton_legacy_star_dual_rail_arm")
+    self.assertEqual(dual.reference_point, "center")
+    # 246.0 is an illustrative <300 width; no single-rail dump exists yet to measure one.
+    single = DriveConfiguration(width=246.0)
+    self.assertEqual(single.model, "hamilton_legacy_star_single_right_rail_arm")
+    self.assertEqual(single.reference_point, "right")
+
+
+class TestXArmReachByDeck(AnyioTestBase):
+  """A STAR reaches farther in X than a STARLet: an X past the STARLet's right edge
+  is reachable on a STAR but rejected on a STARLet."""
+
+  async def test_x_past_starlet_edge_reachable_on_star_only(self):
+    async with (
+      LiquidHandler(STARChatterboxBackend(), deck=STARDeck()) as star,
+      LiquidHandler(STARChatterboxBackend(), deck=STARLetDeck()) as starlet,
+    ):
+      star_range = star.backend.extended_conf.left_x_drive.x_range
+      starlet_range = starlet.backend.extended_conf.left_x_drive.x_range
+      assert star_range is not None and starlet_range is not None
+      self.assertGreater(star_range[1], starlet_range[1])
+
+      x = (starlet_range[1] + star_range[1]) / 2  # past the STARLet edge, within STAR reach
+      star.backend._check_x_arm_reachable(x)  # reachable on STAR: no raise
+      with self.assertRaises(ValueError):
+        starlet.backend._check_x_arm_reachable(x)
+
+
+class TestXArmRangeQueries(AnyioTestBase):
+  """RU/UA parse the firmware replies observed on real machines."""
+
+  async def _enter_lifespan(self, stack):
+    self.star = STARBackend()
+    self.star.send_command = unittest.mock.AsyncMock()
+
+  async def test_maximal_ranges_of_x_drives(self):
+    self.star.send_command.return_value = "C0RUid0002er00/00ru00950 13402 30000 30000"
+    ranges = await self.star.request_maximal_ranges_of_x_drives()
+    self.assertEqual(ranges, {"left": (95.0, 1340.2), "right": (3000.0, 3000.0)})
+
+  async def test_working_envelopes_per_arm(self):
+    self.star.send_command.return_value = "C0UAid0001er00/00ua5952 0000 -03232 +15172 +30000 +30000"
+    wraps = await self.star.request_working_envelopes_per_arm()
+    self.assertEqual(wraps, {"left": (595.2, (-323.2, 1517.2)), "right": (0.0, (3000.0, 3000.0))})
+
+
+class TestXArmRangeEnforcement(AnyioTestBase):
+  """move_channel_x / experimental_x_arm_move reject targets outside the arm's x_range."""
+
+  async def _enter_lifespan(self, stack):
+    self.star = STARBackend()
+    # setup() normally resolves this from firmware; seed the left X-drive geometry so the
+    # reachability checks have a range to enforce against, without needing a deck-mounted
+    # arm or tracker.
+    self.star._extended_conf = replace(
+      _DEFAULT_EXTENDED_CONFIGURATION,
+      left_x_drive=replace(
+        _DEFAULT_EXTENDED_CONFIGURATION.left_x_drive,
+        width=370.0,
+        x_range=(95.0, 1337.5),
+        workspace_range=(-323.2, 1337.5),
+      ),
+    )
+    self.star.send_command = unittest.mock.AsyncMock(return_value={})
+
+  async def test_experimental_x_arm_move_rejects_out_of_range(self):
+    # x_range is (95.0, 1337.5): both ends reject, and no wire command is sent.
+    for x in (94.0, 1400.0):
+      with self.assertRaises(ValueError):
+        await self.star.experimental_x_arm_move(x)
+    self.star.send_command.assert_not_awaited()
+
+  async def test_experimental_x_arm_move_in_range_sends_command(self):
+    # A target inside x_range passes the guard and reaches the wire unchanged.
+    await self.star.experimental_x_arm_move(500.0)
+    self.star.send_command.assert_awaited_once_with(
+      module="X0", command="XP", la="05000", lr="3", lw="7"
+    )
+
+  async def test_move_channel_x_rejects_out_of_range(self):
+    with self.assertRaises(ValueError):
+      await self.star.move_channel_x(0, 1400.0)
+    self.star.send_command.assert_not_awaited()
+
+  async def test_rejects_target_on_absent_right_arm(self):
+    # The default single-arm STAR has no right X-arm, so a right-arm target is rejected.
+    with self.assertRaises(ValueError):
+      self.star._check_x_arm_reachable(400.0, "right")
