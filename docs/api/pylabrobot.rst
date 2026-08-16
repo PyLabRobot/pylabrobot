@@ -10,18 +10,29 @@ Subpackages
     :maxdepth: 1
 
     pylabrobot.config
-    pylabrobot.centrifuge
-    pylabrobot.machine
-    pylabrobot.heating_shaking
-    pylabrobot.liquid_handling
-    pylabrobot.plate_reading
-    pylabrobot.pumps
-    pylabrobot.only_fans
     pylabrobot.resources
-    pylabrobot.scales
-    pylabrobot.io.sila
-    pylabrobot.shaking
-    pylabrobot.temperature_controlling
-    pylabrobot.thermocycling
-    pylabrobot.tilting
     pylabrobot.utils
+
+Manufacturers
+-------------
+
+.. toctree::
+    :maxdepth: 1
+
+    pylabrobot.agilent
+    pylabrobot.azenta
+    pylabrobot.big_bear
+    pylabrobot.brooks
+    pylabrobot.byonoy
+    pylabrobot.cole_parmer
+    pylabrobot.curiox
+    pylabrobot.hamilton
+    pylabrobot.high_res
+    pylabrobot.inheco
+    pylabrobot.kbioscience
+    pylabrobot.kbiosystems
+    pylabrobot.mettler_toledo
+    pylabrobot.molecular_devices
+    pylabrobot.qinstruments
+    pylabrobot.sartorius
+    pylabrobot.thermo_fisher

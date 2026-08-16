@@ -5,7 +5,6 @@ from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.serial import Serial, SerialValidator
 from pylabrobot.io.usb import USB, USBValidator
-from pylabrobot.machines.backend import MachineBackend
 
 cr: Optional[CaptureReader] = None
 
@@ -39,13 +38,6 @@ def validate(capture_file: str):
     else:
       return False
     return True
-
-  for machine_backend in MachineBackend.get_all_instances():
-    if not (
-      (hasattr(machine_backend, "io") and _replace_io(machine_backend))
-      or (hasattr(machine_backend, "interface") and _replace_io(machine_backend.interface))
-    ):
-      raise RuntimeError(f"Backend {machine_backend} not supported for validation")
 
   cr.start()
 

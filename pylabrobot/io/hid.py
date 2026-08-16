@@ -32,7 +32,7 @@ class HID(IOBase):
   def __init__(
     self, human_readable_device_name: str, vid: int, pid: int, serial_number: Optional[str] = None
   ):
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
     self.vid = vid
     self.pid = pid
     self.serial_number = serial_number
@@ -144,7 +144,7 @@ class HID(IOBase):
 
     def _write():
       if self.device is None:
-        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
       return self.device.write(write_data)
 
     if self._executor is None:
@@ -161,7 +161,7 @@ class HID(IOBase):
 
     def _read():
       if self.device is None:
-        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
       try:
         return self.device.read(size, timeout=int(timeout))
       except HIDException as e:
@@ -179,7 +179,7 @@ class HID(IOBase):
 
   def serialize(self):
     return {
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "vid": self.vid,
       "pid": self.pid,
       "serial_number": self.serial_number,

@@ -6,6 +6,7 @@ import logging
 import sys
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
+from pylabrobot.events import coordinate_reference, emit_event, resource_reference
 from pylabrobot.serializer import SerializableMixin, deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
@@ -20,7 +21,7 @@ if sys.version_info >= (3, 11):
 else:
   from typing_extensions import Self
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 def _compute_location_from_anchors(
@@ -125,21 +126,30 @@ class Resource(SerializableMixin):
     return self._local_size_z
 
   def serialize(self) -> dict:
-    return {
+    data: dict = {
       "name": self.name,
       "type": self.__class__.__name__,
       "size_x": self._size_x,
       "size_y": self._size_y,
       "size_z": self._size_z,
-      "location": serialize(self.location),
-      "rotation": serialize(self.rotation),
-      "category": self.category,
-      "model": self.model,
-      "barcode": self.barcode.serialize() if self.barcode is not None else None,
-      "preferred_pickup_location": serialize(self.preferred_pickup_location),
-      "children": [child.serialize() for child in self.children],
-      "parent_name": self.parent.name if self.parent is not None else None,
     }
+    if self.location is not None:
+      data["location"] = serialize(self.location)
+    if not (self.rotation.x == 0 and self.rotation.y == 0 and self.rotation.z == 0):
+      data["rotation"] = serialize(self.rotation)
+    if self.category is not None:
+      data["category"] = self.category
+    if self.model is not None:
+      data["model"] = self.model
+    if self.barcode is not None:
+      data["barcode"] = self.barcode.serialize()
+    if self.preferred_pickup_location is not None:
+      data["preferred_pickup_location"] = serialize(self.preferred_pickup_location)
+    if self.children:
+      data["children"] = [child.serialize() for child in self.children]
+    if self.parent is not None:
+      data["parent_name"] = self.parent.name
+    return data
 
   @property
   def name(self) -> str:
@@ -380,6 +390,13 @@ class Resource(SerializableMixin):
     for callback in self._did_assign_resource_callbacks:
       callback(resource)
 
+    emit_event(
+      "resource.assigned",
+      resource=resource_reference(resource),
+      parent=resource_reference(self),
+      location=coordinate_reference(resource.location),
+    )
+
   def assign_child_by_anchor(
     self,
     resource: Resource,
@@ -536,6 +553,9 @@ class Resource(SerializableMixin):
     for callback in self._will_unassign_resource_callbacks:
       callback(resource)
 
+    # Preserve the pose for the event before unassignment clears it.
+    previous_location = coordinate_reference(resource.location)
+
     # Update the tree structure
     resource.parent = None
     resource.location = None
@@ -550,6 +570,13 @@ class Resource(SerializableMixin):
     # Call "did unassign" callbacks
     for callback in self._did_unassign_resource_callbacks:
       callback(resource)
+
+    emit_event(
+      "resource.unassigned",
+      resource=resource_reference(resource),
+      previous_parent=resource_reference(self),
+      previous_location=previous_location,
+    )
 
   def unassign(self):
     """Unassign this resource from its parent."""
@@ -753,15 +780,16 @@ class Resource(SerializableMixin):
       "parent_name",
       "location",
     ]:  # delete meta keys
-      del data_copy[key]
-    children_data = data_copy.pop("children")
-    rotation = data_copy.pop("rotation")
+      data_copy.pop(key, None)
+    children_data = data_copy.pop("children", [])
+    rotation = data_copy.pop("rotation", None)
     barcode = data_copy.pop("barcode", None)
     preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
-    resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
+    if rotation is not None:
+      resource.rotation = deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
-      resource.barcode = Barcode.deserialize(barcode)
+      resource.barcode = Barcode(**barcode)
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
 
@@ -875,7 +903,7 @@ class Resource(SerializableMixin):
     overriding this method should call ``super().load_state(state)``.
     """
     if "rotation" in state:
-      self.rotation = Rotation.deserialize(state["rotation"])
+      self.rotation = deserialize(state["rotation"])
 
   # Developer note: you probably don't need to override this method. Instead, override `load_state`.
   def load_all_state(self, state: Dict[str, Dict[str, Any]]) -> None:
