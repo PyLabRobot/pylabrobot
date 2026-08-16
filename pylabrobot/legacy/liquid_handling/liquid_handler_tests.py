@@ -28,6 +28,7 @@ from pylabrobot.resources import (
   PetriDish,
   Plate,
   Resource,
+  ResourceHolder,
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
@@ -693,7 +694,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(discard["resources"][0]["type"], "Trash")
     self.assertEqual(discard["tip_operations"][0]["resource"], discard["resources"][0])
 
-  async def test_resource_pickup_emits_source_holder_before_unassignment(self):
+  async def test_resource_pickup_emits_source_holder(self):
     source = ResourceHolder("source", size_x=130, size_y=90, size_z=0)
     self.plate.unassign()
     self.deck.assign_child_resource(source, location=Coordinate(100, 100, 0))
@@ -708,7 +709,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[0].name, "liquid_handler.resource_pickup.started")
     self.assertEqual(events[0].context["resources"][0]["name"], self.plate.name)
     self.assertEqual(events[0].context["source"]["name"], "source")
-    self.assertIsNone(self.plate.parent)
+    self.assertIs(self.plate.parent, source)
 
   async def test_96_head_tip_operations_emit_direct_rack_resources(self):
     events = []
