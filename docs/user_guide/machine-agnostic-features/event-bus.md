@@ -124,6 +124,18 @@ Detailed operation references:
 - [Brooks PreciseFlex](event-bus/precise-flex.md)
 - [Diagnostic transports](event-bus/diagnostic-transports.md)
 
+```{toctree}
+:hidden:
+
+event-bus/machine-lifecycle
+event-bus/incubator
+event-bus/liquid-handler
+event-bus/thermal-and-shaking
+event-bus/vspin
+event-bus/precise-flex
+event-bus/diagnostic-transports
+```
+
 ## Operation reference
 
 ### Incubator
