@@ -1,41 +1,50 @@
 import asyncio
-from typing import List, Tuple
+import logging
+import math
+from typing import List, Optional, Tuple
 
-import numpy as np
-import usb.core
-import usb.util
+from pylabrobot.io.usb import USB
+
+logger = logging.getLogger(__name__)
 
 
 class ThermoFisherNanoDrop1000:
-  """
-  """
-
   VID = 0x2457
   PID = 0x1002
   EP_OUT = 0x02
   EP_IN_HEAVY = 0x82
   EP_IN_COMM = 0x87
 
-  def __init__(self):
-    super().__init__()
-    self.dev = None
+  def __init__(self, io: Optional[USB] = None):
+    self.io = io or USB(
+      id_vendor=self.VID,
+      id_product=self.PID,
+      human_readable_device_name="Thermo Fisher NanoDrop 1000",
+      packet_read_timeout=0.05,
+      read_timeout=1,
+      read_endpoint_address=self.EP_IN_COMM,
+      write_endpoint_address=self.EP_OUT,
+      configuration_callback=self._configure_usb_device,
+    )
+    self._connected = False
 
     self.coefficients = {}
     self.wavelengths = None
     self.dark_spectrum = None
     self.blank_spectrum = None
 
+  @classmethod
+  def _configure_usb_device(cls, device) -> None:
+    device.set_configuration()
+    device.clear_halt(cls.EP_OUT)
+    device.clear_halt(cls.EP_IN_HEAVY)
+    device.clear_halt(cls.EP_IN_COMM)
+
   async def setup(self):
     """Initializes the USB connection."""
-    print("Connecting to NanoDrop...")
-    self.dev = usb.core.find(idVendor=self.VID, idProduct=self.PID)
-    if self.dev is None:
-      raise RuntimeError("NanoDrop not found. Is Zadig set to libusb-win32?")
-
-    self.dev.set_configuration()
-    self.dev.clear_halt(self.EP_OUT)
-    self.dev.clear_halt(self.EP_IN_HEAVY)
-    self.dev.clear_halt(self.EP_IN_COMM)
+    logger.info("Connecting to NanoDrop 1000")
+    await self.io.setup(empty_buffer=False)
+    self._connected = True
 
     # Wake & Init
     await self.send_command([0x08])
@@ -48,46 +57,59 @@ class ThermoFisherNanoDrop1000:
 
   async def stop(self):
     """Safely powers down hardware and releases the USB port."""
-    if self.dev:
+    if self._connected:
       try:
         # Ensure lamp and magnet are off before disconnect
         await self.send_command([0x03, 0x00])
         await self.send_command([0x0F, 0x00])
-        self.dev.reset()
-        usb.util.dispose_resources(self.dev)
       except Exception:
-        pass
-      print("NanoDrop safely disconnected.")
+        logger.warning("Failed to power down the NanoDrop cleanly", exc_info=True)
+      await self.io.stop()
+      self._connected = False
+      logger.info("NanoDrop 1000 disconnected")
 
     self.coefficients = {}
 
   async def send_command(self, payload: List[int]):
     """Generic transport method for writing to the command mailbox."""
-    self.dev.write(self.EP_OUT, payload)
+    await self.io.write(bytes(payload))
 
   async def read_comm(self, timeout=500) -> bytes:
     """Reads from the 64-byte text/status endpoint."""
-    return self.dev.read(self.EP_IN_COMM, 64, timeout=timeout)
+    return await self.io.read(timeout=timeout / 1000, size=64)
 
   async def read_heavy(self, packets=64, timeout=1000) -> bytearray:
     """Reads bulk interleaved blocks from the main camera endpoint."""
     data_buffer = bytearray()
     for _ in range(packets):
-      data_buffer.extend(self.dev.read(self.EP_IN_HEAVY, 64, timeout=timeout))
+      packet = await asyncio.to_thread(
+        self.io._read_packet,
+        64,
+        timeout / 1000,
+        self.EP_IN_HEAVY,
+      )
+      if packet is None:
+        raise TimeoutError("Timed out reading a NanoDrop spectrum packet")
+      data_buffer.extend(packet)
     return data_buffer
 
-  def flush_comm(self):
+  async def flush_comm(self):
     try:
       while True:
-        self.dev.read(self.EP_IN_COMM, 64, timeout=50)
-    except usb.core.USBTimeoutError:
+        await self.io.read(timeout=0.05, size=64)
+    except TimeoutError:
       pass
 
-  def flush_heavy(self):
-    try:
-      while True:
-        self.dev.read(self.EP_IN_HEAVY, 512, timeout=50)
-    except usb.core.USBTimeoutError:
+  async def flush_heavy(self):
+    while (
+      await asyncio.to_thread(
+        self.io._read_packet,
+        512,
+        0.05,
+        self.EP_IN_HEAVY,
+      )
+      is not None
+    ):
       pass
 
   async def set_lamp(self, state: bool):
@@ -98,21 +120,21 @@ class ThermoFisherNanoDrop1000:
     cmd = 0xFF if state else 0x00
     await self.send_command([0x0F, cmd])
 
-  async def set_integration_time(self, ms: int):
+  async def _set_integration_time(self, ms: int):
     if ms < 3:
       ms = 3
-      print("Integration too low, setting to 3 ms")
+      logger.warning("Integration time is too low; using 3 ms")
     elif ms > 65535:
       ms = 65535
-      print("Integration too high, setting to 65535 ms")
+      logger.warning("Integration time is too high; using 65535 ms")
 
     lsb = ms & 0xFF
     msb = (ms >> 8) & 0xFF
     await self.send_command([0x02, lsb, msb])
 
   async def _download_all_coefficients(self):
-    print("Downloading Factory Memory Map...")
-    self.flush_comm()
+    logger.info("Downloading NanoDrop factory memory map")
+    await self.flush_comm()
 
     for index in range(1, 15):
       if index == 5:
@@ -124,16 +146,17 @@ class ThermoFisherNanoDrop1000:
         text = bytearray(data[2:]).decode("ascii", errors="ignore").split("\x00")[0]
         self.coefficients[index] = float(text)
       except Exception:
-        print(f"Warning: Failed to read coefficient index {index}")
+        logger.warning("Failed to read coefficient index %d", index, exc_info=True)
 
   def _calculate_x_axis(self):
-    pixels = np.arange(2048)
     c0, c1 = self.coefficients.get(1, 0), self.coefficients.get(2, 0)
     c2, c3 = self.coefficients.get(3, 0), self.coefficients.get(4, 0)
-    self.wavelengths = c0 + (c1 * pixels) + (c2 * (pixels**2)) + (c3 * (pixels**3))
+    self.wavelengths = [
+      c0 + (c1 * pixel) + (c2 * (pixel**2)) + (c3 * (pixel**3)) for pixel in range(2048)
+    ]
 
-  async def get_raw_spectrum(self) -> np.ndarray:
-    self.flush_heavy()
+  async def get_raw_spectrum(self) -> List[float]:
+    await self.flush_heavy()
     await self.send_command([0x09])
 
     data_buffer = await self.read_heavy()
@@ -145,7 +168,7 @@ class ThermoFisherNanoDrop1000:
       for j in range(64):
         pixels.append((msb_block[j] << 8) | lsb_block[j])
 
-    raw_intensities = np.array(pixels, dtype=float)
+    raw_intensities = [float(pixel) for pixel in pixels]
 
     # TODO [Future Work]: Optical Black Pixel Subtraction
     # The first 25 pixels (0-24) are optically black. Calculate their average
@@ -158,24 +181,24 @@ class ThermoFisherNanoDrop1000:
     return raw_intensities
 
   async def take_blank(self, integration_ms=20):
-    await self.set_integration_time(integration_ms)
+    await self._set_integration_time(integration_ms)
 
     await self.set_lamp(False)
     await self.set_magnet(True)
     await asyncio.sleep(0.2)
-    print("Acquiring Dark baseline...")
+    logger.info("Acquiring dark baseline")
     self.dark_spectrum = await self.get_raw_spectrum()
 
     await self.set_lamp(True)
     await asyncio.sleep(0.2)
-    print("Acquiring Blank baseline...")
+    logger.info("Acquiring blank baseline")
     self.blank_spectrum = await self.get_raw_spectrum()
 
     await self.set_lamp(False)
     await self.set_magnet(False)
-    print("Blanking complete.")
+    logger.info("Blanking complete")
 
-  async def measure_absorbance(self, integration_ms=20) -> Tuple[np.ndarray, np.ndarray]:
+  async def measure_absorbance(self, integration_ms=20) -> Tuple[List[float], List[float]]:
     if self.blank_spectrum is None or self.dark_spectrum is None:
       raise ValueError("You must run take_blank() before measuring!")
 
@@ -183,21 +206,24 @@ class ThermoFisherNanoDrop1000:
     # Replace the static `integration_ms` with a loop that fires 8ms, 16ms, 32ms, etc.
     # and mathematically stitches the optimal exposures together.
 
-    await self.set_integration_time(integration_ms)
+    await self._set_integration_time(integration_ms)
     await self.set_magnet(True)
     await self.set_lamp(True)
     await asyncio.sleep(0.2)
 
-    print("Measuring sample...")
+    logger.info("Measuring sample")
     sample_spectrum = await self.get_raw_spectrum()
 
     await self.set_lamp(False)
     await self.set_magnet(False)
 
-    numerator = np.clip(sample_spectrum - self.dark_spectrum, 1, None)
-    denominator = np.clip(self.blank_spectrum - self.dark_spectrum, 1, None)
-
-    transmittance = numerator / denominator
-    absorbance = -np.log10(transmittance)
+    absorbance = [
+      -math.log10(max(sample - dark, 1) / max(blank - dark, 1))
+      for sample, dark, blank in zip(
+        sample_spectrum,
+        self.dark_spectrum,
+        self.blank_spectrum,
+      )
+    ]
 
     return self.wavelengths, absorbance
