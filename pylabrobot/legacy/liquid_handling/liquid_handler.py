@@ -24,6 +24,7 @@ from typing import (
   cast,
 )
 
+from pylabrobot.events import ResourceReference, evented_operation, resource_reference
 from pylabrobot.legacy.liquid_handling.channel_positioning import (
   compute_channel_offsets,
 )
@@ -86,6 +87,151 @@ TipPresenceProbingMethod = Callable[
   [List[TipSpot], Optional[List[int]]],
   Awaitable[Dict[str, bool]],
 ]
+
+
+def _resource_pickup_event_context(
+  liquid_handler: "LiquidHandler", resource: Resource, **_: Any
+) -> Dict[str, Any]:
+  context = {
+    "device": resource_reference(liquid_handler),
+    "resources": [resource_reference(resource)],
+  }
+  if resource.parent is not None:
+    context["source"] = resource_reference(resource.parent)
+  return context
+
+
+def _picked_resource_event_context(liquid_handler: "LiquidHandler", **_: Any) -> Dict[str, Any]:
+  pickup = liquid_handler._resource_pickup
+  return {
+    "device": resource_reference(liquid_handler),
+    "resources": [] if pickup is None else [resource_reference(pickup.resource)],
+  }
+
+
+def _resource_drop_event_context(
+  liquid_handler: "LiquidHandler",
+  destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
+  **_: Any,
+) -> Dict[str, Any]:
+  context = _picked_resource_event_context(liquid_handler)
+  if isinstance(destination, Resource):
+    context["destination"] = resource_reference(destination)
+  else:
+    context["destination"] = repr(destination)
+  return context
+
+
+def _liquid_operation_plate(resource: Container) -> Resource:
+  """Return the plate that owns a well, or the container itself when it is not plate-backed."""
+
+  current: Optional[Resource] = resource
+  while current is not None:
+    if isinstance(current, Plate):
+      return current
+    current = current.parent
+  return resource
+
+
+def _safe_event_volume(value: Any) -> Any:
+  """Normalize a volume for event consumers without changing liquid-handler validation."""
+
+  try:
+    return float(value)
+  except (TypeError, ValueError):
+    return repr(value)
+
+
+def _liquid_operation_event_context(
+  liquid_handler: "LiquidHandler",
+  resources: Sequence[Container],
+  vols: Sequence[Any],
+  use_channels: Optional[List[int]] = None,
+  **_: Any,
+) -> Dict[str, Any]:
+  """Describe requested liquid operations using their directly operated containers."""
+
+  resource_list = list(resources)
+  channels = use_channels or liquid_handler._default_use_channels or list(range(len(resource_list)))
+  operation_resources = resource_list
+  if len(operation_resources) == 1 and len(channels) > 1:
+    operation_resources = operation_resources * len(channels)
+
+  unique_operation_resources: List[ResourceReference] = []
+  seen_resource_keys: Set[Tuple[Any, Any]] = set()
+  for operation_resource in operation_resources:
+    reference = resource_reference(operation_resource)
+    if reference is None:
+      continue
+    key = (reference.get("type"), reference.get("name"))
+    if key in seen_resource_keys:
+      continue
+    seen_resource_keys.add(key)
+    unique_operation_resources.append(reference)
+
+  liquid_operations = []
+  for channel, resource, volume in zip(channels, operation_resources, vols):
+    liquid_operations.append(
+      {
+        "channel": channel,
+        "resource": resource_reference(resource),
+        "plate": resource_reference(_liquid_operation_plate(resource)),
+        "volume": _safe_event_volume(volume),
+      }
+    )
+
+  return {
+    "device": resource_reference(liquid_handler),
+    "resources": unique_operation_resources,
+    "liquid_operations": liquid_operations,
+  }
+
+
+def _tip_operation_event_context(
+  liquid_handler: "LiquidHandler",
+  tip_spots: Sequence[Union[TipSpot, Trash]],
+  use_channels: Optional[List[int]] = None,
+  **_: Any,
+) -> Dict[str, Any]:
+  """Describe channel tip operations using their direct pickup/drop resources."""
+
+  resources: List[ResourceReference] = []
+  seen_resource_keys: Set[Tuple[Any, Any]] = set()
+  for tip_spot in tip_spots:
+    reference = resource_reference(tip_spot)
+    if reference is None:
+      continue
+    key = (reference.get("type"), reference.get("name"))
+    if key in seen_resource_keys:
+      continue
+    seen_resource_keys.add(key)
+    resources.append(reference)
+
+  channels = use_channels or liquid_handler._default_use_channels or list(range(len(tip_spots)))
+  tip_operations = [
+    {"channel": channel, "resource": resource_reference(tip_spot)}
+    for channel, tip_spot in zip(channels, tip_spots)
+  ]
+  return {
+    "device": resource_reference(liquid_handler),
+    "resources": resources,
+    "tip_operations": tip_operations,
+  }
+
+
+def _tip_rack_operation_event_context(
+  liquid_handler: "LiquidHandler",
+  tip_rack: Optional[TipRack] = None,
+  resource: Optional[Union[TipRack, Trash]] = None,
+  **_: Any,
+) -> Dict[str, Any]:
+  """Describe a 96-head operation by its directly operated rack or trash resource."""
+
+  operation_resource = tip_rack if tip_rack is not None else resource
+  return {
+    "device": resource_reference(liquid_handler),
+    "resources": [] if operation_resource is None else [resource_reference(operation_resource)],
+  }
 
 
 class BlowOutVolumeError(Exception):
@@ -434,6 +580,7 @@ class LiquidHandler(Resource, Machine):
       return None
     return self._resource_pickup.resource
 
+  @evented_operation("liquid_handler.tip_pickup", _tip_operation_event_context)
   @need_setup_finished
   async def pick_up_tips(
     self,
@@ -583,6 +730,7 @@ class LiquidHandler(Resource, Machine):
     """
     return [tracker.get_tip() if tracker.has_tip else None for tracker in self.head.values()]
 
+  @evented_operation("liquid_handler.tip_drop", _tip_operation_event_context)
   @need_setup_finished
   async def drop_tips(
     self,
@@ -874,6 +1022,7 @@ class LiquidHandler(Resource, Machine):
     if len(not_containers) > 0:
       raise TypeError(f"Resources must be `Container`s, got {not_containers}")
 
+  @evented_operation("liquid_handler.aspirate", _liquid_operation_event_context)
   @need_setup_finished
   async def aspirate(
     self,
@@ -1066,6 +1215,7 @@ class LiquidHandler(Resource, Machine):
     if error is not None:
       raise error
 
+  @evented_operation("liquid_handler.dispense", _liquid_operation_event_context)
   @need_setup_finished
   async def dispense(
     self,
@@ -1445,6 +1595,7 @@ class LiquidHandler(Resource, Machine):
       else:
         await self.return_tips(use_channels=channels)
 
+  @evented_operation("liquid_handler.tip_pickup_96", _tip_rack_operation_event_context)
   async def pick_up_tips96(
     self,
     tip_rack: TipRack,
@@ -1514,6 +1665,7 @@ class LiquidHandler(Resource, Machine):
           tip_spot.tracker.commit()
         self.head96[i].commit()
 
+  @evented_operation("liquid_handler.tip_drop_96", _tip_rack_operation_event_context)
   async def drop_tips96(
     self,
     resource: Union[TipRack, Trash],
@@ -2035,6 +2187,7 @@ class LiquidHandler(Resource, Machine):
     await self.aspirate96(resource=source, volume=volume, flow_rate=aspiration_flow_rate)
     await self.dispense96(resource=source, volume=volume, flow_rate=dispense_flow_rate)
 
+  @evented_operation("liquid_handler.resource_pickup", _resource_pickup_event_context)
   async def pick_up_resource(
     self,
     resource: Resource,
@@ -2093,6 +2246,7 @@ class LiquidHandler(Resource, Machine):
 
     self._state_updated()
 
+  @evented_operation("liquid_handler.resource_move", _picked_resource_event_context)
   async def move_picked_up_resource(
     self,
     to: Coordinate,
@@ -2129,6 +2283,7 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
+  @evented_operation("liquid_handler.resource_drop", _resource_drop_event_context)
   async def drop_resource(
     self,
     destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
