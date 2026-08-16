@@ -15,8 +15,8 @@ class ThermoFisherNanoDrop1000:
   EP_IN_HEAVY = 0x82
   EP_IN_COMM = 0x87
 
-  def __init__(self, io: Optional[USB] = None):
-    self.io = io or USB(
+  def __init__(self):
+    self.io = USB(
       id_vendor=self.VID,
       id_product=self.PID,
       human_readable_device_name="Thermo Fisher NanoDrop 1000",
@@ -82,35 +82,19 @@ class ThermoFisherNanoDrop1000:
     """Reads bulk interleaved blocks from the main camera endpoint."""
     data_buffer = bytearray()
     for _ in range(packets):
-      packet = await asyncio.to_thread(
-        self.io._read_packet,
-        64,
-        timeout / 1000,
-        self.EP_IN_HEAVY,
+      packet = await self.io.read(
+        timeout=timeout / 1000,
+        size=64,
+        endpoint=self.EP_IN_HEAVY,
       )
-      if packet is None:
-        raise TimeoutError("Timed out reading a NanoDrop spectrum packet")
       data_buffer.extend(packet)
     return data_buffer
 
   async def flush_comm(self):
-    try:
-      while True:
-        await self.io.read(timeout=0.05, size=64)
-    except TimeoutError:
-      pass
+    await self.io.drain(endpoint=self.EP_IN_COMM, timeout=0.05, size=64)
 
   async def flush_heavy(self):
-    while (
-      await asyncio.to_thread(
-        self.io._read_packet,
-        512,
-        0.05,
-        self.EP_IN_HEAVY,
-      )
-      is not None
-    ):
-      pass
+    await self.io.drain(endpoint=self.EP_IN_HEAVY, timeout=0.05, size=512)
 
   async def set_lamp(self, state: bool):
     cmd = 0xFF if state else 0x00
