@@ -50,6 +50,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlex
       ~PreciseFlex.home_all
       ~PreciseFlex.is_gripper_closed
       ~PreciseFlex.move_gripper
+      ~PreciseFlex.move_gripper_joint_position
       ~PreciseFlex.move_rail
       ~PreciseFlex.move_through_cartesian_poses
       ~PreciseFlex.move_to_joint_position
