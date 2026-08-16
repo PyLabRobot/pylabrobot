@@ -63,7 +63,7 @@ class TipTests(unittest.TestCase):
       TipPickupMethod.OUT_OF_RACK,
       name="test_tip",
     )
-    self.assertEqual(HamiltonTip.deserialize(tip.serialize()), tip)
+    self.assertEqual(deserialize(tip.serialize()), tip)
 
   def test_nominal_volume_defaults_to_maximal_volume(self):
     """An unspecified nominal_volume falls back to maximal_volume (the physical capacity)."""
@@ -82,4 +82,4 @@ class TipTests(unittest.TestCase):
     )
     legacy = tip.serialize()
     del legacy["nominal_volume"]
-    self.assertEqual(HamiltonTip.deserialize(legacy).nominal_volume, 400.0)
+    self.assertEqual(deserialize(legacy).nominal_volume, 400.0)

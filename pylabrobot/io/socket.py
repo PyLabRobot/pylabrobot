@@ -38,7 +38,7 @@ class Socket(IOBase):
     ssl_context: Optional[ssl.SSLContext] = None,
     server_hostname: Optional[str] = None,
   ):
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
     self._host = host
     self._port = port
     self._reader: Optional[asyncio.StreamReader] = None
@@ -91,7 +91,7 @@ class Socket(IOBase):
 
   def serialize(self):
     return {
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "host": self._host,
       "port": self._port,
       "type": "Socket",
@@ -99,27 +99,13 @@ class Socket(IOBase):
       "write_timeout": self._write_timeout,
     }
 
-  @classmethod
-  def deserialize(cls, data: dict) -> "Socket":
-    kwargs = {}
-    if "read_timeout" in data:
-      kwargs["read_timeout"] = data["read_timeout"]
-    if "write_timeout" in data:
-      kwargs["write_timeout"] = data["write_timeout"]
-    return cls(
-      human_readable_device_name=data["human_readable_device_name"],
-      host=data["host"],
-      port=data["port"],
-      **kwargs,
-    )
-
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
     """Wrapper around StreamWriter.write with lock and io logging.
     Does not retry on timeouts.
     """
     if self._writer is None:
       raise RuntimeError(
-        f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
+        f"Socket for '{self.human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._write_timeout if timeout is None else timeout
     async with self._write_lock:
@@ -156,7 +142,7 @@ class Socket(IOBase):
     """
     if self._reader is None:
       raise RuntimeError(
-        f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
+        f"Socket for '{self.human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
@@ -179,7 +165,7 @@ class Socket(IOBase):
     """Wrapper around StreamReader.readline with lock and io logging."""
     if self._reader is None:
       raise RuntimeError(
-        f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
+        f"Socket for '{self.human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
@@ -203,7 +189,7 @@ class Socket(IOBase):
     Do not retry on timeouts."""
     if self._reader is None:
       raise RuntimeError(
-        f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
+        f"Socket for '{self.human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
@@ -241,7 +227,7 @@ class Socket(IOBase):
     """
     if self._reader is None:
       raise RuntimeError(
-        f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
+        f"Socket for '{self.human_readable_device_name}' not set up; call setup() first"
       )
     timeout = self._read_timeout if timeout is None else timeout
     data = bytearray()
@@ -279,7 +265,7 @@ class Socket(IOBase):
       while True:
         if self._reader is None:
           raise RuntimeError(
-            f"Socket for '{self._human_readable_device_name}' not set up; call setup() first"
+            f"Socket for '{self.human_readable_device_name}' not set up; call setup() first"
           )
         try:
           chunk = await asyncio.wait_for(self._reader.read(chunk_size), timeout=timeout)

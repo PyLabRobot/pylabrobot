@@ -5,6 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from io import IOBase
 from typing import Optional, cast
 
+from pylabrobot.events import emit_event
+
 try:
   import pylibftdi.driver
   from pylibftdi import Device, FtdiError
@@ -74,7 +76,7 @@ class FTDI(IOBase):
         f"Import error: {_PYUSB_ERROR}"
       )
 
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
     self._device_id = device_id
     self._vid = vid
     self._pid = pid
@@ -86,7 +88,7 @@ class FTDI(IOBase):
 
     if get_capture_or_validation_active():
       raise RuntimeError(
-        f"Cannot create a new FTDI object for '{self._human_readable_device_name}' while capture or validation is active"
+        f"Cannot create a new FTDI object for '{self.human_readable_device_name}' while capture or validation is active"
       )
 
   @property
@@ -198,7 +200,7 @@ class FTDI(IOBase):
       logger.info(f"Successfully opened FTDI device: {self.device_id}")
     except FtdiError as e:
       raise RuntimeError(
-        f"Failed to open FTDI device for '{self._human_readable_device_name}': {e}. "
+        f"Failed to open FTDI device for '{self.human_readable_device_name}': {e}. "
         "Is the device connected? Is it in use by another process? "
         "Try restarting the kernel."
       ) from e
@@ -293,7 +295,7 @@ class FTDI(IOBase):
     )
     return stat.value
 
-  async def get_serial(self) -> str:
+  async def request_serial(self) -> str:
     return self.device_id
 
   async def stop(self):
@@ -307,7 +309,15 @@ class FTDI(IOBase):
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self.device_id, action="write", data=data.hex()))
-    return cast(int, self.dev.write(data))
+    bytes_written = cast(int, self.dev.write(data))
+    emit_event(
+      "io.write",
+      transport="ftdi",
+      device=self.human_readable_device_name,
+      device_id=self.device_id,
+      data=data.hex(),
+    )
+    return bytes_written
 
   async def read(self, num_bytes: int = 1) -> bytes:
     data = self.dev.read(num_bytes)
@@ -320,6 +330,13 @@ class FTDI(IOBase):
           data=data if isinstance(data, str) else data.hex(),
         )
       )
+      emit_event(
+        "io.read",
+        transport="ftdi",
+        device=self.human_readable_device_name,
+        device_id=self.device_id,
+        data=data if isinstance(data, str) else data.hex(),
+      )
     return cast(bytes, data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
@@ -327,11 +344,18 @@ class FTDI(IOBase):
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
       capturer.record(FTDICommand(device_id=self.device_id, action="readline", data=data.hex()))
+      emit_event(
+        "io.read",
+        transport="ftdi",
+        device=self.human_readable_device_name,
+        device_id=self.device_id,
+        data=data if isinstance(data, str) else data.hex(),
+      )
     return cast(bytes, data)
 
   def serialize(self):
     return {
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "device_id": self._device_id,
       "vid": self._vid,
       "pid": self._pid,

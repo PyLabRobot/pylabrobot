@@ -47,6 +47,7 @@ extensions = [
   "IPython.sphinxext.ipython_console_highlighting",
   "sphinx_reredirects",
   "sphinx_sitemap",
+  "plr_devices.directive",
 ]
 
 intersphinx_mapping = {
@@ -72,7 +73,9 @@ autodoc_default_options = {
   # 'undoc-members': False,
   "show-inheritance": True,
   # 'special-members': '__init__,__getitem__',
-  "exclude-members": "__weakref__",
+  # from_bytes/to_bytes are inherited from int by the IntEnum/IntFlag status
+  # types; CPython's docstring for them is not valid reStructuredText.
+  "exclude-members": "__weakref__,from_bytes,to_bytes",
 }
 
 default_role = "code"  # allow single backticks for inline code
@@ -176,8 +179,8 @@ redirects = {
   "installation.html": "user_guide/installation.html",
   "contributing.html": "contributor_guide/index.html",
   "configuration.html": "user_guide/configuration.html",
-  "new-machine-type.html": "contributor_guide/new_machine_type.html",
-  "new-concrete-backend.html": "contributor_guide/new_concrete_backend.html",
+  "new-machine-type.html": "contributor_guide/device-driver-guide.html",
+  "new-concrete-backend.html": "contributor_guide/device-driver-guide.html",
   "how-to-open-source.html": "contributor_guide/how_to_open_source.html",
   "basic.html": "user_guide/basic.html",
   "using-the-visualizer.html": "user_guide/using_the_visualizer.html",
