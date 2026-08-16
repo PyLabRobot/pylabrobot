@@ -9,7 +9,7 @@ import logging
 import struct
 from typing import Dict, Optional
 
-from .driver import (
+from .benchcel import (
   AXIS_GRIPPER,
   AXIS_THETA,
   AXIS_X,
@@ -70,7 +70,7 @@ class BenchCelMockServer:
   """Small asyncio TCP server emulating the BenchCel binary protocol.
 
   The mock is wire-compatible for the commands implemented by
-  :class:`~pylabrobot.agilent.benchcel.driver.BenchCel4RBackend` and is
+  :class:`~pylabrobot.agilent.benchcel.BenchCel4R` and is
   intended for backend tests and manual protocol debugging.
   """
 

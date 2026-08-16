@@ -1,4 +1,4 @@
-from .benchcel import BenchCel4R, BenchCel4RBackend
+from .benchcel import BenchCel4R
 from .biotek import (
   EL406,
   Cytation1,

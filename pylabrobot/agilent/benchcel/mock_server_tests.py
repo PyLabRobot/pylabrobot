@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import unittest
 
-from pylabrobot.agilent.benchcel.driver import BenchCel4RBackend, BenchCelDeviceError
+from pylabrobot.agilent.benchcel.benchcel import BenchCel4R, BenchCelDeviceError
 from pylabrobot.agilent.benchcel.mock_server import BenchCelMockServer
 
 
 class BenchCelMockServerTests(unittest.IsolatedAsyncioTestCase):
   async def test_motion_status_and_axis_bounds_over_tcp(self):
     async with BenchCelMockServer() as server:
-      backend = BenchCel4RBackend(
+      backend = BenchCel4R(
+        name="benchcel",
         host=server.host,
         port=server.port,
         timeout=2.0,
@@ -37,7 +38,8 @@ class BenchCelMockServerTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_stacker_sensor_query_over_tcp(self):
     async with BenchCelMockServer() as server:
-      backend = BenchCel4RBackend(
+      backend = BenchCel4R(
+        name="benchcel",
         host=server.host,
         port=server.port,
         timeout=2.0,
@@ -54,7 +56,8 @@ class BenchCelMockServerTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_jog_out_of_bounds_raises_device_error(self):
     async with BenchCelMockServer() as server:
-      backend = BenchCel4RBackend(
+      backend = BenchCel4R(
+        name="benchcel",
         host=server.host,
         port=server.port,
         timeout=2.0,
@@ -70,7 +73,8 @@ class BenchCelMockServerTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_teachpoint_save_then_move_over_tcp(self):
     async with BenchCelMockServer() as server:
-      backend = BenchCel4RBackend(
+      backend = BenchCel4R(
+        name="benchcel",
         host=server.host,
         port=server.port,
         timeout=2.0,
@@ -89,7 +93,8 @@ class BenchCelMockServerTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_stacker_gripper_diagnostic_over_tcp(self):
     async with BenchCelMockServer() as server:
-      backend = BenchCel4RBackend(
+      backend = BenchCel4R(
+        name="benchcel",
         host=server.host,
         port=server.port,
         timeout=2.0,
@@ -108,7 +113,8 @@ class BenchCelMockServerTests(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.plate import Plate
 
     async with BenchCelMockServer() as server:
-      backend = BenchCel4RBackend(
+      backend = BenchCel4R(
+        name="benchcel",
         host=server.host,
         port=server.port,
         timeout=2.0,
@@ -131,7 +137,8 @@ class BenchCelMockServerTests(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.agilent.benchcel import BenchCelLabwareSettings, PlateNotchSettings
 
     async with BenchCelMockServer() as server:
-      backend = BenchCel4RBackend(
+      backend = BenchCel4R(
+        name="benchcel",
         host=server.host,
         port=server.port,
         timeout=2.0,

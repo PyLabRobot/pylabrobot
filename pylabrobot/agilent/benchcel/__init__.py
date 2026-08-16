@@ -1,5 +1,4 @@
-from .benchcel import BenchCel4R
-from .driver import (
+from .benchcel import (
   AXIS_GRIPPER,
   AXIS_NAMES,
   AXIS_THETA,
@@ -9,8 +8,7 @@ from .driver import (
   TEST_LEFT_TEACHPOINT,
   TEST_LEFT_TEACHPOINT_ID,
   AxisBoundsResponse,
-  BenchCel4RBackend,
-  BenchCelBackend,
+  BenchCel4R,
   BenchCelDeviceError,
   BenchCelProtocolError,
   BenchCelTimeoutError,

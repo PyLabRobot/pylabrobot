@@ -15,9 +15,8 @@ from pylabrobot.agilent.benchcel import (
   calculate_stacker_gripper_offset,
   calculate_stacking_thickness,
 )
-from pylabrobot.agilent.benchcel.driver import (
+from pylabrobot.agilent.benchcel.benchcel import (
   TEST_LEFT_TEACHPOINT,
-  BenchCel4RBackend,
   BenchCelDeviceError,
   BenchCelProtocolError,
   Frame,
@@ -27,8 +26,6 @@ from pylabrobot.agilent.benchcel.driver import (
   split_frames,
 )
 from pylabrobot.agilent.benchcel.stacks import benchcel_4r_stacks
-from pylabrobot.capabilities.stacker import Stacker
-from pylabrobot.device import Driver
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource_stack import ResourceStack
@@ -66,8 +63,10 @@ class _FakeReader:
     return chunk
 
 
-def _make_backend(chunks: list[bytes]) -> tuple[BenchCel4RBackend, _FakeWriter]:
-  backend = BenchCel4RBackend(host="ignored", port=0, timeout=1.0, read_poll_timeout=0.01)
+def _make_backend(chunks: list[bytes]) -> tuple[BenchCel4R, _FakeWriter]:
+  backend = BenchCel4R(
+    name="benchcel", host="ignored", port=0, timeout=1.0, read_poll_timeout=0.01
+  )
   writer = _FakeWriter()
   backend.io._writer = writer  # type: ignore[assignment]
   backend.io._reader = _FakeReader(chunks)  # type: ignore[assignment]
@@ -297,33 +296,24 @@ class BenchCelFactoryTests(unittest.TestCase):
     asyncio.set_event_loop(None)
     self._loop.close()
 
-  def test_factory_creates_device_with_stacker_capability_and_four_stacks(self):
+  def test_factory_creates_device_with_four_stacks(self):
     benchcel = BenchCel4R(name="bc", host="192.168.0.100")
     self.assertIsInstance(benchcel, BenchCel4R)
-    self.assertIsInstance(benchcel.stacker, Stacker)
-    backend = benchcel.driver
-    assert isinstance(backend, BenchCel4RBackend)
-    self.assertEqual(backend.host, "192.168.0.100")
+    self.assertEqual(benchcel.host, "192.168.0.100")
     self.assertEqual(len(benchcel.stacks), 4)
     self.assertTrue(all(isinstance(s, ResourceStack) for s in benchcel.stacks))
-    self.assertIs(benchcel.stacker.stacks, benchcel.stacks)
-    # the capability shares the device driver and is wired into the device lifecycle
-    self.assertIs(benchcel.stacker.backend, benchcel.driver)
-    self.assertIn(benchcel.stacker, benchcel._capabilities)
     self.assertEqual(benchcel.model, "Agilent BenchCel 4R")
 
   def test_factory_records_labware_settings(self):
     plate = Plate("plate", size_x=127.76, size_y=85.47, size_z=44.04, ordered_items={})
     benchcel = BenchCel4R(name="bc", host="192.168.0.100", labware=plate)
-    backend = benchcel.driver
-    assert isinstance(backend, BenchCel4RBackend)
-    assert backend.labware_settings is not None
-    self.assertEqual(backend.labware_settings.name, "plate")
+    assert benchcel.labware_settings is not None
+    self.assertEqual(benchcel.labware_settings.name, "plate")
     # no stacking_z_height on the plate -> estimated pitch (44.04 - 1.5)
-    self.assertAlmostEqual(backend.labware_settings.stacking_thickness, 42.54)
+    self.assertAlmostEqual(benchcel.labware_settings.stacking_thickness, 42.54)
 
 
-class BenchCelBackendWireTests(unittest.IsolatedAsyncioTestCase):
+class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
   async def test_home_writes_command_and_waits_for_split_ack(self):
     backend, writer = _make_backend([b"\x69", b"\x01\x00\x48"])
     ack = await backend.home()
@@ -409,27 +399,24 @@ class BenchCelBackendWireTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_serialize_includes_connection_info(self):
     plate = Plate("plate", size_x=127.76, size_y=85.48, size_z=14.6, ordered_items={})
-    backend = BenchCel4RBackend(
+    backend = BenchCel4R(
+      name="benchcel",
       host="192.168.0.100",
       port=7612,
       timeout=12.5,
       labware=plate,
     )
     serialized = backend.serialize()
-    self.assertEqual(serialized["type"], "BenchCel4RBackend")
+    self.assertEqual(serialized["type"], "BenchCel4R")
     self.assertEqual(serialized["host"], "192.168.0.100")
     self.assertEqual(serialized["timeout"], 12.5)
     self.assertEqual(serialized["labware"]["name"], "plate")
     self.assertAlmostEqual(serialized["labware"]["stacking_thickness"], 13.1)
-    deserialized = Driver.deserialize(serialized.copy())
-    self.assertIsInstance(deserialized, BenchCel4RBackend)
-    self.assertEqual(deserialized.host, "192.168.0.100")
-    self.assertEqual(deserialized.labware_settings.name, "plate")
 
 
 class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
   async def test_transfers_require_a_configured_teachpoint(self):
-    backend = BenchCel4RBackend(host="ignored")  # no loading_tray_teachpoint_id
+    backend = BenchCel4R(name="benchcel", host="ignored")  # no loading_tray_teachpoint_id
     self.assertIsNone(backend.loading_tray_teachpoint_id)
     stacks = benchcel_4r_stacks()
     await backend.set_stacks(stacks)
@@ -441,7 +428,7 @@ class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
       await backend.upstack(stacks[0], plate)
 
   async def test_downstack_maps_stack_to_stacker(self):
-    backend = BenchCel4RBackend(host="ignored")
+    backend = BenchCel4R(name="benchcel", host="ignored")
     stacks = benchcel_4r_stacks()
     await backend.set_stacks(stacks)
 
@@ -461,7 +448,7 @@ class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_upstack_maps_stack_to_stacker(self):
-    backend = BenchCel4RBackend(host="ignored")
+    backend = BenchCel4R(name="benchcel", host="ignored")
     stacks = benchcel_4r_stacks()
     await backend.set_stacks(stacks)
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
