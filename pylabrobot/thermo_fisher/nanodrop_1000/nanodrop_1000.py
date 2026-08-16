@@ -29,7 +29,6 @@ class ThermoFisherNanoDrop1000:
     self._connected = False
 
     self.coefficients = {}
-    self.wavelengths = None
     self.dark_spectrum = None
     self.blank_spectrum = None
 
@@ -53,7 +52,6 @@ class ThermoFisherNanoDrop1000:
     await asyncio.sleep(0.2)
 
     await self._download_all_coefficients()
-    self._calculate_x_axis()
 
   async def stop(self):
     """Safely powers down hardware and releases the USB port."""
@@ -132,10 +130,10 @@ class ThermoFisherNanoDrop1000:
       except Exception:
         logger.warning("Failed to read coefficient index %d", index, exc_info=True)
 
-  def _calculate_x_axis(self):
+  def _calculate_x_axis(self) -> List[float]:
     c0, c1 = self.coefficients.get(1, 0), self.coefficients.get(2, 0)
     c2, c3 = self.coefficients.get(3, 0), self.coefficients.get(4, 0)
-    self.wavelengths = [
+    return [
       c0 + (c1 * pixel) + (c2 * (pixel**2)) + (c3 * (pixel**3)) for pixel in range(2048)
     ]
 
@@ -210,4 +208,4 @@ class ThermoFisherNanoDrop1000:
       )
     ]
 
-    return self.wavelengths, absorbance
+    return self._calculate_x_axis(), absorbance
