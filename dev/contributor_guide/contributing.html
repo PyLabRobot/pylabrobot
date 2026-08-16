@@ -641,6 +641,13 @@ make<span class="w"> </span>format-check
 <p>PyLabRobot uses <a class="reference external" href="https://pre-commit.com/">pre-commit</a> to run the above commands before every commit. To install pre-commit, run <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">pre-commit</span></code> and then <code class="docutils literal notranslate"><span class="pre">pre-commit</span> <span class="pre">install</span></code>.</p>
 </section>
 </section>
+<section id="code-conventions">
+<h2>Code conventions<a class="headerlink" href="#code-conventions" title="Link to this heading">#</a></h2>
+<p>Code and comments describe current behavior, not project history. Do not add diary or changelog comments such as “new”, “now”, or “previously”, and do not add provenance stories to code, commits, or pull requests.</p>
+<p>Do not commit one-time backfill or migration scripts. Run one-time operations ad hoc so the repository contains only permanent software.</p>
+<p>Do not use reflective attribute access. <code class="docutils literal notranslate"><span class="pre">getattr</span></code>, <code class="docutils literal notranslate"><span class="pre">setattr</span></code>, <code class="docutils literal notranslate"><span class="pre">hasattr</span></code>, <code class="docutils literal notranslate"><span class="pre">delattr</span></code>, and equivalent techniques are not allowed. Do not work around this rule with <code class="docutils literal notranslate"><span class="pre">vars</span></code>, direct <code class="docutils literal notranslate"><span class="pre">__dict__</span></code> access, <code class="docutils literal notranslate"><span class="pre">__getattribute__</span></code>, wrappers around these functions, or attribute names constructed as strings.</p>
+<p>Define explicit, typed methods and properties instead. When a value or callable must be selected by name, use a typed mapping with a fixed set of keys. Model behavioral differences with normal control flow or polymorphism so static analysis and readers can see every supported path.</p>
+</section>
 <section id="api-conventions">
 <h2>API conventions<a class="headerlink" href="#api-conventions" title="Link to this heading">#</a></h2>
 <p>Use PyLabRobot’s <a class="reference internal" href="../user_guide/getting-started/units.html"><span class="std std-doc">default units</span></a> in public APIs. Omit the unit from a parameter or attribute name when it uses the PyLabRobot default—for example, use <code class="docutils literal notranslate"><span class="pre">temperature</span></code>, not <code class="docutils literal notranslate"><span class="pre">temperature_celsius</span></code>. Deviate from the default only for a compelling reason, make the alternative unit explicit, and document why it is necessary. Convert device-native units internally.</p>
@@ -731,6 +738,7 @@ make<span class="w"> </span>format-check
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pre-commit-hooks">Pre-commit hooks</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-conventions">Code conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-conventions">API conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-documentation">Writing documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#common-tasks">Common Tasks</a><ul class="nav section-nav flex-column">

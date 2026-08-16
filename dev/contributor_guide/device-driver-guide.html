@@ -600,7 +600,7 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="writing-pylabrobot-device-drivers-hello-world-guides">
 <h1>Writing PyLabRobot Device Drivers &amp; Hello-World Guides<a class="headerlink" href="#writing-pylabrobot-device-drivers-hello-world-guides" title="Link to this heading">#</a></h1>
-<p>How to add a device driver and its hello-world notebook, for humans and agents. Post on the <a class="reference external" href="https://discuss.pylabrobot.org">PyLabRobot forum</a> before starting to avoid duplicated effort and get support.</p>
+<p>How to add a device driver and its hello-world notebook, for humans and agents. This guide covers device-specific requirements; follow the <a class="reference internal" href="contributing.html"><span class="std std-doc">general contribution guide</span></a> for shared code style, testing, and contribution conventions. Post on the <a class="reference external" href="https://discuss.pylabrobot.org">PyLabRobot forum</a> before starting to avoid duplicated effort and get support.</p>
 <section id="understand-the-device">
 <h2>1. Understand the device<a class="headerlink" href="#understand-the-device" title="Link to this heading">#</a></h2>
 <p>Recover the protocol before writing code.</p>
@@ -631,16 +631,8 @@
 <p>If the driver hasn’t been checked against real hardware, say so loudly: <code class="docutils literal notranslate"><span class="pre">setup()</span></code> should <code class="docutils literal notranslate"><span class="pre">logger.warning(...)</span></code> that it’s untested and invite a change once someone verifies it. Don’t quietly present untested code as ready.</p>
 </section>
 </section>
-<section id="code-style">
-<h2>3. Code style<a class="headerlink" href="#code-style" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><strong>Comments document what the code does, not its history.</strong> No “NEW”, “now”, “previously”, no emphasis-caps — the code is not a diary. State behavior as fact; plain rationale (“why”) is welcome.</p></li>
-<li><p><strong>No provenance stories.</strong> Describe what the thing <em>is</em>, not where it came from — in code, commits, or PRs.</p></li>
-<li><p><strong>No dead code</strong>, and <strong>no one-time scripts in the repo.</strong> The codebase holds permanent software only; run backfills/migrations ad-hoc as thin inline invocations of the module’s own functions.</p></li>
-</ul>
-</section>
 <section id="hello-world-notebook">
-<h2>4. Hello-world notebook<a class="headerlink" href="#hello-world-notebook" title="Link to this heading">#</a></h2>
+<h2>3. Hello-world notebook<a class="headerlink" href="#hello-world-notebook" title="Link to this heading">#</a></h2>
 <p>Every device ships a runnable notebook that takes a user from cabling to first command. Path <code class="docutils literal notranslate"><span class="pre">docs/user_guide/&lt;vendor&gt;/&lt;device&gt;/hello-world.ipynb</span></code>; wire it in via the <code class="docutils literal notranslate"><span class="pre">&lt;vendor&gt;/index.md</span></code> <code class="docutils literal notranslate"><span class="pre">{toctree}</span></code> and add <code class="docutils literal notranslate"><span class="pre">&lt;vendor&gt;/index</span></code> to the Manufacturers <code class="docutils literal notranslate"><span class="pre">{toctree}</span></code> in <code class="docutils literal notranslate"><span class="pre">docs/user_guide/index.md</span></code> (alphabetical).</p>
 <p>Sections (markdown cell then code cell): (1) title + property table + untested-warning; (2) how it talks — brief, since users care about the machine, not the wire; (3) physical setup; (4) <code class="docutils literal notranslate"><span class="pre">setup()</span></code>; (5) one section per operation.</p>
 <p>Cell rules:</p>
@@ -648,8 +640,9 @@
 <li><p><strong>One concept per code cell.</strong> If a physical action happens between steps, that’s two cells: <code class="docutils literal notranslate"><span class="pre">move_tray_out()</span></code> → place plate → <code class="docutils literal notranslate"><span class="pre">move_tray_in()</span></code>. Every code cell gets a preceding markdown cell.</p></li>
 <li><p><strong>Notebook JSON:</strong> edit with a notebook-aware tool (plain-text replace is blocked on <code class="docutils literal notranslate"><span class="pre">.ipynb</span></code>); code cells <code class="docutils literal notranslate"><span class="pre">execution_count:</span> <span class="pre">null</span></code>, empty <code class="docutils literal notranslate"><span class="pre">outputs</span></code>; <code class="docutils literal notranslate"><span class="pre">nbformat:</span> <span class="pre">4</span></code>, <code class="docutils literal notranslate"><span class="pre">nbformat_minor:</span> <span class="pre">5</span></code>; every cell has an <code class="docutils literal notranslate"><span class="pre">id</span></code>; validate it parses.</p></li>
 </ul>
+</section>
 <section id="register-the-device-and-its-guide">
-<h3>Register the device and its guide<a class="headerlink" href="#register-the-device-and-its-guide" title="Link to this heading">#</a></h3>
+<h2>4. Register the device and its guide<a class="headerlink" href="#register-the-device-and-its-guide" title="Link to this heading">#</a></h2>
 <p>Add or update the device’s object in <code class="docutils literal notranslate"><span class="pre">docs/_static/devices.json</span></code> in the same change. Follow the <a class="reference internal" href="device-registry.html"><span class="std std-doc">device registry guide</span></a> for the schema. A driver and hello-world change is not complete until its registry entry has:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">api</span></code>, <code class="docutils literal notranslate"><span class="pre">api_version</span></code>, and <code class="docutils literal notranslate"><span class="pre">code_slug</span></code> pointing to the driver;</p></li>
@@ -658,20 +651,13 @@
 </ul>
 <p>When the device is already registered, edit its existing object instead of adding a duplicate. In particular, add <code class="docutils literal notranslate"><span class="pre">doc_slug</span></code> when a guide is added to a device that previously had no documentation page.</p>
 </section>
-</section>
-<section id="verify-ship">
-<h2>5. Verify &amp; ship<a class="headerlink" href="#verify-ship" title="Link to this heading">#</a></h2>
+<section id="verify-the-integration">
+<h2>5. Verify the integration<a class="headerlink" href="#verify-the-integration" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>Lint + type-check:</strong> ruff + mypy, 2-space indent.</p></li>
-<li><p><strong>Show commit + PR text and get confirmation before committing.</strong></p></li>
-<li><p><strong>Never drive real hardware without explicit per-run approval</strong> — a previous OK doesn’t carry to the next run.</p></li>
-</ul>
-</section>
-<section id="working-style">
-<h2>6. Working style<a class="headerlink" href="#working-style" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><strong>Do exactly what’s asked, nothing more</strong> — no drive-by edits to comments/constants/logic, no side-quests. If a fix seems to need more, state the minimal fact and let the person decide.</p></li>
-<li><p><strong>Run at full speed;</strong> parallelize independent work.</p></li>
+<li><p>Test framing, parsing, command sequencing, status handling, and error handling through a mocked or captured transport without connecting to hardware.</p></li>
+<li><p>Validate the hello-world notebook structure and imports without executing its hardware cells.</p></li>
+<li><p>Run the device-registry tests and build the documentation so its API, code, and documentation links are checked.</p></li>
+<li><p>Keep the unverified-driver warning until the implementation has been checked on the real device.</p></li>
 </ul>
 </section>
 </section>
@@ -729,13 +715,9 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#unverified-drivers">Unverified drivers</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-style">3. Code style</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hello-world-notebook">4. Hello-world notebook</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#register-the-device-and-its-guide">Register the device and its guide</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-ship">5. Verify &amp; ship</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#working-style">6. Working style</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hello-world-notebook">3. Hello-world notebook</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#register-the-device-and-its-guide">4. Register the device and its guide</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-the-integration">5. Verify the integration</a></li>
 </ul>
   </nav></div>
 

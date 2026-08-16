@@ -1,6 +1,6 @@
 # Writing PyLabRobot Device Drivers & Hello-World Guides
 
-How to add a device driver and its hello-world notebook, for humans and agents. Post on the [PyLabRobot forum](https://discuss.pylabrobot.org) before starting to avoid duplicated effort and get support.
+How to add a device driver and its hello-world notebook, for humans and agents. This guide covers device-specific requirements; follow the [general contribution guide](contributing.md) for shared code style, testing, and contribution conventions. Post on the [PyLabRobot forum](https://discuss.pylabrobot.org) before starting to avoid duplicated effort and get support.
 
 ## 1. Understand the device
 
@@ -30,13 +30,7 @@ The public surface must expose **no non-idempotent commands.** If the hardware o
 
 If the driver hasn't been checked against real hardware, say so loudly: `setup()` should `logger.warning(...)` that it's untested and invite a change once someone verifies it. Don't quietly present untested code as ready.
 
-## 3. Code style
-
-- **Comments document what the code does, not its history.** No "NEW", "now", "previously", no emphasis-caps — the code is not a diary. State behavior as fact; plain rationale ("why") is welcome.
-- **No provenance stories.** Describe what the thing *is*, not where it came from — in code, commits, or PRs.
-- **No dead code**, and **no one-time scripts in the repo.** The codebase holds permanent software only; run backfills/migrations ad-hoc as thin inline invocations of the module's own functions.
-
-## 4. Hello-world notebook
+## 3. Hello-world notebook
 
 Every device ships a runnable notebook that takes a user from cabling to first command. Path `docs/user_guide/<vendor>/<device>/hello-world.ipynb`; wire it in via the `<vendor>/index.md` `{toctree}` and add `<vendor>/index` to the Manufacturers `{toctree}` in `docs/user_guide/index.md` (alphabetical).
 
@@ -46,7 +40,7 @@ Cell rules:
 - **One concept per code cell.** If a physical action happens between steps, that's two cells: `move_tray_out()` → place plate → `move_tray_in()`. Every code cell gets a preceding markdown cell.
 - **Notebook JSON:** edit with a notebook-aware tool (plain-text replace is blocked on `.ipynb`); code cells `execution_count: null`, empty `outputs`; `nbformat: 4`, `nbformat_minor: 5`; every cell has an `id`; validate it parses.
 
-### Register the device and its guide
+## 4. Register the device and its guide
 
 Add or update the device's object in `docs/_static/devices.json` in the same change. Follow the [device registry guide](device-registry.md) for the schema. A driver and hello-world change is not complete until its registry entry has:
 
@@ -56,13 +50,9 @@ Add or update the device's object in `docs/_static/devices.json` in the same cha
 
 When the device is already registered, edit its existing object instead of adding a duplicate. In particular, add `doc_slug` when a guide is added to a device that previously had no documentation page.
 
-## 5. Verify & ship
+## 5. Verify the integration
 
-- **Lint + type-check:** ruff + mypy, 2-space indent.
-- **Show commit + PR text and get confirmation before committing.**
-- **Never drive real hardware without explicit per-run approval** — a previous OK doesn't carry to the next run.
-
-## 6. Working style
-
-- **Do exactly what's asked, nothing more** — no drive-by edits to comments/constants/logic, no side-quests. If a fix seems to need more, state the minimal fact and let the person decide.
-- **Run at full speed;** parallelize independent work.
+- Test framing, parsing, command sequencing, status handling, and error handling through a mocked or captured transport without connecting to hardware.
+- Validate the hello-world notebook structure and imports without executing its hardware cells.
+- Run the device-registry tests and build the documentation so its API, code, and documentation links are checked.
+- Keep the unverified-driver warning until the implementation has been checked on the real device.
