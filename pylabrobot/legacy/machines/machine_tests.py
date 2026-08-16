@@ -2,7 +2,7 @@ import asyncio
 import unittest
 import unittest.mock
 
-from pylabrobot.events import EventBus, use_event_bus
+from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.machines.machine import Machine, MachineBackend
 
 
@@ -40,7 +40,7 @@ class TestMachine(unittest.TestCase):
     Machine.deserialize(m.serialize())  # shouldn't raise
 
   def test_non_resource_machine_uses_device_reference(self):
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
     machine = self.MockMachine(backend=self.MockBackend("mock_param"))

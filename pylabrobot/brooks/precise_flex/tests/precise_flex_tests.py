@@ -8,7 +8,7 @@ from pylabrobot.brooks.precise_flex import (
   PreciseFlex,
   PreciseFlexCartesianPose,
 )
-from pylabrobot.events import EventBus, event_context, use_event_bus
+from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
 from pylabrobot.resources import Coordinate, Rotation
 
 
@@ -91,7 +91,7 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
 class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
   async def test_gripper_event_uses_default_length_unit_field(self):
     arm = _make_arm()
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -110,14 +110,17 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
     )
     arm.io.write = AsyncMock()  # type: ignore[method-assign]
     arm.io.readline = AsyncMock(return_value=b"0\n")  # type: ignore[method-assign]
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
-    with use_event_bus(event_bus), event_context(
-      resources=[{"name": "sample_plate"}],
-      source={"name": "source_nest"},
-      destination={"name": "destination_nest"},
+    with (
+      use_event_bus(event_bus),
+      event_context(
+        resources=[{"name": "sample_plate"}],
+        source={"name": "source_nest"},
+        destination={"name": "destination_nest"},
+      ),
     ):
       await arm.move_gripper_joint_position(520.0)
 

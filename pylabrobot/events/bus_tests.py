@@ -3,6 +3,7 @@ import unittest
 
 from pylabrobot.events import (
   EventBus,
+  PLREvent,
   coordinate_reference,
   device_reference,
   emit_event,
@@ -50,7 +51,7 @@ class TestEventBus(unittest.TestCase):
     )
 
   def test_context_is_attached_to_events(self):
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -63,7 +64,7 @@ class TestEventBus(unittest.TestCase):
     self.assertEqual(json.loads(json.dumps(events[0].as_dict()))["name"], "example.completed")
 
   def test_resource_assignment_and_unassignment_emit_contextual_events(self):
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
     parent = Resource("parent", size_x=10, size_y=10, size_z=1)
@@ -86,7 +87,7 @@ class TestEventBus(unittest.TestCase):
 
 class TestEventedOperation(unittest.IsolatedAsyncioTestCase):
   def test_block_operation_emits_a_correlated_lifecycle(self):
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -102,17 +103,20 @@ class TestEventedOperation(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[2].context["operation_id"], operation_id)
 
   def test_block_operation_can_capture_final_completion_data(self):
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
     location = {"name": "source"}
 
-    with use_event_bus(event_bus), event_operation(
-      "resource.transfer",
-      resources=[{"name": "plate", "location": location["name"]}],
-      completed_data_factory=lambda: {
-        "resources": [{"name": "plate", "location": location["name"]}],
-      },
+    with (
+      use_event_bus(event_bus),
+      event_operation(
+        "resource.transfer",
+        resources=[{"name": "plate", "location": location["name"]}],
+        completed_data_factory=lambda: {
+          "resources": [{"name": "plate", "location": location["name"]}],
+        },
+      ),
     ):
       location["name"] = "destination"
 
@@ -120,7 +124,7 @@ class TestEventedOperation(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[1].data["resources"][0]["location"], "destination")
 
   async def test_operation_context_is_inherited_by_nested_events(self):
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -132,17 +136,20 @@ class TestEventedOperation(unittest.IsolatedAsyncioTestCase):
     with use_event_bus(event_bus):
       self.assertEqual(await action(3), 6)
 
-    self.assertEqual([event.name for event in events], [
-      "device.action.started",
-      "firmware.command.started",
-      "device.action.completed",
-    ])
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "device.action.started",
+        "firmware.command.started",
+        "device.action.completed",
+      ],
+    )
     operation_id = events[0].context["operation_id"]
     self.assertEqual(events[1].context["operation_id"], operation_id)
     self.assertEqual(events[2].context["operation_id"], operation_id)
 
   async def test_failed_operation_emits_a_correlated_failure(self):
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -154,9 +161,12 @@ class TestEventedOperation(unittest.IsolatedAsyncioTestCase):
       with self.assertRaisesRegex(RuntimeError, "expected failure"):
         await action()
 
-    self.assertEqual([event.name for event in events], [
-      "device.action.started",
-      "device.action.failed",
-    ])
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "device.action.started",
+        "device.action.failed",
+      ],
+    )
     self.assertEqual(events[1].data["error_type"], "RuntimeError")
     self.assertEqual(events[1].context["operation_id"], events[0].context["operation_id"])

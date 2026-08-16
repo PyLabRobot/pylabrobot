@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.events import EventBus, use_event_bus
+from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.temperature_controlling import (
   TemperatureController,
   TemperatureControllerChatterboxBackend,
@@ -68,7 +68,7 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
       backend=TemperatureControllerChatterboxBackend(dummy_temperature=20.0),
       child_location=Coordinate.zero(),
     )
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -104,7 +104,7 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     )
     plate = Resource("plate", size_x=1, size_y=1, size_z=1)
     temperature_controller.assign_child_resource(plate)
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -126,8 +126,8 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     plate = Resource("plate", size_x=1, size_y=1, size_z=1)
     temperature_controller.assign_child_resource(plate)
     temperature_controller.target_temperature = 37.0
-    backend.set_temperature = AsyncMock()
-    events = []
+    backend.set_temperature = AsyncMock()  # type: ignore[method-assign]
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -163,7 +163,7 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
       backend=TemperatureControllerChatterboxBackend(dummy_temperature=20.0),
       child_location=Coordinate.zero(),
     )
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 

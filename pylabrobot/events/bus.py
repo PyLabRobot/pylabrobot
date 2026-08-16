@@ -301,7 +301,9 @@ def event_operation(
         error_message=str(error),
       )
       raise
-    completed_data = completed_data_factory() if completed_data_factory is not None else operation_data
+    completed_data = (
+      completed_data_factory() if completed_data_factory is not None else operation_data
+    )
     emit_event(f"{name}.completed", **completed_data)
 
 

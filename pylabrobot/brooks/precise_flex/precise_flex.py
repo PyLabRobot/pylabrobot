@@ -2071,13 +2071,7 @@ class PreciseFlex:
 
   @evented_operation(
     "precise_flex.move_to_location",
-    lambda self,
-    location,
-    direction,
-    speed_pct=None,
-    orientation=None,
-    wrist=None,
-    rail_position=None: {
+    lambda self, location, direction, speed_pct=None, orientation=None, wrist=None, rail_position=None: {
       "device": _controller_reference(self),
       "target": _cartesian_target_reference(
         location,
@@ -2516,15 +2510,7 @@ class PreciseFlex:
 
   @evented_operation(
     "precise_flex.pick_up_at_location",
-    lambda self,
-    location,
-    direction,
-    resource_width,
-    finger_speed_pct=50.0,
-    grasp_force=10.0,
-    orientation=None,
-    wrist=None,
-    rail_position=None: {
+    lambda self, location, direction, resource_width, finger_speed_pct=50.0, grasp_force=10.0, orientation=None, wrist=None, rail_position=None: {
       "device": _controller_reference(self),
       "target": _cartesian_target_reference(
         location,
@@ -2592,13 +2578,7 @@ class PreciseFlex:
 
   @evented_operation(
     "precise_flex.drop_at_location",
-    lambda self,
-    location,
-    direction,
-    resource_width,
-    orientation=None,
-    wrist=None,
-    rail_position=None: {
+    lambda self, location, direction, resource_width, orientation=None, wrist=None, rail_position=None: {
       "device": _controller_reference(self),
       "target": _cartesian_target_reference(
         location,

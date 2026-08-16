@@ -6,6 +6,7 @@ from io import IOBase
 from typing import Optional, cast
 
 from pylabrobot.events import emit_event
+
 try:
   import pylibftdi.driver
   from pylibftdi import Device, FtdiError

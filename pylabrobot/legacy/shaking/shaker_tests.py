@@ -1,6 +1,6 @@
 import unittest
 
-from pylabrobot.events import EventBus, use_event_bus
+from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.shaking import Shaker, ShakerChatterboxBackend
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -32,7 +32,7 @@ class ShakerEventTests(unittest.IsolatedAsyncioTestCase):
       backend=ShakerChatterboxBackend(),
       child_location=Coordinate.zero(),
     )
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -65,7 +65,7 @@ class ShakerEventTests(unittest.IsolatedAsyncioTestCase):
     )
     plate = Resource("plate", size_x=1, size_y=1, size_z=1)
     shaker.assign_child_resource(plate)
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 

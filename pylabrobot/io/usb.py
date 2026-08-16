@@ -244,7 +244,7 @@ class USB(IOBase):
     if timeout is None:
       timeout = self.read_timeout
 
-    def read_or_timeout():
+    def read_or_timeout() -> bytes:
       # Attempt to read packets until timeout, or when we identify the right id.
       timeout_time = time.time() + timeout
 
@@ -276,7 +276,7 @@ class USB(IOBase):
             data=resp.decode("unicode_escape", errors="backslashreplace"),
           )
         )
-        return resp
+        return bytes(resp)
 
       raise TimeoutError(
         f"Timeout while reading from USB device '{self.human_readable_device_name}'."

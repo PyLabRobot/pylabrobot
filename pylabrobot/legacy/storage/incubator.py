@@ -21,9 +21,7 @@ class NoFreeSiteError(Exception):
   pass
 
 
-def _fetch_plate_event_context(
-  incubator: "Incubator", plate_name: str, **_: object
-) -> dict:
+def _fetch_plate_event_context(incubator: "Incubator", plate_name: str, **_: object) -> dict:
   try:
     site = incubator.get_site_by_plate_name(plate_name)
     plate = site.resource

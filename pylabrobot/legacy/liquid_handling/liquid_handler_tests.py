@@ -7,7 +7,7 @@ from unittest.mock import PropertyMock
 
 import pytest
 
-from pylabrobot.events import EventBus, use_event_bus
+from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.legacy.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
 from pylabrobot.legacy.liquid_handling.channel_positioning import (
@@ -626,7 +626,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     well = self.plate.get_item("A1")
     well.tracker.set_volume(20)
     self.lh.update_head_state({0: self.tip_rack.get_item("A1").get_tip()})
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -662,7 +662,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_pickup_and_discard_emit_direct_tip_resources(self):
     tip_spot = self.tip_rack.get_item("A1")
     trash = self.deck.get_trash_area()
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -699,7 +699,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.unassign()
     self.deck.assign_child_resource(source, location=Coordinate(100, 100, 0))
     source.assign_child_resource(self.plate, location=Coordinate.zero())
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
@@ -712,7 +712,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertIs(self.plate.parent, source)
 
   async def test_96_head_tip_operations_emit_direct_rack_resources(self):
-    events = []
+    events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 

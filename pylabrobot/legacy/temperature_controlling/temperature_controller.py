@@ -23,7 +23,9 @@ def _temperature_event_context(
   context: dict[str, Any] = {"device": resource_reference(temperature_controller)}
   if temperature_controller.resource is not None:
     context["resources"] = [resource_reference(temperature_controller.resource)]
-  target_temperature = temperature_controller.target_temperature if temperature is None else temperature
+  target_temperature = (
+    temperature_controller.target_temperature if temperature is None else temperature
+  )
   if target_temperature is not None:
     context["target_temperature"] = float(target_temperature)
   if passive is not None:

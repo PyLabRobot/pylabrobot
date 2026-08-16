@@ -24,7 +24,7 @@ from typing import (
   cast,
 )
 
-from pylabrobot.events import evented_operation, resource_reference
+from pylabrobot.events import ResourceReference, evented_operation, resource_reference
 from pylabrobot.legacy.liquid_handling.channel_positioning import (
   compute_channel_offsets,
 )
@@ -157,7 +157,7 @@ def _liquid_operation_event_context(
   if len(operation_resources) == 1 and len(channels) > 1:
     operation_resources = operation_resources * len(channels)
 
-  unique_operation_resources: List[Dict[str, Any]] = []
+  unique_operation_resources: List[ResourceReference] = []
   seen_resource_keys: Set[Tuple[Any, Any]] = set()
   for operation_resource in operation_resources:
     reference = resource_reference(operation_resource)
@@ -195,7 +195,7 @@ def _tip_operation_event_context(
 ) -> Dict[str, Any]:
   """Describe channel tip operations using their direct pickup/drop resources."""
 
-  resources: List[Dict[str, Any]] = []
+  resources: List[ResourceReference] = []
   seen_resource_keys: Set[Tuple[Any, Any]] = set()
   for tip_spot in tip_spots:
     reference = resource_reference(tip_spot)
