@@ -1,7 +1,8 @@
 import asyncio
 import unittest
+from typing import Callable
 
-from pylabrobot.events import EventBus, use_event_bus
+from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.manual_operator import (
   ConsoleOperatorActionProvider,
   ManualOperator,
@@ -16,7 +17,7 @@ from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 class RecordingProvider:
   def __init__(self, result: OperatorActionResult):
     self.result = result
-    self.requests = []
+    self.requests: list[OperatorActionRequest] = []
 
   async def request(self, action: OperatorActionRequest) -> OperatorActionResult:
     self.requests.append(action)
@@ -24,9 +25,9 @@ class RecordingProvider:
 
 
 class CallbackProvider:
-  def __init__(self, callback):
+  def __init__(self, callback: Callable[[OperatorActionRequest], OperatorActionResult]):
     self.callback = callback
-    self.requests = []
+    self.requests: list[OperatorActionRequest] = []
 
   async def request(self, action: OperatorActionRequest) -> OperatorActionResult:
     self.requests.append(action)
@@ -104,7 +105,9 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     plate = Resource("plate", size_x=80, size_y=60, size_z=15)
     source.assign_child_resource(plate)
 
-    def complete_while_model_is_unchanged(request):
+    def complete_while_model_is_unchanged(
+      request: OperatorActionRequest,
+    ) -> OperatorActionResult:
       self.assertIs(plate.parent, source)
       self.assertIs(source.resource, plate)
       self.assertIsNone(destination.resource)
@@ -215,7 +218,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     plate = Resource("plate", size_x=80, size_y=60, size_z=15)
     source.assign_child_resource(plate)
 
-    def change_model_then_complete(_request):
+    def change_model_then_complete(_request: OperatorActionRequest) -> OperatorActionResult:
       unexpected.assign_child_resource(plate)
       return OperatorActionResult.completed()
 
@@ -236,7 +239,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
       OperatorActionResult.completed(message="Spin verified", confirmed_by="operator-1")
     )
     event_bus = EventBus()
-    events = []
+    events: list[PLREvent] = []
     event_bus.subscribe(events.append)
 
     with use_event_bus(event_bus):
@@ -271,7 +274,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
   async def test_perform_emits_failed_event_for_reported_failure(self):
     provider = RecordingProvider(OperatorActionResult.failed(message="Inspection failed"))
     event_bus = EventBus()
-    events = []
+    events: list[PLREvent] = []
     event_bus.subscribe(events.append)
 
     with use_event_bus(event_bus):
@@ -299,7 +302,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     source.assign_child_resource(plate)
     provider = RecordingProvider(OperatorActionResult.completed())
     event_bus = EventBus()
-    events = []
+    events: list[PLREvent] = []
     event_bus.subscribe(events.append)
 
     with use_event_bus(event_bus):
@@ -326,9 +329,14 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
 
 class TestConsoleOperatorActionProvider(unittest.IsolatedAsyncioTestCase):
   async def test_enter_completes_action_without_blocking_event_loop(self):
-    output = []
+    output: list[str] = []
+
+    def input_fn(prompt: str) -> str:
+      output.append(prompt)
+      return ""
+
     provider = ConsoleOperatorActionProvider(
-      input_fn=lambda prompt: output.append(prompt) or "",
+      input_fn=input_fn,
       output_fn=output.append,
     )
     request = OperatorActionRequest(
