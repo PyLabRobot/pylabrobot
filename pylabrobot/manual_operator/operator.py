@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Optional, Sequence
 
-from pylabrobot.events import event_operation, resource_reference
+from pylabrobot.events import device_reference, event_operation, resource_reference
 from pylabrobot.resources import Coordinate, Resource
 
 from .provider import OperatorActionProvider
@@ -51,7 +51,7 @@ class ManualOperator:
       details={} if details is None else details,
     )
     operation_data: Dict[str, Any] = {
-      "device": resource_reference(self),
+      "device": device_reference(self, name=self.name),
       "resources": [resource_reference(resource) for resource in resources or ()],
       "manual_action": request.action,
       "title": request.title,

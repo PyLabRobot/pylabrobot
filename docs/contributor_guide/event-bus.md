@@ -203,7 +203,7 @@ deck resources. A genuine manual resource transfer additionally includes its act
 
 ```python
 {
-  "device": resource_reference(manual_operator),
+  "device": device_reference(manual_operator, name=manual_operator.name),
   "resources": [resource_reference(plate)],
   "manual_action": "centrifuge.spin",
   "title": "Spin sample plate",
