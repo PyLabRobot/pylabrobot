@@ -120,8 +120,6 @@ Detailed operation references:
 - [Incubator](event-bus/incubator.md)
 - [LiquidHandler](event-bus/liquid-handler.md)
 - [Shaker and temperature controller](event-bus/thermal-and-shaking.md)
-- [Agilent VSpin and Access2](event-bus/vspin.md)
-- [Brooks PreciseFlex](event-bus/precise-flex.md)
 - [Diagnostic transports](event-bus/diagnostic-transports.md)
 
 ```{toctree}
@@ -131,8 +129,6 @@ event-bus/machine-lifecycle
 event-bus/incubator
 event-bus/liquid-handler
 event-bus/thermal-and-shaking
-event-bus/vspin
-event-bus/precise-flex
 event-bus/diagnostic-transports
 ```
 

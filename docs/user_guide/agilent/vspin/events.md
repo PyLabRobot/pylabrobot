@@ -1,4 +1,4 @@
-# Agilent VSpin and Access2 events
+# VSpin and Access2 events
 
 Each listed semantic operation emits `started`, `completed`, or `failed` lifecycle records.
 

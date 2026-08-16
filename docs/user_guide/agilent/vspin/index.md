@@ -1,7 +1,8 @@
-# Agilent
+# VSpin
 
 ```{toctree}
 :maxdepth: 1
 
-vspin/index
+hello-world
+events
 ```

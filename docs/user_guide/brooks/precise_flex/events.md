@@ -1,4 +1,4 @@
-# Brooks PreciseFlex events
+# PreciseFlex events
 
 The instrumented `brooks.precise_flex.PreciseFlex` frontend emits `started`, `completed`, and
 `failed` records for each of these public controller operations:
