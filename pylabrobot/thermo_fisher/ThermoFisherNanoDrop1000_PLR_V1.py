@@ -5,19 +5,9 @@ import numpy as np
 import usb.core
 import usb.util
 
-from pylabrobot.capabilities import CapabilityBackend
 
-# PyLabRobot core imports (Assuming standard PLR v1b1 structure)
-from pylabrobot.device import Device, Driver
-
-# Assuming an Absorbance Capability exists in PLR; if not, you would define it in capabilities/
-# from pylabrobot.capabilities.absorbance import AbsorbanceBackend, Absorbance
-
-
-class ThermoFisherNanoDrop1000Driver(Driver):
+class ThermoFisherNanoDrop1000:
   """
-  Pure transport layer for the NanoDrop 1000.
-  Handles USB connections, endpoints, and raw byte transfers.
   """
 
   VID = 0x2457
@@ -29,6 +19,11 @@ class ThermoFisherNanoDrop1000Driver(Driver):
   def __init__(self):
     super().__init__()
     self.dev = None
+
+    self.coefficients = {}
+    self.wavelengths = None
+    self.dark_spectrum = None
+    self.blank_spectrum = None
 
   async def setup(self):
     """Initializes the USB connection."""
@@ -48,6 +43,9 @@ class ThermoFisherNanoDrop1000Driver(Driver):
     await self.send_command([0x01])
     await asyncio.sleep(0.2)
 
+    await self._download_all_coefficients()
+    self._calculate_x_axis()
+
   async def stop(self):
     """Safely powers down hardware and releases the USB port."""
     if self.dev:
@@ -60,6 +58,8 @@ class ThermoFisherNanoDrop1000Driver(Driver):
       except Exception:
         pass
       print("NanoDrop safely disconnected.")
+
+    self.coefficients = {}
 
   async def send_command(self, payload: List[int]):
     """Generic transport method for writing to the command mailbox."""
@@ -90,41 +90,13 @@ class ThermoFisherNanoDrop1000Driver(Driver):
     except usb.core.USBTimeoutError:
       pass
 
-
-class ThermoFisherNanoDrop1000AbsorbanceBackend(
-  CapabilityBackend
-):  # Ideally inherits from AbsorbanceBackend
-  """
-  Translates scientific workflow methods into raw driver commands.
-  Holds state for coefficients, dark spectra, and blank spectra.
-  """
-
-  def __init__(self, driver: ThermoFisherNanoDrop1000Driver):
-    super().__init__()
-    self.driver = driver
-    self.coefficients = {}
-    self.wavelengths = None
-
-    self.dark_spectrum = None
-    self.blank_spectrum = None
-
-  async def _on_setup(self):
-    """Lifecycle hook to download factory calibration on boot."""
-    await self._download_all_coefficients()
-    self._calculate_x_axis()
-    print("NanoDrop Initialized and Calibrated.")
-
-  async def _on_stop(self):
-    """Lifecycle hook to clean up state on teardown."""
-    self.coefficients.clear()
-
   async def set_lamp(self, state: bool):
     cmd = 0xFF if state else 0x00
-    await self.driver.send_command([0x03, cmd])
+    await self.send_command([0x03, cmd])
 
   async def set_magnet(self, state: bool):
     cmd = 0xFF if state else 0x00
-    await self.driver.send_command([0x0F, cmd])
+    await self.send_command([0x0F, cmd])
 
   async def set_integration_time(self, ms: int):
     if ms < 3:
@@ -136,19 +108,19 @@ class ThermoFisherNanoDrop1000AbsorbanceBackend(
 
     lsb = ms & 0xFF
     msb = (ms >> 8) & 0xFF
-    await self.driver.send_command([0x02, lsb, msb])
+    await self.send_command([0x02, lsb, msb])
 
   async def _download_all_coefficients(self):
     print("Downloading Factory Memory Map...")
-    self.driver.flush_comm()
+    self.flush_comm()
 
     for index in range(1, 15):
       if index == 5:
         continue
-      await self.driver.send_command([0x05, index])
+      await self.send_command([0x05, index])
       await asyncio.sleep(0.05)
       try:
-        data = await self.driver.read_comm()
+        data = await self.read_comm()
         text = bytearray(data[2:]).decode("ascii", errors="ignore").split("\x00")[0]
         self.coefficients[index] = float(text)
       except Exception:
@@ -161,10 +133,10 @@ class ThermoFisherNanoDrop1000AbsorbanceBackend(
     self.wavelengths = c0 + (c1 * pixels) + (c2 * (pixels**2)) + (c3 * (pixels**3))
 
   async def get_raw_spectrum(self) -> np.ndarray:
-    self.driver.flush_heavy()
-    await self.driver.send_command([0x09])
+    self.flush_heavy()
+    await self.send_command([0x09])
 
-    data_buffer = await self.driver.read_heavy()
+    data_buffer = await self.read_heavy()
 
     pixels = []
     for i in range(0, 4096, 128):
@@ -229,31 +201,3 @@ class ThermoFisherNanoDrop1000AbsorbanceBackend(
     absorbance = -np.log10(transmittance)
 
     return self.wavelengths, absorbance
-
-
-class ThermoFisherNanoDrop1000(Device):
-  """
-  Main PyLabRobot Device Class.
-  Constructs the driver and registers the absorbance capability.
-  """
-
-  def __init__(self, name: str = "NanoDrop1000"):
-    super().__init__(name=name)
-
-    # Construct ONE driver
-    self.driver = ThermoFisherNanoDrop1000Driver()
-
-    # Construct backends sharing the single driver
-    self.absorbance_backend = ThermoFisherNanoDrop1000AbsorbanceBackend(driver=self.driver)
-
-    # Append to capabilities
-    self._capabilities.append(self.absorbance_backend)
-
-  # setup() and stop() are completely removed! Inherited behavior takes over.
-
-  # CAUTION: Convenience methods below map to Capability operations.
-  async def take_blank(self, integration_ms=20):
-    await self.absorbance_backend.take_blank(integration_ms)
-
-  async def measure_absorbance(self, integration_ms=20):
-    return await self.absorbance_backend.measure_absorbance(integration_ms)
