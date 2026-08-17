@@ -153,11 +153,8 @@ class _FlexHead:
     cannot tell you *which* channel(s) hold a tip.
 
     Asked for with the ``getTipPresence`` run command rather than the
-    ``GET /instruments`` REST read, which reports the same bit but re-caches
-    the attached instruments as a side effect. On a Flex that re-cache
-    clears the run's record of the attached tip, so reading the sensor over
-    REST between a pickup and the next pipetting command makes that command
-    fail with "cannot perform PREPARE_ASPIRATE without a tip attached".
+    ``GET /instruments`` REST read: same bit, but the REST path re-caches the
+    attached instruments as a side effect.
 
     Returns:
       ``True``/``False`` when the sensor reads present/absent, ``None`` when
@@ -324,21 +321,66 @@ class _FlexHead:
 
   # --- Fine-pipetting shared helpers ---
 
+  def _mounted_count(self) -> int:
+    """How many channels currently hold a tip."""
+    return sum(1 for tip in self._channel_tips if tip is not None)
+
   def _require_mounted_tip(self) -> None:
     """Raise if no channel holds a tip -- pre-wire guard for tip-motion ops.
 
-    Every liquid-handling op moves the mounted tip into the labware, so
-    issuing one without a tip would drive the bare NOZZLE there instead --
-    roughly a tip length lower than the pose the command describes. The
-    engine rejects a tipless op, but ``dispense`` moves to the well first and
-    only then checks, so the collision happens before the rejection. Checked
-    before any wire command is sent.
+    Without a tip the same command drives the bare NOZZLE into the labware,
+    about a tip length lower than the pose it describes. The engine does
+    reject a tipless op, but ``dispense`` moves to the well before it checks,
+    so the crash lands first.
     """
     if all(tip is None for tip in self._channel_tips):
       raise OpentronsError(
         "NoTipError",
         "No tip mounted; pick up a tip first.",
       )
+
+  async def _well_target(self, target: Union[Well, TipSpot, Container]) -> Tuple[str, str]:
+    """Labware id and well name for a well or tip spot, or a container's sole well."""
+    if isinstance(target, (Well, TipSpot)):
+      parent = self._require_itemized_parent(target)
+      loaded = await self.flex._ensure_labware_loaded(parent)
+      return loaded, parent.get_child_identifier(target)
+    return await self.flex._ensure_labware_loaded(target), _CONTAINER_WELL_NAME
+
+  async def _pipette(
+    self,
+    verb: str,
+    labware_id: str,
+    well_name: str,
+    volume: float,
+    flow_rate: Optional[float],
+    offset: Optional[Coordinate],
+    liquid_height: Optional[float],
+    staged_trackers: List[VolumeTracker],
+  ) -> None:
+    """Send one ``aspirate``/``dispense`` at a named well and settle the trackers.
+
+    ``flow_rate`` defaults to the robot's own for the mounted tip, so it is
+    resolved only when the caller left it out (asking with no tip raises).
+    An aspirate is primed first when a prepare is pending.
+    """
+    if flow_rate is None:
+      rates = self.default_flow_rates()
+      flow_rate = rates.aspirate if verb == "aspirate" else rates.dispense
+    params: Dict[str, Any] = {
+      "pipetteId": self.pipette_id,
+      "labwareId": labware_id,
+      "wellName": well_name,
+      "volume": volume,
+      "flowRate": flow_rate,
+    }
+    well_location = self._well_location([offset], [liquid_height])
+    if well_location is not None:
+      params["wellLocation"] = well_location
+    if verb == "aspirate":
+      await self._execute_with_prepare(verb, params, staged_trackers)
+    else:
+      await self._execute_liquid_op(verb, params, staged_trackers)
 
   async def _configure_nozzle_layout(self, configuration_params: Dict[str, Any]) -> None:
     """Send ``configureNozzleLayout``, refusing while any channel holds a tip.
@@ -370,20 +412,11 @@ class _FlexHead:
   ) -> Dict[str, Any]:
     """Build the ``touchTip`` params dict shared by every head's ``touch_tip``.
 
-    ``touchTip`` addresses the height of the wall-touch motion, not a liquid
-    position, so the ``wellLocation`` is TOP-relative: the default touches
-    1 mm below the rim (the Opentrons Python API's ``v_offset`` default), and
-    a caller ``offset`` REPLACES it, also read against the well top.
-    ``radius`` is the fraction of the well radius the tip moves toward
-    (1.0 = the wall).
-
-    Replacing rather than shifting is deliberate, unlike the liquid position
-    ``_well_location`` builds. This z IS the touch height (the Opentrons
-    Python API's own ``v_offset``, where a caller's number is likewise
-    absolute), so shifting would make the same argument mean a different
-    height here than in that API. And dropping this default moves the tip
-    UP toward the rim, away from the labware, where dropping the liquid
-    clearance moves it down onto the well floor.
+    The ``wellLocation`` is TOP-relative and the default touches 1 mm below
+    the rim. A caller ``offset`` REPLACES it rather than shifting it, unlike
+    the liquid position ``_well_location`` builds: this z IS the touch height
+    (the Opentrons Python API's absolute ``v_offset``), and dropping the
+    default here moves the tip UP toward the rim, away from the labware.
     """
     o = offset if offset is not None else Coordinate(z=_DEFAULT_TOUCH_TIP_Z_OFFSET)
     return {
@@ -505,12 +538,10 @@ class _FlexHead:
   def _stage_container_aspirate(container: Container, total_volume: float) -> List[VolumeTracker]:
     """Stage an aspirate's total volume against a container's single tracker.
 
-    N channels drawing from one cavity share ONE tracker, whose pending
-    ops accumulate onto one pending volume and are flushed/discarded
-    together by a single ``commit()``/``rollback()``. So the summed volume
-    is staged as ONE ``remove_liquid`` and the tracker appears ONCE in the
-    returned staged list -- staging per channel would orphan the earlier
-    pending ops if a later channel's validation raised.
+    N channels drawing from one cavity share ONE tracker, so the summed
+    volume is staged as one ``remove_liquid`` and the tracker appears once in
+    the returned list. Staging per channel would orphan the earlier pending
+    ops if a later channel's validation raised.
     """
     staged_trackers: List[VolumeTracker] = []
     if does_volume_tracking() and not container.tracker.is_disabled:
@@ -522,13 +553,32 @@ class _FlexHead:
   def _stage_container_dispense(container: Container, total_volume: float) -> List[VolumeTracker]:
     """Stage a dispense's total volume against a container's single tracker.
 
-    Same one-tracker rule as ``_stage_container_aspirate``, with
-    ``add_liquid`` staging the summed volume.
+    Same one-tracker rule as ``_stage_container_aspirate``.
     """
     staged_trackers: List[VolumeTracker] = []
     if does_volume_tracking() and not container.tracker.is_disabled:
       container.tracker.add_liquid(volume=total_volume)  # stages + validates
       staged_trackers.append(container.tracker)
+    return staged_trackers
+
+  def _stage_wells_aspirate(self, wells: List[Well], volume: float) -> List[VolumeTracker]:
+    """Stage ``remove_liquid`` on each well whose channel holds a tip."""
+    staged_trackers: List[VolumeTracker] = []
+    if does_volume_tracking():
+      for i, well in enumerate(wells):
+        if self._channel_tips[i] is not None and not well.tracker.is_disabled:
+          well.tracker.remove_liquid(volume=volume)  # stages + validates
+          staged_trackers.append(well.tracker)
+    return staged_trackers
+
+  def _stage_wells_dispense(self, wells: List[Well], volume: float) -> List[VolumeTracker]:
+    """Stage ``add_liquid`` on each well whose channel holds a tip."""
+    staged_trackers: List[VolumeTracker] = []
+    if does_volume_tracking():
+      for i, well in enumerate(wells):
+        if self._channel_tips[i] is not None and not well.tracker.is_disabled:
+          well.tracker.add_liquid(volume=volume)  # stages + validates
+          staged_trackers.append(well.tracker)
     return staged_trackers
 
   @staticmethod
@@ -540,17 +590,12 @@ class _FlexHead:
   ) -> None:
     """Raise pre-wire if the nozzle array would overhang the container.
 
-    The engine centers the array on the cavity (the definition's
-    ``centerMultichannelOnWells`` quirk) and the caller's ``offset`` then
+    The engine centers the array on the cavity and the caller's ``offset``
     shifts it, so the shifted span must still fit on each axis. The footprint
-    read here is the deck-frame one the uploaded definition carries
-    (``container_footprint``), not the container's own x/y: a rotated
-    container presents its axes to the robot swapped, and guarding the
-    pre-rotation axis passes an array that overhangs it.
-
-    That footprint is the container's OUTER box, so this guard is as loose as
-    the definition is: PLR carries no cavity x/y, so an array that fits the
-    shell but not the cavity inside it passes both.
+    is the deck-frame one the definition carries, not the container's own
+    x/y: a rotated container presents its axes to the robot swapped. It is
+    the OUTER box, so an array that fits the shell but not the cavity inside
+    passes -- PLR carries no cavity x/y to check against.
     """
     o = offset if offset is not None else Coordinate.zero()
     cavity_x, cavity_y = container_footprint(container)
@@ -628,33 +673,19 @@ class _FlexHead:
     """Move to a well, named rather than measured -- ONE ``moveToWell`` command.
 
     Prefer this over :meth:`move_to` for anything positioned relative to
-    labware. The robot owns the geometry, so naming the well lets it work out
-    where that is and refuse a move it cannot make, the same way it checks an
-    aspirate. ``move_to`` sends raw deck coordinates, which nothing on either
-    side bounds-checks.
-
-    ``origin`` is where the offset is measured from: "top", "bottom",
-    "center", or "meniscus" (the last needs the robot to have a liquid level
-    for the well). So 10 mm above the well is ``origin="top"`` with
-    ``offset=Coordinate(z=10)``.
-
-    No mounted tip is required: the target is the tip bottom when one is
-    mounted, the nozzle when none is.
-
-    A tip spot is a valid target: the robot addresses a tip rack's wells by
-    the same names, so this is how you look at where a pickup would descend
-    before committing to it.
+    labware: naming the well lets the robot work out where that is and refuse
+    a move it cannot make, where ``move_to`` sends raw coordinates nothing
+    bounds-checks. ``origin`` is where the offset is measured from ("top",
+    "bottom", "center", or "meniscus", the last needing a probed liquid
+    level), so 10 mm above the well is ``origin="top"`` with
+    ``offset=Coordinate(z=10)``. A tip spot is a valid target. No mounted tip
+    is required: the target is the tip bottom when one is mounted, the nozzle
+    when none is.
     """
     self._warn_untested_hardware("move_to_well")
     if origin not in _WELL_ORIGINS:
       raise ValueError(f"origin must be one of {sorted(_WELL_ORIGINS)}, got {origin!r}")
-    if isinstance(target, (Well, TipSpot)):
-      parent = self._require_itemized_parent(target)
-      labware_id = await self.flex._ensure_labware_loaded(parent)
-      well_name = parent.get_child_identifier(target)
-    else:
-      labware_id = await self.flex._ensure_labware_loaded(target)
-      well_name = _CONTAINER_WELL_NAME
+    labware_id, well_name = await self._well_target(target)
 
     o = offset or Coordinate(0, 0, 0)
     params: Dict[str, Any] = {
@@ -1041,42 +1072,21 @@ class FlexHead1(_FlexHead):
   ) -> None:
     """Aspirate from a well or single-cavity container -- one ``aspirate`` command.
 
-    A ``Well`` is addressed through its plate parent by well name. A bare
-    ``Container`` (trough/reservoir) is its own robot-side labware whose
-    single-cavity definition exposes exactly one well, named "A1", so the
-    command names the container's labware id and well "A1"; the volume is
-    tracked against the container's own tracker. Either way a mounted tip is
-    required (checked before any wire command), and: stage -> validate ->
-    wire -> commit/rollback -- the tracker (``remove_liquid``) is staged
-    BEFORE the wire command, so an infeasible aspirate raises before any
-    hardware motion. A ``prepareToAspirate`` command is sent first if this is
-    the first aspirate since the last tip pickup.
+    A ``Well`` is addressed through its plate parent by well name; a bare
+    ``Container`` (trough/reservoir) at its own sole well. Requires a mounted
+    tip. Follows stage -> validate -> wire -> commit/rollback: the tracker
+    (``remove_liquid``) is staged BEFORE the wire command, so an infeasible
+    aspirate raises before any hardware motion. A ``prepareToAspirate``
+    command is sent first if this is the first aspirate since the last tip
+    pickup.
     """
     self._warn_untested_hardware("aspirate")
     self._require_mounted_tip()
-    if isinstance(target, Well):
-      parent = self._require_itemized_parent(target)
-      labware_id = await self.flex._ensure_labware_loaded(parent)
-      well_name = parent.get_child_identifier(target)
-    else:
-      labware_id = await self.flex._ensure_labware_loaded(target)
-      well_name = _CONTAINER_WELL_NAME
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
-
+    labware_id, well_name = await self._well_target(target)
     staged_trackers = self._stage_container_aspirate(target, volume)
-
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": well_name,
-      "volume": volume,
-      "flowRate": rate,
-    }
-    well_location = self._well_location([offset], [liquid_height])
-    if well_location is not None:
-      params["wellLocation"] = well_location
-
-    await self._execute_with_prepare("aspirate", params, staged_trackers)
+    await self._pipette(
+      "aspirate", labware_id, well_name, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
 
   async def dispense(
     self,
@@ -1088,38 +1098,17 @@ class FlexHead1(_FlexHead):
   ) -> None:
     """Dispense to a well or single-cavity container -- one ``dispense`` command.
 
-    A ``Well`` is addressed through its plate parent by well name; a bare
-    ``Container`` (trough/reservoir) is addressed as its own labware at
-    its sole robot-side well "A1". Either way a mounted tip is required (see
-    ``aspirate``), and: stage -> validate -> wire -> commit/rollback -- the
-    tracker (``add_liquid``) is staged BEFORE the wire command, so an
-    infeasible dispense raises before any hardware motion.
+    Mirrors ``aspirate``: same addressing, same mounted-tip requirement, and
+    stage -> validate -> wire -> commit/rollback with ``add_liquid`` staged
+    BEFORE the wire command.
     """
     self._warn_untested_hardware("dispense")
     self._require_mounted_tip()
-    if isinstance(target, Well):
-      parent = self._require_itemized_parent(target)
-      labware_id = await self.flex._ensure_labware_loaded(parent)
-      well_name = parent.get_child_identifier(target)
-    else:
-      labware_id = await self.flex._ensure_labware_loaded(target)
-      well_name = _CONTAINER_WELL_NAME
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
-
+    labware_id, well_name = await self._well_target(target)
     staged_trackers = self._stage_container_dispense(target, volume)
-
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": well_name,
-      "volume": volume,
-      "flowRate": rate,
-    }
-    well_location = self._well_location([offset], [liquid_height])
-    if well_location is not None:
-      params["wellLocation"] = well_location
-
-    await self._execute_liquid_op("dispense", params, staged_trackers)
+    await self._pipette(
+      "dispense", labware_id, well_name, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
 
   async def touch_tip(
     self,
@@ -1130,18 +1119,13 @@ class FlexHead1(_FlexHead):
     """Touch the mounted tip to the sides of ``well`` -- one ``touchTip`` command.
 
     ``radius`` is the fraction of the well radius the tip moves toward
-    (1.0 = the wall). ``offset`` IS the touch position, read from the well
-    top (the Opentrons Python API's absolute ``v_offset``): it REPLACES the
-    1 mm below the rim this touches at by default rather than shifting it the
-    way an ``aspirate``/``dispense`` offset does, so ``Coordinate(x=1)``
-    touches level with the rim. Requires a mounted tip (checked before any
-    wire command). No trackers are involved.
+    (1.0 = the wall); ``offset`` IS the touch position, not a shift (see
+    ``_touch_tip_params``). Requires a mounted tip, checked before any wire
+    command. No trackers are involved.
     """
     self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()
-    parent = self._require_itemized_parent(well)
-    labware_id = await self.flex._ensure_labware_loaded(parent)
-    well_name = parent.get_child_identifier(well)
+    labware_id, well_name = await self._well_target(well)
     await self._execute("touchTip", self._touch_tip_params(labware_id, well_name, radius, offset))
 
   async def liquid_probe(self, well: Well) -> float:
@@ -1197,7 +1181,26 @@ class FlexHead8(_FlexHead):
   one-time untested-hardware notice, same as the other heads.
   """
 
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset({"pick_up_tips"})
+  # Confirmed on a p50 single-channel Flex. Base-class ops are listed here
+  # rather than on _FlexHead because only this head has been on hardware.
+  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
+    {
+      "aspirate",
+      "configure_for_volume",
+      "dispense",
+      "drop_tips",
+      "get_tip_presence",
+      "liquid_probe",
+      "move_relative",
+      "move_to",
+      "move_to_addressable_area",
+      "move_to_well",
+      "pick_up_tips",
+      "position",
+      "try_liquid_probe",
+      "verify_tip_presence",
+    }
+  )
 
   def __init__(
     self,
@@ -1234,20 +1237,15 @@ class FlexHead8(_FlexHead):
     """Validate ``column`` against the labware's real grid; return the anchor
     well name plus the 8 resources the nozzle row covers, rearmost first.
 
-    Every column op calls this BEFORE any wire command (including
-    ``configureNozzleLayout`` and ``loadLabware``) so a rejected op ships
-    nothing. PLR itemized resources are column-major (item 0 is A1, item 1
-    is B1, ...), and the anchor name comes from the resource itself rather
-    than a fixed name table, so any column count is addressed safely.
+    Every column op calls this BEFORE any wire command so a rejected op ships
+    nothing.
 
-    The 8 nozzles sit at a 9 mm pitch, so on a denser layout they cover
-    every ``row_stride``-th row rather than adjacent rows: a 16-row (384)
-    plate has two interleaved sets of 8 (A,C,E,.. and B,D,F,..) per physical
-    column, matching the engine's own multi-channel coverage math. Those
-    sets are addressed as consecutive ``column`` indices, so a 384 plate
-    takes ``column`` 0-47 (physical column ``column // 2``, rear-row set
-    when even). A row count that is not a multiple of 8 has no such set and
-    is rejected.
+    The 8 nozzles sit at a 9 mm pitch, so on a denser layout they cover every
+    ``row_stride``-th row rather than adjacent rows: a 384 plate has two
+    interleaved sets of 8 per physical column, addressed as consecutive
+    ``column`` indices (so 0-47, physical column ``column // 2``, rear-row set
+    when even). A row count that is not a multiple of 8 has no such set and is
+    rejected.
     """
     rows = itemized.num_items_y
     row_stride, remainder = divmod(rows, _NUM_CHANNELS)
@@ -1418,29 +1416,10 @@ class FlexHead8(_FlexHead):
     well_name, column_wells = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
-
-    tracking = does_volume_tracking()
-    staged_trackers: List[Any] = []
-    if tracking:
-      for i, well in enumerate(column_wells):
-        if self._channel_tips[i] is None or well.tracker.is_disabled:
-          continue
-        well.tracker.remove_liquid(volume=volume)  # stages + validates
-        staged_trackers.append(well.tracker)
-
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": well_name,
-      "volume": volume,
-      "flowRate": rate,
-    }
-    well_location = self._well_location([offset], [liquid_height])
-    if well_location is not None:
-      params["wellLocation"] = well_location
-
-    await self._execute_with_prepare("aspirate", params, staged_trackers)
+    staged_trackers = self._stage_wells_aspirate(column_wells, volume)
+    await self._pipette(
+      "aspirate", labware_id, well_name, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
 
   async def dispense(
     self,
@@ -1464,29 +1443,10 @@ class FlexHead8(_FlexHead):
     well_name, column_wells = self._column_anchor_and_items(plate, column)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
-
-    tracking = does_volume_tracking()
-    staged_trackers: List[Any] = []
-    if tracking:
-      for i, well in enumerate(column_wells):
-        if self._channel_tips[i] is None or well.tracker.is_disabled:
-          continue
-        well.tracker.add_liquid(volume=volume)  # stages + validates
-        staged_trackers.append(well.tracker)
-
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": well_name,
-      "volume": volume,
-      "flowRate": rate,
-    }
-    well_location = self._well_location([offset], [liquid_height])
-    if well_location is not None:
-      params["wellLocation"] = well_location
-
-    await self._execute_liquid_op("dispense", params, staged_trackers)
+    staged_trackers = self._stage_wells_dispense(column_wells, volume)
+    await self._pipette(
+      "dispense", labware_id, well_name, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
 
   # --- Single-cavity container (trough/reservoir) liquid handling ---
 
@@ -1500,44 +1460,30 @@ class FlexHead8(_FlexHead):
   ) -> None:
     """Aspirate ``volume`` uL per channel from one single-cavity container.
 
-    All 8 nozzles dip into the same cavity (trough/reservoir), which is
-    its own robot-side labware whose single-cavity definition exposes
-    exactly one well, named "A1": ONE ``aspirate`` command names that
-    well. The engine centers the nozzle row in the cavity itself (the
-    definition's ``centerMultichannelOnWells`` quirk, carried by every
-    single-cavity reservoir definition, uploaded ones included), so only
-    the caller's ``offset``/``liquid_height`` ride the wire. Requires at
-    least one mounted tip and a cavity that contains the 63 mm row even
-    after the offset shifts it -- both checked before any wire command --
-    plus ALL nozzle mode (reset first if a single-tip op left the layout
-    otherwise). Each channel holding a tip draws ``volume``, so the
-    container's single tracker is staged with ``volume * (channels holding
-    tips)`` and committed/rolled back as one op (stage -> validate -> wire
-    -> commit/rollback). A ``prepareToAspirate`` command is sent first if
-    this is the first aspirate since the last tip pickup.
+    All 8 nozzles dip into the same cavity (trough/reservoir) and ONE
+    ``aspirate`` command names its sole well. The engine centers the nozzle
+    row in the cavity itself, so only the caller's ``offset``/
+    ``liquid_height`` ride the wire. Requires a mounted tip, a cavity the
+    offset-shifted row still fits, and ALL nozzle mode. Each channel holding
+    a tip draws ``volume``, so the container's single tracker is staged with
+    the total and settled as one op.
     """
     self._warn_untested_hardware("aspirate_container")
     self._require_mounted_tip()
     self._require_span_fits_container(container, 0.0, _EIGHT_CHANNEL_Y_SPAN, offset)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(container)
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
-
-    mounted = sum(1 for tip in self._channel_tips if tip is not None)
-    staged_trackers = self._stage_container_aspirate(container, volume * mounted)
-
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": _CONTAINER_WELL_NAME,
-      "volume": volume,
-      "flowRate": rate,
-    }
-    well_location = self._well_location([offset], [liquid_height])
-    if well_location is not None:
-      params["wellLocation"] = well_location
-
-    await self._execute_with_prepare("aspirate", params, staged_trackers)
+    staged_trackers = self._stage_container_aspirate(container, volume * self._mounted_count())
+    await self._pipette(
+      "aspirate",
+      labware_id,
+      _CONTAINER_WELL_NAME,
+      volume,
+      flow_rate,
+      offset,
+      liquid_height,
+      staged_trackers,
+    )
 
   async def dispense_container(
     self,
@@ -1549,36 +1495,25 @@ class FlexHead8(_FlexHead):
   ) -> None:
     """Dispense ``volume`` uL per channel into one single-cavity container.
 
-    Mirrors ``aspirate_container``: ONE ``dispense`` command at the
-    container's sole robot-side well "A1", engine-side centering via the
-    definition's ``centerMultichannelOnWells`` quirk, the same pre-wire
-    guards (mounted tip, offset-shifted row fits the cavity, ALL nozzle
-    mode), and the container's single tracker staged with ``volume *
-    (channels holding tips)`` and committed/rolled back as one op (stage ->
-    validate -> wire -> commit/rollback).
+    Mirrors ``aspirate_container``: same addressing, same pre-wire guards,
+    and the container's single tracker staged with the total.
     """
     self._warn_untested_hardware("dispense_container")
     self._require_mounted_tip()
     self._require_span_fits_container(container, 0.0, _EIGHT_CHANNEL_Y_SPAN, offset)
     await self._ensure_all_mode()
     labware_id = await self.flex._ensure_labware_loaded(container)
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
-
-    mounted = sum(1 for tip in self._channel_tips if tip is not None)
-    staged_trackers = self._stage_container_dispense(container, volume * mounted)
-
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": _CONTAINER_WELL_NAME,
-      "volume": volume,
-      "flowRate": rate,
-    }
-    well_location = self._well_location([offset], [liquid_height])
-    if well_location is not None:
-      params["wellLocation"] = well_location
-
-    await self._execute_liquid_op("dispense", params, staged_trackers)
+    staged_trackers = self._stage_container_dispense(container, volume * self._mounted_count())
+    await self._pipette(
+      "dispense",
+      labware_id,
+      _CONTAINER_WELL_NAME,
+      volume,
+      flow_rate,
+      offset,
+      liquid_height,
+      staged_trackers,
+    )
 
   async def touch_tip(
     self,
@@ -1590,15 +1525,9 @@ class FlexHead8(_FlexHead):
     """Touch the mounted tips to their well walls -- one ``touchTip`` command
     anchored at the column's rearmost well.
 
-    ``radius`` is the fraction of the well radius each tip moves toward
-    (1.0 = the wall). ``offset`` IS the touch position, read from the well
-    top (the Opentrons Python API's absolute ``v_offset``): it REPLACES the
-    1 mm below the rim this touches at by default rather than shifting it the
-    way an ``aspirate``/``dispense`` offset does, so ``Coordinate(x=1)``
-    touches level with the rim. Requires at least one mounted tip and a valid
-    column (both checked before any wire command) and ALL nozzle mode (reset
-    first if a single-tip op left the layout otherwise). No trackers are
-    involved.
+    ``radius`` and ``offset`` behave as in ``FlexHead1.touch_tip``. Requires
+    a mounted tip and a valid column, both checked before any wire command,
+    plus ALL nozzle mode. No trackers are involved.
     """
     self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()
@@ -1745,21 +1674,16 @@ class FlexHead8(_FlexHead):
     """Pick up one tip in SINGLE nozzle mode.
 
     Switches to SINGLE layout (``configureNozzleLayout``) before the
-    ``pickUpTip`` command. In that layout the pipette drives ONE nozzle, and
-    the engine moves it over whatever well is named -- so the nozzle, not the
+    ``pickUpTip`` command. In that layout the pipette drives ONE nozzle and
+    the engine moves it over whatever well is named, so the nozzle, not the
     well, decides which channel ends up holding the tip. An 8-channel Flex
-    can anchor on its "A1" or "H1" nozzle only (channel 0 or channel 7);
-    ``primary_nozzle`` picks between them, and left unset it is chosen for
-    you: the well's own row when that end can reach the slot the rack is on,
-    otherwise the end that can (see ``reachable_single_nozzles``). Raises
-    ``OpentronsError`` if that channel already holds a tip -- checked, like
-    the nozzle itself, before any wire command. Tip tracker changes are
-    staged (``commit=False``) before the wire command, then, after the wire
-    command succeeds, the hardware tip-presence sensor is checked
-    (``_verify_tips_seated()``) -- the tracker and ``_channel_tips`` are
-    committed only if that verification passes, and rolled back (with no
-    ``_channel_tips`` mutation) if the sensor reports a missed pickup (stage
-    -> validate -> wire -> verify -> commit/rollback).
+    can anchor on its "A1" or "H1" nozzle only; ``primary_nozzle`` picks
+    between them, and left unset it is the well's own row when that end can
+    reach the rack's slot, otherwise the end that can (see
+    ``reachable_single_nozzles``). Raises ``OpentronsError`` if that channel
+    already holds a tip -- checked, like the nozzle itself, before any wire
+    command. Then stage -> validate -> wire -> verify -> commit/rollback, as
+    in ``pick_up_tips``.
     """
     self._warn_untested_hardware("pick_up_single_tip")
     primary_nozzle = self._anchor_for(tip_rack, well, primary_nozzle)
@@ -1816,27 +1740,10 @@ class FlexHead8(_FlexHead):
     self._active_single_channel()
     self._require_reach_in_single_layout(plate, well)
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": well,
-      "volume": volume,
-      "flowRate": rate,
-      "wellLocation": {
-        "origin": "bottom",
-        "offset": {"x": 0, "y": 0, "z": _DEFAULT_WELL_BOTTOM_CLEARANCE},
-      },
-    }
-
-    target = plate.get_item(well)
-    tracking = does_volume_tracking()
-    staged_trackers: List[Any] = []
-    if tracking and not target.tracker.is_disabled:
-      target.tracker.remove_liquid(volume=volume)  # stages + validates
-      staged_trackers.append(target.tracker)
-
-    await self._execute_with_prepare("aspirate", params, staged_trackers)
+    staged_trackers = self._stage_container_aspirate(plate.get_item(well), volume)
+    await self._pipette(
+      "aspirate", labware_id, well, volume, flow_rate, None, None, staged_trackers
+    )
 
   async def dispense_single(
     self,
@@ -1850,27 +1757,10 @@ class FlexHead8(_FlexHead):
     self._active_single_channel()
     self._require_reach_in_single_layout(plate, well)
     labware_id = await self.flex._ensure_labware_loaded(plate)
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": well,
-      "volume": volume,
-      "flowRate": rate,
-      "wellLocation": {
-        "origin": "bottom",
-        "offset": {"x": 0, "y": 0, "z": _DEFAULT_WELL_BOTTOM_CLEARANCE},
-      },
-    }
-
-    target = plate.get_item(well)
-    tracking = does_volume_tracking()
-    staged_trackers: List[Any] = []
-    if tracking and not target.tracker.is_disabled:
-      target.tracker.add_liquid(volume=volume)  # stages + validates
-      staged_trackers.append(target.tracker)
-
-    await self._execute_liquid_op("dispense", params, staged_trackers)
+    staged_trackers = self._stage_container_dispense(plate.get_item(well), volume)
+    await self._pipette(
+      "dispense", labware_id, well, volume, flow_rate, None, None, staged_trackers
+    )
 
   async def drop_single_tip(self, trash: Trash) -> None:
     """Drop the single mounted tip to trash and restore ALL nozzle mode.
@@ -2043,56 +1933,30 @@ class FlexHead96(_FlexHead):
     """Aspirate a whole plate or one single-cavity container -- one ``aspirate`` command.
 
     A ``Plate`` (which must have exactly 96 positions) is anchored at its
-    "A1" well and covered one-to-one: ``Well.tracker`` (``remove_liquid``)
-    is staged for every well whose channel actually holds a tip
-    (None-skip). A bare ``Container`` (trough/reservoir) is its own
-    robot-side labware whose single-cavity definition exposes exactly one
-    well, named "A1": the engine centers the 12x8 nozzle grid in the
-    cavity itself (the definition's ``centerMultichannelOnWells`` quirk), a
-    footprint containing the grid's 99 x 63 mm span even after the offset
-    shifts it is required, and the container's single tracker is staged
-    with ``volume * (channels holding tips)``. Either way at least one
-    mounted tip is required, and: stage -> validate -> wire ->
-    commit/rollback, with an infeasible aspirate raising before any
-    hardware motion (every check above runs before any wire command), and a
-    ``prepareToAspirate`` command sent first if this is the first aspirate
-    since the last tip pickup.
+    "A1" well and covered one-to-one, staging ``remove_liquid`` per well
+    whose channel holds a tip. A bare ``Container`` (trough/reservoir) is
+    addressed at its sole well, with the engine centering the nozzle grid in
+    the cavity and the container's single tracker staged with the total.
+    Either way a mounted tip is required and every check runs before any wire
+    command. A ``prepareToAspirate`` command is sent first if this is the
+    first aspirate since the last tip pickup.
     """
     self._warn_untested_hardware("aspirate")
     self._require_mounted_tip()
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
-    staged_trackers: List[Any] = []
     if isinstance(target, Plate):
-      wells = self._check_full_coverage(target)
       labware_id = await self.flex._ensure_labware_loaded(target)
       well_name = self._ANCHOR_WELL_NAME
-      if does_volume_tracking():
-        for i, well in enumerate(wells):
-          if self._channel_tips[i] is None or well.tracker.is_disabled:
-            continue
-          well.tracker.remove_liquid(volume=volume)  # stages + validates
-          staged_trackers.append(well.tracker)
+      staged_trackers = self._stage_wells_aspirate(self._check_full_coverage(target), volume)
     else:
       self._require_span_fits_container(
         target, _NINETY_SIX_HEAD_X_SPAN, _NINETY_SIX_HEAD_Y_SPAN, offset
       )
       labware_id = await self.flex._ensure_labware_loaded(target)
       well_name = _CONTAINER_WELL_NAME
-      mounted = sum(1 for tip in self._channel_tips if tip is not None)
-      staged_trackers.extend(self._stage_container_aspirate(target, volume * mounted))
-    well_location = self._well_location([offset], [liquid_height])
-
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": well_name,
-      "volume": volume,
-      "flowRate": rate,
-    }
-    if well_location is not None:
-      params["wellLocation"] = well_location
-
-    await self._execute_with_prepare("aspirate", params, staged_trackers)
+      staged_trackers = self._stage_container_aspirate(target, volume * self._mounted_count())
+    await self._pipette(
+      "aspirate", labware_id, well_name, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
 
   async def dispense(
     self,
@@ -2104,52 +1968,26 @@ class FlexHead96(_FlexHead):
   ) -> None:
     """Dispense to a whole plate or one single-cavity container -- one ``dispense`` command.
 
-    Mirrors ``aspirate``: a ``Plate`` is anchored at its "A1" well with
-    ``Well.tracker`` (``add_liquid``) staged per tip-holding channel
-    (None-skip); a bare ``Container`` is addressed at its sole robot-side
-    well "A1" with the engine centering the nozzle grid in the cavity
-    (the ``centerMultichannelOnWells`` quirk), the same pre-wire footprint
-    guard (offset-shifted grid fits), and the container's single tracker
-    staged with ``volume * (channels holding tips)``. Either way at least
-    one mounted tip is required, and: stage -> validate -> wire ->
-    commit/rollback, with an infeasible dispense raising before any
-    hardware motion.
+    Mirrors ``aspirate``: same addressing, same pre-wire guards, with
+    ``add_liquid`` staged per tip-holding channel for a plate and the total
+    staged against a container's single tracker.
     """
     self._warn_untested_hardware("dispense")
     self._require_mounted_tip()
-    rate = flow_rate if flow_rate is not None else self.default_flow_rates().dispense
-    staged_trackers: List[Any] = []
     if isinstance(target, Plate):
-      wells = self._check_full_coverage(target)
       labware_id = await self.flex._ensure_labware_loaded(target)
       well_name = self._ANCHOR_WELL_NAME
-      if does_volume_tracking():
-        for i, well in enumerate(wells):
-          if self._channel_tips[i] is None or well.tracker.is_disabled:
-            continue
-          well.tracker.add_liquid(volume=volume)  # stages + validates
-          staged_trackers.append(well.tracker)
+      staged_trackers = self._stage_wells_dispense(self._check_full_coverage(target), volume)
     else:
       self._require_span_fits_container(
         target, _NINETY_SIX_HEAD_X_SPAN, _NINETY_SIX_HEAD_Y_SPAN, offset
       )
       labware_id = await self.flex._ensure_labware_loaded(target)
       well_name = _CONTAINER_WELL_NAME
-      mounted = sum(1 for tip in self._channel_tips if tip is not None)
-      staged_trackers.extend(self._stage_container_dispense(target, volume * mounted))
-    well_location = self._well_location([offset], [liquid_height])
-
-    params: Dict[str, Any] = {
-      "pipetteId": self.pipette_id,
-      "labwareId": labware_id,
-      "wellName": well_name,
-      "volume": volume,
-      "flowRate": rate,
-    }
-    if well_location is not None:
-      params["wellLocation"] = well_location
-
-    await self._execute_liquid_op("dispense", params, staged_trackers)
+      staged_trackers = self._stage_container_dispense(target, volume * self._mounted_count())
+    await self._pipette(
+      "dispense", labware_id, well_name, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
 
   async def touch_tip(
     self,
@@ -2160,14 +1998,9 @@ class FlexHead96(_FlexHead):
     """Touch the mounted tips to their well walls -- one ``touchTip`` command
     anchored at "A1", fanned to all 96 channels.
 
-    ``radius`` is the fraction of the well radius each tip moves toward
-    (1.0 = the wall). ``offset`` IS the touch position, read from the well
-    top (the Opentrons Python API's absolute ``v_offset``): it REPLACES the
-    1 mm below the rim this touches at by default rather than shifting it the
-    way an ``aspirate``/``dispense`` offset does, so ``Coordinate(x=1)``
-    touches level with the rim. Requires at least one mounted tip and a
-    96-position plate (both checked before any wire command). No trackers are
-    involved.
+    ``radius`` and ``offset`` behave as in ``FlexHead1.touch_tip``. Requires
+    a mounted tip and a 96-position plate, both checked before any wire
+    command. No trackers are involved.
     """
     self._warn_untested_hardware("touch_tip")
     self._require_mounted_tip()
