@@ -6,6 +6,7 @@ import logging
 import sys
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
+from pylabrobot.events import coordinate_reference, emit_event, resource_reference
 from pylabrobot.serializer import SerializableMixin, deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
@@ -389,6 +390,13 @@ class Resource(SerializableMixin):
     for callback in self._did_assign_resource_callbacks:
       callback(resource)
 
+    emit_event(
+      "resource.assigned",
+      resource=resource_reference(resource),
+      parent=resource_reference(self),
+      location=coordinate_reference(resource.location),
+    )
+
   def assign_child_by_anchor(
     self,
     resource: Resource,
@@ -545,6 +553,9 @@ class Resource(SerializableMixin):
     for callback in self._will_unassign_resource_callbacks:
       callback(resource)
 
+    # Preserve the pose for the event before unassignment clears it.
+    previous_location = coordinate_reference(resource.location)
+
     # Update the tree structure
     resource.parent = None
     resource.location = None
@@ -559,6 +570,13 @@ class Resource(SerializableMixin):
     # Call "did unassign" callbacks
     for callback in self._did_unassign_resource_callbacks:
       callback(resource)
+
+    emit_event(
+      "resource.unassigned",
+      resource=resource_reference(resource),
+      previous_parent=resource_reference(self),
+      previous_location=previous_location,
+    )
 
   def unassign(self):
     """Unassign this resource from its parent."""

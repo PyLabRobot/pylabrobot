@@ -1,6 +1,7 @@
 import random
 from typing import List, Literal, Optional, Union, cast
 
+from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.legacy.machines import Machine
 from pylabrobot.resources import (
   Coordinate,
@@ -18,6 +19,33 @@ from .backend import IncubatorBackend
 
 class NoFreeSiteError(Exception):
   pass
+
+
+def _fetch_plate_event_context(incubator: "Incubator", plate_name: str, **_: object) -> dict:
+  try:
+    site = incubator.get_site_by_plate_name(plate_name)
+    plate = site.resource
+  except ResourceNotFoundError:
+    site = None
+    plate = None
+  return {
+    "device": resource_reference(incubator),
+    "resources": [] if plate is None else [resource_reference(plate)],
+    "source": resource_reference(site),
+    "destination": resource_reference(incubator.loading_tray),
+  }
+
+
+def _take_in_plate_event_context(
+  incubator: "Incubator", site: Union[PlateHolder, Literal["random", "smallest"]], **_: object
+) -> dict:
+  plate = incubator.loading_tray.resource
+  return {
+    "device": resource_reference(incubator),
+    "resources": [] if plate is None else [resource_reference(plate)],
+    "source": resource_reference(incubator.loading_tray),
+    "destination": resource_reference(site) if isinstance(site, PlateHolder) else site,
+  }
 
 
 class Incubator(Machine, Resource):
@@ -73,6 +101,7 @@ class Incubator(Machine, Resource):
           return site
     raise ResourceNotFoundError(f"Plate {plate_name} not found in incubator '{self.name}'")
 
+  @evented_operation("incubator.fetch_plate", _fetch_plate_event_context)
   async def fetch_plate_to_loading_tray(self, plate_name: str, **backend_kwargs) -> Plate:
     """Fetch a plate from the incubator and put it on the loading tray."""
 
@@ -112,6 +141,7 @@ class Incubator(Machine, Resource):
   def find_random_site(self, plate: Plate) -> PlateHolder:
     return random.choice(self._find_available_sites_sorted(plate))
 
+  @evented_operation("incubator.take_in_plate", _take_in_plate_event_context)
   async def take_in_plate(
     self, site: Union[PlateHolder, Literal["random", "smallest"]], **backend_kwargs
   ):
