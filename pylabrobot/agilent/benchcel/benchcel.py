@@ -1,4 +1,4 @@
-"""Backend for the Agilent BenchCel 4R microplate handler.
+"""Driver for the Agilent BenchCel 4R microplate handler.
 
 The BenchCel exposes a binary TCP protocol on port 7612 by default. This module
 implements the command set reverse-engineered from Agilent VWorks packet
@@ -54,7 +54,7 @@ Safety
 ------
 Keep the robot and stacker area clear, make sure E-stop/power-off is available,
 and ensure VWorks or any other control client is disconnected before using this
-backend. The BenchCel appears to allow only one effective control client at a
+driver. The BenchCel appears to allow only one effective control client at a
 time; if another client owns the session, connections may be accepted and then
 immediately closed.
 
@@ -81,23 +81,20 @@ import asyncio
 import dataclasses
 import logging
 import struct
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Literal, Optional, Sequence, Tuple, Union, cast
 
+from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.io.socket import Socket
-from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, Rotation
-from pylabrobot.resources.resource_stack import ResourceStack
+from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, ResourceStack, Rotation
 
 from .labware import BenchCelLabwareSettings, resolve_benchcel_labware_settings
 from .stacks import benchcel_4r_stacks
 
 logger = logging.getLogger(__name__)
 
-# Stackers use target IDs 0x00..0x03 (same as zero-based stacker index). The
-# right teachpoint captured from VWorks used 0x1e. Live tests confirmed that
-# teachpoint slots can be written standalone with command 0x73; an undefined
-# teachpoint slot may instead send the arm to a home-like position.
-RIGHT_TEACHPOINT_ID = 0x1E
-TEST_LEFT_TEACHPOINT_ID = 0x1F
+# Stackers use target IDs 0x00..0x03 (the zero-based stacker indexes). Numeric
+# teachpoint slots can be written with command 0x73; an undefined teachpoint
+# slot may instead send the arm to a home-like position.
 
 
 class BenchCelProtocolError(RuntimeError):
@@ -120,6 +117,18 @@ class BenchCelDeviceError(RuntimeError):
     super().__init__(message)
     self.message = message
     self.frame = frame
+
+
+class EmptyStackError(RuntimeError):
+  """Raised when a transfer requests a plate from an empty stack."""
+
+
+class LoadingTrayOccupiedError(RuntimeError):
+  """Raised when a transfer would collide with a plate on the loading tray."""
+
+
+class LoadingTrayEmptyError(RuntimeError):
+  """Raised when an upstack operation requires a plate on the loading tray."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -183,16 +192,15 @@ class SensorStatus:
 
 
 @dataclasses.dataclass(frozen=True)
-class ArmStatus:
-  """Partially decoded ``0x87`` general status response.
+class BenchCelArmPose:
+  """Partially decoded BenchCel arm pose from a ``0x87`` status response.
 
   The remaining bytes are still unknown and preserved in ``raw_payload``.
   """
 
-  theta: float
-  x: float
-  z: float
-  gripper: float
+  location: Coordinate
+  rotation: Rotation
+  gripper_position: float
   raw_payload: bytes
 
 
@@ -201,7 +209,15 @@ class GeneralStatus:
   """``0x87`` general status response."""
 
   raw_payload: bytes
-  arm_status: Optional[ArmStatus] = None
+  arm_pose: Optional[BenchCelArmPose] = None
+
+
+@dataclasses.dataclass(frozen=True)
+class BenchCelStatusSnapshot:
+  """One complete client-side BenchCel status polling cycle."""
+
+  stackers: Dict[int, SensorStatus]
+  general: GeneralStatus
 
 
 @dataclasses.dataclass(frozen=True)
@@ -220,22 +236,8 @@ class Teachpoint:
   gripper_open_limit: float
   respect_approach_height_when_not_holding_plate: bool
   something_above_this_point: bool
-  teachpoint_id: int = TEST_LEFT_TEACHPOINT_ID
+  teachpoint_id: int
   name: Optional[str] = None
-
-
-TEST_LEFT_TEACHPOINT = Teachpoint(
-  theta=89.99874114990234,
-  x=-360.8802795410156,
-  z=-10.0,
-  approach_height=20.0,
-  cavity_depth=0.0,
-  gripper_open_limit=-1.5,
-  respect_approach_height_when_not_holding_plate=True,
-  something_above_this_point=False,
-  teachpoint_id=TEST_LEFT_TEACHPOINT_ID,
-  name="test-left",
-)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -265,6 +267,9 @@ class CurrentPositionResponse:
 
   selector: int
   raw_payload: bytes
+
+
+AxisName = Literal["theta", "x", "z", "gripper"]
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +357,7 @@ def _target_id(target_id: int) -> int:
   return target_id
 
 
-# Command IDs from VWorks captures/live tests. The backend methods construct
+# Command IDs from VWorks captures/live tests. The device methods construct
 # frames directly, using private payload helpers for nontrivial binary layouts.
 CMD_ERROR = 0x02
 CMD_HOME_MOTORS = 0x47
@@ -452,15 +457,14 @@ def parse_sensor_response(frame: Frame) -> SensorStatus:
   )
 
 
-def parse_arm_status_from_87_payload(payload: bytes) -> ArmStatus:
+def parse_arm_pose_from_87_payload(payload: bytes) -> BenchCelArmPose:
   """Decode known arm-position fields from a 66-byte ``0x87`` payload."""
   if len(payload) != 66:
     raise BenchCelProtocolError(f"expected 66-byte 0x87 payload, got {len(payload)} bytes")
-  return ArmStatus(
-    theta=_f32le(payload, 4),
-    x=_f32le(payload, 12),
-    z=_f32le(payload, 20),
-    gripper=_f32le(payload, 28),
+  return BenchCelArmPose(
+    location=Coordinate(x=_f32le(payload, 12), z=_f32le(payload, 20)),
+    rotation=Rotation(z=_f32le(payload, 4)),
+    gripper_position=_f32le(payload, 28),
     raw_payload=payload,
   )
 
@@ -469,8 +473,8 @@ def parse_general_status_response(frame: Frame) -> GeneralStatus:
   """Parse the ``0x87`` general status response."""
   if frame.command_id != CMD_GENERAL_STATUS:
     raise BenchCelProtocolError(f"expected 0x87 general status frame, got {frame}")
-  arm_status = parse_arm_status_from_87_payload(frame.payload) if len(frame.payload) == 66 else None
-  return GeneralStatus(raw_payload=frame.payload, arm_status=arm_status)
+  arm_pose = parse_arm_pose_from_87_payload(frame.payload) if len(frame.payload) == 66 else None
+  return GeneralStatus(raw_payload=frame.payload, arm_pose=arm_pose)
 
 
 def parse_axis_bounds_response(frame: Frame) -> AxisBoundsResponse:
@@ -501,27 +505,49 @@ def parse_current_position_response(frame: Frame, *, selector: int = 1) -> Curre
   return CurrentPositionResponse(selector=selector, raw_payload=frame.payload)
 
 
+def _downstack_event_context(
+  benchcel: "BenchCel4R", stack: ResourceStack, *, timeout: float = 30.0
+) -> dict:
+  plate = stack.get_top_item() if len(stack.children) > 0 else None
+  return {
+    "device": resource_reference(benchcel),
+    "resources": [] if plate is None else [resource_reference(plate)],
+    "source": resource_reference(stack),
+    "destination": resource_reference(benchcel.loading_tray),
+  }
+
+
+def _upstack_event_context(
+  benchcel: "BenchCel4R", stack: ResourceStack, *, timeout: float = 30.0
+) -> dict:
+  plate = benchcel.loading_tray.resource
+  return {
+    "device": resource_reference(benchcel),
+    "resources": [] if plate is None else [resource_reference(plate)],
+    "source": resource_reference(benchcel.loading_tray),
+    "destination": resource_reference(stack),
+  }
+
+
+def _stack_transfer_event_context(
+  benchcel: "BenchCel4R",
+  source: ResourceStack,
+  destination: ResourceStack,
+  *,
+  timeout: float = 30.0,
+) -> dict:
+  plate = source.get_top_item() if len(source.children) > 0 else None
+  return {
+    "device": resource_reference(benchcel),
+    "resources": [] if plate is None else [resource_reference(plate)],
+    "source": resource_reference(source),
+    "destination": resource_reference(destination),
+  }
+
+
 # ---------------------------------------------------------------------------
-# Backend
+# Device
 # ---------------------------------------------------------------------------
-
-
-class _BenchCelSocket(Socket):
-  """Socket variant that can bind to a specific local/source IP."""
-
-  def __init__(self, *args, source_ip: Optional[str] = None, **kwargs):
-    super().__init__(*args, **kwargs)
-    self._source_ip = source_ip
-
-  async def _connect(self):
-    local_addr = (self._source_ip, 0) if self._source_ip is not None else None
-    self._reader, self._writer = await asyncio.open_connection(
-      host=self._host,
-      port=self._port,
-      ssl=self._ssl_context,
-      server_hostname=self._server_hostname,
-      local_addr=local_addr,
-    )
 
 
 DEFAULT_PORT = 7612
@@ -532,8 +558,8 @@ class BenchCel4R(Resource):
   """Agilent BenchCel 4R microplate handler.
 
   The BenchCel is a sequential ("stacking access") storage device: each of its four stackers is a
-  single-ended LIFO stack of plates. It is modelled with the ``Stacker`` capability
-  and exposes ``downstack``/``upstack`` transfers.
+  single-ended LIFO stack of plates. The device exposes ``downstack``/``upstack`` transfers and
+  tracks the expected plate order in four :class:`~pylabrobot.resources.ResourceStack` objects.
 
   The four ``ResourceStack`` stacks track the expected plate order/content of each stacker.
   """
@@ -548,8 +574,7 @@ class BenchCel4R(Resource):
     read_poll_timeout: float = 0.25,
     loading_tray_teachpoint_id: Optional[int] = None,
     source_ip: Optional[str] = None,
-    backend: Optional[BenchCel4R] = None,
-    stacks: Optional[List[ResourceStack]] = None,
+    stacks: Optional[Sequence[ResourceStack]] = None,
     labware: Optional[Union[Plate, BenchCelLabwareSettings, dict]] = None,
     loading_tray_location: Optional[Coordinate] = None,
     size_x: float = 0.0,
@@ -558,9 +583,12 @@ class BenchCel4R(Resource):
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = "Agilent BenchCel 4R",
+    _create_default_resources: bool = True,
   ):
     """
     Args:
+      name: Resource name for the device.
+      host: IP address or DNS name of the BenchCel Ethernet interface.
       port: TCP port. Defaults to 7612, as observed in VWorks captures.
       timeout: Default command timeout in seconds.
       read_poll_timeout: Per-read timeout used while assembling framed replies.
@@ -568,23 +596,17 @@ class BenchCel4R(Resource):
         (loading/unloading) point by :meth:`downstack` and :meth:`upstack`.
         There is no fixed loading position on the
         BenchCel: the transfer point is a teachpoint you taught in VWorks (or
-        with :meth:`save_teachpoint`). This is intentionally not defaulted --
-        transfers raise unless a teachpoint is configured here or passed per
-        call via ``teachpoint_id``, because an unset/wrong teachpoint can send
-        the arm to a home-like pose. The captured VWorks right teachpoint was
-        ``0x1e``, but do not rely on that without verifying it on your device.
+        with :meth:`set_teachpoint`). This is intentionally not defaulted --
+        transfers raise unless a teachpoint is configured here, because an
+        unset or wrong teachpoint can send the arm to a home-like pose. The
+        captured VWorks transfer teachpoint was ``0x1e``, but do not rely on
+        that without verifying it on your device.
       source_ip: Optional local/source IP to bind, useful on hosts with multiple
         network interfaces connected to different subnets.
       labware: Optional PLR plate, calculated settings object, or serialized
         settings dict. The device must still be configured with matching VWorks
         labware settings; this value is used for PLR metadata, serialization,
         and validation.
-      name: Resource name for the device.
-      host: IP address or DNS name of the BenchCel Ethernet interface.
-      loading_tray_teachpoint_id: Teachpoint target ID used as the transfer point by the stacker's
-        ``downstack``/``upstack``. The BenchCel has no fixed loading position; this must be a
-        teachpoint taught on the device. Transfers raise unless it is set. There is no default
-        because an unset/wrong teachpoint can send the arm to a home-like pose.
       stacks: Optionally provide custom ``ResourceStack`` stacks; defaults to four generic stacks.
       loading_tray_location: Cosmetic ``Coordinate`` of the loading-tray resource (resource tree /
         visualization only; the real transfer position is the teachpoint on the device).
@@ -599,7 +621,7 @@ class BenchCel4R(Resource):
     self.labware_settings = (
       resolve_benchcel_labware_settings(labware) if labware is not None else None
     )
-    self.io = _BenchCelSocket(
+    self.io = Socket(
       human_readable_device_name="Agilent BenchCel 4R",
       host=host,
       port=port,
@@ -622,29 +644,36 @@ class BenchCel4R(Resource):
       model=model,
     )
 
-    self.loading_tray = PlateHolder(
-      name=f"{name}_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
-    )
-    self.assign_child_resource(
-      self.loading_tray, location=loading_tray_location or Coordinate.zero()
-    )
+    if _create_default_resources:
+      self.loading_tray = PlateHolder(
+        name=f"{name}_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
+      )
+      self.assign_child_resource(
+        self.loading_tray, location=loading_tray_location or Coordinate.zero()
+      )
 
-    self._stacks = stacks if stacks is not None else benchcel_4r_stacks()
-    for stack in self._stacks:
-      self.assign_child_resource(stack, location=None)
+      self._stacks = (
+        list(stacks) if stacks is not None else benchcel_4r_stacks(name_prefix=f"{name}_stacker")
+      )
+      if len(self._stacks) != NUM_STACKERS:
+        raise ValueError(f"BenchCel4R requires exactly {NUM_STACKERS} stacks")
+      for stack in self._stacks:
+        self.assign_child_resource(stack, location=Coordinate.zero())
 
   async def setup(self) -> None:
     """Open the TCP connection to the BenchCel."""
-    logger.debug("[benchcel] connecting to %s:%d", self.host, self.port)
+    logger.info("[benchcel] connecting to %s:%d", self.host, self.port)
     await asyncio.wait_for(self.io.setup(), timeout=self.timeout)
+    logger.info("[benchcel] connected to %s:%d", self.host, self.port)
 
   async def stop(self) -> None:
     """Close the TCP connection. Safe to call even if never set up."""
     await self.io.stop()
     self._rx_buffer.clear()
+    logger.info("[benchcel] disconnected from %s:%d", self.host, self.port)
 
   def serialize(self) -> dict:
-    """Return a JSON-serialisable view of this backend's construction args."""
+    """Return a JSON-serialisable view of this device's construction arguments."""
     return {
       **super().serialize(),
       "host": self.host,
@@ -655,6 +684,39 @@ class BenchCel4R(Resource):
       "source_ip": self.source_ip,
       "labware": self.labware_settings.to_dict() if self.labware_settings is not None else None,
     }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "BenchCel4R":
+    """Restore a BenchCel and its serialized tray, stacks, and tracked plates."""
+    data_copy = data.copy()
+    data_copy["children"] = [
+      {
+        **child,
+        **(
+          {"location": Coordinate.zero().serialize()}
+          if child.get("type") == "ResourceStack" and "location" not in child
+          else {}
+        ),
+      }
+      for child in data_copy.get("children", [])
+    ]
+    data_copy["_create_default_resources"] = False
+    benchcel = cast(BenchCel4R, super().deserialize(data_copy, allow_marshal=allow_marshal))
+
+    tray = next(
+      (
+        child
+        for child in benchcel.children
+        if isinstance(child, PlateHolder) and child.name == f"{benchcel.name}_tray"
+      ),
+      None,
+    )
+    stacks = [child for child in benchcel.children if isinstance(child, ResourceStack)]
+    if tray is None or len(stacks) != NUM_STACKERS:
+      raise ValueError("Serialized BenchCel must contain one loading tray and exactly four stacks")
+    benchcel.loading_tray = tray
+    benchcel._stacks = stacks
+    return benchcel
 
   # ------------------------------------------------------------------ wire IO
 
@@ -740,7 +802,7 @@ class BenchCel4R(Resource):
       return await self._wait_for_command_ack(frame.command_id, timeout=timeout)
     return await self._wait_for_ack_payload(ack_payload, timeout=timeout)
 
-  async def send_frame(
+  async def _send_frame(
     self,
     frame: Frame,
     *,
@@ -762,13 +824,14 @@ class BenchCel4R(Resource):
 
   # --------------------------------------------------------------- movements
 
-  async def home_motors(self, *, timeout: float = 90.0, reconnect: bool = True) -> bool:
-    """Send VWorks ``home motors`` (``0x47``) and wait for the device to recover.
+  async def home(self, *, timeout: float = 90.0) -> None:
+    """Home all BenchCel motors and reconnect when the device becomes responsive.
 
     Live testing showed this command drops the TCP control session while the
-    motors home. If ``reconnect=True`` (default), this method reconnects and
-    polls ``0x87`` status until the device responds again.
+    motors home. This method reconnects and polls status until the device
+    responds again.
     """
+    logger.info("[benchcel] homing motors")
     async with self._lock:
       cmd = Frame(CMD_HOME_MOTORS, b"\x01")
       try:
@@ -778,13 +841,8 @@ class BenchCel4R(Resource):
 
       try:
         await self._wait_for_command_ack(cmd.command_id, timeout=5.0)
-        if not reconnect:
-          return True
       except (BenchCelProtocolError, BenchCelTimeoutError, OSError, ConnectionError):
         pass
-
-      if not reconnect:
-        return True
 
       loop = asyncio.get_running_loop()
       deadline = loop.time() + timeout
@@ -798,7 +856,8 @@ class BenchCel4R(Resource):
           await asyncio.wait_for(self.io.setup(), timeout=min(self.timeout, 5.0))
           await self._write_frame(Frame(CMD_GENERAL_STATUS), timeout=2.0)
           await self._read_until(lambda f: f.command_id == CMD_GENERAL_STATUS, timeout=2.0)
-          return True
+          logger.info("[benchcel] motors homed")
+          return
         except (
           BenchCelProtocolError,
           BenchCelTimeoutError,
@@ -810,15 +869,17 @@ class BenchCel4R(Resource):
           await asyncio.sleep(2.0)
       raise BenchCelTimeoutError(f"home-motors: device not responsive within {timeout}s")
 
-  async def home(self, *, timeout: float = 15.0) -> Frame:
-    """Send the home command and wait for completion."""
-    return await self.send_frame(Frame(CMD_HOME, b"\x01"), timeout=timeout)
+  async def _send_home_command(self, *, timeout: float = 15.0) -> Frame:
+    """Send the lower-level ``0x48`` home command and wait for completion."""
+    return await self._send_frame(Frame(CMD_HOME, b"\x01"), timeout=timeout)
 
-  async def move_to_stacker(self, stacker: int, *, timeout: float = 20.0) -> Frame:
-    """Move the arm to stacker 1, 2, 3, or 4."""
-    return await self.move_to_target(_stacker_index(stacker), timeout=timeout)
+  async def move_to_stacker(self, stack: ResourceStack, *, timeout: float = 20.0) -> None:
+    """Move the arm to one of this BenchCel's configured stacks."""
+    stacker = self._stack_to_stacker(stack)
+    await self._move_to_target(_stacker_index(stacker), timeout=timeout)
+    logger.info("[benchcel] moved arm to stacker %d", stacker)
 
-  async def move_to_target(
+  async def _move_to_target(
     self,
     target_id: int,
     *,
@@ -826,7 +887,7 @@ class BenchCel4R(Resource):
     timeout: float = 20.0,
   ) -> Frame:
     """Move to a one-byte BenchCel target id using command ``0x65``."""
-    return await self.send_frame(
+    return await self._send_frame(
       Frame(CMD_MOVE_TO_TARGET, _move_to_target_payload(target_id, approach_height)),
       timeout=timeout,
     )
@@ -837,257 +898,212 @@ class BenchCel4R(Resource):
     *,
     approach_height: float = 20.0,
     timeout: float = 20.0,
-  ) -> Frame:
+  ) -> None:
     """Move to a teachpoint target id using command ``0x65``."""
-    return await self.move_to_target(
+    await self._move_to_target(
       teachpoint_id,
       approach_height=approach_height,
       timeout=timeout,
     )
+    logger.info("[benchcel] moved arm to teachpoint %d", teachpoint_id)
 
-  async def move_to_right_teachpoint(
-    self,
-    *,
-    approach_height: float = 20.0,
-    timeout: float = 20.0,
-  ) -> Frame:
-    """Move to the captured right teachpoint target id ``0x1e``."""
-    return await self.move_to_teachpoint(
-      RIGHT_TEACHPOINT_ID,
-      approach_height=approach_height,
-      timeout=timeout,
-    )
-
-  async def pick_plate_from_target(
+  async def _pick_up_at_target(
     self,
     target_id: int,
     *,
     timeout: float = 30.0,
   ) -> Frame:
     """Pick/downstack a plate from a target id using command ``0x62``."""
-    return await self.send_frame(
+    return await self._send_frame(
       Frame(CMD_PICK, _target_payload(target_id)),
       timeout=timeout,
     )
 
-  async def place_plate_at_target(
+  async def _drop_at_target(
     self,
     target_id: int,
     *,
     timeout: float = 30.0,
   ) -> Frame:
     """Place/upstack a plate at a target id using command ``0x63``."""
-    return await self.send_frame(
+    return await self._send_frame(
       Frame(CMD_PLACE, _target_payload(target_id)),
       timeout=timeout,
     )
 
-  async def pick_plate_from_teachpoint(
+  async def _pick_up_at_teachpoint(
     self,
     teachpoint_id: int,
     *,
     timeout: float = 30.0,
   ) -> Frame:
     """Pick a plate from a teachpoint target id using command ``0x62``."""
-    return await self.pick_plate_from_target(teachpoint_id, timeout=timeout)
+    return await self._pick_up_at_target(teachpoint_id, timeout=timeout)
 
-  async def place_plate_at_teachpoint(
+  async def _drop_at_teachpoint(
     self,
     teachpoint_id: int,
     *,
     timeout: float = 30.0,
   ) -> Frame:
     """Place a plate at a teachpoint target id using command ``0x63``."""
-    return await self.place_plate_at_target(teachpoint_id, timeout=timeout)
+    return await self._drop_at_target(teachpoint_id, timeout=timeout)
 
-  async def pick_plate_from_right_teachpoint(
-    self,
-    *,
-    timeout: float = 30.0,
-  ) -> Frame:
-    """Pick a plate from the captured right teachpoint target id ``0x1e``."""
-    return await self.pick_plate_from_teachpoint(
-      RIGHT_TEACHPOINT_ID,
-      timeout=timeout,
-    )
-
-  async def place_plate_at_right_teachpoint(
-    self,
-    *,
-    timeout: float = 30.0,
-  ) -> Frame:
-    """Place a plate at the captured right teachpoint target id ``0x1e``."""
-    return await self.place_plate_at_teachpoint(
-      RIGHT_TEACHPOINT_ID,
-      timeout=timeout,
-    )
-
-  async def load_stacker(self, stacker: int, *, timeout: float = 30.0) -> Frame:
+  async def _load_stacker(self, stacker: int, *, timeout: float = 30.0) -> Frame:
     """Send the ``0x60`` stacker load command for stacker 1-4.
 
     Confirmed from VWorks captures: pressing "Load" emits a single ``0x60`` with
     payload ``01 <stacker_index>`` and the device replies ``0x69`` ``60 <index>``.
     This operates the whole-stacker mechanism, not the robot grippers, and is
-    distinct from :meth:`downstack_plate`/:meth:`upstack_plate` (the
-    ``0x62``/``0x63`` per-plate robot pick/place).
+    distinct from the ``0x62``/``0x63`` per-plate robot pick/place commands.
     """
     stacker_index = _stacker_index(stacker)
     cmd = Frame(CMD_LOAD_PLATE, bytes([0x01, stacker_index]))
-    return await self.send_frame(
+    return await self._send_frame(
       cmd,
       ack_payload=bytes([cmd.command_id, stacker_index]),
       timeout=timeout,
     )
 
-  async def unload_stacker(self, stacker: int, *, timeout: float = 30.0) -> Frame:
+  async def _unload_stacker(self, stacker: int, *, timeout: float = 30.0) -> Frame:
     """Send the ``0x61`` stacker unload command for stacker 1-4.
 
     Confirmed from VWorks captures: pressing "Unload" emits a single ``0x61``
     with payload ``01 <stacker_index> 00 00 00 00`` and the device replies
-    ``0x69`` ``61 <index>``. Like :meth:`load_stacker` this drives the
+    ``0x69`` ``61 <index>``. Like :meth:`_load_stacker` this drives the
     whole-stacker mechanism, not the robot grippers.
     """
     stacker_index = _stacker_index(stacker)
     cmd = Frame(CMD_UNLOAD_PLATE, bytes([0x01, stacker_index]) + b"\x00\x00\x00\x00")
-    return await self.send_frame(
+    return await self._send_frame(
       cmd,
       ack_payload=bytes([cmd.command_id, stacker_index]),
       timeout=timeout,
     )
 
-  async def dangerously_open_stacker_grippers(
+  async def open_stacker_clamps(
     self,
-    stacker: int,
+    stack: ResourceStack,
     *,
     timeout: float = 15.0,
-  ) -> Frame:
-    """Open pneumatic stacker grippers/clamps using command ``0x67``.
+  ) -> None:
+    """Open one stacker's pneumatic clamps using command ``0x67``.
 
     Caution: this diagnostic command can release/drop a plate stack if it is not
-    physically supported. These are stacker clamps, not the robot grippers.
+    physically supported.
     """
+    stacker = self._stack_to_stacker(stack)
     payload = bytes([_stacker_index(stacker), 0x01])
-    return await self.send_frame(
+    await self._send_frame(
       Frame(CMD_STACKER_GRIPPER, payload),
       timeout=timeout,
     )
+    logger.warning("[benchcel] opened clamps on stacker %d", stacker)
 
-  async def close_stacker_grippers(
+  async def close_stacker_clamps(
     self,
-    stacker: int,
+    stack: ResourceStack,
     *,
     timeout: float = 15.0,
-  ) -> Frame:
-    """Close pneumatic stacker grippers/clamps using command ``0x67``."""
+  ) -> None:
+    """Close one stacker's pneumatic clamps using command ``0x67``."""
+    stacker = self._stack_to_stacker(stack)
     payload = bytes([_stacker_index(stacker), 0x00])
-    return await self.send_frame(
+    await self._send_frame(
       Frame(CMD_STACKER_GRIPPER, payload),
       timeout=timeout,
     )
+    logger.info("[benchcel] closed clamps on stacker %d", stacker)
 
-  async def downstack_plate(self, stacker: int, *, timeout: float = 30.0) -> Frame:
-    """Pick/downstack one plate from stacker 1-4.
+  async def _pick_from_stacker(self, stacker: int, *, timeout: float = 30.0) -> Frame:
+    """Send the raw one-plate pick command for stacker 1-4."""
+    return await self._pick_up_at_target(_stacker_index(stacker), timeout=timeout)
 
-    Equivalent to the VWorks "Downstack" task: confirmed from captures to emit a
-    single ``0x62`` with payload ``01 <stacker_index> 00 01``.
-    """
-    return await self.pick_plate_from_target(_stacker_index(stacker), timeout=timeout)
+  async def _place_on_stacker(self, stacker: int, *, timeout: float = 30.0) -> Frame:
+    """Send the raw one-plate place command for stacker 1-4."""
+    return await self._drop_at_target(_stacker_index(stacker), timeout=timeout)
 
-  async def upstack_plate(self, stacker: int, *, timeout: float = 30.0) -> Frame:
-    """Place/upstack one plate to stacker 1-4.
-
-    Equivalent to the VWorks "Upstack" task: confirmed from captures to emit a
-    single ``0x63`` with payload ``01 <stacker_index> 00 01``.
-    """
-    return await self.place_plate_at_target(_stacker_index(stacker), timeout=timeout)
-
-  async def jog(self, axis: int, delta: float, *, timeout: float = 10.0) -> Frame:
+  async def _jog(self, axis: int, delta: float, *, timeout: float = 10.0) -> Frame:
     """Send a relative jog command on one axis and wait for ACK/error."""
     if axis not in AXIS_NAMES:
       raise ValueError(f"axis must be one of {sorted(AXIS_NAMES)}, got {axis!r}")
-    return await self.send_frame(
+    return await self._send_frame(
       Frame(CMD_JOG, struct.pack("<Bf", axis, float(delta))),
       timeout=timeout,
     )
 
-  async def rotate_theta(self, delta_degrees: float, *, timeout: float = 10.0) -> Frame:
+  async def _rotate_theta_relative(self, delta_degrees: float, *, timeout: float = 10.0) -> Frame:
     """Relative theta jog. Positive is CCW/left in observed tests."""
-    return await self.jog(AXIS_THETA, delta_degrees, timeout=timeout)
+    return await self._jog(AXIS_THETA, delta_degrees, timeout=timeout)
 
-  async def move_x(self, delta_mm: float, *, timeout: float = 10.0) -> Frame:
+  async def _move_x_relative(self, delta_mm: float, *, timeout: float = 10.0) -> Frame:
     """Relative X jog. Positive is right in observed tests."""
-    return await self.jog(AXIS_X, delta_mm, timeout=timeout)
+    return await self._jog(AXIS_X, delta_mm, timeout=timeout)
 
-  async def move_z(self, delta_mm: float, *, timeout: float = 10.0) -> Frame:
+  async def _move_z_relative(self, delta_mm: float, *, timeout: float = 10.0) -> Frame:
     """Relative Z jog. Positive is up in observed tests."""
-    return await self.jog(AXIS_Z, delta_mm, timeout=timeout)
+    return await self._jog(AXIS_Z, delta_mm, timeout=timeout)
 
-  async def move_gripper_relative(
+  async def _move_gripper_relative(
     self,
     delta: float,
     *,
     timeout: float = 10.0,
   ) -> Frame:
     """Relative robot-gripper jog in internal units. Positive closes grippers."""
-    return await self.jog(AXIS_GRIPPER, delta, timeout=timeout)
+    return await self._jog(AXIS_GRIPPER, delta, timeout=timeout)
 
-  async def fully_close_grippers(self, *, timeout: float = 10.0) -> Frame:
-    """Fully close robot grippers using command ``0x6a``."""
-    return await self.send_frame(Frame(CMD_ROBOT_GRIPPER, b"\x00"), timeout=timeout)
+  async def close_robot_gripper(self, *, timeout: float = 10.0) -> None:
+    """Fully close the robot gripper."""
+    await self._send_frame(Frame(CMD_ROBOT_GRIPPER, b"\x00"), timeout=timeout)
+    logger.info("[benchcel] closed robot gripper")
 
-  async def fully_open_grippers(self, *, timeout: float = 10.0) -> Frame:
-    """Fully open robot grippers using command ``0x6a``."""
-    return await self.send_frame(Frame(CMD_ROBOT_GRIPPER, b"\x01"), timeout=timeout)
+  async def open_robot_gripper(self, *, timeout: float = 10.0) -> None:
+    """Fully open the robot gripper."""
+    await self._send_frame(Frame(CMD_ROBOT_GRIPPER, b"\x01"), timeout=timeout)
+    logger.info("[benchcel] opened robot gripper")
 
-  async def save_teachpoint(
+  async def set_teachpoint(
     self,
     teachpoint: Teachpoint,
     *,
-    expect_ack: bool = False,
     timeout: float = 5.0,
-  ) -> Frame:
-    """Send ``0x73`` save-teachpoint.
+  ) -> None:
+    """Write a numeric teachpoint with command ``0x73``.
 
     Captures did not show a command-specific ACK after ``0x73``, so
-    ``expect_ack`` defaults to ``False`` and the sent frame is returned after
-    writing. The device cannot read teachpoints back; keep a record of the
-    numeric teachpoints you write in your own protocol/config if you need them.
+    the method returns after writing. The device cannot read teachpoints back;
+    keep the numeric teachpoints in your own protocol or configuration.
     """
     cmd = Frame(CMD_SAVE_TEACHPOINT, _teachpoint_payload(teachpoint))
     async with self._lock:
       await self._write_frame(cmd, timeout=timeout)
-      if expect_ack:
-        return await self._wait_for_command_ack(cmd.command_id, timeout=timeout)
-      return cmd
+    logger.info("[benchcel] wrote teachpoint %d", teachpoint.teachpoint_id)
 
-  async def save_test_left_teachpoint(
+  @evented_operation("benchcel.move_plate_between_stacks", _stack_transfer_event_context)
+  async def move_plate_between_stacks(
     self,
+    source: ResourceStack,
+    destination: ResourceStack,
     *,
-    expect_ack: bool = False,
-    timeout: float = 5.0,
-  ) -> Frame:
-    """Send exactly the captured numeric payload for teachpoint ``test-left``."""
-    return await self.save_teachpoint(
-      TEST_LEFT_TEACHPOINT,
-      expect_ack=expect_ack,
-      timeout=timeout,
-    )
-
-  async def move_plate_between_stackers(
-    self,
-    source_stacker: int,
-    destination_stacker: int,
-    *,
-    open_grippers_first: bool = True,
     timeout: float = 30.0,
-  ) -> None:
-    """Move one plate from the source stacker to the destination stacker."""
+  ) -> Plate:
+    """Move the accessible plate between two configured stacks and update PLR state."""
+    source_stacker = self._stack_to_stacker(source)
+    destination_stacker = self._stack_to_stacker(destination)
+    if source is destination:
+      raise ValueError("Source and destination stacks must be different")
+    if len(source.children) == 0:
+      raise EmptyStackError(f"Stack {source.name!r} is empty")
+    plate = source.get_top_item()
+    if not isinstance(plate, Plate):
+      raise TypeError(f"Top item in stack {source.name!r} is not a Plate")
+
     async with self._lock:
-      if open_grippers_first:
-        await self._send_frame_expect_ack_no_lock(
-          Frame(CMD_ROBOT_GRIPPER, b"\x01"),
-          timeout=timeout,
-        )
+      await self._send_frame_expect_ack_no_lock(
+        Frame(CMD_ROBOT_GRIPPER, b"\x01"),
+        timeout=timeout,
+      )
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_PICK, _target_payload(_stacker_index(source_stacker))),
         timeout=timeout,
@@ -1096,15 +1112,24 @@ class BenchCel4R(Resource):
         Frame(CMD_PLACE, _target_payload(_stacker_index(destination_stacker))),
         timeout=timeout,
       )
+    plate.unassign()
+    destination.assign_child_resource(plate)
+    logger.info(
+      "[benchcel] moved %s from stacker %d to stacker %d",
+      plate.name,
+      source_stacker,
+      destination_stacker,
+    )
+    return plate
 
   # --------------------------------------------------------------- labware config
 
   async def set_labware(
     self,
-    labware: Union[Plate, BenchCelLabwareSettings, dict],
+    labware: Union[Plate, BenchCelLabwareSettings],
     *,
     timeout: float = 10.0,
-  ) -> BenchCelLabwareSettings:
+  ) -> None:
     """Push labware geometry to the BenchCel using the ``0x7d`` settings command.
 
     VWorks sends the labware settings as a 77-byte ``0x7d`` frame followed by an
@@ -1113,10 +1138,9 @@ class BenchCel4R(Resource):
     ``0x02`` error. ``labware`` may be a PLR :class:`~pylabrobot.resources.Plate`
     (settings are calculated from its dimensions), a
     :class:`~pylabrobot.agilent.benchcel.labware.BenchCelLabwareSettings`
-    object, or a serialized settings dict.
+    object.
 
-    On success, the resolved settings are stored on ``self.labware_settings`` and
-    returned.
+    On success, the resolved settings are stored on ``self.labware_settings``.
     """
     settings = resolve_benchcel_labware_settings(labware)
     payload = settings.to_device_payload()
@@ -1141,12 +1165,13 @@ class BenchCel4R(Resource):
       if error is not None:
         raise BenchCelDeviceError(error, Frame(CMD_ERROR, error.encode("ascii", "replace")))
     self.labware_settings = settings
-    return settings
+    logger.info("[benchcel] configured labware %s", settings.name)
 
   # --------------------------------------------------------------- status APIs
 
-  async def request_stacker_sensors(self, stacker: int, *, timeout: float = 5.0) -> SensorStatus:
-    """Query and decode one stacker's sensor/status frame."""
+  async def _request_stacker_sensor_status(
+    self, stacker: int, *, timeout: float = 5.0
+  ) -> SensorStatus:
     expected_index = _stacker_index(stacker)
     query = Frame(CMD_SENSOR_STATUS, bytes([expected_index]))
 
@@ -1162,18 +1187,26 @@ class BenchCel4R(Resource):
       frame = await self._read_until(is_matching_sensor_response, timeout=timeout)
       return parse_sensor_response(frame)
 
-  async def request_all_stacker_sensors(
+  async def request_stacker_sensor_status(
+    self, stack: ResourceStack, *, timeout: float = 5.0
+  ) -> SensorStatus:
+    """Return the sensor status for one configured stack."""
+    return await self._request_stacker_sensor_status(self._stack_to_stacker(stack), timeout=timeout)
+
+  async def request_all_stacker_sensor_statuses(
     self,
     *,
     timeout_per_stacker: float = 5.0,
-  ) -> List[SensorStatus]:
-    """Query and decode all four stacker sensor/status frames."""
-    sensors: List[SensorStatus] = []
+  ) -> Dict[int, SensorStatus]:
+    """Return sensor status keyed by human stacker number 1-4."""
+    sensors: Dict[int, SensorStatus] = {}
     for stacker in (1, 2, 3, 4):
-      sensors.append(await self.request_stacker_sensors(stacker, timeout=timeout_per_stacker))
+      sensors[stacker] = await self._request_stacker_sensor_status(
+        stacker, timeout=timeout_per_stacker
+      )
     return sensors
 
-  async def request_general_status(self, *, timeout: float = 5.0) -> GeneralStatus:
+  async def request_status(self, *, timeout: float = 5.0) -> GeneralStatus:
     """Send ``87 00 00`` and return decoded/raw general status."""
     async with self._lock:
       await self._write_frame(Frame(CMD_GENERAL_STATUS), timeout=timeout)
@@ -1183,23 +1216,31 @@ class BenchCel4R(Resource):
       )
       return parse_general_status_response(frame)
 
-  async def request_arm_status(self, *, timeout: float = 5.0) -> ArmStatus:
-    """Send ``87 00 00`` and return decoded theta/X/Z/gripper fields."""
-    status = await self.request_general_status(timeout=timeout)
-    if status.arm_status is None:
+  async def request_arm_pose(self, *, timeout: float = 5.0) -> BenchCelArmPose:
+    """Return the decoded arm location, rotation, and robot-gripper position."""
+    status = await self.request_status(timeout=timeout)
+    if status.arm_pose is None:
       raise BenchCelProtocolError(
-        f"0x87 response did not contain decoded 66-byte arm status: len={len(status.raw_payload)}"
+        f"0x87 response did not contain a decoded 66-byte arm pose: len={len(status.raw_payload)}"
       )
-    return status.arm_status
+    return status.arm_pose
 
-  async def request_axis_bounds(self, *, timeout: float = 5.0) -> AxisBoundsResponse:
-    """Send ``0x99`` query and parse per-axis min/max travel limits."""
+  async def request_axis_limits(
+    self, *, timeout: float = 5.0
+  ) -> Dict[AxisName, Tuple[float, float]]:
+    """Return per-axis travel limits as ``{axis: (minimum, maximum)}``."""
     async with self._lock:
       await self._write_frame(Frame(CMD_AXIS_BOUNDS), timeout=timeout)
       frame = await self._read_until(lambda f: f.command_id == CMD_AXIS_BOUNDS, timeout=timeout)
-      return parse_axis_bounds_response(frame)
+    bounds = parse_axis_bounds_response(frame)
+    return {
+      "theta": (bounds.theta_min, bounds.theta_max),
+      "x": (bounds.x_min, bounds.x_max),
+      "z": (bounds.z_min, bounds.z_max),
+      "gripper": (bounds.gripper_min, bounds.gripper_max),
+    }
 
-  async def request_current_position(
+  async def _request_raw_current_position(
     self,
     selector: int = 1,
     *,
@@ -1220,72 +1261,74 @@ class BenchCel4R(Resource):
       )
       return parse_current_position_response(frame, selector=selector)
 
-  async def vworks_style_idle_poll_once(
+  async def request_status_snapshot(
     self,
     *,
     timeout_per_response: float = 5.0,
-  ) -> Tuple[List[SensorStatus], GeneralStatus]:
-    """Perform one VWorks-like idle polling cycle."""
-    sensors = await self.request_all_stacker_sensors(timeout_per_stacker=timeout_per_response)
-    general = await self.request_general_status(timeout=timeout_per_response)
-    return sensors, general
+  ) -> BenchCelStatusSnapshot:
+    """Return all stacker sensors and the general status from one polling cycle."""
+    stackers = await self.request_all_stacker_sensor_statuses(
+      timeout_per_stacker=timeout_per_response
+    )
+    general = await self.request_status(timeout=timeout_per_response)
+    return BenchCelStatusSnapshot(stackers=stackers, general=general)
 
   # -------------------------------------------------------------- stacker API
 
-  async def set_stacks(self, stacks: List[ResourceStack]) -> None:
-    """Configure the stacks this driver manages. Called by the BenchCel4R device on setup."""
-    self._stacks = list(stacks)
-
   @property
-  def stacks(self) -> List[ResourceStack]:
-    return self._stacks
+  def stacks(self) -> Sequence[ResourceStack]:
+    """The four configured stacks, ordered by human stacker number."""
+    return tuple(self._stacks)
 
   def _stack_to_stacker(self, stack: ResourceStack) -> int:
     """Map a configured ``ResourceStack`` to its human stacker number (1-4)."""
-    stack_names = [s.name for s in self.stacks]
-    try:
-      return stack_names.index(stack.name) + 1
-    except ValueError as exc:
-      raise ValueError(f"Stack {stack.name!r} is not configured on this BenchCel") from exc
+    for index, configured_stack in enumerate(self._stacks, start=1):
+      if configured_stack is stack:
+        return index
+    raise ValueError(f"Stack {stack.name!r} is not configured on this BenchCel")
 
-  def _resolve_loading_tray_target(self, teachpoint_id: Optional[int]) -> int:
-    """Return the teachpoint target for a transfer, or raise if none configured."""
-    target = self.loading_tray_teachpoint_id if teachpoint_id is None else teachpoint_id
+  def _loading_tray_target(self) -> int:
+    """Return the configured loading-tray teachpoint target."""
+    target = self.loading_tray_teachpoint_id
     if target is None:
       raise ValueError(
         "No BenchCel loading/transfer teachpoint configured. The BenchCel has no "
-        "fixed loading position; set loading_tray_teachpoint_id on the backend/factory "
-        "or pass teachpoint_id=... to this call. Make sure the teachpoint is taught on "
-        "the device (VWorks or save_teachpoint) first."
+        "fixed loading position; set loading_tray_teachpoint_id on the device. "
+        "Make sure the teachpoint is taught on the device with VWorks or set_teachpoint first."
       )
     if not 0 <= target <= 0xFF:
       raise ValueError(f"teachpoint_id must fit in one byte, got {target!r}")
     return target
 
+  @evented_operation("benchcel.downstack", _downstack_event_context)
   async def downstack(
     self,
     stack: ResourceStack,
     *,
-    teachpoint_id: Optional[int] = None,
-    open_grippers_first: bool = True,
     timeout: float = 30.0,
-    **backend_kwargs,
-  ) -> None:
+  ) -> Plate:
     """Move the accessible plate of ``stack`` to the loading teachpoint.
 
     The BenchCel firmware addresses whole stackers; ``stack`` selects which configured stacker
-    (1-4) to downstack from. This is the device half of :meth:`Stacker.downstack`: a robot pick
-    from the stacker (``0x62``) followed by a place at the transfer teachpoint (``0x63``).
+    (1-4) to downstack from. The device picks from the stacker (``0x62``), places at the transfer
+    teachpoint (``0x63``), and updates the resource model after the motion succeeds.
     """
-    _ = backend_kwargs
     source_stacker = self._stack_to_stacker(stack)
-    destination_target = self._resolve_loading_tray_target(teachpoint_id)
+    destination_target = self._loading_tray_target()
+    if len(stack.children) == 0:
+      raise EmptyStackError(f"Stack {stack.name!r} is empty")
+    plate = stack.get_top_item()
+    if not isinstance(plate, Plate):
+      raise TypeError(f"Top item in stack {stack.name!r} is not a Plate")
+    if self.loading_tray.resource is not None:
+      raise LoadingTrayOccupiedError(
+        f"Loading tray already holds {self.loading_tray.resource.name!r}"
+      )
     async with self._lock:
-      if open_grippers_first:
-        await self._send_frame_expect_ack_no_lock(
-          Frame(CMD_ROBOT_GRIPPER, b"\x01"),
-          timeout=timeout,
-        )
+      await self._send_frame_expect_ack_no_lock(
+        Frame(CMD_ROBOT_GRIPPER, b"\x01"),
+        timeout=timeout,
+      )
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_PICK, _target_payload(_stacker_index(source_stacker))),
         timeout=timeout,
@@ -1294,32 +1337,35 @@ class BenchCel4R(Resource):
         Frame(CMD_PLACE, _target_payload(destination_target)),
         timeout=timeout,
       )
+    plate.unassign()
+    self.loading_tray.assign_child_resource(plate)
+    logger.info("[benchcel] downstacked %s from stacker %d", plate.name, source_stacker)
+    return plate
 
+  @evented_operation("benchcel.upstack", _upstack_event_context)
   async def upstack(
     self,
     stack: ResourceStack,
-    plate: Plate,
     *,
-    teachpoint_id: Optional[int] = None,
-    open_grippers_first: bool = True,
     timeout: float = 30.0,
-    **backend_kwargs,
   ) -> None:
     """Move a plate from the loading teachpoint onto ``stack``.
 
-    The device half of :meth:`Stacker.upstack`: a robot pick from the transfer teachpoint
-    (``0x62``) followed by a place onto the selected stacker (``0x63``). ``plate`` is accepted for
-    interface symmetry and PLR state; the firmware only needs the destination stacker.
+    The device picks from the transfer teachpoint (``0x62``), places onto the selected stacker
+    (``0x63``), and updates the resource model after the motion succeeds.
     """
-    _ = (plate, backend_kwargs)
-    source_target = self._resolve_loading_tray_target(teachpoint_id)
+    source_target = self._loading_tray_target()
+    plate = self.loading_tray.resource
+    if plate is None:
+      raise LoadingTrayEmptyError("BenchCel loading tray is empty")
+    if not isinstance(plate, Plate):
+      raise TypeError(f"Resource {plate.name!r} on the BenchCel loading tray is not a Plate")
     destination_stacker = self._stack_to_stacker(stack)
     async with self._lock:
-      if open_grippers_first:
-        await self._send_frame_expect_ack_no_lock(
-          Frame(CMD_ROBOT_GRIPPER, b"\x01"),
-          timeout=timeout,
-        )
+      await self._send_frame_expect_ack_no_lock(
+        Frame(CMD_ROBOT_GRIPPER, b"\x01"),
+        timeout=timeout,
+      )
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_PICK, _target_payload(source_target)),
         timeout=timeout,
@@ -1328,3 +1374,6 @@ class BenchCel4R(Resource):
         Frame(CMD_PLACE, _target_payload(_stacker_index(destination_stacker))),
         timeout=timeout,
       )
+    plate.unassign()
+    stack.assign_child_resource(plate)
+    logger.info("[benchcel] upstacked %s onto stacker %d", plate.name, destination_stacker)

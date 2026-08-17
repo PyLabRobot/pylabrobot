@@ -15,6 +15,6 @@ def benchcel_4r_stacks(name_prefix: str = "benchcel_stacker") -> List[ResourceSt
   supplied.
 
   The stacks are named ``{name_prefix}_1`` .. ``{name_prefix}_4`` and are ordered to match the
-  human stacker numbers 1-4 used by the backend and firmware.
+  human stacker numbers 1-4 used by the device and firmware.
   """
   return [ResourceStack(name=f"{name_prefix}_{i}", direction="z") for i in range(1, 5)]

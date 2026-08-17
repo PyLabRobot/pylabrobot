@@ -61,8 +61,17 @@ class ResourceStack(Resource):
     name: str,
     direction: str,
     resources: Optional[List[Resource]] = None,
+    *,
+    size_x: float = 0,
+    size_y: float = 0,
+    size_z: float = 0,
+    category: str = "resource_group",
+    model: Optional[str] = None,
   ):
-    super().__init__(name, size_x=0, size_y=0, size_z=0, category="resource_group")
+    # ``size_*`` are accepted for generic Resource deserialization. Stack dimensions are always
+    # derived from the current children by the overridden getters below.
+    _ = (size_x, size_y, size_z)
+    super().__init__(name, size_x=0, size_y=0, size_z=0, category=category, model=model)
     assert direction in [
       "x",
       "y",
@@ -74,6 +83,10 @@ class ResourceStack(Resource):
       resources = list(reversed(resources))
     for resource in resources:
       self.assign_child_resource(resource)
+
+  def serialize(self) -> dict:
+    """Serialize this stack, including the axis along which it grows."""
+    return {**super().serialize(), "direction": self.direction}
 
   def get_size_x(self) -> float:
     """Get local size in the x direction."""

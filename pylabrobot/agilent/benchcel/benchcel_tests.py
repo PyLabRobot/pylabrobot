@@ -3,11 +3,13 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 from pylabrobot.agilent.benchcel import (
   BenchCel4R,
   BenchCelLabwareSettings,
   PlateNotchSettings,
+  Teachpoint,
   apply_benchcel_labware_settings,
   calculate_benchcel_labware_settings,
   calculate_robot_gripper_offset,
@@ -16,19 +18,32 @@ from pylabrobot.agilent.benchcel import (
   calculate_stacking_thickness,
 )
 from pylabrobot.agilent.benchcel.benchcel import (
-  TEST_LEFT_TEACHPOINT,
   BenchCelDeviceError,
   BenchCelProtocolError,
   Frame,
-  parse_arm_status_from_87_payload,
+  parse_arm_pose_from_87_payload,
   parse_frame_from_buffer,
   parse_sensor_response,
   split_frames,
 )
 from pylabrobot.agilent.benchcel.stacks import benchcel_4r_stacks
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, Resource, cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource_stack import ResourceStack
+
+
+TEST_TEACHPOINT = Teachpoint(
+  theta=89.99874114990234,
+  x=-360.8802795410156,
+  z=-10.0,
+  approach_height=20.0,
+  cavity_depth=0.0,
+  gripper_open_limit=-1.5,
+  respect_approach_height_when_not_holding_plate=True,
+  something_above_this_point=False,
+  teachpoint_id=0x1F,
+  name="test",
+)
 
 
 class _FakeWriter:
@@ -64,9 +79,7 @@ class _FakeReader:
 
 
 def _make_backend(chunks: list[bytes]) -> tuple[BenchCel4R, _FakeWriter]:
-  backend = BenchCel4R(
-    name="benchcel", host="ignored", port=0, timeout=1.0, read_poll_timeout=0.01
-  )
+  backend = BenchCel4R(name="benchcel", host="ignored", port=0, timeout=1.0, read_poll_timeout=0.01)
   writer = _FakeWriter()
   backend.io._writer = writer  # type: ignore[assignment]
   backend.io._reader = _FakeReader(chunks)  # type: ignore[assignment]
@@ -119,17 +132,17 @@ class BenchCelParserTests(unittest.TestCase):
     self.assertTrue(status.plate_present())
     self.assertEqual(status.notch_values(), (1, 0, 0, 1))
 
-  def test_parse_arm_status(self):
+  def test_parse_arm_pose(self):
     payload = bytearray(66)
     struct.pack_into("<f", payload, 4, 12.5)
     struct.pack_into("<f", payload, 12, -34.25)
     struct.pack_into("<f", payload, 20, 99.0)
     struct.pack_into("<f", payload, 28, -1.0)
-    status = parse_arm_status_from_87_payload(bytes(payload))
-    self.assertAlmostEqual(status.theta, 12.5)
-    self.assertAlmostEqual(status.x, -34.25)
-    self.assertAlmostEqual(status.z, 99.0)
-    self.assertAlmostEqual(status.gripper, -1.0)
+    pose = parse_arm_pose_from_87_payload(bytes(payload))
+    self.assertAlmostEqual(pose.rotation.z, 12.5)
+    self.assertAlmostEqual(pose.location.x, -34.25)
+    self.assertAlmostEqual(pose.location.z, 99.0)
+    self.assertAlmostEqual(pose.gripper_position, -1.0)
 
 
 class BenchCelLabwareSettingsTests(unittest.TestCase):
@@ -314,20 +327,35 @@ class BenchCelFactoryTests(unittest.TestCase):
 
 
 class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
-  async def test_home_writes_command_and_waits_for_split_ack(self):
+  async def test_lower_level_home_command_writes_expected_frame(self):
     backend, writer = _make_backend([b"\x69", b"\x01\x00\x48"])
-    ack = await backend.home()
+    ack = await backend._send_home_command()
     self.assertEqual(writer.sent.hex(), "48010001")
     self.assertEqual(ack, Frame(0x69, b"\x48"))
 
+  async def test_home_reconnects_and_confirms_status(self):
+    backend, _ = _make_backend([])
+    backend._write_frame = AsyncMock()  # type: ignore[method-assign]
+    backend._wait_for_command_ack = AsyncMock()  # type: ignore[method-assign]
+    backend.io.stop = AsyncMock()  # type: ignore[method-assign]
+    backend.io.setup = AsyncMock()  # type: ignore[method-assign]
+    backend._read_until = AsyncMock(return_value=Frame(0x87))  # type: ignore[method-assign]
+
+    await backend.home()
+
+    first_frame = backend._write_frame.await_args_list[0].args[0]
+    self.assertEqual(first_frame, Frame(0x47, b"\x01"))
+    backend.io.stop.assert_awaited_once()
+    backend.io.setup.assert_awaited_once()
+
   async def test_move_to_stacker_writes_expected_frame(self):
     backend, writer = _make_backend([Frame(0x69, b"\x65").to_bytes()])
-    await backend.move_to_stacker(3)
+    await backend.move_to_stacker(backend.stacks[2])
     self.assertEqual(writer.sent.hex(), "650a0001020000204100000000")
 
-  async def test_save_teachpoint_writes_captured_shape(self):
+  async def test_set_teachpoint_writes_captured_shape(self):
     backend, writer = _make_backend([])
-    await backend.save_teachpoint(TEST_LEFT_TEACHPOINT)
+    await backend.set_teachpoint(TEST_TEACHPOINT)
     self.assertEqual(
       writer.sent.hex(),
       "731b001f5bffb342ad70b4c3000020c100010000a041000000000000c0bf",
@@ -338,36 +366,36 @@ class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
     frame = Frame(0x02, payload).to_bytes()
     backend, writer = _make_backend([frame])
     with self.assertRaises(BenchCelDeviceError) as cm:
-      await backend.move_x(500)
+      await backend._move_x_relative(500)
     self.assertEqual(writer.sent.hex(), Frame(0x66, struct.pack("<Bf", 1, 500.0)).hex())
     self.assertEqual(cm.exception.message, "X position out of bounds")
 
-  async def test_request_stacker_sensors(self):
+  async def test_request_stacker_sensor_status(self):
     response = Frame(0x7E, _sensor_payload(stacker_index=2)).to_bytes()
     backend, writer = _make_backend([response])
-    status = await backend.request_stacker_sensors(3)
+    status = await backend.request_stacker_sensor_status(backend.stacks[2])
     self.assertEqual(writer.sent.hex(), "7e010002")
     self.assertEqual(status.stacker, 3)
     self.assertEqual(status.plate_presence, 128)
 
-  async def test_request_axis_bounds(self):
+  async def test_request_axis_limits(self):
     payload = struct.pack("<8f", -115.0, -360.9, -1.5, -1.5, 115.0, 360.9, 104.0, 11.0)
     backend, writer = _make_backend([Frame(0x99, payload).to_bytes()])
-    bounds = await backend.request_axis_bounds()
+    limits = await backend.request_axis_limits()
     self.assertEqual(writer.sent.hex(), "990000")
-    self.assertAlmostEqual(bounds.theta_min, -115.0)
-    self.assertAlmostEqual(bounds.x_max, 360.9, places=3)
-    self.assertAlmostEqual(bounds.gripper_max, 11.0)
+    self.assertAlmostEqual(limits["theta"][0], -115.0)
+    self.assertAlmostEqual(limits["x"][1], 360.9, places=3)
+    self.assertAlmostEqual(limits["gripper"][1], 11.0)
 
-  async def test_open_and_close_stacker_grippers(self):
+  async def test_open_and_close_stacker_clamps(self):
     backend, writer = _make_backend(
       [
         Frame(0x69, b"\x67").to_bytes(),
         Frame(0x69, b"\x67").to_bytes(),
       ]
     )
-    await backend.dangerously_open_stacker_grippers(1)
-    await backend.close_stacker_grippers(1)
+    await backend.open_stacker_clamps(backend.stacks[0])
+    await backend.close_stacker_clamps(backend.stacks[0])
     self.assertEqual(writer.sent.hex(), "67020000016702000000")
 
   async def test_stacker_primitives_match_vworks_captures(self):
@@ -385,10 +413,10 @@ class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
         Frame(0x69, b"\x61\x02").to_bytes(),
       ]
     )
-    await backend.downstack_plate(3)
-    await backend.upstack_plate(3)
-    await backend.load_stacker(3)
-    await backend.unload_stacker(3)
+    await backend._pick_from_stacker(3)
+    await backend._place_on_stacker(3)
+    await backend._load_stacker(3)
+    await backend._unload_stacker(3)
     self.assertEqual(
       writer.sent.hex(),
       "62040001020001"  # downstack stacker 3
@@ -413,24 +441,47 @@ class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(serialized["labware"]["name"], "plate")
     self.assertAlmostEqual(serialized["labware"]["stacking_thickness"], 13.1)
 
+  async def test_serialize_round_trip_restores_device_resources(self):
+    backend = BenchCel4R(
+      name="benchcel",
+      host="192.168.0.100",
+      loading_tray_teachpoint_id=0x1E,
+    )
+    plate = cor_96_wellplate_360uL_Fb("plate")
+    backend.stacks[0].assign_child_resource(plate)
+
+    restored = Resource.deserialize(backend.serialize())
+
+    self.assertIsInstance(restored, BenchCel4R)
+    assert isinstance(restored, BenchCel4R)
+    self.assertEqual(restored.host, backend.host)
+    self.assertEqual(len(restored.stacks), 4)
+    self.assertEqual(restored.stacks[0].get_top_item().name, "plate")
+    self.assertIs(restored.loading_tray, restored.get_resource("benchcel_tray"))
+
 
 class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
   async def test_transfers_require_a_configured_teachpoint(self):
-    backend = BenchCel4R(name="benchcel", host="ignored")  # no loading_tray_teachpoint_id
-    self.assertIsNone(backend.loading_tray_teachpoint_id)
     stacks = benchcel_4r_stacks()
-    await backend.set_stacks(stacks)
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
+    # No loading_tray_teachpoint_id.
+    backend = BenchCel4R(name="benchcel", host="ignored", stacks=stacks)
+    self.assertIsNone(backend.loading_tray_teachpoint_id)
 
     with self.assertRaisesRegex(ValueError, "teachpoint"):
       await backend.downstack(stacks[0])
     with self.assertRaisesRegex(ValueError, "teachpoint"):
-      await backend.upstack(stacks[0], plate)
+      await backend.upstack(stacks[0])
 
   async def test_downstack_maps_stack_to_stacker(self):
-    backend = BenchCel4R(name="benchcel", host="ignored")
     stacks = benchcel_4r_stacks()
-    await backend.set_stacks(stacks)
+    backend = BenchCel4R(
+      name="benchcel",
+      host="ignored",
+      stacks=stacks,
+      loading_tray_teachpoint_id=0x1E,
+    )
+    plate = cor_96_wellplate_360uL_Fb("plate")
+    stacks[2].assign_child_resource(plate)
 
     sent: list[Frame] = []
 
@@ -440,18 +491,26 @@ class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
 
     backend._send_frame_expect_ack_no_lock = fake_send  # type: ignore[method-assign]
     # stacks[2] is human stacker 3 (zero-based index 0x02)
-    await backend.downstack(stacks[2], teachpoint_id=0x1E)
+    returned = await backend.downstack(stacks[2])
 
     self.assertEqual(
       [f.hex() for f in sent],
       ["6a010001", "62040001020001", "630400011e0001"],
     )
+    self.assertIs(returned, plate)
+    self.assertIs(backend.loading_tray.resource, plate)
+    self.assertNotIn(plate, stacks[2].children)
 
   async def test_upstack_maps_stack_to_stacker(self):
-    backend = BenchCel4R(name="benchcel", host="ignored")
     stacks = benchcel_4r_stacks()
-    await backend.set_stacks(stacks)
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
+    backend = BenchCel4R(
+      name="benchcel",
+      host="ignored",
+      stacks=stacks,
+      loading_tray_teachpoint_id=0x1E,
+    )
+    plate = cor_96_wellplate_360uL_Fb("plate")
+    backend.loading_tray.assign_child_resource(plate)
 
     sent: list[Frame] = []
 
@@ -461,11 +520,43 @@ class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
 
     backend._send_frame_expect_ack_no_lock = fake_send  # type: ignore[method-assign]
     # stacks[0] is human stacker 1 (zero-based index 0x00)
-    await backend.upstack(stacks[0], plate, teachpoint_id=0x1E)
+    await backend.upstack(stacks[0])
 
     self.assertEqual(
       [f.hex() for f in sent],
       ["6a010001", "620400011e0001", "63040001000001"],
+    )
+    self.assertIsNone(backend.loading_tray.resource)
+    self.assertIs(stacks[0].get_top_item(), plate)
+
+  async def test_transfer_rejects_foreign_stack_with_same_name(self):
+    backend = BenchCel4R(name="benchcel", host="ignored", loading_tray_teachpoint_id=0x1E)
+    foreign_stack = ResourceStack(name=backend.stacks[0].name, direction="z")
+
+    with self.assertRaisesRegex(ValueError, "not configured"):
+      await backend.downstack(foreign_stack)
+
+  async def test_move_plate_between_stacks_updates_resource_state(self):
+    stacks = benchcel_4r_stacks()
+    backend = BenchCel4R(name="benchcel", host="ignored", stacks=stacks)
+    plate = cor_96_wellplate_360uL_Fb("plate")
+    stacks[0].assign_child_resource(plate)
+    sent: list[Frame] = []
+
+    async def fake_send(frame: Frame, **kwargs) -> Frame:
+      sent.append(frame)
+      return Frame(0x69, kwargs.get("ack_payload") or bytes([frame.command_id]))
+
+    backend._send_frame_expect_ack_no_lock = fake_send  # type: ignore[method-assign]
+
+    returned = await backend.move_plate_between_stacks(stacks[0], stacks[3])
+
+    self.assertIs(returned, plate)
+    self.assertNotIn(plate, stacks[0].children)
+    self.assertIs(stacks[3].get_top_item(), plate)
+    self.assertEqual(
+      [frame.hex() for frame in sent],
+      ["6a010001", "62040001000001", "63040001030001"],
     )
 
 

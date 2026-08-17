@@ -3,6 +3,21 @@
 pylabrobot.agilent package
 ==========================
 
+BenchCel 4R
+-----------
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BenchCel4R
+    BenchCelLabwareSettings
+    PlateNotchSettings
+
+
 BioTek EL406
 ------------
 
