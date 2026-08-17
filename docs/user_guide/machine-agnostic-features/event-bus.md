@@ -28,6 +28,17 @@ Use `set_default_event_bus()` when one process-wide bus is appropriate. `use_eve
 preferred for a bounded protocol or task because it is context-local and composes safely with
 async tasks.
 
+## Forward events to external services
+
+Subscribers can format and forward selected events to external logging, monitoring, or
+notification services. EventBus itself remains transport-independent: integrations such as Slack
+live in application code and choose which semantic or diagnostic events they need.
+
+The [Slack notifications cookbook](../../cookbook/slack_notifications.ipynb) demonstrates a small
+subscriber that forwards completed and failed semantic operations to a Slack webhook. It also
+shows how to keep the synchronous subscriber fast by submitting network work to a background
+thread.
+
 ## Event shape
 
 Every event has the following JSON-ready representation:
