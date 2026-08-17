@@ -1,0 +1,30 @@
+﻿:orphan:
+
+
+pylabrobot.generic.SerialBarcodeScanner
+=======================================
+
+.. currentmodule:: pylabrobot.generic
+
+.. autoclass:: SerialBarcodeScanner
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SerialBarcodeScanner.__init__
+      ~SerialBarcodeScanner.read_line
+      ~SerialBarcodeScanner.reset_input_buffer
+      ~SerialBarcodeScanner.scan_barcode
+      ~SerialBarcodeScanner.setup
+      ~SerialBarcodeScanner.stop
+      ~SerialBarcodeScanner.write
+   
+   

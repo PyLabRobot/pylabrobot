@@ -19,6 +19,7 @@ getting-started/units
 
 machines
 definitions
+generic/index
 00_liquid-handling/_liquid-handling
 ```
 

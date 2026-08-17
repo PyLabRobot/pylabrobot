@@ -1,0 +1,6 @@
+pylabrobot.generic.SerialBarcodeScanner.stop
+============================================
+
+.. currentmodule:: pylabrobot.generic
+
+.. automethod:: SerialBarcodeScanner.stop
