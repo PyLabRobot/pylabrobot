@@ -31,7 +31,6 @@ from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource_stack import ResourceStack
 
-
 TEST_TEACHPOINT = Teachpoint(
   theta=89.99874114990234,
   x=-360.8802795410156,
