@@ -1178,6 +1178,13 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_tip_tracking_pick_up(self):
+    set_tip_tracking(enabled=True)
+    try:
+      await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
+    finally:
+      set_tip_tracking(enabled=False)
+
   async def test_tip_tracking_pick_up96(self):
     set_tip_tracking(enabled=True)
     await self.lh.pick_up_tips96(self.tip_rack)

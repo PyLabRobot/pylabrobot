@@ -21,7 +21,7 @@ from pylabrobot.legacy.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
 from pylabrobot.legacy.liquid_handling.standard import PipettingOp
-from pylabrobot.resources import TipSpot
+from pylabrobot.resources import Tip
 from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipPickupMethod,
@@ -454,15 +454,14 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     return self._tth2tti[tip_type_hash]
 
-  def _get_hamilton_tip(self, tip_spots: List[TipSpot]) -> HamiltonTip:
-    """Get the single tip type for all tip spots. If it does not exist or is not a HamiltonTip,
-    raise an error."""
-    tips = set(tip_spot.get_tip() for tip_spot in tip_spots)
-    if len(tips) > 1:
+  def _get_hamilton_tip(self, tips: Sequence[Tip]) -> HamiltonTip:
+    """Get the single Hamilton tip type. If mixed or not a HamiltonTip, raise an error."""
+    unique = set(tips)
+    if len(unique) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
-    if len(tips) == 0:
+    if len(unique) == 0:
       raise ValueError("No tips specified.")
-    tip = tips.pop()
+    tip = unique.pop()
     if not isinstance(tip, HamiltonTip):
       raise ValueError(f"Tip {tip} is not a HamiltonTip.")
     return tip

@@ -484,7 +484,7 @@ class VantageBackend(HamiltonLiquidHandler):
   ):
     x_positions, y_positions, tip_pattern = self._ops_to_fw_positions(ops, use_channels)
 
-    tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
+    tips = [cast(HamiltonTip, op.tip) for op in ops]
     ttti = [await self.get_or_assign_tip_type_index(tip) for tip in tips]
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
@@ -492,9 +492,9 @@ class VantageBackend(HamiltonLiquidHandler):
     max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
     # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
+    if self._get_hamilton_tip([op.tip for op in ops]).tip_size == TipSize.LOW_VOLUME:
       max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
+    elif self._get_hamilton_tip([op.tip for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
       max_tip_length -= 2
 
     try:
