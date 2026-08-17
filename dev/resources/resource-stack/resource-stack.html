@@ -671,9 +671,9 @@ them.</p>
 <p>Pass the name and direction of growth (<code class="docutils literal notranslate"><span class="pre">&quot;x&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;y&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;z&quot;</span></code>).</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">stack_x</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">&quot;stack_x&quot;</span><span class="p">,</span> <span class="s2">&quot;x&quot;</span><span class="p">)</span>
-<span class="n">stack_y</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">&quot;stack_y&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">)</span>
-<span class="n">stack_z</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">&quot;stack_z&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">stack_x</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">"stack_x"</span><span class="p">,</span> <span class="s2">"x"</span><span class="p">)</span>
+<span class="n">stack_y</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">"stack_y"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">)</span>
+<span class="n">stack_z</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">"stack_z"</span><span class="p">,</span> <span class="s2">"z"</span><span class="p">)</span>
 <span class="p">(</span><span class="n">stack_x</span><span class="o">.</span><span class="n">children</span><span class="p">,</span> <span class="n">stack_y</span><span class="o">.</span><span class="n">children</span><span class="p">,</span> <span class="n">stack_z</span><span class="o">.</span><span class="n">children</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -691,11 +691,11 @@ them.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">stack</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span>
-    <span class="s2">&quot;stack&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;x&quot;</span><span class="p">,</span>
+    <span class="s2">"stack"</span><span class="p">,</span>
+    <span class="s2">"x"</span><span class="p">,</span>
     <span class="p">[</span>
-        <span class="n">Resource</span><span class="p">(</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
-        <span class="n">Resource</span><span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+        <span class="n">Resource</span><span class="p">(</span><span class="s2">"A"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+        <span class="n">Resource</span><span class="p">(</span><span class="s2">"B"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
     <span class="p">],</span>
 <span class="p">)</span>
 <span class="p">([</span><span class="n">child</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">stack</span><span class="o">.</span><span class="n">children</span><span class="p">],</span> <span class="n">stack</span><span class="o">.</span><span class="n">get_size_x</span><span class="p">())</span>
@@ -703,7 +703,7 @@ them.</p>
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>([&#39;A&#39;, &#39;B&#39;], 20)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(['A', 'B'], 20)
 </pre></div>
 </div>
 </div>
@@ -712,11 +712,11 @@ them.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">stack_y2</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span>
-    <span class="s2">&quot;stack_y2&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;y&quot;</span><span class="p">,</span>
+    <span class="s2">"stack_y2"</span><span class="p">,</span>
+    <span class="s2">"y"</span><span class="p">,</span>
     <span class="p">[</span>
-        <span class="n">Resource</span><span class="p">(</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
-        <span class="n">Resource</span><span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+        <span class="n">Resource</span><span class="p">(</span><span class="s2">"A"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+        <span class="n">Resource</span><span class="p">(</span><span class="s2">"B"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
     <span class="p">],</span>
 <span class="p">)</span>
 <span class="n">stack_y2</span><span class="o">.</span><span class="n">get_size_y</span><span class="p">()</span>
@@ -737,8 +737,8 @@ them.</p>
 the current top item.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lid1</span> <span class="o">=</span> <span class="n">Lid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;L1&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">nesting_z_height</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-<span class="n">lid2</span> <span class="o">=</span> <span class="n">Lid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;L2&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">nesting_z_height</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lid1</span> <span class="o">=</span> <span class="n">Lid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"L1"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">nesting_z_height</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">lid2</span> <span class="o">=</span> <span class="n">Lid</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"L2"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">nesting_z_height</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <span class="n">stack_z</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">lid1</span><span class="p">)</span>
 <span class="n">stack_z</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">lid2</span><span class="p">)</span>
 <span class="n">stack_z</span><span class="o">.</span><span class="n">get_top_item</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
@@ -746,7 +746,7 @@ the current top item.</p>
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;L2&#39;
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>'L2'
 </pre></div>
 </div>
 </div>
@@ -759,7 +759,7 @@ the current top item.</p>
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;L1&#39;
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>'L1'
 </pre></div>
 </div>
 </div>
@@ -773,8 +773,8 @@ top item in this z-growing stack.</p>
 plate on the stack you can retrieve it again using <code class="docutils literal notranslate"><span class="pre">get_top_item()</span></code>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span> <span class="o">=</span> <span class="n">Plate</span><span class="p">(</span><span class="s2">&quot;p1&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ordered_items</span><span class="o">=</span><span class="p">{})</span>
-<span class="n">stacking_area</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">&quot;stacking_area&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span> <span class="o">=</span> <span class="n">Plate</span><span class="p">(</span><span class="s2">"p1"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ordered_items</span><span class="o">=</span><span class="p">{})</span>
+<span class="n">stacking_area</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">"stacking_area"</span><span class="p">,</span> <span class="s2">"z"</span><span class="p">)</span>
 <span class="n">stacking_area</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
 <span class="n">stacking_area</span><span class="o">.</span><span class="n">get_top_item</span><span class="p">()</span> <span class="ow">is</span> <span class="n">plate</span>
 </pre></div>
@@ -794,11 +794,11 @@ so a stack of <code class="docutils literal notranslate"><span class="pre">N</sp
 <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">*</span> <span class="pre">size_z</span></code>. Plates without a <code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code>, and plates wearing a lid, do not nest.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">nesting_stack</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">&quot;nesting_stack&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">nesting_stack</span> <span class="o">=</span> <span class="n">ResourceStack</span><span class="p">(</span><span class="s2">"nesting_stack"</span><span class="p">,</span> <span class="s2">"z"</span><span class="p">)</span>
 <span class="n">nesting_stack</span><span class="o">.</span><span class="n">location</span> <span class="o">=</span> <span class="n">Coordinate</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
     <span class="n">nesting_stack</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span>
-        <span class="n">Plate</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;plate_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">127</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">86</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">ordered_items</span><span class="o">=</span><span class="p">{},</span> <span class="n">stacking_z_height</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">Plate</span><span class="p">(</span><span class="sa">f</span><span class="s2">"plate_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">127</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">86</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">ordered_items</span><span class="o">=</span><span class="p">{},</span> <span class="n">stacking_z_height</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
     <span class="p">)</span>
 
 <span class="c1"># 14 + (3 - 1) * 4 = 22, not 3 * 14 = 42</span>

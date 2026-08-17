@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -860,7 +861,7 @@
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.qinstruments</span><span class="w"> </span><span class="kn">import</span> <span class="n">BioShakeQ1</span>
 
-<span class="n">bs</span> <span class="o">=</span> <span class="n">BioShakeQ1</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;bioshake&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;COM1&quot;</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
+<span class="n">bs</span> <span class="o">=</span> <span class="n">BioShakeQ1</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"bioshake"</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">"COM1"</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
 <span class="k">await</span> <span class="n">bs</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 </pre></div>
 </div>

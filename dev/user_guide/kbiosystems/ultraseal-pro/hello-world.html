@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -780,7 +781,7 @@
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.kbiosystems</span><span class="w"> </span><span class="kn">import</span> <span class="n">KBiosystemsUltrasealPRO</span>
 
-<span class="n">sealer</span> <span class="o">=</span> <span class="n">KBiosystemsUltrasealPRO</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/ttyUSB0&quot;</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
+<span class="n">sealer</span> <span class="o">=</span> <span class="n">KBiosystemsUltrasealPRO</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">"/dev/ttyUSB0"</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
 <span class="k">await</span> <span class="n">sealer</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -804,7 +805,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">sealer</span><span class="o">.</span><span class="n">set_temperature</span><span class="p">(</span><span class="mi">160</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Current temperature:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">sealer</span><span class="o">.</span><span class="n">request_temperature</span><span class="p">(),</span> <span class="s2">&quot;C&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Current temperature:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">sealer</span><span class="o">.</span><span class="n">request_temperature</span><span class="p">(),</span> <span class="s2">"C"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -815,7 +816,7 @@
 <p>Read the status byte as a set of flags. On the Ultraseal PRO this includes <code class="docutils literal notranslate"><span class="pre">LowAir</span></code>, which indicates the compressed air supply is insufficient, and <code class="docutils literal notranslate"><span class="pre">ParkMode</span></code>, which indicates the shuttle is parked inside.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Status:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">sealer</span><span class="o">.</span><span class="n">request_status</span><span class="p">())</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"Status:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">sealer</span><span class="o">.</span><span class="n">request_status</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>

@@ -1,0 +1,99 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.benchcel.BenchCel4R
+======================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoclass:: BenchCel4R
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BenchCel4R.name
+      ~BenchCel4R.stacks
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BenchCel4R.__init__
+      ~BenchCel4R.assign_child_by_anchor
+      ~BenchCel4R.assign_child_resource
+      ~BenchCel4R.at
+      ~BenchCel4R.center
+      ~BenchCel4R.centers
+      ~BenchCel4R.check_can_drop_resource_here
+      ~BenchCel4R.close_robot_gripper
+      ~BenchCel4R.close_stacker_clamps
+      ~BenchCel4R.copy
+      ~BenchCel4R.deregister_did_assign_resource_callback
+      ~BenchCel4R.deregister_did_unassign_resource_callback
+      ~BenchCel4R.deregister_state_update_callback
+      ~BenchCel4R.deregister_will_assign_resource_callback
+      ~BenchCel4R.deregister_will_unassign_resource_callback
+      ~BenchCel4R.deserialize
+      ~BenchCel4R.downstack
+      ~BenchCel4R.get_absolute_location
+      ~BenchCel4R.get_absolute_rotation
+      ~BenchCel4R.get_absolute_size_x
+      ~BenchCel4R.get_absolute_size_y
+      ~BenchCel4R.get_absolute_size_z
+      ~BenchCel4R.get_all_children
+      ~BenchCel4R.get_anchor
+      ~BenchCel4R.get_highest_known_point
+      ~BenchCel4R.get_location_wrt
+      ~BenchCel4R.get_resource
+      ~BenchCel4R.get_root
+      ~BenchCel4R.get_size_x
+      ~BenchCel4R.get_size_y
+      ~BenchCel4R.get_size_z
+      ~BenchCel4R.home
+      ~BenchCel4R.is_in_subtree_of
+      ~BenchCel4R.load_all_state
+      ~BenchCel4R.load_from_json_file
+      ~BenchCel4R.load_state
+      ~BenchCel4R.load_state_from_file
+      ~BenchCel4R.move_plate_between_stacks
+      ~BenchCel4R.move_to_stacker
+      ~BenchCel4R.move_to_teachpoint
+      ~BenchCel4R.named
+      ~BenchCel4R.open_robot_gripper
+      ~BenchCel4R.open_stacker_clamps
+      ~BenchCel4R.register_did_assign_resource_callback
+      ~BenchCel4R.register_did_unassign_resource_callback
+      ~BenchCel4R.register_state_update_callback
+      ~BenchCel4R.register_will_assign_resource_callback
+      ~BenchCel4R.register_will_unassign_resource_callback
+      ~BenchCel4R.request_all_stacker_sensor_statuses
+      ~BenchCel4R.request_arm_pose
+      ~BenchCel4R.request_axis_limits
+      ~BenchCel4R.request_stacker_sensor_status
+      ~BenchCel4R.request_status
+      ~BenchCel4R.request_status_snapshot
+      ~BenchCel4R.rotate
+      ~BenchCel4R.rotated
+      ~BenchCel4R.save
+      ~BenchCel4R.save_state_to_file
+      ~BenchCel4R.serialize
+      ~BenchCel4R.serialize_all_state
+      ~BenchCel4R.serialize_state
+      ~BenchCel4R.set_labware
+      ~BenchCel4R.set_teachpoint
+      ~BenchCel4R.setup
+      ~BenchCel4R.stop
+      ~BenchCel4R.unassign
+      ~BenchCel4R.unassign_child_resource
+      ~BenchCel4R.upstack
+   
+   

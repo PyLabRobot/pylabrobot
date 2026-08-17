@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -748,8 +749,8 @@ sudo<span class="w"> </span>apt<span class="w"> </span>upgrade
 </div>
 </li>
 <li><p>Make USB devices accessible to users: add the following line to <code class="docutils literal notranslate"><span class="pre">/etc/udev/rules.d/99-usb.rules</span></code>:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">SUBSYSTEM</span><span class="o">==</span><span class="s2">&quot;usb&quot;</span><span class="p">,</span> <span class="n">MODE</span><span class="o">=</span><span class="s2">&quot;0666&quot;</span>
-<span class="n">SUBSYSTEM</span><span class="o">==</span><span class="s2">&quot;tty&quot;</span><span class="p">,</span> <span class="n">MODE</span><span class="o">=</span><span class="s2">&quot;0666&quot;</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">SUBSYSTEM</span><span class="o">==</span><span class="s2">"usb"</span><span class="p">,</span> <span class="n">MODE</span><span class="o">=</span><span class="s2">"0666"</span>
+<span class="n">SUBSYSTEM</span><span class="o">==</span><span class="s2">"tty"</span><span class="p">,</span> <span class="n">MODE</span><span class="o">=</span><span class="s2">"0666"</span>
 </pre></div>
 </div>
 </li>

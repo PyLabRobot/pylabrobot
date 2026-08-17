@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -753,14 +754,14 @@
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tip carrier&quot;</span><span class="p">)</span> <span class="c1"># initialize a tip carrier</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"tip carrier"</span><span class="p">)</span> <span class="c1"># initialize a tip carrier</span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt_carrier</span> <span class="o">=</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate carrier&quot;</span><span class="p">)</span> <span class="c1"># initialize a plate carrier</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt_carrier</span> <span class="o">=</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate carrier"</span><span class="p">)</span> <span class="c1"># initialize a plate carrier</span>
 </pre></div>
 </div>
 </div>
@@ -782,14 +783,14 @@
 <p>Whether or not tip tracking is turned on, spots on a tip rack initialize with a tip tracker that defaults to having a tip. The tip tracker only comes into play with performing operations.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tip rack&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"tip rack"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
 </pre></div>
 </div>
 </div>
@@ -802,14 +803,14 @@
 <p>To initialize a tip rack without tips, pass <code class="docutils literal notranslate"><span class="pre">with_tips=False</span></code>:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">empty_tip_rack</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;empty tip rack&quot;</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">empty_tip_rack</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"empty tip rack"</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
 </pre></div>
 </div>
 </div>
@@ -823,7 +824,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">fill</span><span class="p">()</span>
-<span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
+<span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
 </pre></div>
 </div>
 </div>
@@ -836,7 +837,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-<span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
+<span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
 </pre></div>
 </div>
 </div>
@@ -875,7 +876,7 @@
 <span class="k">try</span><span class="p">:</span>
   <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 <span class="k">except</span> <span class="n">NoTipError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"As expected:"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -902,7 +903,7 @@ As expected: Tip spot does not have a tip.
 <span class="k">try</span><span class="p">:</span>
   <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">empty_tip_rack</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 <span class="k">except</span> <span class="n">HasTipError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"As expected:"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -938,7 +939,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
   <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">empty_tip_rack</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
 <span class="k">except</span> <span class="n">NoTipError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"As expected:"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -959,7 +960,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 <span class="k">try</span><span class="p">:</span>
   <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="k">except</span> <span class="n">HasTipError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"As expected:"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -1121,14 +1122,14 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 <p>Wells automatically initialize with a volume tracker that defaults to having no volume.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">()</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1140,7 +1141,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1152,8 +1153,8 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">set_volume</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
-<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">set_volume</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1175,8 +1176,8 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 <h3>Inspecting volume tracker operation history<a class="headerlink" href="#inspecting-volume-tracker-operation-history" title="Link to this heading">#</a></h3>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
-<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1193,8 +1194,8 @@ pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
-<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">"A1"</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1225,9 +1226,9 @@ pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
-  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span> <span class="c1"># this is less liquid than is currently in the tip</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span> <span class="c1"># this is less liquid than is currently in the tip</span>
 <span class="k">except</span> <span class="n">TooLittleLiquidError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"As expected:"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -1267,7 +1268,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
   <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">):</span>
     <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span>
 <span class="k">except</span> <span class="n">TooLittleVolumeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"As expected:"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -1314,9 +1315,9 @@ As expected: Not enough space in container: 100.0uL &gt; 65.0uL.
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
-  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span> <span class="c1"># this is less liquid than is currently in the well</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span> <span class="c1"># this is less liquid than is currently in the well</span>
 <span class="k">except</span> <span class="n">TooLittleLiquidError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"As expected:"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -1355,9 +1356,9 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
   <span class="c1"># aspirate liquid from the first column into the first well</span>
   <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">):</span>
     <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span>
-    <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span>
+    <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span>
 <span class="k">except</span> <span class="n">TooLittleVolumeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">"As expected:"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>

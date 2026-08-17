@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -788,7 +789,7 @@
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.molecular_devices.spectramax</span><span class="w"> </span><span class="kn">import</span> <span class="n">SpectraMaxM5</span>
 
-<span class="n">reader</span> <span class="o">=</span> <span class="n">SpectraMaxM5</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;spectramax&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/ttyUSB0&quot;</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
+<span class="n">reader</span> <span class="o">=</span> <span class="n">SpectraMaxM5</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"spectramax"</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">"/dev/ttyUSB0"</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
 <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -799,7 +800,7 @@
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># from pylabrobot.molecular_devices.spectramax import SpectraMax384Plus</span>
 <span class="c1">#</span>
-<span class="c1"># reader = SpectraMax384Plus(name=&quot;spectramax&quot;, port=&quot;/dev/ttyUSB0&quot;)</span>
+<span class="c1"># reader = SpectraMax384Plus(name="spectramax", port="/dev/ttyUSB0")</span>
 <span class="c1"># await reader.setup()</span>
 </pre></div>
 </div>
@@ -810,7 +811,7 @@
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cor_96_wellplate_360ul_Fb</span>
 
-<span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate&quot;</span><span class="p">)</span>
+<span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate"</span><span class="p">)</span>
 <span class="n">reader</span><span class="o">.</span><span class="n">loading_tray</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -835,7 +836,7 @@
     <span class="n">plate</span><span class="o">.</span><span class="n">get_wells</span><span class="p">(),</span>
     <span class="n">wavelength</span><span class="o">=</span><span class="mi">450</span><span class="p">,</span>
     <span class="n">speed_read</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">calibrate</span><span class="o">=</span><span class="s2">&quot;once&quot;</span><span class="p">,</span>
+    <span class="n">calibrate</span><span class="o">=</span><span class="s2">"once"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -867,7 +868,7 @@
     <span class="n">excitation_wavelength</span><span class="o">=</span><span class="mi">485</span><span class="p">,</span>
     <span class="n">emission_wavelength</span><span class="o">=</span><span class="mi">520</span><span class="p">,</span>
     <span class="n">focal_height</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-    <span class="n">pmt_gain</span><span class="o">=</span><span class="s2">&quot;high&quot;</span><span class="p">,</span>
+    <span class="n">pmt_gain</span><span class="o">=</span><span class="s2">"high"</span><span class="p">,</span>
     <span class="n">read_from_bottom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
@@ -904,7 +905,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">current</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">request_current_temperature</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">current</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="se">\u00b0</span><span class="s2">C&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">current</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="se">\u00b0</span><span class="s2">C"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>

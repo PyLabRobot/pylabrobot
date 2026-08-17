@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.save
+===========================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.save

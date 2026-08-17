@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.assign\_child\_by\_anchor
+================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.assign_child_by_anchor

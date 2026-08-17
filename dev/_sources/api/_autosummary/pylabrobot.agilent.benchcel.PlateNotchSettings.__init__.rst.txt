@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.PlateNotchSettings.\_\_init\_\_
+===========================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: PlateNotchSettings.__init__

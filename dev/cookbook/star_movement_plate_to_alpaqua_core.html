@@ -606,7 +606,7 @@
 <h2>Protocol Mode<a class="headerlink" href="#protocol-mode" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">protocol_mode</span> <span class="o">=</span> <span class="s2">&quot;simulation&quot;</span> <span class="c1"># &quot;execution&quot; or &quot;simulation&quot;</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">protocol_mode</span> <span class="o">=</span> <span class="s2">"simulation"</span> <span class="c1"># "execution" or "simulation"</span>
 </pre></div>
 </div>
 </div>
@@ -633,13 +633,13 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARLetDeck</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.visualizer.visualizer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Visualizer</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">&quot;execution&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"execution"</span><span class="p">:</span>
 
   <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARBackend</span>
 
   <span class="n">backend</span> <span class="o">=</span> <span class="n">STARBackend</span><span class="p">()</span>
 
-<span class="k">elif</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">&quot;simulation&quot;</span><span class="p">:</span>
+<span class="k">elif</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"simulation"</span><span class="p">:</span>
 
   <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.backends.hamilton.STAR_chatterbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARChatterboxBackend</span>
     
@@ -667,7 +667,7 @@
 <p>Note: if you’re unsure whether you have the resources mentioned in a PLR automated Protocol, use Python’s inbuild <code class="docutils literal notranslate"><span class="pre">help</span></code> function to check out the resource definition’s docstring - they always contain the manufacturer’s catalogue/part number (and if available a direct link to the product page):</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">help</span><span class="p">(</span><span class="n">hamilton_mfx_plateholder_DWP_metal_tapped</span><span class="p">)</span> <span class="c1"># for more information visit the docs &#39;Resource Management&#39; section</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">help</span><span class="p">(</span><span class="n">hamilton_mfx_plateholder_DWP_metal_tapped</span><span class="p">)</span> <span class="c1"># for more information visit the docs 'Resource Management' section</span>
 </pre></div>
 </div>
 </div>
@@ -676,7 +676,7 @@
 
 hamilton_mfx_plateholder_DWP_metal_tapped(name: str) -&gt; pylabrobot.resources.carrier.PlateHolder
     Hamilton MFX DWP Module (cat.-no. 188042 / 188042-00).
-    Hamilton name: &#39;MFX_DWP_rackbased_module&#39;
+    Hamilton name: 'MFX_DWP_rackbased_module'
     It also contains metal clamps at the corners.
     https://www.hamiltoncompany.com/other-robotics/188042
 </pre></div>
@@ -717,30 +717,30 @@ C0CDid0001
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Setup MFX Carrier for Magnetic Bead Resuspension</span>
 
 <span class="n">mfx_plateholder_dwp_0</span> <span class="o">=</span> <span class="n">hamilton_mfx_plateholder_DWP_metal_tapped</span><span class="p">(</span>
-    <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;mfx_plateholder_dwp_tapped_dwp_0&quot;</span>
+    <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"mfx_plateholder_dwp_tapped_dwp_0"</span>
 <span class="p">)</span>
 
 <span class="n">mfx_carrier_tapped_plate_holder_example</span> <span class="o">=</span> <span class="n">hamilton_mfx_carrier_L5_base</span><span class="p">(</span>
-  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;mfx_carrier_tapped_plate_holder_example&quot;</span><span class="p">,</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">"mfx_carrier_tapped_plate_holder_example"</span><span class="p">,</span>
   <span class="n">modules</span><span class="o">=</span><span class="p">{</span>
     <span class="mi">0</span><span class="p">:</span> <span class="n">mfx_plateholder_dwp_0</span><span class="p">,</span>
   <span class="p">}</span>
 <span class="p">)</span>
 
 <span class="n">mfx_carrier_tapped_plate_holder_example</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">Azenta4titudeFrameStar_96_wellplate_200ul_Vb</span><span class="p">(</span>
-  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;wash_plate_0&quot;</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">"wash_plate_0"</span>
 <span class="p">)</span>
 
 <span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">mfx_carrier_tapped_plate_holder_example</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
 <span class="c1"># Setup Magnet-carrying MFX Carrier</span>
 
-<span class="n">plateholder_flat_0</span> <span class="o">=</span> <span class="n">hamilton_mfx_plateholder_DWP_flat</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;plateholder_flat_0&quot;</span><span class="p">)</span>
-<span class="n">magnet_0</span> <span class="o">=</span> <span class="n">alpaqua_96_plateadapter_magnum_flx</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;alpaqua_magnet_0&quot;</span><span class="p">)</span>
+<span class="n">plateholder_flat_0</span> <span class="o">=</span> <span class="n">hamilton_mfx_plateholder_DWP_flat</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"plateholder_flat_0"</span><span class="p">)</span>
+<span class="n">magnet_0</span> <span class="o">=</span> <span class="n">alpaqua_96_plateadapter_magnum_flx</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"alpaqua_magnet_0"</span><span class="p">)</span>
 <span class="n">plateholder_flat_0</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">magnet_0</span><span class="p">)</span>
 
 <span class="n">mfx_carrier_magnet_example</span> <span class="o">=</span> <span class="n">hamilton_mfx_carrier_L5_base</span><span class="p">(</span>
-  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;mfx_carrier_magnet_example&quot;</span><span class="p">,</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">"mfx_carrier_magnet_example"</span><span class="p">,</span>
   <span class="n">modules</span><span class="o">=</span><span class="p">{</span>
     <span class="mi">0</span><span class="p">:</span> <span class="n">plateholder_flat_0</span><span class="p">,</span>
   <span class="p">}</span>
@@ -765,19 +765,19 @@ C0CDid0001
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate_index</span> <span class="o">=</span> <span class="mi">0</span> <span class="c1"># always design for throughput adaptivness ;)</span>
 
-<span class="n">plate_to_move</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;wash_plate_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="n">move_target</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;alpaqua_magnet_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">plate_to_move</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"wash_plate_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">move_target</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"alpaqua_magnet_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 
 <span class="n">back_channel_idx</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>  <span class="c1"># Reduce wear &amp; tear on any single channel</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">&quot;simulation&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"simulation"</span><span class="p">:</span>
   <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
     
 <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">move_plate</span><span class="p">(</span>
   <span class="n">plate</span><span class="o">=</span><span class="n">plate_to_move</span><span class="p">,</span>
   <span class="n">to</span><span class="o">=</span><span class="n">move_target</span><span class="p">,</span>
-  <span class="n">use_arm</span><span class="o">=</span><span class="s2">&quot;core&quot;</span><span class="p">,</span>
+  <span class="n">use_arm</span><span class="o">=</span><span class="s2">"core"</span><span class="p">,</span>
   <span class="n">channel_1</span><span class="o">=</span><span class="n">back_channel_idx</span><span class="p">,</span>
   <span class="n">channel_2</span><span class="o">=</span><span class="n">back_channel_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
   <span class="n">pickup_distance_from_top</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
@@ -785,8 +785,8 @@ C0CDid0001
   <span class="n">return_core_gripper</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">&quot;execution&quot;</span><span class="p">:</span>
-  <span class="c1"># &quot;smart&quot; command, will ask operator for input if it cannot find plate in move_target location</span>
+<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"execution"</span><span class="p">:</span>
+  <span class="c1"># "smart" command, will ask operator for input if it cannot find plate in move_target location</span>
   <span class="c1"># place into condition for simulation mode</span>
 
   <span class="c1"># (1) check transfer success, (2) push plate flush</span>
@@ -801,7 +801,7 @@ C0CDid0001
 <span class="nb">print</span><span class="p">(</span><span class="n">backend</span><span class="o">.</span><span class="n">core_parked</span><span class="p">)</span>
 <span class="c1"># &gt;&gt;&gt; False # save time - keep CORE grippers on channels during magnetisation time</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">&quot;simulation&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"simulation"</span><span class="p">:</span>
   <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -819,12 +819,12 @@ False
 <h3>Move Plate back onto tapped PlateHolder<a class="headerlink" href="#move-plate-back-onto-tapped-plateholder" title="Link to this heading">#</a></h3>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">move_target</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;mfx_plateholder_dwp_tapped_dwp_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">move_target</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="sa">f</span><span class="s2">"mfx_plateholder_dwp_tapped_dwp_</span><span class="si">{</span><span class="n">plate_index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">move_plate</span><span class="p">(</span>
   <span class="n">plate</span><span class="o">=</span><span class="n">plate_to_move</span><span class="p">,</span>
   <span class="n">to</span><span class="o">=</span><span class="n">move_target</span><span class="p">,</span>
-  <span class="n">use_arm</span><span class="o">=</span><span class="s2">&quot;core&quot;</span><span class="p">,</span>
+  <span class="n">use_arm</span><span class="o">=</span><span class="s2">"core"</span><span class="p">,</span>
   <span class="n">channel_1</span><span class="o">=</span><span class="n">back_channel_idx</span><span class="p">,</span>
   <span class="n">channel_2</span><span class="o">=</span><span class="n">back_channel_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
   <span class="n">pickup_distance_from_top</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
@@ -832,7 +832,7 @@ False
   <span class="n">return_core_gripper</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">&quot;execution&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="n">protocol_mode</span> <span class="o">==</span> <span class="s2">"execution"</span><span class="p">:</span>
 
   <span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">core_check_resource_exists_at_location_center</span><span class="p">(</span>
     <span class="n">location</span><span class="o">=</span><span class="n">plate_to_move</span><span class="o">.</span><span class="n">get_absolute_location</span><span class="p">(),</span>

@@ -657,7 +657,7 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span><span class="p">,</span> <span class="n">Resource</span>
 
 <span class="n">blue_bucket</span> <span class="o">=</span> <span class="n">Resource</span><span class="p">(</span>
-  <span class="n">name</span><span class="o">=</span><span class="s1">&#39;Blue Bucket&#39;</span><span class="p">,</span>
+  <span class="n">name</span><span class="o">=</span><span class="s1">'Blue Bucket'</span><span class="p">,</span>
   <span class="n">size_x</span><span class="o">=</span><span class="mi">123</span><span class="p">,</span> <span class="c1"># in mm</span>
   <span class="n">size_y</span><span class="o">=</span><span class="mi">86</span><span class="p">,</span>
   <span class="n">size_z</span><span class="o">=</span><span class="mi">75</span><span class="p">,</span>
@@ -676,7 +676,7 @@
 </pre></div>
 </div>
 <p>This will allow you to creates instances like so:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">blue_bucket</span> <span class="o">=</span> <span class="n">BlueBucket</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my blue bucket&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">blue_bucket</span> <span class="o">=</span> <span class="n">BlueBucket</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"my blue bucket"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Because a blue bucket cannot have children, we override the <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.assign_child_resource.html#pylabrobot.resources.Resource.assign_child_resource" title="pylabrobot.resources.Resource.assign_child_resource"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.Resource.assign_child_resource()</span></code></a> method to raise an exception:</p>
@@ -684,7 +684,7 @@
   <span class="o">...</span>
 
   <span class="k">def</span><span class="w"> </span><span class="nf">assign_child_resource</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">child_resource</span><span class="p">:</span> <span class="n">Resource</span><span class="p">,</span> <span class="n">location</span><span class="p">:</span> <span class="n">Coordinate</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;BlueBuckets cannot have children&quot;</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"BlueBuckets cannot have children"</span><span class="p">)</span>
 </pre></div>
 </div>
 <section id="aspirating-from-the-custom-resource">
@@ -721,8 +721,8 @@
 
   <span class="k">def</span><span class="w"> </span><span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
     <span class="k">return</span> <span class="p">{</span>
-      <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-      <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+      <span class="s2">"name"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+      <span class="s2">"type"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
     <span class="p">}</span>
 </pre></div>
 </div>
@@ -768,11 +768,11 @@
 </div>
 <p>The <code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.create_equally_spaced_2d()</span></code> function creates a list of items, equally spaced in a grid.</p>
 <p>This resource is automatically compatible with the rest of PyLabRobot. For example, we can aspirate from the plate:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tube_plate</span> <span class="o">=</span> <span class="n">TubePlate</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tube_plate&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tube_plate</span> <span class="o">=</span> <span class="n">TubePlate</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"tube_plate"</span><span class="p">)</span>
 <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">tube_plate</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
 
-<span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">tube_plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">:</span><span class="s2">&quot;C1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
-<span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">tube_plate</span><span class="p">[</span><span class="s2">&quot;A2&quot;</span><span class="p">:</span><span class="s2">&quot;C2&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">tube_plate</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">:</span><span class="s2">"C1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">tube_plate</span><span class="p">[</span><span class="s2">"A2"</span><span class="p">:</span><span class="s2">"C2"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
 </div>
 <p><img alt="Aspirating from the tube plate" src="../_images/aspirate-tube-plate.jpg" /></p>

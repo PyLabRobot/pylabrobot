@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -745,11 +746,11 @@ python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </s
 </pre></div>
 </div>
 <p>If you want to use PLR on physical hardware, you need install the additional dependencies for those. See the example below for how to install the dependencies for the USB interface:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;pylabrobot[usb]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"pylabrobot[usb]"</span>
 </pre></div>
 </div>
 <p>You can install multiple dependencies at once by separating them with a comma:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;pylabrobot[serial,usb]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"pylabrobot[serial,usb]"</span>
 </pre></div>
 </div>
 <p>Different machines use different communication modes. Replace <code class="docutils literal notranslate"><span class="pre">[usb]</span></code> with one of the following items to install the desired dependencies. Find specific information for the machines you are using on their respective documentation pages.</p>
@@ -805,7 +806,7 @@ python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </s
 </table>
 </div>
 <p>Or install all dependencies:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">&#39;pylabrobot[all]&#39;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'pylabrobot[all]'</span>
 </pre></div>
 </div>
 <p>Cytation microscopy is not included in the <code class="docutils literal notranslate"><span class="pre">all</span></code> group because it requires an older version of numpy. If you want to use Cytation imaging features, install those dependencies separately through <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;pylabrobot[cytation-microscopy]&quot;</span></code>.</p>
@@ -815,7 +816,7 @@ python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </s
 <p>You can install PyLabRobot from source. This is particularly useful if you want to contribute to the project or if you want to use the latest features that haven’t been released on PyPI yet.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/pylabrobot/pylabrobot.git
 <span class="nb">cd</span><span class="w"> </span>pylabrobot
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">".[dev]"</span>
 </pre></div>
 </div>
 <p>This will install PyLabRobot in editable mode, which means that any changes you make to the source code will be reflected in your environment without needing to reinstall. It will also install all the dependencies needed for development, testing and building documentation. See above for more information on the different dependency groups.</p>

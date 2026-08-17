@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -753,16 +754,16 @@ async tasks.</p>
 <h2>Event shape<a class="headerlink" href="#event-shape" title="Link to this heading">#</a></h2>
 <p>Every event has the following JSON-ready representation:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">&quot;sequence&quot;</span><span class="p">:</span> <span class="mi">42</span><span class="p">,</span>
-  <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;incubator.fetch_plate.completed&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="s2">&quot;2026-08-10T12:34:56.789012+00:00&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;context&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;operation&quot;</span><span class="p">:</span> <span class="s2">&quot;incubator.fetch_plate&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;operation_id&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">,</span>
+  <span class="s2">"sequence"</span><span class="p">:</span> <span class="mi">42</span><span class="p">,</span>
+  <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"incubator.fetch_plate.completed"</span><span class="p">,</span>
+  <span class="s2">"timestamp"</span><span class="p">:</span> <span class="s2">"2026-08-10T12:34:56.789012+00:00"</span><span class="p">,</span>
+  <span class="s2">"context"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"operation"</span><span class="p">:</span> <span class="s2">"incubator.fetch_plate"</span><span class="p">,</span>
+    <span class="s2">"operation_id"</span><span class="p">:</span> <span class="s2">"..."</span><span class="p">,</span>
   <span class="p">},</span>
-  <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;incubator&quot;</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;Incubator&quot;</span><span class="p">},</span>
-    <span class="s2">&quot;resources&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;plate_1&quot;</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;Plate&quot;</span><span class="p">}],</span>
+  <span class="s2">"data"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"device"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"incubator"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"Incubator"</span><span class="p">},</span>
+    <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"plate_1"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"Plate"</span><span class="p">}],</span>
   <span class="p">},</span>
 <span class="p">}</span>
 </pre></div>
@@ -789,7 +790,7 @@ such as rotational <code class="docutils literal notranslate"><span class="pre">
 batch identifiers that PLR itself cannot know.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.events</span><span class="w"> </span><span class="kn">import</span> <span class="n">event_context</span>
 
-<span class="k">with</span> <span class="n">use_event_bus</span><span class="p">(</span><span class="n">event_bus</span><span class="p">),</span> <span class="n">event_context</span><span class="p">(</span><span class="n">run_id</span><span class="o">=</span><span class="s2">&quot;run-42&quot;</span><span class="p">,</span> <span class="n">batch_id</span><span class="o">=</span><span class="s2">&quot;batch-2&quot;</span><span class="p">):</span>
+<span class="k">with</span> <span class="n">use_event_bus</span><span class="p">(</span><span class="n">event_bus</span><span class="p">),</span> <span class="n">event_context</span><span class="p">(</span><span class="n">run_id</span><span class="o">=</span><span class="s2">"run-42"</span><span class="p">,</span> <span class="n">batch_id</span><span class="o">=</span><span class="s2">"batch-2"</span><span class="p">):</span>
   <span class="k">await</span> <span class="n">incubator</span><span class="o">.</span><span class="n">fetch_plate_to_loading_tray</span><span class="p">(</span><span class="n">site</span><span class="p">)</span>
 </pre></div>
 </div>

@@ -1,0 +1,77 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.benchcel.BenchCelLabwareSettings
+===================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoclass:: BenchCelLabwareSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BenchCelLabwareSettings.additional_release_height
+      ~BenchCelLabwareSettings.can_be_lidded
+      ~BenchCelLabwareSettings.can_be_sealed
+      ~BenchCelLabwareSettings.error_correction_offset
+      ~BenchCelLabwareSettings.gripper_holding_plate_position
+      ~BenchCelLabwareSettings.gripper_holding_stack_position
+      ~BenchCelLabwareSettings.gripper_open_position
+      ~BenchCelLabwareSettings.identifier
+      ~BenchCelLabwareSettings.lidded_plate_departure_height
+      ~BenchCelLabwareSettings.lidded_plate_gripper_offset
+      ~BenchCelLabwareSettings.lidded_plate_gripper_position
+      ~BenchCelLabwareSettings.lidded_plate_resting_height
+      ~BenchCelLabwareSettings.lidded_plate_stacking_thickness
+      ~BenchCelLabwareSettings.lidded_plate_thickness
+      ~BenchCelLabwareSettings.low_pressure_warning
+      ~BenchCelLabwareSettings.orientation_sensor_threshold
+      ~BenchCelLabwareSettings.plate_presence_threshold
+      ~BenchCelLabwareSettings.rack_presence_threshold
+      ~BenchCelLabwareSettings.sealed_plate_stacking_thickness
+      ~BenchCelLabwareSettings.sealed_plate_thickness
+      ~BenchCelLabwareSettings.sensor_intensity
+      ~BenchCelLabwareSettings.source
+      ~BenchCelLabwareSettings.stack_plate_presence_threshold
+      ~BenchCelLabwareSettings.tilt_margin
+      ~BenchCelLabwareSettings.tilt_margin_enabled
+      ~BenchCelLabwareSettings.name
+      ~BenchCelLabwareSettings.plate_size_x
+      ~BenchCelLabwareSettings.plate_size_y
+      ~BenchCelLabwareSettings.plate_size_z
+      ~BenchCelLabwareSettings.stacking_thickness
+      ~BenchCelLabwareSettings.robot_gripper_offset
+      ~BenchCelLabwareSettings.stacker_gripper_offset
+      ~BenchCelLabwareSettings.sensor_offset
+      ~BenchCelLabwareSettings.notch_settings
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BenchCelLabwareSettings.__init__
+      ~BenchCelLabwareSettings.apply_to_plate
+      ~BenchCelLabwareSettings.dimension_differences
+      ~BenchCelLabwareSettings.effective_plate_height
+      ~BenchCelLabwareSettings.effective_stacking_thickness
+      ~BenchCelLabwareSettings.from_device_payload
+      ~BenchCelLabwareSettings.from_dict
+      ~BenchCelLabwareSettings.from_plate
+      ~BenchCelLabwareSettings.from_xml_file
+      ~BenchCelLabwareSettings.preferred_pickup_location
+      ~BenchCelLabwareSettings.robot_pickup_distance_from_top
+      ~BenchCelLabwareSettings.to_device_payload
+      ~BenchCelLabwareSettings.to_dict
+      ~BenchCelLabwareSettings.validate_plate_dimensions
+   
+   

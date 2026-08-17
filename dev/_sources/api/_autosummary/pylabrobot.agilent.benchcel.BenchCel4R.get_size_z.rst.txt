@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.get\_size\_z
+===================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.get_size_z

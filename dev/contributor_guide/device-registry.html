@@ -609,18 +609,18 @@ one object to that file.</p>
 <h2>Adding a device<a class="headerlink" href="#adding-a-device" title="Link to this heading">#</a></h2>
 <p>Append an object to <code class="docutils literal notranslate"><span class="pre">docs/_static/devices.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;curiox-ht2000&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;vendor&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Curiox&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HT2000&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;plate washer&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;plate washing&quot;</span><span class="p">],</span>
-<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mostly&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;api&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pylabrobot.curiox.CurioxHT2000&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;api_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;v1&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;code_slug&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;curiox&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;doc_slug&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;curiox/curiox-ht2000/hello-world&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;manager&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://discuss.pylabrobot.org/u/rickwierenga&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;oem&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://curiox.com/&quot;</span>
+<span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"curiox-ht2000"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"vendor"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Curiox"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"HT2000"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"plate washer"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"plate washing"</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"mostly"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"api"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pylabrobot.curiox.CurioxHT2000"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"api_version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v1"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"code_slug"</span><span class="p">:</span><span class="w"> </span><span class="s2">"curiox"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"doc_slug"</span><span class="p">:</span><span class="w"> </span><span class="s2">"curiox/curiox-ht2000/hello-world"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"manager"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://discuss.pylabrobot.org/u/rickwierenga"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"oem"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://curiox.com/"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -706,7 +706,7 @@ repository and branch in <code class="docutils literal notranslate"><span class=
 <li><p>Put a <code class="docutils literal notranslate"><span class="pre">{device-card}</span></code> directive in the guide using the registry object’s <code class="docutils literal notranslate"><span class="pre">id</span></code>.</p></li>
 </ol>
 <p>For example, a notebook at <code class="docutils literal notranslate"><span class="pre">docs/user_guide/agilent/vspin/hello-world.ipynb</span></code> uses:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;doc_slug&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agilent/vspin/hello-world&quot;</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"doc_slug"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agilent/vspin/hello-world"</span>
 </pre></div>
 </div>
 <p>and its card is:</p>

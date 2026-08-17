@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.name
+===========================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoproperty:: BenchCel4R.name

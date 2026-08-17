@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.set\_labware
+===================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.set_labware

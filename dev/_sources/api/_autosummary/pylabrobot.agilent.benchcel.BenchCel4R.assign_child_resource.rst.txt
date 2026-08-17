@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.assign\_child\_resource
+==============================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.assign_child_resource

@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -794,7 +795,7 @@
 
 
 
-<span class="n">decapper</span> <span class="o">=</span> <span class="n">FluidXIntelliXcap96</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/ttyUSB0&quot;</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
+<span class="n">decapper</span> <span class="o">=</span> <span class="n">FluidXIntelliXcap96</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">"/dev/ttyUSB0"</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
 
 <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 </pre></div>
@@ -807,7 +808,7 @@
 <p><code class="docutils literal notranslate"><span class="pre">request_status()</span></code> returns the current status word: <code class="docutils literal notranslate"><span class="pre">StatusOK</span></code> (idle with no caps held), <code class="docutils literal notranslate"><span class="pre">StatusBUSY</span></code> (moving), <code class="docutils literal notranslate"><span class="pre">StatusRECAP</span></code> (decapped; caps held and ready to recap or waste), <code class="docutils literal notranslate"><span class="pre">StatusSLEEP</span></code> (standby), <code class="docutils literal notranslate"><span class="pre">StatusCAREJECT</span></code> (cartridge ejected), or <code class="docutils literal notranslate"><span class="pre">StatusMANUAL</span></code> (halted; needs inspection, then <code class="docutils literal notranslate"><span class="pre">reset_error()</span></code> or one of the manual recovery commands). Note the status word does <strong>not</strong> encode the tray position.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;status:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_status</span><span class="p">())</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"status:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_status</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>
@@ -827,9 +828,9 @@
 
 <span class="n">code</span> <span class="o">=</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_error_code</span><span class="p">()</span>
 <span class="k">if</span> <span class="n">code</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;no error latched&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"no error latched"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">get_error_message</span><span class="p">(</span><span class="n">code</span><span class="p">),</span> <span class="s2">&quot;recoverable:&quot;</span><span class="p">,</span> <span class="n">is_recoverable_error</span><span class="p">(</span><span class="n">code</span><span class="p">))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">get_error_message</span><span class="p">(</span><span class="n">code</span><span class="p">),</span> <span class="s2">"recoverable:"</span><span class="p">,</span> <span class="n">is_recoverable_error</span><span class="p">(</span><span class="n">code</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -851,23 +852,23 @@
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;firmware:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_firmware_versions</span><span class="p">())</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"firmware:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_firmware_versions</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;cartridge:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_cartridge_info</span><span class="p">())</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;profile:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_profile</span><span class="p">())</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"cartridge:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_cartridge_info</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"profile:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_profile</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;extended status:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_extended_status</span><span class="p">())</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;caps held:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">caps_on_pins</span><span class="p">())</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"extended status:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">request_extended_status</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"caps held:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">caps_on_pins</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>
@@ -1008,7 +1009,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Place the replacement cartridge on the tray, then pick it up.</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;loaded profile:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">load_cartridge</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"loaded profile:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">decapper</span><span class="o">.</span><span class="n">load_cartridge</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>

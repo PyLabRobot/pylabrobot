@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.request\_axis\_limits
+============================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.request_axis_limits

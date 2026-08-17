@@ -677,26 +677,26 @@
 <p>Let’s create plate and a tip rack modules:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_plate_module</span> <span class="o">=</span> <span class="n">hamilton_mfx_plateholder_DWP_flat</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my_plate_module&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_plate_module</span> <span class="o">=</span> <span class="n">hamilton_mfx_plateholder_DWP_flat</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"my_plate_module"</span><span class="p">)</span>
 <span class="n">my_plate_module</span>
 </pre></div>
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PlateHolder(name=&#39;my_plate_module&#39;, location=None, size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PlateHolder(name='my_plate_module', location=None, size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_tip_rack_module</span> <span class="o">=</span> <span class="n">MFX_TIP_module</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my_tip_rack_module&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">my_tip_rack_module</span> <span class="o">=</span> <span class="n">MFX_TIP_module</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"my_tip_rack_module"</span><span class="p">)</span>
 <span class="n">my_tip_rack_module</span>
 </pre></div>
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>ResourceHolder(name=&#39;my_tip_rack_module&#39;, location=None, size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>ResourceHolder(name='my_tip_rack_module', location=None, size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)
 </pre></div>
 </div>
 </div>
@@ -705,7 +705,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">carrier</span> <span class="o">=</span> <span class="n">hamilton_mfx_carrier_L5_base</span><span class="p">(</span>
-  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my_carrier&quot;</span><span class="p">,</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">"my_carrier"</span><span class="p">,</span>
   <span class="n">modules</span><span class="o">=</span><span class="p">{</span>
     <span class="mi">0</span><span class="p">:</span> <span class="n">my_plate_module</span><span class="p">,</span>
     <span class="mi">3</span><span class="p">:</span> <span class="n">my_tip_rack_module</span><span class="p">,</span>
@@ -723,7 +723,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PlateHolder(name=&#39;my_plate_module&#39;, location=Coordinate(000.000, 005.000, 018.195), size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PlateHolder(name='my_plate_module', location=Coordinate(000.000, 005.000, 018.195), size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)
 </pre></div>
 </div>
 </div>
@@ -735,7 +735,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>ResourceHolder(name=&#39;my_tip_rack_module&#39;, location=Coordinate(000.000, 293.000, 018.195), size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>ResourceHolder(name='my_tip_rack_module', location=Coordinate(000.000, 293.000, 018.195), size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)
 </pre></div>
 </div>
 </div>
@@ -746,7 +746,7 @@
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
   <span class="n">carrier</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;KeyError, as expected.&quot;</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"KeyError, as expected."</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -760,14 +760,14 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cor_96_wellplate_2mL_Vb</span>
-<span class="n">my_plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_2mL_Vb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my_plate&quot;</span><span class="p">)</span>
+<span class="n">my_plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_2mL_Vb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"my_plate"</span><span class="p">)</span>
 <span class="n">carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">my_plate</span><span class="p">)</span>
 <span class="n">my_plate</span><span class="o">.</span><span class="n">parent</span>
 </pre></div>
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PlateHolder(name=&#39;my_plate_module&#39;, location=Coordinate(000.000, 005.000, 018.195), size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PlateHolder(name='my_plate_module', location=Coordinate(000.000, 005.000, 018.195), size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)
 </pre></div>
 </div>
 </div>
@@ -776,14 +776,14 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span>
-<span class="n">my_tip_rack</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my_tip_rack&quot;</span><span class="p">)</span>
+<span class="n">my_tip_rack</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"my_tip_rack"</span><span class="p">)</span>
 <span class="n">carrier</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">my_tip_rack</span>
 <span class="n">my_tip_rack</span><span class="o">.</span><span class="n">parent</span>
 </pre></div>
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>ResourceHolder(name=&#39;my_tip_rack_module&#39;, location=Coordinate(000.000, 293.000, 018.195), size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>ResourceHolder(name='my_tip_rack_module', location=Coordinate(000.000, 293.000, 018.195), size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)
 </pre></div>
 </div>
 </div>

@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -765,7 +766,7 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.ufactory.xarm6</span><span class="w"> </span><span class="kn">import</span> <span class="n">XArm6</span>
 
 <span class="n">xarm</span> <span class="o">=</span> <span class="n">XArm6</span><span class="p">(</span>
-  <span class="n">ip</span><span class="o">=</span><span class="s2">&quot;192.168.1.220&quot;</span><span class="p">,</span>
+  <span class="n">ip</span><span class="o">=</span><span class="s2">"192.168.1.220"</span><span class="p">,</span>
   <span class="n">tcp_offset</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>  <span class="c1"># adjust for your gripper mount (x, y, z, roll, pitch, yaw)</span>
 <span class="p">)</span>
 <span class="k">await</span> <span class="n">xarm</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>

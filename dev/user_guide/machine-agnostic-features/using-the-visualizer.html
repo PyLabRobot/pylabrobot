@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -800,12 +801,12 @@ File server started at http://127.0.0.1:1337 . Open this URL in your browser.
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_car</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;tip carrier&#39;</span><span class="p">)</span>
-<span class="n">tip_car</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack1</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;tips_01&#39;</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="n">tip_car</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack2</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;tips_02&#39;</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="n">tip_car</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack3</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;tips_03&#39;</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="n">tip_car</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack4</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;tips_04&#39;</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="n">tip_car</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack5</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;tips_05&#39;</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_car</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'tip carrier'</span><span class="p">)</span>
+<span class="n">tip_car</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack1</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'tips_01'</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">tip_car</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack2</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'tips_02'</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">tip_car</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack3</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'tips_03'</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">tip_car</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack4</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'tips_04'</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">tip_car</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack5</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'tips_05'</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -819,10 +820,10 @@ File server started at http://127.0.0.1:1337 . Open this URL in your browser.
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt_car</span> <span class="o">=</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;plate carrier&#39;</span><span class="p">)</span>
-<span class="n">plt_car</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate_1</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;plate_01&#39;</span><span class="p">)</span>
-<span class="n">plt_car</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate_2</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;plate_02&#39;</span><span class="p">)</span>
-<span class="n">plt_car</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate_3</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;plate_03&#39;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt_car</span> <span class="o">=</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'plate carrier'</span><span class="p">)</span>
+<span class="n">plt_car</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate_1</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'plate_01'</span><span class="p">)</span>
+<span class="n">plt_car</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate_2</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'plate_02'</span><span class="p">)</span>
+<span class="n">plt_car</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate_3</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'plate_03'</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -852,7 +853,7 @@ File server started at http://127.0.0.1:1337 . Open this URL in your browser.
 <p>You can precisely control the presence of tips using <code class="xref py py-func docutils literal notranslate"><span class="pre">set_tip_state()</span></code>. This function allows you to set whether there is a tip in each <a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.tip_rack.TipSpot.html#pylabrobot.resources.tip_rack.TipSpot" title="pylabrobot.resources.tip_rack.TipSpot"><code class="xref py py-class docutils literal notranslate"><span class="pre">TipSpot</span></code></a>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_rack4</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s2">&quot;tips_04&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_rack4</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s2">"tips_04"</span><span class="p">)</span>
 <span class="n">tip_rack4</span><span class="o">.</span><span class="n">set_tip_state</span><span class="p">([</span><span class="kc">True</span><span class="p">]</span><span class="o">*</span><span class="mi">48</span> <span class="o">+</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span><span class="o">*</span><span class="mi">48</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -915,7 +916,7 @@ File server started at http://127.0.0.1:1337 . Open this URL in your browser.
 <p>Note that since we are using the <code class="xref py py-class docutils literal notranslate"><span class="pre">ChatterboxBackend</span></code>, we just print out “Picking up tips” instead of actually performing an operation. The visualizer will show the tips being picked up.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack1</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">,</span> <span class="s2">&quot;B2&quot;</span><span class="p">,</span> <span class="s2">&quot;C3&quot;</span><span class="p">,</span> <span class="s2">&quot;D4&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack1</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">,</span> <span class="s2">"B2"</span><span class="p">,</span> <span class="s2">"C3"</span><span class="p">,</span> <span class="s2">"D4"</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
@@ -932,7 +933,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">tip_rack1</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">,</span> <span class="s2">&quot;B2&quot;</span><span class="p">,</span> <span class="s2">&quot;C3&quot;</span><span class="p">,</span> <span class="s2">&quot;D4&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">tip_rack1</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">,</span> <span class="s2">"B2"</span><span class="p">,</span> <span class="s2">"C3"</span><span class="p">,</span> <span class="s2">"D4"</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
@@ -952,7 +953,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 <h3>Aspirating and dispensing<a class="headerlink" href="#aspirating-and-dispensing" title="Link to this heading">#</a></h3>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack1</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack1</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
@@ -966,7 +967,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate_1</span><span class="p">[</span><span class="s2">&quot;A2&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">200</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate_1</span><span class="p">[</span><span class="s2">"A2"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">200</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
@@ -980,7 +981,7 @@ pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate_2</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">200</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate_2</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">200</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
@@ -1035,7 +1036,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Aspirating 100.0 from Plate(name=&#39;plate_01&#39;, size_x=127.76, size_y=85.48, size_z=14.2, location=Coordinate(000.000, 000.000, -03.030)).
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Aspirating 100.0 from Plate(name='plate_01', size_x=127.76, size_y=85.48, size_z=14.2, location=Coordinate(000.000, 000.000, -03.030)).
 </pre></div>
 </div>
 </div>
@@ -1047,7 +1048,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Dispensing 100.0 to Plate(name=&#39;plate_03&#39;, size_x=127.76, size_y=85.48, size_z=14.2, location=Coordinate(000.000, 000.000, -03.030)).
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Dispensing 100.0 to Plate(name='plate_03', size_x=127.76, size_y=85.48, size_z=14.2, location=Coordinate(000.000, 000.000, -03.030)).
 </pre></div>
 </div>
 </div>

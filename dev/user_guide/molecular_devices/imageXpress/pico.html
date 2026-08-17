@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -765,7 +766,7 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.molecular_devices.imageXpress.pico</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pico</span><span class="p">,</span> <span class="n">Objective</span><span class="p">,</span> <span class="n">ImagingMode</span>
 
 <span class="n">pico</span> <span class="o">=</span> <span class="n">Pico</span><span class="p">(</span>
-  <span class="n">host</span><span class="o">=</span><span class="s2">&quot;192.168.1.100&quot;</span><span class="p">,</span>  <span class="c1"># replace with your instrument&#39;s IP</span>
+  <span class="n">host</span><span class="o">=</span><span class="s2">"192.168.1.100"</span><span class="p">,</span>  <span class="c1"># replace with your instrument's IP</span>
   <span class="n">objectives</span><span class="o">=</span><span class="p">{</span>
     <span class="mi">0</span><span class="p">:</span> <span class="n">Objective</span><span class="o">.</span><span class="n">O_4X_PL_FL</span><span class="p">,</span>
     <span class="mi">1</span><span class="p">:</span> <span class="n">Objective</span><span class="o">.</span><span class="n">O_10X_PL_FL</span><span class="p">,</span>

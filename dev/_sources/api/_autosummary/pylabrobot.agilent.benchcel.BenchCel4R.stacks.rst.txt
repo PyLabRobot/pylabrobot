@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.stacks
+=============================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoproperty:: BenchCel4R.stacks

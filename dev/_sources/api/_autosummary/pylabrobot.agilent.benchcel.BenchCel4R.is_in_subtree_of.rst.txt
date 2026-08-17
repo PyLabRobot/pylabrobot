@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.is\_in\_subtree\_of
+==========================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.is_in_subtree_of

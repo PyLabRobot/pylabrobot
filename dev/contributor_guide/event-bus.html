@@ -631,11 +631,11 @@ protocol-level action or resource-transfer meaning.</p>
 <h2>Event contract<a class="headerlink" href="#event-contract" title="Link to this heading">#</a></h2>
 <p>A <code class="docutils literal notranslate"><span class="pre">PLREvent</span></code> always contains:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">&quot;sequence&quot;</span><span class="p">:</span> <span class="mi">42</span><span class="p">,</span>
-  <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;liquid_handler.aspirate.completed&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="s2">&quot;2026-08-10T12:34:56.789012+00:00&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;context&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
-  <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
+  <span class="s2">"sequence"</span><span class="p">:</span> <span class="mi">42</span><span class="p">,</span>
+  <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"liquid_handler.aspirate.completed"</span><span class="p">,</span>
+  <span class="s2">"timestamp"</span><span class="p">:</span> <span class="s2">"2026-08-10T12:34:56.789012+00:00"</span><span class="p">,</span>
+  <span class="s2">"context"</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
+  <span class="s2">"data"</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -694,10 +694,10 @@ references.</p>
 <h3>Machine lifecycle<a class="headerlink" href="#machine-lifecycle" title="Link to this heading">#</a></h3>
 <p>Use for <code class="docutils literal notranslate"><span class="pre">setup()</span></code> and <code class="docutils literal notranslate"><span class="pre">stop()</span></code> on a public PLR machine frontend.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@evented_operation</span><span class="p">(</span>
-  <span class="s2">&quot;machine.setup&quot;</span><span class="p">,</span>
+  <span class="s2">"machine.setup"</span><span class="p">,</span>
   <span class="k">lambda</span> <span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device_reference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate_reader&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;resources&quot;</span><span class="p">:</span> <span class="p">[],</span>
+    <span class="s2">"device"</span><span class="p">:</span> <span class="n">device_reference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"plate_reader"</span><span class="p">),</span>
+    <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[],</span>
   <span class="p">},</span>
 <span class="p">)</span>
 <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">):</span>
@@ -713,7 +713,7 @@ Do not pass arbitrary controller objects to <code class="docutils literal notran
 <p>Use for a plate, lid, carrier, or other resource transfer. The direct moved resource is listed in
 <code class="docutils literal notranslate"><span class="pre">resources</span></code>; locations are named separately.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">event_operation</span><span class="p">(</span>
-  <span class="s2">&quot;incubator.fetch_plate&quot;</span><span class="p">,</span>
+  <span class="s2">"incubator.fetch_plate"</span><span class="p">,</span>
   <span class="n">device</span><span class="o">=</span><span class="n">resource_reference</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
   <span class="n">resources</span><span class="o">=</span><span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">)],</span>
   <span class="n">source</span><span class="o">=</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">site</span><span class="p">),</span>
@@ -734,13 +734,13 @@ or a physical-deck assumption.</p>
 channel. Each item should include the channel, direct resource reference, owning plate reference
 when applicable, and <code class="docutils literal notranslate"><span class="pre">volume</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">liquid_handler</span><span class="p">),</span>
-  <span class="s2">&quot;resources&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="p">)],</span>
-  <span class="s2">&quot;liquid_operations&quot;</span><span class="p">:</span> <span class="p">[{</span>
-    <span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-    <span class="s2">&quot;resource&quot;</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="p">),</span>
-    <span class="s2">&quot;plate&quot;</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="o">.</span><span class="n">parent</span><span class="p">),</span>
-    <span class="s2">&quot;volume&quot;</span><span class="p">:</span> <span class="mf">50.0</span><span class="p">,</span>
+  <span class="s2">"device"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">liquid_handler</span><span class="p">),</span>
+  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="p">)],</span>
+  <span class="s2">"liquid_operations"</span><span class="p">:</span> <span class="p">[{</span>
+    <span class="s2">"channel"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="s2">"resource"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="p">),</span>
+    <span class="s2">"plate"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="o">.</span><span class="n">parent</span><span class="p">),</span>
+    <span class="s2">"volume"</span><span class="p">:</span> <span class="mf">50.0</span><span class="p">,</span>
   <span class="p">}],</span>
 <span class="p">}</span>
 </pre></div>
@@ -751,9 +751,9 @@ when applicable, and <code class="docutils literal notranslate"><span class="pre
 <p>Report each direct <code class="docutils literal notranslate"><span class="pre">TipSpot</span></code>, <code class="docutils literal notranslate"><span class="pre">TipRack</span></code>, or <code class="docutils literal notranslate"><span class="pre">Trash</span></code> resource. For channelized tip actions,
 include <code class="docutils literal notranslate"><span class="pre">tip_operations</span></code> with the channel and direct resource.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">liquid_handler</span><span class="p">),</span>
-  <span class="s2">&quot;resources&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">tip_spot</span><span class="p">)],</span>
-  <span class="s2">&quot;tip_operations&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;resource&quot;</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">tip_spot</span><span class="p">)}],</span>
+  <span class="s2">"device"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">liquid_handler</span><span class="p">),</span>
+  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">tip_spot</span><span class="p">)],</span>
+  <span class="s2">"tip_operations"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"channel"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"resource"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">tip_spot</span><span class="p">)}],</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -765,11 +765,11 @@ currently loaded direct resource in <code class="docutils literal notranslate"><
 infer a resource from broader deck state. Event fields use PLR’s
 <a class="reference internal" href="../user_guide/getting-started/units.html"><span class="std std-doc">default units</span></a>, so their names do not repeat those units:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">controller</span><span class="p">),</span>
-  <span class="s2">&quot;resources&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">controller</span><span class="o">.</span><span class="n">resource</span><span class="p">)],</span>  <span class="c1"># only when loaded</span>
-  <span class="s2">&quot;target_temperature&quot;</span><span class="p">:</span> <span class="mf">37.0</span><span class="p">,</span>
-  <span class="s2">&quot;duration&quot;</span><span class="p">:</span> <span class="mf">300.0</span><span class="p">,</span>
-  <span class="s2">&quot;speed_rpm&quot;</span><span class="p">:</span> <span class="mf">800.0</span><span class="p">,</span>
+  <span class="s2">"device"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">controller</span><span class="p">),</span>
+  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">controller</span><span class="o">.</span><span class="n">resource</span><span class="p">)],</span>  <span class="c1"># only when loaded</span>
+  <span class="s2">"target_temperature"</span><span class="p">:</span> <span class="mf">37.0</span><span class="p">,</span>
+  <span class="s2">"duration"</span><span class="p">:</span> <span class="mf">300.0</span><span class="p">,</span>
+  <span class="s2">"speed_rpm"</span><span class="p">:</span> <span class="mf">800.0</span><span class="p">,</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -787,16 +787,16 @@ they do not need to inherit from the legacy temperature-controller frontend.</p>
 resource, including one bucket holder reference per loaded resource when the frontend exposes
 individual buckets. Use explicit physical parameters:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device_reference</span><span class="p">(</span><span class="n">centrifuge</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">centrifuge</span><span class="o">.</span><span class="n">name</span><span class="p">),</span>
-  <span class="s2">&quot;resources&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">)],</span>
-  <span class="s2">&quot;bucket_resources&quot;</span><span class="p">:</span> <span class="p">[{</span>
-    <span class="s2">&quot;holder&quot;</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">bucket</span><span class="p">),</span>
-    <span class="s2">&quot;resource&quot;</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">),</span>
+  <span class="s2">"device"</span><span class="p">:</span> <span class="n">device_reference</span><span class="p">(</span><span class="n">centrifuge</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">centrifuge</span><span class="o">.</span><span class="n">name</span><span class="p">),</span>
+  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">)],</span>
+  <span class="s2">"bucket_resources"</span><span class="p">:</span> <span class="p">[{</span>
+    <span class="s2">"holder"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">bucket</span><span class="p">),</span>
+    <span class="s2">"resource"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">),</span>
   <span class="p">}],</span>
-  <span class="s2">&quot;relative_centrifugal_force&quot;</span><span class="p">:</span> <span class="mf">500.0</span><span class="p">,</span>
-  <span class="s2">&quot;duration&quot;</span><span class="p">:</span> <span class="mf">60.0</span><span class="p">,</span>
-  <span class="s2">&quot;acceleration_fraction&quot;</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span>
-  <span class="s2">&quot;deceleration_fraction&quot;</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span>
+  <span class="s2">"relative_centrifugal_force"</span><span class="p">:</span> <span class="mf">500.0</span><span class="p">,</span>
+  <span class="s2">"duration"</span><span class="p">:</span> <span class="mf">60.0</span><span class="p">,</span>
+  <span class="s2">"acceleration_fraction"</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span>
+  <span class="s2">"deceleration_fraction"</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -820,8 +820,8 @@ events when an arm is actually approaching, picking up, moving, or dropping a PL
 <h2>Failure events<a class="headerlink" href="#failure-events" title="Link to this heading">#</a></h2>
 <p>A failed operation retains the original invocation context and adds:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">&quot;error_type&quot;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
-  <span class="s2">&quot;error_message&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">),</span>
+  <span class="s2">"error_type"</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+  <span class="s2">"error_message"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">),</span>
 <span class="p">}</span>
 </pre></div>
 </div>

@@ -610,33 +610,33 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">resize_image</span><span class="p">(</span><span class="n">input_path</span><span class="p">,</span> <span class="n">output_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">720</span><span class="p">,</span> <span class="n">quality</span><span class="o">=</span><span class="mi">80</span><span class="p">):</span>
-<span class="w">  </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">  </span><span class="sd">"""</span>
 <span class="sd">  Resize an image to the specified width while maintaining aspect ratio,</span>
 <span class="sd">  then save it as a compressed JPEG for web use.</span>
-<span class="sd">  &quot;&quot;&quot;</span>
+<span class="sd">  """</span>
   <span class="n">img</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">input_path</span><span class="p">)</span>
 
   <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">width</span> <span class="o">&gt;</span> <span class="n">width</span><span class="p">:</span>
     <span class="n">w_percent</span> <span class="o">=</span> <span class="n">width</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">img</span><span class="o">.</span><span class="n">width</span><span class="p">)</span>
     <span class="n">height</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">img</span><span class="o">.</span><span class="n">height</span> <span class="o">*</span> <span class="n">w_percent</span><span class="p">)</span>
     <span class="n">img</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">resize</span><span class="p">((</span><span class="n">width</span><span class="p">,</span> <span class="n">height</span><span class="p">),</span> <span class="n">Image</span><span class="o">.</span><span class="n">LANCZOS</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Resized down to </span><span class="si">{</span><span class="n">width</span><span class="si">}</span><span class="s2">x</span><span class="si">{</span><span class="n">height</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Resized down to </span><span class="si">{</span><span class="n">width</span><span class="si">}</span><span class="s2">x</span><span class="si">{</span><span class="n">height</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
   <span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skipping resize: image width (</span><span class="si">{</span><span class="n">img</span><span class="o">.</span><span class="n">width</span><span class="si">}</span><span class="s2">px) &lt;= target width (</span><span class="si">{</span><span class="n">width</span><span class="si">}</span><span class="s2">px)&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Skipping resize: image width (</span><span class="si">{</span><span class="n">img</span><span class="o">.</span><span class="n">width</span><span class="si">}</span><span class="s2">px) &lt;= target width (</span><span class="si">{</span><span class="n">width</span><span class="si">}</span><span class="s2">px)"</span><span class="p">)</span>
 
-  <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">mode</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;RGBA&quot;</span><span class="p">,</span> <span class="s2">&quot;P&quot;</span><span class="p">):</span>
-    <span class="n">img</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">&quot;RGB&quot;</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">mode</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"RGBA"</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">):</span>
+    <span class="n">img</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">"RGB"</span><span class="p">)</span>
 
   <span class="k">if</span> <span class="n">output_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">base</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">input_path</span><span class="p">)</span>
-    <span class="n">output_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">_resized.jpg&quot;</span>
+    <span class="n">output_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">_resized.jpg"</span>
 
-  <span class="n">img</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">output_path</span><span class="p">,</span> <span class="s2">&quot;JPEG&quot;</span><span class="p">,</span> <span class="n">quality</span><span class="o">=</span><span class="n">quality</span><span class="p">,</span> <span class="n">optimize</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-  <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Saved: </span><span class="si">{</span><span class="n">output_path</span><span class="si">}</span><span class="s2"> (quality=</span><span class="si">{</span><span class="n">quality</span><span class="si">}</span><span class="s2">%)&quot;</span><span class="p">)</span>
+  <span class="n">img</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">output_path</span><span class="p">,</span> <span class="s2">"JPEG"</span><span class="p">,</span> <span class="n">quality</span><span class="o">=</span><span class="n">quality</span><span class="p">,</span> <span class="n">optimize</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Saved: </span><span class="si">{</span><span class="n">output_path</span><span class="si">}</span><span class="s2"> (quality=</span><span class="si">{</span><span class="n">quality</span><span class="si">}</span><span class="s2">%)"</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
   <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Usage: python resize.py &lt;input_path&gt; [output_path]&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"Usage: python resize.py &lt;input_path&gt; [output_path]"</span><span class="p">)</span>
     <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
   <span class="n">inp</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
   <span class="n">outp</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="k">else</span> <span class="kc">None</span>
@@ -645,7 +645,7 @@
 </div>
 <p>You can easily resize images in bulk using a bash script:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">for</span><span class="w"> </span>img<span class="w"> </span><span class="k">in</span><span class="w"> </span>*.png<span class="w"> </span>*.jpg<span class="p">;</span><span class="w"> </span><span class="k">do</span>
-<span class="w">  </span>python<span class="w"> </span>resize.py<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$img</span><span class="s2">&quot;</span>
+<span class="w">  </span>python<span class="w"> </span>resize.py<span class="w"> </span><span class="s2">"</span><span class="nv">$img</span><span class="s2">"</span>
 <span class="k">done</span>
 </pre></div>
 </div>

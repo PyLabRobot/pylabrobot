@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -794,7 +795,7 @@ you verify it on an HT2000, please open a PR to remove the not-tested warning.</
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.curiox</span><span class="w"> </span><span class="kn">import</span> <span class="n">CurioxHT2000</span>
 
-<span class="n">washer</span> <span class="o">=</span> <span class="n">CurioxHT2000</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/ttyUSB0&quot;</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
+<span class="n">washer</span> <span class="o">=</span> <span class="n">CurioxHT2000</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">"/dev/ttyUSB0"</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
 <span class="k">await</span> <span class="n">washer</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -841,7 +842,7 @@ you verify it on an HT2000, please open a PR to remove the not-tested warning.</
 <p>Before washing, prime the fluid path. <code class="docutils literal notranslate"><span class="pre">prime()</span></code> runs a routine and waits for it to settle. Choose the routine by name: <code class="docutils literal notranslate"><span class="pre">&quot;standard&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;head&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pump&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;short&quot;</span></code>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">washer</span><span class="o">.</span><span class="n">prime</span><span class="p">(</span><span class="s2">&quot;standard&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">washer</span><span class="o">.</span><span class="n">prime</span><span class="p">(</span><span class="s2">"standard"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>

@@ -591,7 +591,7 @@
 <section id="store-the-webhook-url">
 <h2>1. Store the webhook URL<a class="headerlink" href="#store-the-webhook-url" title="Link to this heading">#</a></h2>
 <p>Save the URL to <code class="docutils literal notranslate"><span class="pre">~/.plr_slack_webhook</span></code> — outside the repo, mode 600 so only your user can read it:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">umask</span><span class="w"> </span><span class="m">077</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;https://hooks.slack.com/services/...&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>~/.plr_slack_webhook
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">umask</span><span class="w"> </span><span class="m">077</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"https://hooks.slack.com/services/..."</span><span class="w"> </span>&gt;<span class="w"> </span>~/.plr_slack_webhook
 </pre></div>
 </div>
 <p>The helper below reads from this file. Pass <code class="docutils literal notranslate"><span class="pre">webhook_url=</span></code> to override (e.g. for testing).</p>
@@ -606,7 +606,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">urllib.error</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<span class="n">WEBHOOK_FILE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;~/.plr_slack_webhook&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
+<span class="n">WEBHOOK_FILE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"~/.plr_slack_webhook"</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_load_webhook</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
@@ -618,23 +618,23 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">slack_notify</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">webhook_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
   <span class="n">url</span> <span class="o">=</span> <span class="n">webhook_url</span> <span class="ow">or</span> <span class="n">_load_webhook</span><span class="p">()</span>
   <span class="k">if</span> <span class="ow">not</span> <span class="n">url</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[slack_notify: no webhook configured at </span><span class="si">{</span><span class="n">WEBHOOK_FILE</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"[slack_notify: no webhook configured at </span><span class="si">{</span><span class="n">WEBHOOK_FILE</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="k">return</span>
 
   <span class="n">req</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">Request</span><span class="p">(</span>
     <span class="n">url</span><span class="p">,</span>
-    <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">text</span><span class="p">})</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">),</span>
-    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">},</span>
-    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;POST&quot;</span><span class="p">,</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">text</span><span class="p">})</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">),</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">"Content-Type"</span><span class="p">:</span> <span class="s2">"application/json"</span><span class="p">},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"POST"</span><span class="p">,</span>
   <span class="p">)</span>
   <span class="k">try</span><span class="p">:</span>
     <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span> <span class="k">as</span> <span class="n">resp</span><span class="p">:</span>
       <span class="n">resp</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
   <span class="k">except</span> <span class="p">(</span><span class="n">urllib</span><span class="o">.</span><span class="n">error</span><span class="o">.</span><span class="n">URLError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[slack_notify failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"[slack_notify failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 
-<span class="n">slack_notify</span><span class="p">(</span><span class="s2">&quot;:wave: Hello from PyLabRobot&quot;</span><span class="p">)</span>
+<span class="n">slack_notify</span><span class="p">(</span><span class="s2">":wave: Hello from PyLabRobot"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -657,7 +657,7 @@
 
 <span class="k">try</span><span class="p">:</span>
   <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
-  <span class="n">slack_notify</span><span class="p">(</span><span class="s2">&quot;:test_tube: Protocol started&quot;</span><span class="p">)</span>
+  <span class="n">slack_notify</span><span class="p">(</span><span class="s2">":test_tube: Protocol started"</span><span class="p">)</span>
 
   <span class="c1"># ... your protocol goes here ...</span>
   <span class="c1"># await lh.pick_up_tips(...)</span>
@@ -665,9 +665,9 @@
   <span class="c1"># await lh.dispense(...)</span>
   <span class="c1"># await lh.drop_tips()</span>
 
-  <span class="n">slack_notify</span><span class="p">(</span><span class="s2">&quot;:white_check_mark: Protocol finished&quot;</span><span class="p">)</span>
+  <span class="n">slack_notify</span><span class="p">(</span><span class="s2">":white_check_mark: Protocol finished"</span><span class="p">)</span>
 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-  <span class="n">slack_notify</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;:rotating_light: Protocol failed: `</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">`</span><span class="se">\n</span><span class="s2">```</span><span class="si">{</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">()</span><span class="si">}</span><span class="s2">```&quot;</span><span class="p">)</span>
+  <span class="n">slack_notify</span><span class="p">(</span><span class="sa">f</span><span class="s2">":rotating_light: Protocol failed: `</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">`</span><span class="se">\n</span><span class="s2">```</span><span class="si">{</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">()</span><span class="si">}</span><span class="s2">```"</span><span class="p">)</span>
   <span class="k">raise</span>
 <span class="k">finally</span><span class="p">:</span>
   <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
@@ -684,27 +684,27 @@
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">slack_post</span><span class="p">(</span><span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">webhook_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
   <span class="n">url</span> <span class="o">=</span> <span class="n">webhook_url</span> <span class="ow">or</span> <span class="n">_load_webhook</span><span class="p">()</span>
   <span class="k">if</span> <span class="ow">not</span> <span class="n">url</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[slack_post: no webhook configured at </span><span class="si">{</span><span class="n">WEBHOOK_FILE</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">payload</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"[slack_post: no webhook configured at </span><span class="si">{</span><span class="n">WEBHOOK_FILE</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">payload</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="k">return</span>
   <span class="n">req</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">Request</span><span class="p">(</span>
     <span class="n">url</span><span class="p">,</span>
-    <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">),</span>
-    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">},</span>
-    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;POST&quot;</span><span class="p">,</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">),</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">"Content-Type"</span><span class="p">:</span> <span class="s2">"application/json"</span><span class="p">},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"POST"</span><span class="p">,</span>
   <span class="p">)</span>
   <span class="k">try</span><span class="p">:</span>
     <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span> <span class="k">as</span> <span class="n">resp</span><span class="p">:</span>
       <span class="n">resp</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
   <span class="k">except</span> <span class="p">(</span><span class="n">urllib</span><span class="o">.</span><span class="n">error</span><span class="o">.</span><span class="n">URLError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[slack_post failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">payload</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"[slack_post failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">payload</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 
 <span class="n">slack_post</span><span class="p">({</span>
-  <span class="s2">&quot;blocks&quot;</span><span class="p">:</span> <span class="p">[</span>
-    <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;header&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;plain_text&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;Run complete&quot;</span><span class="p">}},</span>
-    <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;section&quot;</span><span class="p">,</span> <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">[</span>
-      <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;mrkdwn&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;*Plates:*</span><span class="se">\n</span><span class="s2">4&quot;</span><span class="p">},</span>
-      <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;mrkdwn&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;*Duration:*</span><span class="se">\n</span><span class="s2">00:42:13&quot;</span><span class="p">},</span>
+  <span class="s2">"blocks"</span><span class="p">:</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"header"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"plain_text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="s2">"Run complete"</span><span class="p">}},</span>
+    <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"section"</span><span class="p">,</span> <span class="s2">"fields"</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"mrkdwn"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="s2">"*Plates:*</span><span class="se">\n</span><span class="s2">4"</span><span class="p">},</span>
+      <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"mrkdwn"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="s2">"*Duration:*</span><span class="se">\n</span><span class="s2">00:42:13"</span><span class="p">},</span>
     <span class="p">]},</span>
   <span class="p">]</span>
 <span class="p">})</span>

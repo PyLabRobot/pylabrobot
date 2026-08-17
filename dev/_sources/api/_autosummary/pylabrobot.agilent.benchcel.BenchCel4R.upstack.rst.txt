@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.upstack
+==============================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.upstack

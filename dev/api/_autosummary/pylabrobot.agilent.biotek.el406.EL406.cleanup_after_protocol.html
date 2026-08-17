@@ -596,8 +596,8 @@ software does after all protocol steps complete:
 <p>This is the recommended way to end a protocol run.</p>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Run protocol steps</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">syringe_prime</span><span class="p">(</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">syringe_prime</span><span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">syringe_prime</span><span class="p">(</span><span class="s2">"A"</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">syringe_prime</span><span class="p">(</span><span class="s2">"B"</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Then cleanup</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">backend</span><span class="o">.</span><span class="n">cleanup_after_protocol</span><span class="p">()</span>
 </pre></div>

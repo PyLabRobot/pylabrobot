@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.register\_did\_unassign\_resource\_callback
+==================================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.register_did_unassign_resource_callback

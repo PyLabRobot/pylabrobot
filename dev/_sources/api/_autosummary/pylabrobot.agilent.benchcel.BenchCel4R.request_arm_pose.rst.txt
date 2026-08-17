@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.request\_arm\_pose
+=========================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.request_arm_pose

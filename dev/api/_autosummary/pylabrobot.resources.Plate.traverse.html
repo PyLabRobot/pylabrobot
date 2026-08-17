@@ -620,7 +620,7 @@ be <code class="code docutils literal notranslate"><span class="pre">[E1,</span>
 <p class="rubric">Examples</p>
 <p>Traverse the items in the resource from top to bottom, in batches of 3:</p>
 <blockquote>
-<div><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">items</span><span class="o">.</span><span class="n">traverse</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="s2">&quot;top_left&quot;</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">items</span><span class="o">.</span><span class="n">traverse</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s2">"down"</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="s2">"top_left"</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>[[&lt;Item A1&gt;, &lt;Item B1&gt;, &lt;Item C1&gt;], [&lt;Item D1&gt;, &lt;Item E1&gt;, &lt;Item F1&gt;], …]</p>
@@ -628,7 +628,7 @@ be <code class="code docutils literal notranslate"><span class="pre">[E1,</span>
 <p>Traverse the items in the resource from left to right, in batches of 5, repeating the
 traversal when the end of the resource is reached:</p>
 <blockquote>
-<div><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">items</span><span class="o">.</span><span class="n">traverse</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="s2">&quot;top_left&quot;</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">items</span><span class="o">.</span><span class="n">traverse</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s2">"right"</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="s2">"top_left"</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>[[&lt;Item A1&gt;, &lt;Item A2&gt;, &lt;Item A3&gt;], [&lt;Item A4&gt;, &lt;Item A5&gt;, &lt;Item A6&gt;], …]</p>

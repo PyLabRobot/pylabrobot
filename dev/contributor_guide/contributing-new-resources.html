@@ -616,7 +616,7 @@ List the part number, name, a picture and a link to the manufacturer’s website
 Existing entries use a table format like this:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>| Description | Image | PLR definition |
 |-------------|-------|----------------|
-| &#39;VWRReagentReservoirs25mL&#39;&lt;br&gt;Part no.: 89094&lt;br&gt;[manufacturer website](https://us.vwr.com/store/product/4694822/vwr-disposable-pipetting-reservoirs)&lt;br&gt;Polystyrene Reservoirs | ![](img/vwr/VWRReagentReservoirs25mL.jpg) | `VWRReagentReservoirs25mL` |
+| 'VWRReagentReservoirs25mL'&lt;br&gt;Part no.: 89094&lt;br&gt;[manufacturer website](https://us.vwr.com/store/product/4694822/vwr-disposable-pipetting-reservoirs)&lt;br&gt;Polystyrene Reservoirs | ![](img/vwr/VWRReagentReservoirs25mL.jpg) | `VWRReagentReservoirs25mL` |
 </pre></div>
 </div>
 <p>Use the same style and folder structure for images.</p>
@@ -635,16 +635,16 @@ If you measured a value yourself append <code class="docutils literal notranslat
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># example</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">AGenBio_96_wellplate_Ub_2200ul</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">lid</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Lid</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Plate</span><span class="p">:</span>
-<span class="w"> </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w"> </span><span class="sd">"""</span>
 <span class="sd">  AGenBio Catalog No. P-2.2-SQG-96</span>
 <span class="sd">  - Material: Polypropylene</span>
 <span class="sd">  - Max. volume: 2200 uL</span>
-<span class="sd">  &quot;&quot;&quot;</span>
+<span class="sd">  """</span>
   <span class="n">INNER_WELL_WIDTH</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># measured</span>
   <span class="n">INNER_WELL_LENGTH</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># measured</span>
 
   <span class="n">well_kwargs</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;size_x&quot;</span><span class="p">:</span> <span class="n">INNER_WELL_WIDTH</span><span class="p">,</span>  <span class="c1"># measured</span>
+    <span class="s2">"size_x"</span><span class="p">:</span> <span class="n">INNER_WELL_WIDTH</span><span class="p">,</span>  <span class="c1"># measured</span>
     <span class="o">...</span>
   <span class="p">}</span>
 

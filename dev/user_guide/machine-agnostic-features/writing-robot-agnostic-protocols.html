@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -750,11 +751,11 @@
 <span class="n">lh</span> <span class="o">=</span> <span class="n">LiquidHandler</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">deck</span><span class="o">=</span><span class="n">deck</span><span class="p">)</span>
 
 <span class="c1"># Get references to the resources you need. Use type hinting for autocompletion.</span>
-<span class="n">tip_rack</span><span class="p">:</span> <span class="n">TipRack</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s1">&#39;tip_rack&#39;</span><span class="p">)</span>
-<span class="n">plate</span><span class="p">:</span> <span class="n">Plate</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s1">&#39;plate&#39;</span><span class="p">)</span>
+<span class="n">tip_rack</span><span class="p">:</span> <span class="n">TipRack</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s1">'tip_rack'</span><span class="p">)</span>
+<span class="n">plate</span><span class="p">:</span> <span class="n">Plate</span> <span class="o">=</span> <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s1">'plate'</span><span class="p">)</span>
 
 <span class="c1"># the protocol...</span>
-<span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tip</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">])</span>
+<span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tip</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">])</span>
 </pre></div>
 </div>
 </section>
@@ -770,13 +771,13 @@
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling</span><span class="w"> </span><span class="kn">import</span> <span class="n">Strictness</span><span class="p">,</span> <span class="n">set_strictness</span>
 
 <span class="n">set_strictness</span><span class="p">(</span><span class="n">Strictness</span><span class="o">.</span><span class="n">IGNORE</span><span class="p">)</span>
-<span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">my_tip_rack</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">illegal_argument</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="c1"># will log on debug level</span>
+<span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">my_tip_rack</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">illegal_argument</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="c1"># will log on debug level</span>
 
 <span class="n">set_strictness</span><span class="p">(</span><span class="n">Strictness</span><span class="o">.</span><span class="n">WARN</span><span class="p">)</span>
-<span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">my_tip_rack</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">illegal_argument</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="c1"># will warn</span>
+<span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">my_tip_rack</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">illegal_argument</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="c1"># will warn</span>
 
 <span class="n">set_strictness</span><span class="p">(</span><span class="n">Strictness</span><span class="o">.</span><span class="n">STRICT</span><span class="p">)</span>
-<span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">my_tip_rack</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">illegal_argument</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="c1"># will raise a TypeError</span>
+<span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">my_tip_rack</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">illegal_argument</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="c1"># will raise a TypeError</span>
 </pre></div>
 </div>
 </section>

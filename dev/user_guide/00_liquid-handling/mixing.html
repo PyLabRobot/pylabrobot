@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -743,13 +744,13 @@
 <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">TIP_CAR_480_A00</span><span class="p">,</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span>
-<span class="n">tip_carrier</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tiprack_1&quot;</span><span class="p">)</span>
-<span class="n">tip_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">tr0</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tiprack_1_0&quot;</span><span class="p">)</span>
+<span class="n">tip_carrier</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"tiprack_1"</span><span class="p">)</span>
+<span class="n">tip_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">tr0</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL_filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"tiprack_1_0"</span><span class="p">)</span>
 <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">tip_carrier</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">,</span> <span class="n">Cor_96_wellplate_360ul_Fb</span>
-<span class="n">plate_carrier</span> <span class="o">=</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate_carrier_1&quot;</span><span class="p">)</span>
-<span class="n">plate_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate_1&quot;</span><span class="p">)</span>
+<span class="n">plate_carrier</span> <span class="o">=</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate_carrier_1"</span><span class="p">)</span>
+<span class="n">plate_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate_1"</span><span class="p">)</span>
 <span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate_carrier</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -771,7 +772,7 @@ Resource plate_carrier_1 was assigned to the liquid handler.
 <p>Import the <code class="docutils literal notranslate"><span class="pre">Mix</span></code> object, and pass it to the <code class="docutils literal notranslate"><span class="pre">mix</span></code> parameter of LiquidHandler.aspirate and LiquidHandler.dispense as a list, with one object per channel.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tr0</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tr0</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
@@ -786,7 +787,7 @@ pip#  resource             offset           tip type     max volume (µL)  fitti
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.standard</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mix</span>
-<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">],</span> <span class="n">mix</span><span class="o">=</span><span class="p">[</span><span class="n">Mix</span><span class="p">(</span><span class="n">volume</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">repetitions</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">flow_rate</span><span class="o">=</span><span class="mi">100</span><span class="p">)])</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">],</span> <span class="n">mix</span><span class="o">=</span><span class="p">[</span><span class="n">Mix</span><span class="p">(</span><span class="n">volume</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">repetitions</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">flow_rate</span><span class="o">=</span><span class="mi">100</span><span class="p">)])</span>
 </pre></div>
 </div>
 </div>
@@ -800,7 +801,7 @@ pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">],</span> <span class="n">mix</span><span class="o">=</span><span class="p">[</span><span class="n">Mix</span><span class="p">(</span><span class="n">volume</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">repetitions</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">flow_rate</span><span class="o">=</span><span class="mi">100</span><span class="p">)])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">"A1"</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">],</span> <span class="n">mix</span><span class="o">=</span><span class="p">[</span><span class="n">Mix</span><span class="p">(</span><span class="n">volume</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">repetitions</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">flow_rate</span><span class="o">=</span><span class="mi">100</span><span class="p">)])</span>
 </pre></div>
 </div>
 </div>

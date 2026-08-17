@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.move\_plate\_between\_stacks
+===================================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.move_plate_between_stacks

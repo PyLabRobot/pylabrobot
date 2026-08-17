@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -851,7 +852,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">current</span> <span class="o">=</span> <span class="k">await</span> <span class="n">stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_temperature</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">current</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> °C&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">current</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> °C"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -859,7 +860,7 @@
 <p>The device has three independent temperature sensors (<code class="docutils literal notranslate"><span class="pre">&quot;main&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;dif&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;boost&quot;</span></code>). You can also read a geometric <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> of all three:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_temperature</span><span class="p">(</span><span class="n">sensor</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_temperature</span><span class="p">(</span><span class="n">sensor</span><span class="o">=</span><span class="s2">"mean"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -867,7 +868,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Block until temperature is reached</span>
-<span class="k">await</span> <span class="n">stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">wait_for_temperature</span><span class="p">(</span><span class="n">sensor</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">wait_for_temperature</span><span class="p">(</span><span class="n">sensor</span><span class="o">=</span><span class="s2">"mean"</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -926,7 +927,7 @@
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span><span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;figure_eight&quot;</span><span class="p">,</span> <span class="n">rpm</span><span class="o">=</span><span class="mi">400</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span><span class="n">pattern</span><span class="o">=</span><span class="s2">"figure_eight"</span><span class="p">,</span> <span class="n">rpm</span><span class="o">=</span><span class="mi">400</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -964,7 +965,7 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Query states</span>
-<span class="k">await</span> <span class="n">stack</span><span class="o">.</span><span class="n">request_loading_tray_states</span><span class="p">()</span>      <span class="c1"># {0: &#39;closed&#39;, 1: &#39;closed&#39;}</span>
+<span class="k">await</span> <span class="n">stack</span><span class="o">.</span><span class="n">request_loading_tray_states</span><span class="p">()</span>      <span class="c1"># {0: 'closed', 1: 'closed'}</span>
 <span class="k">await</span> <span class="n">stack</span><span class="o">.</span><span class="n">request_temperature_control_states</span><span class="p">()</span> <span class="c1"># {0: False, 1: False}</span>
 <span class="k">await</span> <span class="n">stack</span><span class="o">.</span><span class="n">request_shaking_states</span><span class="p">()</span>             <span class="c1"># {0: False, 1: False}</span>
 </pre></div>
@@ -977,11 +978,11 @@
 <p>When using more than one physical stack, pass the serial port explicitly to avoid ambiguity:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">backend_a</span> <span class="o">=</span> <span class="n">InhecoIncubatorShakerStackBackend</span><span class="p">(</span><span class="n">dip_switch_id</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/cu.usbserial-130&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">backend_a</span> <span class="o">=</span> <span class="n">InhecoIncubatorShakerStackBackend</span><span class="p">(</span><span class="n">dip_switch_id</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">"/dev/cu.usbserial-130"</span><span class="p">)</span>
 <span class="n">stack_a</span> <span class="o">=</span> <span class="n">IncubatorShakerStack</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">backend_a</span><span class="p">)</span>
 <span class="k">await</span> <span class="n">stack_a</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 
-<span class="n">backend_b</span> <span class="o">=</span> <span class="n">InhecoIncubatorShakerStackBackend</span><span class="p">(</span><span class="n">dip_switch_id</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/cu.usbserial-42&quot;</span><span class="p">)</span>
+<span class="n">backend_b</span> <span class="o">=</span> <span class="n">InhecoIncubatorShakerStackBackend</span><span class="p">(</span><span class="n">dip_switch_id</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">"/dev/cu.usbserial-42"</span><span class="p">)</span>
 <span class="n">stack_b</span> <span class="o">=</span> <span class="n">IncubatorShakerStack</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">backend_b</span><span class="p">)</span>
 <span class="k">await</span> <span class="n">stack_b</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 </pre></div>

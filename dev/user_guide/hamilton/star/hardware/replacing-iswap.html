@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -794,7 +795,7 @@
 <ol class="arabic simple" start="11">
 <li><p><strong>!!While supporting the iSWAP in the Z axis!!</strong> release the Z axis brake on the iSWAP.</p></li>
 </ol>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Confirm the deck is clear and press Enter to continue...&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">input</span><span class="p">(</span><span class="s2">"Confirm the deck is clear and press Enter to continue..."</span><span class="p">)</span>
 <span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">pip</span><span class="o">.</span><span class="n">backend</span><span class="o">.</span><span class="n">position_components_for_free_iswap_y_range</span><span class="p">()</span>
 <span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">move_y</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
 <span class="n">x</span> <span class="o">=</span> <span class="n">star</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">rails_to_location</span><span class="p">(</span><span class="n">star</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">num_rails</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">x</span>
@@ -802,14 +803,14 @@
 </pre></div>
 </div>
 <p>hold the iSWAP arm in place while you do this, as it will fall if you don’t:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">dangerous_release_break</span><span class="p">()</span>  <span class="c1"># firmware command &quot;R0BA&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">dangerous_release_break</span><span class="p">()</span>  <span class="c1"># firmware command "R0BA"</span>
 </pre></div>
 </div>
 <ol class="arabic simple" start="12">
 <li><p>Lower the iSWAP until the gripper fingers are just above the deck surface (2-5mm) but still above the little “submarines”.</p></li>
 <li><p>Reengage the Z axis brake</p></li>
 </ol>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">reengage_break</span><span class="p">()</span>  <span class="c1"># firmware command &quot;R0BO&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">reengage_break</span><span class="p">()</span>  <span class="c1"># firmware command "R0BO"</span>
 </pre></div>
 </div>
 <ol class="arabic simple" start="14">
@@ -819,7 +820,7 @@
 
 <span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span>
   <span class="n">rotation_drive</span><span class="o">=</span><span class="n">iSWAPBackend</span><span class="o">.</span><span class="n">RotationDriveOrientation</span><span class="o">.</span><span class="n">RIGHT</span><span class="p">,</span>
-  <span class="n">grip_direction</span><span class="o">=</span><span class="s2">&quot;back&quot;</span><span class="p">,</span>
+  <span class="n">grip_direction</span><span class="o">=</span><span class="s2">"back"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -828,7 +829,7 @@
 </ol>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span>
   <span class="n">rotation_drive</span><span class="o">=</span><span class="n">iSWAPBackend</span><span class="o">.</span><span class="n">RotationDriveOrientation</span><span class="o">.</span><span class="n">LEFT</span><span class="p">,</span>
-  <span class="n">grip_direction</span><span class="o">=</span><span class="s2">&quot;back&quot;</span><span class="p">,</span>
+  <span class="n">grip_direction</span><span class="o">=</span><span class="s2">"back"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -836,7 +837,7 @@
 <li><p>Repeat steps 14 and 15 until both sides are relatively the same.</p></li>
 <li><p>Make sure there is no chance of Z axis collision and initialize the Z axis of the iSWAP.</p></li>
 </ol>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">initialize_z_axis</span><span class="p">()</span>  <span class="c1"># firmware command &quot;R0ZI&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">iswap</span><span class="o">.</span><span class="n">initialize_z_axis</span><span class="p">()</span>  <span class="c1"># firmware command "R0ZI"</span>
 </pre></div>
 </div>
 <ol class="arabic simple" start="18">

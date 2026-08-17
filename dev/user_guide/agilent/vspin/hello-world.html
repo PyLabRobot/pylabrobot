@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Agilent</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="index.html">VSpin</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="events.html">VSpin and Access2 events</a></li>
@@ -789,7 +790,7 @@ movement or spin has completed.</p>
 <p>Install PyLabRobot with its FTDI dependencies in the notebook’s Python environment.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="n">pip</span> <span class="n">install</span> <span class="s2">&quot;pylabrobot[ftdi]&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="n">pip</span> <span class="n">install</span> <span class="s2">"pylabrobot[ftdi]"</span>
 </pre></div>
 </div>
 </div>
@@ -815,7 +816,7 @@ the controller, so keep the machine clear while this cell runs.</p>
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.agilent.vspin</span><span class="w"> </span><span class="kn">import</span> <span class="n">VSpin</span>
 
-<span class="n">vspin</span> <span class="o">=</span> <span class="n">VSpin</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;vspin&quot;</span><span class="p">,</span> <span class="n">device_id</span><span class="o">=</span><span class="s2">&quot;YOUR_FTDI_SERIAL&quot;</span><span class="p">)</span>
+<span class="n">vspin</span> <span class="o">=</span> <span class="n">VSpin</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"vspin"</span><span class="p">,</span> <span class="n">device_id</span><span class="o">=</span><span class="s2">"YOUR_FTDI_SERIAL"</span><span class="p">)</span>
 <span class="k">await</span> <span class="n">vspin</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -827,9 +828,9 @@ the controller, so keep the machine clear while this cell runs.</p>
 <p>Read the door and bucket-lock sensors before loading anything.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Door open:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">vspin</span><span class="o">.</span><span class="n">request_door_open</span><span class="p">())</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Door locked:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">vspin</span><span class="o">.</span><span class="n">request_door_locked</span><span class="p">())</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Bucket locked:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">vspin</span><span class="o">.</span><span class="n">request_bucket_locked</span><span class="p">())</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"Door open:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">vspin</span><span class="o">.</span><span class="n">request_door_open</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Door locked:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">vspin</span><span class="o">.</span><span class="n">request_door_locked</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Bucket locked:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">vspin</span><span class="o">.</span><span class="n">request_bucket_locked</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>

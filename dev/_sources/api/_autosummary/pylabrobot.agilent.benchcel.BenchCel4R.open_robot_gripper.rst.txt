@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.open\_robot\_gripper
+===========================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.open_robot_gripper

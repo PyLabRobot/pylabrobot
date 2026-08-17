@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -789,7 +790,7 @@ remove the warning.</p>
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.cole_parmer</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenoGrinder</span>
 
-<span class="n">grinder</span> <span class="o">=</span> <span class="n">GenoGrinder</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/ttyUSB0&quot;</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
+<span class="n">grinder</span> <span class="o">=</span> <span class="n">GenoGrinder</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="s2">"/dev/ttyUSB0"</span><span class="p">)</span>  <span class="c1"># replace with your port</span>
 <span class="k">await</span> <span class="n">grinder</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -801,7 +802,7 @@ remove the warning.</p>
 <p><code class="docutils literal notranslate"><span class="pre">request_clamp_state()</span></code> reports whether the clamp is <code class="docutils literal notranslate"><span class="pre">&quot;open&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;closed&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;unknown&quot;</span></code>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Clamp:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">grinder</span><span class="o">.</span><span class="n">request_clamp_state</span><span class="p">())</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"Clamp:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">grinder</span><span class="o">.</span><span class="n">request_clamp_state</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>
@@ -850,7 +851,7 @@ remove the warning.</p>
 <p><code class="docutils literal notranslate"><span class="pre">request_status()</span></code> returns the instrument’s raw status line – <code class="docutils literal notranslate"><span class="pre">Standby</span></code> when idle, or one of the transient run states (<code class="docutils literal notranslate"><span class="pre">Running</span> <span class="pre">Sample</span></code>, <code class="docutils literal notranslate"><span class="pre">Locking</span></code>, <code class="docutils literal notranslate"><span class="pre">Mixing</span></code>, <code class="docutils literal notranslate"><span class="pre">Unlocking</span></code>, <code class="docutils literal notranslate"><span class="pre">Run</span> <span class="pre">Complete</span></code>) during a run. Useful when driving the machine from another task while a run is going.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Status:&quot;</span><span class="p">,</span> <span class="k">await</span> <span class="n">grinder</span><span class="o">.</span><span class="n">request_status</span><span class="p">())</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"Status:"</span><span class="p">,</span> <span class="k">await</span> <span class="n">grinder</span><span class="o">.</span><span class="n">request_status</span><span class="p">())</span>
 </pre></div>
 </div>
 </div>

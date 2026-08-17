@@ -537,6 +537,7 @@
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../agilent/vspin/events.html">VSpin and Access2 events</a></li>
@@ -730,8 +731,8 @@
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># instantiate some hamilton tip racks as an example</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton</span><span class="w"> </span><span class="kn">import</span> <span class="n">hamilton_96_tiprack_1000uL</span> <span class="c1"># an example tip rack</span>
-<span class="n">tip_rack_0</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;tip_rack_0&#39;</span><span class="p">)</span>
-<span class="n">tip_rack_1</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;tip_rack_1&#39;</span><span class="p">)</span>
+<span class="n">tip_rack_0</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'tip_rack_0'</span><span class="p">)</span>
+<span class="n">tip_rack_1</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_1000uL</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'tip_rack_1'</span><span class="p">)</span>
 <span class="n">tip_racks</span> <span class="o">=</span> <span class="p">[</span><span class="n">tip_rack_0</span><span class="p">,</span> <span class="n">tip_rack_1</span><span class="p">]</span>
 </pre></div>
 </div>
@@ -747,7 +748,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>TipSpot(name=&#39;tip_rack_0_tipspot_0_0&#39;, location=Coordinate(007.200, 068.300, -83.500), size_x=9.0, size_y=9.0, size_z=0, category=tip_spot)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>TipSpot(name='tip_rack_0_tipspot_0_0', location=Coordinate(007.200, 068.300, -83.500), size_x=9.0, size_y=9.0, size_z=0, category=tip_spot)
 </pre></div>
 </div>
 </div>
@@ -759,8 +760,8 @@
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">linear_generator</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">linear_tip_spot_generator</span><span class="p">(</span>
   <span class="n">tip_spots</span><span class="o">=</span><span class="n">tip_spots</span><span class="p">,</span>                      <span class="c1"># the list of tip spots to use</span>
-  <span class="n">cache_file_path</span><span class="o">=</span><span class="s2">&quot;./linear_cache.json&quot;</span><span class="p">,</span>    <span class="c1"># load/save tip spot cache for state in between runs</span>
-  <span class="n">repeat</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>                             <span class="c1"># don&#39;t repeat the tip spots if they run out</span>
+  <span class="n">cache_file_path</span><span class="o">=</span><span class="s2">"./linear_cache.json"</span><span class="p">,</span>    <span class="c1"># load/save tip spot cache for state in between runs</span>
+  <span class="n">repeat</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>                             <span class="c1"># don't repeat the tip spots if they run out</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -774,7 +775,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>TipSpot(name=&#39;tip_rack_0_tipspot_1_4&#39;, location=Coordinate(016.200, 032.300, -83.500), size_x=9.0, size_y=9.0, size_z=0, category=tip_spot)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>TipSpot(name='tip_rack_0_tipspot_1_4', location=Coordinate(016.200, 032.300, -83.500), size_x=9.0, size_y=9.0, size_z=0, category=tip_spot)
 </pre></div>
 </div>
 </div>
@@ -787,11 +788,11 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&#39;tip_rack_0_tipspot_1_5&#39;,
- &#39;tip_rack_0_tipspot_1_6&#39;,
- &#39;tip_rack_0_tipspot_1_7&#39;,
- &#39;tip_rack_0_tipspot_2_0&#39;,
- &#39;tip_rack_0_tipspot_2_1&#39;]
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>['tip_rack_0_tipspot_1_5',
+ 'tip_rack_0_tipspot_1_6',
+ 'tip_rack_0_tipspot_1_7',
+ 'tip_rack_0_tipspot_2_0',
+ 'tip_rack_0_tipspot_2_1']
 </pre></div>
 </div>
 </div>
@@ -826,7 +827,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>TipSpot(name=&#39;tip_rack_0_tipspot_1_4&#39;, location=Coordinate(016.200, 032.300, -83.500), size_x=9.0, size_y=9.0, size_z=0, category=tip_spot)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>TipSpot(name='tip_rack_0_tipspot_1_4', location=Coordinate(016.200, 032.300, -83.500), size_x=9.0, size_y=9.0, size_z=0, category=tip_spot)
 </pre></div>
 </div>
 </div>
@@ -839,8 +840,8 @@
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">random_generator</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">randomized_tip_spot_generator</span><span class="p">(</span>
   <span class="n">tip_spots</span><span class="o">=</span><span class="n">tip_spots</span><span class="p">,</span>                      <span class="c1"># the list of tip spots to use</span>
-  <span class="n">cache_file_path</span><span class="o">=</span><span class="s2">&quot;./random_cache.json&quot;</span><span class="p">,</span>    <span class="c1"># load/save tip spot cache for state in between runs</span>
-  <span class="n">K</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>                                     <span class="c1"># don&#39;t sample tip spots that have been used in the last K samples</span>
+  <span class="n">cache_file_path</span><span class="o">=</span><span class="s2">"./random_cache.json"</span><span class="p">,</span>    <span class="c1"># load/save tip spot cache for state in between runs</span>
+  <span class="n">K</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>                                     <span class="c1"># don't sample tip spots that have been used in the last K samples</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -853,7 +854,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>TipSpot(name=&#39;tip_rack_0_tipspot_3_2&#39;, location=Coordinate(034.200, 050.300, -83.500), size_x=9.0, size_y=9.0, size_z=0, category=tip_spot)
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>TipSpot(name='tip_rack_0_tipspot_3_2', location=Coordinate(034.200, 050.300, -83.500), size_x=9.0, size_y=9.0, size_z=0, category=tip_spot)
 </pre></div>
 </div>
 </div>
@@ -866,11 +867,11 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&#39;tip_rack_0_tipspot_0_3&#39;,
- &#39;tip_rack_0_tipspot_5_0&#39;,
- &#39;tip_rack_1_tipspot_6_6&#39;,
- &#39;tip_rack_0_tipspot_9_3&#39;,
- &#39;tip_rack_0_tipspot_0_5&#39;]
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>['tip_rack_0_tipspot_0_3',
+ 'tip_rack_0_tipspot_5_0',
+ 'tip_rack_1_tipspot_6_6',
+ 'tip_rack_0_tipspot_9_3',
+ 'tip_rack_0_tipspot_0_5']
 </pre></div>
 </div>
 </div>
