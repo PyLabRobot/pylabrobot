@@ -190,9 +190,7 @@ class OpentronsFlex(OpentronsRobot):
           "Unsupported pipette channel count",
           f"{pip.channels} channels (mount '{pip.mount}') has no matching FlexHead.",
         )
-      head = head_cls(
-        self, pip.mount, pipette_id, pip.channels, pip.pipette_model, pip.max_volume
-      )
+      head = head_cls(self, pip.mount, pipette_id, pip.channels, pip.pipette_model, pip.max_volume)
 
       if pip.channels == 96:
         self.head96 = head

@@ -965,11 +965,32 @@ class FlexHead1(_FlexHead):
   ``prepareToAspirate`` priming -- the same machinery ``FlexHead8`` uses for
   its column ops, applied to a single well instead of a column.
 
-  Coded but **not yet verified on real single-channel Flex hardware** --
-  Vincent's bench Flex carries an 8-channel pipette, not a single-channel
-  one. A one-time ``logger.warning`` fires on the first op issued by an
-  instance, and this docstring makes no "validated on hardware" claim.
+  Verified on a real single-channel Flex (p50, robot-server API 9.1.1):
+  motion, tip pickup and drop, liquid probe, aspirate/dispense and volume
+  mode, all against the hardware tip-presence sensor. Ops outside
+  ``_HARDWARE_VERIFIED_OPS`` still log the one-time untested-hardware notice.
   """
+
+  # Confirmed on a p50 single channel. Base-class ops are listed here rather
+  # than on _FlexHead because the other heads have not been run on hardware.
+  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
+    {
+      "aspirate",
+      "configure_for_volume",
+      "dispense",
+      "drop_tips",
+      "get_tip_presence",
+      "liquid_probe",
+      "move_relative",
+      "move_to",
+      "move_to_addressable_area",
+      "move_to_well",
+      "pick_up_tips",
+      "position",
+      "try_liquid_probe",
+      "verify_tip_presence",
+    }
+  )
 
   async def pick_up_tips(
     self,
@@ -1181,26 +1202,7 @@ class FlexHead8(_FlexHead):
   one-time untested-hardware notice, same as the other heads.
   """
 
-  # Confirmed on a p50 single-channel Flex. Base-class ops are listed here
-  # rather than on _FlexHead because only this head has been on hardware.
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
-    {
-      "aspirate",
-      "configure_for_volume",
-      "dispense",
-      "drop_tips",
-      "get_tip_presence",
-      "liquid_probe",
-      "move_relative",
-      "move_to",
-      "move_to_addressable_area",
-      "move_to_well",
-      "pick_up_tips",
-      "position",
-      "try_liquid_probe",
-      "verify_tip_presence",
-    }
-  )
+  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset({"pick_up_tips"})
 
   def __init__(
     self,
