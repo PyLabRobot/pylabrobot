@@ -43,9 +43,11 @@ from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
 
 class TestBlowOut(unittest.TestCase):
-  """blow_out sends one blowOutInPlace command at the current position and
-  invalidates the plunger priming, so the NEXT aspirate re-sends
-  prepareToAspirate first."""
+  """blow_out sends one blowOutInPlace command at the current position.
+
+  It leaves the plunger past its dispense bottom, but the driver sends no
+  prepareToAspirate to fix that: a following well-addressed aspirate names a
+  well, so the robot primes at the well top and descends by itself."""
 
   def setUp(self):
     set_tip_tracking(True)
@@ -88,7 +90,7 @@ class TestBlowOut(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_head8_next_aspirate_reprimes_after_blow_out(self):
+  def test_head8_next_aspirate_after_blow_out_sends_no_prepare(self):
     flex, transport, head = _flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
@@ -105,15 +107,12 @@ class TestBlowOut(unittest.TestCase):
       asyncio.run(head.aspirate(plate, column=1, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
-      aspirate_indices = [i for i, t in enumerate(cmd_types) if t == "aspirate"]
-      self.assertEqual(len(prepare_indices), 2, "a blow-out must require a new prepare")
-      self.assertEqual(len(aspirate_indices), 2)
-      self.assertEqual(prepare_indices[1], aspirate_indices[1] - 1)
+      self.assertEqual(cmd_types.count("aspirate"), 2)
+      self.assertNotIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
-  def test_head1_blow_out_and_reprime(self):
+  def test_head1_blow_out_then_aspirate_sends_no_prepare(self):
     flex, transport, head = _flex_head1()
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
@@ -138,12 +137,12 @@ class TestBlowOut(unittest.TestCase):
         {"pipetteId": head.pipette_id, "flowRate": 478.0},
       )
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
-      self.assertEqual(len(prepare_indices), 2, "a blow-out must require a new prepare")
+      self.assertEqual(cmd_types.count("aspirate"), 2)
+      self.assertNotIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
-  def test_head96_blow_out_and_reprime(self):
+  def test_head96_blow_out_then_aspirate_sends_no_prepare(self):
     flex, transport, head = _flex_head96()
     try:
       rack = flex_96_tiprack_50ul(name="rack96")
@@ -163,8 +162,8 @@ class TestBlowOut(unittest.TestCase):
       self.assertEqual(len(blow_cmds), 1)
       self.assertEqual(blow_cmds[0]["params"]["pipetteId"], head.pipette_id)
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
-      self.assertEqual(len(prepare_indices), 2, "a blow-out must require a new prepare")
+      self.assertEqual(cmd_types.count("aspirate"), 2)
+      self.assertNotIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
@@ -504,6 +503,46 @@ class TestLiquidProbeHead1(unittest.TestCase):
       with self.assertRaises(OpentronsCommandError) as ctx:
         asyncio.run(head.liquid_probe(plate.get_item("B3")))
       self.assertEqual(ctx.exception.error_type, "overpressure")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_probe_refused_for_an_unprimed_plunger_carries_the_priming_remedy(self):
+    """A probe pushes the plunger, so the robot refuses it on an unprimed one
+    even though a well IS named: getting there means the tip has held liquid,
+    and a probe wants a dry tip. The driver translates it like an in-place
+    draw rather than letting the raw wire error through."""
+
+    class _UnprimedProbeTransport(ChatterboxTransport):
+      async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        result = await super().post(path, json)
+        data = (json or {}).get("data", {})
+        if path.endswith("/commands") and data.get("commandType") == "liquidProbe":
+          cmd_data = result["data"]
+          cmd_data["status"] = "failed"
+          cmd_data["error"] = {
+            "errorType": "PipetteNotReadyToAspirateError",
+            "detail": "The pipette cannot probe liquid because a previous dispense or "
+            "blowout pushed the plunger beyond the bottom position.",
+          }
+        return result
+
+    transport = _UnprimedProbeTransport(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    asyncio.run(flex.setup())
+    try:
+      head = flex.right
+      assert isinstance(head, FlexHead1)
+      rack = flex_96_tiprack_50ul(name="rack1")
+      plate = cor_96_wellplate_360uL_Fb(name="plate1")
+      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(plate, "C2")
+
+      asyncio.run(head.pick_up_tips(rack.get_item("A1")))
+      with self.assertRaises(OpentronsError) as caught:
+        asyncio.run(head.liquid_probe(plate.get_item("B3")))
+      self.assertEqual(caught.exception.title, "NotReadyToAspirateError")
+      self.assertIn("prepare_to_aspirate()", str(caught.exception))
     finally:
       asyncio.run(flex.stop())
 
@@ -995,8 +1034,13 @@ class TestInPlaceLiquidOps(unittest.TestCase):
   """The in-place ops act where the head already is: one command each, naming
   no labware and no well, carrying the flow-rate default of the motion they
   are (aspirate for the air gap too). Each requires a mounted tip, refused
-  before the wire, and an unprimed plunger is primed first, since the robot
-  requires a prepareToAspirate before any aspirate, in place or not."""
+  before the wire.
+
+  Naming no well is also why the in-place DRAWS are the only ops that make the
+  caller deal with plunger priming. The robot primes a well-addressed aspirate
+  itself, at the well top where the tip is in open air; with no well it has no
+  safe height to do that at, so it refuses instead of guessing, and the driver
+  passes the refusal on rather than priming blind."""
 
   def setUp(self):
     set_tip_tracking(True)
@@ -1041,7 +1085,9 @@ class TestInPlaceLiquidOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_aspirate_in_place_primes_the_unprimed_plunger_first_and_only_once(self):
+  def test_a_pickup_leaves_the_plunger_ready_so_in_place_draws_need_no_prepare(self):
+    """The robot primes as part of a tip pickup, so back-to-back in-place
+    aspirates straight off a fresh tip send no prepareToAspirate at all."""
     flex, transport, head, rack = self._bench()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
@@ -1049,55 +1095,102 @@ class TestInPlaceLiquidOps(unittest.TestCase):
       asyncio.run(head.aspirate_in_place(volume=15))
 
       sent = [c["commandType"] for c in transport.commands]
-      self.assertEqual(sent.count("prepareToAspirate"), 1)
       self.assertEqual(sent.count("aspirateInPlace"), 2)
-      self.assertEqual(sent[sent.index("aspirateInPlace") - 1], "prepareToAspirate")
+      self.assertNotIn("prepareToAspirate", sent)
     finally:
       asyncio.run(flex.stop())
 
-  def test_a_dispense_unprimes_the_plunger_so_the_next_aspirate_primes_again(self):
-    """A dispense drives the plunger past its bottom, so the robot refuses the
-    next aspirate until a prepareToAspirate resets it. Without this the ordinary
-    aspirate/dispense/aspirate transfer loop fails on its second aspirate.
-    Confirmed against the Opentrons robot-server simulator.
-    """
+  def _assert_in_place_draw_is_refused(self, head, transport):
+    """The robot refuses, and the driver hands back a message naming both remedies."""
+    n_before = len(transport.commands)
+    with self.assertRaises(OpentronsError) as caught:
+      asyncio.run(head.aspirate_in_place(volume=15))
+    self.assertEqual(caught.exception.title, "NotReadyToAspirateError")
+    self.assertIn("prepare_to_aspirate()", str(caught.exception))
+    self.assertIn("aspirate from a well", str(caught.exception))
+    self.assertEqual(len(transport.commands), n_before + 1, "the refusal comes from the robot")
+
+  def test_a_dispense_that_empties_the_tip_makes_the_next_in_place_draw_refuse(self):
+    """The ordinary transfer loop's second draw: emptying the tip leaves the
+    plunger past its bottom, and with no well named the robot will not fix it."""
     flex, transport, head, rack = self._bench()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate_in_place(volume=15))
       asyncio.run(head.dispense_in_place(volume=15))
-      asyncio.run(head.aspirate_in_place(volume=15))
 
-      sent = [c["commandType"] for c in transport.commands]
-      self.assertEqual(sent.count("prepareToAspirate"), 2)
-      last_aspirate = len(sent) - 1 - sent[::-1].index("aspirateInPlace")
-      self.assertEqual(sent[last_aspirate - 1], "prepareToAspirate")
+      self._assert_in_place_draw_is_refused(head, transport)
     finally:
       asyncio.run(flex.stop())
 
-  def test_configure_for_volume_unprimes_the_plunger(self):
-    """Switching volume mode resets the robot's ready-to-aspirate flag, so the
-    next aspirate needs a fresh prepare. Confirmed against the simulator."""
+  def test_a_partial_dispense_leaves_the_plunger_ready(self):
+    """Only a dispense that EMPTIES the tip un-primes it, because only that one
+    gets a push-out. Refusing after every dispense would refuse work the robot
+    accepts."""
     flex, transport, head, rack = self._bench()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate_in_place(volume=15))
-      asyncio.run(head.configure_for_volume(10.0))
+      asyncio.run(head.dispense_in_place(volume=5))
       asyncio.run(head.aspirate_in_place(volume=5))
 
-      self.assertEqual([c["commandType"] for c in transport.commands].count("prepareToAspirate"), 2)
+      sent = [c["commandType"] for c in transport.commands]
+      self.assertEqual(sent.count("aspirateInPlace"), 2)
+      self.assertNotIn("prepareToAspirate", sent)
     finally:
       asyncio.run(flex.stop())
 
-  def test_a_blow_out_unprimes_the_plunger_too(self):
+  def test_lifting_clear_and_priming_by_hand_clears_the_refusal(self):
+    """The documented remedy, end to end: the caller moves the tip out of the
+    liquid, primes, and the in-place draw goes through."""
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.aspirate_in_place(volume=15))
+      asyncio.run(head.dispense_in_place(volume=15))
+      self._assert_in_place_draw_is_refused(head, transport)
+
+      asyncio.run(head.prepare_to_aspirate())
+      asyncio.run(head.aspirate_in_place(volume=15))
+
+      sent = [c["commandType"] for c in transport.commands]
+      self.assertEqual(sent[-1], "aspirateInPlace")
+      self.assertEqual(sent.count("prepareToAspirate"), 1)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_configure_for_volume_makes_the_next_in_place_draw_refuse(self):
+    """Switching volume mode moves where the plunger bottom IS, so the robot
+    drops its ready flag."""
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.configure_for_volume(10.0))
+
+      self._assert_in_place_draw_is_refused(head, transport)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_blow_out_makes_the_next_in_place_draw_refuse(self):
     flex, transport, head, rack = self._bench()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate_in_place(volume=15))
       asyncio.run(head.blow_out())
-      asyncio.run(head.aspirate_in_place(volume=15))
 
-      self.assertEqual([c["commandType"] for c in transport.commands].count("prepareToAspirate"), 2)
+      self._assert_in_place_draw_is_refused(head, transport)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_an_air_gap_in_place_refuses_the_same_way(self):
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.blow_out())
+
+      with self.assertRaises(OpentronsError) as caught:
+        asyncio.run(head.air_gap_in_place(volume=10))
+      self.assertEqual(caught.exception.title, "NotReadyToAspirateError")
     finally:
       asyncio.run(flex.stop())
 
@@ -1369,16 +1462,18 @@ class TestUnsafeRecoveryOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_next_aspirate_reprimes_after_an_unsafe_blow_out(self):
+  def test_an_unsafe_blow_out_makes_the_next_in_place_draw_refuse(self):
+    """The recovery blow-out leaves the plunger where the ordinary one does,
+    so the next in-place draw needs the same manual prime."""
     flex, transport, head, rack = self._bench()
     try:
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate_in_place(volume=10))
       asyncio.run(head.unsafe_blow_out_in_place(flow_rate=20.0))
-      asyncio.run(head.aspirate_in_place(volume=10))
 
-      sent = [c["commandType"] for c in transport.commands]
-      self.assertEqual(sent.count("prepareToAspirate"), 2, "a blow-out must require a new prepare")
+      with self.assertRaises(OpentronsError) as caught:
+        asyncio.run(head.aspirate_in_place(volume=10))
+      self.assertEqual(caught.exception.title, "NotReadyToAspirateError")
     finally:
       asyncio.run(flex.stop())
 

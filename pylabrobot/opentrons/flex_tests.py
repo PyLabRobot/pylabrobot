@@ -467,8 +467,14 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
 
 
 class TestFlexHead8PrepareToAspirate(unittest.TestCase):
-  """Task 3 fix #1: `prepareToAspirate` must fire once, immediately before the
-  FIRST aspirate after a tip pickup, and NOT before subsequent aspirates."""
+  """Priming a well-addressed aspirate is the robot's job, never the driver's.
+
+  The robot moves to the well TOP, primes there in open air and then descends,
+  which is the only way to prime safely: the plunger travels several uL worth,
+  so priming with the tip already in the liquid would draw an unmeasured slug
+  of the well into the tip. A prepareToAspirate the driver sends first sets the
+  robot's ready flag and so skips that safe handling. `prepare_to_aspirate` is
+  the caller's escape hatch for the in-place ops, which name no well."""
 
   def setUp(self):
     set_tip_tracking(True)
@@ -478,54 +484,65 @@ class TestFlexHead8PrepareToAspirate(unittest.TestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  def test_prepare_to_aspirate_sent_before_first_aspirate_only(self):
+  def _bench(self):
     flex, transport, head = _flex_head8()
-    try:
-      rack = flex_96_tiprack_50ul(name="rack")
-      plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
-      flex.deck.assign_child_at_slot(rack, "C1")
-      flex.deck.assign_child_at_slot(plate, "C2")
-      for well in plate.get_all_items():
-        well.tracker.set_volume(100.0)
+    rack = flex_96_tiprack_50ul(name="rack")
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    flex.deck.assign_child_at_slot(rack, "C1")
+    flex.deck.assign_child_at_slot(plate, "C2")
+    for well in plate.get_all_items():
+      well.tracker.set_volume(100.0)
+    return flex, transport, head, rack, plate
 
+  def test_no_prepare_is_sent_around_a_transfer_loop(self):
+    flex, transport, head, rack, plate = self._bench()
+    try:
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate(plate, column=0, volume=10))
+      asyncio.run(head.dispense(plate, column=1, volume=10))
       asyncio.run(head.aspirate(plate, column=1, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
-      aspirate_indices = [i for i, t in enumerate(cmd_types) if t == "aspirate"]
-
-      self.assertEqual(len(prepare_indices), 1, "prepareToAspirate must fire exactly once")
-      self.assertEqual(len(aspirate_indices), 2)
-      self.assertEqual(prepare_indices[0], aspirate_indices[0] - 1)
-
-      prepare_cmd = transport.commands[prepare_indices[0]]
-      self.assertEqual(prepare_cmd["params"], {"pipetteId": head.pipette_id})
+      self.assertEqual(cmd_types.count("aspirate"), 2)
+      self.assertNotIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
-  def test_prepare_to_aspirate_refires_after_a_new_pickup(self):
-    flex, transport, head = _flex_head8()
+  def test_a_well_addressed_aspirate_still_works_with_the_plunger_pushed_past_bottom(self):
+    """The whole reason the driver can stay out of it: after a blow-out the
+    robot primes the aspirate itself rather than refusing it."""
+    flex, transport, head, rack, plate = self._bench()
     try:
-      rack = flex_96_tiprack_50ul(name="rack")
-      plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
-      flex.deck.assign_child_at_slot(rack, "C1")
-      flex.deck.assign_child_at_slot(plate, "C2")
-      for well in plate.get_all_items():
-        well.tracker.set_volume(100.0)
-
       asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.blow_out())
       asyncio.run(head.aspirate(plate, column=0, volume=10))
-      asyncio.run(head.drop_tips(rack, column=0))
-      asyncio.run(head.pick_up_tips(rack, column=1))
-      asyncio.run(head.aspirate(plate, column=1, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
-      self.assertEqual(len(prepare_indices), 2, "a new pickup must require a new prepare")
+      self.assertEqual(cmd_types.count("aspirate"), 1)
+      self.assertNotIn("prepareToAspirate", cmd_types)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_prepare_to_aspirate_sends_one_command_carrying_only_the_pipette(self):
+    flex, transport, head, rack, _plate = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.prepare_to_aspirate())
+
+      prepares = [c for c in transport.commands if c["commandType"] == "prepareToAspirate"]
+      self.assertEqual(len(prepares), 1)
+      self.assertEqual(prepares[0]["params"], {"pipetteId": head.pipette_id})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_prepare_to_aspirate_without_a_tip_raises_before_the_wire(self):
+    flex, transport, head, _rack, _plate = self._bench()
+    try:
+      n_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.prepare_to_aspirate())
+      self.assertEqual(len(transport.commands), n_before)
     finally:
       asyncio.run(flex.stop())
 
@@ -951,11 +968,9 @@ class TestFlexHead1Ops(unittest.TestCase):
       asyncio.run(head.aspirate(target_well, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
       aspirate_indices = [i for i, t in enumerate(cmd_types) if t == "aspirate"]
-      self.assertEqual(len(prepare_indices), 1, "prepareToAspirate must fire exactly once")
       self.assertEqual(len(aspirate_indices), 1)
-      self.assertEqual(prepare_indices[0], aspirate_indices[0] - 1)
+      self.assertNotIn("prepareToAspirate", cmd_types, "the robot primes for a named well")
       self.assertEqual(transport.commands[aspirate_indices[0]]["params"]["wellName"], "B3")
 
       # Exactly 1 Well tracked -- every other well on the plate is untouched.
@@ -1084,10 +1099,9 @@ class TestFlexHead96Ops(unittest.TestCase):
 
       cmd_types = [c["commandType"] for c in transport.commands]
       aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
       self.assertEqual(len(aspirate_cmds), 1)
       self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A1")
-      self.assertEqual(len(prepare_indices), 1, "prepareToAspirate must fire before the aspirate")
+      self.assertNotIn("prepareToAspirate", cmd_types, "the robot primes for a named well")
 
       wells = plate.get_all_items()
       self.assertEqual(len(wells), 96)

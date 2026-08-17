@@ -281,10 +281,11 @@ class TestFlexHead8ContainerOps(unittest.TestCase):
       )
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
-      aspirate_indices = [i for i, t in enumerate(cmd_types) if t == "aspirate"]
-      self.assertEqual(len(prepare_indices), 1, "prepareToAspirate must fire before the aspirate")
-      self.assertEqual(prepare_indices[0], aspirate_indices[0] - 1)
+      self.assertNotIn(
+        "prepareToAspirate",
+        cmd_types,
+        "naming the well leaves priming to the robot, which does it at the well top",
+      )
 
       # All 8 channels hold a tip, so the single tracker loses 8 * 50.
       self.assertAlmostEqual(trough.tracker.volume, 9600.0)
