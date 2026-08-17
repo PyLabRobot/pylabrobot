@@ -1,5 +1,21 @@
 [
   {
+    "id": "agilent-benchcel-4r",
+    "vendor": "Agilent",
+    "name": "BenchCel 4R",
+    "kind": "storage",
+    "capabilities": [
+      "storage"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.agilent.benchcel.BenchCel4R",
+    "api_version": "v1",
+    "code_slug": "agilent/benchcel",
+    "doc_slug": "agilent/benchcel/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "BenchCel 4R four-stacker configuration; protocol verified with firmware 3.2.20.0."
+  },
+  {
     "id": "agilent-vspin",
     "vendor": "Agilent",
     "name": "VSpin",
