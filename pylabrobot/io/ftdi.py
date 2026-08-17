@@ -180,32 +180,68 @@ class FTDI(IOBase):
     device_serial_number = cast(str, usb.util.get_string(device, device.iSerialNumber))
     return device_serial_number
 
-  async def setup(self):
-    """Initialize the FTDI device connection with device resolution."""
+  def _setup_sync(self) -> None:
+    """Resolve and open the device. Runs on the executor that owns all device calls."""
     if self._dev is not None and not self._dev.closed:
       self._dev.close()
+    self._dev = None
+
+    # Resolve which device to connect to
+    self._device_id = self._resolve_device_serial()
+
+    # Create and open device
+    dev = Device(
+      lazy_open=True,
+      device_id=self.device_id,
+      pid=self._pid,
+      vid=self._vid,
+      interface_select=self._interface_select,
+    )
     try:
-      # Resolve which device to connect to
-      self._device_id = self._resolve_device_serial()
+      dev.open()
+    except BaseException:
+      try:
+        dev.close()
+      except Exception:
+        logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
+      raise
+    self._dev = dev
 
-      # Create and open device
-      self._dev = Device(
-        lazy_open=True,
-        device_id=self.device_id,
-        pid=self._pid,
-        vid=self._vid,
-        interface_select=self._interface_select,
-      )
-      self._dev.open()
-      logger.info(f"Successfully opened FTDI device: {self.device_id}")
-    except FtdiError as e:
-      raise RuntimeError(
-        f"Failed to open FTDI device for '{self.human_readable_device_name}': {e}. "
-        "Is the device connected? Is it in use by another process? "
-        "Try restarting the kernel."
-      ) from e
+  async def setup(self):
+    """Initialize the FTDI device connection with device resolution."""
+    if self._executor is None:
+      self._executor = ThreadPoolExecutor(max_workers=1)
+    loop = asyncio.get_running_loop()
+    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    try:
+      await asyncio.shield(setup_future)
+    except BaseException as exc:
+      if isinstance(exc, asyncio.CancelledError):
+        try:
+          await setup_future
+        except BaseException:
+          pass
+      if self._dev is not None:
+        try:
+          await loop.run_in_executor(self._executor, self._dev.close)
+        except Exception:
+          logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
+        self._dev = None
+      self._shutdown_executor()
+      if isinstance(exc, FtdiError):
+        raise RuntimeError(
+          f"Failed to open FTDI device for '{self.human_readable_device_name}': {exc}. "
+          "Is the device connected? Is it in use by another process? "
+          "Try restarting the kernel."
+        ) from exc
+      raise
+    logger.info(f"Successfully opened FTDI device: {self.device_id}")
 
-    self._executor = ThreadPoolExecutor(max_workers=1)
+  def _shutdown_executor(self) -> None:
+    if self._executor is not None:
+      # the worker is idle here, so this does not block the event loop
+      self._executor.shutdown(wait=False, cancel_futures=True)
+      self._executor = None
 
   @property
   def device_id(self) -> str:
@@ -299,17 +335,18 @@ class FTDI(IOBase):
     return self.device_id
 
   async def stop(self):
+    loop = asyncio.get_running_loop()
     if self._dev is not None:
-      self.dev.close()
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+      await loop.run_in_executor(self._executor, self.dev.close)
+      self._dev = None
+    self._shutdown_executor()
 
   async def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self.device_id, action="write", data=data.hex()))
-    bytes_written = cast(int, self.dev.write(data))
+    loop = asyncio.get_running_loop()
+    bytes_written = cast(int, await loop.run_in_executor(self._executor, self.dev.write, data))
     emit_event(
       "io.write",
       transport="ftdi",
@@ -320,7 +357,8 @@ class FTDI(IOBase):
     return bytes_written
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    data = self.dev.read(num_bytes)
+    loop = asyncio.get_running_loop()
+    data = await loop.run_in_executor(self._executor, self.dev.read, num_bytes)
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
       capturer.record(
@@ -340,7 +378,8 @@ class FTDI(IOBase):
     return cast(bytes, data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    data = self.dev.readline()
+    loop = asyncio.get_running_loop()
+    data = await loop.run_in_executor(self._executor, self.dev.readline)
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
       capturer.record(FTDICommand(device_id=self.device_id, action="readline", data=data.hex()))
