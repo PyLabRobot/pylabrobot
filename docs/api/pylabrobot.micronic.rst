@@ -3,23 +3,10 @@
 pylabrobot.micronic package
 ===========================
 
-Micronic integrations built on the rack-reading capability.
+Direct Micronic code-reader integration.
 
-Device
-------
-
-.. currentmodule:: pylabrobot.micronic.code_reader.code_reader
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    MicronicCodeReader
-
-
-Driver
-------
+Code reader
+-----------
 
 .. currentmodule:: pylabrobot.micronic.code_reader.driver
 
@@ -28,7 +15,9 @@ Driver
   :nosignatures:
   :recursive:
 
-    MicronicCodeReaderDriver
+    MicronicCodeReader
+    RackScanEntry
+    RackScanResult
 
 .. currentmodule:: pylabrobot.micronic.code_reader.errors
 
@@ -53,16 +42,3 @@ Scanners
     Scanner
     TwainScanner
     SaneScanner
-
-
-Capabilities
-------------
-
-.. currentmodule:: pylabrobot.micronic.code_reader.rack_reading_backend
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    MicronicCodeReaderRackReadingBackend

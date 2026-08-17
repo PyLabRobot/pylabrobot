@@ -1,8 +1,8 @@
 from pylabrobot.micronic.code_reader import (
   MicronicCodeReader,
-  MicronicCodeReaderDriver,
-  MicronicCodeReaderRackReadingBackend,
   MicronicError,
+  RackScanEntry,
+  RackScanResult,
   SaneScanner,
   Scanner,
   TwainScanner,
