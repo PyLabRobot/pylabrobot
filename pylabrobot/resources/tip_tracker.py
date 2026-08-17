@@ -56,6 +56,11 @@ class TipTracker(SerializableMixin):
     """Whether the tip tracker has a tip. Note that this includes pending operations."""
     return self._pending_tip is not None
 
+  @property
+  def has_committed_tip(self) -> bool:
+    """Whether the tip tracker has a committed tip. Pending operations are not included."""
+    return self._tip is not None
+
   def get_tip(self) -> "Tip":
     """Get the tip. Note that does includes pending operations.
 

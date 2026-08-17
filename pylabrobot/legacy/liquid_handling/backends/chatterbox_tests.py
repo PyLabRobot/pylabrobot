@@ -4,6 +4,7 @@ from pylabrobot.legacy.liquid_handling import LiquidHandler
 from pylabrobot.legacy.liquid_handling.backends.chatterbox import (
   LiquidHandlerChatterboxBackend,
 )
+from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.resources import (
   Coordinate,
   cor_96_wellplate_360uL_Fb,
@@ -65,3 +66,44 @@ class ChatterboxBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move(self):
     await self.lh.move_resource(self.plate, Coordinate(0, 0, 0))
+
+  async def test_failed_pickup_does_not_commit_pending_tips(self):
+    async def fail_pickup(*args, **kwargs):
+      raise RuntimeError("simulated pickup failure")
+
+    self.backend.pick_up_tips = fail_pickup  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      await self.lh.pick_up_tips(self.tip_rack["A1"])
+    self.assertFalse(self.lh.head[0].has_tip)
+
+  async def test_failed_drop_does_not_commit_pending_remove(self):
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    self.assertTrue(self.lh.head[0].has_tip)
+
+    async def fail_drop(*args, **kwargs):
+      raise RuntimeError("simulated drop failure")
+
+    self.backend.drop_tips = fail_drop  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      await self.lh.drop_tips(self.tip_rack["A1"])
+    self.assertTrue(self.lh.head[0].has_tip)
+
+  async def test_failed_multi_channel_pickup_rolls_back_all_channels(self):
+    async def fail_pickup(*args, **kwargs):
+      raise RuntimeError("simulated pickup failure")
+
+    self.backend.pick_up_tips = fail_pickup  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
+    self.assertFalse(self.lh.head[0].has_tip)
+    self.assertFalse(self.lh.head[1].has_tip)
+
+  async def test_failed_pickup_presence_query_overrides_channelized_error(self):
+    async def fail_pickup(*args, **kwargs):
+      raise ChannelizedError(errors={0: Exception("channel 0 failed")})
+
+    self.backend.pick_up_tips = fail_pickup  # type: ignore[method-assign]
+    with self.assertRaises(ChannelizedError):
+      await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
+    self.assertFalse(self.lh.head[0].has_tip)
+    self.assertFalse(self.lh.head[1].has_tip)

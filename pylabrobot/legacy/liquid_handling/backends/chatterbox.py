@@ -230,13 +230,16 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     print(f"Dropping resource: {drop}")
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
-    """Return tip presence based on the tip tracker state.
+    """Return simulated sleeve-sensor tip presence from committed tracker state.
+
+    Pending pickup/drop operations are excluded so error recovery can distinguish
+    intended state from the last committed (simulated physical) state.
 
     Returns:
       A list of length `num_channels` where each element is `True` if a tip is mounted,
       `False` if not, or `None` if unknown.
     """
-    return [self.head[ch].has_tip for ch in range(self.num_channels)]
+    return [self.head[ch].has_committed_tip for ch in range(self.num_channels)]
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     return True
