@@ -758,7 +758,9 @@ class _FlexHead:
 
     Names no well, so no ``Well``/``Container`` tracker moves with it:
     position the head first (``move_to_well``/``move_to``) and account for the
-    liquid yourself. ``flow_rate`` (uL/s) defaults to the aspirate default.
+    liquid yourself. Draw with the tip UNDER the surface and far enough off the
+    floor not to seal against it; drawing from above the liquid takes air.
+    ``flow_rate`` (uL/s) defaults to the aspirate default.
 
     Raises ``NotReadyToAspirateError`` when the plunger needs priming, since
     naming no well leaves the robot no safe height to prime at. See
@@ -784,6 +786,11 @@ class _FlexHead:
     ``push_out`` (uL) pushes the plunger past its dispense bottom to clear the
     last drops; left out of the command entirely when None, so the robot
     applies its own default for the mounted tip and volume.
+
+    Put the tip AT THE LIQUID SURFACE first, not above it. Dispensing from
+    height splashes, aerosolises, and leaves volume hanging in the tip. "The
+    caller owns the position" means the caller owes it a good one, not that
+    any position will do.
     """
     self._warn_untested_hardware("dispense_in_place")
     self._require_mounted_tip()
@@ -982,9 +989,12 @@ class FlexHead1(_FlexHead):
   # than on _FlexHead because the other heads have not been run on hardware.
   _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
     {
+      "air_gap_in_place",
       "aspirate",
+      "aspirate_in_place",
       "configure_for_volume",
       "dispense",
+      "dispense_in_place",
       "drop_tips",
       "get_tip_presence",
       "liquid_probe",
