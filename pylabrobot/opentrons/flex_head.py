@@ -11,13 +11,16 @@ which physical channel holds which tip is genuine head-local state
 This module holds the ``_FlexHead`` base plus ``FlexHead1`` (single-channel,
 well-addressed), ``FlexHead8`` (column-addressed, anchor-well fan-out) and
 ``FlexHead96`` (96 fixed nozzles, whole-plate-addressed). The transactional
-stage->wire->verify->commit/rollback flow, hardware tip-presence
-verification, and ``prepareToAspirate`` priming are factored onto the
-``_FlexHead`` base (``_execute_pickup``/``_execute_liquid_op``/
-``_execute_with_prepare``/``_execute_trash_drop``) so ``FlexHead1`` and
-``FlexHead96`` reuse the exact machinery ``FlexHead8`` established -- only
-the addressing (single well vs. column vs. whole-plate anchor) and nozzle
-layout differ per head.
+stage->wire->verify->commit/rollback flow and hardware tip-presence
+verification are factored onto the ``_FlexHead`` base
+(``_execute_pickup``/``_execute_liquid_op``/``_execute_draw``/
+``_execute_trash_drop``) so ``FlexHead1`` and ``FlexHead96`` reuse the exact
+machinery ``FlexHead8`` established -- only the addressing (single well vs.
+column vs. whole-plate anchor) and nozzle layout differ per head.
+
+Plunger priming (``prepareToAspirate``) is the robot's business, not this
+driver's: see ``prepare_to_aspirate`` for the whole rule and why nothing here
+tracks it.
 """
 
 import logging
@@ -80,11 +83,6 @@ class _FlexHead:
     # describing the head does not have to re-read /instruments to get it.
     self.max_volume = max_volume
     self._channel_tips: List[Optional[Tip]] = [None] * channels
-    # Whether the plunger has been prepared (primed) since the last tip
-    # pickup. The Flex requires an explicit `prepareToAspirate` command
-    # before the FIRST aspirate after a pickup (implicit on the STAR,
-    # explicit on the Flex) -- True means no prepare is currently pending.
-    self._prepared: bool = True
     self._untested_hardware_warned: bool = False
 
   def _warn_untested_hardware(self, op: str) -> None:
@@ -135,9 +133,8 @@ class _FlexHead:
     Pushes the plunger past its dispense-bottom to expel residual liquid
     from the tip(s) wherever the pipette currently is (no well addressing --
     position with a dispense/move first). ``flow_rate`` (uL/s) defaults to
-    the dispense default. Blowing out leaves the plunger at the blow-out
-    position, so the next aspirate is preceded by a fresh
-    ``prepareToAspirate`` (same priming rule as after a tip pickup). No
+    the dispense default. Blowing out leaves the plunger past its dispense
+    bottom, so the next draw needs priming: see ``prepare_to_aspirate``. No
     trackers are involved.
     """
     self._warn_untested_hardware("blow_out")
@@ -224,7 +221,7 @@ class _FlexHead:
     fails, or if it succeeds but ``_verify_tips_seated()`` reports no tip
     seated; commits only once both the wire command and hardware
     verification succeed. Callers are responsible for updating
-    ``_channel_tips`` and ``_prepared`` AFTER this returns successfully.
+    ``_channel_tips`` AFTER this returns successfully.
     """
     try:
       await self._execute(command_type, params)
@@ -266,30 +263,46 @@ class _FlexHead:
       for tracker in staged_trackers:
         tracker.commit()
 
-  async def _execute_with_prepare(
-    self,
-    command_type: str,
-    params: Dict[str, Any],
-    staged_trackers: List[Any],
-  ) -> None:
-    """``prepareToAspirate`` (if pending) -> wire -> commit/rollback.
+  async def _execute_draw(self, command_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """``_execute`` for a draw, restating the robot's "plunger not primed" refusal.
 
-    Shared by every ``aspirate``/``aspirate_single`` variant. Sends
-    ``prepareToAspirate`` first when the plunger is not primed, then the
-    aspirate itself. Priming is physical plunger state, so a tracker rollback
-    on a failed aspirate does not undo it: ``_execute`` records it.
+    The robot refuses a draw that names no well while the plunger sits past
+    its dispense bottom: fixing that means moving the plunger, and only the
+    caller knows whether the tip is in liquid. The robot's own message offers
+    one remedy (aspirate from a well instead); this adds the other one, which
+    is to lift clear and prime by hand.
     """
     try:
-      if not self._prepared:
-        await self._execute("prepareToAspirate", {"pipetteId": self.pipette_id})
-      await self._execute(command_type, params)
-    except Exception:
-      for tracker in staged_trackers:
-        tracker.rollback()
-      raise
-    else:
-      for tracker in staged_trackers:
-        tracker.commit()
+      return await self._execute(command_type, params)
+    except OpentronsCommandError as e:
+      if e.error_type != _NOT_READY_TO_ASPIRATE:
+        raise
+      raise OpentronsError("NotReadyToAspirateError", _NOT_PRIMED_REMEDY) from e
+
+  async def prepare_to_aspirate(self) -> None:
+    """Move the plunger to where an aspirate starts from ("priming"). Tip OUT of the liquid.
+
+    The plunger sits past its dispense bottom after a dispense that emptied
+    the tip, a blow out, or a volume-mode change, and the robot will not draw
+    from there. Priming lifts it back, which with the tip submerged draws
+    that much of the well in, unmeasured: about 4 uL on a p50 in its normal
+    mode, 12 uL in low-volume mode, 80 uL on a p1000. Move the tip above the
+    liquid first (``move_to_well`` with a "top" origin) and prime there.
+
+    Usually you do not need this at all. A well-addressed ``aspirate`` primes
+    itself, at the well top in open air, then descends and draws. Only the
+    in-place draws need it, because they name no well and so the robot cannot
+    pick a safe height to prime at. Sending it when the plunger is already in
+    place does nothing, so it is safe to send defensively.
+
+    Nothing here tracks whether a prime is pending. The robot owns that flag
+    and answers with it on every draw; a copy in this process would go stale
+    the first time anything moved the plunger without going through this
+    driver.
+    """
+    self._warn_untested_hardware("prepare_to_aspirate")
+    self._require_mounted_tip()
+    await self._execute("prepareToAspirate", {"pipetteId": self.pipette_id})
 
   def _trash_addressable_area(self, trash: Trash) -> str:
     """The movable-trash addressable area for the slot this trash sits in."""
@@ -362,7 +375,8 @@ class _FlexHead:
 
     ``flow_rate`` defaults to the robot's own for the mounted tip, so it is
     resolved only when the caller left it out (asking with no tip raises).
-    An aspirate is primed first when a prepare is pending.
+    Naming the well is what lets the robot prime itself when it needs to, so
+    no ``prepareToAspirate`` is sent here: see ``prepare_to_aspirate``.
     """
     if flow_rate is None:
       rates = self.default_flow_rates()
@@ -377,10 +391,7 @@ class _FlexHead:
     well_location = self._well_location([offset], [liquid_height])
     if well_location is not None:
       params["wellLocation"] = well_location
-    if verb == "aspirate":
-      await self._execute_with_prepare(verb, params, staged_trackers)
-    else:
-      await self._execute_liquid_op(verb, params, staged_trackers)
+    await self._execute_liquid_op(verb, params, staged_trackers)
 
   async def _configure_nozzle_layout(self, configuration_params: Dict[str, Any]) -> None:
     """Send ``configureNozzleLayout``, refusing while any channel holds a tip.
@@ -437,8 +448,13 @@ class _FlexHead:
     robot-server OMITS ``z_position`` from a successful command result
     entirely (rather than reporting null) when no liquid is detected, so
     absence is read with ``.get()`` and surfaced as ``None``.
+
+    A probe pushes the plunger, so it is refused on an unprimed one exactly
+    like an in-place draw, even though it does name a well: the robot
+    deliberately does not prime for it, because reaching this state means the
+    tip has held liquid and a probe wants a dry one.
     """
-    result = await self._execute(
+    result = await self._execute_draw(
       command_type,
       {
         "pipetteId": self.pipette_id,
@@ -481,12 +497,7 @@ class _FlexHead:
 
   async def _execute(self, command_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """Issue a robot-server command through the owning device's shared transport."""
-    result = await self.flex._execute_command(command_type, params)
-    if command_type in _UNPRIMING_COMMANDS:
-      self._prepared = False
-    elif command_type in _PRIMING_COMMANDS:
-      self._prepared = True
-    return result
+    return await self.flex._execute_command(command_type, params)
 
   @staticmethod
   def _require_itemized_parent(item: Resource) -> ItemizedResource:
@@ -747,18 +758,18 @@ class _FlexHead:
 
     Names no well, so no ``Well``/``Container`` tracker moves with it:
     position the head first (``move_to_well``/``move_to``) and account for the
-    liquid yourself. ``flow_rate`` (uL/s) defaults to the aspirate default. A
-    ``prepareToAspirate`` command is sent first when the plunger is unprimed
-    (after a tip pickup or a blow-out), which the robot requires before any
-    aspirate, in place or not.
+    liquid yourself. ``flow_rate`` (uL/s) defaults to the aspirate default.
+
+    Raises ``NotReadyToAspirateError`` when the plunger needs priming, since
+    naming no well leaves the robot no safe height to prime at. See
+    ``prepare_to_aspirate``.
     """
     self._warn_untested_hardware("aspirate_in_place")
     self._require_mounted_tip()
     rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
-    await self._execute_with_prepare(
+    await self._execute_draw(
       "aspirateInPlace",
       {"pipetteId": self.pipette_id, "volume": volume, "flowRate": rate},
-      [],
     )
 
   async def dispense_in_place(
@@ -791,16 +802,15 @@ class _FlexHead:
 
     The same plunger motion as ``aspirate_in_place``, but the robot books the
     volume as air, so park the tip above the liquid first. ``flow_rate``
-    (uL/s) defaults to the aspirate default, and the same priming rule
-    applies. No tracker is involved.
+    (uL/s) defaults to the aspirate default. Refuses an unprimed plunger the
+    same way ``aspirate_in_place`` does. No tracker is involved.
     """
     self._warn_untested_hardware("air_gap_in_place")
     self._require_mounted_tip()
     rate = flow_rate if flow_rate is not None else self.default_flow_rates().aspirate
-    await self._execute_with_prepare(
+    await self._execute_draw(
       "airGapInPlace",
       {"pipetteId": self.pipette_id, "volume": volume, "flowRate": rate},
-      [],
     )
 
   # --- Tip-presence sensor (command form) ---
@@ -863,8 +873,8 @@ class _FlexHead:
 
     The recovery counterpart to ``blow_out`` (see ``unsafe_drop_tip_in_place``
     for what "unsafe/" buys). ``flow_rate`` is in uL/s and has no default
-    here, the recovery path being an explicit one. Leaves the plunger at the
-    blow-out position, so the next aspirate re-primes.
+    here, the recovery path being an explicit one. Leaves the plunger past
+    its dispense bottom, so the next draw needs priming.
     """
     self._warn_untested_hardware("unsafe_blow_out_in_place")
     self._require_mounted_tip()
@@ -884,19 +894,16 @@ _WELL_ORIGINS = frozenset({"top", "bottom", "center", "meniscus"})
 
 _MOVE_AXES = frozenset({"x", "y", "z"})
 
-# Wider than the robot's own rule (it primes on pickUpTip, and a dispense
-# unprimes only when it pushes out or empties): a redundant prepare is accepted.
-_UNPRIMING_COMMANDS = frozenset(
-  {
-    "dispense",
-    "dispenseInPlace",
-    "blowOutInPlace",
-    "unsafe/blowOutInPlace",
-    "configureForVolume",
-    "pickUpTip",
-  }
+# What the robot calls its refusal to draw with the plunger past its dispense
+# bottom. Raised undefined, so the wire carries the exception's class name.
+_NOT_READY_TO_ASPIRATE = "PipetteNotReadyToAspirateError"
+
+_NOT_PRIMED_REMEDY = (
+  "The plunger sits past its dispense bottom, so the robot will not draw from where it "
+  "is. Either aspirate from a well by name, which primes itself at the well top and then "
+  "descends, or lift the tip clear of the liquid and call prepare_to_aspirate() before "
+  "drawing in place. Priming while submerged draws several uL of the well into the tip."
 )
-_PRIMING_COMMANDS = frozenset({"prepareToAspirate"})
 
 # What verify_tip_presence can assert. The sensor itself can also read
 # "unknown", but that is a reading, not something to check against.
@@ -960,10 +967,10 @@ class FlexHead1(_FlexHead):
   length 1; the sole channel is index 0.
 
   Reuses the ``_FlexHead`` base's transactional stage -> wire -> verify ->
-  commit/rollback flow, hardware tip-presence verification
-  (``_verify_tips_seated``/``_confirm_tips_cleared``), and
-  ``prepareToAspirate`` priming -- the same machinery ``FlexHead8`` uses for
-  its column ops, applied to a single well instead of a column.
+  commit/rollback flow and hardware tip-presence verification
+  (``_verify_tips_seated``/``_confirm_tips_cleared``) -- the same machinery
+  ``FlexHead8`` uses for its column ops, applied to a single well instead of
+  a column.
 
   Verified on a real single-channel Flex (p50, robot-server API 9.1.1):
   motion, tip pickup and drop, liquid probe, aspirate/dispense and volume
@@ -1097,9 +1104,9 @@ class FlexHead1(_FlexHead):
     ``Container`` (trough/reservoir) at its own sole well. Requires a mounted
     tip. Follows stage -> validate -> wire -> commit/rollback: the tracker
     (``remove_liquid``) is staged BEFORE the wire command, so an infeasible
-    aspirate raises before any hardware motion. A ``prepareToAspirate``
-    command is sent first if this is the first aspirate since the last tip
-    pickup.
+    aspirate raises before any hardware motion. Naming the well means the
+    robot primes the plunger itself when it needs to, at the well top and
+    then descending, so nothing here has to.
     """
     self._warn_untested_hardware("aspirate")
     self._require_mounted_tip()
@@ -1410,8 +1417,9 @@ class FlexHead8(_FlexHead):
     every well whose channel actually holds a tip (None-skip; wells outside
     ``column`` are never touched -- the Case-1 regression guard) BEFORE the
     wire command, so an infeasible aspirate (e.g. ``TooLittleLiquidError``)
-    raises before any hardware motion. A ``prepareToAspirate`` command is
-    sent first if this is the first aspirate since the last tip pickup.
+    raises before any hardware motion. Naming the wells means the robot
+    primes the plunger itself when it needs to, at the well top and then
+    descending, so nothing here has to.
     """
     self._warn_untested_hardware("aspirate")
     self._require_mounted_tip()
@@ -1734,9 +1742,9 @@ class FlexHead8(_FlexHead):
   ) -> None:
     """Aspirate a single well with the currently mounted single tip.
 
-    Sends ``prepareToAspirate`` first if this is the first aspirate since
-    the last (single-tip) pickup. Follows stage -> validate -> wire ->
-    commit/rollback for the well tracker, same as the column ``aspirate``.
+    Follows stage -> validate -> wire -> commit/rollback for the well
+    tracker, same as the column ``aspirate``, and leaves any plunger priming
+    to the robot for the same reason.
     """
     self._warn_untested_hardware("aspirate_single")
     self._active_single_channel()
@@ -1940,8 +1948,8 @@ class FlexHead96(_FlexHead):
     addressed at its sole well, with the engine centering the nozzle grid in
     the cavity and the container's single tracker staged with the total.
     Either way a mounted tip is required and every check runs before any wire
-    command. A ``prepareToAspirate`` command is sent first if this is the
-    first aspirate since the last tip pickup.
+    command. Naming the wells means the robot primes the plunger itself when
+    it needs to, at the well top and then descending, so nothing here has to.
     """
     self._warn_untested_hardware("aspirate")
     self._require_mounted_tip()

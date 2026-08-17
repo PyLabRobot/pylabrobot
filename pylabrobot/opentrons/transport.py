@@ -196,6 +196,10 @@ class ChatterboxTransport:
   partial-tip extents) — that is protocol-file based (``opentrons_simulate``
   against a virtual Protocol Engine) and needs the ``opentrons`` package,
   which an HTTP transport cannot reach.
+
+  It does track the engine's plunger-priming rule (see ``_track_plunger``),
+  so a draw the real robot would refuse fails here too. That rule cost a
+  round of tests that passed on wire traffic hardware rejects.
   """
 
   def __init__(
@@ -285,6 +289,10 @@ class ChatterboxTransport:
     # pipetteId (as returned by loadPipette) -> mount, so a later
     # pickUpTip/dropTip command's pipetteId can be resolved back to a mount.
     self._pipette_id_to_mount: Dict[str, str] = {}
+    # Simulated plunger state per pipetteId, so a draw the real robot would
+    # refuse is refused here too. See _plunger_is_ready.
+    self._plunger_primed: Dict[str, bool] = {}
+    self._tip_volume: Dict[str, Optional[float]] = {}
 
   async def setup(self) -> None:
     """No connection to open."""
@@ -328,6 +336,77 @@ class ChatterboxTransport:
       return {"data": cmd_data}
     return {"data": {}}
 
+  def _plunger_is_ready(self, pipette_id: str) -> bool:
+    """Whether the robot would let this pipette draw where it stands.
+
+    Mirrors ``HardwarePipettingHandler.get_is_ready_to_aspirate``: the
+    plunger must be at its dispense bottom AND the robot must still know how
+    much the tip holds. Dropping a tip makes the contents unknown, which is
+    why a drop leaves the pipette not ready even though nothing pushed the
+    plunger down.
+    """
+    return self._tip_volume.get(pipette_id) is not None and self._plunger_primed.get(
+      pipette_id, False
+    )
+
+  def _track_plunger(self, ctype: str, params: Dict[str, Any]) -> None:
+    """Apply one command's effect on the simulated plunger and tip contents.
+
+    Straight from the Protocol Engine's own state updates. The two that
+    surprise people: a tip pickup PRIMES the plunger (the engine primes it as
+    part of the pickup), and a dispense only un-primes when it empties the
+    tip, because that is the one the robot follows with a push-out.
+    """
+    pid = params.get("pipetteId")
+    if not isinstance(pid, str):
+      return
+    volume = float(params.get("volume", 0.0) or 0.0)
+    held = self._tip_volume.get(pid)
+    if ctype == "configureForVolume":
+      self._plunger_primed[pid] = False
+    elif ctype in ("pickUpTip", "prepareToAspirate", "liquidProbe", "tryLiquidProbe"):
+      self._plunger_primed[pid] = True
+      self._tip_volume[pid] = 0.0
+    elif ctype in ("aspirate", "aspirateInPlace", "airGapInPlace"):
+      # A well-addressed aspirate primes itself at the well top when it has to.
+      self._plunger_primed[pid] = True
+      self._tip_volume[pid] = (held or 0.0) + volume
+    elif ctype in ("dispense", "dispenseInPlace"):
+      left = (held or 0.0) - volume
+      self._tip_volume[pid] = left
+      push_out = params.get("pushOut")
+      self._plunger_primed[pid] = push_out == 0 if push_out is not None else abs(left) > 1e-9
+    elif ctype in ("blowOut", "blowOutInPlace", "unsafe/blowOutInPlace"):
+      self._plunger_primed[pid] = False
+      self._tip_volume[pid] = 0.0
+    elif ctype in ("dropTip", "dropTipInPlace", "unsafe/dropTipInPlace"):
+      self._tip_volume[pid] = None
+
+  def _plunger_refusal(self, ctype: str, params: Dict[str, Any]) -> Optional[str]:
+    """The robot's own message when a command needs a primed plunger and finds none.
+
+    Only commands that name no well refuse: a well-addressed ``aspirate``
+    primes itself at the well top instead. A liquid probe refuses despite
+    naming a well, deliberately, because getting there means the tip has held
+    liquid and a probe wants a dry one.
+    """
+    pid = params.get("pipetteId")
+    if not isinstance(pid, str):
+      return None
+    if ctype in ("aspirateInPlace", "airGapInPlace") and not self._plunger_is_ready(pid):
+      return (
+        "Pipette cannot aspirate in place because a previous dispense or blowout pushed "
+        "the plunger beyond the bottom position. The subsequent aspirate must be from a "
+        "specific well so the plunger can be reset in a known safe position."
+      )
+    if ctype in ("liquidProbe", "tryLiquidProbe") and self._tip_volume.get(pid) is None:
+      return (
+        "The pipette cannot probe liquid because a previous dispense or blowout pushed "
+        "the plunger beyond the bottom position. The plunger must be reset while the tip "
+        "is somewhere away from liquid."
+      )
+    return None
+
   async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     if path == "/runs":
       return {"data": {"id": "chatterbox-run"}}
@@ -355,6 +434,23 @@ class ChatterboxTransport:
       cmd_id = f"cmd-{self._n}"
       self.commands.append({"commandType": ctype, "params": dict(params)})
       result: Dict[str, Any] = {}
+      refusal = self._plunger_refusal(ctype, params)
+      if refusal is not None:
+        # Raised undefined by the engine, so the wire carries the exception's
+        # class name rather than a defined error code.
+        cmd_data = {
+          "id": cmd_id,
+          "commandType": ctype,
+          "status": "failed",
+          "error": {
+            "errorType": "PipetteNotReadyToAspirateError",
+            "errorCode": "4000",
+            "detail": refusal,
+          },
+        }
+        self._cmds[cmd_id] = cmd_data
+        self._log("Chatterbox: %s %s REFUSED (plunger not primed)", ctype, params)
+        return {"data": cmd_data}
       if ctype == "loadPipette":
         self._pipette_load_count += 1
         pipette_id = f"chatterbox-pip-{self._pipette_load_count}"
@@ -416,6 +512,8 @@ class ChatterboxTransport:
             "isDefined": True,
           },
         }
+      if cmd_data["status"] == "succeeded":
+        self._track_plunger(ctype, params)
       self._cmds[cmd_id] = cmd_data
       self._log("Chatterbox: %s %s", ctype, params)
       return {"data": cmd_data}
