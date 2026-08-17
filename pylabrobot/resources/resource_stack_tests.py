@@ -73,27 +73,6 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stack.get_absolute_size_y(), 0)
     self.assertEqual(stack.get_absolute_size_z(), 0)
 
-  def test_serialize_round_trip(self):
-    stack = ResourceStack(
-      "stack",
-      "z",
-      [
-        Resource("A", size_x=10, size_y=10, size_z=10),
-        Resource("B", size_x=10, size_y=10, size_z=10),
-      ],
-    )
-
-    restored = Resource.deserialize(stack.serialize())
-
-    self.assertIsInstance(restored, ResourceStack)
-    assert isinstance(restored, ResourceStack)
-    self.assertEqual(restored.direction, "z")
-    self.assertEqual(
-      [child.name for child in restored.children], [child.name for child in stack.children]
-    )
-    self.assertEqual(restored.get_resource("A").location, Coordinate(0, 0, 10))
-    self.assertEqual(restored.get_resource("B").location, Coordinate.zero())
-
   # Tests for using ResourceStack as a stacking area, like the one near the washer on the STARs.
 
   def test_add_item(self):

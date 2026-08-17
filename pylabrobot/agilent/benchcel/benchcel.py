@@ -81,7 +81,7 @@ import asyncio
 import dataclasses
 import logging
 import struct
-from typing import Callable, Dict, List, Literal, Optional, Sequence, Tuple, Union, cast
+from typing import Callable, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.io.socket import Socket
@@ -583,7 +583,6 @@ class BenchCel4R(Resource):
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = "Agilent BenchCel 4R",
-    _create_default_resources: bool = True,
   ):
     """
     Args:
@@ -605,8 +604,7 @@ class BenchCel4R(Resource):
         network interfaces connected to different subnets.
       labware: Optional PLR plate, calculated settings object, or serialized
         settings dict. The device must still be configured with matching VWorks
-        labware settings; this value is used for PLR metadata, serialization,
-        and validation.
+        labware settings; this value is used for PLR metadata and validation.
       stacks: Optionally provide custom ``ResourceStack`` stacks; defaults to four generic stacks.
       loading_tray_location: Cosmetic ``Coordinate`` of the loading-tray resource (resource tree /
         visualization only; the real transfer position is the teachpoint on the device).
@@ -644,21 +642,20 @@ class BenchCel4R(Resource):
       model=model,
     )
 
-    if _create_default_resources:
-      self.loading_tray = PlateHolder(
-        name=f"{name}_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
-      )
-      self.assign_child_resource(
-        self.loading_tray, location=loading_tray_location or Coordinate.zero()
-      )
+    self.loading_tray = PlateHolder(
+      name=f"{name}_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
+    )
+    self.assign_child_resource(
+      self.loading_tray, location=loading_tray_location or Coordinate.zero()
+    )
 
-      self._stacks = (
-        list(stacks) if stacks is not None else benchcel_4r_stacks(name_prefix=f"{name}_stacker")
-      )
-      if len(self._stacks) != NUM_STACKERS:
-        raise ValueError(f"BenchCel4R requires exactly {NUM_STACKERS} stacks")
-      for stack in self._stacks:
-        self.assign_child_resource(stack, location=Coordinate.zero())
+    self._stacks = (
+      list(stacks) if stacks is not None else benchcel_4r_stacks(name_prefix=f"{name}_stacker")
+    )
+    if len(self._stacks) != NUM_STACKERS:
+      raise ValueError(f"BenchCel4R requires exactly {NUM_STACKERS} stacks")
+    for stack in self._stacks:
+      self.assign_child_resource(stack, location=None)
 
   async def setup(self) -> None:
     """Open the TCP connection to the BenchCel."""
@@ -671,52 +668,6 @@ class BenchCel4R(Resource):
     await self.io.stop()
     self._rx_buffer.clear()
     logger.info("[benchcel] disconnected from %s:%d", self.host, self.port)
-
-  def serialize(self) -> dict:
-    """Return a JSON-serialisable view of this device's construction arguments."""
-    return {
-      **super().serialize(),
-      "host": self.host,
-      "port": self.port,
-      "timeout": self.timeout,
-      "read_poll_timeout": self.read_poll_timeout,
-      "loading_tray_teachpoint_id": self.loading_tray_teachpoint_id,
-      "source_ip": self.source_ip,
-      "labware": self.labware_settings.to_dict() if self.labware_settings is not None else None,
-    }
-
-  @classmethod
-  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "BenchCel4R":
-    """Restore a BenchCel and its serialized tray, stacks, and tracked plates."""
-    data_copy = data.copy()
-    data_copy["children"] = [
-      {
-        **child,
-        **(
-          {"location": Coordinate.zero().serialize()}
-          if child.get("type") == "ResourceStack" and "location" not in child
-          else {}
-        ),
-      }
-      for child in data_copy.get("children", [])
-    ]
-    data_copy["_create_default_resources"] = False
-    benchcel = cast(BenchCel4R, super().deserialize(data_copy, allow_marshal=allow_marshal))
-
-    tray = next(
-      (
-        child
-        for child in benchcel.children
-        if isinstance(child, PlateHolder) and child.name == f"{benchcel.name}_tray"
-      ),
-      None,
-    )
-    stacks = [child for child in benchcel.children if isinstance(child, ResourceStack)]
-    if tray is None or len(stacks) != NUM_STACKERS:
-      raise ValueError("Serialized BenchCel must contain one loading tray and exactly four stacks")
-    benchcel.loading_tray = tray
-    benchcel._stacks = stacks
-    return benchcel
 
   # ------------------------------------------------------------------ wire IO
 

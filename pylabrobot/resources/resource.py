@@ -775,12 +775,6 @@ class Resource(SerializableMixin):
       raise ValueError(f'Could not find subclass with name "{data["type"]}"')
     assert issubclass(subclass, cls)  # mypy does not know the type after the None check...
 
-    # Let concrete resource types handle constructor-owned children or other custom state. When a
-    # subclass implementation calls ``super().deserialize()``, ``subclass is cls`` prevents
-    # redispatch and lets the generic reconstruction below run exactly once.
-    if subclass is not cls and "deserialize" in subclass.__dict__:
-      return cast(Self, subclass.deserialize(data, allow_marshal=allow_marshal))
-
     for key in [
       "type",
       "parent_name",

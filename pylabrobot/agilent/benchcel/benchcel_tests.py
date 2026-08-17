@@ -27,7 +27,7 @@ from pylabrobot.agilent.benchcel.benchcel import (
   split_frames,
 )
 from pylabrobot.agilent.benchcel.stacks import benchcel_4r_stacks
-from pylabrobot.resources import Coordinate, Resource, cor_96_wellplate_360uL_Fb
+from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource_stack import ResourceStack
 
@@ -424,40 +424,6 @@ class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
       "6002000102"  # load stacker 3
       "610600010200000000",  # unload stacker 3
     )
-
-  async def test_serialize_includes_connection_info(self):
-    plate = Plate("plate", size_x=127.76, size_y=85.48, size_z=14.6, ordered_items={})
-    backend = BenchCel4R(
-      name="benchcel",
-      host="192.168.0.100",
-      port=7612,
-      timeout=12.5,
-      labware=plate,
-    )
-    serialized = backend.serialize()
-    self.assertEqual(serialized["type"], "BenchCel4R")
-    self.assertEqual(serialized["host"], "192.168.0.100")
-    self.assertEqual(serialized["timeout"], 12.5)
-    self.assertEqual(serialized["labware"]["name"], "plate")
-    self.assertAlmostEqual(serialized["labware"]["stacking_thickness"], 13.1)
-
-  async def test_serialize_round_trip_restores_device_resources(self):
-    backend = BenchCel4R(
-      name="benchcel",
-      host="192.168.0.100",
-      loading_tray_teachpoint_id=0x1E,
-    )
-    plate = cor_96_wellplate_360uL_Fb("plate")
-    backend.stacks[0].assign_child_resource(plate)
-
-    restored = Resource.deserialize(backend.serialize())
-
-    self.assertIsInstance(restored, BenchCel4R)
-    assert isinstance(restored, BenchCel4R)
-    self.assertEqual(restored.host, backend.host)
-    self.assertEqual(len(restored.stacks), 4)
-    self.assertEqual(restored.stacks[0].get_top_item().name, "plate")
-    self.assertIs(restored.loading_tray, restored.get_resource("benchcel_tray"))
 
 
 class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
