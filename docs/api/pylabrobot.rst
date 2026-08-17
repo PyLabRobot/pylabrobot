@@ -10,6 +10,7 @@ Subpackages
     :maxdepth: 1
 
     pylabrobot.config
+    pylabrobot.generic
     pylabrobot.resources
     pylabrobot.utils
 

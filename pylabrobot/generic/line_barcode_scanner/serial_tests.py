@@ -1,11 +1,7 @@
 import unittest
 from typing import List
 
-from pylabrobot.capabilities.barcode_scanning.serial import (
-  SerialBarcodeScanner,
-  SerialBarcodeScannerBackend,
-  SerialBarcodeScannerDriver,
-)
+from pylabrobot.generic import SerialBarcodeScanner
 
 
 class FakeSerialIO:
@@ -56,54 +52,64 @@ class FakeSerialIO:
     return TemporaryTimeout()
 
 
-def make_driver(chunks: List[bytes]) -> SerialBarcodeScannerDriver:
-  driver = SerialBarcodeScannerDriver(port="COM_TEST")
-  driver.io = FakeSerialIO(chunks)  # type: ignore[assignment]
-  return driver
+def make_scanner(chunks: List[bytes]) -> SerialBarcodeScanner:
+  scanner = SerialBarcodeScanner(port="COM_TEST")
+  scanner.io = FakeSerialIO(chunks)  # type: ignore[assignment]
+  return scanner
 
 
-class TestSerialBarcodeScannerDriver(unittest.IsolatedAsyncioTestCase):
+class TestSerialBarcodeScanner(unittest.IsolatedAsyncioTestCase):
   async def test_read_line_carriage_return(self):
-    driver = make_driver([b"1", b"2", b"3", b"\r"])
+    scanner = make_scanner([b"1", b"2", b"3", b"\r"])
 
-    self.assertEqual(await driver.read_line(timeout=1), "123")
+    self.assertEqual(await scanner.read_line(timeout=1), "123")
 
   async def test_read_line_newline(self):
-    driver = make_driver([b"A", b"B", b"C", b"\n"])
+    scanner = make_scanner([b"A", b"B", b"C", b"\n"])
 
-    self.assertEqual(await driver.read_line(timeout=1), "ABC")
+    self.assertEqual(await scanner.read_line(timeout=1), "ABC")
 
   async def test_read_line_timeout_before_data(self):
-    driver = make_driver([])
+    scanner = make_scanner([])
 
-    self.assertEqual(await driver.read_line(timeout=0), "")
+    self.assertEqual(await scanner.read_line(timeout=0), "")
+
+  async def test_read_line_rejects_negative_timeout(self):
+    scanner = make_scanner([])
+
+    with self.assertRaises(ValueError):
+      await scanner.read_line(timeout=-1)
 
   async def test_reset_input_buffer(self):
-    driver = make_driver([])
+    scanner = make_scanner([])
 
-    await driver.reset_input_buffer()
+    await scanner.reset_input_buffer()
 
-    fake_io = driver.io
+    fake_io = scanner.io
     assert isinstance(fake_io, FakeSerialIO)
     self.assertTrue(fake_io.reset_input_buffer_called)
 
   def test_rejects_empty_terminators(self):
     with self.assertRaises(ValueError):
-      SerialBarcodeScannerDriver(port="COM_TEST", terminators=[])
+      SerialBarcodeScanner(port="COM_TEST", terminators=[])
 
   def test_rejects_multi_byte_terminators(self):
     with self.assertRaises(ValueError):
-      SerialBarcodeScannerDriver(port="COM_TEST", terminators=[b"\r\n"])
+      SerialBarcodeScanner(port="COM_TEST", terminators=[b"\r\n"])
 
+  def test_rejects_non_positive_max_line_length(self):
+    with self.assertRaises(ValueError):
+      SerialBarcodeScanner(port="COM_TEST", max_line_length=0)
 
-class TestSerialBarcodeScannerBackend(unittest.IsolatedAsyncioTestCase):
   async def test_scan_barcode(self):
-    driver = make_driver([b"2", b"2", b"6", b"\r"])
-    backend = SerialBarcodeScannerBackend(
-      driver=driver, symbology="Code 128 (Subset B and C)", position_on_resource="right"
-    )
+    scanner = SerialBarcodeScanner(port="COM_TEST")
+    scanner.io = FakeSerialIO([b"2", b"2", b"6", b"\r"])  # type: ignore[assignment]
 
-    barcode = await backend.scan_barcode(read_time=1)
+    barcode = await scanner.scan_barcode(
+      read_time=1,
+      symbology="Code 128 (Subset B and C)",
+      position_on_resource="right",
+    )
 
     assert barcode is not None
     self.assertEqual(barcode.data, "226")
@@ -111,47 +117,45 @@ class TestSerialBarcodeScannerBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(barcode.position_on_resource, "right")
 
   async def test_scan_barcode_returns_none_on_timeout(self):
-    driver = make_driver([])
-    backend = SerialBarcodeScannerBackend(driver=driver)
+    scanner = make_scanner([])
 
-    self.assertIsNone(await backend.scan_barcode(read_time=0))
+    self.assertIsNone(await scanner.scan_barcode(read_time=0))
 
   async def test_scan_barcode_with_trigger_command(self):
-    driver = make_driver([b"1", b"2", b"3", b"\r"])
-    backend = SerialBarcodeScannerBackend(
-      driver=driver,
+    scanner = SerialBarcodeScanner(
+      port="COM_TEST",
       trigger_command=b"TRIGGER\r",
       untrigger_command=b"UNTRIGGER\r",
     )
+    scanner.io = FakeSerialIO([b"1", b"2", b"3", b"\r"])  # type: ignore[assignment]
 
-    barcode = await backend.scan_barcode(read_time=1)
+    barcode = await scanner.scan_barcode(read_time=1)
 
     assert barcode is not None
     self.assertEqual(barcode.data, "123")
-    fake_io = driver.io
+    fake_io = scanner.io
     assert isinstance(fake_io, FakeSerialIO)
     self.assertEqual(fake_io.writes, [b"TRIGGER\r", b"UNTRIGGER\r"])
 
   async def test_scan_barcode_rejects_negative_read_time(self):
-    driver = make_driver([])
-    backend = SerialBarcodeScannerBackend(driver=driver)
+    scanner = make_scanner([])
 
     with self.assertRaises(ValueError):
-      await backend.scan_barcode(read_time=-1)
+      await scanner.scan_barcode(read_time=-1)
 
-
-class TestSerialBarcodeScannerDevice(unittest.IsolatedAsyncioTestCase):
-  async def test_device_setup_scan_stop(self):
+  async def test_setup_scan_stop(self):
     scanner = SerialBarcodeScanner(port="COM_TEST")
     fake_io = FakeSerialIO([b"X", b"Y", b"Z", b"\r"])
-    scanner.driver.io = fake_io  # type: ignore[assignment]
+    scanner.io = fake_io  # type: ignore[assignment]
 
     await scanner.setup()
-    barcode = await scanner.barcode_scanning.scan(read_time=1)
+    barcode = await scanner.scan_barcode(read_time=1, symbology="Code 39")
     await scanner.stop()
 
     assert barcode is not None
     self.assertEqual(barcode.data, "XYZ")
+    self.assertEqual(barcode.symbology, "Code 39")
+    self.assertEqual(barcode.position_on_resource, "bottom")
     self.assertTrue(fake_io.setup_called)
     self.assertTrue(fake_io.stop_called)
 
