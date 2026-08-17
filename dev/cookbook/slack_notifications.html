@@ -581,7 +581,7 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="sending-pylabrobot-notifications-to-slack">
 <h1>Sending PyLabRobot notifications to Slack<a class="headerlink" href="#sending-pylabrobot-notifications-to-slack" title="Link to this heading">#</a></h1>
-<p>A basic example of sending Slack messages from Python, wired into a PLR protocol. Nothing here is PLR-specific — for the full webhook API (formatting, attachments, threading, Block Kit), see <a class="reference external" href="https://api.slack.com/messaging/webhooks">Slack’s Incoming Webhooks docs</a>.</p>
+<p>A basic example of sending Slack messages from Python, wired into a PLR protocol and PLR’s EventBus. The webhook helper uses only the Python standard library — for the full webhook API (formatting, attachments, threading, Block Kit), see <a class="reference external" href="https://api.slack.com/messaging/webhooks">Slack’s Incoming Webhooks docs</a>.</p>
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -676,8 +676,68 @@
 </div>
 </div>
 </section>
+<section id="forward-semantic-eventbus-events">
+<h2>4. Forward semantic EventBus events<a class="headerlink" href="#forward-semantic-eventbus-events" title="Link to this heading">#</a></h2>
+<p>PLR’s <a class="reference internal" href="../user_guide/machine-agnostic-features/event-bus.html"><span class="std std-doc">EventBus</span></a> can automatically report instrument operations. This subscriber forwards completed and failed semantic operations while ignoring lower-level transport and firmware diagnostics.</p>
+<p>EventBus subscribers run synchronously with PLR, so the callback only submits work to a background thread. A slow Slack request therefore does not delay the instrument operation.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.events</span><span class="w"> </span><span class="kn">import</span> <span class="n">EventBus</span><span class="p">,</span> <span class="n">PLREvent</span><span class="p">,</span> <span class="n">use_event_bus</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">semantic_slack_message</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">PLREvent</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">  </span><span class="sd">"""Return Slack text for events we want to forward, or None to filter an event out."""</span>
+  <span class="c1"># Semantic lifecycle events identify their high-level operation in context.</span>
+  <span class="c1"># Lower-level transport, firmware, and other diagnostic events may not.</span>
+  <span class="n">operation</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"operation"</span><span class="p">)</span>
+  <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+  <span class="c1"># Forward outcomes only. Ignoring `.started` keeps Slack volume manageable while</span>
+  <span class="c1"># still reporting every successful operation and every operation failure.</span>
+  <span class="n">status</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">operation</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">status</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"completed"</span><span class="p">,</span> <span class="s2">"failed"</span><span class="p">}:</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+  <span class="n">resources</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"resources"</span><span class="p">,</span> <span class="p">[])</span>
+  <span class="n">resource_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">resource</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span> <span class="k">for</span> <span class="n">resource</span> <span class="ow">in</span> <span class="n">resources</span> <span class="k">if</span> <span class="s2">"name"</span> <span class="ow">in</span> <span class="n">resource</span><span class="p">]</span>
+  <span class="n">resource_text</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">" (</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">resource_names</span><span class="p">)</span><span class="si">}</span><span class="s2">)"</span> <span class="k">if</span> <span class="n">resource_names</span> <span class="k">else</span> <span class="s2">""</span>
+
+  <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="s2">"failed"</span><span class="p">:</span>
+    <span class="n">error</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"error_message"</span><span class="p">,</span> <span class="s2">"unknown error"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">":rotating_light: `</span><span class="si">{</span><span class="n">operation</span><span class="si">}</span><span class="s2">` failed</span><span class="si">{</span><span class="n">resource_text</span><span class="si">}</span><span class="s2">: `</span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">`"</span>
+  <span class="k">return</span> <span class="sa">f</span><span class="s2">":white_check_mark: `</span><span class="si">{</span><span class="n">operation</span><span class="si">}</span><span class="s2">` completed</span><span class="si">{</span><span class="n">resource_text</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="n">slack_worker</span> <span class="o">=</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">event_bus</span> <span class="o">=</span> <span class="n">EventBus</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">forward_semantic_event_to_slack</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">PLREvent</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+  <span class="c1"># EventBus subscribers run synchronously, so only queue network work here.</span>
+  <span class="n">message</span> <span class="o">=</span> <span class="n">semantic_slack_message</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">message</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">slack_worker</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">slack_notify</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+
+
+<span class="n">unsubscribe</span> <span class="o">=</span> <span class="n">event_bus</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">forward_semantic_event_to_slack</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+  <span class="k">with</span> <span class="n">use_event_bus</span><span class="p">(</span><span class="n">event_bus</span><span class="p">):</span>
+    <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+    <span class="c1"># Instrumented PLR operations in this scope are forwarded automatically.</span>
+    <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="k">finally</span><span class="p">:</span>
+  <span class="n">unsubscribe</span><span class="p">()</span>
+  <span class="n">slack_worker</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
 <section id="richer-messages-with-block-kit">
-<h2>4. Richer messages with Block Kit<a class="headerlink" href="#richer-messages-with-block-kit" title="Link to this heading">#</a></h2>
+<h2>5. Richer messages with Block Kit<a class="headerlink" href="#richer-messages-with-block-kit" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">text</span></code> is just one of the payload fields. Slack also accepts <a class="reference external" href="https://api.slack.com/block-kit">Block Kit</a> for headers, sections, fields, and dividers:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -718,6 +778,8 @@
 <ul class="simple">
 <li><p>The webhook URL lives in <code class="docutils literal notranslate"><span class="pre">~/.plr_slack_webhook</span></code>, outside the repo. Anyone with the URL can post to that channel, so keep it mode 600.</p></li>
 <li><p>The helper catches <code class="docutils literal notranslate"><span class="pre">URLError</span></code> and <code class="docutils literal notranslate"><span class="pre">TimeoutError</span></code> so a failed POST doesn’t abort the protocol.</p></li>
+<li><p>The EventBus example forwards semantic operation outcomes, not <code class="docutils literal notranslate"><span class="pre">.started</span></code> or diagnostic events. Adapt that filter to the notification volume you need.</p></li>
+<li><p>Keep EventBus subscribers fast. For production use, enqueue network or disk work rather than performing it directly in the callback.</p></li>
 <li><p>Incoming Webhooks rate-limit to ~1 msg/sec per channel.</p></li>
 <li><p>Webhooks are write-only. Slack → robot (e.g. a <code class="docutils literal notranslate"><span class="pre">/pause</span></code> command) needs the Events API.</p></li>
 </ul>
@@ -775,7 +837,8 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#store-the-webhook-url">1. Store the webhook URL</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-tiny-stdlib-notifier">2. A tiny stdlib notifier</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wrap-a-plr-run">3. Wrap a PLR run</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#richer-messages-with-block-kit">4. Richer messages with Block Kit</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#forward-semantic-eventbus-events">4. Forward semantic EventBus events</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#richer-messages-with-block-kit">5. Richer messages with Block Kit</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes">Notes</a></li>
 </ul>
   </nav></div>

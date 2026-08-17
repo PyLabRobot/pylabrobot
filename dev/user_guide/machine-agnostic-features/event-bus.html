@@ -750,6 +750,16 @@ callback should enqueue or persist the event rather than perform slow work synch
 preferred for a bounded protocol or task because it is context-local and composes safely with
 async tasks.</p>
 </section>
+<section id="forward-events-to-external-services">
+<h2>Forward events to external services<a class="headerlink" href="#forward-events-to-external-services" title="Link to this heading">#</a></h2>
+<p>Subscribers can format and forward selected events to external logging, monitoring, or
+notification services. EventBus itself remains transport-independent: integrations such as Slack
+live in application code and choose which semantic or diagnostic events they need.</p>
+<p>The <a class="reference internal" href="../../cookbook/slack_notifications.html"><span class="std std-doc">Slack notifications cookbook</span></a> demonstrates a small
+subscriber that forwards completed and failed semantic operations to a Slack webhook. It also
+shows how to keep the synchronous subscriber fast by submitting network work to a background
+thread.</p>
+</section>
 <section id="event-shape">
 <h2>Event shape<a class="headerlink" href="#event-shape" title="Link to this heading">#</a></h2>
 <p>Every event has the following JSON-ready representation:</p>
@@ -944,6 +954,7 @@ resource, and test conventions for driver authors adding coverage.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#subscribe-to-events">Subscribe to events</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#forward-events-to-external-services">Forward events to external services</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#event-shape">Event shape</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#add-application-context">Add application context</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#semantic-and-diagnostic-events">Semantic and diagnostic events</a></li>
