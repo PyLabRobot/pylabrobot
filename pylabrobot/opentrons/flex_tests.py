@@ -928,7 +928,7 @@ class TestFlexHead1Ops(unittest.TestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  def test_pick_up_tips_and_aspirate_emit_one_command_each_and_warn_untested(self):
+  def test_pick_up_tips_and_aspirate_emit_one_command_each(self):
     flex, transport, head = _flex_head1()
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
@@ -940,9 +940,7 @@ class TestFlexHead1Ops(unittest.TestCase):
       target_well = plate.get_item("B3")
       target_well.tracker.set_volume(100.0)
 
-      with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
-        asyncio.run(head.pick_up_tips(rack.get_item("A1")))
-      self.assertTrue(any("not yet verified" in msg.lower() for msg in log_ctx.output))
+      asyncio.run(head.pick_up_tips(rack.get_item("A1")))
 
       pickup_cmds = [c for c in transport.commands if c["commandType"] == "pickUpTip"]
       self.assertEqual(len(pickup_cmds), 1)
@@ -950,10 +948,7 @@ class TestFlexHead1Ops(unittest.TestCase):
       self.assertIsNotNone(head.get_mounted_tips()[0])
       self.assertEqual(len(head.get_mounted_tips()), 1)
 
-      # A 2nd warning call must be a no-op (only the FIRST op logs).
-      with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
-          asyncio.run(head.aspirate(target_well, volume=10))
+      asyncio.run(head.aspirate(target_well, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
       prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]

@@ -439,12 +439,30 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_base_motion_ops_warn_on_unverified_heads(self):
-    flex, _transport = _flex_with_gripper()
-    asyncio.run(flex.setup())
+    """A base-class op warns unless THIS head's verified set names it.
+
+    Uses FlexHead8, whose verified lineage is column pickup only, so a motion
+    op it never covered still warns.
+    """
+    flex, head = self._flex_head8()
     try:
       with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
-        asyncio.run(_head(flex).position())
-      self.assertTrue(any("FlexHead1.position" in msg for msg in log_ctx.output))
+        asyncio.run(head.position())
+      self.assertTrue(any("FlexHead8.position" in msg for msg in log_ctx.output))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_head1_hardware_verified_ops_do_not_warn(self):
+    """FlexHead1's ops were confirmed on a p50 single channel, so they stay quiet."""
+    transport = ChatterboxTransport(pipettes=[("p50_single_flex", 1, 1.0, 50.0, "left")])
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    asyncio.run(flex.setup())
+    try:
+      head = flex.left
+      assert head is not None
+      with self.assertRaises(AssertionError):
+        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+          asyncio.run(head.position())
     finally:
       asyncio.run(flex.stop())
 

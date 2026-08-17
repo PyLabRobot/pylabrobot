@@ -1085,9 +1085,7 @@ class TestInPlaceLiquidOps(unittest.TestCase):
       asyncio.run(head.configure_for_volume(10.0))
       asyncio.run(head.aspirate_in_place(volume=5))
 
-      self.assertEqual(
-        [c["commandType"] for c in transport.commands].count("prepareToAspirate"), 2
-      )
+      self.assertEqual([c["commandType"] for c in transport.commands].count("prepareToAspirate"), 2)
     finally:
       asyncio.run(flex.stop())
 
@@ -1099,9 +1097,7 @@ class TestInPlaceLiquidOps(unittest.TestCase):
       asyncio.run(head.blow_out())
       asyncio.run(head.aspirate_in_place(volume=15))
 
-      self.assertEqual(
-        [c["commandType"] for c in transport.commands].count("prepareToAspirate"), 2
-      )
+      self.assertEqual([c["commandType"] for c in transport.commands].count("prepareToAspirate"), 2)
     finally:
       asyncio.run(flex.stop())
 
