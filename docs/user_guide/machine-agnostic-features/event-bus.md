@@ -121,6 +121,8 @@ events.
 | `legacy.liquid_handling.LiquidHandler` | resource pickup/move/drop; tip pickup/drop; 96-head tip pickup/drop; aspirate; dispense |
 | `legacy.shaking.Shaker` | `shaker.shake`, `shaker.stop_shaking` |
 | `legacy.temperature_controlling.TemperatureController` | set temperature, wait for temperature, deactivate |
+| `legacy.centrifuge.Centrifuge` | `centrifuge.spin` |
+| `legacy.centrifuge.Loader` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
 | `agilent.vspin.VSpin` | `centrifuge.spin` |
 | `agilent.vspin.Access2` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
 | `brooks.precise_flex.PreciseFlex` | lifecycle, fault/home/freedrive, joint/cartesian/rail/gripper motion, pick/drop, park |
