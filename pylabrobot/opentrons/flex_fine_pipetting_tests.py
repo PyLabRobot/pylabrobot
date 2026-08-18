@@ -869,15 +869,16 @@ class TestSingleNozzleLayout(unittest.TestCase):
       if c["commandType"] == "configureNozzleLayout"
     ]
 
-  def test_a_middle_row_well_anchors_on_a_nozzle_that_can_reach_it(self):
-    # The row letter names no anchor ("C1" is not a primaryNozzle the
-    # robot-server accepts), so the reachable end is chosen instead.
+  def test_the_front_most_row_is_pickable_from_a_full_rack_on_the_rear_anchor(self):
+    # The workable single-tip pattern on a ganged head: take the front-most row
+    # anchored on the REAR nozzle, so the idle seven extend past the front edge
+    # over nothing. Consuming a rack front-to-back keeps that true every time.
     flex, transport, head, rack = self._bench()
     try:
-      asyncio.run(head.pick_up_single_tip(rack, well="C3"))
+      asyncio.run(head.pick_up_single_tip(rack, well="H3"))
       self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "A1")
       pickups = [c for c in transport.commands if c["commandType"] == "pickUpTip"]
-      self.assertEqual(pickups[-1]["params"]["wellName"], "C3")
+      self.assertEqual(pickups[-1]["params"]["wellName"], "H3")
       self.assertIsNotNone(head.get_mounted_tips()[0])
     finally:
       asyncio.run(flex.stop())
@@ -898,12 +899,40 @@ class TestSingleNozzleLayout(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_row_letter_default_picks_that_rows_nozzle(self):
+  def test_a_rear_row_well_anchors_on_the_FRONT_nozzle_so_the_idle_seven_hang_off_the_back(self):
+    # The nozzles are ganged and descend together, so a pick is only "single"
+    # when the other seven have nothing under them. Anchoring the REAR nozzle
+    # on a rear-row well would put them over rows B-H, which still hold tips:
+    # eight tips, not one. The far nozzle is the one that hangs them clear.
     flex, transport, head, rack = self._bench()
     try:
       asyncio.run(head.pick_up_single_tip(rack, well="A2"))
-      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "A1")
-      self.assertIsNotNone(head.get_mounted_tips()[0])
+      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "H1")
+      self.assertIsNotNone(head.get_mounted_tips()[7])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_full_rack_middle_row_is_refused_rather_than_taking_a_handful_of_tips(self):
+    # No anchor clears a middle row of a full rack: whichever end you pick,
+    # some idle nozzles sit over tips. Refusing beats silently taking several.
+    flex, _transport, head, rack = self._bench()
+    try:
+      with self.assertRaises(ValueError) as caught:
+        asyncio.run(head.pick_up_single_tip(rack, well="D2"))
+      self.assertIn("more than one tip", str(caught.exception))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_middle_row_is_allowed_once_its_neighbours_are_already_empty(self):
+    # Same well, but with the rest of the column consumed the idle nozzles have
+    # nothing to engage, so the pick really is single.
+    flex, transport, head, rack = self._bench()
+    try:
+      for spot in rack.get_all_items():
+        if spot.name != rack.get_item("D2").name and spot.has_tip():
+          spot.tracker.remove_tip(commit=True)
+      asyncio.run(head.pick_up_single_tip(rack, well="D2"))
+      self.assertIn(self._nozzle_params(transport)[-1]["primaryNozzle"], ("A1", "H1"))
     finally:
       asyncio.run(flex.stop())
 
@@ -988,12 +1017,17 @@ class TestSingleNozzleLayout(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_a_front_row_well_anchors_on_the_nozzle_that_reaches_it(self):
+  def test_reach_and_clearance_can_disagree_and_the_pick_is_then_refused(self):
+    # On a front-row slot only the H1 anchor reaches a mid/front row, but H1
+    # hangs its idle nozzles BACKWARD over rows that still hold tips. The anchor
+    # that clears cannot reach and the anchor that reaches cannot clear, so
+    # there is no way to take one tip here. Refuse instead of taking several.
     flex, transport, head, rack = self._bench(slot="D1")
     try:
-      asyncio.run(head.pick_up_single_tip(rack, well="F1"))
-      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "H1")
-      self.assertIsNotNone(head.get_mounted_tips()[7])
+      commands_before = len(transport.commands)
+      with self.assertRaises(ValueError):
+        asyncio.run(head.pick_up_single_tip(rack, well="F1"))
+      self.assertEqual(len(transport.commands), commands_before, "must not reach the wire")
     finally:
       asyncio.run(flex.stop())
 
@@ -1477,17 +1511,23 @@ class TestUnsafeRecoveryOps(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_unsafe_ops_without_a_tip_raise_and_send_nothing(self):
+  def test_unsafe_ops_still_run_when_this_process_knows_of_no_tip(self):
+    # The old contract refused these unless this head's own bookkeeping showed a
+    # tip. That bookkeeping is per-process and empty after any restart, which is
+    # exactly when a tip is stranded on the nozzle and these calls are the only
+    # way off it. Guarding on it made the escape hatch refuse in the one
+    # situation it exists for, so the guard is gone and the commands go out.
     flex, transport, head, _rack = self._bench()
     try:
-      for op in (
-        head.unsafe_drop_tip_in_place,
-        lambda: head.unsafe_blow_out_in_place(flow_rate=20.0),
+      self.assertTrue(all(tip is None for tip in head.get_mounted_tips()))
+      for op, expected in (
+        (head.unsafe_drop_tip_in_place, "unsafe/dropTipInPlace"),
+        (lambda: head.unsafe_blow_out_in_place(flow_rate=20.0), "unsafe/blowOutInPlace"),
       ):
         n_before = len(transport.commands)
-        with self.assertRaises(OpentronsError):
-          asyncio.run(op())
-        self.assertEqual(len(transport.commands), n_before, "rejection must not reach the wire")
+        asyncio.run(op())
+        sent = [c["commandType"] for c in transport.commands[n_before:]]
+        self.assertIn(expected, sent)
     finally:
       asyncio.run(flex.stop())
 

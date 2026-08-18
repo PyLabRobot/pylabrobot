@@ -355,8 +355,8 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
       self.assertEqual(transport.commands[pickup_idx]["params"]["wellName"], "H2")
 
       tips = head.get_mounted_tips()
-      self.assertIsNotNone(tips[7])
-      for i in range(7):
+      self.assertIsNotNone(tips[0])
+      for i in range(1, 8):
         self.assertIsNone(tips[i], msg=f"channel {i}")
     finally:
       asyncio.run(flex.stop())
@@ -438,7 +438,7 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
       trash = flex.deck.get_trash_area()
 
       asyncio.run(head.pick_up_single_tip(rack, well="A1"))
-      self.assertIsNotNone(head.get_mounted_tips()[0])
+      self.assertIsNotNone(head.get_mounted_tips()[7])
 
       asyncio.run(head.dispense_single(plate, well="B3", volume=20))
       target = plate.get_item("B3")
