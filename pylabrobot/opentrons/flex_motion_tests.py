@@ -422,36 +422,46 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_head8_op_outside_verified_lineage_warns_once(self):
+  def test_each_unverified_head_op_warns_not_just_the_first(self):
+    # A run touching several unverified ops has to name them all: one flag per
+    # instance made a whole run's worth of unverified ops look like a single op.
     flex, head = self._flex_head8()
     try:
-      rack = flex_96_tiprack_50ul(name="rack")
-      flex.deck.assign_child_at_slot(rack, "C1")
-      asyncio.run(head.pick_up_tips(rack, column=0))
-
       with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
-        asyncio.run(head.blow_out())
-      self.assertTrue(any("FlexHead8.blow_out" in msg for msg in log_ctx.output))
+        asyncio.run(head.position())
+        asyncio.run(head.move_relative("z", -1.0))
+        asyncio.run(head.position())  # repeat stays quiet
+      self.assertEqual(len(log_ctx.output), 2)
+      self.assertTrue(any("FlexHead8.position" in msg for msg in log_ctx.output))
+      self.assertTrue(any("FlexHead8.move_relative" in msg for msg in log_ctx.output))
       self.assertTrue(any("not yet verified" in msg.lower() for msg in log_ctx.output))
-
-      # Only the FIRST unverified op on an instance logs.
-      with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
-          asyncio.run(head.blow_out())
     finally:
       asyncio.run(flex.stop())
 
-  def test_base_motion_ops_warn_on_unverified_heads(self):
+  def test_base_motion_ops_warn_on_a_head_that_never_ran_them(self):
     """A base-class op warns unless THIS head's verified set names it.
 
-    Uses FlexHead8, whose verified lineage is column pickup only, so a motion
-    op it never covered still warns.
+    The bench drives the motion verbs on the left mount's single channel only,
+    so they stay unverified on the 8-channel head even though the p50 ran them.
     """
     flex, head = self._flex_head8()
     try:
       with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
         asyncio.run(head.position())
       self.assertTrue(any("FlexHead8.position" in msg for msg in log_ctx.output))
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_in_place_ops_ran_on_the_eight_head_so_they_stay_quiet(self):
+    # Step 40 of the bench drives these under an 8-nozzle layout.
+    flex, head = self._flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      with self.assertRaises(AssertionError):
+        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+          asyncio.run(head.blow_out())
     finally:
       asyncio.run(flex.stop())
 

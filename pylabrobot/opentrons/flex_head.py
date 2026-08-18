@@ -1068,6 +1068,7 @@ class FlexHead1(_FlexHead):
       "air_gap_in_place",
       "aspirate",
       "aspirate_in_place",
+      "blow_out",
       "configure_for_volume",
       "dispense",
       "dispense_in_place",
@@ -1080,7 +1081,11 @@ class FlexHead1(_FlexHead):
       "move_to_well",
       "pick_up_tips",
       "position",
+      "prepare_to_aspirate",
+      "touch_tip",
       "try_liquid_probe",
+      "unsafe_blow_out_in_place",
+      "unsafe_drop_tip_in_place",
       "verify_tip_presence",
     }
   )
@@ -1296,36 +1301,39 @@ class FlexHead8(_FlexHead):
   front four) layouts, and tip drop in the full-column and single-nozzle
   layouts, confirmed against the hardware tip-presence sensor; and
   aspirate/dispense into a plate in the full-column and single-nozzle layouts.
-  Ops outside that set -- container/reservoir ops, touch_tip, liquid_probe, and
-  the motion surface -- are coded but not yet hardware-verified and log the
-  one-time untested-hardware notice, same as the other heads.
+  ``_HARDWARE_VERIFIED_OPS`` is the full record: the notebook runs above cover
+  the tip and plate ops, and a Cheshire Labs bench session on the same head
+  covers the container, in-place, probe and recovery ops. What is left -- the
+  motion surface (``move_to``, ``move_relative``, ``position``,
+  ``move_to_addressable_area``), ``configure_for_volume``,
+  ``prepare_to_aspirate`` and ``verify_tip_presence`` -- is coded but not yet
+  hardware-verified and logs the untested-hardware notice, same as the other
+  heads.
   """
 
   _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
     {
-      "pick_up_tips",
-      "pick_up_single_tip",
-      "pick_up_partial",
-      "drop_tips",
-      "drop_single_tip",
+      "air_gap_in_place",
       "aspirate",
-      "dispense",
-    }
-  )
-
-
-  # Confirmed on a p1000 8-channel: a single-nozzle cherry-pick end to end, plus a
-  # full column picked and discarded. Other bench steps' ops are not recorded yet.
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
-    {
+      "aspirate_container",
+      "aspirate_in_place",
       "aspirate_single",
-      "discard_tips",
+      "blow_out",
+      "dispense",
+      "dispense_container",
+      "dispense_in_place",
       "dispense_single",
       "drop_single_tip",
       "drop_tips",
-      "has_tip_on_hardware",
+      "liquid_probe",
+      "move_to_well",
+      "pick_up_partial",
       "pick_up_single_tip",
       "pick_up_tips",
+      "touch_tip",
+      "try_liquid_probe",
+      "unsafe_blow_out_in_place",
+      "unsafe_drop_tip_in_place",
     }
   )
 
