@@ -437,7 +437,7 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
       flex.deck.assign_child_at_slot(plate, "C2")
       trash = flex.deck.get_trash_area()
 
-      asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+      asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
       self.assertIsNotNone(head.get_mounted_tips()[7])
 
       asyncio.run(head.dispense_single(plate, well="B3", volume=20))
@@ -660,9 +660,10 @@ class TestFlexHead8DoublePickupGuard(unittest.TestCase):
       rack = flex_96_tiprack_50ul(name="rack")
       flex.deck.assign_child_at_slot(rack, "C1")
 
-      asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+      asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
       with self.assertRaises(OpentronsError):
-        asyncio.run(head.pick_up_single_tip(rack, well="A2"))  # same channel (row A)
+        # Same anchor, so the same channel, whatever row the well is in.
+        asyncio.run(head.pick_up_single_tip(rack, well="A2", primary_nozzle="H1"))
     finally:
       asyncio.run(flex.stop())
 
@@ -723,7 +724,7 @@ class TestFlexHead8SingleOpFlowRateAndNoneSkip(unittest.TestCase):
       flex.deck.assign_child_at_slot(rack, "C1")
       flex.deck.assign_child_at_slot(plate, "C2")
 
-      asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+      asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
       asyncio.run(head.dispense_single(plate, well="A1", volume=20, flow_rate=99.0))
       asyncio.run(head.aspirate_single(plate, well="A1", volume=20, flow_rate=88.0))
 
@@ -821,7 +822,7 @@ class TestFlexHead8HardwareTipPresence(unittest.TestCase):
       flex.deck.assign_child_at_slot(rack, "C1")
 
       with self.assertRaises(OpentronsError):
-        asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+        asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
 
       spot = rack.get_item("A1")
       self.assertTrue(spot.has_tip())

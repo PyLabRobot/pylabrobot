@@ -136,7 +136,7 @@ class TestUnifiedAspirateSingleWell(unittest.TestCase):
       target = plate.get_item("B3")
       target.tracker.set_volume(100.0)
 
-      asyncio.run(head.pick_up_single_tip(rack, well="A1"))
+      asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
       commands_before = len(transport.commands)
 
       asyncio.run(head.aspirate(target, volume=20))
@@ -283,14 +283,16 @@ class TestUnifiedPickUpTips(unittest.TestCase):
     try:
       rack = _rack_on(flex)
 
-      asyncio.run(head.pick_up_tips(rack.get_item("A1"), use_channels=[0]))
+      # Channel 0 anchors the REAR nozzle, whose idle seven trail forward, so the
+      # front row is the one it can take a single tip from on a full rack.
+      asyncio.run(head.pick_up_tips(rack.get_item("H1"), use_channels=[0]))
 
       configure = _commands_of(transport, "configureNozzleLayout")
       cfg = configure[-1]["params"]["configurationParams"]
       self.assertEqual(cfg["style"], "SINGLE")
       self.assertEqual(cfg["primaryNozzle"], "A1")
       pickup = _commands_of(transport, "pickUpTip")
-      self.assertEqual(pickup[-1]["params"]["wellName"], "A1")
+      self.assertEqual(pickup[-1]["params"]["wellName"], "H1")
       tips = head.get_mounted_tips()
       self.assertIsNotNone(tips[0])
       self.assertEqual(sum(1 for t in tips if t is not None), 1)
