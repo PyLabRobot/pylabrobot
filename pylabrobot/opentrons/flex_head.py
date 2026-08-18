@@ -1068,6 +1068,7 @@ class FlexHead1(_FlexHead):
       "air_gap_in_place",
       "aspirate",
       "aspirate_in_place",
+      "blow_out",
       "configure_for_volume",
       "dispense",
       "dispense_in_place",
@@ -1080,7 +1081,11 @@ class FlexHead1(_FlexHead):
       "move_to_well",
       "pick_up_tips",
       "position",
+      "prepare_to_aspirate",
+      "touch_tip",
       "try_liquid_probe",
+      "unsafe_blow_out_in_place",
+      "unsafe_drop_tip_in_place",
       "verify_tip_presence",
     }
   )
@@ -1295,21 +1300,28 @@ class FlexHead8(_FlexHead):
   one-time untested-hardware notice, same as the other heads.
   """
 
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset({"pick_up_tips"})
-
-
-  # Confirmed on a p1000 8-channel: a single-nozzle cherry-pick end to end, plus a
-  # full column picked and discarded. Other bench steps' ops are not recorded yet.
   _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
     {
+      "air_gap_in_place",
+      "aspirate",
+      "aspirate_container",
+      "aspirate_in_place",
       "aspirate_single",
-      "discard_tips",
+      "blow_out",
+      "dispense",
+      "dispense_container",
+      "dispense_in_place",
       "dispense_single",
       "drop_single_tip",
       "drop_tips",
-      "has_tip_on_hardware",
+      "liquid_probe",
+      "move_to_well",
       "pick_up_single_tip",
       "pick_up_tips",
+      "touch_tip",
+      "try_liquid_probe",
+      "unsafe_blow_out_in_place",
+      "unsafe_drop_tip_in_place",
     }
   )
 
