@@ -182,150 +182,16 @@ Avoid adding fields solely to simplify one consumer. An event should describe wh
 actually did; dashboards, logs, and integrations can derive their own views from the structured
 references.
 
-## Operation templates
+## Canonical operation schemas
 
-### Machine lifecycle
+The [Event Schema Registry](event-schemas.md) defines the canonical operation names, fields,
+units, lifecycle-specific payloads, and resource semantics for every currently instrumented
+frontend and diagnostic producer. Use an existing schema whenever the operation meaning matches.
 
-Use for `setup()` and `stop()` on a public PLR machine frontend.
-
-```python
-def _setup_event_context(self, **backend_kwargs):
-  return {
-    "device": device_reference(self, name="plate_reader"),
-    "resources": [],
-  }
-
-
-@evented_operation("machine.setup", _setup_event_context)
-async def setup(self, **backend_kwargs):
-  ...
-```
-
-If the machine frontend itself inherits `Resource`, use `resource_reference(self)` instead.
-Do not pass arbitrary controller objects to `resource_reference()` merely because they expose a
-`name` attribute.
-
-### Resource transfer
-
-Use for a plate, lid, carrier, or other resource transfer. The direct moved resource is listed in
-`resources`; locations are named separately.
-
-```python
-with event_operation(
-  "incubator.fetch_plate",
-  device=resource_reference(self),
-  resources=[resource_reference(plate)],
-  source=resource_reference(site),
-  destination=resource_reference(self.loading_tray),
-):
-  await self.backend.fetch_plate_to_loading_tray(plate)
-```
-
-For pickup and drop, record the resource's invocation state in `.started`. A
-`completed_data_factory` may capture its final assignment or pose for `.completed`.
-For a pickup, capture `resource.parent` as `source` before the frontend unassigns the moved
-resource. Omit `source` if the resource is not currently assigned; do not infer one from a caller
-or a physical-deck assumption.
-
-### Liquid handling
-
-Use the direct operated containers in `resources`, plus one `liquid_operations` record per
-channel. Each item should include the channel, direct resource reference, owning plate reference
-when applicable, and `volume`.
-
-```python
-{
-  "device": resource_reference(liquid_handler),
-  "resources": [resource_reference(well)],
-  "liquid_operations": [{
-    "channel": 0,
-    "resource": resource_reference(well),
-    "plate": resource_reference(well.parent),
-    "volume": 50.0,
-  }],
-}
-```
-
-### Tip handling
-
-Report each direct `TipSpot`, `TipRack`, or `Trash` resource. For channelized tip actions,
-include `tip_operations` with the channel and direct resource.
-
-```python
-{
-  "device": resource_reference(liquid_handler),
-  "resources": [resource_reference(tip_spot)],
-  "tip_operations": [{"channel": 0, "resource": resource_reference(tip_spot)}],
-}
-```
-
-### Thermal and shaking operations
-
-Represent the issuing controller as `device`. A `ResourceHolder` controller should include its
-currently loaded direct resource in `resources` when one is assigned at operation start. Do not
-infer a resource from broader deck state. Event fields use PLR's
-[default units](../user_guide/getting-started/units.md), so their names do not repeat those units:
-
-```python
-{
-  "device": resource_reference(controller),
-  "resources": [resource_reference(controller.resource)],  # only when loaded
-  "target_temperature": 37.0,
-  "duration": 300.0,
-  "speed_rpm": 800.0,
-}
-```
-
-The `speed_rpm` suffix is explicit because rotational speed differs from PLR's default linear
-speed in millimeters per second.
-
-For a protocol-requested temperature dwell, use `temperature_controller.hold_temperature` with
-`duration` and the controller's configured `target_temperature` when known. The operation
-must not reissue `set_temperature()` or claim that an attached resource reached target
-temperature. New direct vendor frontends should emit this same semantic operation independently;
-they do not need to inherit from the legacy temperature-controller frontend.
-
-For an operation that waits for a controller reading to reach its target, retain
-`target_temperature` in the full lifecycle and add `current_temperature` to the completed event.
-This is the final controller sensor reading that satisfied the operation; it does not represent a
-measurement of the loaded resource unless the frontend explicitly provides such a measurement.
-
-### Centrifuge and loader operations
-
-Use `centrifuge.spin` for one requested centrifuge cycle. Include every directly loaded
-resource, including one bucket holder reference per loaded resource when the frontend exposes
-individual buckets. Use explicit physical parameters:
-
-```python
-{
-  "device": device_reference(centrifuge, name=centrifuge.name),
-  "resources": [resource_reference(plate)],
-  "bucket_resources": [{
-    "holder": resource_reference(bucket),
-    "resource": resource_reference(plate),
-  }],
-  "relative_centrifugal_force": 500.0,
-  "duration": 60.0,
-  "acceleration_fraction": 0.8,
-  "deceleration_fraction": 0.8,
-}
-```
-
-`relative_centrifugal_force` is the dimensionless multiple of standard gravity conventionally
-written as x g, which PLR defines as the default unit for relative centrifugal force; it is not a
-mass in grams or a force in Newtons.
-
-Use `centrifuge_loader.load` and `centrifuge_loader.unload` for a loader's physical transfer
-between its staging holder and a centrifuge bucket. List the direct plate in `resources`, and use
-the actual staging holder and bucket as `source` and `destination`.
-
-### Arm/controller motion
-
-Public controller operations should identify the controller in `device` and use PLR's default
-units for motion arguments. Add a unit suffix only when a field deliberately differs from the
-default, such as a percentage-based speed. Low-level controller operations can be useful to a
-diagnostic listener, but higher-level resource-aware wrappers should emit the resource-transfer
-events when an arm is actually approaching, picking up, moving, or dropping a PLR resource.
+If a contribution introduces a genuinely new device or operation family, choose semantically
+accurate conventions, add the proposed contract to the registry in the same contribution, and
+treat maintainer review as establishing the standard for future implementations of that operation.
+Do not create an undocumented vendor-local alias for an existing concept.
 
 ## Failure events
 
@@ -362,8 +228,10 @@ When adding EventBus support to a frontend or driver:
    decorated methods, test both positional and keyword invocation when the public method supports
    both.
 10. Verify no EventBus listener is required for normal device operation and that listener failures
-   cannot alter hardware control flow.
+    cannot alter hardware control flow.
+11. Update the [Event Schema Registry](event-schemas.md) and user-guide implementation matrix when
+    adding a new operation, changing a payload, or instrumenting a new frontend.
 
 New or existing drivers should adopt these conventions incrementally at their public semantic API
-boundaries. Update the user EventBus coverage reference when adding a newly instrumented frontend
-or changing an emitted public operation.
+boundaries. A new operation family establishes precedent for future devices, so its schema should
+be reviewed as deliberately as its implementation.

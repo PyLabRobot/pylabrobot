@@ -20,7 +20,7 @@ The instrumented `legacy.temperature_controlling.TemperatureController` frontend
 | `temperature_controller.set_temperature` | `device`, loaded `resources`, `target_temperature`, `passive` |
 | `temperature_controller.wait_for_temperature` | `device`, loaded `resources`, `target_temperature`, `timeout`, `tolerance`; completed event adds `current_temperature` |
 | `temperature_controller.hold_temperature` | `device`, loaded `resources`, `duration`, configured `target_temperature` when known |
-| `temperature_controller.deactivate` | `device`, loaded `resources` |
+| `temperature_controller.deactivate` | `device`, loaded `resources`, configured `target_temperature` when known |
 
 `hold_temperature` records a protocol-requested dwell while the controller remains at its existing
 configuration. It does not send a new temperature command and does not assert that a resource has
