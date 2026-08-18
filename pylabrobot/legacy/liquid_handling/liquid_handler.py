@@ -1143,6 +1143,10 @@ class LiquidHandler(Resource, Machine):
       blow_out_air_volume=blow_out_air_volume,
     )
 
+    # If the user specified a single resource, but multiple channels to use, we will assume they
+    # want to space the channels evenly across the resource. Note that offsets are relative to the
+    # center of the resource.
+
     self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
