@@ -24,8 +24,9 @@ tracks it.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union, cast
 
+from pylabrobot.opentrons.checks import traversal_z
 from pylabrobot.opentrons.flex_wire import UNTESTED_HARDWARE_WARNING
 from pylabrobot.opentrons.labware_definitions import container_footprint
 from pylabrobot.opentrons.pipette_defaults import FlowRates, flow_rates
@@ -84,6 +85,40 @@ class _FlexHead:
     self.max_volume = max_volume
     self._channel_tips: List[Optional[Tip]] = [None] * channels
     self._untested_hardware_warned: bool = False
+    # The labware id the pipette last pipetted over, or None when its position is
+    # unknown (start of run, after a jog or a trash drop). Used to arc high only
+    # when a pipetting move crosses to a different slot -- see _travel_guard.
+    self._current_labware_id: Optional[str] = None
+
+  async def _travel_guard(self, params: Dict[str, Any]) -> None:
+    """Arc to a new slot's well at the safe travel plane before pipetting there.
+
+    A pipetting move to a well on a DIFFERENT labware than the pipette last
+    worked over crosses deck slots, so it is prefixed with a ``moveToWell`` at
+    the computed traversal plane (never below a tip rack, see
+    ``checks.traversal_z``) -- the ``aspirate``/``dispense``/``pickUpTip``/
+    ``dropTip`` commands cannot carry a ``minimumZHeight`` themselves. A move
+    WITHIN the same labware never crosses another slot, so it is left to the
+    engine's own low arc. ``minimumZHeight`` is a mid-travel floor only; it does
+    not clamp the descent, so the following op still reaches the well.
+    """
+    labware_id = params.get("labwareId")
+    well_name = params.get("wellName")
+    if not isinstance(labware_id, str) or not isinstance(well_name, str):
+      return
+    if labware_id == self._current_labware_id:
+      return
+    await self._execute(
+      "moveToWell",
+      {
+        "pipetteId": self.pipette_id,
+        "labwareId": labware_id,
+        "wellName": well_name,
+        "wellLocation": {"origin": "top", "offset": {"x": 0, "y": 0, "z": 0}},
+        "minimumZHeight": self._traversal_height(),
+      },
+    )
+    self._current_labware_id = labware_id
 
   def _warn_untested_hardware(self, op: str) -> None:
     """Log a one-time notice when an op has no real-hardware verification.
@@ -224,6 +259,7 @@ class _FlexHead:
     ``_channel_tips`` AFTER this returns successfully.
     """
     try:
+      await self._travel_guard(params)
       await self._execute(command_type, params)
     except Exception:
       for tracker in staged_trackers:
@@ -254,6 +290,7 @@ class _FlexHead:
     calling this.
     """
     try:
+      await self._travel_guard(params)
       await self._execute(command_type, params)
     except Exception:
       for tracker in staged_trackers:
@@ -321,6 +358,11 @@ class _FlexHead:
     Shared by every ``discard_tips``/``drop_single_tip`` variant. No tracker
     involvement (trash has none); callers update ``_channel_tips`` and call
     ``_confirm_tips_cleared()`` themselves after this returns.
+
+    ``minimumZHeight`` is set to the computed traversal plane so the travel to
+    the trash arcs over every labware on the deck. Without it the engine picks
+    its own arc height from only the labware it has been told is loaded, which
+    can travel too low and clip a rack the robot was never told about.
     """
     await self._execute(
       "moveToAddressableAreaForDropTip",
@@ -328,9 +370,12 @@ class _FlexHead:
         "pipetteId": self.pipette_id,
         "addressableAreaName": self._trash_addressable_area(trash),
         "alternateDropLocation": True,
+        "minimumZHeight": self._traversal_height(),
       },
     )
     await self._execute("dropTipInPlace", {"pipetteId": self.pipette_id})
+    # Now over the trash, not a slot's labware: the next pipetting move arcs high.
+    self._current_labware_id = None
 
   # --- Fine-pipetting shared helpers ---
 
@@ -625,6 +670,17 @@ class _FlexHead:
 
   # --- Direct head motion (teaching / recovery jog) ---
 
+  def _traversal_height(self) -> float:
+    """The computed tip-safe travel plane for a lateral jog over this deck.
+
+    ``max(labware tops) + arc margin`` (``checks.traversal_z``), tip-end framed
+    (the frame ``minimumZHeight`` already uses), computed from the resource model
+    -- so the arc adapts to what is actually on the deck instead of a fixed magic
+    number that is both wasteful over short labware and unsafe under anything
+    taller.
+    """
+    return traversal_z(self.flex.deck)
+
   async def position(self) -> Coordinate:
     """The head's current deck-frame position -- one ``savePosition`` query.
 
@@ -667,11 +723,16 @@ class _FlexHead:
     params: Dict[str, Any] = {
       "pipetteId": self.pipette_id,
       "coordinates": {"x": x, "y": y, "z": z},
-      "minimumZHeight": minimum_z_height if minimum_z_height is not None else _TRAVERSAL_HEIGHT,
+      "minimumZHeight": (
+        minimum_z_height if minimum_z_height is not None else self._traversal_height()
+      ),
     }
     if speed is not None:
       params["speed"] = speed
     await self._execute("moveToCoordinates", params)
+    # A raw jog leaves the pipette at an arbitrary point: the next pipetting move
+    # can no longer assume it is over its last labware, so make it arc high.
+    self._current_labware_id = None
 
   async def move_to_well(
     self,
@@ -704,7 +765,9 @@ class _FlexHead:
       "labwareId": labware_id,
       "wellName": well_name,
       "wellLocation": {"origin": origin, "offset": {"x": o.x, "y": o.y, "z": o.z}},
-      "minimumZHeight": minimum_z_height if minimum_z_height is not None else _TRAVERSAL_HEIGHT,
+      "minimumZHeight": (
+        minimum_z_height if minimum_z_height is not None else self._traversal_height()
+      ),
     }
     if speed is not None:
       params["speed"] = speed
@@ -745,7 +808,9 @@ class _FlexHead:
       "addressableAreaName": addressable_area_name,
       "offset": {"x": o.x, "y": o.y, "z": o.z},
       "stayAtHighestPossibleZ": stay_at_max_height,
-      "minimumZHeight": minimum_z_height if minimum_z_height is not None else _TRAVERSAL_HEIGHT,
+      "minimumZHeight": (
+        minimum_z_height if minimum_z_height is not None else self._traversal_height()
+      ),
     }
     if speed is not None:
       params["speed"] = speed
@@ -891,10 +956,6 @@ class _FlexHead:
     )
 
 
-# Default minimumZHeight (mm) for moveToCoordinates jogs: the head keeps at
-# least this z while traveling, clearing any labware on the deck.
-_TRAVERSAL_HEIGHT = 120.0
-
 # Where a wellLocation offset is measured from. "meniscus" needs the robot to
 # hold a liquid level for the well, which only a liquid probe gives it.
 _WELL_ORIGINS = frozenset({"top", "bottom", "center", "meniscus"})
@@ -915,6 +976,10 @@ _NOT_PRIMED_REMEDY = (
 # What verify_tip_presence can assert. The sensor itself can also read
 # "unknown", but that is a reading, not something to check against.
 _TIP_PRESENCE_STATES = frozenset({"present", "absent"})
+
+# The 8-channel head's rows front-to-back: channel 0 = "A" (rearmost) .. 7 = "H"
+# (frontmost). Used to name the corner nozzles of a partial (QUADRANT) column.
+_ROW_LETTERS = "ABCDEFGH"
 
 # The only nozzles an 8-channel Flex can anchor a SINGLE layout on ("A1" is
 # the rearmost, "H1" the frontmost), mapped to the channel each one is.
@@ -1288,28 +1353,233 @@ class FlexHead8(_FlexHead):
 
   async def pick_up_tips(
     self,
+    target: Union[TipRack, Sequence[TipSpot], TipSpot],
+    *,
+    column: Optional[int] = None,
+    use_channels: Optional[Sequence[int]] = None,
+    offset: Optional[Coordinate] = None,
+    primary_nozzle: Optional[str] = None,
+  ) -> None:
+    """Pick up tip(s), choosing the nozzle layout for this call.
+
+    Pickup is where per-call nozzle configuration lives -- the engine only lets
+    the layout change while no tip is on -- so this is the method that emits the
+    ``configureNozzleLayout``. The ``target`` *type* selects the layout:
+
+    - a ``Sequence[TipSpot]`` (a ``rack.column(c)``) -> ALL, a full column;
+    - a single ``TipSpot`` -> SINGLE, one cherry-picked tip.
+
+    ``use_channels`` names the channels to fill: ``None``/all 8 -> ALL; ``[0]``
+    or ``[7]`` -> SINGLE on the A1 or H1 nozzle (the only two an 8-channel Flex
+    can single-anchor). The ALL configuration is emitted only when a prior
+    single-tip op left the layout otherwise (``_ensure_all_mode``); a SINGLE
+    pickup always emits its ``configureNozzleLayout``. ``column`` is the
+    transitional bridge for the old ``pick_up_tips(rack, column=c)`` call;
+    prefer ``rack.column(c)``.
+    """
+    if column is not None:
+      await self._pick_up_column(cast(TipRack, target), column, offset)
+      return
+    if isinstance(target, (list, tuple)):
+      await self._pick_up_spots(list(target), use_channels, offset)
+      return
+    if isinstance(target, TipSpot):
+      await self._pick_up_single_spot(target, use_channels, offset, primary_nozzle)
+      return
+    raise TypeError(
+      f"pick_up_tips target must be a column (Sequence[TipSpot]) or a single TipSpot; "
+      f"got {type(target).__name__}."
+    )
+
+  async def _pick_up_single_spot(
+    self,
+    spot: TipSpot,
+    use_channels: Optional[Sequence[int]],
+    offset: Optional[Coordinate],
+    primary_nozzle: Optional[str],
+  ) -> None:
+    """Cherry-pick one tip (SINGLE layout), resolving the anchor nozzle.
+
+    ``use_channels`` may name only the single-anchor channels (0 -> A1, 7 -> H1);
+    any other channel is refused, since an 8-channel Flex cannot anchor a
+    single-nozzle layout elsewhere.
+    """
+    parent = self._require_itemized_parent(spot)
+    well_name = parent.get_child_identifier(spot)
+    if use_channels is not None:
+      if len(use_channels) != 1 or use_channels[0] not in _SINGLE_NOZZLE_BY_CHANNEL:
+        raise OpentronsError(
+          "NozzleConfigError",
+          f"An 8-channel Flex can single-anchor only on channels "
+          f"{sorted(_SINGLE_NOZZLE_BY_CHANNEL)} (A1/H1); got use_channels={list(use_channels)}.",
+        )
+      resolved = _SINGLE_NOZZLE_BY_CHANNEL[use_channels[0]]
+      if primary_nozzle is not None and primary_nozzle != resolved:
+        raise OpentronsError(
+          "NozzleConfigError",
+          f"use_channels={list(use_channels)} names nozzle {resolved}, but "
+          f"primary_nozzle={primary_nozzle!r} was also given.",
+        )
+      primary_nozzle = resolved
+    await self.pick_up_single_tip(
+      cast(TipRack, parent), well_name, offset=offset, primary_nozzle=primary_nozzle
+    )
+
+  async def _pick_up_spots(
+    self,
+    spots: List[TipSpot],
+    use_channels: Optional[Sequence[int]],
+    offset: Optional[Coordinate],
+  ) -> None:
+    """Pick up a full or partial column given as a list of tip spots.
+
+    ``use_channels`` names the channel each spot fills, in order. The full
+    8-channel set (or ``None`` for a full column) uses the ALL layout; a
+    contiguous run from the front (incl. H1/ch7) or rear (incl. A1/ch0) end uses
+    a QUADRANT partial layout.
+    """
+    if not spots:
+      raise ValueError("pick_up_tips: the target spot sequence is empty.")
+    n = len(spots)
+    if use_channels is None:
+      if n != self.channels:
+        raise OpentronsError(
+          "NozzleConfigError",
+          f"{n} spots given without use_channels; pass use_channels to name which "
+          f"nozzles a partial column fills, or give a full column of {self.channels}.",
+        )
+      use_channels = list(range(self.channels))
+    uc = list(use_channels)
+    if len(uc) != n:
+      raise OpentronsError(
+        "NozzleConfigError",
+        f"use_channels has {len(uc)} entries but {n} spots were given; one per spot.",
+      )
+    ordered = sorted(uc)
+    if ordered != list(range(ordered[0], ordered[-1] + 1)):
+      raise OpentronsError(
+        "NozzleConfigError",
+        f"a partial column must be a contiguous run of channels; got use_channels={uc}.",
+      )
+    if ordered == list(range(self.channels)):
+      parent = cast(TipRack, self._require_itemized_parent(spots[0]))
+      anchor = parent.get_child_identifier(spots[0])
+      await self._pick_up_spots_core(parent, anchor, spots, offset)
+      return
+    await self._pick_up_partial(spots, uc, offset)
+
+  async def _pick_up_partial(
+    self,
+    spots: List[TipSpot],
+    use_channels: List[int],
+    offset: Optional[Coordinate],
+  ) -> None:
+    """Pick up a contiguous partial column in a QUADRANT nozzle layout.
+
+    The layout matches what Opentrons' own ``configure_nozzle_layout`` emits for a
+    ``PARTIAL_COLUMN``: a front-anchored run (including H1/ch7) sets
+    ``primaryNozzle = frontRightNozzle = "H1"`` with ``backLeftNozzle`` the rear-most
+    active nozzle; a rear-anchored run (including A1/ch0) mirrors it on A1. The
+    ``configureNozzleLayout`` is emitted here (no tip is on yet, so the engine
+    accepts it); the ``pickUpTip`` is anchored at the well under the primary nozzle.
+    """
+    ordered = sorted(use_channels)
+    top = self.channels - 1
+    if ordered[-1] == top:  # front-anchored partial (includes H1)
+      primary_channel = top
+      primary = front_right = "H1"
+      back_left = f"{_ROW_LETTERS[ordered[0]]}1"
+    elif ordered[0] == 0:  # rear-anchored partial (includes A1)
+      primary_channel = 0
+      primary = back_left = "A1"
+      front_right = f"{_ROW_LETTERS[ordered[-1]]}1"
+    else:
+      raise OpentronsError(
+        "NozzleConfigError",
+        "an 8-channel partial column must run from the front (incl. H1) or the rear "
+        f"(incl. A1) end; got use_channels={use_channels}.",
+      )
+
+    spot_by_channel = {use_channels[i]: spots[i] for i in range(len(spots))}
+    for ch in ordered:
+      if spot_by_channel[ch].has_tip() and self._channel_tips[ch] is not None:
+        raise OpentronsError(
+          "HasTipError",
+          f"Channel {ch} already holds a tip; drop it before picking up another.",
+        )
+
+    await self._configure_nozzle_layout(
+      {
+        "style": "QUADRANT",
+        "primaryNozzle": primary,
+        "frontRightNozzle": front_right,
+        "backLeftNozzle": back_left,
+      }
+    )
+    self._nozzle_layout = "PARTIAL"  # non-ALL: a later column op resets via _ensure_all_mode
+
+    primary_spot = spot_by_channel[primary_channel]
+    parent = cast(TipRack, self._require_itemized_parent(primary_spot))
+    labware_id = await self.flex._ensure_labware_loaded(parent)
+    anchor = parent.get_child_identifier(primary_spot)
+
+    tracking = does_tip_tracking()
+    staged_trackers: List[Any] = []
+    tips: Dict[int, Tip] = {}
+    for ch in ordered:
+      spot = spot_by_channel[ch]
+      if not spot.has_tip():
+        continue
+      tips[ch] = spot.get_tip()
+      if tracking and not spot.tracker.is_disabled:
+        spot.tracker.remove_tip()  # commit=False: stages + validates
+        staged_trackers.append(spot.tracker)
+
+    params: Dict[str, Any] = {
+      "pipetteId": self.pipette_id,
+      "labwareId": labware_id,
+      "wellName": anchor,
+    }
+    well_location = self._well_location([offset], [None], origin="top")
+    if well_location is not None:
+      params["wellLocation"] = well_location
+
+    await self._execute_pickup("pickUpTip", params, staged_trackers)
+    for ch, tip in tips.items():
+      self._channel_tips[ch] = tip
+
+  async def _pick_up_column(
+    self,
     tip_rack: TipRack,
     column: int,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Pick up a full column (8 tips) with a single ``pickUpTip`` command.
+    """Pick up a full column (8 tips) by column index (transitional bridge)."""
+    well_name, column_spots = self._column_anchor_and_items(tip_rack, column)
+    await self._pick_up_spots_core(tip_rack, well_name, column_spots, offset)
+
+  async def _pick_up_spots_core(
+    self,
+    tip_rack: TipRack,
+    anchor_name: str,
+    spots: List[Any],
+    offset: Optional[Coordinate],
+  ) -> None:
+    """Shared ALL-layout column pickup with a single ``pickUpTip`` command.
 
     Anchored at the column's rearmost spot; the hardware fans the pickup motion
     out to all 8 physical nozzles. Follows stage -> validate -> wire ->
-    verify -> commit/rollback: the column index and the double-pickup guard
-    (fix #4) are validated before ANY wire command, tip trackers are staged
-    (``commit=False``) before the pickup command -- so an invalid tracker
-    state raises before any hardware motion -- then, after the wire command
-    succeeds, the hardware tip-presence sensor is checked
-    (``_verify_tips_seated()``); trackers and ``_channel_tips`` are committed
-    only if that verification passes, and rolled back (with no
-    ``_channel_tips`` mutation) if the sensor reports a missed pickup. Only
-    spots that actually had a tip are staged (None-skip).
+    verify -> commit/rollback: the double-pickup guard is validated before ANY
+    wire command, tip trackers are staged (``commit=False``) before the pickup
+    command, then, after the wire command succeeds, the hardware tip-presence
+    sensor is checked (``_verify_tips_seated()``); trackers and ``_channel_tips``
+    are committed only if that verification passes, and rolled back (with no
+    ``_channel_tips`` mutation) if the sensor reports a missed pickup. Only spots
+    that actually had a tip are staged (None-skip).
     """
     self._warn_untested_hardware("pick_up_tips")
-    well_name, column_spots = self._column_anchor_and_items(tip_rack, column)
 
-    for i, spot in enumerate(column_spots):
+    for i, spot in enumerate(spots):
       if spot.has_tip() and self._channel_tips[i] is not None:
         raise OpentronsError(
           "HasTipError",
@@ -1321,8 +1591,8 @@ class FlexHead8(_FlexHead):
 
     tracking = does_tip_tracking()
     staged_trackers: List[Any] = []
-    tips: List[Optional[Tip]] = [None] * len(column_spots)
-    for i, spot in enumerate(column_spots):
+    tips: List[Optional[Tip]] = [None] * len(spots)
+    for i, spot in enumerate(spots):
       if not spot.has_tip():
         continue
       tips[i] = spot.get_tip()
@@ -1333,7 +1603,7 @@ class FlexHead8(_FlexHead):
     params: Dict[str, Any] = {
       "pipetteId": self.pipette_id,
       "labwareId": labware_id,
-      "wellName": well_name,
+      "wellName": anchor_name,
     }
     well_location = self._well_location([offset], [None], origin="top")
     if well_location is not None:
@@ -1409,9 +1679,158 @@ class FlexHead8(_FlexHead):
     """Discard the mounted column of tips into the trash."""
     await self.drop_tips(trash)
 
-  # --- Column liquid handling ---
+  # --- Unified liquid handling (per-call nozzle configuration) ---
+
+  def _require_use_channels_match_mounted(self, use_channels: Optional[Sequence[int]]) -> None:
+    """Refuse a ``use_channels`` that is not exactly the mounted channels.
+
+    ``use_channels`` names the active nozzles for the call, but the layout is
+    fixed at pickup (the engine refuses to reconfigure while a tip is on) and
+    one fanned command actuates every mounted nozzle -- so it cannot address a
+    subset. An explicit ``use_channels`` must therefore equal the channels that
+    currently hold tips; left ``None`` the mounted set is used implicitly. The
+    reference channel it names is also what the reachability check reads to pick
+    the active nozzle, so a mismatch here would misaim that guard.
+    """
+    if use_channels is None:
+      return
+    mounted = {i for i, tip in enumerate(self._channel_tips) if tip is not None}
+    requested = set(use_channels)
+    if requested != mounted:
+      raise OpentronsError(
+        "NozzleConfigMismatch",
+        f"use_channels={sorted(requested)} does not match the mounted channels "
+        f"{sorted(mounted)}. The nozzle layout is fixed at pickup and one command fans to "
+        "every mounted nozzle, so use_channels must name exactly the channels holding tips.",
+      )
 
   async def aspirate(
+    self,
+    target: Union[Plate, Well, Sequence[Well], Container],
+    volume: float,
+    *,
+    column: Optional[int] = None,
+    use_channels: Optional[Sequence[int]] = None,
+    flow_rate: Optional[float] = None,
+    offset: Optional[Coordinate] = None,
+    liquid_height: Optional[float] = None,
+  ) -> None:
+    """Aspirate ``volume`` uL from ``target`` -- one ``aspirate`` command.
+
+    ONE method for every 8-channel aspirate; the ``target`` *type* selects the
+    addressing and ``use_channels`` names the active nozzles for this call:
+
+    - a ``Sequence[Well]`` (a ``plate.column(c)``) -> that column, anchored at
+      its rearmost well, one ``Well.tracker`` per active channel (None-skip);
+    - a single ``Well`` -> the mounted single nozzle draws from it;
+    - a ``Container`` (trough/reservoir) -> every active nozzle dips into the
+      one cavity, its single tracker staged with ``volume x active-channels``.
+
+    The nozzle LAYOUT is fixed at pickup, not here: the engine refuses a
+    reconfiguration while a tip is attached, and an aspirate always has a tip,
+    so no ``configureNozzleLayout`` is ever emitted by an aspirate. This method
+    only names which mounted nozzles it drives and refuses a request the mount
+    cannot satisfy, before any wire command.
+
+    ``column`` is the transitional bridge for the old ``aspirate(plate,
+    column=c)`` call and takes a ``Plate`` target; prefer ``plate.column(c)``.
+    """
+    self._require_use_channels_match_mounted(use_channels)
+    if column is not None:
+      await self._aspirate_column(
+        cast(Plate, target), column, volume, flow_rate, offset, liquid_height
+      )
+      return
+    if isinstance(target, (list, tuple)):
+      await self._aspirate_wells(
+        list(target), volume, use_channels, flow_rate, offset, liquid_height
+      )
+      return
+    if isinstance(target, Well):  # Well is a Container, so check it first
+      await self._aspirate_single_well(target, volume, flow_rate, offset, liquid_height)
+      return
+    if isinstance(target, Container):
+      await self.aspirate_container(
+        target, volume, flow_rate=flow_rate, offset=offset, liquid_height=liquid_height
+      )
+      return
+    raise TypeError(
+      f"aspirate target must be a Plate column (Sequence[Well]), a single Well, or a "
+      f"Container; got {type(target).__name__}."
+    )
+
+  def _require_single_nozzle_clearance(self, labware: ItemizedResource) -> None:
+    """Refuse a single-nozzle liquid op whose idle nozzles would overhang the
+    adjacent slot's labware.
+
+    In SINGLE layout the 7 idle nozzles trail off one end of the head, so a
+    liquid op over a slot with a tip rack (or taller labware) in the trailing
+    slot would drive them into it. The engine does not check this for a raw
+    command, so it is refused here -- the same clearance guard
+    ``pick_up_single_tip`` runs at pickup, applied to the liquid op.
+    """
+    nozzle = _SINGLE_NOZZLE_BY_CHANNEL.get(self._active_single_channel())
+    slot = self.flex.deck.get_slot(labware)
+    if nozzle is not None and slot is not None:
+      self.flex.deck.check_single_nozzle_clearance(slot, nozzle)
+
+  async def _aspirate_single_well(
+    self,
+    well: Well,
+    volume: float,
+    flow_rate: Optional[float],
+    offset: Optional[Coordinate],
+    liquid_height: Optional[float],
+  ) -> None:
+    """Aspirate one well with the mounted single nozzle -- one ``aspirate`` at it.
+
+    Requires exactly one mounted tip (a SINGLE-layout cherry-pick); refuses a
+    well the mounted anchor cannot reach, and a target whose idle nozzles would
+    overhang the adjacent slot's labware -- all before any wire command. The
+    well's own tracker is staged with ``volume``.
+    """
+    self._warn_untested_hardware("aspirate")
+    self._active_single_channel()
+    parent = self._require_itemized_parent(well)
+    well_name = parent.get_child_identifier(well)
+    self._require_reach_in_single_layout(parent, well_name)
+    self._require_single_nozzle_clearance(parent)
+    labware_id = await self.flex._ensure_labware_loaded(parent)
+    staged_trackers = self._stage_container_aspirate(well, volume)
+    await self._pipette(
+      "aspirate", labware_id, well_name, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
+
+  async def _aspirate_wells(
+    self,
+    wells: List[Well],
+    volume: float,
+    use_channels: Optional[Sequence[int]],
+    flow_rate: Optional[float],
+    offset: Optional[Coordinate],
+    liquid_height: Optional[float],
+  ) -> None:
+    """Aspirate a PLR-native column (a list of wells) -- one anchored ``aspirate``.
+
+    The wells are the resources the nozzle row covers, rearmost first (as
+    ``plate.column(c)`` returns them); the command anchors at the first and the
+    hardware fans it to all 8 nozzles. One ``Well.tracker`` is staged per well
+    whose channel holds a tip (None-skip), before the wire command.
+    """
+    self._warn_untested_hardware("aspirate")
+    self._require_mounted_tip()
+    if not wells:
+      raise ValueError("aspirate: the target well sequence is empty.")
+    parent = self._require_itemized_parent(wells[0])
+    await self._ensure_all_mode()
+    labware_id = await self.flex._ensure_labware_loaded(parent)
+    anchor = parent.get_child_identifier(wells[0])
+    staged_trackers = self._stage_wells_aspirate(wells, volume)
+    await self._pipette(
+      "aspirate", labware_id, anchor, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
+
+  async def _aspirate_column(
     self,
     plate: Plate,
     column: int,
@@ -1442,6 +1861,95 @@ class FlexHead8(_FlexHead):
     )
 
   async def dispense(
+    self,
+    target: Union[Plate, Well, Sequence[Well], Container],
+    volume: float,
+    *,
+    column: Optional[int] = None,
+    use_channels: Optional[Sequence[int]] = None,
+    flow_rate: Optional[float] = None,
+    offset: Optional[Coordinate] = None,
+    liquid_height: Optional[float] = None,
+  ) -> None:
+    """Dispense ``volume`` uL into ``target`` -- one ``dispense`` command.
+
+    The ``dispense`` mirror of :meth:`aspirate`: the ``target`` type selects the
+    addressing (a ``plate.column(c)`` sequence, a single ``Well``, or a
+    ``Container`` cavity) and ``use_channels`` names the active nozzles. No
+    ``configureNozzleLayout`` is emitted (the layout is fixed at pickup). See
+    :meth:`aspirate` for the full contract; ``column`` is the same transitional
+    bridge for the old ``dispense(plate, column=c)`` call.
+    """
+    self._require_use_channels_match_mounted(use_channels)
+    if column is not None:
+      await self._dispense_column(
+        cast(Plate, target), column, volume, flow_rate, offset, liquid_height
+      )
+      return
+    if isinstance(target, (list, tuple)):
+      await self._dispense_wells(
+        list(target), volume, use_channels, flow_rate, offset, liquid_height
+      )
+      return
+    if isinstance(target, Well):  # Well is a Container, so check it first
+      await self._dispense_single_well(target, volume, flow_rate, offset, liquid_height)
+      return
+    if isinstance(target, Container):
+      await self.dispense_container(
+        target, volume, flow_rate=flow_rate, offset=offset, liquid_height=liquid_height
+      )
+      return
+    raise TypeError(
+      f"dispense target must be a Plate column (Sequence[Well]), a single Well, or a "
+      f"Container; got {type(target).__name__}."
+    )
+
+  async def _dispense_single_well(
+    self,
+    well: Well,
+    volume: float,
+    flow_rate: Optional[float],
+    offset: Optional[Coordinate],
+    liquid_height: Optional[float],
+  ) -> None:
+    """Dispense to one well with the mounted single nozzle -- the mirror of
+    :meth:`_aspirate_single_well`."""
+    self._warn_untested_hardware("dispense")
+    self._active_single_channel()
+    parent = self._require_itemized_parent(well)
+    well_name = parent.get_child_identifier(well)
+    self._require_reach_in_single_layout(parent, well_name)
+    self._require_single_nozzle_clearance(parent)
+    labware_id = await self.flex._ensure_labware_loaded(parent)
+    staged_trackers = self._stage_container_dispense(well, volume)
+    await self._pipette(
+      "dispense", labware_id, well_name, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
+
+  async def _dispense_wells(
+    self,
+    wells: List[Well],
+    volume: float,
+    use_channels: Optional[Sequence[int]],
+    flow_rate: Optional[float],
+    offset: Optional[Coordinate],
+    liquid_height: Optional[float],
+  ) -> None:
+    """Dispense a PLR-native column (a list of wells) -- one anchored ``dispense``."""
+    self._warn_untested_hardware("dispense")
+    self._require_mounted_tip()
+    if not wells:
+      raise ValueError("dispense: the target well sequence is empty.")
+    parent = self._require_itemized_parent(wells[0])
+    await self._ensure_all_mode()
+    labware_id = await self.flex._ensure_labware_loaded(parent)
+    anchor = parent.get_child_identifier(wells[0])
+    staged_trackers = self._stage_wells_dispense(wells, volume)
+    await self._pipette(
+      "dispense", labware_id, anchor, volume, flow_rate, offset, liquid_height, staged_trackers
+    )
+
+  async def _dispense_column(
     self,
     plate: Plate,
     column: int,
@@ -1759,6 +2267,7 @@ class FlexHead8(_FlexHead):
     self._warn_untested_hardware("aspirate_single")
     self._active_single_channel()
     self._require_reach_in_single_layout(plate, well)
+    self._require_single_nozzle_clearance(plate)
     labware_id = await self.flex._ensure_labware_loaded(plate)
     staged_trackers = self._stage_container_aspirate(plate.get_item(well), volume)
     await self._pipette(
@@ -1776,6 +2285,7 @@ class FlexHead8(_FlexHead):
     self._warn_untested_hardware("dispense_single")
     self._active_single_channel()
     self._require_reach_in_single_layout(plate, well)
+    self._require_single_nozzle_clearance(plate)
     labware_id = await self.flex._ensure_labware_loaded(plate)
     staged_trackers = self._stage_container_dispense(plate.get_item(well), volume)
     await self._pipette(

@@ -13,6 +13,7 @@ import asyncio
 import unittest
 from typing import Any, Dict, List, Tuple
 
+from pylabrobot.opentrons.checks import traversal_z
 from pylabrobot.opentrons.flex import OpentronsFlex
 from pylabrobot.opentrons.flex_gripper import FlexGripper, _require_robot_commands
 from pylabrobot.opentrons.flex_head import FlexHead8, _FlexHead
@@ -102,7 +103,9 @@ class TestHeadMoveTo(unittest.TestCase):
         {
           "pipetteId": head.pipette_id,
           "coordinates": {"x": 50.0, "y": 20.0, "z": 30.0},
-          "minimumZHeight": 120.0,
+          # Default minimumZHeight is now the computed tip-safe plane (tallest
+          # labware top + arc margin), not a hardcoded 120.0 magic number.
+          "minimumZHeight": traversal_z(flex.deck),
         },
       )
     finally:
