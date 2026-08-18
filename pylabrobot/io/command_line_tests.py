@@ -139,6 +139,20 @@ class CommandLineTransportTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertFalse(transport.is_setup)
 
+  async def test_stop_kills_active_process(self) -> None:
+    transport = self.make_transport()
+    await self.setup_transport(transport)
+    process = MagicMock()
+    process.returncode = None
+    process.wait = AsyncMock()
+    transport._process = process
+
+    await transport.stop()
+
+    process.kill.assert_called_once_with()
+    process.wait.assert_awaited_once_with()
+    self.assertFalse(transport.is_setup)
+
   async def test_rejects_non_positive_timeout(self) -> None:
     transport = self.make_transport()
     await self.setup_transport(transport)
