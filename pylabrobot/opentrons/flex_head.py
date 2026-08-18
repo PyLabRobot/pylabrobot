@@ -934,9 +934,13 @@ class _FlexHead:
     be, so move somewhere it can be retrieved from first. Clears this head's
     per-channel tip bookkeeping; no tip tracker is touched, since the tip
     goes back to no rack.
+
+    Deliberately does NOT require a tip in this head's own bookkeeping. That
+    model is per-process and empty after any restart, which is exactly when a
+    tip is stranded on the nozzle and this call is the way off. Guarding on it
+    made the escape hatch refuse in the only situation it exists for.
     """
     self._warn_untested_hardware("unsafe_drop_tip_in_place")
-    self._require_mounted_tip()
     await self._execute("unsafe/dropTipInPlace", {"pipetteId": self.pipette_id})
     self._channel_tips = [None] * self.channels
 
@@ -945,11 +949,13 @@ class _FlexHead:
 
     The recovery counterpart to ``blow_out`` (see ``unsafe_drop_tip_in_place``
     for what "unsafe/" buys). ``flow_rate`` is in uL/s and has no default
-    here, the recovery path being an explicit one. Leaves the plunger past
+    here, the recovery path being an explicit one. Like
+    ``unsafe_drop_tip_in_place`` it does not consult this head's per-process
+    tip bookkeeping, which is empty after a restart and would refuse the very
+    recovery it exists for. Leaves the plunger past
     its dispense bottom, so the next draw needs priming.
     """
     self._warn_untested_hardware("unsafe_blow_out_in_place")
-    self._require_mounted_tip()
     await self._execute(
       "unsafe/blowOutInPlace",
       {"pipetteId": self.pipette_id, "flowRate": flow_rate},
@@ -1313,8 +1319,24 @@ class FlexHead8(_FlexHead):
   ) -> None:
     super().__init__(flex, mount, pipette_id, channels, pipette_model, max_volume)
     self._nozzle_layout: str = "ALL"  # "ALL" | "SINGLE"
+    # The anchor the robot was actually SENT, not one merely computed here.
+    self._single_anchor: Optional[str] = None
 
   # --- Nozzle layout guard ---
+
+  async def _ensure_single_mode(self, nozzle: str) -> None:
+    """Put the robot on this anchor nozzle, sending the layout if it is not already.
+
+    Every single-nozzle op calls this rather than assuming the pickup's anchor
+    still stands. Which nozzle is primary decides which SIDE the seven idle
+    nozzles hang on, so an anchor the driver assumed but never transmitted
+    points them the opposite way from where its own clearance maths looked.
+    """
+    if self._nozzle_layout == "SINGLE" and self._single_anchor == nozzle:
+      return
+    await self._configure_nozzle_layout({"style": "SINGLE", "primaryNozzle": nozzle})
+    self._nozzle_layout = "SINGLE"
+    self._single_anchor = nozzle
 
   async def _ensure_all_mode(self) -> None:
     """Reset to the ALL nozzle layout before a column op.
@@ -1329,6 +1351,7 @@ class FlexHead8(_FlexHead):
       return
     await self._configure_nozzle_layout({"style": "ALL"})
     self._nozzle_layout = "ALL"
+    self._single_anchor = None
 
   # --- Column helpers ---
 
@@ -2142,13 +2165,51 @@ class FlexHead8(_FlexHead):
     )
 
   @classmethod
+  def _spots_under_idle_nozzles(
+    cls, labware: ItemizedResource, well: str, nozzle: str
+  ) -> List[Any]:
+    """The labware positions the SEVEN idle nozzles sit over, anchored this way.
+
+    The nozzles are ganged: they cannot move relative to each other and they
+    always descend together, so every one of them engages whatever is beneath
+    it. A "single" pickup is only single because the other seven have nothing
+    under them. Positions past the labware's own edge are simply absent from
+    the result, which is the case that makes a pick safe.
+    """
+    rows = labware.num_items_y
+    stride = max(rows // _NUM_CHANNELS, 1)
+    items = labware.get_all_items()
+    target = labware.get_item(well)
+    index = items.index(target)
+    column, row = divmod(index, rows)
+    anchor_channel = _SINGLE_NOZZLES[nozzle]
+
+    under: List[Any] = []
+    for channel in range(_NUM_CHANNELS):
+      if channel == anchor_channel:
+        continue
+      other_row = row + (channel - anchor_channel) * stride
+      if 0 <= other_row < rows:
+        under.append(items[column * rows + other_row])
+    return under
+
+  @classmethod
+  def _idle_nozzles_are_clear(cls, labware: ItemizedResource, well: str, nozzle: str) -> bool:
+    """Whether anchoring here leaves the seven idle nozzles over empty positions."""
+    return not any(
+      spot.has_tip() for spot in cls._spots_under_idle_nozzles(labware, well, nozzle)
+    )
+
+  @classmethod
   def _anchor_for(cls, labware: ItemizedResource, well: str, primary_nozzle: Optional[str]) -> str:
     """Settle which nozzle a single-tip op anchors on, refusing what cannot reach.
 
     A caller's explicit choice is never silently swapped -- an unreachable one
-    is refused, naming the nozzle that would work. Left to us, the well's own
-    row wins when it can reach (least surprise: the tip lands on the channel
-    whose row was asked for), otherwise whichever end reaches.
+    is refused, naming the nozzle that would work. Left to us, an anchor whose
+    idle nozzles hang clear of every remaining tip wins, because on a ganged
+    head that is what makes the pick single at all (see
+    ``_spots_under_idle_nozzles``). Reach is settled first; among the anchors
+    that reach, clearance decides.
     """
     reachable = cls.reachable_single_nozzles(labware, well)
     if primary_nozzle is not None:
@@ -2174,8 +2235,29 @@ class FlexHead8(_FlexHead):
         f"({' and '.join(_SINGLE_NOZZLES)}); the pipette would leave the robot's extents "
         f"either way. Move the labware to another slot."
       )
-    row_nozzle = f"{well[:1].upper()}1"
-    return row_nozzle if row_nozzle in reachable else reachable[0]
+    clear = [n for n in reachable if cls._idle_nozzles_are_clear(labware, well, n)]
+    if clear:
+      return clear[0]
+    raise ValueError(
+      f"A single-tip pick at '{labware.name}' well '{well}' would take more than one tip. "
+      f"The 8 nozzles are ganged and descend together, so anchoring on "
+      f"{' or '.join(reachable)} leaves idle nozzles over positions that still hold tips. "
+      f"Pick from a position whose neighbours along the column are already empty (the "
+      f"front-most or rear-most remaining row), or use pick_up_tips for the whole column."
+    )
+
+  async def _ensure_anchored_on_mounted_channel(self) -> None:
+    """Anchor the robot on the nozzle that is actually carrying the tip.
+
+    The tip sits on one physical channel and every later single-nozzle op has
+    to be driven from that same one. Recomputing an anchor per call and not
+    sending it leaves the robot on the pickup's nozzle while this side reasons
+    about a different one, which flips which side the seven idle nozzles hang
+    on without anything saying so.
+    """
+    nozzle = _SINGLE_NOZZLE_BY_CHANNEL.get(self._active_single_channel())
+    if nozzle is not None:
+      await self._ensure_single_mode(nozzle)
 
   def _require_reach_in_single_layout(self, labware: ItemizedResource, well: str) -> None:
     """Refuse a single-nozzle move to a well the mounted anchor cannot reach.
@@ -2244,8 +2326,7 @@ class FlexHead8(_FlexHead):
         f"Channel {channel} already holds a tip; drop it before picking up another.",
       )
 
-    await self._configure_nozzle_layout({"style": "SINGLE", "primaryNozzle": primary_nozzle})
-    self._nozzle_layout = "SINGLE"
+    await self._ensure_single_mode(primary_nozzle)
 
     labware_id = await self.flex._ensure_labware_loaded(tip_rack)
     params: Dict[str, Any] = {
@@ -2282,7 +2363,7 @@ class FlexHead8(_FlexHead):
     to the robot for the same reason.
     """
     self._warn_untested_hardware("aspirate_single")
-    self._active_single_channel()
+    await self._ensure_anchored_on_mounted_channel()
     self._require_reach_in_single_layout(plate, well)
     self._require_single_nozzle_clearance(plate)
     labware_id = await self.flex._ensure_labware_loaded(plate)
@@ -2300,7 +2381,7 @@ class FlexHead8(_FlexHead):
   ) -> None:
     """Dispense to a single well with the currently mounted single tip."""
     self._warn_untested_hardware("dispense_single")
-    self._active_single_channel()
+    await self._ensure_anchored_on_mounted_channel()
     self._require_reach_in_single_layout(plate, well)
     self._require_single_nozzle_clearance(plate)
     labware_id = await self.flex._ensure_labware_loaded(plate)
@@ -2318,6 +2399,7 @@ class FlexHead8(_FlexHead):
     """
     self._warn_untested_hardware("drop_single_tip")
     channel = self._active_single_channel()
+    await self._ensure_anchored_on_mounted_channel()
     await self._execute_trash_drop(trash)
     self._channel_tips[channel] = None
     await self._confirm_tips_cleared()
