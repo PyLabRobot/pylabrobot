@@ -16,7 +16,6 @@ from pylabrobot.resources import Coordinate, Resource, ResourceHolder
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import deserialize
 
-
 _MISSING_BACKEND_PARAMETER = object()
 
 
