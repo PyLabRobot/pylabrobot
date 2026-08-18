@@ -393,9 +393,11 @@ class TestRobotCommandsVersionGate(unittest.TestCase):
 
 
 class TestUntestedHardwareWarnings(unittest.TestCase):
-  """Hardware-verification coverage is op-scoped: FlexHead8's verified
-  column-pickup lineage never warns; every other head or gripper op logs the
-  one-time untested-hardware notice, naming the op."""
+  """Hardware-verification coverage is op-scoped per head class: an op in the
+  class's verified set never warns; every other op logs the one-time
+  untested-hardware notice, naming the op. The gripper carries the same
+  mechanism with all five of its ops verified, so an op added later is
+  untested by default rather than silently unnoticed."""
 
   def setUp(self):
     set_tip_tracking(True)
@@ -421,6 +423,21 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
           asyncio.run(head.pick_up_tips(rack, column=0))
     finally:
       asyncio.run(flex.stop())
+
+  def test_every_gripper_op_is_in_the_gripper_s_verified_set(self):
+    """The gripper's notice can never fire today, and that is the point: the set
+    is full rather than the mechanism deleted, so the next op added warns."""
+    ops = {"grip", "move_labware", "move_to", "open_jaw", "ungrip"}
+    self.assertEqual(FlexGripper._HARDWARE_VERIFIED_OPS, frozenset(ops))
+
+  def test_an_op_outside_the_gripper_s_verified_set_still_warns(self):
+    flex, _transport = _flex_with_gripper()
+    gripper = FlexGripper(flex, gripper_model="gripperV1")
+
+    with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING") as logged:
+      gripper._warn_untested_hardware("an_op_added_later")
+
+    self.assertIn("an_op_added_later", logged.output[0])
 
   def test_each_unverified_head_op_warns_not_just_the_first(self):
     # A run touching several unverified ops has to name them all: one flag per
@@ -453,7 +470,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_in_place_ops_ran_on_the_eight_head_so_they_stay_quiet(self):
-    # Step 40 of the bench drives these under an 8-nozzle layout.
+    # These ran on the robot under an 8-nozzle layout.
     flex, head = self._flex_head8()
     try:
       rack = flex_96_tiprack_50ul(name="rack")
@@ -479,36 +496,13 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_gripper_ops_run_on_hardware_do_not_warn(self):
-    # All five gripper verbs have now been driven on a real Flex, so the notice
-    # must stay silent for them; a warning here means the set lost an entry.
-    flex, _transport = _flex_with_gripper()
-    asyncio.run(flex.setup())
+  def test_head8_tip_presence_read_ran_on_hardware_so_it_stays_quiet(self):
+    # The 8-head's tip-presence sensor was read on the robot.
+    flex, head = self._flex_head8()
     try:
-      gripper = _gripper(flex)
-      for op in ("grip", "move_labware", "move_to", "open_jaw", "ungrip"):
-        self.assertIn(op, gripper._HARDWARE_VERIFIED_OPS, msg=op)
       with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING"):
-          asyncio.run(gripper.move_to(1.0, 2.0, 3.0))
-          asyncio.run(gripper.open_jaw())
-    finally:
-      asyncio.run(flex.stop())
-
-  def test_each_unverified_op_warns_not_just_the_first_one(self):
-    # A run touching several unverified ops has to name them all: a single
-    # per-instance flag made five unverified ops look like one.
-    flex, _transport = _flex_with_gripper()
-    asyncio.run(flex.setup())
-    try:
-      gripper = _gripper(flex)
-      with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING") as log_ctx:
-        gripper._warn_untested_hardware("some_new_op")
-        gripper._warn_untested_hardware("another_new_op")
-        gripper._warn_untested_hardware("some_new_op")  # repeat stays quiet
-      self.assertEqual(len(log_ctx.output), 2)
-      self.assertTrue(any("some_new_op" in msg for msg in log_ctx.output))
-      self.assertTrue(any("another_new_op" in msg for msg in log_ctx.output))
+        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+          asyncio.run(head.get_tip_presence())
     finally:
       asyncio.run(flex.stop())
 

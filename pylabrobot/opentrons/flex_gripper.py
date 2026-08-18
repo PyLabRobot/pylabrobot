@@ -49,10 +49,13 @@ class FlexGripper:
   The Flex gripper has NO rotation capability (a hardware limitation, not a
   missing API): labware keeps its orientation through every gripper motion,
   so a plate cannot be re-oriented between slots.
+
+  Every op here has been run on a real Flex gripper: jaw open/close/release,
+  a free-space move on the extension mount, and carrying a plate between deck
+  slots. The notice mechanism stays so an op added later is untested by
+  default, the same as on the heads.
   """
 
-  # Confirmed on a real Flex gripper: jaw open/close/release, a free-space
-  # move on the extension mount, and carrying a plate between deck slots.
   _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
     {
       "grip",
@@ -69,7 +72,11 @@ class FlexGripper:
     self._untested_hardware_warned: Set[str] = set()
 
   def _warn_untested_hardware(self, op: str) -> None:
-    """Log a one-time notice for each gripper op with no real-hardware verification."""
+    """Log a one-time notice when an op has no real-hardware verification.
+
+    Coverage is op-scoped, the same as on the heads: ops in
+    ``_HARDWARE_VERIFIED_OPS`` never log, and every other op logs once.
+    """
     if op in self._HARDWARE_VERIFIED_OPS or op in self._untested_hardware_warned:
       return
     self._untested_hardware_warned.add(op)
