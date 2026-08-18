@@ -24,7 +24,7 @@ tracks it.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from pylabrobot.opentrons.checks import traversal_z
 from pylabrobot.opentrons.flex_wire import UNTESTED_HARDWARE_WARNING
@@ -84,7 +84,7 @@ class _FlexHead:
     # describing the head does not have to re-read /instruments to get it.
     self.max_volume = max_volume
     self._channel_tips: List[Optional[Tip]] = [None] * channels
-    self._untested_hardware_warned: bool = False
+    self._untested_hardware_warned: Set[str] = set()
     # The labware id the pipette last pipetted over, or None when its position is
     # unknown (start of run, after a jog or a trash drop). Used to arc high only
     # when a pipetting move crosses to a different slot -- see _travel_guard.
@@ -123,12 +123,13 @@ class _FlexHead:
   def _warn_untested_hardware(self, op: str) -> None:
     """Log a one-time notice when an op has no real-hardware verification.
 
-    Coverage is op-scoped: ops in ``_HARDWARE_VERIFIED_OPS`` never log; the
-    first op outside that set logs once per instance.
+    Coverage is op-scoped: ops in ``_HARDWARE_VERIFIED_OPS`` never log, and
+    every other op logs once, so a run that touches several unverified ops
+    names all of them rather than only whichever ran first.
     """
-    if op in self._HARDWARE_VERIFIED_OPS or self._untested_hardware_warned:
+    if op in self._HARDWARE_VERIFIED_OPS or op in self._untested_hardware_warned:
       return
-    self._untested_hardware_warned = True
+    self._untested_hardware_warned.add(op)
     logger.warning(UNTESTED_HARDWARE_WARNING, type(self).__name__, op)
 
   def get_mounted_tips(self) -> List[Optional[Tip]]:
@@ -1295,6 +1296,22 @@ class FlexHead8(_FlexHead):
   """
 
   _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset({"pick_up_tips"})
+
+
+  # Confirmed on a p1000 8-channel: a single-nozzle cherry-pick end to end, plus a
+  # full column picked and discarded. Other bench steps' ops are not recorded yet.
+  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
+    {
+      "aspirate_single",
+      "discard_tips",
+      "dispense_single",
+      "drop_single_tip",
+      "drop_tips",
+      "has_tip_on_hardware",
+      "pick_up_single_tip",
+      "pick_up_tips",
+    }
+  )
 
   def __init__(
     self,

@@ -469,18 +469,36 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_gripper_ops_warn_once(self):
+  def test_gripper_ops_run_on_hardware_do_not_warn(self):
+    # All five gripper verbs have now been driven on a real Flex, so the notice
+    # must stay silent for them; a warning here means the set lost an entry.
+    flex, _transport = _flex_with_gripper()
+    asyncio.run(flex.setup())
+    try:
+      gripper = _gripper(flex)
+      for op in ("grip", "move_labware", "move_to", "open_jaw", "ungrip"):
+        self.assertIn(op, gripper._HARDWARE_VERIFIED_OPS, msg=op)
+      with self.assertRaises(AssertionError):
+        with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING"):
+          asyncio.run(gripper.move_to(1.0, 2.0, 3.0))
+          asyncio.run(gripper.open_jaw())
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_each_unverified_op_warns_not_just_the_first_one(self):
+    # A run touching several unverified ops has to name them all: a single
+    # per-instance flag made five unverified ops look like one.
     flex, _transport = _flex_with_gripper()
     asyncio.run(flex.setup())
     try:
       gripper = _gripper(flex)
       with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING") as log_ctx:
-        asyncio.run(gripper.move_to(1.0, 2.0, 3.0))
-      self.assertTrue(any("FlexGripper.move_to" in msg for msg in log_ctx.output))
-
-      with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING"):
-          asyncio.run(gripper.open_jaw())
+        gripper._warn_untested_hardware("some_new_op")
+        gripper._warn_untested_hardware("another_new_op")
+        gripper._warn_untested_hardware("some_new_op")  # repeat stays quiet
+      self.assertEqual(len(log_ctx.output), 2)
+      self.assertTrue(any("some_new_op" in msg for msg in log_ctx.output))
+      self.assertTrue(any("another_new_op" in msg for msg in log_ctx.output))
     finally:
       asyncio.run(flex.stop())
 

@@ -44,6 +44,8 @@ class FlexEnvelope:
   # --- primitives (grounded; do not pre-compute anything here) ---
   deck_extent_x: float = 477.2  # robot/definitions/1/ot3.json extents[0]
   deck_extent_y: float = 493.8  # ot3.json extents[1] (rear/home limit)
+  # PIPETTE mounts only: the extension mount's reference sits 161.8 mm lower
+  # (gripper offset z 93.85 vs 255.675), so never bound a gripper move by this.
   z_max: float = 300.0  # ot3controller.py axis_bounds Z_L/Z_R
   carriage_offset_x: float = 477.20  # defaults_ot3.py:72 DEFAULT_CARRIAGE_OFFSET
   carriage_offset_y: float = 493.8
