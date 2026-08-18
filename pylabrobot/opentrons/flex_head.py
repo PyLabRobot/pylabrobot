@@ -990,6 +990,10 @@ _ROW_LETTERS = "ABCDEFGH"
 # The only nozzles an 8-channel Flex can anchor a SINGLE layout on ("A1" is
 # the rearmost, "H1" the frontmost), mapped to the channel each one is.
 _SINGLE_NOZZLES = {"A1": 0, "H1": 7}
+
+# Anchoring the rear nozzle suits consuming a rack front-to-back: the idle seven
+# hang past the front edge the whole way up a column.
+_DEFAULT_SINGLE_NOZZLE = "A1"
 _SINGLE_NOZZLE_BY_CHANNEL = {channel: nozzle for nozzle, channel in _SINGLE_NOZZLES.items()}
 
 # Each anchor nozzle's y offset from the pipette mount, and the pipette body's own
@@ -1445,7 +1449,10 @@ class FlexHead8(_FlexHead):
         )
       primary_nozzle = resolved
     await self.pick_up_single_tip(
-      cast(TipRack, parent), well_name, offset=offset, primary_nozzle=primary_nozzle
+      cast(TipRack, parent),
+      well_name,
+      offset=offset,
+      primary_nozzle=primary_nozzle if primary_nozzle is not None else _DEFAULT_SINGLE_NOZZLE,
     )
 
   async def _pick_up_spots(
@@ -2184,49 +2191,44 @@ class FlexHead8(_FlexHead):
     )
 
   @classmethod
-  def _anchor_for(cls, labware: ItemizedResource, well: str, primary_nozzle: Optional[str]) -> str:
-    """Settle which nozzle a single-tip op anchors on, refusing what cannot reach.
+  def _validate_single_anchor(cls, labware: ItemizedResource, well: str, nozzle: str) -> None:
+    """Refuse an anchor that cannot reach the well, or that would take more than one tip.
 
-    A caller's explicit choice is never silently swapped -- an unreachable one
-    is refused, naming the nozzle that would work. Left to us, an anchor whose
-    idle nozzles hang clear of every remaining tip wins, because on a ganged
-    head that is what makes the pick single at all (see
-    ``_spots_under_idle_nozzles``). Reach is settled first; among the anchors
-    that reach, clearance decides.
+    Which nozzle carries the tip fixes where the idle seven hang for the rest of
+    that tip's life, so it stays the caller's choice and is never swapped for
+    another one here. Clearance reads the tip trackers, so it is only checked
+    while tip tracking is on: with it off nothing maintains rack contents and
+    every position reads as full forever.
     """
-    reachable = cls.reachable_single_nozzles(labware, well)
-    if primary_nozzle is not None:
-      if primary_nozzle not in _SINGLE_NOZZLES:
-        raise ValueError(
-          f"primary_nozzle={primary_nozzle!r}: an 8-channel Flex can anchor a single-nozzle "
-          f"layout only on {' or '.join(_SINGLE_NOZZLES)}."
-        )
-      if primary_nozzle not in reachable:
-        alternative = (
-          f" Anchor on {reachable[0]} instead."
-          if reachable
-          else " Neither anchor reaches it; move the labware to another slot."
-        )
-        raise ValueError(
-          f"Anchoring the {primary_nozzle} nozzle over '{labware.name}' well '{well}' would "
-          f"carry the pipette outside the robot's reach.{alternative}"
-        )
-      return primary_nozzle
-    if not reachable:
+    if nozzle not in _SINGLE_NOZZLES:
       raise ValueError(
-        f"'{labware.name}' well '{well}' is out of reach of both single-nozzle anchors "
-        f"({' and '.join(_SINGLE_NOZZLES)}); the pipette would leave the robot's extents "
-        f"either way. Move the labware to another slot."
+        f"primary_nozzle={nozzle!r}: an 8-channel Flex can anchor a single-nozzle "
+        f"layout only on {' or '.join(_SINGLE_NOZZLES)}."
       )
-    clear = [n for n in reachable if cls._idle_nozzles_are_clear(labware, well, n)]
-    if clear:
-      return clear[0]
+    reachable = cls.reachable_single_nozzles(labware, well)
+    if nozzle not in reachable:
+      alternative = (
+        f" Anchor on {reachable[0]} instead."
+        if reachable
+        else " Neither anchor reaches it; move the labware to another slot."
+      )
+      raise ValueError(
+        f"Anchoring the {nozzle} nozzle over '{labware.name}' well '{well}' would "
+        f"carry the pipette outside the robot's reach.{alternative}"
+      )
+    if not does_tip_tracking() or cls._idle_nozzles_are_clear(labware, well, nozzle):
+      return
+    other = next(n for n in _SINGLE_NOZZLES if n != nozzle)
+    alternative = (
+      f" Anchor on {other} to hang them off the opposite edge."
+      if other in reachable and cls._idle_nozzles_are_clear(labware, well, other)
+      else " Pick a position whose neighbours along the column are already empty, or use "
+      "pick_up_tips for the whole column."
+    )
     raise ValueError(
-      f"A single-tip pick at '{labware.name}' well '{well}' would take more than one tip. "
-      f"The 8 nozzles are ganged and descend together, so anchoring on "
-      f"{' or '.join(reachable)} leaves idle nozzles over positions that still hold tips. "
-      f"Pick from a position whose neighbours along the column are already empty (the "
-      f"front-most or rear-most remaining row), or use pick_up_tips for the whole column."
+      f"Anchoring the {nozzle} nozzle on '{labware.name}' well '{well}' would take more than "
+      f"one tip: the 8 nozzles are ganged and descend together, and the idle seven sit over "
+      f"positions that still hold tips.{alternative}"
     )
 
   async def _ensure_anchored_on_mounted_channel(self) -> None:
@@ -2279,24 +2281,24 @@ class FlexHead8(_FlexHead):
     tip_rack: TipRack,
     well: str,
     offset: Optional[Coordinate] = None,
-    primary_nozzle: Optional[str] = None,
+    primary_nozzle: str = _DEFAULT_SINGLE_NOZZLE,
   ) -> None:
-    """Pick up one tip in SINGLE nozzle mode.
+    """Pick up one tip in SINGLE nozzle mode, anchored on ``primary_nozzle``.
 
     Switches to SINGLE layout (``configureNozzleLayout``) before the
-    ``pickUpTip`` command. In that layout the pipette drives ONE nozzle and
-    the engine moves it over whatever well is named, so the nozzle, not the
-    well, decides which channel ends up holding the tip. An 8-channel Flex
-    can anchor on its "A1" or "H1" nozzle only; ``primary_nozzle`` picks
-    between them, and left unset it is the well's own row when that end can
-    reach the rack's slot, otherwise the end that can (see
-    ``reachable_single_nozzles``). Raises ``OpentronsError`` if that channel
-    already holds a tip -- checked, like the nozzle itself, before any wire
-    command. Then stage -> validate -> wire -> verify -> commit/rollback, as
-    in ``pick_up_tips``.
+    ``pickUpTip`` command. The eight nozzles are ganged, so a pick is only
+    "single" because the idle seven have nothing under them: the anchor, not
+    the well, decides what the pick does and which channel ends up holding the
+    tip. ``primary_nozzle`` names a nozzle -- "A1" is the rear one, "H1" the
+    front, and an 8-channel Flex anchors on those two only. It defaults to
+    "A1", which suits consuming a rack front-to-back: the idle seven hang past
+    the front edge the whole way up a column. Refused before any wire command
+    if the anchor cannot reach the well's slot, if it would take more than one
+    tip, or if its channel already holds one. Then stage -> validate -> wire ->
+    verify -> commit/rollback, as in ``pick_up_tips``.
     """
     self._warn_untested_hardware("pick_up_single_tip")
-    primary_nozzle = self._anchor_for(tip_rack, well, primary_nozzle)
+    self._validate_single_anchor(tip_rack, well, primary_nozzle)
     # The anchor only settles that the pipette stays inside the robot. The 7
     # idle nozzles still hang over the neighbouring slot, which is a crash.
     slot = self.flex.deck.get_slot(tip_rack)
