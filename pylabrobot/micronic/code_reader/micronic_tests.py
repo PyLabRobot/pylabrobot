@@ -6,8 +6,17 @@ from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from pylabrobot.io.command_line import CommandLineResult, CommandLineTransport
 from pylabrobot.micronic import MicronicCodeReader, MicronicError, SaneScanner, TwainScanner
-from pylabrobot.micronic.code_reader.driver import DecodeResult
+from pylabrobot.micronic.code_reader.driver import (
+  DecodeResult,
+  cluster_axis,
+  decode_image,
+  find_duplicate_ids,
+  is_tube_id,
+  iter_positions,
+  rack_position,
+)
 from pylabrobot.resources.tube_rack import TubeRack
 
 
@@ -20,13 +29,30 @@ def _rack(num_items_x: int = 12, num_items_y: int = 8, num_items: int = 96) -> T
 
 
 def _mock_scanner(image_extension: str = "bmp") -> MagicMock:
+  """Return a scanner mock that succeeds without accessing hardware."""
   scanner = MagicMock()
   scanner.image_extension = image_extension
-  scanner.acquire = MagicMock(return_value={"source": "test"})
+  scanner.setup = AsyncMock()
+  scanner.stop = AsyncMock()
+  scanner.acquire = AsyncMock(return_value={"source": "test"})
   return scanner
 
 
+def _mock_command_line(
+  executable: str,
+  result: CommandLineResult = CommandLineResult(0, "", ""),
+) -> MagicMock:
+  """Return a configured command-line I/O mock."""
+  command_line = MagicMock(spec=CommandLineTransport)
+  command_line.executable = executable
+  command_line.setup = AsyncMock()
+  command_line.stop = AsyncMock()
+  command_line.run = AsyncMock(return_value=result)
+  return command_line
+
+
 def _run_inline(_executor, function, *args):
+  """Execute an executor callback inline and return its result as a future."""
   future = asyncio.get_running_loop().create_future()
   try:
     future.set_result(function(*args))
@@ -35,37 +61,35 @@ def _run_inline(_executor, function, *args):
   return future
 
 
-class TestScannerClasses(unittest.TestCase):
-  def test_sane_scanner_invokes_scanimage(self):
+class TestScannerClasses(unittest.IsolatedAsyncioTestCase):
+  """Tests for scanner command construction and error handling."""
+
+  async def test_sane_scanner_invokes_scanimage(self):
     with tempfile.TemporaryDirectory() as image_dir:
       output_path = Path(image_dir) / "rack.tiff"
-      with (
-        patch(
-          "pylabrobot.micronic.code_reader.scanner.shutil.which",
-          return_value="/usr/bin/scanimage",
-        ),
-        patch(
-          "pylabrobot.micronic.code_reader.scanner._run_scan_command",
-          return_value={"source": "sane"},
-        ) as run_scan_command,
-      ):
-        scanner = SaneScanner(sane_device="avision:libusb:001:004")
-        metadata = scanner.acquire(output_path, timeout_ms=1000)
+      output_path.touch()
+      command_line = _mock_command_line("/usr/bin/scanimage")
+      scanner = SaneScanner(
+        sane_device="avision:libusb:001:004",
+        command_line=command_line,
+      )
+      await scanner.setup()
+      metadata = await scanner.acquire(output_path, timeout=1.0)
+      await scanner.stop()
 
       self.assertEqual(metadata["source"], "sane")
       self.assertEqual(scanner.image_extension, "tiff")
-      run_scan_command.assert_called_once_with(
+      command_line.setup.assert_awaited_once_with()
+      command_line.stop.assert_awaited_once_with()
+      command_line.run.assert_awaited_once_with(
         [
-          "/usr/bin/scanimage",
           "--device-name",
           "avision:libusb:001:004",
           "--format=tiff",
           "--output-file",
           str(output_path),
         ],
-        output_path,
-        1000,
-        source="sane",
+        timeout=16.0,
       )
 
   def test_sane_scanner_raises_when_scanimage_missing(self):
@@ -89,26 +113,77 @@ class TestScannerClasses(unittest.TestCase):
       with self.assertRaises(MicronicError):
         TwainScanner()
 
-  def test_twain_scanner_acquire_runs_helper(self):
+  async def test_twain_scanner_acquire_runs_helper(self):
     with tempfile.TemporaryDirectory() as image_dir:
       output_path = Path(image_dir) / "rack.bmp"
-      with patch(
-        "pylabrobot.micronic.code_reader.scanner._run_scan_command",
-        return_value={"source": "twain"},
-      ) as run_scan_command:
-        scanner = TwainScanner(twain_scanner_path="/opt/twain_scan", twain_source="AVA6PlusG")
-        scanner.acquire(output_path, timeout_ms=1000)
-
-      run_scan_command.assert_called_once_with(
-        ["/opt/twain_scan", str(output_path), "AVA6PlusG", "1000"],
-        output_path,
-        1000,
-        source="twain",
+      output_path.touch()
+      command_line = _mock_command_line("/opt/twain_scan")
+      scanner = TwainScanner(
+        twain_source="AVA6PlusG",
+        command_line=command_line,
       )
+      await scanner.setup()
+      await scanner.acquire(output_path, timeout=1.25)
+      await scanner.stop()
+
+      command_line.run.assert_awaited_once_with(
+        [str(output_path), "AVA6PlusG", "1250"],
+        timeout=16.25,
+      )
+
+  async def test_scanner_raises_on_helper_failure(self):
+    command_line = _mock_command_line(
+      "/opt/twain_scan",
+      result=CommandLineResult(2, "", "scanner fault"),
+    )
+    scanner = TwainScanner(command_line=command_line)
+
+    with self.assertRaisesRegex(MicronicError, "scanner fault"):
+      await scanner.acquire(Path("rack.bmp"), timeout=1.0)
+
+  async def test_scanner_raises_when_helper_creates_no_image(self):
+    command_line = _mock_command_line("/opt/twain_scan")
+    scanner = TwainScanner(command_line=command_line)
+
+    with tempfile.TemporaryDirectory() as image_dir:
+      with self.assertRaisesRegex(MicronicError, "did not create image"):
+        await scanner.acquire(Path(image_dir) / "rack.bmp", timeout=1.0)
+
+  async def test_scanner_wraps_helper_timeout(self):
+    command_line = _mock_command_line("/opt/twain_scan")
+    command_line.run = AsyncMock(side_effect=asyncio.TimeoutError)
+    scanner = TwainScanner(command_line=command_line)
+
+    with self.assertRaisesRegex(MicronicError, "timed out"):
+      await scanner.acquire(Path("rack.bmp"), timeout=1.0)
+
+  async def test_scanner_wraps_missing_helper(self):
+    command_line = _mock_command_line("/missing/twain_scan")
+    command_line.run = AsyncMock(side_effect=FileNotFoundError)
+    scanner = TwainScanner(command_line=command_line)
+
+    with self.assertRaisesRegex(MicronicError, "was not found"):
+      await scanner.acquire(Path("rack.bmp"), timeout=1.0)
 
 
 class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
-  def test_acquire_image_runs_scanner_and_tracks_metadata(self):
+  """Tests for the public Micronic code-reader operations."""
+
+  def test_rejects_non_positive_device_timeouts(self):
+    with self.assertRaisesRegex(ValueError, "scanner_timeout"):
+      MicronicCodeReader(
+        scanner=_mock_scanner(),
+        serial_port="/dev/ttyUSB0",
+        scanner_timeout=0,
+      )
+    with self.assertRaisesRegex(ValueError, "serial_timeout"):
+      MicronicCodeReader(
+        scanner=_mock_scanner(),
+        serial_port="/dev/ttyUSB0",
+        serial_timeout=0,
+      )
+
+  async def test_acquire_image_runs_scanner_and_tracks_metadata(self):
     with tempfile.TemporaryDirectory() as image_dir:
       scanner = _mock_scanner()
       reader = MicronicCodeReader(
@@ -118,13 +193,34 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
         scanner_timeout=1.25,
         keep_images=True,
       )
-      image_path = reader._acquire_image()
+      image_path = await reader._acquire_image()
 
       self.assertEqual(reader.last_image_path, image_path)
       self.assertEqual(reader.last_scan_metadata, {"source": "test"})
-      scanner.acquire.assert_called_once_with(image_path, 1250)
+      scanner.acquire.assert_awaited_once_with(image_path, 1.25)
       self.assertTrue(image_path.name.startswith("micronic_"))
       self.assertEqual(image_path.suffix, ".bmp")
+
+  async def test_acquire_image_removes_partial_image_after_failure(self):
+    async def fail_after_writing(output_path: Path, timeout: float) -> None:
+      """Create a partial output image before reporting acquisition failure."""
+      del timeout
+      output_path.touch()
+      raise MicronicError("acquisition failed")
+
+    with tempfile.TemporaryDirectory() as image_dir:
+      scanner = _mock_scanner()
+      scanner.acquire = AsyncMock(side_effect=fail_after_writing)
+      reader = MicronicCodeReader(
+        scanner=scanner,
+        serial_port="/dev/ttyUSB0",
+        image_dir=image_dir,
+      )
+
+      with self.assertRaisesRegex(MicronicError, "acquisition failed"):
+        await reader._acquire_image()
+
+      self.assertEqual(list(Path(image_dir).iterdir()), [])
 
   async def test_scan_rack_id_uses_plr_serial(self):
     instances: list[object] = []
@@ -153,7 +249,8 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
         self.calls.append("stop")
 
     with patch("pylabrobot.micronic.code_reader.driver.Serial", FakeSerial):
-      reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+      scanner = _mock_scanner()
+      reader = MicronicCodeReader(scanner=scanner, serial_port="/dev/ttyUSB0")
       await reader.setup()
       try:
         rack_id = await reader.scan_rack_id(timeout=1.0)
@@ -170,6 +267,29 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
     self.assertIn("reset_input_buffer", fake_serial.calls)
     self.assertIn("write:b'<t>\\r\\n'", fake_serial.calls)
     self.assertEqual(fake_serial.calls[-1], "stop")
+    scanner.setup.assert_awaited_once_with()
+    scanner.stop.assert_awaited_once_with()
+
+  async def test_setup_stops_scanner_when_serial_setup_fails(self):
+    scanner = _mock_scanner()
+    reader = MicronicCodeReader(scanner=scanner, serial_port="/dev/ttyUSB0")
+
+    with patch.object(reader.io, "setup", AsyncMock(side_effect=OSError("serial failed"))):
+      with self.assertRaisesRegex(OSError, "serial failed"):
+        await reader.setup()
+
+    scanner.setup.assert_awaited_once_with()
+    scanner.stop.assert_awaited_once_with()
+
+  async def test_stop_releases_scanner_when_serial_stop_fails(self):
+    scanner = _mock_scanner()
+    reader = MicronicCodeReader(scanner=scanner, serial_port="/dev/ttyUSB0")
+
+    with patch.object(reader.io, "stop", AsyncMock(side_effect=OSError("serial failed"))):
+      with self.assertRaisesRegex(OSError, "serial failed"):
+        await reader.stop()
+
+    scanner.stop.assert_awaited_once_with()
 
   async def test_scan_rack_populates_result(self):
     with tempfile.TemporaryDirectory() as image_dir:
@@ -209,7 +329,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(result.entries[1].tube_id, "2222222222")
       self.assertEqual(reader.last_scan_metadata, {"source": "test"})
       self.assertEqual(reader.last_decode_metadata, {"decodedWells": 2})
-      scanner.acquire.assert_called_once()
+      scanner.acquire.assert_awaited_once()
       read_barcode.assert_awaited_once()
       decode_image_mock.assert_called_once()
 
@@ -243,7 +363,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
 
       self.assertEqual(first.rack_id, "9500017722")
       self.assertEqual(second.rack_id, "9500017722")
-      self.assertEqual(scanner.acquire.call_count, 2)
+      self.assertEqual(scanner.acquire.await_count, 2)
 
   async def test_rejects_mismatched_rack_shape(self):
     reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
@@ -306,6 +426,109 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
 
       self.assertEqual(rack_id, "9500017722")
       read_barcode.assert_awaited_once_with()
+
+  async def test_scan_rack_id_returns_noread_for_unrecognized_response(self):
+    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    with (
+      patch.object(reader.io, "reset_input_buffer", AsyncMock()),
+      patch.object(reader.io, "write", AsyncMock()),
+      patch.object(reader.io, "read", AsyncMock(side_effect=[b"?", b"\r"])),
+    ):
+      rack_id = await reader.scan_rack_id(timeout=1.0)
+
+    self.assertEqual(rack_id, "NOREAD")
+
+  async def test_scan_rack_id_wraps_serial_error(self):
+    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    with patch.object(
+      reader.io,
+      "reset_input_buffer",
+      AsyncMock(side_effect=OSError("port disconnected")),
+    ):
+      with self.assertRaisesRegex(MicronicError, "port disconnected"):
+        await reader.scan_rack_id(timeout=1.0)
+
+  def test_decode_rack_rejects_missing_wells(self):
+    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
+
+    with patch(
+      "pylabrobot.micronic.code_reader.driver.decode_image",
+      return_value=(decoded, {"decodedWells": 1}),
+    ):
+      with self.assertRaisesRegex(MicronicError, "expected at least 2"):
+        reader._decode_rack_image(Path("rack.bmp"), "9500017722", expected_well_count=2)
+
+  def test_decode_rack_represents_missing_rack_id(self):
+    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
+
+    with patch(
+      "pylabrobot.micronic.code_reader.driver.decode_image",
+      return_value=(decoded, {"decodedWells": 1}),
+    ):
+      result = reader._decode_rack_image(Path("rack.bmp"), "NOREAD", expected_well_count=1)
+
+    self.assertIsNone(result.rack_barcode)
+    self.assertEqual(result.entries[0].status, "OK")
+    self.assertEqual(result.entries[1].status, "NOREAD")
+
+
+class TestDecodeHelpers(unittest.TestCase):
+  """Tests for image-decoding validation and rack-coordinate parsing."""
+
+  def test_tube_id_validation(self):
+    self.assertTrue(is_tube_id("0123456789"))
+    self.assertFalse(is_tube_id("123456789"))
+    self.assertFalse(is_tube_id("12345A7890"))
+    self.assertFalse(is_tube_id(1234567890))
+
+  def test_rack_position_maps_scanner_orientation(self):
+    self.assertEqual(rack_position(scan_row=0, scan_col=0), "H12")
+    self.assertEqual(rack_position(scan_row=11, scan_col=7), "A1")
+
+  def test_iter_positions_is_row_major(self):
+    positions = list(iter_positions())
+    self.assertEqual(len(positions), 96)
+    self.assertEqual(positions[:2], ["A1", "A2"])
+    self.assertEqual(positions[-2:], ["H11", "H12"])
+
+  def test_cluster_axis_uses_detected_centers(self):
+    self.assertEqual(cluster_axis([0.0, 2.0, 100.0, 102.0], 2, 10.0), [1.0, 101.0])
+
+  def test_cluster_axis_interpolates_missing_centers(self):
+    self.assertEqual(cluster_axis([0.0, 50.0, 100.0], 5, 10.0), [0.0, 25.0, 50.0, 75.0, 100.0])
+
+  def test_cluster_axis_rejects_insufficient_data(self):
+    with self.assertRaisesRegex(MicronicError, "Could not fit"):
+      cluster_axis([1.0, 2.0], 8, 10.0)
+
+  def test_duplicate_ids_are_sorted_and_unique(self):
+    decoded = {
+      "A1": DecodeResult("2222222222", "test"),
+      "A2": DecodeResult("1111111111", "test"),
+      "A3": DecodeResult("2222222222", "test"),
+      "A4": DecodeResult("1111111111", "test"),
+      "A5": DecodeResult("1111111111", "test"),
+    }
+    self.assertEqual(find_duplicate_ids(decoded), ["1111111111", "2222222222"])
+
+  def test_decode_image_rejects_too_few_full_image_codes(self):
+    image = MagicMock()
+    image.size = (100, 100)
+    image_context = MagicMock()
+    image_context.__enter__.return_value.convert.return_value = image
+    image_module = MagicMock()
+    image_module.open.return_value = image_context
+    zxingcpp = MagicMock()
+    zxingcpp.read_barcodes.return_value = []
+
+    with patch(
+      "pylabrobot.micronic.code_reader.driver.import_decode_dependencies",
+      return_value=(MagicMock(), MagicMock(), zxingcpp, image_module, MagicMock()),
+    ):
+      with self.assertRaisesRegex(MicronicError, "Only 0 DataMatrix"):
+        decode_image(Path("rack.bmp"))
 
 
 if __name__ == "__main__":

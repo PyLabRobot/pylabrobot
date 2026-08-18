@@ -17,8 +17,9 @@ import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from pathlib import Path
-from typing import Iterable, Literal, Optional
+from typing import Any, Iterable, Iterator, Literal, Optional
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
@@ -37,13 +38,27 @@ RACK_COLS = 12
 
 @dataclass(frozen=True)
 class DecodeResult:
+  """A tube barcode decoded from a rack image.
+
+  Attributes:
+    tube_id: Ten-digit tube identifier.
+    method: Image-decoding strategy that produced the result.
+  """
+
   tube_id: str
   method: str
 
 
 @dataclass
 class RackScanEntry:
-  """One decoded rack position."""
+  """One decoded rack position.
+
+  Attributes:
+    position: Rack position such as ``"A1"``.
+    tube_id: Decoded tube identifier, or ``None`` when no code was read.
+    status: ``"OK"`` when a tube code was read, otherwise ``"NOREAD"``.
+    barcode: Structured representation of the decoded tube barcode.
+  """
 
   position: str
   tube_id: Optional[str]
@@ -53,7 +68,13 @@ class RackScanEntry:
 
 @dataclass
 class RackScanResult:
-  """The rack identifier and position-indexed tube scan results."""
+  """The rack identifier and position-indexed tube scan results.
+
+  Attributes:
+    rack_id: Side barcode value, or ``"NOREAD"`` when no rack code was read.
+    entries: Results for all 96 positions in row-major order.
+    rack_barcode: Structured representation of the rack barcode.
+  """
 
   rack_id: str
   entries: list[RackScanEntry]
@@ -61,7 +82,16 @@ class RackScanResult:
 
 
 class MicronicCodeReader:
-  """Control a Micronic rack scanner without the OEM application."""
+  """Control a Micronic rack scanner without the OEM application.
+
+  Args:
+    scanner: Image acquisition implementation for the flatbed scanner.
+    serial_port: Port for the side rack-barcode reader.
+    image_dir: Directory for temporary or retained rack images.
+    scanner_timeout: Image acquisition timeout in seconds.
+    serial_timeout: Side barcode read timeout in seconds.
+    keep_images: Preserve acquired images after decoding when ``True``.
+  """
 
   def __init__(
     self,
@@ -72,6 +102,15 @@ class MicronicCodeReader:
     serial_timeout: float = 2.5,
     keep_images: bool = False,
   ) -> None:
+    """Initialize the code reader and its serial transport.
+
+    Raises:
+      ValueError: If either device timeout is not positive.
+    """
+    if scanner_timeout <= 0:
+      raise ValueError("scanner_timeout must be positive")
+    if serial_timeout <= 0:
+      raise ValueError("serial_timeout must be positive")
     self.scanner = scanner
     self.image_dir = (
       Path(image_dir) if image_dir else Path(tempfile.gettempdir()) / "pylabrobot-micronic"
@@ -97,15 +136,34 @@ class MicronicCodeReader:
   async def setup(self) -> None:
     """Create the image directory and connect to the side barcode reader."""
     self.image_dir.mkdir(parents=True, exist_ok=True)
-    await self.io.setup()
+    await self.scanner.setup()
+    try:
+      await self.io.setup()
+    except BaseException:
+      try:
+        await self.scanner.stop()
+      except Exception:
+        logger.warning("Failed to stop Micronic scanner after setup failure", exc_info=True)
+      raise
     logger.info("Set up Micronic code reader")
 
   async def stop(self) -> None:
-    """Disconnect from the side barcode reader."""
-    await self.io.stop()
+    """Disconnect from the side barcode reader and image scanner."""
+    try:
+      await self.io.stop()
+    finally:
+      await self.scanner.stop()
     logger.info("Stopped Micronic code reader")
 
   async def _read_barcode(self) -> str:
+    """Trigger and parse one side rack-barcode read.
+
+    Returns:
+      The first sequence of at least six digits, or ``"NOREAD"``.
+
+    Raises:
+      MicronicError: If serial communication fails.
+    """
     deadline = time.monotonic() + self.serial_timeout
     chunks: list[bytes] = []
     try:
@@ -118,6 +176,7 @@ class MicronicCodeReader:
           if value in {b"\r", b"\n"}:
             break
     except Exception as exc:
+      logger.exception("Micronic rack ID serial read failed")
       raise MicronicError(
         "Rack ID serial read failed. Install the PLR serial extra with "
         "`pip install pylabrobot[serial]` and verify the serial port: "
@@ -127,28 +186,38 @@ class MicronicCodeReader:
     match = re.search(r"\d{6,}", text)
     return match.group(0) if match else "NOREAD"
 
-  def _acquire_image(self) -> Path:
+  async def _acquire_image(self) -> Path:
+    """Acquire one rack image and retain its scanner metadata."""
     self.image_dir.mkdir(parents=True, exist_ok=True)
     image_path = (
       self.image_dir
       / f"micronic_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.{self.scanner.image_extension}"
     )
-    self.last_scan_metadata = self.scanner.acquire(
-      image_path, max(1, int(self.scanner_timeout * 1000))
-    )
+    try:
+      self.last_scan_metadata = await self.scanner.acquire(image_path, self.scanner_timeout)
+    except asyncio.CancelledError:
+      self._release_image(image_path)
+      raise
+    except Exception:
+      self._release_image(image_path)
+      raise
     self.last_image_path = image_path
     return image_path
 
   def _release_image(self, image_path: Path) -> None:
+    """Delete an acquired image unless image retention is enabled."""
     if not self.keep_images:
       try:
         image_path.unlink()
         self.last_image_path = None
+      except FileNotFoundError:
+        self.last_image_path = None
       except OSError:
-        pass
+        logger.warning("Could not remove Micronic rack image %s", image_path, exc_info=True)
 
   @staticmethod
   def _validate_rack(rack: TubeRack) -> None:
+    """Reject rack resources that do not represent an 8x12 layout."""
     if rack.num_items_x != RACK_COLS or rack.num_items_y != RACK_ROWS:
       raise MicronicError(
         f"Micronic code reader only supports {RACK_ROWS}x{RACK_COLS} racks; "
@@ -156,93 +225,169 @@ class MicronicCodeReader:
       )
 
   async def scan_rack(self, rack: TubeRack, timeout: float = 90.0) -> RackScanResult:
-    """Scan the rack ID and all tube positions in an 8x12 rack."""
-    return await asyncio.wait_for(self._scan_rack(rack), timeout=timeout)
+    """Scan the rack ID and all tube positions in an 8x12 rack.
+
+    Args:
+      rack: Rack resource whose 96 positions correspond to the scanner layout.
+      timeout: Overall operation timeout in seconds.
+
+    Returns:
+      Rack and tube barcode results.
+
+    Raises:
+      MicronicError: If the rack shape is unsupported, a scan is already running, image
+        acquisition fails, or decoding fails.
+      asyncio.TimeoutError: If the operation exceeds ``timeout``.
+    """
+    logger.info("Starting Micronic rack scan")
+    try:
+      result = await asyncio.wait_for(self._scan_rack(rack), timeout=timeout)
+    except Exception:
+      logger.exception("Micronic rack scan failed")
+      raise
+    logger.info(
+      "Completed Micronic rack scan: rack_id=%s decoded=%d",
+      result.rack_id,
+      sum(entry.status == "OK" for entry in result.entries),
+    )
+    return result
 
   async def scan_rack_id(self, timeout: float = 5.0) -> str:
-    """Read and return the side rack barcode, or ``"NOREAD"`` if none is decoded."""
-    return await asyncio.wait_for(self._read_barcode(), timeout=timeout)
+    """Read the side rack barcode.
+
+    Args:
+      timeout: Overall operation timeout in seconds.
+
+    Returns:
+      The decoded rack identifier, or ``"NOREAD"``.
+
+    Raises:
+      MicronicError: If serial communication fails.
+      asyncio.TimeoutError: If the operation exceeds ``timeout``.
+    """
+    try:
+      rack_id = await asyncio.wait_for(self._read_barcode(), timeout=timeout)
+    except Exception:
+      logger.exception("Micronic rack ID scan failed")
+      raise
+    logger.info("Completed Micronic rack ID scan: rack_id=%s", rack_id)
+    return rack_id
 
   async def _scan_rack(self, rack: TubeRack) -> RackScanResult:
+    """Coordinate one cancellation-safe rack scan."""
     self._validate_rack(rack)
     if self._scan_lock.locked():
       raise MicronicError("Micronic rack scan is already in progress.")
     await self._scan_lock.acquire()
     release_lock = True
+    image_path: Optional[Path] = None
     try:
       rack_id = await self._read_barcode()
+      image_path = await self._acquire_image()
       loop = asyncio.get_running_loop()
-      scan_future = loop.run_in_executor(None, self._scan_rack_blocking, rack_id, rack.num_items)
+      scan_future = loop.run_in_executor(
+        None,
+        self._decode_rack_image,
+        image_path,
+        rack_id,
+        rack.num_items,
+      )
       try:
         return await asyncio.shield(scan_future)
       except asyncio.CancelledError:
         release_lock = False
-        scan_future.add_done_callback(self._finish_cancelled_scan)
+        scan_future.add_done_callback(partial(self._finish_cancelled_scan, image_path=image_path))
+        image_path = None
         raise
     finally:
+      if image_path is not None:
+        self._release_image(image_path)
       if release_lock:
         self._release_scan_lock()
 
-  def _finish_cancelled_scan(self, future: asyncio.Future[RackScanResult]) -> None:
+  def _finish_cancelled_scan(
+    self,
+    future: asyncio.Future[RackScanResult],
+    *,
+    image_path: Path,
+  ) -> None:
+    """Release scan resources after a cancelled caller's decode finishes."""
     try:
-      future.exception()
+      exception = future.exception()
     except asyncio.CancelledError:
-      pass
+      exception = None
+    if exception is not None:
+      logger.error("Cancelled Micronic rack scan later failed: %s", exception)
+    self._release_image(image_path)
     self._release_scan_lock()
 
   def _release_scan_lock(self) -> None:
+    """Release the scan lock if it is currently held."""
     if self._scan_lock.locked():
       self._scan_lock.release()
 
-  def _scan_rack_blocking(self, rack_id: str, expected_well_count: int) -> RackScanResult:
-    image_path = self._acquire_image()
-
-    try:
-      decoded, self.last_decode_metadata = decode_image(image_path)
-      if len(decoded) < expected_well_count:
-        missing = ", ".join(position for position in iter_positions() if position not in decoded)
-        raise MicronicError(
-          f"Micronic decode found {len(decoded)} wells; expected at least "
-          f"{expected_well_count}. Missing: {missing}"
-        )
-
-      for position, result in decoded.items():
-        logger.debug("Micronic decoded %s via %s", position, result.method)
-
-      entries = [
-        RackScanEntry(
-          position=position,
-          tube_id=decoded[position].tube_id if position in decoded else None,
-          status="OK" if position in decoded else "NOREAD",
-          barcode=(
-            Barcode(
-              data=decoded[position].tube_id,
-              symbology="DataMatrix",
-              position_on_resource="bottom",
-            )
-            if position in decoded
-            else None
-          ),
-        )
-        for position in iter_positions()
-      ]
-
-      return RackScanResult(
-        rack_id=rack_id,
-        entries=entries,
-        rack_barcode=Barcode(
-          data=rack_id,
-          symbology="Code 128 (Subset B and C)",
-          position_on_resource="right",
-        )
-        if rack_id != "NOREAD"
-        else None,
+  def _decode_rack_image(
+    self,
+    image_path: Path,
+    rack_id: str,
+    expected_well_count: int,
+  ) -> RackScanResult:
+    """Decode an acquired rack image in a worker thread."""
+    decoded, self.last_decode_metadata = decode_image(image_path)
+    if len(decoded) < expected_well_count:
+      missing = ", ".join(position for position in iter_positions() if position not in decoded)
+      raise MicronicError(
+        f"Micronic decode found {len(decoded)} wells; expected at least "
+        f"{expected_well_count}. Missing: {missing}"
       )
-    finally:
-      self._release_image(image_path)
+
+    for position, result in decoded.items():
+      logger.debug("Micronic decoded %s via %s", position, result.method)
+
+    entries = [
+      RackScanEntry(
+        position=position,
+        tube_id=decoded[position].tube_id if position in decoded else None,
+        status="OK" if position in decoded else "NOREAD",
+        barcode=(
+          Barcode(
+            data=decoded[position].tube_id,
+            symbology="DataMatrix",
+            position_on_resource="bottom",
+          )
+          if position in decoded
+          else None
+        ),
+      )
+      for position in iter_positions()
+    ]
+
+    return RackScanResult(
+      rack_id=rack_id,
+      entries=entries,
+      rack_barcode=Barcode(
+        data=rack_id,
+        symbology="Code 128 (Subset B and C)",
+        position_on_resource="right",
+      )
+      if rack_id != "NOREAD"
+      else None,
+    )
 
 
 def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, object]]:
+  """Decode all tube barcodes in a Micronic rack image.
+
+  Args:
+    image_path: Path to the acquired rack image.
+
+  Returns:
+    Position-indexed decode results and diagnostic metadata.
+
+  Raises:
+    MicronicError: If dependencies are missing, the grid cannot be calibrated, or duplicate tube
+      identifiers are found.
+  """
   cv2, np, zxingcpp, Image, ImageOps = import_decode_dependencies()
   with Image.open(image_path) as loaded_image:
     image = loaded_image.convert("L")
@@ -323,7 +468,15 @@ def decode_image(image_path: Path) -> tuple[dict[str, DecodeResult], dict[str, o
   return decoded, metadata
 
 
-def import_decode_dependencies():
+def import_decode_dependencies() -> tuple[Any, Any, Any, Any, Any]:
+  """Import optional image-decoding dependencies on demand.
+
+  Returns:
+    The OpenCV, NumPy, zxing-cpp, Pillow Image, and Pillow ImageOps modules.
+
+  Raises:
+    MicronicError: If any decoding dependency is unavailable.
+  """
   try:
     import cv2  # type: ignore
     import numpy as np  # type: ignore
@@ -338,6 +491,19 @@ def import_decode_dependencies():
 
 
 def cluster_axis(values: list[float], expected_count: int, tolerance: float) -> list[float]:
+  """Cluster detected coordinates along one scanner axis.
+
+  Args:
+    values: Detected barcode coordinates.
+    expected_count: Number of rack rows or columns expected on the axis.
+    tolerance: Maximum gap within one cluster, in image pixels.
+
+  Returns:
+    Cluster centers, interpolated to ``expected_count`` when necessary.
+
+  Raises:
+    MicronicError: If fewer than two usable clusters can be found.
+  """
   if not values:
     raise MicronicError("No decoded barcode positions are available for grid calibration.")
 
@@ -366,6 +532,7 @@ def cluster_axis(values: list[float], expected_count: int, tolerance: float) -> 
 
 
 def fitted_axis(means: list[float], expected_count: int) -> list[float]:
+  """Fit evenly spaced coordinates between the first and last cluster centers."""
   return [
     means[0] + index * (means[-1] - means[0]) / (expected_count - 1)
     for index in range(expected_count)
@@ -373,22 +540,33 @@ def fitted_axis(means: list[float], expected_count: int) -> list[float]:
 
 
 def rack_position(scan_row: int, scan_col: int) -> str:
+  """Map scanner-oriented grid coordinates to a rack position name."""
   return f"{ROWS[RACK_ROWS - 1 - scan_col]}{RACK_COLS - scan_row}"
 
 
 def iter_positions() -> Iterable[str]:
+  """Yield every 8x12 rack position in row-major order."""
   for row in ROWS:
     for column in range(1, COLS + 1):
       yield f"{row}{column}"
 
 
 def is_tube_id(value: object) -> bool:
+  """Return whether a decoded value is a ten-digit Micronic tube identifier."""
   return isinstance(value, str) and value.isdigit() and len(value) == 10
 
 
 def decode_well_crop(
-  image, center_x, center_y, cv2, np, zxingcpp, Image, ImageOps
+  image: Any,
+  center_x: float,
+  center_y: float,
+  cv2: Any,
+  np: Any,
+  zxingcpp: Any,
+  Image: Any,
+  ImageOps: Any,
 ) -> Optional[DecodeResult]:
+  """Decode one well using progressively larger direct and perspective-corrected crops."""
   for size in [150, 160, 180, 200, 220, 240]:
     crop = centered_crop(image, center_x, center_y, size)
     decoded = decode_pil_variants(crop, zxingcpp, ImageOps)
@@ -404,7 +582,8 @@ def decode_well_crop(
   return None
 
 
-def centered_crop(image, center_x: float, center_y: float, size: int):
+def centered_crop(image: Any, center_x: float, center_y: float, size: int) -> Any:
+  """Return a square image crop centered on scanner coordinates."""
   half = size / 2
   return image.crop(
     (
@@ -416,7 +595,8 @@ def centered_crop(image, center_x: float, center_y: float, size: int):
   )
 
 
-def decode_pil_variants(crop, zxingcpp, ImageOps) -> Optional[str]:
+def decode_pil_variants(crop: Any, zxingcpp: Any, ImageOps: Any) -> Optional[str]:
+  """Try original, autocontrasted, and equalized variants of an image crop."""
   for variant in [crop, ImageOps.autocontrast(crop), ImageOps.equalize(crop)]:
     decoded = decode_with_zxing(variant, zxingcpp, ImageOps)
     if decoded:
@@ -424,7 +604,8 @@ def decode_pil_variants(crop, zxingcpp, ImageOps) -> Optional[str]:
   return None
 
 
-def decode_with_zxing(image, zxingcpp, ImageOps) -> Optional[str]:
+def decode_with_zxing(image: Any, zxingcpp: Any, ImageOps: Any) -> Optional[str]:
+  """Search image scales, polarity, borders, and binarizers for a tube identifier."""
   binarizers = [
     zxingcpp.Binarizer.LocalAverage,
     zxingcpp.Binarizer.GlobalHistogram,
@@ -453,7 +634,8 @@ def decode_with_zxing(image, zxingcpp, ImageOps) -> Optional[str]:
   return None
 
 
-def order_box(points, np):
+def order_box(points: Any, np: Any) -> Any:
+  """Order four rectangle corners clockwise from the top-left corner."""
   points = np.array(points, dtype=np.float32)
   sums = points.sum(axis=1)
   diffs = np.diff(points, axis=1).ravel()
@@ -468,7 +650,15 @@ def order_box(points, np):
   )
 
 
-def decode_perspective_crop(crop, cv2, np, zxingcpp, Image, ImageOps) -> Optional[str]:
+def decode_perspective_crop(
+  crop: Any,
+  cv2: Any,
+  np: Any,
+  zxingcpp: Any,
+  Image: Any,
+  ImageOps: Any,
+) -> Optional[str]:
+  """Locate, rectify, and decode a DataMatrix candidate within one well crop."""
   crop_array = np.array(crop)
   for threshold in [30, 40, 50, 60, 70, 80, 90, 100, 120, 140]:
     mask = (crop_array < threshold).astype(np.uint8) * 255
@@ -510,7 +700,8 @@ def decode_perspective_crop(crop, cv2, np, zxingcpp, Image, ImageOps) -> Optiona
   return None
 
 
-def candidate_masks(mask, cv2, np):
+def candidate_masks(mask: Any, cv2: Any, np: Any) -> Iterator[Any]:
+  """Yield the raw threshold mask and its centered connected components."""
   yield mask
   number, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, 8)
   combined = np.zeros_like(mask)
@@ -528,7 +719,14 @@ def candidate_masks(mask, cv2, np):
   yield combined
 
 
-def perspective_variants(warped, threshold: int, cv2, Image, ImageOps):
+def perspective_variants(
+  warped: Any,
+  threshold: int,
+  cv2: Any,
+  Image: Any,
+  ImageOps: Any,
+) -> Iterator[Any]:
+  """Yield grayscale and binary variants of a rectified DataMatrix candidate."""
   yield Image.fromarray(warped)
   yield ImageOps.autocontrast(Image.fromarray(warped))
   _, binary = cv2.threshold(warped, min(220, threshold + 70), 255, cv2.THRESH_BINARY)
@@ -537,6 +735,7 @@ def perspective_variants(warped, threshold: int, cv2, Image, ImageOps):
 
 
 def find_duplicate_ids(decoded: dict[str, DecodeResult]) -> list[str]:
+  """Return tube identifiers assigned to more than one rack position."""
   seen: dict[str, str] = {}
   duplicates: list[str] = []
   for position, result in decoded.items():
