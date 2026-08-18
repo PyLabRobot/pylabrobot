@@ -57,7 +57,6 @@ bucket_1_not_set_error = RuntimeError(
 
 def _vspin_event_context(
   vspin: "VSpin",
-  *,
   g: float = 500,
   duration: float = 60,
   acceleration: float = 0.8,

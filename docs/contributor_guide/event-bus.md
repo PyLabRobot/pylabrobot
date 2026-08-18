@@ -261,13 +261,16 @@ When adding EventBus support to a frontend or driver:
 
 1. Choose public semantic operation boundaries; do not decorate transport primitives by default.
 2. Use a stable `<component>.<operation>` name and one event scope per logical action.
-3. Include `device` and direct `resources` in the context factory.
-4. Preserve PLR resource semantics; use ancestry for context rather than substituting resources.
-5. Use PLR's default units without repeating them in field names. Add a suffix only when a value
+3. Match the context factory's positional and keyword parameters to the decorated public method.
+   `evented_operation()` invokes the factory with the method's original `*args` and `**kwargs`.
+4. Include `device` and direct `resources` in the context factory.
+5. Preserve PLR resource semantics; use ancestry for context rather than substituting resources.
+6. Use PLR's default units without repeating them in field names. Add a suffix only when a value
    deliberately uses a different unit or representation, such as `speed_rpm` or `speed_pct`.
-6. Include `source` and `destination` only for actual resource transfers.
-7. Add tests for `.started`, `.completed`, and `.failed`, including operation-ID correlation.
-8. Verify no EventBus listener is required for normal device operation and that listener failures
+7. Include `source` and `destination` only for actual resource transfers.
+8. Add tests for `.started`, `.completed`, and `.failed`, including operation-ID correlation and
+   both positional and keyword invocation when the public method supports both.
+9. Verify no EventBus listener is required for normal device operation and that listener failures
    cannot alter hardware control flow.
 
 New or existing drivers should adopt these conventions incrementally at their public semantic API

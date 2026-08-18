@@ -113,6 +113,28 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(events[0].context["resources"][0]["name"], "plate")
 
+  async def test_wait_for_temperature_positional_arguments_preserve_context(self):
+    temperature_controller = TemperatureController(
+      name="test_temperature_module",
+      size_x=1,
+      size_y=1,
+      size_z=1,
+      backend=TemperatureControllerChatterboxBackend(dummy_temperature=37.0),
+      child_location=Coordinate.zero(),
+    )
+    temperature_controller.target_temperature = 37.0
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await temperature_controller.wait_for_temperature(1.0, 0.25)
+
+    self.assertEqual(events[0].context["target_temperature"], 37.0)
+    self.assertEqual(events[0].context["timeout"], 1.0)
+    self.assertEqual(events[0].context["tolerance"], 0.25)
+    self.assertNotIn("passive", events[0].context)
+
   async def test_hold_temperature_emits_loaded_resource_without_reissuing_target(self):
     backend = TemperatureControllerChatterboxBackend(dummy_temperature=20.0)
     temperature_controller = TemperatureController(
@@ -182,6 +204,31 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[0].context["duration"], -1.0)
     self.assertNotIn("target_temperature", events[0].context)
     self.assertEqual(events[1].data["error_type"], "ValueError")
+
+  async def test_hold_temperature_positional_argument_preserves_context(self):
+    temperature_controller = TemperatureController(
+      name="test_temperature_module",
+      size_x=1,
+      size_y=1,
+      size_z=1,
+      backend=TemperatureControllerChatterboxBackend(dummy_temperature=20.0),
+      child_location=Coordinate.zero(),
+    )
+    temperature_controller.target_temperature = 37.0
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with patch(
+      "pylabrobot.legacy.temperature_controlling.temperature_controller.asyncio.sleep",
+      new_callable=AsyncMock,
+    ) as sleep:
+      with use_event_bus(event_bus):
+        await temperature_controller.hold_temperature(120.0)
+
+    self.assertEqual(events[0].context["target_temperature"], 37.0)
+    self.assertEqual(events[0].context["duration"], 120.0)
+    sleep.assert_awaited_once_with(120.0)
 
 
 class _FakeBackend(TemperatureControllerBackend):
