@@ -101,7 +101,7 @@ class Access2Backend(LoaderBackend):
       grip_steps: Number of steps taken to tighten the grip.
         Higher values may improve grip for certain plate types.
     """
-    if not grip_steps not in (1, 2, 3, 4):
+    if grip_steps not in (1, 2, 3, 4):
       raise ValueError("grip_steps must be between 1 and 4")
     logger.debug("[loader] load")
 

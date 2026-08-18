@@ -1,5 +1,6 @@
 import unittest
 import unittest.mock
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.legacy.centrifuge import (
   BucketHasPlateError,
@@ -15,6 +16,7 @@ from pylabrobot.legacy.centrifuge.chatterbox import (
   CentrifugeChatterboxBackend,
   LoaderChatterboxBackend,
 )
+from pylabrobot.legacy.centrifuge.vspin_backend import Access2Backend
 from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb
 
 
@@ -144,3 +146,25 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
     self.centrifuge.backend = CentrifugeChatterboxBackend()
     serialized = self.loader.serialize()
     self.assertEqual(Loader.deserialize(serialized), self.loader)
+
+
+class Access2BackendTests(unittest.IsolatedAsyncioTestCase):
+  async def test_load_accepts_default_grip_steps(self):
+    """The default one-step grip is valid and must reach the loader sequence."""
+    with patch("pylabrobot.legacy.centrifuge.vspin_backend.FTDI"):
+      backend = Access2Backend(device_id="test")
+    backend.send_command = AsyncMock(return_value=b"")  # type: ignore[method-assign]
+
+    await backend.load()
+
+    self.assertGreater(backend.send_command.await_count, 0)
+
+  async def test_load_rejects_invalid_grip_steps_before_hardware_command(self):
+    with patch("pylabrobot.legacy.centrifuge.vspin_backend.FTDI"):
+      backend = Access2Backend(device_id="test")
+    backend.send_command = AsyncMock()  # type: ignore[method-assign]
+
+    with self.assertRaisesRegex(ValueError, "grip_steps must be between 1 and 4"):
+      await backend.load(grip_steps=0)  # type: ignore[arg-type]
+
+    backend.send_command.assert_not_awaited()
