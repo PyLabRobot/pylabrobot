@@ -51,6 +51,8 @@ pylabrobot.resources.TipRack
       ~TipRack.empty
       ~TipRack.enable_tip_trackers
       ~TipRack.fill
+      ~TipRack.find_resource
+      ~TipRack.find_resources
       ~TipRack.get_absolute_location
       ~TipRack.get_absolute_rotation
       ~TipRack.get_absolute_size_x

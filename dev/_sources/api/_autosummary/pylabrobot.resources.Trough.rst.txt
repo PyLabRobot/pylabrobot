@@ -44,6 +44,8 @@ pylabrobot.resources.Trough
       ~Trough.deregister_will_assign_resource_callback
       ~Trough.deregister_will_unassign_resource_callback
       ~Trough.deserialize
+      ~Trough.find_resource
+      ~Trough.find_resources
       ~Trough.get_absolute_location
       ~Trough.get_absolute_rotation
       ~Trough.get_absolute_size_x

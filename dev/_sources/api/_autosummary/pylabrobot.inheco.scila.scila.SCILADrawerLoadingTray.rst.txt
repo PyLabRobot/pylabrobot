@@ -42,6 +42,8 @@ pylabrobot.inheco.scila.scila.SCILADrawerLoadingTray
       ~SCILADrawerLoadingTray.deregister_will_assign_resource_callback
       ~SCILADrawerLoadingTray.deregister_will_unassign_resource_callback
       ~SCILADrawerLoadingTray.deserialize
+      ~SCILADrawerLoadingTray.find_resource
+      ~SCILADrawerLoadingTray.find_resources
       ~SCILADrawerLoadingTray.get_absolute_location
       ~SCILADrawerLoadingTray.get_absolute_rotation
       ~SCILADrawerLoadingTray.get_absolute_size_x

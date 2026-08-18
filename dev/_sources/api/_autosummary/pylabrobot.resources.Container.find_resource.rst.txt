@@ -1,0 +1,6 @@
+pylabrobot.resources.Container.find\_resource
+=============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Container.find_resource

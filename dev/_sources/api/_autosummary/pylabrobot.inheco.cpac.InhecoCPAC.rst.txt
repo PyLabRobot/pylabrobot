@@ -42,6 +42,8 @@ pylabrobot.inheco.cpac.InhecoCPAC
       ~InhecoCPAC.deregister_will_assign_resource_callback
       ~InhecoCPAC.deregister_will_unassign_resource_callback
       ~InhecoCPAC.deserialize
+      ~InhecoCPAC.find_resource
+      ~InhecoCPAC.find_resources
       ~InhecoCPAC.get_absolute_location
       ~InhecoCPAC.get_absolute_rotation
       ~InhecoCPAC.get_absolute_size_x

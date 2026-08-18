@@ -41,6 +41,8 @@ pylabrobot.agilent.vspin.Access2
       ~Access2.deregister_will_assign_resource_callback
       ~Access2.deregister_will_unassign_resource_callback
       ~Access2.deserialize
+      ~Access2.find_resource
+      ~Access2.find_resources
       ~Access2.get_absolute_location
       ~Access2.get_absolute_rotation
       ~Access2.get_absolute_size_x

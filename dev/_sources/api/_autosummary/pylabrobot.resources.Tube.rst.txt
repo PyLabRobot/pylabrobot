@@ -44,6 +44,8 @@ pylabrobot.resources.Tube
       ~Tube.deregister_will_assign_resource_callback
       ~Tube.deregister_will_unassign_resource_callback
       ~Tube.deserialize
+      ~Tube.find_resource
+      ~Tube.find_resources
       ~Tube.get_absolute_location
       ~Tube.get_absolute_rotation
       ~Tube.get_absolute_size_x

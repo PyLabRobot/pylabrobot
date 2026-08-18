@@ -41,6 +41,8 @@ pylabrobot.resources.Deck
       ~Deck.deregister_will_assign_resource_callback
       ~Deck.deregister_will_unassign_resource_callback
       ~Deck.deserialize
+      ~Deck.find_resource
+      ~Deck.find_resources
       ~Deck.get_absolute_location
       ~Deck.get_absolute_rotation
       ~Deck.get_absolute_size_x

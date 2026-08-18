@@ -44,6 +44,8 @@ pylabrobot.resources.PetriDish
       ~PetriDish.deregister_will_assign_resource_callback
       ~PetriDish.deregister_will_unassign_resource_callback
       ~PetriDish.deserialize
+      ~PetriDish.find_resource
+      ~PetriDish.find_resources
       ~PetriDish.get_absolute_location
       ~PetriDish.get_absolute_rotation
       ~PetriDish.get_absolute_size_x

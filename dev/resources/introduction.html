@@ -671,6 +671,45 @@
 </pre></div>
 </div>
 </section>
+<section id="resource-metadata">
+<h2>Resource Metadata<a class="headerlink" href="#resource-metadata" title="Link to this heading">#</a></h2>
+<p>You can attach generic key-value metadata to any <code class="docutils literal notranslate"><span class="pre">Resource</span></code> via the <code class="docutils literal notranslate"><span class="pre">metadata</span></code> parameter during initialization or by modifying <code class="docutils literal notranslate"><span class="pre">resource.metadata</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resource</span>
+
+<span class="n">plate</span> <span class="o">=</span> <span class="n">Resource</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"plate1"</span><span class="p">,</span>
+    <span class="n">size_x</span><span class="o">=</span><span class="mf">127.76</span><span class="p">,</span>
+    <span class="n">size_y</span><span class="o">=</span><span class="mf">85.48</span><span class="p">,</span>
+    <span class="n">size_z</span><span class="o">=</span><span class="mf">14.5</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"solvent"</span><span class="p">:</span> <span class="s2">"water"</span><span class="p">,</span> <span class="s2">"batch_id"</span><span class="p">:</span> <span class="s2">"B2026-07"</span><span class="p">,</span> <span class="s2">"is_sterilized"</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">"vendor_plate_96_Vb"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Metadata key-value pairs are included in serialization (<code class="docutils literal notranslate"><span class="pre">resource.serialize()</span></code>) and deserialization (<code class="docutils literal notranslate"><span class="pre">Resource.deserialize()</span></code>).</p>
+</section>
+<section id="finding-resources-find-resources-and-find-resource">
+<h2>Finding Resources (<code class="docutils literal notranslate"><span class="pre">find_resources</span></code> and <code class="docutils literal notranslate"><span class="pre">find_resource</span></code>)<a class="headerlink" href="#finding-resources-find-resources-and-find-resource" title="Link to this heading">#</a></h2>
+<p>You can query resources in a deck or resource tree using <code class="docutils literal notranslate"><span class="pre">find_resources</span></code> and <code class="docutils literal notranslate"><span class="pre">find_resource</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Find all resources with solvent="water"</span>
+<span class="n">water_plates</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">find_resources</span><span class="p">(</span><span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"solvent"</span><span class="p">:</span> <span class="s2">"water"</span><span class="p">})</span>
+
+<span class="c1"># Check metadata key presence</span>
+<span class="n">sterilized_items</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">find_resources</span><span class="p">(</span><span class="n">has_metadata</span><span class="o">=</span><span class="s2">"is_sterilized"</span><span class="p">)</span>
+
+<span class="c1"># Use predicate functions for metadata values (receives metadata.get(key), e.g. None if key is missing)</span>
+<span class="n">incubated</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">find_resources</span><span class="p">(</span><span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"temperature"</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span> <span class="o">&gt;=</span> <span class="mf">37.0</span><span class="p">})</span>
+
+<span class="c1"># Filter by top-level attributes (name, type, model, category)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Plate</span>
+<span class="n">plates</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">find_resources</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">Plate</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"vendor_"</span><span class="p">))</span>
+
+<span class="c1"># Find the first matching resource</span>
+<span class="n">first_sterile</span> <span class="o">=</span> <span class="n">deck</span><span class="o">.</span><span class="n">find_resource</span><span class="p">(</span><span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"is_sterilized"</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+</pre></div>
+</div>
+</section>
 <section id="saving-and-loading-resources">
 <h2>Saving and loading resources<a class="headerlink" href="#saving-and-loading-resources" title="Link to this heading">#</a></h2>
 <p>PyLabRobot provide utilities to save and load resources and their states to and from files, as well as to serialize and deserialize resources and their states to and from Python dictionaries.</p>
@@ -811,6 +850,8 @@
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#defining-a-simple-resource">Defining a simple resource</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-metadata">Resource Metadata</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#finding-resources-find-resources-and-find-resource">Finding Resources (<code class="docutils literal notranslate"><span class="pre">find_resources</span></code> and <code class="docutils literal notranslate"><span class="pre">find_resource</span></code>)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#saving-and-loading-resources">Saving and loading resources</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#definitions">Definitions</a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#saving-to-and-loading-from-a-file">Saving to and loading from a file</a></li>

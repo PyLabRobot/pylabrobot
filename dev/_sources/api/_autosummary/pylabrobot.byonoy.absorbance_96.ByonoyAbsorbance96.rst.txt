@@ -42,6 +42,8 @@ pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbance96
       ~ByonoyAbsorbance96.deregister_will_unassign_resource_callback
       ~ByonoyAbsorbance96.describe_error_code
       ~ByonoyAbsorbance96.deserialize
+      ~ByonoyAbsorbance96.find_resource
+      ~ByonoyAbsorbance96.find_resources
       ~ByonoyAbsorbance96.get_absolute_location
       ~ByonoyAbsorbance96.get_absolute_rotation
       ~ByonoyAbsorbance96.get_absolute_size_x

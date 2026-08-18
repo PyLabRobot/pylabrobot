@@ -42,6 +42,8 @@ pylabrobot.inheco.thermoshake.InhecoThermoShake
       ~InhecoThermoShake.deregister_will_assign_resource_callback
       ~InhecoThermoShake.deregister_will_unassign_resource_callback
       ~InhecoThermoShake.deserialize
+      ~InhecoThermoShake.find_resource
+      ~InhecoThermoShake.find_resources
       ~InhecoThermoShake.get_absolute_location
       ~InhecoThermoShake.get_absolute_rotation
       ~InhecoThermoShake.get_absolute_size_x

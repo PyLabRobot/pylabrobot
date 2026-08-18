@@ -42,6 +42,8 @@ pylabrobot.resources.TubeCarrier
       ~TubeCarrier.deregister_will_assign_resource_callback
       ~TubeCarrier.deregister_will_unassign_resource_callback
       ~TubeCarrier.deserialize
+      ~TubeCarrier.find_resource
+      ~TubeCarrier.find_resources
       ~TubeCarrier.get_absolute_location
       ~TubeCarrier.get_absolute_rotation
       ~TubeCarrier.get_absolute_size_x

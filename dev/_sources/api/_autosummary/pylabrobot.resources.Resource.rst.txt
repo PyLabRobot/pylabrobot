@@ -40,6 +40,8 @@ pylabrobot.resources.Resource
       ~Resource.deregister_will_assign_resource_callback
       ~Resource.deregister_will_unassign_resource_callback
       ~Resource.deserialize
+      ~Resource.find_resource
+      ~Resource.find_resources
       ~Resource.get_absolute_location
       ~Resource.get_absolute_rotation
       ~Resource.get_absolute_size_x

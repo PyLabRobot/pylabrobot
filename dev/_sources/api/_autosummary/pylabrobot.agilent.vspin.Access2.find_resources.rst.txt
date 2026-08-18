@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2.find\_resources
+================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2.find_resources

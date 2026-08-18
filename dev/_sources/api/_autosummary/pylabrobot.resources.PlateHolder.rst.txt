@@ -41,6 +41,8 @@ pylabrobot.resources.PlateHolder
       ~PlateHolder.deregister_will_assign_resource_callback
       ~PlateHolder.deregister_will_unassign_resource_callback
       ~PlateHolder.deserialize
+      ~PlateHolder.find_resource
+      ~PlateHolder.find_resources
       ~PlateHolder.get_absolute_location
       ~PlateHolder.get_absolute_rotation
       ~PlateHolder.get_absolute_size_x

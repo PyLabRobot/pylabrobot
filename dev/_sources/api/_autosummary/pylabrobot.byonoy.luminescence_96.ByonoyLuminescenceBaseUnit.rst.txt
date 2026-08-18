@@ -40,6 +40,8 @@ pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit
       ~ByonoyLuminescenceBaseUnit.deregister_will_assign_resource_callback
       ~ByonoyLuminescenceBaseUnit.deregister_will_unassign_resource_callback
       ~ByonoyLuminescenceBaseUnit.deserialize
+      ~ByonoyLuminescenceBaseUnit.find_resource
+      ~ByonoyLuminescenceBaseUnit.find_resources
       ~ByonoyLuminescenceBaseUnit.get_absolute_location
       ~ByonoyLuminescenceBaseUnit.get_absolute_rotation
       ~ByonoyLuminescenceBaseUnit.get_absolute_size_x

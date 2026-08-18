@@ -44,6 +44,8 @@ pylabrobot.resources.Container
       ~Container.deregister_will_assign_resource_callback
       ~Container.deregister_will_unassign_resource_callback
       ~Container.deserialize
+      ~Container.find_resource
+      ~Container.find_resources
       ~Container.get_absolute_location
       ~Container.get_absolute_rotation
       ~Container.get_absolute_size_x

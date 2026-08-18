@@ -40,6 +40,8 @@ pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbanceBaseUnit
       ~ByonoyAbsorbanceBaseUnit.deregister_will_assign_resource_callback
       ~ByonoyAbsorbanceBaseUnit.deregister_will_unassign_resource_callback
       ~ByonoyAbsorbanceBaseUnit.deserialize
+      ~ByonoyAbsorbanceBaseUnit.find_resource
+      ~ByonoyAbsorbanceBaseUnit.find_resources
       ~ByonoyAbsorbanceBaseUnit.get_absolute_location
       ~ByonoyAbsorbanceBaseUnit.get_absolute_rotation
       ~ByonoyAbsorbanceBaseUnit.get_absolute_size_x

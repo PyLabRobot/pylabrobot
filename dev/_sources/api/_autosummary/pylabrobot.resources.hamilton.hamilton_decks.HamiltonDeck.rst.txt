@@ -41,6 +41,8 @@ pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
       ~HamiltonDeck.deregister_will_assign_resource_callback
       ~HamiltonDeck.deregister_will_unassign_resource_callback
       ~HamiltonDeck.deserialize
+      ~HamiltonDeck.find_resource
+      ~HamiltonDeck.find_resources
       ~HamiltonDeck.get_absolute_location
       ~HamiltonDeck.get_absolute_rotation
       ~HamiltonDeck.get_absolute_size_x

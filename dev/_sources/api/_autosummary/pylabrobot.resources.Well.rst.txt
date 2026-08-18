@@ -44,6 +44,8 @@ pylabrobot.resources.Well
       ~Well.deregister_will_assign_resource_callback
       ~Well.deregister_will_unassign_resource_callback
       ~Well.deserialize
+      ~Well.find_resource
+      ~Well.find_resources
       ~Well.get_absolute_location
       ~Well.get_absolute_rotation
       ~Well.get_absolute_size_x

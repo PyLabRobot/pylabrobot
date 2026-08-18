@@ -1,0 +1,6 @@
+pylabrobot.inheco.cpac.InhecoCPAC.find\_resources
+=================================================
+
+.. currentmodule:: pylabrobot.inheco.cpac
+
+.. automethod:: InhecoCPAC.find_resources

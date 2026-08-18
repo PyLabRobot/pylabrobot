@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.find\_resources
+======================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.find_resources

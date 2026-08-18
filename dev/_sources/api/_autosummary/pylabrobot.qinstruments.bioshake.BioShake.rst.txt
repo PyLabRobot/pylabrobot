@@ -42,6 +42,8 @@ pylabrobot.qinstruments.bioshake.BioShake
       ~BioShake.deregister_will_assign_resource_callback
       ~BioShake.deregister_will_unassign_resource_callback
       ~BioShake.deserialize
+      ~BioShake.find_resource
+      ~BioShake.find_resources
       ~BioShake.get_absolute_location
       ~BioShake.get_absolute_rotation
       ~BioShake.get_absolute_size_x

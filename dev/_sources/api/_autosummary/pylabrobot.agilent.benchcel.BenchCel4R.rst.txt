@@ -44,6 +44,8 @@ pylabrobot.agilent.benchcel.BenchCel4R
       ~BenchCel4R.deregister_will_unassign_resource_callback
       ~BenchCel4R.deserialize
       ~BenchCel4R.downstack
+      ~BenchCel4R.find_resource
+      ~BenchCel4R.find_resources
       ~BenchCel4R.get_absolute_location
       ~BenchCel4R.get_absolute_rotation
       ~BenchCel4R.get_absolute_size_x

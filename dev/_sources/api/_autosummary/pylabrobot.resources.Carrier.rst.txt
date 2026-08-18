@@ -42,6 +42,8 @@ pylabrobot.resources.Carrier
       ~Carrier.deregister_will_assign_resource_callback
       ~Carrier.deregister_will_unassign_resource_callback
       ~Carrier.deserialize
+      ~Carrier.find_resource
+      ~Carrier.find_resources
       ~Carrier.get_absolute_location
       ~Carrier.get_absolute_rotation
       ~Carrier.get_absolute_size_x

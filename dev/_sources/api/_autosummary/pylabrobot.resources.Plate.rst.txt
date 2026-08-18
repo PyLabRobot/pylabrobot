@@ -50,6 +50,8 @@ pylabrobot.resources.Plate
       ~Plate.deserialize
       ~Plate.disable_volume_trackers
       ~Plate.enable_volume_trackers
+      ~Plate.find_resource
+      ~Plate.find_resources
       ~Plate.get_absolute_location
       ~Plate.get_absolute_rotation
       ~Plate.get_absolute_size_x

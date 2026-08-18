@@ -42,6 +42,8 @@ pylabrobot.inheco.scila.scila.SCILA
       ~SCILA.deregister_will_assign_resource_callback
       ~SCILA.deregister_will_unassign_resource_callback
       ~SCILA.deserialize
+      ~SCILA.find_resource
+      ~SCILA.find_resources
       ~SCILA.get_absolute_location
       ~SCILA.get_absolute_rotation
       ~SCILA.get_absolute_size_x

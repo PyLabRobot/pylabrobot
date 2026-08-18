@@ -44,6 +44,8 @@ pylabrobot.resources.Trash
       ~Trash.deregister_will_assign_resource_callback
       ~Trash.deregister_will_unassign_resource_callback
       ~Trash.deserialize
+      ~Trash.find_resource
+      ~Trash.find_resources
       ~Trash.get_absolute_location
       ~Trash.get_absolute_rotation
       ~Trash.get_absolute_size_x

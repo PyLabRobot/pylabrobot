@@ -47,6 +47,8 @@ pylabrobot.resources.ItemizedResource
       ~ItemizedResource.deregister_will_assign_resource_callback
       ~ItemizedResource.deregister_will_unassign_resource_callback
       ~ItemizedResource.deserialize
+      ~ItemizedResource.find_resource
+      ~ItemizedResource.find_resources
       ~ItemizedResource.get_absolute_location
       ~ItemizedResource.get_absolute_rotation
       ~ItemizedResource.get_absolute_size_x

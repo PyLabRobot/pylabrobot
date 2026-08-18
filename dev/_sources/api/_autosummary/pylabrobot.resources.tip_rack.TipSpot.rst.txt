@@ -41,6 +41,8 @@ pylabrobot.resources.tip\_rack.TipSpot
       ~TipSpot.deregister_will_unassign_resource_callback
       ~TipSpot.deserialize
       ~TipSpot.empty
+      ~TipSpot.find_resource
+      ~TipSpot.find_resources
       ~TipSpot.get_absolute_location
       ~TipSpot.get_absolute_rotation
       ~TipSpot.get_absolute_size_x

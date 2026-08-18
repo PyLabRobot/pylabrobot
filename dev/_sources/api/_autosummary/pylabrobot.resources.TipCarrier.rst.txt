@@ -42,6 +42,8 @@ pylabrobot.resources.TipCarrier
       ~TipCarrier.deregister_will_assign_resource_callback
       ~TipCarrier.deregister_will_unassign_resource_callback
       ~TipCarrier.deserialize
+      ~TipCarrier.find_resource
+      ~TipCarrier.find_resources
       ~TipCarrier.get_absolute_location
       ~TipCarrier.get_absolute_rotation
       ~TipCarrier.get_absolute_size_x

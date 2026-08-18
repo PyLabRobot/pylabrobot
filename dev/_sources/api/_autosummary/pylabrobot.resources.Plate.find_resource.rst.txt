@@ -1,0 +1,6 @@
+pylabrobot.resources.Plate.find\_resource
+=========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Plate.find_resource
