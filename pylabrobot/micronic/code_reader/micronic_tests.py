@@ -20,11 +20,10 @@ from pylabrobot.micronic.code_reader.driver import (
 from pylabrobot.resources.tube_rack import TubeRack
 
 
-def _rack(num_items_x: int = 12, num_items_y: int = 8, num_items: int = 96) -> TubeRack:
+def _rack(num_items_x: int = 12, num_items_y: int = 8) -> TubeRack:
   rack = MagicMock(spec=TubeRack)
   rack.num_items_x = num_items_x
   rack.num_items_y = num_items_y
-  rack.num_items = num_items
   return rack
 
 
@@ -313,7 +312,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
           return_value=(decoded, {"decodedWells": 2}),
         ) as decode_image_mock,
       ):
-        result = await reader.scan_rack(_rack(num_items=2), timeout=1.0)
+        result = await reader.scan_rack(_rack(), timeout=1.0)
 
       self.assertEqual(result.rack_id, "9500017722")
       rack_barcode = result.rack_barcode
@@ -356,8 +355,8 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       ):
         await reader.setup()
         try:
-          first = await reader.scan_rack(rack=_rack(num_items=1), timeout=1.0)
-          second = await reader.scan_rack(rack=_rack(num_items=1), timeout=1.0)
+          first = await reader.scan_rack(rack=_rack(), timeout=1.0)
+          second = await reader.scan_rack(rack=_rack(), timeout=1.0)
         finally:
           await reader.stop()
 
@@ -448,7 +447,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       with self.assertRaisesRegex(MicronicError, "port disconnected"):
         await reader.scan_rack_id(timeout=1.0)
 
-  def test_decode_rack_rejects_missing_wells(self):
+  def test_decode_rack_returns_noread_for_missing_wells(self):
     reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
 
@@ -456,8 +455,13 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       "pylabrobot.micronic.code_reader.driver.decode_image",
       return_value=(decoded, {"decodedWells": 1}),
     ):
-      with self.assertRaisesRegex(MicronicError, "expected at least 2"):
-        reader._decode_rack_image(Path("rack.bmp"), "9500017722", expected_well_count=2)
+      result = reader._decode_rack_image(Path("rack.bmp"), "9500017722")
+
+    self.assertEqual(len(result.entries), 96)
+    self.assertEqual(result.entries[0].status, "OK")
+    self.assertEqual(result.entries[1].status, "NOREAD")
+    self.assertIsNone(result.entries[1].tube_id)
+    self.assertIsNone(result.entries[1].barcode)
 
   def test_decode_rack_represents_missing_rack_id(self):
     reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
@@ -467,7 +471,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       "pylabrobot.micronic.code_reader.driver.decode_image",
       return_value=(decoded, {"decodedWells": 1}),
     ):
-      result = reader._decode_rack_image(Path("rack.bmp"), "NOREAD", expected_well_count=1)
+      result = reader._decode_rack_image(Path("rack.bmp"), "NOREAD")
 
     self.assertIsNone(result.rack_barcode)
     self.assertEqual(result.entries[0].status, "OK")

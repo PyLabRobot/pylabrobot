@@ -290,7 +290,6 @@ class MicronicCodeReader:
         self._decode_rack_image,
         image_path,
         rack_id,
-        rack.num_items,
       )
       try:
         return await asyncio.shield(scan_future)
@@ -330,16 +329,9 @@ class MicronicCodeReader:
     self,
     image_path: Path,
     rack_id: str,
-    expected_well_count: int,
   ) -> RackScanResult:
     """Decode an acquired rack image in a worker thread."""
     decoded, self.last_decode_metadata = decode_image(image_path)
-    if len(decoded) < expected_well_count:
-      missing = ", ".join(position for position in iter_positions() if position not in decoded)
-      raise MicronicError(
-        f"Micronic decode found {len(decoded)} wells; expected at least "
-        f"{expected_well_count}. Missing: {missing}"
-      )
 
     for position, result in decoded.items():
       logger.debug("Micronic decoded %s via %s", position, result.method)
@@ -522,10 +514,7 @@ def cluster_axis(values: list[float], expected_count: int, tolerance: float) -> 
   if len(means) == expected_count:
     return means
   if len(means) >= 2:
-    return [
-      means[0] + index * (means[-1] - means[0]) / (expected_count - 1)
-      for index in range(expected_count)
-    ]
+    return fitted_axis(means, expected_count)
   raise MicronicError(
     f"Could not fit {expected_count} grid clusters from {len(values)} decoded positions."
   )
