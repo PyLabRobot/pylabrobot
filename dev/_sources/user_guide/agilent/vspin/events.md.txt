@@ -1,6 +1,8 @@
 # VSpin and Access2 events
 
-Each listed semantic operation emits `started`, `completed`, or `failed` lifecycle records.
+Each listed semantic operation emits `started`, `completed`, or `failed` lifecycle records. The
+modern Agilent frontends and the resource-aware legacy `Centrifuge` and `Loader` frontends use the
+same canonical operation names and payload semantics.
 
 ## VSpin centrifuge
 
