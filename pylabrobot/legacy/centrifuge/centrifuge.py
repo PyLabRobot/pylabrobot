@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, Tuple, cast
+from typing import Any, Mapping, Optional, Tuple, cast
 
 from pylabrobot.legacy.centrifuge.backend import CentrifugeBackend, LoaderBackend
 from pylabrobot.legacy.centrifuge.standard import (
@@ -29,6 +29,7 @@ class Centrifuge(Machine, Resource):
     category: Optional[str] = "centrifuge",
     model: Optional[str] = None,
     buckets: Optional[Tuple[ResourceHolder, ResourceHolder]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ) -> None:
     Machine.__init__(self, backend=backend)
     Resource.__init__(
@@ -40,6 +41,7 @@ class Centrifuge(Machine, Resource):
       rotation=rotation,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self.backend: CentrifugeBackend = backend  # fix type
     self._door_open = False
@@ -147,6 +149,7 @@ class Centrifuge(Machine, Resource):
       category=data.get("category"),
       model=data.get("model"),
       buckets=buckets,
+      metadata=data.get("metadata"),
     )
 
 
@@ -166,6 +169,7 @@ class Loader(Machine, ResourceHolder):
     rotation=None,
     category="loader",
     model=None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ) -> None:
     Machine.__init__(self, backend=backend)
     ResourceHolder.__init__(
@@ -178,6 +182,7 @@ class Loader(Machine, ResourceHolder):
       rotation=rotation,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self.backend: LoaderBackend = backend  # fix type
     self.centrifuge = centrifuge
@@ -239,4 +244,5 @@ class Loader(Machine, ResourceHolder):
       rotation=deserialize(data["resource"].get("rotation")),
       category=data["resource"].get("category"),
       model=data["resource"].get("model"),
+      metadata=data["resource"].get("metadata"),
     )
