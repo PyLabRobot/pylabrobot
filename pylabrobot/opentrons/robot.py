@@ -9,11 +9,46 @@ from pylabrobot.opentrons.transport import HttpxTransport, OpentronsTransport
 
 logger = logging.getLogger(__name__)
 
+# Seconds of polling a command gets on top of however long its own motion takes.
+COMMAND_POLL_HEADROOM = 30.0
+
+
+def _plunger_seconds(params: Dict[str, Any]) -> float:
+  """How long a command's own plunger travel takes, from its volume and rate.
+
+  A 1000 uL aspirate at a viscous-liquid flow rate outlasts any fixed poll
+  timeout, and giving up mid-command rolls the trackers back while the robot
+  keeps pipetting.
+  """
+  volume, flow_rate = params.get("volume"), params.get("flowRate")
+  if not isinstance(volume, (int, float)) or not isinstance(flow_rate, (int, float)):
+    return 0.0
+  return abs(volume) / flow_rate if flow_rate > 0 else 0.0
+
 
 class OpentronsError(Exception):
   def __init__(self, title: str, message: Optional[str] = None) -> None:
     self.title, self.message = title, message
     super().__init__(f"{title}: {message}" if message else title)
+
+
+class OpentronsCommandError(RuntimeError):
+  """A robot-server command completed with status "failed".
+
+  Carries the command's error payload (the robot-server's ErrorOccurrence
+  dict) so callers can react to defined errors by ``error_type`` (e.g.
+  ``"liquidNotFound"``) instead of parsing the message string.
+  """
+
+  def __init__(self, command_type: str, error: Dict[str, Any]) -> None:
+    super().__init__(f"Opentrons command '{command_type}' failed: {error.get('detail', error)}")
+    self.command_type = command_type
+    self.error = error
+
+  @property
+  def error_type(self) -> Optional[str]:
+    """The machine-readable error identifier, e.g. "liquidNotFound"."""
+    return cast(Optional[str], self.error.get("errorType"))
 
 
 @dataclass
@@ -48,25 +83,78 @@ class OpentronsRobot(abc.ABC):
   ) -> None:
     self.host, self.port = host, port
     self.base_url = f"http://{host}:{port}"
-    self._transport: Optional[OpentronsTransport] = transport
+    # Built here rather than on connect: a pylabrobot io refuses construction
+    # once a capture is armed, so a robot built first can still be recorded.
+    self._transport: OpentronsTransport = transport or HttpxTransport(base_url=self.base_url)
     self.run_id: Optional[str] = None
     self.pipette: Optional[PipetteInfo] = None
     self.api_version: Optional[str] = None
     self.robot_model: Optional[str] = None
 
   async def setup(self) -> None:
-    await self._connect()
-    await self._create_run()
-    await self._model_setup()
+    """Bring the robot fully up, PyLabRobot's usual one-call lifecycle entry.
+
+    Composed of the steps below so a caller who needs only some of them (talk to
+    the robot without moving it, hand it back without homing it) can take them
+    one at a time.
+    """
+    await self.connect()
+    await self.create_run()
+    await self.home()
+    await self.initialize()
 
   async def stop(self) -> None:
-    # Always home before releasing the robot so the gantry parks in a known
-    # pose. Done inside the run (before cancel); a failure here must not block
-    # disconnect.
+    """Park the gantry and release the robot, PyLabRobot's usual teardown."""
+    # Home inside the run (before cancelling it) so the gantry parks in a known
+    # pose; a failure here must not block the release that follows.
     try:
       await self.home()
     except Exception:
-      logger.warning("home() before stop failed; continuing to disconnect", exc_info=True)
+      logger.warning("home() before stop failed; continuing to release", exc_info=True)
+    await self.cancel_run()
+    await self.disconnect()
+
+  async def connect(self) -> None:
+    """Open the link and confirm the robot answers. Starts no run, moves nothing."""
+    await self._connect()
+
+  async def create_run(self) -> None:
+    """Start a control session.
+
+    The robot reports itself as in use and refuses its own touchscreen for as
+    long as a run is current, so this is the step that takes it from the
+    operator, not ``connect``.
+
+    Cancels a run this object already holds before opening the next one.
+    ``run_id`` is the only handle we have on a run, so overwriting it strands
+    the old one on the robot, still current, with nothing left able to release
+    it: the touchscreen stays locked and a power cycle is the only way out.
+    """
+    await self._cancel_run()
+    await self._create_run()
+
+  async def initialize(self) -> None:
+    """Discover what is mounted and get it ready to command. Moves nothing.
+
+    Homing is ``home()``, deliberately not folded in here: a caller that wants
+    to know what is on the robot should not have to move it to find out.
+    """
+    await self._model_setup()
+
+  async def cancel_run(self) -> None:
+    """End the control session, handing the robot back to its own touchscreen.
+
+    Safe with no run open. This, not ``disconnect``, is what frees local
+    control: the run is what the robot holds, and it outlives our link.
+    """
+    await self._cancel_run()
+
+  async def disconnect(self) -> None:
+    """Drop the link, moving nothing.
+
+    Cancels an open run first, since a run left current keeps the robot locked
+    out of its own controls with nothing left to release it.
+    """
     await self._cancel_run()
     await self._disconnect()
 
@@ -86,13 +174,12 @@ class OpentronsRobot(abc.ABC):
   # --- Connection Lifecycle ---
 
   async def _connect(self) -> None:
-    """Create the transport (unless one was injected) and verify connectivity.
+    """Open the transport and verify connectivity.
 
     Sends a health check to confirm the robot is reachable and the robot
     server is running (not in Jupyter/Python API mode).
     """
-    if self._transport is None:
-      self._transport = HttpxTransport(base_url=self.base_url)
+    await self._transport.setup()
     health = await self._get("/health")
     self.api_version = health.get("api_version")
     self.robot_model = health.get("robot_model", "")
@@ -107,26 +194,49 @@ class OpentronsRobot(abc.ABC):
     )
 
   async def _disconnect(self) -> None:
-    """Close the transport."""
-    if self._transport is not None:
-      await self._transport.close()
-      self._transport = None
+    """Close the transport, keeping the object so a reconnect can reopen it.
+
+    Discarding it here would mean rebuilding an io on the next connect, which
+    a capture armed in the meantime refuses.
+    """
+    await self._transport.close()
+
+  async def send_command(
+    self,
+    command_type: str,
+    params: Optional[Dict[str, Any]] = None,
+    wait: bool = True,
+    timeout: float = 30.0,
+  ) -> Dict[str, Any]:
+    """Send any robot command by name, for the parts of the robot this class does not wrap.
+
+    The robot accepts far more commands than this driver exposes as methods:
+    the module families (heater-shaker, thermocycler, temperature, magnetic,
+    absorbance reader, vacuum, Flex Stacker), calibration, and whatever a
+    later robot software release adds. ``command_type`` is the robot's own
+    command name (``"moveToWell"``, ``"heaterShaker/setTargetTemperature"``)
+    and ``params`` its payload; both are passed through untouched, and the
+    returned dict is the completed command including its ``result``.
+
+    Prefer a typed method where one exists. This one validates nothing and
+    updates no resource-tree state, so a command that moves labware or changes
+    tip or liquid state leaves PyLabRobot's own trackers describing the state
+    before it ran.
+    """
+    return await self._execute_command(command_type, params or {}, wait=wait, timeout=timeout)
 
   # --- Low-Level Wire Calls ---
 
   async def _get(self, path: str) -> Dict[str, Any]:
     """Wire GET, return parsed JSON."""
-    assert self._transport is not None, "Not connected. Call connect() first."
     return await self._transport.get(path)
 
   async def _post(self, path: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Wire POST, return parsed JSON."""
-    assert self._transport is not None, "Not connected. Call connect() first."
     return await self._transport.post(path, json=data or {})
 
   async def _delete(self, path: str) -> Dict[str, Any]:
     """Wire DELETE, return parsed JSON."""
-    assert self._transport is not None, "Not connected. Call connect() first."
     return await self._transport.delete(path)
 
   # --- Run Management ---
@@ -185,9 +295,11 @@ class OpentronsRobot(abc.ABC):
       The completed command data dict (includes "result" field).
 
     Raises:
-      RuntimeError: If the command fails or times out.
+      OpentronsCommandError: If the command reports status "failed".
+      RuntimeError: If the command times out.
     """
     assert self.run_id is not None, "No active run. Call create_run() first."
+    timeout = max(timeout, _plunger_seconds(params) + COMMAND_POLL_HEADROOM)
     payload = {
       "data": {
         "commandType": command_type,
@@ -214,10 +326,7 @@ class OpentronsRobot(abc.ABC):
       if status == "succeeded":
         return cmd_data
       elif status == "failed":
-        error = cmd_data.get("error", {})
-        raise RuntimeError(
-          f"Opentrons command '{command_type}' failed: {error.get('detail', error)}"
-        )
+        raise OpentronsCommandError(command_type, cmd_data.get("error", {}))
       await asyncio.sleep(0.2)
 
     raise RuntimeError(f"Opentrons command '{command_type}' timed out after {timeout}s")

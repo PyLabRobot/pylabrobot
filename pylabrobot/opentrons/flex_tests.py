@@ -42,6 +42,80 @@ def _flex_with_transport(
   return flex, transport
 
 
+class TestLifecycleHalves(unittest.TestCase):
+  """``setup``/``stop`` are the two halves run together; each half is callable alone.
+
+  The split exists because taking the robot and moving it are separate acts. An
+  operator reclaiming the touchscreen wants the session ended and nothing else;
+  homing an arm over a deck someone is reaching into is the thing to avoid.
+  """
+
+  def test_connect_opens_the_link_but_starts_no_run(self):
+    """The run is what the robot holds against its touchscreen, so taking the
+    robot is create_run's doing, not connect's."""
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+
+    asyncio.run(flex.connect())
+    try:
+      self.assertIsNone(flex.run_id)
+      self.assertEqual([c for c in transport.commands if c["commandType"] == "home"], [])
+    finally:
+      asyncio.run(flex.disconnect())
+
+  def test_initialize_discovers_without_moving(self):
+    """Asking what is mounted must not require moving the robot to find out."""
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    asyncio.run(flex.connect())
+    asyncio.run(flex.create_run())
+
+    asyncio.run(flex.initialize())
+    try:
+      self.assertIsInstance(flex.left, FlexHead8)
+      self.assertEqual([c for c in transport.commands if c["commandType"] == "home"], [])
+    finally:
+      asyncio.run(flex.disconnect())
+
+  def test_cancel_run_frees_local_control_without_dropping_the_link(self):
+    """The operator's 'give me the robot back' action: end the session, stay connected."""
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    asyncio.run(flex.setup())
+    homes_from_setup = len([c for c in transport.commands if c["commandType"] == "home"])
+
+    asyncio.run(flex.cancel_run())
+    try:
+      self.assertIsNone(flex.run_id)
+      self.assertEqual(
+        len([c for c in transport.commands if c["commandType"] == "home"]), homes_from_setup
+      )
+    finally:
+      asyncio.run(flex.disconnect())
+
+  def test_disconnect_ends_the_run_without_homing(self):
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    asyncio.run(flex.setup())
+    homes_from_setup = len([c for c in transport.commands if c["commandType"] == "home"])
+
+    asyncio.run(flex.disconnect())
+
+    self.assertIsNone(flex.run_id)
+    self.assertEqual(
+      len([c for c in transport.commands if c["commandType"] == "home"]), homes_from_setup
+    )
+
+  def test_stop_still_homes_before_releasing(self):
+    """The one-call teardown keeps parking the gantry; only disconnect skips it."""
+    flex, transport = _flex_with_transport([("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    asyncio.run(flex.setup())
+    homes_from_setup = len([c for c in transport.commands if c["commandType"] == "home"])
+
+    asyncio.run(flex.stop())
+
+    self.assertEqual(
+      len([c for c in transport.commands if c["commandType"] == "home"]), homes_from_setup + 1
+    )
+    self.assertIsNone(flex.run_id)
+
+
 class TestHeadDiscovery(unittest.TestCase):
   """setup() discovers mounted pipettes and composes the matching head per mount."""
 
@@ -393,8 +467,14 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
 
 
 class TestFlexHead8PrepareToAspirate(unittest.TestCase):
-  """Task 3 fix #1: `prepareToAspirate` must fire once, immediately before the
-  FIRST aspirate after a tip pickup, and NOT before subsequent aspirates."""
+  """Priming a well-addressed aspirate is the robot's job, never the driver's.
+
+  The robot moves to the well TOP, primes there in open air and then descends,
+  which is the only way to prime safely: the plunger travels several uL worth,
+  so priming with the tip already in the liquid would draw an unmeasured slug
+  of the well into the tip. A prepareToAspirate the driver sends first sets the
+  robot's ready flag and so skips that safe handling. `prepare_to_aspirate` is
+  the caller's escape hatch for the in-place ops, which name no well."""
 
   def setUp(self):
     set_tip_tracking(True)
@@ -404,54 +484,65 @@ class TestFlexHead8PrepareToAspirate(unittest.TestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  def test_prepare_to_aspirate_sent_before_first_aspirate_only(self):
+  def _bench(self):
     flex, transport, head = _flex_head8()
-    try:
-      rack = flex_96_tiprack_50ul(name="rack")
-      plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
-      flex.deck.assign_child_at_slot(rack, "C1")
-      flex.deck.assign_child_at_slot(plate, "C2")
-      for well in plate.get_all_items():
-        well.tracker.set_volume(100.0)
+    rack = flex_96_tiprack_50ul(name="rack")
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    flex.deck.assign_child_at_slot(rack, "C1")
+    flex.deck.assign_child_at_slot(plate, "C2")
+    for well in plate.get_all_items():
+      well.tracker.set_volume(100.0)
+    return flex, transport, head, rack, plate
 
+  def test_no_prepare_is_sent_around_a_transfer_loop(self):
+    flex, transport, head, rack, plate = self._bench()
+    try:
       asyncio.run(head.pick_up_tips(rack, column=0))
       asyncio.run(head.aspirate(plate, column=0, volume=10))
+      asyncio.run(head.dispense(plate, column=1, volume=10))
       asyncio.run(head.aspirate(plate, column=1, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
-      aspirate_indices = [i for i, t in enumerate(cmd_types) if t == "aspirate"]
-
-      self.assertEqual(len(prepare_indices), 1, "prepareToAspirate must fire exactly once")
-      self.assertEqual(len(aspirate_indices), 2)
-      self.assertEqual(prepare_indices[0], aspirate_indices[0] - 1)
-
-      prepare_cmd = transport.commands[prepare_indices[0]]
-      self.assertEqual(prepare_cmd["params"], {"pipetteId": head.pipette_id})
+      self.assertEqual(cmd_types.count("aspirate"), 2)
+      self.assertNotIn("prepareToAspirate", cmd_types)
     finally:
       asyncio.run(flex.stop())
 
-  def test_prepare_to_aspirate_refires_after_a_new_pickup(self):
-    flex, transport, head = _flex_head8()
+  def test_a_well_addressed_aspirate_still_works_with_the_plunger_pushed_past_bottom(self):
+    """The whole reason the driver can stay out of it: after a blow-out the
+    robot primes the aspirate itself rather than refusing it."""
+    flex, transport, head, rack, plate = self._bench()
     try:
-      rack = flex_96_tiprack_50ul(name="rack")
-      plate = cor_96_wellplate_360uL_Fb(name="plate")
-      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
-      flex.deck.assign_child_at_slot(rack, "C1")
-      flex.deck.assign_child_at_slot(plate, "C2")
-      for well in plate.get_all_items():
-        well.tracker.set_volume(100.0)
-
       asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.blow_out())
       asyncio.run(head.aspirate(plate, column=0, volume=10))
-      asyncio.run(head.drop_tips(rack, column=0))
-      asyncio.run(head.pick_up_tips(rack, column=1))
-      asyncio.run(head.aspirate(plate, column=1, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
-      self.assertEqual(len(prepare_indices), 2, "a new pickup must require a new prepare")
+      self.assertEqual(cmd_types.count("aspirate"), 1)
+      self.assertNotIn("prepareToAspirate", cmd_types)
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_prepare_to_aspirate_sends_one_command_carrying_only_the_pipette(self):
+    flex, transport, head, rack, _plate = self._bench()
+    try:
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.prepare_to_aspirate())
+
+      prepares = [c for c in transport.commands if c["commandType"] == "prepareToAspirate"]
+      self.assertEqual(len(prepares), 1)
+      self.assertEqual(prepares[0]["params"], {"pipetteId": head.pipette_id})
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_prepare_to_aspirate_without_a_tip_raises_before_the_wire(self):
+    flex, transport, head, _rack, _plate = self._bench()
+    try:
+      n_before = len(transport.commands)
+      with self.assertRaises(OpentronsError):
+        asyncio.run(head.prepare_to_aspirate())
+      self.assertEqual(len(transport.commands), n_before)
     finally:
       asyncio.run(flex.stop())
 
@@ -765,6 +856,28 @@ class TestFlexHead8HardwareTipPresence(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
+  def test_tip_presence_is_read_as_a_run_command_never_over_the_instruments_route(self):
+    """The tip check must not touch ``GET /instruments`` once a run is live.
+
+    That REST read re-caches the attached pipettes, which clears the run's
+    record of the attached tip, so the next pipetting command fails with
+    "cannot perform PREPARE_ASPIRATE without a tip attached". Reproduced
+    against the Opentrons robot-server simulator.
+    """
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+      reads_after_setup = transport.instrument_reads
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.drop_tips(rack, column=0))
+
+      self.assertEqual(transport.instrument_reads, reads_after_setup)
+      self.assertIn("getTipPresence", [c["commandType"] for c in transport.commands])
+    finally:
+      asyncio.run(flex.stop())
+
   def test_simulated_stuck_tip_after_drop_logs_warning(self):
     flex, _transport, head = _flex_head8(simulate_stuck_tip=True)
     try:
@@ -832,7 +945,7 @@ class TestFlexHead1Ops(unittest.TestCase):
     set_tip_tracking(False)
     set_volume_tracking(False)
 
-  def test_pick_up_tips_and_aspirate_emit_one_command_each_and_warn_untested(self):
+  def test_pick_up_tips_and_aspirate_emit_one_command_each(self):
     flex, transport, head = _flex_head1()
     try:
       rack = flex_96_tiprack_50ul(name="rack1")
@@ -844,9 +957,7 @@ class TestFlexHead1Ops(unittest.TestCase):
       target_well = plate.get_item("B3")
       target_well.tracker.set_volume(100.0)
 
-      with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
-        asyncio.run(head.pick_up_tips(rack.get_item("A1")))
-      self.assertTrue(any("not yet verified" in msg.lower() for msg in log_ctx.output))
+      asyncio.run(head.pick_up_tips(rack.get_item("A1")))
 
       pickup_cmds = [c for c in transport.commands if c["commandType"] == "pickUpTip"]
       self.assertEqual(len(pickup_cmds), 1)
@@ -854,17 +965,12 @@ class TestFlexHead1Ops(unittest.TestCase):
       self.assertIsNotNone(head.get_mounted_tips()[0])
       self.assertEqual(len(head.get_mounted_tips()), 1)
 
-      # A 2nd warning call must be a no-op (only the FIRST op logs).
-      with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
-          asyncio.run(head.aspirate(target_well, volume=10))
+      asyncio.run(head.aspirate(target_well, volume=10))
 
       cmd_types = [c["commandType"] for c in transport.commands]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
       aspirate_indices = [i for i, t in enumerate(cmd_types) if t == "aspirate"]
-      self.assertEqual(len(prepare_indices), 1, "prepareToAspirate must fire exactly once")
       self.assertEqual(len(aspirate_indices), 1)
-      self.assertEqual(prepare_indices[0], aspirate_indices[0] - 1)
+      self.assertNotIn("prepareToAspirate", cmd_types, "the robot primes for a named well")
       self.assertEqual(transport.commands[aspirate_indices[0]]["params"]["wellName"], "B3")
 
       # Exactly 1 Well tracked -- every other well on the plate is untouched.
@@ -993,10 +1099,9 @@ class TestFlexHead96Ops(unittest.TestCase):
 
       cmd_types = [c["commandType"] for c in transport.commands]
       aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
-      prepare_indices = [i for i, t in enumerate(cmd_types) if t == "prepareToAspirate"]
       self.assertEqual(len(aspirate_cmds), 1)
       self.assertEqual(aspirate_cmds[0]["params"]["wellName"], "A1")
-      self.assertEqual(len(prepare_indices), 1, "prepareToAspirate must fire before the aspirate")
+      self.assertNotIn("prepareToAspirate", cmd_types, "the robot primes for a named well")
 
       wells = plate.get_all_items()
       self.assertEqual(len(wells), 96)
@@ -1055,6 +1160,89 @@ class TestFlexHead96Ops(unittest.TestCase):
   def test_docstring_does_not_claim_hardware_validation(self):
     doc = FlexHead96.__doc__ or ""
     self.assertNotIn("Validated on real", doc)
+
+
+class TrashAddressableAreaTests(unittest.TestCase):
+  """A Flex takes a movable trash in any of eight slots, not just A3."""
+
+  def test_the_drop_follows_the_trash_to_another_slot(self):
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      flex.deck.assign_child_at_slot(rack, "C1")
+      trash = flex.deck.get_trash_area()
+      flex.deck.unassign_child_at_slot("A3")
+      flex.deck.assign_child_at_slot(trash, "B3")
+
+      asyncio.run(head.pick_up_tips(rack, column=0))
+      asyncio.run(head.discard_tips(trash))
+
+      move_cmd = next(
+        c for c in transport.commands if c["commandType"] == "moveToAddressableAreaForDropTip"
+      )
+      self.assertEqual(move_cmd["params"]["addressableAreaName"], "movableTrashB3")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_a_trash_outside_a_trash_slot_is_refused(self):
+    flex, _transport, head = _flex_head8()
+    try:
+      trash = flex.deck.get_trash_area()
+      flex.deck.unassign_child_at_slot("A3")
+      flex.deck.assign_child_at_slot(trash, "C2")
+      with self.assertRaises(OpentronsError):
+        head._trash_addressable_area(trash)
+    finally:
+      asyncio.run(flex.stop())
+
+
+class DeclaredIdentityTests(unittest.TestCase):
+  """How a PLR resource resolves to an Opentrons load name."""
+
+  def test_a_declared_load_name_is_what_the_resource_loads_by(self):
+    plate = cor_96_wellplate_360uL_Fb(name="anything at all")
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"
+    load_name, version = OpentronsFlex._ot_declared_identity(plate)
+    self.assertEqual(load_name, "corning_96_wellplate_360ul_flat")
+    self.assertEqual(version, 1)
+
+  def test_the_revision_is_the_resource_s_to_declare_too(self):
+    # Revision 1 is the only one every robot holds, so a caller who wants a
+    # later one (for its gripper grip height) has to say so.
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"
+    plate.ot_version = 2
+    self.assertEqual(OpentronsFlex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2))
+
+  def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
+    # The robot resolves against its own shipped definitions AND a lab's own
+    # uploads, so any list here would be wrong for somebody's robot.
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.ot_load_name = "a_lab_uploaded_this_one_themselves"
+    load_name, version = OpentronsFlex._ot_declared_identity(plate)
+    self.assertEqual(load_name, "a_lab_uploaded_this_one_themselves")
+    self.assertEqual(version, 1)
+
+  def test_a_resource_declaring_nothing_asks_for_a_synthesized_definition(self):
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    with self.assertRaises(OpentronsError):
+      OpentronsFlex._ot_declared_identity(plate)
+
+  def test_the_model_never_decides_the_load_name(self):
+    # A PLR model is not an Opentrons load name, and sending one that merely
+    # looks like a load name would load the wrong labware. Declaring is the rule.
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.model = "corning_96_wellplate_360ul_flat"
+    with self.assertRaises(OpentronsError):
+      OpentronsFlex._ot_declared_identity(plate)
+
+  def test_the_instance_name_never_decides_the_load_name(self):
+    # It is a user-chosen label, so naming a plate after a tip rack must not
+    # load a tip rack.
+    plate = cor_96_wellplate_360uL_Fb(name="flex_96_tiprack_50ul")
+    plate.model = None
+    with self.assertRaises(OpentronsError):
+      OpentronsFlex._ot_declared_identity(plate)
 
 
 if __name__ == "__main__":

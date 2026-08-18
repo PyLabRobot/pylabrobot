@@ -44,6 +44,7 @@ def flex_plate(
   name: str,
   num_wells: int = 96,
   well_volume: float = 360.0,
+  version: int = 1,
 ) -> Plate:
   """Build a nominal, name-based Flex plate.
 
@@ -56,6 +57,13 @@ def flex_plate(
     num_wells: number of wells; only the standard 96-well SBS grid (8 rows x
       12 columns) is supported today.
     well_volume: nominal per-well max volume (uL), used for volume tracking.
+    version: which revision of that definition to load. Stored as
+      ``ot_version``. Revision 1 is the one every definition has, and the only
+      one safe to assume, but for much of Opentrons' catalogue it predates the
+      Flex and states no gripper grip height, so the robot grips at the plate's
+      mid-height. A later revision usually fixes that and leaves the well
+      geometry alone. Naming a revision the robot does not hold fails the load,
+      so raise this only for a plate you know the robot has.
 
   Returns:
     A PLR ``Plate`` with a nominal 96-well grid (see module docstring) and
@@ -92,6 +100,7 @@ def flex_plate(
   # Flex-specific: Opentrons labware load name for JIT loading. The robot
   # resolves the real geometry from this name; PLR's grid above is nominal.
   plate.ot_load_name = load_name  # type: ignore[attr-defined]
+  plate.ot_version = version  # type: ignore[attr-defined]
 
   return plate
 
@@ -102,10 +111,15 @@ def corning_96_wellplate_360ul_flat(name: str) -> Plate:
   Convenience wrapper around :func:`flex_plate` for
   ``"corning_96_wellplate_360ul_flat"``, the plate used in the Flex
   hello-world notebook.
+
+  Loads revision 2, the earliest that states a gripper grip height (12.2 mm);
+  revision 1 states none and the robot grips at the plate's mid-height instead.
+  The well geometry is the same in both.
   """
   return flex_plate(
     load_name="corning_96_wellplate_360ul_flat",
     name=name,
     num_wells=96,
     well_volume=360.0,
+    version=2,
   )

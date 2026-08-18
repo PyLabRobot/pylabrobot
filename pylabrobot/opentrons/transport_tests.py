@@ -1,11 +1,26 @@
 """Tests for the OpentronsRobot transport seam (Protocol + chatterbox)."""
 
 import asyncio
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Any, Dict, List
 
+import httpx
+
+import pylabrobot
+from pylabrobot.io.errors import ValidationError
+from pylabrobot.opentrons.flex import OpentronsFlex
 from pylabrobot.opentrons.robot import OpentronsRobot
-from pylabrobot.opentrons.transport import ChatterboxTransport, OpentronsTransport
+from pylabrobot.opentrons.transport import (
+  ChatterboxTransport,
+  HttpxTransport,
+  OpentronsTransport,
+  ReplayTransport,
+)
+from pylabrobot.resources.opentrons.flex_deck import FlexDeck
+from pylabrobot.testing.http_server import serving
 
 
 class _StubRobot(OpentronsRobot):
@@ -160,6 +175,100 @@ class TestChatterboxTransportMultiplePipettes(unittest.TestCase):
     self.assertEqual(len(ids), 2)
     self.assertEqual(len(set(ids)), 2)  # distinct pipetteIds
     self.assertEqual(len(transport.load_pipette_commands), 2)
+
+
+class TestTransportIsBuiltBeforeCaptureCanBeArmed(unittest.TestCase):
+  """A robot builds its transport in __init__, not on connect.
+
+  Every pylabrobot io refuses construction while a capture is active, so
+  building it on connect made the documented recording recipe (construct,
+  start_capture, setup) die with "Cannot create a new HTTP object while
+  capture or validation is active" unless the caller passed a transport in.
+  """
+
+  def test_a_robot_built_with_no_transport_still_has_one(self):
+    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test")
+    self.assertIsInstance(flex._transport, HttpxTransport)
+
+  def test_arming_a_capture_after_construction_does_not_refuse_the_io(self):
+    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test")
+    with tempfile.TemporaryDirectory() as tmp:
+      pylabrobot.start_capture(Path(tmp) / "c.json")
+      try:
+        # The io already exists, so nothing here needs to construct one.
+        self.assertIsInstance(flex._transport, HttpxTransport)
+      finally:
+        pylabrobot.stop_capture()
+
+
+class RecordAndReplayTests(unittest.IsolatedAsyncioTestCase):
+  """A recorded Flex lifecycle replays with nothing on the network.
+
+  The recording is taken over ``HttpxTransport``, which is the path a real
+  robot uses, so what the replay proves is that the driver reaches the same
+  state from the capture file alone.
+  """
+
+  def setUp(self):
+    self._dir = tempfile.TemporaryDirectory()
+    self.capture_file = Path(self._dir.name) / "flex_setup.json"
+
+  def tearDown(self):
+    self._dir.cleanup()
+
+  async def _record_a_setup(self) -> None:
+    """Drive setup() over HTTP against a stand-in server, capturing as we go."""
+    robot_server = ChatterboxTransport(
+      pipettes=[("p1000_multi_flex", 8, 5.0, 1000.0, "left")],
+      gripper=True,
+    )
+
+    async def answer(request: httpx.Request) -> httpx.Response:
+      path = request.url.path
+      if request.method == "GET":
+        body = await robot_server.get(path)
+      elif request.method == "DELETE":
+        body = await robot_server.delete(path)
+      else:
+        sent = json.loads(request.content) if request.content else {}
+        body = await robot_server.post(path, json=sent)
+      return httpx.Response(200, json=body)
+
+    # The transport is built before capture starts: every pylabrobot io
+    # refuses construction while a capture is active.
+    transport = HttpxTransport(base_url="http://robot.test:31950")
+    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test", transport=transport)
+    with serving(answer):
+      pylabrobot.start_capture(self.capture_file)
+      try:
+        await flex.setup()
+      finally:
+        pylabrobot.stop_capture()
+
+  async def test_replayed_setup_discovers_the_same_head(self):
+    await self._record_a_setup()
+
+    replay = ReplayTransport(self.capture_file, base_url="http://robot.test:31950")
+    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test", transport=replay)
+    await flex.setup()
+
+    left = flex.left
+    self.assertIsNotNone(left)
+    self.assertIsNone(flex.right)
+    assert left is not None
+    self.assertEqual(left.channels, 8)
+    replay.assert_fully_replayed()
+
+  async def test_a_dropped_command_fails_the_replay(self):
+    """Skipping a step must fail, or a replay could pass while doing less."""
+    await self._record_a_setup()
+
+    replay = ReplayTransport(self.capture_file, base_url="http://robot.test:31950")
+    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test", transport=replay)
+    await flex.connect()
+
+    with self.assertRaisesRegex(ValidationError, "not fully read"):
+      replay.assert_fully_replayed()
 
 
 if __name__ == "__main__":
