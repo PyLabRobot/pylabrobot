@@ -2,7 +2,6 @@ import logging
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
 
 from pylabrobot.opentrons.flex_gripper import FlexGripper
-from pylabrobot.opentrons.catalogue import is_catalogue_labware
 from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
 from pylabrobot.opentrons.flex_wire import ROBOT_AXES, _require_robot_commands, slot_wire_location
 from pylabrobot.opentrons.labware_definitions import (
@@ -21,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 _OT_NAMESPACE = "opentrons"
 
-# Catalogue definition revision per load name -- see _ot_catalogue_identity.
+# Definition revision per load name -- see _ot_declared_identity.
 _OT_VERSION = 1
 _OT_CATALOGUE_VERSIONS = {
   "appliedbiosystemsmicroamp_384_wellplate_40ul": 3,
@@ -268,7 +267,7 @@ class OpentronsFlex(OpentronsRobot):
     height and is honored on the FIRST load only; a cache hit (already
     loaded, or definition already uploaded) reuses the stored identity
     unchanged, and labware resolving to an official Opentrons load name
-    ignores it entirely (the catalogue definition owns the grip height).
+    ignores it entirely (the robot's own definition owns the grip height).
     Every discard is logged.
     """
     name = getattr(resource, "name", str(resource))
@@ -291,7 +290,7 @@ class OpentronsFlex(OpentronsRobot):
       )
 
     try:
-      load_name, version = self._ot_catalogue_identity(resource)
+      load_name, version = self._ot_declared_identity(resource)
     except OpentronsError:
       # No official Opentrons definition: build one from the resource's PLR
       # geometry, upload it, and load by the uploaded definition's identity.
@@ -303,7 +302,7 @@ class OpentronsFlex(OpentronsRobot):
       _warn_grip_distance_discarded(
         name,
         grip_distance_from_top,
-        f"it loads the Opentrons catalogue definition '{load_name}', whose grip height is "
+        f"it loads the robot's own definition for '{load_name}', whose grip height is "
         "the vendor's to state (the robot grips at mid-height when it states none)",
       )
     # The robot assigns the id. Proposing one here would only make the
@@ -487,41 +486,37 @@ class OpentronsFlex(OpentronsRobot):
     )
 
   @staticmethod
-  def _ot_catalogue_identity(resource: Resource) -> Tuple[str, int]:
-    """Resolve a PLR resource to its Opentrons load name and definition version.
+  def _ot_declared_identity(resource: Resource) -> Tuple[str, int]:
+    """The load name and version to load a resource by, if it declares one.
 
-    Catalogue definitions are versioned per load name, and version 1 is the
-    OLDEST revision -- for much of the catalogue it predates the Flex and
+    Declaring ``ot_load_name`` is the whole rule: a resource that does one is
+    loaded by name, and a resource that does not gets a definition built from
+    its own geometry and uploaded. Whether the robot can actually resolve a
+    declared name is the ROBOT's to answer, not ours. It looks in the
+    definitions its own software shipped with AND in the custom labware a lab
+    has added to it, so no list on this side can be right for every robot. A
+    name it cannot resolve fails the ``loadLabware``, which surfaces where a
+    caller expects it: at the point the labware goes onto the deck.
+
+    A definition is versioned per load name, and version 1 is the OLDEST
+    revision -- for much of Opentrons' own catalogue it predates the Flex and
     declares no gripper grip height, so the robot grips at the labware's
     mid-height rather than where the vendor says. ``_OT_CATALOGUE_VERSIONS``
-    therefore pins the EARLIEST revision that states one. Earliest, not
-    newest: a robot only holds the revisions its own software shipped with,
-    and these have shipped since API 2.14, while their well geometry is
-    identical to version 1's -- so the bump changes the grip and nothing else.
-    Load names outside that map (every Flex tip rack among them, which ships
-    one revision) stay at 1. A resource can override the version for its own
-    load name by carrying an ``ot_version``.
+    therefore pins the EARLIEST revision that states one. Earliest, not newest:
+    a robot only holds the revisions its own software shipped with, and these
+    have shipped since API 2.14, while their well geometry is identical to
+    version 1's -- so the bump changes the grip and nothing else. Load names
+    outside that map (every Flex tip rack among them, which ships one revision)
+    stay at 1. A resource can override the version by carrying an ``ot_version``.
     """
     declared = getattr(resource, "ot_load_name", None)
-    if declared is not None:
-      load_name = cast(str, declared)
-      if not is_catalogue_labware(load_name):
-        # Not an OpentronsError: that is the caller's signal to synthesize, which
-        # would hide a typo behind geometry the operator never asked for.
-        raise ValueError(
-          f"'{resource.name}' declares ot_load_name '{load_name}', which Opentrons' labware "
-          "catalogue does not define. Correct the load name, or drop the attribute to have a "
-          "definition built from the resource's own geometry."
-        )
-    elif resource.model is not None and is_catalogue_labware(resource.model):
-      load_name = resource.model
-    else:
+    if declared is None:
       raise OpentronsError(
-        "Cannot determine Opentrons load name",
-        f"'{resource.name}' has no ot_load_name, and its model "
-        f"{resource.model!r} is not in Opentrons' catalogue.",
+        "No Opentrons load name declared",
+        f"'{resource.name}' carries no ot_load_name, so there is no name to load it by.",
       )
 
+    load_name = cast(str, declared)
     version = getattr(resource, "ot_version", None)
     if version is None:
       version = _OT_CATALOGUE_VERSIONS.get(load_name, _OT_VERSION)

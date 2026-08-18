@@ -1199,29 +1199,34 @@ class TrashAddressableAreaTests(unittest.TestCase):
 class CatalogueIdentityTests(unittest.TestCase):
   """How a PLR resource resolves to an Opentrons load name."""
 
-  def test_a_resource_resolves_on_its_model(self):
-    # The model IS the load name on Opentrons' own factories, so nothing needs
-    # to be declared and the resource's instance name is irrelevant.
+  def test_a_declared_load_name_is_what_the_resource_loads_by(self):
     plate = cor_96_wellplate_360uL_Fb(name="anything at all")
-    plate.model = "corning_96_wellplate_360ul_flat"
-    load_name, _version = OpentronsFlex._ot_catalogue_identity(plate)
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"
+    load_name, version = OpentronsFlex._ot_declared_identity(plate)
     self.assertEqual(load_name, "corning_96_wellplate_360ul_flat")
+    self.assertEqual(version, 2)
 
-  def test_a_declared_load_name_outside_the_catalogue_is_a_hard_error(self):
-    # Must NOT raise OpentronsError: the caller treats that as "synthesize one",
-    # which would silently ship geometry the operator never asked for.
+  def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
+    # The robot resolves against its own shipped definitions AND a lab's own
+    # uploads, so any list here would be wrong for somebody's robot.
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flatt"
-    with self.assertRaises(ValueError) as caught:
-      OpentronsFlex._ot_catalogue_identity(plate)
-    self.assertNotIsInstance(caught.exception, OpentronsError)
-    self.assertIn("corning_96_wellplate_360ul_flatt", str(caught.exception))
+    plate.ot_load_name = "a_lab_uploaded_this_one_themselves"
+    load_name, version = OpentronsFlex._ot_declared_identity(plate)
+    self.assertEqual(load_name, "a_lab_uploaded_this_one_themselves")
+    self.assertEqual(version, 1)
 
-  def test_an_unresolvable_resource_asks_for_a_synthesized_definition(self):
+  def test_a_resource_declaring_nothing_asks_for_a_synthesized_definition(self):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.model = None
     with self.assertRaises(OpentronsError):
-      OpentronsFlex._ot_catalogue_identity(plate)
+      OpentronsFlex._ot_declared_identity(plate)
+
+  def test_the_model_never_decides_the_load_name(self):
+    # A PLR model is not an Opentrons load name, and sending one that merely
+    # looks like a load name would load the wrong labware. Declaring is the rule.
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.model = "corning_96_wellplate_360ul_flat"
+    with self.assertRaises(OpentronsError):
+      OpentronsFlex._ot_declared_identity(plate)
 
   def test_the_instance_name_never_decides_the_load_name(self):
     # It is a user-chosen label, so naming a plate after a tip rack must not
@@ -1229,7 +1234,7 @@ class CatalogueIdentityTests(unittest.TestCase):
     plate = cor_96_wellplate_360uL_Fb(name="flex_96_tiprack_50ul")
     plate.model = None
     with self.assertRaises(OpentronsError):
-      OpentronsFlex._ot_catalogue_identity(plate)
+      OpentronsFlex._ot_declared_identity(plate)
 
 
 if __name__ == "__main__":
