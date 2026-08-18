@@ -22,13 +22,90 @@ activity performed to execute them.
 An instrumented method remains a no-op with respect to events unless an EventBus with at least
 one subscriber is active. Use one of these helpers:
 
-- `@evented_operation(...)` for one public async method.
-- `with event_operation(...):` for one logical operation implemented by several calls.
+- `@evented_operation(...)` for a trivial projection of one public async method's invocation.
+- `with event_operation(...):` for explicit semantic context assembled inside an operation.
 - `emit_event(...)` only for a meaningful state transition that is not an operation lifecycle.
 
 Use a low-level diagnostic event only when the transport boundary itself is useful to observe.
 Diagnostic events may inherit the enclosing semantic operation context, but do not define a new
 protocol-level action or resource-transfer meaning.
+
+## Choosing an instrumentation style
+
+Prefer explicit `event_operation()` construction for new semantic frontend operations. It keeps
+the event boundary and metadata next to the code that determines their meaning:
+
+```python
+async def move_to_target(self, requested_target: str) -> None:
+  target = self.resolve_target(requested_target)
+  target_coordinate = self.coordinate_for_target(target)
+
+  with event_operation(
+    "plate_mover.move_to_target",
+    device=resource_reference(self),
+    resources=[],
+    requested_target=requested_target,
+    target=target,
+    target_coordinate=coordinate_reference(target_coordinate),
+  ):
+    await self.backend.move_to(target_coordinate)
+```
+
+Compute metadata before entering the operation scope when doing so has no hardware side effects.
+Perform operation validation inside the scope when validation failures are part of the operation's
+lifecycle. Always enter the scope before issuing hardware commands so command failures emit the
+correlated `.failed` event. If meaningful data is known only after successful execution, expose it
+with `completed_data_factory`; return the full completed-event payload, including stable invocation
+context:
+
+```python
+operation_data = {
+  "device": resource_reference(self),
+  "resources": [resource_reference(plate)],
+}
+completion_data: dict[str, object] = {}
+with event_operation(
+  "reader.read_plate",
+  **operation_data,
+  completed_data_factory=lambda: {**operation_data, **completion_data},
+):
+  result = await self.backend.read_plate(plate)
+  completion_data["result"] = result
+```
+
+`@evented_operation(...)` remains appropriate when all event metadata is a simple, pure projection
+of invocation arguments and pre-operation resource state. Its context factory is called with the
+method's original `*args` and `**kwargs`; the decorator does not inspect, bind, normalize, or apply
+defaults to the call. The context factory must therefore mirror the decorated method's calling
+signature, including positional order, parameter kinds, defaults, and `**backend_kwargs`:
+
+```python
+def _set_temperature_event_context(
+  self: "TemperatureController",
+  temperature: float,
+  passive: bool = False,
+) -> dict[str, object]:
+  return {
+    "device": resource_reference(self),
+    "resources": [] if self.resource is None else [resource_reference(self.resource)],
+    "target_temperature": temperature,
+    "passive": passive,
+  }
+
+
+@evented_operation("temperature_controller.set_temperature", _set_temperature_event_context)
+async def set_temperature(
+  self,
+  temperature: float,
+  passive: bool = False,
+) -> None:
+  ...
+```
+
+Do not use a decorator context factory when event meaning depends on validation, normalization,
+resolved targets, derived values, hardware responses, or final resource state. Construct the event
+explicitly inside the operation instead. In either style, context construction must be pure: it
+must not command hardware, mutate resource state, or perform expensive I/O.
 
 ## Event contract
 
@@ -108,13 +185,14 @@ references.
 Use for `setup()` and `stop()` on a public PLR machine frontend.
 
 ```python
-@evented_operation(
-  "machine.setup",
-  lambda self, **_: {
+def _setup_event_context(self, **backend_kwargs):
+  return {
     "device": device_reference(self, name="plate_reader"),
     "resources": [],
-  },
-)
+  }
+
+
+@evented_operation("machine.setup", _setup_event_context)
 async def setup(self, **backend_kwargs):
   ...
 ```
@@ -261,16 +339,20 @@ When adding EventBus support to a frontend or driver:
 
 1. Choose public semantic operation boundaries; do not decorate transport primitives by default.
 2. Use a stable `<component>.<operation>` name and one event scope per logical action.
-3. Match the context factory's positional and keyword parameters to the decorated public method.
-   `evented_operation()` invokes the factory with the method's original `*args` and `**kwargs`.
-4. Include `device` and direct `resources` in the context factory.
-5. Preserve PLR resource semantics; use ancestry for context rather than substituting resources.
-6. Use PLR's default units without repeating them in field names. Add a suffix only when a value
+3. Prefer explicit `event_operation()` construction, especially when context includes validated,
+   normalized, resolved, derived, measured, or final-state values.
+4. Use `@evented_operation(...)` only for a trivial invocation projection. Match the context
+   factory's complete calling signature to the decorated method; the decorator forwards the
+   original `*args` and `**kwargs` without binding or normalization.
+5. Include `device` and direct `resources` in the operation context.
+6. Preserve PLR resource semantics; use ancestry for context rather than substituting resources.
+7. Use PLR's default units without repeating them in field names. Add a suffix only when a value
    deliberately uses a different unit or representation, such as `speed_rpm` or `speed_pct`.
-7. Include `source` and `destination` only for actual resource transfers.
-8. Add tests for `.started`, `.completed`, and `.failed`, including operation-ID correlation and
-   both positional and keyword invocation when the public method supports both.
-9. Verify no EventBus listener is required for normal device operation and that listener failures
+8. Include `source` and `destination` only for actual resource transfers.
+9. Add tests for `.started`, `.completed`, and `.failed`, including operation-ID correlation. For
+   decorated methods, test both positional and keyword invocation when the public method supports
+   both.
+10. Verify no EventBus listener is required for normal device operation and that listener failures
    cannot alter hardware control flow.
 
 New or existing drivers should adopt these conventions incrementally at their public semantic API

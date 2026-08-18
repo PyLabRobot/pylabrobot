@@ -10,23 +10,23 @@ from .backend import TemperatureControllerBackend
 
 
 def _temperature_controller_event_context(
-  temperature_controller: "TemperatureController",
+  self: "TemperatureController",
 ) -> dict[str, Any]:
   """Describe a thermal device and its directly loaded resource, when present."""
-  context: dict[str, Any] = {"device": resource_reference(temperature_controller)}
-  if temperature_controller.resource is not None:
-    context["resources"] = [resource_reference(temperature_controller.resource)]
-  if temperature_controller.target_temperature is not None:
-    context["target_temperature"] = float(temperature_controller.target_temperature)
+  context: dict[str, Any] = {"device": resource_reference(self)}
+  if self.resource is not None:
+    context["resources"] = [resource_reference(self.resource)]
+  if self.target_temperature is not None:
+    context["target_temperature"] = float(self.target_temperature)
   return context
 
 
 def _set_temperature_event_context(
-  temperature_controller: "TemperatureController",
+  self: "TemperatureController",
   temperature: float,
-  passive: Optional[bool] = None,
+  passive: bool = False,
 ) -> dict[str, Any]:
-  context = _temperature_controller_event_context(temperature_controller)
+  context = _temperature_controller_event_context(self)
   context["target_temperature"] = float(temperature)
   if passive is not None:
     context["passive"] = passive
@@ -34,11 +34,11 @@ def _set_temperature_event_context(
 
 
 def _wait_for_temperature_event_context(
-  temperature_controller: "TemperatureController",
-  timeout: Optional[float] = None,
-  tolerance: Optional[float] = None,
+  self: "TemperatureController",
+  timeout: float = 300.0,
+  tolerance: float = 0.5,
 ) -> dict[str, Any]:
-  context = _temperature_controller_event_context(temperature_controller)
+  context = _temperature_controller_event_context(self)
   if timeout is not None:
     context["timeout"] = float(timeout)
   if tolerance is not None:
@@ -47,10 +47,10 @@ def _wait_for_temperature_event_context(
 
 
 def _hold_temperature_event_context(
-  temperature_controller: "TemperatureController",
+  self: "TemperatureController",
   duration: float,
 ) -> dict[str, Any]:
-  context = _temperature_controller_event_context(temperature_controller)
+  context = _temperature_controller_event_context(self)
   context["duration"] = float(duration)
   return context
 

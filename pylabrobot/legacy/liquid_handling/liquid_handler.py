@@ -90,15 +90,15 @@ TipPresenceProbingMethod = Callable[
 
 
 def _resource_pickup_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   resource: Resource,
   offset: Coordinate = Coordinate.zero(),
   pickup_distance_from_top: Optional[float] = None,
   direction: GripDirection = GripDirection.FRONT,
-  **_: Any,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
   context = {
-    "device": resource_reference(liquid_handler),
+    "device": resource_reference(self),
     "resources": [resource_reference(resource)],
   }
   if resource.parent is not None:
@@ -115,13 +115,13 @@ def _picked_resource_event_context(liquid_handler: "LiquidHandler") -> Dict[str,
 
 
 def _resource_drop_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
   offset: Coordinate = Coordinate.zero(),
   direction: GripDirection = GripDirection.FRONT,
-  **_: Any,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
-  context = _picked_resource_event_context(liquid_handler)
+  context = _picked_resource_event_context(self)
   if isinstance(destination, Resource):
     context["destination"] = resource_reference(destination)
   else:
@@ -130,13 +130,13 @@ def _resource_drop_event_context(
 
 
 def _resource_move_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   to: Coordinate,
   offset: Coordinate = Coordinate.zero(),
   direction: Optional[GripDirection] = None,
-  **_: Any,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
-  return _picked_resource_event_context(liquid_handler)
+  return _picked_resource_event_context(self)
 
 
 def _liquid_operation_plate(resource: Container) -> Resource:
@@ -160,7 +160,7 @@ def _safe_event_volume(value: Any) -> Any:
 
 
 def _liquid_operation_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   resources: Sequence[Container],
   vols: Sequence[Any],
   use_channels: Optional[List[int]] = None,
@@ -170,12 +170,12 @@ def _liquid_operation_event_context(
   blow_out_air_volume: Optional[List[Optional[float]]] = None,
   spread: Literal["wide", "tight", "custom"] = "wide",
   mix: Optional[List[Mix]] = None,
-  **_: Any,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
   """Describe requested liquid operations using their directly operated containers."""
 
   resource_list = list(resources)
-  channels = use_channels or liquid_handler._default_use_channels or list(range(len(resource_list)))
+  channels = use_channels or self._default_use_channels or list(range(len(resource_list)))
   operation_resources = resource_list
   if len(operation_resources) == 1 and len(channels) > 1:
     operation_resources = operation_resources * len(channels)
@@ -204,7 +204,7 @@ def _liquid_operation_event_context(
     )
 
   return {
-    "device": resource_reference(liquid_handler),
+    "device": resource_reference(self),
     "resources": unique_operation_resources,
     "liquid_operations": liquid_operations,
   }
@@ -243,51 +243,51 @@ def _tip_operation_event_context(
 
 
 def _tip_pickup_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   tip_spots: List[TipSpot],
   use_channels: Optional[List[int]] = None,
   offsets: Optional[List[Coordinate]] = None,
-  **_: Any,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
-  return _tip_operation_event_context(liquid_handler, tip_spots, use_channels)
+  return _tip_operation_event_context(self, tip_spots, use_channels)
 
 
 def _tip_drop_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   tip_spots: Sequence[Union[TipSpot, Trash]],
   use_channels: Optional[List[int]] = None,
   offsets: Optional[List[Coordinate]] = None,
   allow_nonzero_volume: bool = False,
-  **_: Any,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
-  return _tip_operation_event_context(liquid_handler, tip_spots, use_channels)
+  return _tip_operation_event_context(self, tip_spots, use_channels)
 
 
 def _tip_rack_pickup_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   tip_rack: TipRack,
   offset: Coordinate = Coordinate.zero(),
-  **_: Any,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
   """Describe a 96-head pickup by its directly operated tip rack."""
 
   return {
-    "device": resource_reference(liquid_handler),
+    "device": resource_reference(self),
     "resources": [resource_reference(tip_rack)],
   }
 
 
 def _tip_rack_drop_event_context(
-  liquid_handler: "LiquidHandler",
+  self: "LiquidHandler",
   resource: Union[TipRack, Trash],
   offset: Coordinate = Coordinate.zero(),
   allow_nonzero_volume: bool = False,
-  **_: Any,
+  **backend_kwargs: Any,
 ) -> Dict[str, Any]:
   """Describe a 96-head drop by its directly operated rack or trash resource."""
 
   return {
-    "device": resource_reference(liquid_handler),
+    "device": resource_reference(self),
     "resources": [resource_reference(resource)],
   }
 
@@ -724,9 +724,9 @@ class LiquidHandler(Resource, Machine):
     # checks
     self._assert_resources_exist(tip_spots)
     self._make_sure_channels_exist(use_channels)
-    assert len(tip_spots) == len(offsets) == len(use_channels), (
-      "Number of tips and offsets and use_channels must be equal."
-    )
+    assert (
+      len(tip_spots) == len(offsets) == len(use_channels)
+    ), "Number of tips and offsets and use_channels must be equal."
 
     # create operations
     pickups = [
@@ -869,9 +869,9 @@ class LiquidHandler(Resource, Machine):
     # checks
     self._assert_resources_exist(tip_spots)
     self._make_sure_channels_exist(use_channels)
-    assert len(tip_spots) == len(offsets) == len(use_channels) == len(tips), (
-      "Number of channels and offsets and use_channels and tips must be equal."
-    )
+    assert (
+      len(tip_spots) == len(offsets) == len(use_channels) == len(tips)
+    ), "Number of channels and offsets and use_channels and tips must be equal."
 
     # create operations
     drops = [
@@ -2414,9 +2414,9 @@ class LiquidHandler(Resource, Machine):
 
     # get the location of the destination
     if isinstance(destination, ResourceStack):
-      assert destination.direction == "z", (
-        "Only ResourceStacks with direction 'z' are currently supported"
-      )
+      assert (
+        destination.direction == "z"
+      ), "Only ResourceStacks with direction 'z' are currently supported"
 
       # the resource can be rotated wrt the ResourceStack. This is allowed as long
       # as it's in multiples of 180 degrees. 90 degrees is not allowed.

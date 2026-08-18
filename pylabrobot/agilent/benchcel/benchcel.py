@@ -506,31 +506,31 @@ def parse_current_position_response(frame: Frame, *, selector: int = 1) -> Curre
 
 
 def _downstack_event_context(
-  benchcel: "BenchCel4R", stack: ResourceStack, *, timeout: float = 30.0
+  self: "BenchCel4R", stack: ResourceStack, *, timeout: float = 30.0
 ) -> dict:
   plate = stack.get_top_item() if len(stack.children) > 0 else None
   return {
-    "device": resource_reference(benchcel),
+    "device": resource_reference(self),
     "resources": [] if plate is None else [resource_reference(plate)],
     "source": resource_reference(stack),
-    "destination": resource_reference(benchcel.loading_tray),
+    "destination": resource_reference(self.loading_tray),
   }
 
 
 def _upstack_event_context(
-  benchcel: "BenchCel4R", stack: ResourceStack, *, timeout: float = 30.0
+  self: "BenchCel4R", stack: ResourceStack, *, timeout: float = 30.0
 ) -> dict:
-  plate = benchcel.loading_tray.resource
+  plate = self.loading_tray.resource
   return {
-    "device": resource_reference(benchcel),
+    "device": resource_reference(self),
     "resources": [] if plate is None else [resource_reference(plate)],
-    "source": resource_reference(benchcel.loading_tray),
+    "source": resource_reference(self.loading_tray),
     "destination": resource_reference(stack),
   }
 
 
 def _stack_transfer_event_context(
-  benchcel: "BenchCel4R",
+  self: "BenchCel4R",
   source: ResourceStack,
   destination: ResourceStack,
   *,
@@ -538,7 +538,7 @@ def _stack_transfer_event_context(
 ) -> dict:
   plate = source.get_top_item() if len(source.children) > 0 else None
   return {
-    "device": resource_reference(benchcel),
+    "device": resource_reference(self),
     "resources": [] if plate is None else [resource_reference(plate)],
     "source": resource_reference(source),
     "destination": resource_reference(destination),

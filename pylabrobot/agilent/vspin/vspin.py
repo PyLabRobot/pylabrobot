@@ -56,7 +56,7 @@ bucket_1_not_set_error = RuntimeError(
 
 
 def _vspin_event_context(
-  vspin: "VSpin",
+  self: "VSpin",
   g: float = 500,
   duration: float = 60,
   acceleration: float = 0.8,
@@ -68,11 +68,11 @@ def _vspin_event_context(
       "holder": resource_reference(bucket),
       "resource": resource_reference(bucket.resource),
     }
-    for bucket in (vspin.bucket1, vspin.bucket2)
+    for bucket in (self.bucket1, self.bucket2)
     if bucket.resource is not None
   ]
   return {
-    "device": device_reference(vspin, name=vspin.name),
+    "device": device_reference(self, name=self.name),
     "resources": [bucket["resource"] for bucket in bucket_resources],
     "bucket_resources": bucket_resources,
     "relative_centrifugal_force": g,
