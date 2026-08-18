@@ -846,18 +846,17 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       params = load_cmds[0]["params"]
       self.assertEqual(params["namespace"], "opentrons")
       self.assertEqual(params["loadName"], "corning_96_wellplate_360ul_flat")
-      # Revision 2, not 1: version 1 of this plate declares no gripper grip
-      # height, and 2 adds it without moving a single well.
-      self.assertEqual(params["version"], 2)
+      # This resource declares no ot_version, and revision 1 is the only one
+      # every robot is guaranteed to hold, so that is what goes out.
+      self.assertEqual(params["version"], 1)
     finally:
       asyncio.run(flex.stop())
 
-  def test_catalogue_version_falls_back_to_1_and_a_resource_can_override_it(self):
+  def test_version_falls_back_to_1_and_a_resource_can_override_it(self):
     flex, transport = _flex_with_transport()
     asyncio.run(flex.setup())
     try:
       rack = _tip_rack()
-      # Flex tip racks ship one revision, so they stay at 1.
       rack.ot_load_name = "opentrons_flex_96_tiprack_50ul"  # type: ignore[attr-defined]
       flex.deck.assign_child_at_slot(rack, "C1")
       asyncio.run(flex._ensure_labware_loaded(rack))

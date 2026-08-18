@@ -1196,7 +1196,7 @@ class TrashAddressableAreaTests(unittest.TestCase):
       asyncio.run(flex.stop())
 
 
-class CatalogueIdentityTests(unittest.TestCase):
+class DeclaredIdentityTests(unittest.TestCase):
   """How a PLR resource resolves to an Opentrons load name."""
 
   def test_a_declared_load_name_is_what_the_resource_loads_by(self):
@@ -1204,7 +1204,15 @@ class CatalogueIdentityTests(unittest.TestCase):
     plate.ot_load_name = "corning_96_wellplate_360ul_flat"
     load_name, version = OpentronsFlex._ot_declared_identity(plate)
     self.assertEqual(load_name, "corning_96_wellplate_360ul_flat")
-    self.assertEqual(version, 2)
+    self.assertEqual(version, 1)
+
+  def test_the_revision_is_the_resource_s_to_declare_too(self):
+    # Revision 1 is the only one every robot holds, so a caller who wants a
+    # later one (for its gripper grip height) has to say so.
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"
+    plate.ot_version = 2
+    self.assertEqual(OpentronsFlex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2))
 
   def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
     # The robot resolves against its own shipped definitions AND a lab's own
