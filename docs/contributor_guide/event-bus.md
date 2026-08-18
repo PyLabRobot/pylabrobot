@@ -73,6 +73,10 @@ with event_operation(
   completion_data["result"] = result
 ```
 
+The completion factory runs after the operation body has succeeded. Keep it pure, deterministic,
+and non-throwing so event construction cannot turn a successful hardware operation into an
+application failure.
+
 `@evented_operation(...)` remains appropriate when all event metadata is a simple, pure projection
 of invocation arguments and pre-operation resource state. Its context factory is called with the
 method's original `*args` and `**kwargs`; the decorator does not inspect, bind, normalize, or apply
