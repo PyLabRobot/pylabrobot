@@ -16,7 +16,7 @@ the robot's own for official load names, or the uploaded custom definition
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Optional, Set
 
 from pylabrobot.opentrons.flex_wire import (
   UNTESTED_HARDWARE_WARNING,
@@ -51,16 +51,28 @@ class FlexGripper:
   so a plate cannot be re-oriented between slots.
   """
 
+  # Confirmed on a real Flex gripper: jaw open/close/release, a free-space
+  # move on the extension mount, and carrying a plate between deck slots.
+  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
+    {
+      "grip",
+      "move_labware",
+      "move_to",
+      "open_jaw",
+      "ungrip",
+    }
+  )
+
   def __init__(self, flex: "OpentronsFlex", gripper_model: str) -> None:
     self.flex = flex
     self.gripper_model = gripper_model
-    self._untested_hardware_warned: bool = False
+    self._untested_hardware_warned: Set[str] = set()
 
   def _warn_untested_hardware(self, op: str) -> None:
-    """Log a one-time notice that gripper ops are not yet verified on real hardware."""
-    if self._untested_hardware_warned:
+    """Log a one-time notice for each gripper op with no real-hardware verification."""
+    if op in self._HARDWARE_VERIFIED_OPS or op in self._untested_hardware_warned:
       return
-    self._untested_hardware_warned = True
+    self._untested_hardware_warned.add(op)
     logger.warning(UNTESTED_HARDWARE_WARNING, type(self).__name__, op)
 
   async def move_labware(
