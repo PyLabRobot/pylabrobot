@@ -20,23 +20,8 @@ logger = logging.getLogger(__name__)
 
 _OT_NAMESPACE = "opentrons"
 
-# Definition revision per load name -- see _ot_declared_identity.
+# Every definition has a revision 1, so it is the only version safe to assume.
 _OT_VERSION = 1
-_OT_CATALOGUE_VERSIONS = {
-  "appliedbiosystemsmicroamp_384_wellplate_40ul": 3,
-  "armadillo_96_wellplate_200ul_pcr_full_skirt": 2,
-  "biorad_384_wellplate_50ul": 2,
-  "biorad_96_wellplate_200ul_pcr": 2,
-  "corning_12_wellplate_6.9ml_flat": 2,
-  "corning_384_wellplate_112ul_flat": 2,
-  "corning_48_wellplate_1.6ml_flat": 2,
-  "corning_96_wellplate_360ul_flat": 2,
-  "nest_1_reservoir_195ml": 2,
-  "nest_96_wellplate_100ul_pcr_full_skirt": 2,
-  "nest_96_wellplate_200ul_flat": 2,
-  "nest_96_wellplate_2ml_deep": 2,
-  "opentrons_96_wellplate_200ul_pcr_full_skirt": 2,
-}
 
 # Discovered pipette channel count -> matching head class.
 _CHANNELS_TO_HEAD: Dict[int, Type[_FlexHead]] = {
@@ -498,16 +483,16 @@ class OpentronsFlex(OpentronsRobot):
     name it cannot resolve fails the ``loadLabware``, which surfaces where a
     caller expects it: at the point the labware goes onto the deck.
 
-    A definition is versioned per load name, and version 1 is the OLDEST
-    revision -- for much of Opentrons' own catalogue it predates the Flex and
-    declares no gripper grip height, so the robot grips at the labware's
-    mid-height rather than where the vendor says. ``_OT_CATALOGUE_VERSIONS``
-    therefore pins the EARLIEST revision that states one. Earliest, not newest:
-    a robot only holds the revisions its own software shipped with, and these
-    have shipped since API 2.14, while their well geometry is identical to
-    version 1's -- so the bump changes the grip and nothing else. Load names
-    outside that map (every Flex tip rack among them, which ships one revision)
-    stay at 1. A resource can override the version by carrying an ``ot_version``.
+    ``ot_version`` picks the revision, and which revisions a robot holds is the
+    robot's business too, so this defaults to 1 rather than guessing higher.
+    Revision 1 is the one every definition has. It is also the OLDEST, and for
+    much of Opentrons' own catalogue it predates the Flex and states no gripper
+    grip height, so the robot grips at the labware's mid-height rather than
+    where the vendor says. A later revision usually fixes that while leaving the
+    well geometry alone, which is why the resources PyLabRobot ships for those
+    plates declare one. Naming a revision the robot does not hold fails the
+    load, so raising the default here would break older robots to grip better on
+    newer ones.
     """
     declared = getattr(resource, "ot_load_name", None)
     if declared is None:
@@ -519,7 +504,7 @@ class OpentronsFlex(OpentronsRobot):
     load_name = cast(str, declared)
     version = getattr(resource, "ot_version", None)
     if version is None:
-      version = _OT_CATALOGUE_VERSIONS.get(load_name, _OT_VERSION)
+      version = _OT_VERSION
     return load_name, cast(int, version)
 
   async def _define_custom_labware(

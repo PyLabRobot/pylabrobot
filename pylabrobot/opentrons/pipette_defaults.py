@@ -21,8 +21,6 @@ guess with.
 
 from typing import Dict, NamedTuple, Tuple
 
-SHARED_DATA_VERSION = "9.1.2"
-
 
 class FlowRates(NamedTuple):
   """Default aspirate, dispense and blow-out rates in uL/s."""
