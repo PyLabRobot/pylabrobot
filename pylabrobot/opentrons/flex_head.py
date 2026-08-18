@@ -24,7 +24,19 @@ tracks it.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import (
+  TYPE_CHECKING,
+  Any,
+  Dict,
+  FrozenSet,
+  List,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+  Union,
+  cast,
+)
 
 from pylabrobot.opentrons.checks import traversal_z
 from pylabrobot.opentrons.flex_wire import UNTESTED_HARDWARE_WARNING
@@ -1314,6 +1326,7 @@ class FlexHead8(_FlexHead):
       "dispense_single",
       "drop_single_tip",
       "drop_tips",
+      "get_tip_presence",
       "liquid_probe",
       "move_to_well",
       "pick_up_single_tip",
@@ -2215,9 +2228,7 @@ class FlexHead8(_FlexHead):
   @classmethod
   def _idle_nozzles_are_clear(cls, labware: ItemizedResource, well: str, nozzle: str) -> bool:
     """Whether anchoring here leaves the seven idle nozzles over empty positions."""
-    return not any(
-      spot.has_tip() for spot in cls._spots_under_idle_nozzles(labware, well, nozzle)
-    )
+    return not any(spot.has_tip() for spot in cls._spots_under_idle_nozzles(labware, well, nozzle))
 
   @classmethod
   def _validate_single_anchor(cls, labware: ItemizedResource, well: str, nozzle: str) -> None:
@@ -2443,8 +2454,8 @@ class FlexHead96(_FlexHead):
 
   Coded but **not yet verified on real 96-channel Flex hardware** --
   Vincent's bench Flex carries an 8-channel pipette, not a 96-channel head.
-  A one-time ``logger.warning`` fires on the first op issued by an instance,
-  and this docstring makes no "validated on hardware" claim.
+  Every op logs the one-time untested-hardware notice the first time an
+  instance issues it, and this docstring makes no "validated on hardware" claim.
   """
 
   # The Flex API's anchor well for 96-channel ALL-mode whole-plate ops; the

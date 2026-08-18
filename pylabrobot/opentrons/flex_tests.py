@@ -1213,7 +1213,9 @@ class DeclaredIdentityTests(unittest.TestCase):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     plate.ot_load_name = "corning_96_wellplate_360ul_flat"
     plate.ot_version = 2
-    self.assertEqual(OpentronsFlex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2))
+    self.assertEqual(
+      OpentronsFlex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2)
+    )
 
   def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
     # The robot resolves against its own shipped definitions AND a lab's own

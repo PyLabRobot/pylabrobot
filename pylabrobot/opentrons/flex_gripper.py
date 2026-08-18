@@ -16,13 +16,9 @@ the robot's own for official load names, or the uploaded custom definition
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pylabrobot.opentrons.flex_wire import (
-  UNTESTED_HARDWARE_WARNING,
-  _require_robot_commands,
-  slot_wire_location,
-)
+from pylabrobot.opentrons.flex_wire import _require_robot_commands, slot_wire_location
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.resources.resource import Resource
 
@@ -49,31 +45,15 @@ class FlexGripper:
   The Flex gripper has NO rotation capability (a hardware limitation, not a
   missing API): labware keeps its orientation through every gripper motion,
   so a plate cannot be re-oriented between slots.
-  """
 
-  # Confirmed on a real Flex gripper: jaw open/close/release, a free-space
-  # move on the extension mount, and carrying a plate between deck slots.
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
-    {
-      "grip",
-      "move_labware",
-      "move_to",
-      "open_jaw",
-      "ungrip",
-    }
-  )
+  Every op here has been run on a real Flex gripper: jaw open/close/release,
+  a free-space move on the extension mount, and carrying a plate between deck
+  slots. Unlike the heads, no op logs the untested-hardware notice.
+  """
 
   def __init__(self, flex: "OpentronsFlex", gripper_model: str) -> None:
     self.flex = flex
     self.gripper_model = gripper_model
-    self._untested_hardware_warned: Set[str] = set()
-
-  def _warn_untested_hardware(self, op: str) -> None:
-    """Log a one-time notice for each gripper op with no real-hardware verification."""
-    if op in self._HARDWARE_VERIFIED_OPS or op in self._untested_hardware_warned:
-      return
-    self._untested_hardware_warned.add(op)
-    logger.warning(UNTESTED_HARDWARE_WARNING, type(self).__name__, op)
 
   async def move_labware(
     self,
@@ -111,7 +91,6 @@ class FlexGripper:
       OpentronsError: If the resource is not on the deck, or ``to_slot`` is
         invalid or occupied. Raised before any wire command is sent.
     """
-    self._warn_untested_hardware("move_labware")
     deck = self.flex.deck
     name = getattr(resource, "name", str(resource))
 
@@ -158,7 +137,6 @@ class FlexGripper:
     still be holding the labware; this releases it so the operator can
     recover the plate by hand.
     """
-    self._warn_untested_hardware("ungrip")
     await self.flex._execute_command("unsafe/ungripLabware", {})
 
   # --- robot/*: direct gripper motion and jaw control ---
@@ -174,7 +152,6 @@ class FlexGripper:
     accepts can still be out of bounds. ``speed`` is in mm/s (robot default
     if None).
     """
-    self._warn_untested_hardware("move_to")
     _require_robot_commands("robot/moveTo", self.flex.api_version)
     # The robot/* commands take snake_case params, unlike the rest of the API.
     params: Dict[str, Any] = {"mount": "extension", "destination": {"x": x, "y": y, "z": z}}
@@ -194,7 +171,6 @@ class FlexGripper:
       OpentronsError: If ``force`` is outside the accepted range -- raised
         before any wire command is sent.
     """
-    self._warn_untested_hardware("grip")
     _require_robot_commands("robot/closeGripperJaw", self.flex.api_version)
     params: Dict[str, Any] = {}
     if force is not None:
@@ -212,6 +188,5 @@ class FlexGripper:
 
     Releases anything held; there is no partial-open width parameter.
     """
-    self._warn_untested_hardware("open_jaw")
     _require_robot_commands("robot/openGripperJaw", self.flex.api_version)
     await self.flex._execute_command("robot/openGripperJaw", {})
