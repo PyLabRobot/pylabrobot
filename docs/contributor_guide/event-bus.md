@@ -285,6 +285,11 @@ must not reissue `set_temperature()` or claim that an attached resource reached 
 temperature. New direct vendor frontends should emit this same semantic operation independently;
 they do not need to inherit from the legacy temperature-controller frontend.
 
+For an operation that waits for a controller reading to reach its target, retain
+`target_temperature` in the full lifecycle and add `current_temperature` to the completed event.
+This is the final controller sensor reading that satisfied the operation; it does not represent a
+measurement of the loaded resource unless the frontend explicitly provides such a measurement.
+
 ### Centrifuge and loader operations
 
 Use `centrifuge.spin` for one requested centrifuge cycle. Include every directly loaded

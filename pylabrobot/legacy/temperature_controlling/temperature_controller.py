@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Any, Optional
 
-from pylabrobot.events import evented_operation, resource_reference
+from pylabrobot.events import event_operation, evented_operation, resource_reference
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -116,9 +116,6 @@ class TemperatureController(ResourceHolder, Machine):
     """Get the current temperature of the temperature controller in Celsius."""
     return await self.backend.get_current_temperature()
 
-  @evented_operation(
-    "temperature_controller.wait_for_temperature", _wait_for_temperature_event_context
-  )
   async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5) -> None:
     """Wait for the temperature to reach the target temperature. The target temperature must be
     set by `set_temperature()`.
@@ -127,15 +124,23 @@ class TemperatureController(ResourceHolder, Machine):
       timeout: Timeout in seconds.
       tolerance: Tolerance in Celsius.
     """
-    if self.target_temperature is None:
-      raise RuntimeError("Target temperature is not set.")
-    start = time.time()
-    while time.time() - start < timeout:
-      temperature = await self.get_temperature()
-      if abs(temperature - self.target_temperature) < tolerance:
-        return
-      await asyncio.sleep(1.0)
-    raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
+    operation_data = _wait_for_temperature_event_context(self, timeout, tolerance)
+    completion_data: dict[str, Any] = {}
+    with event_operation(
+      "temperature_controller.wait_for_temperature",
+      **operation_data,
+      completed_data_factory=lambda: {**operation_data, **completion_data},
+    ):
+      if self.target_temperature is None:
+        raise RuntimeError("Target temperature is not set.")
+      start = time.time()
+      while time.time() - start < timeout:
+        temperature = await self.get_temperature()
+        if abs(temperature - self.target_temperature) < tolerance:
+          completion_data["current_temperature"] = float(temperature)
+          return
+        await asyncio.sleep(1.0)
+      raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
 
   @evented_operation("temperature_controller.hold_temperature", _hold_temperature_event_context)
   async def hold_temperature(self, duration: float) -> None:
