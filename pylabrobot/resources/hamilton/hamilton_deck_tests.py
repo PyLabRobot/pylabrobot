@@ -96,8 +96,8 @@ class HamiltonDeckTests(unittest.TestCase):
 
   def test_get_trash_area96_survives_serialization_round_trip(self):
     """`serialize()` encodes the 96 trash as a child and sets `with_trash96=False`, so the
-    rebuilt deck's `__init__` leaves the cached `_trash96` pointer as None. `get_trash_area96()`
-    must still resolve it from the child tree rather than raising."""
+    rebuilt deck never runs the `with_trash96` branch in `__init__`. `get_trash_area96()` must
+    still resolve it from the child tree rather than raising."""
     deck = self.build_layout()
     original_location = deck.get_trash_area96().get_location_wrt(deck)
 
@@ -107,10 +107,10 @@ class HamiltonDeckTests(unittest.TestCase):
     self.assertEqual(deck2.get_trash_area96().get_location_wrt(deck2), original_location)
 
   def test_get_trash_area96_raises_after_clear_include_trash(self):
-    """`clear(include_trash=True)` unassigns the 96 trash. `get_trash_area96()` must raise
-    rather than hand back the now-orphaned resource via the stale cached pointer."""
+    """`clear(include_trash=True)` unassigns the 96 trash, so `get_trash_area96()` must raise
+    rather than hand back the now-orphaned resource."""
     deck = self.build_layout()
-    deck.get_trash_area96()  # populate the cache before invalidating it
+    deck.get_trash_area96()  # resolves while still assigned
 
     deck.clear(include_trash=True)
 
