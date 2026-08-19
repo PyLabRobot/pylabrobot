@@ -3,6 +3,24 @@
 `ManualOperator` lets a protocol await work performed by a person without coupling the protocol
 to a terminal, notebook, graphical interface, or external task system.
 
+## Why use a manual operator?
+
+Many protocols start with a direct `input()` call. That is a reasonable choice for a simple
+notebook pause, but `ManualOperator` gives the same physical handoff a reusable PLR contract:
+
+- **Provider independence:** keep the protocol code unchanged while presenting the request through
+  terminal input, a notebook, a custom GUI, LIMS, Slack, or another acknowledgement system.
+- **Explicit outcomes:** providers report `completed`, `cancelled`, or `failed` rather than
+  reducing every acknowledgement to Enter being pressed.
+- **Resource-model reconciliation:** `move_resource()` validates a manual transfer before and
+  after acknowledgement, then applies the corresponding PLR assignment only when the model is
+  still consistent.
+- **Native traceability:** an active EventBus receives a correlated lifecycle with the action,
+  affected resources, endpoints, operator acknowledgement, and failure details where applicable.
+
+The built-in console provider is intentionally simple. It is a practical default for users who
+only need an interactive pause; more capable providers are optional application integrations.
+
 ```python
 from pylabrobot.manual_operator import ConsoleOperatorActionProvider, ManualOperator
 
@@ -32,6 +50,10 @@ class DashboardOperatorActionProvider:
     result = await dashboard.publish_and_wait(action)
     return OperatorActionResult.completed(confirmed_by=result.user)
 ```
+
+For a complete notebook example using a chatterbox incubator, manual plate transfer, plate reader,
+and optional EventBus subscriber, see the
+[ManualOperator Jupyter cookbook](../../cookbook/manual_operator_jupyter.ipynb).
 
 Providers return one of three explicit outcomes:
 
