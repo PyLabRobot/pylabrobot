@@ -458,12 +458,11 @@ class HamiltonSTARDeck(HamiltonDeck):
       origin=origin,
     )
 
-    self._trash96: Optional[Trash] = None
     if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
-      self._trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
+      trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
       self.assign_child_resource(
-        resource=self._trash96,
+        resource=trash96,
         location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=216.4),
       )
 
@@ -548,11 +547,11 @@ class HamiltonSTARDeck(HamiltonDeck):
     return Coordinate(x=x, y=63, z=100)
 
   def get_trash_area96(self) -> Trash:
-    if self._trash96 is None:
+    if not self.has_resource("trash_core96"):
       raise RuntimeError(
         "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
       )
-    return self._trash96
+    return cast(Trash, self.get_resource("trash_core96"))
 
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""
