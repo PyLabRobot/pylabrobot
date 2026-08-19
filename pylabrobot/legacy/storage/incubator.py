@@ -1,5 +1,5 @@
 import random
-from typing import List, Literal, Optional, Union, cast
+from typing import Any, List, Literal, Mapping, Optional, Union, cast
 
 from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.legacy.machines import Machine
@@ -65,6 +65,7 @@ class Incubator(Machine, Resource):
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     Machine.__init__(self, backend=backend)
     self.backend: IncubatorBackend = backend  # fix type
@@ -77,6 +78,7 @@ class Incubator(Machine, Resource):
       rotation=rotation,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self.loading_tray = PlateHolder(
       name=self.name + "_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
@@ -242,4 +244,5 @@ class Incubator(Machine, Resource):
       rotation=cast(Optional[Rotation], deserialize(data.get("rotation"))),
       category=data.get("category"),
       model=data.get("model"),
+      metadata=data.get("metadata"),
     )

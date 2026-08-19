@@ -91,16 +91,37 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return arr
 
   async def setup(self, skip_home: bool = False):
-    """Initialize the PreciseFlex backend."""
-    await self.io.setup()
-    await self.set_response_mode("pc")
-    await self.power_on_robot()
-    await self.attach(1)
+    """Bring the arm up: link, power, control, and (unless skipped) home."""
+    await self.connect()
+    await self.initialize()
     if not skip_home:
       await self.home()
 
+  async def connect(self):
+    """Open the link and agree the response protocol. Powers nothing, moves nothing."""
+    await self.io.setup()
+    await self.set_response_mode("pc")
+
+  async def initialize(self):
+    """Raise high power and take control, so the arm accepts commands. Moves nothing.
+
+    Homing stays separate because it is the only step that moves: it sweeps the
+    arm through its whole envelope, which is far too much to do just to read a
+    position or check what the controller reports.
+    """
+    await self.power_on_robot()
+    await self.attach(1)
+
   async def stop(self):
-    """Stop the PreciseFlex backend."""
+    """Release the arm."""
+    await self.disconnect()
+
+  async def disconnect(self):
+    """Drop high power and release the link, moving nothing.
+
+    Powers down as well as disconnecting, because ``initialize`` is what raised
+    high power.
+    """
     await self.detach()
     await self.power_off_robot()
     await self.exit()

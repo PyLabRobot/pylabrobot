@@ -16,6 +16,7 @@ from typing import (
   Generator,
   List,
   Literal,
+  Mapping,
   Optional,
   Sequence,
   Set,
@@ -339,6 +340,7 @@ class LiquidHandler(Resource, Machine):
     deck: Deck,
     default_offset_head96: Optional[Coordinate] = None,
     name: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Initialize a LiquidHandler.
 
@@ -347,6 +349,7 @@ class LiquidHandler(Resource, Machine):
       deck: Deck to use.
       default_offset_head96: Base offset applied to all 96-head operations.
       name: Name of the liquid handler. If not provided, defaults to ``lh_{deck.name}``.
+      metadata: Metadata for the liquid handler.
     """
 
     Resource.__init__(
@@ -356,6 +359,7 @@ class LiquidHandler(Resource, Machine):
       size_y=deck._size_y,
       size_z=deck._size_z,
       category="liquid_handler",
+      metadata=metadata,
     )
     Machine.__init__(self, backend=backend)
 
@@ -2746,6 +2750,8 @@ class LiquidHandler(Resource, Machine):
       deck=deck,
       backend=backend,
       default_offset_head96=default_offset,
+      name=data.get("name"),
+      metadata=data.get("metadata"),
     )
 
   @classmethod

@@ -116,25 +116,16 @@ events.
 
 | Frontend | Canonical semantic operations |
 | --- | --- |
-| `pylabrobot.legacy.machines.Machine` | `machine.setup`, `machine.stop` |
-| `pylabrobot.legacy.storage.Incubator` | `incubator.fetch_plate`, `incubator.take_in_plate` |
-| `pylabrobot.legacy.liquid_handling.LiquidHandler` | `liquid_handler.resource_pickup`, `liquid_handler.resource_move`, `liquid_handler.resource_drop`, `liquid_handler.tip_pickup`, `liquid_handler.tip_drop`, `liquid_handler.tip_pickup_96`, `liquid_handler.tip_drop_96`, `liquid_handler.aspirate`, `liquid_handler.dispense` |
-| `pylabrobot.legacy.shaking.Shaker` | `shaker.shake`, `shaker.stop_shaking` |
-| `pylabrobot.legacy.temperature_controlling.TemperatureController` | `temperature_controller.set_temperature`, `temperature_controller.wait_for_temperature`, `temperature_controller.hold_temperature`, `temperature_controller.deactivate` |
-| `pylabrobot.agilent.vspin.VSpin` | `centrifuge.spin` |
-| `pylabrobot.agilent.vspin.Access2` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
-| `pylabrobot.agilent.benchcel.BenchCel4R` | `benchcel.downstack`, `benchcel.upstack`, `benchcel.move_plate_between_stacks` |
-| `pylabrobot.brooks.precise_flex.PreciseFlex` lifecycle/control | `precise_flex.setup`, `precise_flex.stop`, `precise_flex.power_on`, `precise_flex.power_off`, `precise_flex.recover_from_fault`, `precise_flex.home`, `precise_flex.start_freedrive`, `precise_flex.stop_freedrive`, `precise_flex.halt`, `precise_flex.park` |
-| `pylabrobot.brooks.precise_flex.PreciseFlex` motion | `precise_flex.move_to_joint_position`, `precise_flex.move_to_location`, `precise_flex.move_through_cartesian_poses`, `precise_flex.move_gripper`, `precise_flex.move_gripper_joint_position`, `precise_flex.move_rail`, `precise_flex.pick_up_at_joint_position`, `precise_flex.drop_at_joint_position`, `precise_flex.pick_up_at_location`, `precise_flex.drop_at_location` |
-
-PLR also emits these state and diagnostic records independently of semantic frontend coverage:
-
-| Producer | Events |
-| --- | --- |
-| `pylabrobot.resources.Resource` assignment methods | `resource.assigned`, `resource.unassigned` |
-| `pylabrobot.io.Serial`, `pylabrobot.io.USB`, `pylabrobot.io.FTDI` | `io.read`, `io.write` |
-| Hamilton USB transport | `firmware.command.started`, `firmware.command.completed`, `firmware.command.failed` |
-| `pylabrobot.brooks.precise_flex.PreciseFlex.send_command` | `precise_flex.firmware_command.started`, `precise_flex.firmware_command.completed`, `precise_flex.firmware_command.failed` |
+| `legacy.machines.Machine` | `machine.setup`, `machine.stop` |
+| `legacy.storage.Incubator` | `incubator.fetch_plate`, `incubator.take_in_plate` |
+| `legacy.liquid_handling.LiquidHandler` | resource pickup/move/drop; tip pickup/drop; 96-head tip pickup/drop; aspirate; dispense |
+| `legacy.shaking.Shaker` | `shaker.shake`, `shaker.stop_shaking` |
+| `legacy.temperature_controlling.TemperatureController` | set temperature, wait for temperature, deactivate |
+| `legacy.centrifuge.Centrifuge` | `centrifuge.spin` |
+| `legacy.centrifuge.Loader` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
+| `agilent.vspin.VSpin` | `centrifuge.spin` |
+| `agilent.vspin.Access2` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
+| `brooks.precise_flex.PreciseFlex` | lifecycle, fault/home/freedrive, joint/cartesian/rail/gripper motion, pick/drop, park |
 
 Detailed operation references:
 
