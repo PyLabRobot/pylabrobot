@@ -387,7 +387,7 @@ class TestMicronicRD235(unittest.IsolatedAsyncioTestCase):
       return MagicMock()
 
     with patch.object(reader, "_scan_rack", slow):
-      with self.assertRaises(TimeoutError):
+      with self.assertRaises(asyncio.TimeoutError):
         await reader.scan_rack(rack=_rack(), timeout=0.01)
 
   async def test_timeout_keeps_scan_lock_until_blocking_scan_finishes(self):
@@ -400,7 +400,7 @@ class TestMicronicRD235(unittest.IsolatedAsyncioTestCase):
       patch.object(reader, "_read_barcode", AsyncMock(return_value="9500017722")),
       patch.object(loop, "run_in_executor", return_value=scan_future),
     ):
-      with self.assertRaises(TimeoutError):
+      with self.assertRaises(asyncio.TimeoutError):
         await reader.scan_rack(rack=_rack(), timeout=0.01)
       with self.assertRaises(MicronicError):
         await reader.scan_rack(rack=_rack(), timeout=0.01)
