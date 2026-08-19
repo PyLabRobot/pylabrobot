@@ -352,3 +352,20 @@ def TIP_CAR_NTR_A00(name: str) -> TipCarrier:
     ),
     model="TIP_CAR_NTR_A00",
   )
+
+
+def hamilton_prep_ftr_pedestal(name: str) -> TipCarrier:
+  """Hamilton cat. no.: 6600553-01
+  Pedestal for elevating fixed tip racks (FTR) on the MicroLab Prep.
+  Body: 133.11 x 89.96 x 53.37 mm. FTR rack seats on top of the pedestal.
+  """
+  site = ResourceHolder(name=f"{name}-0", size_x=122.4, size_y=82.6, size_z=0)
+  site.location = Coordinate(1.5, 1, 53.37)
+  return TipCarrier(
+    name=name,
+    size_x=133.11,
+    size_y=89.96,
+    size_z=53.37,
+    sites={0: site},
+    model="hamilton_prep_ftr_pedestal",
+  )
