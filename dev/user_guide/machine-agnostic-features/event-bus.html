@@ -805,7 +805,7 @@ batch identifiers that PLR itself cannot know.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.events</span><span class="w"> </span><span class="kn">import</span> <span class="n">event_context</span>
 
 <span class="k">with</span> <span class="n">use_event_bus</span><span class="p">(</span><span class="n">event_bus</span><span class="p">),</span> <span class="n">event_context</span><span class="p">(</span><span class="n">run_id</span><span class="o">=</span><span class="s2">"run-42"</span><span class="p">,</span> <span class="n">batch_id</span><span class="o">=</span><span class="s2">"batch-2"</span><span class="p">):</span>
-  <span class="k">await</span> <span class="n">incubator</span><span class="o">.</span><span class="n">fetch_plate_to_loading_tray</span><span class="p">(</span><span class="n">site</span><span class="p">)</span>
+  <span class="k">await</span> <span class="n">incubator</span><span class="o">.</span><span class="n">fetch_plate_to_loading_tray</span><span class="p">(</span><span class="s2">"plate_1"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The values are inherited by nested PLR events. Keep this context application-specific; device
@@ -826,13 +826,13 @@ diagnostic events preserve controller and transport activity for debugging.</p>
 </section>
 <section id="current-event-coverage">
 <h2>Current event coverage<a class="headerlink" href="#current-event-coverage" title="Link to this heading">#</a></h2>
-<p>EventBus adoption is incremental. The initial implementation instruments the following public
+<p>EventBus adoption is incremental. The current implementation instruments the following public
 frontends. Each listed semantic operation emits <code class="docutils literal notranslate"><span class="pre">started</span></code>, <code class="docutils literal notranslate"><span class="pre">completed</span></code>, and <code class="docutils literal notranslate"><span class="pre">failed</span></code> lifecycle
 events.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Frontend</p></th>
-<th class="head"><p>Operations</p></th>
+<th class="head"><p>Canonical semantic operations</p></th>
 </tr>
 </thead>
 <tbody>
@@ -875,7 +875,9 @@ events.</p>
 <li><p><a class="reference internal" href="event-bus/incubator.html"><span class="std std-doc">Incubator</span></a></p></li>
 <li><p><a class="reference internal" href="event-bus/liquid-handler.html"><span class="std std-doc">LiquidHandler</span></a></p></li>
 <li><p><a class="reference internal" href="event-bus/thermal-and-shaking.html"><span class="std std-doc">Shaker and temperature controller</span></a></p></li>
+<li><p><a class="reference internal" href="../agilent/vspin/events.html"><span class="std std-doc">VSpin centrifuge and Access2 loader</span></a></p></li>
 <li><p><a class="reference internal" href="event-bus/diagnostic-transports.html"><span class="std std-doc">Diagnostic transports</span></a></p></li>
+<li><p><a class="reference internal" href="../../contributor_guide/event-schemas.html"><span class="std std-doc">Canonical schema for every operation above</span></a></p></li>
 </ul>
 <div class="toctree-wrapper compound">
 </div>
@@ -908,11 +910,19 @@ serialized <code class="docutils literal notranslate"><span class="pre">Coordina
 <code class="docutils literal notranslate"><span class="pre">pick</span></code> and <code class="docutils literal notranslate"><span class="pre">drop</span></code> describe controller actions. A resource-aware wrapper should emit the separate
 resource-transfer event when it has PLR resource context.</p>
 </section>
+<section id="agilent-benchcel">
+<h3>Agilent BenchCel<a class="headerlink" href="#agilent-benchcel" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">benchcel.downstack</span></code>, <code class="docutils literal notranslate"><span class="pre">benchcel.upstack</span></code>, and <code class="docutils literal notranslate"><span class="pre">benchcel.move_plate_between_stacks</span></code> include the
+BenchCel in <code class="docutils literal notranslate"><span class="pre">device</span></code>, the directly moved plate in <code class="docutils literal notranslate"><span class="pre">resources</span></code>, and the actual PLR stack or loading
+tray holders in <code class="docutils literal notranslate"><span class="pre">source</span></code> and <code class="docutils literal notranslate"><span class="pre">destination</span></code>.</p>
+</section>
 </section>
 <section id="more-detail">
 <h2>More detail<a class="headerlink" href="#more-detail" title="Link to this heading">#</a></h2>
 <p>The <a class="reference internal" href="../../contributor_guide/event-bus.html"><span class="std std-doc">EventBus contributor guide</span></a> defines the stable naming,
-resource, and test conventions for driver authors adding coverage.</p>
+resource, and test conventions for driver authors adding coverage. The
+<a class="reference internal" href="../../contributor_guide/event-schemas.html"><span class="std std-doc">Event Schema Registry</span></a> defines canonical operation names
+and payload fields.</p>
 </section>
 </section>
 
@@ -974,6 +984,7 @@ resource, and test conventions for driver authors adding coverage.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#liquidhandler">LiquidHandler</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shaker-and-temperaturecontroller">Shaker and TemperatureController</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#brooks-preciseflex">Brooks PreciseFlex</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#agilent-benchcel">Agilent BenchCel</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#more-detail">More detail</a></li>

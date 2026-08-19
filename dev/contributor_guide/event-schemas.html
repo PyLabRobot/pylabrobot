@@ -1,0 +1,1474 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Event Schema Registry &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=b0ac04d7" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/plr_devices.js?v=2dde28f2"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'contributor_guide/event-schemas';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/contributor_guide/event-schemas.html" />
+    <link rel="icon" href="../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Contributing New Resources" href="contributing-new-resources.html" />
+    <link rel="prev" title="EventBus Contributor Guide" href="event-bus.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">General</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to PyLabRobot</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how-to-open-source.html">How to Open Source</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing-to-docs.html">Contributing to Docs</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Adding Backends/Drivers</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="device-driver-guide.html">Writing PyLabRobot Device Drivers &amp; Hello-World Guides</a></li>
+<li class="toctree-l1"><a class="reference internal" href="device-registry.html">The device registry</a></li>
+<li class="toctree-l1"><a class="reference internal" href="event-bus.html">EventBus Contributor Guide</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Event Schema Registry</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Adding Resource Definitions</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="contributing-new-resources.html">Contributing New Resources</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Expanding the Visualizer/Simulator</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="visualizer.html">Visualizer Architecture and Contributing</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Adding to the Cookbook</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="adding-coookbook-recipes.html">Contributing a New Recipe</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Contributor guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Event Schema Registry</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="event-schema-registry">
+<h1>Event Schema Registry<a class="headerlink" href="#event-schema-registry" title="Link to this heading">#</a></h1>
+<p>This registry defines canonical names and payload fields for EventBus records emitted by PLR.
+It is the shared semantic contract between instrument frontends and event consumers.</p>
+<p>The registry describes operation families, not required capabilities. A frontend implements only
+the operations that its hardware and public API support. When it does implement an operation that
+already appears here, it should use the canonical operation name and field meanings below.</p>
+<p>For guidance on operation boundaries, instrumentation style, and testing, see the
+<a class="reference internal" href="event-bus.html"><span class="std std-doc">EventBus contributor guide</span></a>. For the exact frontend classes that currently emit
+these operations, see <a class="reference internal" href="../user_guide/machine-agnostic-features/event-bus.html#current-event-coverage"><span class="std std-ref">Current event coverage</span></a>.</p>
+<section id="extending-the-registry">
+<h2>Extending the registry<a class="headerlink" href="#extending-the-registry" title="Link to this heading">#</a></h2>
+<p>When adding an event for a device or operation family that is not represented here:</p>
+<ol class="arabic simple">
+<li><p>Prefer a device-independent semantic name over a vendor-specific name when the operation has a
+clear cross-device meaning.</p></li>
+<li><p>Reuse canonical fields from this registry when their meaning matches. Do not introduce a second
+name for an existing concept.</p></li>
+<li><p>Add new fields only when they describe information the PLR operation actually knows.</p></li>
+<li><p>Document the proposed operation and fields in this registry in the same contribution as the
+implementation.</p></li>
+<li><p>Treat maintainer review of the new schema as establishing the convention for future frontends
+that implement that operation family.</p></li>
+</ol>
+<p>Do not distort resource semantics or add presentation-only fields for a particular logger,
+dashboard, or notification service.</p>
+</section>
+<section id="record-classes">
+<h2>Record classes<a class="headerlink" href="#record-classes" title="Link to this heading">#</a></h2>
+<section id="semantic-operation-lifecycle">
+<h3>Semantic operation lifecycle<a class="headerlink" href="#semantic-operation-lifecycle" title="Link to this heading">#</a></h3>
+<p>A semantic operation uses this lifecycle:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&lt;component&gt;.&lt;operation&gt;.started
+&lt;component&gt;.&lt;operation&gt;.completed
+</pre></div>
+</div>
+<p>or, when it raises:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&lt;component&gt;.&lt;operation&gt;.started
+&lt;component&gt;.&lt;operation&gt;.failed
+</pre></div>
+</div>
+<p>Lifecycle records share <code class="docutils literal notranslate"><span class="pre">context.operation</span></code> and <code class="docutils literal notranslate"><span class="pre">context.operation_id</span></code>. A failed record preserves
+the operation’s invocation data and adds:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">error_type</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>Exception class name.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">error_message</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>String representation of the original exception.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Tables in this guide describe fields in <code class="docutils literal notranslate"><span class="pre">event.data</span></code>. A field marked <strong>completed only</strong> is added
+only after successful execution. All other listed fields describe invocation state and remain
+stable across the lifecycle unless an operation-specific note says otherwise.</p>
+</section>
+<section id="state-transition-records">
+<h3>State-transition records<a class="headerlink" href="#state-transition-records" title="Link to this heading">#</a></h3>
+<p>State records describe an instantaneous PLR model transition and do not use the
+<code class="docutils literal notranslate"><span class="pre">started</span></code>/<code class="docutils literal notranslate"><span class="pre">completed</span></code>/<code class="docutils literal notranslate"><span class="pre">failed</span></code> lifecycle. Current examples are <code class="docutils literal notranslate"><span class="pre">resource.assigned</span></code> and
+<code class="docutils literal notranslate"><span class="pre">resource.unassigned</span></code>.</p>
+</section>
+<section id="diagnostic-records">
+<h3>Diagnostic records<a class="headerlink" href="#diagnostic-records" title="Link to this heading">#</a></h3>
+<p>Diagnostic events describe controller or transport activity. They may use a lifecycle when the
+underlying command has a meaningful request and response, but they are not semantic frontend
+operations. When emitted inside a semantic operation, they inherit its event context.</p>
+</section>
+</section>
+<section id="canonical-common-fields">
+<h2>Canonical common fields<a class="headerlink" href="#canonical-common-fields" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">DeviceReference</span></code> or <code class="docutils literal notranslate"><span class="pre">ResourceReference</span></code></p></td>
+<td><p>Device or controller issuing the operation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list[ResourceReference]</span></code></p></td>
+<td><p>Direct PLR resources acted on by the operation. Omit or use an empty list when none are known.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">source</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ResourceReference</span></code> or <code class="docutils literal notranslate"><span class="pre">CoordinateReference</span></code></p></td>
+<td><p>Physical origin of a resource transfer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ResourceReference</span></code> or <code class="docutils literal notranslate"><span class="pre">CoordinateReference</span></code></p></td>
+<td><p>Physical destination of a resource transfer.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">duration</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Requested duration in PLR’s default time unit.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">timeout</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Requested timeout in PLR’s default time unit.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">target_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Configured or requested controller target temperature.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">current_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Controller sensor reading observed by the operation. It is not a resource-temperature measurement unless explicitly documented otherwise.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tolerance</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Allowed temperature difference in PLR’s default temperature unit.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">volume</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Requested liquid volume in PLR’s default volume unit.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">resource_reference()</span></code> for direct resources and resource endpoints. Its <code class="docutils literal notranslate"><span class="pre">ancestors</span></code> provide
+structural context without replacing a <code class="docutils literal notranslate"><span class="pre">Well</span></code>, <code class="docutils literal notranslate"><span class="pre">TipSpot</span></code>, plate, or holder with a more convenient
+display resource. Use <code class="docutils literal notranslate"><span class="pre">coordinate_reference()</span></code> for geometric endpoints and targets.</p>
+<p>Quantitative fields use PLR’s <a class="reference internal" href="../user_guide/getting-started/units.html"><span class="std std-doc">default units</span></a>. Add a suffix
+only when the value deliberately uses a different representation, such as <code class="docutils literal notranslate"><span class="pre">speed_rpm</span></code> or
+<code class="docutils literal notranslate"><span class="pre">speed_pct</span></code>.</p>
+<section id="canonical-vocabulary">
+<h3>Canonical vocabulary<a class="headerlink" href="#canonical-vocabulary" title="Link to this heading">#</a></h3>
+<p>Use these names consistently across operation families:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Concept</p></th>
+<th class="head"><p>Canonical field</p></th>
+<th class="head"><p>Do not introduce aliases such as</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Requested elapsed time</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">duration</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">time</span></code>, <code class="docutils literal notranslate"><span class="pre">duration_s</span></code>, <code class="docutils literal notranslate"><span class="pre">duration_sec</span></code>, <code class="docutils literal notranslate"><span class="pre">seconds</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Maximum wait</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">timeout</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">timeout_s</span></code>, <code class="docutils literal notranslate"><span class="pre">wait_time</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Requested thermal setpoint</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">target_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">temperature_target</span></code>, <code class="docutils literal notranslate"><span class="pre">set_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature_c</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Observed controller temperature</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">current_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">actual_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">measured_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">current_temperature_c</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Temperature acceptance range</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">tolerance</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">temperature_tolerance</span></code>, <code class="docutils literal notranslate"><span class="pre">tolerance_c</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Relative centrifugal force</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">relative_centrifugal_force</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">g</span></code>, <code class="docutils literal notranslate"><span class="pre">g_force</span></code>, <code class="docutils literal notranslate"><span class="pre">rcf</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Direct operated resources</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plates</span></code>, <code class="docutils literal notranslate"><span class="pre">labware</span></code>, <code class="docutils literal notranslate"><span class="pre">items</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Transfer endpoints</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">from</span></code>, <code class="docutils literal notranslate"><span class="pre">to</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Liquid volume</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">volume</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vol</span></code>, <code class="docutils literal notranslate"><span class="pre">volume_ul</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Successful command result</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">response</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">reply</span></code>, <code class="docutils literal notranslate"><span class="pre">result_data</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>This vocabulary is semantic, not merely stylistic. For example, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code> is a
+controller setpoint, while <code class="docutils literal notranslate"><span class="pre">current_temperature</span></code> is an observed controller reading. Do not use one
+as an alias for the other.</p>
+</section>
+</section>
+<section id="machine-lifecycle">
+<h2>Machine lifecycle<a class="headerlink" href="#machine-lifecycle" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">machine.setup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">backend</span></code></p></td>
+<td><p>Initializes a generic machine frontend.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">machine.stop</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">backend</span></code></p></td>
+<td><p>Stops a generic machine frontend.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Vendor frontends may use their own component name, such as <code class="docutils literal notranslate"><span class="pre">precise_flex.setup</span></code>, while preserving
+the same lifecycle meaning.</p>
+</section>
+<section id="resource-model-state">
+<h2>Resource-model state<a class="headerlink" href="#resource-model-state" title="Link to this heading">#</a></h2>
+<p>These are state-transition records rather than semantic operation lifecycles.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Event</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">resource.assigned</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">resource</span></code>, <code class="docutils literal notranslate"><span class="pre">parent</span></code>, <code class="docutils literal notranslate"><span class="pre">location</span></code></p></td>
+<td><p>Emitted after assignment. <code class="docutils literal notranslate"><span class="pre">location</span></code> is the child’s relative <code class="docutils literal notranslate"><span class="pre">CoordinateReference</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">resource.unassigned</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">resource</span></code>, <code class="docutils literal notranslate"><span class="pre">previous_parent</span></code>, <code class="docutils literal notranslate"><span class="pre">previous_location</span></code></p></td>
+<td><p>Emitted after unassignment while preserving the former parent and relative location.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="resource-transfer">
+<h2>Resource transfer<a class="headerlink" href="#resource-transfer" title="Link to this heading">#</a></h2>
+<section id="incubators">
+<h3>Incubators<a class="headerlink" href="#incubators" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">incubator.fetch_plate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">resources</span></code> contains the directly moved plate; endpoints describe the storage site and loading tray when known.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">incubator.take_in_plate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p>Moves the loading-tray plate into storage. A requested selector such as <code class="docutils literal notranslate"><span class="pre">&quot;random&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;smallest&quot;</span></code> may identify an unresolved destination at invocation.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="stackers">
+<h3>Stackers<a class="headerlink" href="#stackers" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">benchcel.downstack</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p>Moves the accessible plate from a stack to the loading tray.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">benchcel.upstack</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p>Moves the loading-tray plate onto a stack.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">benchcel.move_plate_between_stacks</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p>Moves the accessible plate between two stacks.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="centrifuge-loaders">
+<h3>Centrifuge loaders<a class="headerlink" href="#centrifuge-loaders" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p>Transfers the staging plate into the selected centrifuge bucket.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.unload</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p>Transfers the selected bucket plate onto the staging holder.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="liquid-handler-resource-movement">
+<h3>Liquid-handler resource movement<a class="headerlink" href="#liquid-handler-resource-movement" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.resource_pickup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, optional <code class="docutils literal notranslate"><span class="pre">source</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">resources</span></code> contains the directly picked-up resource. Capture <code class="docutils literal notranslate"><span class="pre">source</span></code> before successful pickup unassigns it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.resource_move</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Moves the currently held resource without assigning it to a destination.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.resource_drop</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p>Drops the currently held resource at a resource or geometric destination.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+<section id="liquid-handling">
+<h2>Liquid handling<a class="headerlink" href="#liquid-handling" title="Link to this heading">#</a></h2>
+<section id="channelized-liquid-operations">
+<h3>Channelized liquid operations<a class="headerlink" href="#channelized-liquid-operations" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.aspirate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">liquid_operations</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.dispense</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">liquid_operations</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">resources</span></code> contains the unique direct containers operated on. <code class="docutils literal notranslate"><span class="pre">liquid_operations</span></code> contains one
+record per channel:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">channel</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>Liquid-handler channel index.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">resource</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ResourceReference</span></code></p></td>
+<td><p>Direct operated container, normally a well or trough.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ResourceReference</span></code></p></td>
+<td><p>Owning plate when one exists; otherwise the direct container.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">volume</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Requested channel volume.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="channelized-tip-operations">
+<h3>Channelized tip operations<a class="headerlink" href="#channelized-tip-operations" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.tip_pickup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">tip_operations</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.tip_drop</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">tip_operations</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">resources</span></code> contains unique direct <code class="docutils literal notranslate"><span class="pre">TipSpot</span></code> or <code class="docutils literal notranslate"><span class="pre">Trash</span></code> resources. <code class="docutils literal notranslate"><span class="pre">tip_operations</span></code> contains one
+record per channel with <code class="docutils literal notranslate"><span class="pre">channel</span></code> and direct <code class="docutils literal notranslate"><span class="pre">resource</span></code> fields.</p>
+</section>
+<section id="head-tip-operations">
+<h3>96-head tip operations<a class="headerlink" href="#head-tip-operations" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.tip_pickup_96</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Direct resource is the operated <code class="docutils literal notranslate"><span class="pre">TipRack</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">liquid_handler.tip_drop_96</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Direct resource is the destination <code class="docutils literal notranslate"><span class="pre">TipRack</span></code> or <code class="docutils literal notranslate"><span class="pre">Trash</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+<section id="shaking-and-temperature-control">
+<h2>Shaking and temperature control<a class="headerlink" href="#shaking-and-temperature-control" title="Link to this heading">#</a></h2>
+<p>Controllers that are <code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code>s include their directly loaded resource in <code class="docutils literal notranslate"><span class="pre">resources</span></code> when
+one is assigned at operation start.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">shaker.shake</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">speed_rpm</span></code>, optional <code class="docutils literal notranslate"><span class="pre">duration</span></code></p></td>
+<td><p>Omitted <code class="docutils literal notranslate"><span class="pre">duration</span></code> means shaking continues after the call returns.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">shaker.stop_shaking</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Explicitly stops an indefinite shake.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.set_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">passive</span></code></p></td>
+<td><p>Records the requested target and cooling policy.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.wait_for_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code>, <code class="docutils literal notranslate"><span class="pre">tolerance</span></code>; <strong>completed only:</strong> <code class="docutils literal notranslate"><span class="pre">current_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">current_temperature</span></code> is the final controller reading that satisfied tolerance.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.hold_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, optional <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code></p></td>
+<td><p>Records a requested dwell without reissuing a setpoint or asserting that a resource reached temperature.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.deactivate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, optional <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code></p></td>
+<td><p>Stops active temperature control.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="centrifugation">
+<h2>Centrifugation<a class="headerlink" href="#centrifugation" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">bucket_resources</span></code>, <code class="docutils literal notranslate"><span class="pre">relative_centrifugal_force</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, <code class="docutils literal notranslate"><span class="pre">acceleration_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">deceleration_fraction</span></code></p></td>
+<td><p>Describes one requested spin cycle.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">resources</span></code> contains directly loaded resources only. Empty buckets are not represented.
+<code class="docutils literal notranslate"><span class="pre">bucket_resources</span></code> preserves the association between each loaded resource and its holder:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">"holder"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">bucket</span><span class="p">),</span>
+  <span class="s2">"resource"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">),</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">relative_centrifugal_force</span></code> is the dimensionless multiple of standard gravity conventionally
+written as x g. Acceleration and deceleration are fractions of the device maximum.</p>
+</section>
+<section id="brooks-preciseflex">
+<h2>Brooks PreciseFlex<a class="headerlink" href="#brooks-preciseflex" title="Link to this heading">#</a></h2>
+<p>PreciseFlex currently exposes vendor-specific controller operations. These records describe the
+controller command and geometric or joint target; a higher-level resource-aware integration should
+emit separate resource-transfer operations when it knows the moved PLR resource.</p>
+<section id="lifecycle-and-controller-state">
+<h3>Lifecycle and controller state<a class="headerlink" href="#lifecycle-and-controller-state" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.setup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">skip_home</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.stop</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.power_on</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.power_off</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.recover_from_fault</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.home</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.start_freedrive</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">free_axes</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.stop_freedrive</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.halt</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.park</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="motion">
+<h3>Motion<a class="headerlink" href="#motion" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_to_joint_position</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_pct</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_to_location</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_pct</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_through_cartesian_poses</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">waypoint_count</span></code>, optional <code class="docutils literal notranslate"><span class="pre">start_target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">end_target</span></code>, optional <code class="docutils literal notranslate"><span class="pre">speed_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">blend</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_gripper</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">width</span></code>, <code class="docutils literal notranslate"><span class="pre">force_sensing</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_gripper_joint_position</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">gripper_joint_position</span></code>, <code class="docutils literal notranslate"><span class="pre">force_sensing</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.move_rail</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">rail_position</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.pick_up_at_joint_position</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code>, <code class="docutils literal notranslate"><span class="pre">finger_speed_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">grasp_force</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.drop_at_joint_position</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.pick_up_at_location</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code>, <code class="docutils literal notranslate"><span class="pre">finger_speed_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">grasp_force</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">precise_flex.drop_at_location</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, <code class="docutils literal notranslate"><span class="pre">resource_width</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">target_joint_position</span></code> maps axis names to positions. A Cartesian <code class="docutils literal notranslate"><span class="pre">target</span></code> contains a serialized
+<code class="docutils literal notranslate"><span class="pre">location</span></code>, approach <code class="docutils literal notranslate"><span class="pre">direction</span></code>, optional elbow <code class="docutils literal notranslate"><span class="pre">orientation</span></code>, optional <code class="docutils literal notranslate"><span class="pre">wrist</span></code>, and optional
+<code class="docutils literal notranslate"><span class="pre">rail_position</span></code>. Lengths use PLR’s default unit, <code class="docutils literal notranslate"><span class="pre">grasp_force</span></code> uses the default force unit, and
+percentage values use the <code class="docutils literal notranslate"><span class="pre">_pct</span></code> suffix.</p>
+</section>
+</section>
+<section id="diagnostic-transports-and-firmware">
+<h2>Diagnostic transports and firmware<a class="headerlink" href="#diagnostic-transports-and-firmware" title="Link to this heading">#</a></h2>
+<section id="serial-usb-and-ftdi">
+<h3>Serial, USB, and FTDI<a class="headerlink" href="#serial-usb-and-ftdi" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">io.read</span></code> and <code class="docutils literal notranslate"><span class="pre">io.write</span></code> are instantaneous diagnostic records:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">transport</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;serial&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;usb&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;ftdi&quot;</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>Human-readable transport device name.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">device_id</span></code></p></td>
+<td><p>Port, serial number, or transport-specific identifier.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p>Decoded or hexadecimal transport payload.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="hamilton-firmware-commands">
+<h3>Hamilton firmware commands<a class="headerlink" href="#hamilton-firmware-commands" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">firmware.command.started</span></code>, <code class="docutils literal notranslate"><span class="pre">firmware.command.completed</span></code>, and <code class="docutils literal notranslate"><span class="pre">firmware.command.failed</span></code> use:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Lifecycle</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">transport</span></code></p></td>
+<td><p>all</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;hamilton_usb&quot;</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">driver</span></code></p></td>
+<td><p>all</p></td>
+<td><p>Hamilton driver class name.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">module</span></code></p></td>
+<td><p>all</p></td>
+<td><p>Firmware module identifier.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">command</span></code></p></td>
+<td><p>all</p></td>
+<td><p>Firmware command identifier.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">command_id</span></code></p></td>
+<td><p>all</p></td>
+<td><p>Correlation identifier assigned by the driver.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">raw_command</span></code></p></td>
+<td><p>all</p></td>
+<td><p>Full assembled command.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">response</span></code></p></td>
+<td><p>completed</p></td>
+<td><p>Raw firmware response, if any.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">error_type</span></code>, <code class="docutils literal notranslate"><span class="pre">error_message</span></code></p></td>
+<td><p>failed</p></td>
+<td><p>Original exception details.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="preciseflex-firmware-commands">
+<h3>PreciseFlex firmware commands<a class="headerlink" href="#preciseflex-firmware-commands" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">precise_flex.firmware_command.started</span></code>, <code class="docutils literal notranslate"><span class="pre">precise_flex.firmware_command.completed</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">precise_flex.firmware_command.failed</span></code> use <code class="docutils literal notranslate"><span class="pre">device</span></code> and <code class="docutils literal notranslate"><span class="pre">command</span></code> in the full lifecycle, <code class="docutils literal notranslate"><span class="pre">response</span></code>
+on completion, and <code class="docutils literal notranslate"><span class="pre">error_type</span></code> plus <code class="docutils literal notranslate"><span class="pre">error_message</span></code> on failure.</p>
+</section>
+</section>
+<section id="schema-compatibility">
+<h2>Schema compatibility<a class="headerlink" href="#schema-compatibility" title="Link to this heading">#</a></h2>
+<p>Treat operation names and documented field meanings as public integration contracts:</p>
+<ul class="simple">
+<li><p>Adding an optional field is normally backward compatible.</p></li>
+<li><p>Adding completion-only information is normally backward compatible when invocation fields stay
+stable.</p></li>
+<li><p>Renaming a field, changing its units, replacing a direct resource with an ancestor, or changing
+the meaning of an existing field is a compatibility change and requires explicit review.</p></li>
+<li><p>Vendor-specific extensions should not silently redefine a canonical cross-device field.</p></li>
+</ul>
+<p>When implementation and this registry diverge, update them together and add tests that assert the
+canonical operation name, lifecycle, and payload fields.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="event-bus.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">EventBus Contributor Guide</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="contributing-new-resources.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Contributing New Resources</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#extending-the-registry">Extending the registry</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#record-classes">Record classes</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#semantic-operation-lifecycle">Semantic operation lifecycle</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#state-transition-records">State-transition records</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostic-records">Diagnostic records</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#canonical-common-fields">Canonical common fields</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#canonical-vocabulary">Canonical vocabulary</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#machine-lifecycle">Machine lifecycle</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-model-state">Resource-model state</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-transfer">Resource transfer</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#incubators">Incubators</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#stackers">Stackers</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#centrifuge-loaders">Centrifuge loaders</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#liquid-handler-resource-movement">Liquid-handler resource movement</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#liquid-handling">Liquid handling</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#channelized-liquid-operations">Channelized liquid operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#channelized-tip-operations">Channelized tip operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#head-tip-operations">96-head tip operations</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shaking-and-temperature-control">Shaking and temperature control</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#centrifugation">Centrifugation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#brooks-preciseflex">Brooks PreciseFlex</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-and-controller-state">Lifecycle and controller state</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#motion">Motion</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostic-transports-and-firmware">Diagnostic transports and firmware</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#serial-usb-and-ftdi">Serial, USB, and FTDI</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hamilton-firmware-commands">Hamilton firmware commands</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preciseflex-firmware-commands">PreciseFlex firmware commands</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#schema-compatibility">Schema compatibility</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/contributor_guide/event-schemas.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/contributor_guide/event-schemas.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.20.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

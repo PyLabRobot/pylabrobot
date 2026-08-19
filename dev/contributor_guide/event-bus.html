@@ -62,7 +62,7 @@
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Contributing New Resources" href="contributing-new-resources.html" />
+    <link rel="next" title="Event Schema Registry" href="event-schemas.html" />
     <link rel="prev" title="The device registry" href="device-registry.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -527,6 +527,7 @@
 <li class="toctree-l1"><a class="reference internal" href="device-driver-guide.html">Writing PyLabRobot Device Drivers &amp; Hello-World Guides</a></li>
 <li class="toctree-l1"><a class="reference internal" href="device-registry.html">The device registry</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">EventBus Contributor Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="event-schemas.html">Event Schema Registry</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Adding Resource Definitions</span></p>
 <ul class="nav bd-sidenav">
@@ -619,13 +620,87 @@ activity performed to execute them.</p>
 <p>An instrumented method remains a no-op with respect to events unless an EventBus with at least
 one subscriber is active. Use one of these helpers:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">&#64;evented_operation(...)</span></code> for one public async method.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">event_operation(...):</span></code> for one logical operation implemented by several calls.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;evented_operation(...)</span></code> for a trivial projection of one public async method’s invocation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">event_operation(...):</span></code> for explicit semantic context assembled inside an operation.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">emit_event(...)</span></code> only for a meaningful state transition that is not an operation lifecycle.</p></li>
 </ul>
 <p>Use a low-level diagnostic event only when the transport boundary itself is useful to observe.
 Diagnostic events may inherit the enclosing semantic operation context, but do not define a new
 protocol-level action or resource-transfer meaning.</p>
+</section>
+<section id="choosing-an-instrumentation-style">
+<h2>Choosing an instrumentation style<a class="headerlink" href="#choosing-an-instrumentation-style" title="Link to this heading">#</a></h2>
+<p>Prefer explicit <code class="docutils literal notranslate"><span class="pre">event_operation()</span></code> construction for new semantic frontend operations. It keeps
+the event boundary and metadata next to the code that determines their meaning:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">move_to_target</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">requested_target</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+  <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">resolve_target</span><span class="p">(</span><span class="n">requested_target</span><span class="p">)</span>
+  <span class="n">target_coordinate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordinate_for_target</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+
+  <span class="k">with</span> <span class="n">event_operation</span><span class="p">(</span>
+    <span class="s2">"plate_mover.move_to_target"</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="n">resource_reference</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+    <span class="n">resources</span><span class="o">=</span><span class="p">[],</span>
+    <span class="n">requested_target</span><span class="o">=</span><span class="n">requested_target</span><span class="p">,</span>
+    <span class="n">target</span><span class="o">=</span><span class="n">target</span><span class="p">,</span>
+    <span class="n">target_coordinate</span><span class="o">=</span><span class="n">coordinate_reference</span><span class="p">(</span><span class="n">target_coordinate</span><span class="p">),</span>
+  <span class="p">):</span>
+    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="o">.</span><span class="n">move_to</span><span class="p">(</span><span class="n">target_coordinate</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Compute metadata before entering the operation scope when doing so has no hardware side effects.
+Perform operation validation inside the scope when validation failures are part of the operation’s
+lifecycle. Always enter the scope before issuing hardware commands so command failures emit the
+correlated <code class="docutils literal notranslate"><span class="pre">.failed</span></code> event. If meaningful data is known only after successful execution, expose it
+with <code class="docutils literal notranslate"><span class="pre">completed_data_factory</span></code>; return the full completed-event payload, including stable invocation
+context:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">operation_data</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">"device"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">)],</span>
+<span class="p">}</span>
+<span class="n">completion_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">with</span> <span class="n">event_operation</span><span class="p">(</span>
+  <span class="s2">"reader.read_plate"</span><span class="p">,</span>
+  <span class="o">**</span><span class="n">operation_data</span><span class="p">,</span>
+  <span class="n">completed_data_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">{</span><span class="o">**</span><span class="n">operation_data</span><span class="p">,</span> <span class="o">**</span><span class="n">completion_data</span><span class="p">},</span>
+<span class="p">):</span>
+  <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="o">.</span><span class="n">read_plate</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+  <span class="n">completion_data</span><span class="p">[</span><span class="s2">"result"</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
+</pre></div>
+</div>
+<p>The completion factory runs after the operation body has succeeded. Keep it pure, deterministic,
+and non-throwing so event construction cannot turn a successful hardware operation into an
+application failure.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&#64;evented_operation(...)</span></code> remains appropriate when all event metadata is a simple, pure projection
+of invocation arguments and pre-operation resource state. Its context factory is called with the
+method’s original <code class="docutils literal notranslate"><span class="pre">*args</span></code> and <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code>; the decorator does not inspect, bind, normalize, or apply
+defaults to the call. The context factory must therefore mirror the decorated method’s calling
+signature, including positional order, parameter kinds, defaults, and <code class="docutils literal notranslate"><span class="pre">**backend_kwargs</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_set_temperature_event_context</span><span class="p">(</span>
+  <span class="bp">self</span><span class="p">:</span> <span class="s2">"TemperatureController"</span><span class="p">,</span>
+  <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+  <span class="n">passive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
+  <span class="k">return</span> <span class="p">{</span>
+    <span class="s2">"device"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+    <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">resource</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">resource</span><span class="p">)],</span>
+    <span class="s2">"target_temperature"</span><span class="p">:</span> <span class="n">temperature</span><span class="p">,</span>
+    <span class="s2">"passive"</span><span class="p">:</span> <span class="n">passive</span><span class="p">,</span>
+  <span class="p">}</span>
+
+
+<span class="nd">@evented_operation</span><span class="p">(</span><span class="s2">"temperature_controller.set_temperature"</span><span class="p">,</span> <span class="n">_set_temperature_event_context</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">set_temperature</span><span class="p">(</span>
+  <span class="bp">self</span><span class="p">,</span>
+  <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+  <span class="n">passive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+  <span class="o">...</span>
+</pre></div>
+</div>
+<p>Do not use a decorator context factory when event meaning depends on validation, normalization,
+resolved targets, derived values, hardware responses, or final resource state. Construct the event
+explicitly inside the operation instead. In either style, context construction must be pure: it
+must not command hardware, mutate resource state, or perform expensive I/O.</p>
 </section>
 <section id="event-contract">
 <h2>Event contract<a class="headerlink" href="#event-contract" title="Link to this heading">#</a></h2>
@@ -688,133 +763,15 @@ underlying object’s PLR serialization contract, including <code class="docutil
 actually did; dashboards, logs, and integrations can derive their own views from the structured
 references.</p>
 </section>
-<section id="operation-templates">
-<h2>Operation templates<a class="headerlink" href="#operation-templates" title="Link to this heading">#</a></h2>
-<section id="machine-lifecycle">
-<h3>Machine lifecycle<a class="headerlink" href="#machine-lifecycle" title="Link to this heading">#</a></h3>
-<p>Use for <code class="docutils literal notranslate"><span class="pre">setup()</span></code> and <code class="docutils literal notranslate"><span class="pre">stop()</span></code> on a public PLR machine frontend.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@evented_operation</span><span class="p">(</span>
-  <span class="s2">"machine.setup"</span><span class="p">,</span>
-  <span class="k">lambda</span> <span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">"device"</span><span class="p">:</span> <span class="n">device_reference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"plate_reader"</span><span class="p">),</span>
-    <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[],</span>
-  <span class="p">},</span>
-<span class="p">)</span>
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">):</span>
-  <span class="o">...</span>
-</pre></div>
-</div>
-<p>If the machine frontend itself inherits <code class="docutils literal notranslate"><span class="pre">Resource</span></code>, use <code class="docutils literal notranslate"><span class="pre">resource_reference(self)</span></code> instead.
-Do not pass arbitrary controller objects to <code class="docutils literal notranslate"><span class="pre">resource_reference()</span></code> merely because they expose a
-<code class="docutils literal notranslate"><span class="pre">name</span></code> attribute.</p>
-</section>
-<section id="resource-transfer">
-<h3>Resource transfer<a class="headerlink" href="#resource-transfer" title="Link to this heading">#</a></h3>
-<p>Use for a plate, lid, carrier, or other resource transfer. The direct moved resource is listed in
-<code class="docutils literal notranslate"><span class="pre">resources</span></code>; locations are named separately.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">event_operation</span><span class="p">(</span>
-  <span class="s2">"incubator.fetch_plate"</span><span class="p">,</span>
-  <span class="n">device</span><span class="o">=</span><span class="n">resource_reference</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
-  <span class="n">resources</span><span class="o">=</span><span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">)],</span>
-  <span class="n">source</span><span class="o">=</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">site</span><span class="p">),</span>
-  <span class="n">destination</span><span class="o">=</span><span class="n">resource_reference</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loading_tray</span><span class="p">),</span>
-<span class="p">):</span>
-  <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="o">.</span><span class="n">fetch_plate_to_loading_tray</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>For pickup and drop, record the resource’s invocation state in <code class="docutils literal notranslate"><span class="pre">.started</span></code>. A
-<code class="docutils literal notranslate"><span class="pre">completed_data_factory</span></code> may capture its final assignment or pose for <code class="docutils literal notranslate"><span class="pre">.completed</span></code>.
-For a pickup, capture <code class="docutils literal notranslate"><span class="pre">resource.parent</span></code> as <code class="docutils literal notranslate"><span class="pre">source</span></code> before the frontend unassigns the moved
-resource. Omit <code class="docutils literal notranslate"><span class="pre">source</span></code> if the resource is not currently assigned; do not infer one from a caller
-or a physical-deck assumption.</p>
-</section>
-<section id="liquid-handling">
-<h3>Liquid handling<a class="headerlink" href="#liquid-handling" title="Link to this heading">#</a></h3>
-<p>Use the direct operated containers in <code class="docutils literal notranslate"><span class="pre">resources</span></code>, plus one <code class="docutils literal notranslate"><span class="pre">liquid_operations</span></code> record per
-channel. Each item should include the channel, direct resource reference, owning plate reference
-when applicable, and <code class="docutils literal notranslate"><span class="pre">volume</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">"device"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">liquid_handler</span><span class="p">),</span>
-  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="p">)],</span>
-  <span class="s2">"liquid_operations"</span><span class="p">:</span> <span class="p">[{</span>
-    <span class="s2">"channel"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-    <span class="s2">"resource"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="p">),</span>
-    <span class="s2">"plate"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">well</span><span class="o">.</span><span class="n">parent</span><span class="p">),</span>
-    <span class="s2">"volume"</span><span class="p">:</span> <span class="mf">50.0</span><span class="p">,</span>
-  <span class="p">}],</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-</section>
-<section id="tip-handling">
-<h3>Tip handling<a class="headerlink" href="#tip-handling" title="Link to this heading">#</a></h3>
-<p>Report each direct <code class="docutils literal notranslate"><span class="pre">TipSpot</span></code>, <code class="docutils literal notranslate"><span class="pre">TipRack</span></code>, or <code class="docutils literal notranslate"><span class="pre">Trash</span></code> resource. For channelized tip actions,
-include <code class="docutils literal notranslate"><span class="pre">tip_operations</span></code> with the channel and direct resource.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">"device"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">liquid_handler</span><span class="p">),</span>
-  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">tip_spot</span><span class="p">)],</span>
-  <span class="s2">"tip_operations"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"channel"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"resource"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">tip_spot</span><span class="p">)}],</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-</section>
-<section id="thermal-and-shaking-operations">
-<h3>Thermal and shaking operations<a class="headerlink" href="#thermal-and-shaking-operations" title="Link to this heading">#</a></h3>
-<p>Represent the issuing controller as <code class="docutils literal notranslate"><span class="pre">device</span></code>. A <code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code> controller should include its
-currently loaded direct resource in <code class="docutils literal notranslate"><span class="pre">resources</span></code> when one is assigned at operation start. Do not
-infer a resource from broader deck state. Event fields use PLR’s
-<a class="reference internal" href="../user_guide/getting-started/units.html"><span class="std std-doc">default units</span></a>, so their names do not repeat those units:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">"device"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">controller</span><span class="p">),</span>
-  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">controller</span><span class="o">.</span><span class="n">resource</span><span class="p">)],</span>  <span class="c1"># only when loaded</span>
-  <span class="s2">"target_temperature"</span><span class="p">:</span> <span class="mf">37.0</span><span class="p">,</span>
-  <span class="s2">"duration"</span><span class="p">:</span> <span class="mf">300.0</span><span class="p">,</span>
-  <span class="s2">"speed_rpm"</span><span class="p">:</span> <span class="mf">800.0</span><span class="p">,</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>The <code class="docutils literal notranslate"><span class="pre">speed_rpm</span></code> suffix is explicit because rotational speed differs from PLR’s default linear
-speed in millimeters per second.</p>
-<p>For a protocol-requested temperature dwell, use <code class="docutils literal notranslate"><span class="pre">temperature_controller.hold_temperature</span></code> with
-<code class="docutils literal notranslate"><span class="pre">duration</span></code> and the controller’s configured <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code> when known. The operation
-must not reissue <code class="docutils literal notranslate"><span class="pre">set_temperature()</span></code> or claim that an attached resource reached target
-temperature. New direct vendor frontends should emit this same semantic operation independently;
-they do not need to inherit from the legacy temperature-controller frontend.</p>
-</section>
-<section id="centrifuge-and-loader-operations">
-<h3>Centrifuge and loader operations<a class="headerlink" href="#centrifuge-and-loader-operations" title="Link to this heading">#</a></h3>
-<p>Use <code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code> for one requested centrifuge cycle. Include every directly loaded
-resource, including one bucket holder reference per loaded resource when the frontend exposes
-individual buckets. Use explicit physical parameters:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-  <span class="s2">"device"</span><span class="p">:</span> <span class="n">device_reference</span><span class="p">(</span><span class="n">centrifuge</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">centrifuge</span><span class="o">.</span><span class="n">name</span><span class="p">),</span>
-  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">)],</span>
-  <span class="s2">"bucket_resources"</span><span class="p">:</span> <span class="p">[{</span>
-    <span class="s2">"holder"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">bucket</span><span class="p">),</span>
-    <span class="s2">"resource"</span><span class="p">:</span> <span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">),</span>
-  <span class="p">}],</span>
-  <span class="s2">"relative_centrifugal_force"</span><span class="p">:</span> <span class="mf">500.0</span><span class="p">,</span>
-  <span class="s2">"duration"</span><span class="p">:</span> <span class="mf">60.0</span><span class="p">,</span>
-  <span class="s2">"acceleration_fraction"</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span>
-  <span class="s2">"deceleration_fraction"</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">relative_centrifugal_force</span></code> is the dimensionless multiple of standard gravity conventionally
-written as x g, which PLR defines as the default unit for relative centrifugal force; it is not a
-mass in grams or a force in Newtons.</p>
-<p>Use <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code> and <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.unload</span></code> for a loader’s physical transfer
-between its staging holder and a centrifuge bucket. List the direct plate in <code class="docutils literal notranslate"><span class="pre">resources</span></code>, and use
-the actual staging holder and bucket as <code class="docutils literal notranslate"><span class="pre">source</span></code> and <code class="docutils literal notranslate"><span class="pre">destination</span></code>.</p>
-</section>
-<section id="arm-controller-motion">
-<h3>Arm/controller motion<a class="headerlink" href="#arm-controller-motion" title="Link to this heading">#</a></h3>
-<p>Public controller operations should identify the controller in <code class="docutils literal notranslate"><span class="pre">device</span></code> and use PLR’s default
-units for motion arguments. Add a unit suffix only when a field deliberately differs from the
-default, such as a percentage-based speed. Low-level controller operations can be useful to a
-diagnostic listener, but higher-level resource-aware wrappers should emit the resource-transfer
-events when an arm is actually approaching, picking up, moving, or dropping a PLR resource.</p>
-</section>
+<section id="canonical-operation-schemas">
+<h2>Canonical operation schemas<a class="headerlink" href="#canonical-operation-schemas" title="Link to this heading">#</a></h2>
+<p>The <a class="reference internal" href="event-schemas.html"><span class="std std-doc">Event Schema Registry</span></a> defines the canonical operation names, fields,
+units, lifecycle-specific payloads, and resource semantics for every currently instrumented
+frontend and diagnostic producer. Use an existing schema whenever the operation meaning matches.</p>
+<p>If a contribution introduces a genuinely new device or operation family, choose semantically
+accurate conventions, add the proposed contract to the registry in the same contribution, and
+treat maintainer review as establishing the standard for future implementations of that operation.
+Do not create an undocumented vendor-local alias for an existing concept.</p>
 </section>
 <section id="failure-events">
 <h2>Failure events<a class="headerlink" href="#failure-events" title="Link to this heading">#</a></h2>
@@ -835,18 +792,27 @@ only when they are stable and useful independently of the raw message.</p>
 <ol class="arabic simple">
 <li><p>Choose public semantic operation boundaries; do not decorate transport primitives by default.</p></li>
 <li><p>Use a stable <code class="docutils literal notranslate"><span class="pre">&lt;component&gt;.&lt;operation&gt;</span></code> name and one event scope per logical action.</p></li>
-<li><p>Include <code class="docutils literal notranslate"><span class="pre">device</span></code> and direct <code class="docutils literal notranslate"><span class="pre">resources</span></code> in the context factory.</p></li>
+<li><p>Prefer explicit <code class="docutils literal notranslate"><span class="pre">event_operation()</span></code> construction, especially when context includes validated,
+normalized, resolved, derived, measured, or final-state values.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">&#64;evented_operation(...)</span></code> only for a trivial invocation projection. Match the context
+factory’s complete calling signature to the decorated method; the decorator forwards the
+original <code class="docutils literal notranslate"><span class="pre">*args</span></code> and <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code> without binding or normalization.</p></li>
+<li><p>Include <code class="docutils literal notranslate"><span class="pre">device</span></code> and direct <code class="docutils literal notranslate"><span class="pre">resources</span></code> in the operation context.</p></li>
 <li><p>Preserve PLR resource semantics; use ancestry for context rather than substituting resources.</p></li>
 <li><p>Use PLR’s default units without repeating them in field names. Add a suffix only when a value
 deliberately uses a different unit or representation, such as <code class="docutils literal notranslate"><span class="pre">speed_rpm</span></code> or <code class="docutils literal notranslate"><span class="pre">speed_pct</span></code>.</p></li>
 <li><p>Include <code class="docutils literal notranslate"><span class="pre">source</span></code> and <code class="docutils literal notranslate"><span class="pre">destination</span></code> only for actual resource transfers.</p></li>
-<li><p>Add tests for <code class="docutils literal notranslate"><span class="pre">.started</span></code>, <code class="docutils literal notranslate"><span class="pre">.completed</span></code>, and <code class="docutils literal notranslate"><span class="pre">.failed</span></code>, including operation-ID correlation.</p></li>
+<li><p>Add tests for <code class="docutils literal notranslate"><span class="pre">.started</span></code>, <code class="docutils literal notranslate"><span class="pre">.completed</span></code>, and <code class="docutils literal notranslate"><span class="pre">.failed</span></code>, including operation-ID correlation. For
+decorated methods, test both positional and keyword invocation when the public method supports
+both.</p></li>
 <li><p>Verify no EventBus listener is required for normal device operation and that listener failures
 cannot alter hardware control flow.</p></li>
+<li><p>Update the <a class="reference internal" href="event-schemas.html"><span class="std std-doc">Event Schema Registry</span></a> and user-guide implementation matrix when
+adding a new operation, changing a payload, or instrumenting a new frontend.</p></li>
 </ol>
 <p>New or existing drivers should adopt these conventions incrementally at their public semantic API
-boundaries. Update the user EventBus coverage reference when adding a newly instrumented frontend
-or changing an emitted public operation.</p>
+boundaries. A new operation family establishes precedent for future devices, so its schema should
+be reviewed as deliberately as its implementation.</p>
 </section>
 </section>
 
@@ -870,11 +836,11 @@ or changing an emitted public operation.</p>
       </div>
     </a>
     <a class="right-next"
-       href="contributing-new-resources.html"
+       href="event-schemas.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Contributing New Resources</p>
+        <p class="prev-next-title">Event Schema Registry</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -898,18 +864,10 @@ or changing an emitted public operation.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-to-emit-events">When to emit events</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-an-instrumentation-style">Choosing an instrumentation style</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#event-contract">Event contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#required-fields-for-semantic-device-operations">Required fields for semantic device operations</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operation-templates">Operation templates</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#machine-lifecycle">Machine lifecycle</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-transfer">Resource transfer</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#liquid-handling">Liquid handling</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tip-handling">Tip handling</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#thermal-and-shaking-operations">Thermal and shaking operations</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#centrifuge-and-loader-operations">Centrifuge and loader operations</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#arm-controller-motion">Arm/controller motion</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#canonical-operation-schemas">Canonical operation schemas</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#failure-events">Failure events</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#contributor-checklist">Contributor checklist</a></li>
 </ul>

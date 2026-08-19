@@ -768,13 +768,13 @@
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">passive</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.wait_for_temperature</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code>, <code class="docutils literal notranslate"><span class="pre">tolerance</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code>, <code class="docutils literal notranslate"><span class="pre">tolerance</span></code>; completed event adds <code class="docutils literal notranslate"><span class="pre">current_temperature</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.hold_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, configured <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code> when known</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.deactivate</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, configured <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code> when known</p></td>
 </tr>
 </tbody>
 </table>
@@ -782,6 +782,9 @@
 <p><code class="docutils literal notranslate"><span class="pre">hold_temperature</span></code> records a protocol-requested dwell while the controller remains at its existing
 configuration. It does not send a new temperature command and does not assert that a resource has
 reached the configured target.</p>
+<p>For <code class="docutils literal notranslate"><span class="pre">wait_for_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">current_temperature</span></code> is the controller’s final sensor reading that
+satisfied the requested tolerance. It is emitted only on successful completion and does not imply
+that a loaded resource itself reached that temperature.</p>
 <p>If a resource is assigned when an operation starts, the event’s <code class="docutils literal notranslate"><span class="pre">resources</span></code> contains that direct
 loaded resource. If the holder is empty, <code class="docutils literal notranslate"><span class="pre">resources</span></code> is omitted rather than inferred from
 surrounding deck state.</p>
