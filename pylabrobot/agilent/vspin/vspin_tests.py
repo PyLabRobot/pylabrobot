@@ -72,6 +72,30 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[0].context["operation_id"], events[1].context["operation_id"])
     self.assertEqual(events[1].data["error_type"], "ValueError")
 
+  async def test_spin_accepts_positional_parameters_with_event_bus(self):
+    vspin = VSpin(name="centrifuge", device_id="test")
+    vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    vspin.request_tachometer = AsyncMock(return_value=100000)  # type: ignore[method-assign]
+    vspin.request_position = AsyncMock(  # type: ignore[method-assign]
+      side_effect=[0, 10000000]
+    )
+    vspin.request_home_position = AsyncMock(side_effect=[0, 1])  # type: ignore[method-assign]
+    vspin.send_command = AsyncMock(return_value=b"")  # type: ignore[method-assign]
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await vspin.spin(500, 1, 0.5, 0.6)
+
+    started = events[0]
+    self.assertEqual(started.data["relative_centrifugal_force"], 500)
+    self.assertEqual(started.data["duration"], 1)
+    self.assertEqual(started.data["acceleration_fraction"], 0.5)
+    self.assertEqual(started.data["deceleration_fraction"], 0.6)
+
 
 class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
