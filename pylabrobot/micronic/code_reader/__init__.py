@@ -1,5 +1,5 @@
 from pylabrobot.micronic.code_reader.driver import (
-  MicronicCodeReader,
+  MicronicRD235,
   RackScanEntry,
   RackScanResult,
 )

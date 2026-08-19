@@ -808,13 +808,13 @@
   {
     "id": "micronic-code-reader",
     "vendor": "Micronic",
-    "name": "Code Reader",
+    "name": "RD235",
     "kind": "barcode scanner",
     "capabilities": [
       "barcode reading"
     ],
     "status": "full",
-    "api": "pylabrobot.micronic.MicronicCodeReader",
+    "api": "pylabrobot.micronic.MicronicRD235",
     "api_version": "v1",
     "code_slug": "micronic/code_reader",
     "doc_slug": "micronic/code_reader/hello-world",

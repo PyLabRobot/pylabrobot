@@ -1,4 +1,4 @@
-"""Direct integration for the Micronic rack scanner.
+"""Direct integration for the Micronic RD235 rack scanner.
 
 This driver does not call Micronic Code Reader or IO Monitor. It owns the local
 scanner path directly:
@@ -81,8 +81,8 @@ class RackScanResult:
   rack_barcode: Optional[Barcode] = None
 
 
-class MicronicCodeReader:
-  """Control a Micronic rack scanner without the OEM application.
+class MicronicRD235:
+  """Control a Micronic RD235 rack scanner without the OEM application.
 
   Args:
     scanner: Image acquisition implementation for the flatbed scanner.

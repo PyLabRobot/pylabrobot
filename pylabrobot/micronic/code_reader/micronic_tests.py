@@ -7,7 +7,7 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.io.command_line import CommandLineResult, CommandLineTransport
-from pylabrobot.micronic import MicronicCodeReader, MicronicError, SaneScanner, TwainScanner
+from pylabrobot.micronic import MicronicError, MicronicRD235, SaneScanner, TwainScanner
 from pylabrobot.micronic.code_reader.driver import (
   DecodeResult,
   cluster_axis,
@@ -165,18 +165,18 @@ class TestScannerClasses(unittest.IsolatedAsyncioTestCase):
       await scanner.acquire(Path("rack.bmp"), timeout=1.0)
 
 
-class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
+class TestMicronicRD235(unittest.IsolatedAsyncioTestCase):
   """Tests for the public Micronic code-reader operations."""
 
   def test_rejects_non_positive_device_timeouts(self):
     with self.assertRaisesRegex(ValueError, "scanner_timeout"):
-      MicronicCodeReader(
+      MicronicRD235(
         scanner=_mock_scanner(),
         serial_port="/dev/ttyUSB0",
         scanner_timeout=0,
       )
     with self.assertRaisesRegex(ValueError, "serial_timeout"):
-      MicronicCodeReader(
+      MicronicRD235(
         scanner=_mock_scanner(),
         serial_port="/dev/ttyUSB0",
         serial_timeout=0,
@@ -185,7 +185,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
   async def test_acquire_image_runs_scanner_and_tracks_metadata(self):
     with tempfile.TemporaryDirectory() as image_dir:
       scanner = _mock_scanner()
-      reader = MicronicCodeReader(
+      reader = MicronicRD235(
         scanner=scanner,
         serial_port="/dev/ttyUSB0",
         image_dir=image_dir,
@@ -210,7 +210,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
     with tempfile.TemporaryDirectory() as image_dir:
       scanner = _mock_scanner()
       scanner.acquire = AsyncMock(side_effect=fail_after_writing)
-      reader = MicronicCodeReader(
+      reader = MicronicRD235(
         scanner=scanner,
         serial_port="/dev/ttyUSB0",
         image_dir=image_dir,
@@ -249,7 +249,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
 
     with patch("pylabrobot.micronic.code_reader.driver.Serial", FakeSerial):
       scanner = _mock_scanner()
-      reader = MicronicCodeReader(scanner=scanner, serial_port="/dev/ttyUSB0")
+      reader = MicronicRD235(scanner=scanner, serial_port="/dev/ttyUSB0")
       await reader.setup()
       try:
         rack_id = await reader.scan_rack_id(timeout=1.0)
@@ -271,7 +271,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_stops_scanner_when_serial_setup_fails(self):
     scanner = _mock_scanner()
-    reader = MicronicCodeReader(scanner=scanner, serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=scanner, serial_port="/dev/ttyUSB0")
 
     with patch.object(reader.io, "setup", AsyncMock(side_effect=OSError("serial failed"))):
       with self.assertRaisesRegex(OSError, "serial failed"):
@@ -282,7 +282,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
 
   async def test_stop_releases_scanner_when_serial_stop_fails(self):
     scanner = _mock_scanner()
-    reader = MicronicCodeReader(scanner=scanner, serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=scanner, serial_port="/dev/ttyUSB0")
 
     with patch.object(reader.io, "stop", AsyncMock(side_effect=OSError("serial failed"))):
       with self.assertRaisesRegex(OSError, "serial failed"):
@@ -293,7 +293,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
   async def test_scan_rack_populates_result(self):
     with tempfile.TemporaryDirectory() as image_dir:
       scanner = _mock_scanner()
-      reader = MicronicCodeReader(
+      reader = MicronicRD235(
         scanner=scanner,
         serial_port="/dev/ttyUSB0",
         image_dir=image_dir,
@@ -335,7 +335,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
   async def test_reader_can_scan_twice(self):
     with tempfile.TemporaryDirectory() as image_dir:
       scanner = _mock_scanner()
-      reader = MicronicCodeReader(
+      reader = MicronicRD235(
         scanner=scanner,
         serial_port="/dev/ttyUSB0",
         image_dir=image_dir,
@@ -365,12 +365,12 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(scanner.acquire.await_count, 2)
 
   async def test_rejects_mismatched_rack_shape(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     with self.assertRaises(MicronicError):
       await reader.scan_rack(_rack(num_items_x=6, num_items_y=4), timeout=1.0)
 
   async def test_rejects_concurrent_scan(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     await reader._scan_lock.acquire()
     try:
       with self.assertRaises(MicronicError):
@@ -379,7 +379,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       reader._scan_lock.release()
 
   async def test_scan_rack_times_out(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
 
     async def slow(rack):
       del rack
@@ -391,7 +391,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
         await reader.scan_rack(rack=_rack(), timeout=0.01)
 
   async def test_timeout_keeps_scan_lock_until_blocking_scan_finishes(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     loop = asyncio.get_running_loop()
     scan_future = loop.create_future()
     loop.call_later(0.05, scan_future.set_result, MagicMock())
@@ -409,7 +409,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       self.assertFalse(reader._scan_lock.locked())
 
   async def test_scan_rack_propagates_micronic_error(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     with self.assertRaises(MicronicError):
       await reader.scan_rack(
         rack=_rack(num_items_x=6, num_items_y=4),
@@ -417,7 +417,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       )
 
   async def test_scan_rack_id_reads_barcode(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     with patch.object(
       reader, "_read_barcode", AsyncMock(return_value="9500017722")
     ) as read_barcode:
@@ -427,7 +427,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
       read_barcode.assert_awaited_once_with()
 
   async def test_scan_rack_id_returns_noread_for_unrecognized_response(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     with (
       patch.object(reader.io, "reset_input_buffer", AsyncMock()),
       patch.object(reader.io, "write", AsyncMock()),
@@ -438,7 +438,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(rack_id, "NOREAD")
 
   async def test_scan_rack_id_wraps_serial_error(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     with patch.object(
       reader.io,
       "reset_input_buffer",
@@ -448,7 +448,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
         await reader.scan_rack_id(timeout=1.0)
 
   def test_decode_rack_returns_noread_for_missing_wells(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
 
     with patch(
@@ -464,7 +464,7 @@ class TestMicronicCodeReader(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(result.entries[1].barcode)
 
   def test_decode_rack_represents_missing_rack_id(self):
-    reader = MicronicCodeReader(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
+    reader = MicronicRD235(scanner=_mock_scanner(), serial_port="/dev/ttyUSB0")
     decoded = {"A1": DecodeResult(tube_id="1111111111", method="test")}
 
     with patch(

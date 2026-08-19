@@ -3,7 +3,7 @@
 pylabrobot.micronic package
 ===========================
 
-Direct Micronic code-reader integration.
+Direct Micronic RD235 code-reader integration.
 
 Code reader
 -----------
@@ -15,7 +15,7 @@ Code reader
   :nosignatures:
   :recursive:
 
-    MicronicCodeReader
+    MicronicRD235
     RackScanEntry
     RackScanResult
 
