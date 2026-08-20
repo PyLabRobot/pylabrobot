@@ -75,10 +75,13 @@ Use `move_resource()` when the manual action transfers a modeled PLR resource be
 locations:
 
 ```python
+from pylabrobot.resources import Rotation
+
 await operator.move_resource(
   resource=sample_plate,
   source=centrifuge_loader,
   destination=handover_nest,
+  destination_rotation=Rotation(z=0),
 )
 ```
 
@@ -86,7 +89,10 @@ The method validates the source and destination before prompting, but leaves the
 to its source while the operator works. After the provider reports completion, it validates the
 model again and assigns the resource to the destination using PLR's normal resource-assignment
 machinery. A `ResourceHolder` supplies its normal child location; other destinations can use an
-explicit `destination_location=Coordinate(...)`.
+explicit `destination_location=Coordinate(...)`. Pass an explicit
+`destination_rotation=Rotation(...)` when the manual move changes orientation. The rotation is
+never inferred from the destination holder and is applied before a holder calculates its child
+location.
 
 Cancellation, reported failure, and provider exceptions do not modify the resource model. If the
 model changes while the operator request is pending, the method raises an error rather than

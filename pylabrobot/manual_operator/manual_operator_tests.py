@@ -11,7 +11,7 @@ from pylabrobot.manual_operator import (
   OperatorActionRequest,
   OperatorActionResult,
 )
-from pylabrobot.resources import Coordinate, Resource, ResourceHolder
+from pylabrobot.resources import Coordinate, Resource, ResourceHolder, Rotation
 
 
 class RecordingProvider:
@@ -158,10 +158,38 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
       {"x": 1, "y": 2, "z": 3, "type": "Coordinate"},
     )
 
+  async def test_move_resource_applies_destination_rotation_before_assignment(self):
+    source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder(
+      "destination",
+      size_x=100,
+      size_y=100,
+      size_z=10,
+      child_location=Coordinate(4, 5, 6),
+    )
+    plate = Resource("plate", size_x=127, size_y=85, size_z=15, rotation=Rotation(z=90))
+    source.assign_child_resource(plate)
+    provider = RecordingProvider(OperatorActionResult.completed())
+
+    await ManualOperator(provider).move_resource(
+      resource=plate,
+      source=source,
+      destination=destination,
+      destination_rotation=Rotation(z=0),
+    )
+
+    self.assertIs(plate.parent, destination)
+    self.assertEqual(plate.rotation.z, 0)
+    self.assertEqual(plate.location, Coordinate(4, 5, 6))
+    self.assertEqual(
+      provider.requests[0].details["destination_rotation"],
+      {"x": 0, "y": 0, "z": 0, "type": "Rotation"},
+    )
+
   async def test_move_resource_cancellation_leaves_model_unchanged(self):
     source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
     destination = ResourceHolder("destination", size_x=100, size_y=100, size_z=10)
-    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15, rotation=Rotation(z=90))
     source.assign_child_resource(plate)
     provider = RecordingProvider(OperatorActionResult.cancelled())
 
@@ -170,10 +198,12 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
         resource=plate,
         source=source,
         destination=destination,
+        destination_rotation=Rotation(z=0),
       )
 
     self.assertIs(source.resource, plate)
     self.assertIsNone(destination.resource)
+    self.assertEqual(plate.rotation.z, 90)
 
   async def test_move_resource_rejects_incorrect_source_before_prompt(self):
     actual_source = ResourceHolder("actual_source", size_x=100, size_y=100, size_z=10)
@@ -312,6 +342,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
         resource=plate,
         source=source,
         destination=destination,
+        destination_rotation=Rotation(z=90),
       )
 
     manual_events = [event for event in events if event.name.startswith("manual_operator.")]
@@ -322,6 +353,14 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(manual_events[0].data["resources"][0]["name"], "plate")
     self.assertEqual(manual_events[0].data["source"]["name"], "source")
     self.assertEqual(manual_events[0].data["destination"]["name"], "destination")
+    self.assertEqual(
+      manual_events[0].data["details"]["destination_rotation"],
+      {"x": 0, "y": 0, "z": 90, "type": "Rotation"},
+    )
+    self.assertEqual(
+      manual_events[1].data["details"]["destination_rotation"],
+      {"x": 0, "y": 0, "z": 90, "type": "Rotation"},
+    )
     self.assertEqual(
       [event.name for event in events if event.name.startswith("resource.")],
       ["resource.unassigned", "resource.assigned"],

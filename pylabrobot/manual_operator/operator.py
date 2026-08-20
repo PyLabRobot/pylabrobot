@@ -3,7 +3,7 @@
 from typing import Any, Dict, Optional, Sequence
 
 from pylabrobot.events import device_reference, event_operation, resource_reference
-from pylabrobot.resources import Coordinate, Resource
+from pylabrobot.resources import Coordinate, Resource, Rotation
 
 from .provider import OperatorActionProvider
 from .standard import (
@@ -103,6 +103,7 @@ class ManualOperator:
     source: Resource,
     destination: Resource,
     destination_location: Optional[Coordinate] = None,
+    destination_rotation: Optional[Rotation] = None,
     title: Optional[str] = None,
     instructions: Optional[str] = None,
     confirmation_text: str = "Confirm resource moved",
@@ -120,6 +121,8 @@ class ManualOperator:
       destination: Resource that will contain ``resource`` after the move.
       destination_location: Optional resource location relative to ``destination``. Resource
         holders calculate their normal child location when this is omitted.
+      destination_rotation: Optional resource-local rotation to apply before destination
+        assignment. This is not inferred from ``destination``.
       title: Provider-facing title. Defaults to ``"Move <resource name>"``.
       instructions: Provider-facing instructions. Defaults to a concise source-to-destination
         instruction.
@@ -133,9 +136,19 @@ class ManualOperator:
       destination=destination,
     )
 
+    requested_rotation: Optional[Rotation] = None
+    if destination_rotation is not None:
+      requested_rotation = Rotation(
+        x=destination_rotation.x,
+        y=destination_rotation.y,
+        z=destination_rotation.z,
+      )
+
     move_details = {} if details is None else details.copy()
     if destination_location is not None:
       move_details["destination_location"] = destination_location.serialize()
+    if requested_rotation is not None:
+      move_details["destination_rotation"] = requested_rotation.serialize()
 
     result = await self.perform(
       action="resource.move",
@@ -161,11 +174,18 @@ class ManualOperator:
         "the completed physical move was not applied to the model."
       ) from error
 
-    destination.assign_child_resource(
-      resource=resource,
-      location=destination_location,
-      reassign=True,
-    )
+    previous_rotation = resource.rotation
+    if requested_rotation is not None:
+      resource.rotation = requested_rotation
+    try:
+      destination.assign_child_resource(
+        resource=resource,
+        location=destination_location,
+        reassign=True,
+      )
+    except Exception:
+      resource.rotation = previous_rotation
+      raise
     return result
 
   @staticmethod
