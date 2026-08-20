@@ -12,6 +12,16 @@ logger = logging.getLogger(__name__)
 # Seconds of polling a command gets on top of however long its own motion takes.
 COMMAND_POLL_HEADROOM = 30.0
 
+# One request/response with the robot-server. A read of robot state, not a motion.
+DEFAULT_REQUEST_TIMEOUT = 30.0
+
+# One command, including the motion it performs. Above the slowest single move this
+# class wraps: a gripper labware move (pick, travel, place) runs to about two minutes.
+DEFAULT_COMMAND_TIMEOUT = 120.0
+
+# Delay between two reads of a running command's status.
+DEFAULT_STATUS_POLL_INTERVAL = 0.2
+
 
 def _plunger_seconds(params: Dict[str, Any]) -> float:
   """How long a command's own plunger travel takes, from its volume and rate.
@@ -80,12 +90,52 @@ class OpentronsRobot(abc.ABC):
     host: str,
     port: int = 31950,
     transport: Optional[OpentronsTransport] = None,
+    request_timeout: Optional[float] = None,
+    command_timeout: float = DEFAULT_COMMAND_TIMEOUT,
+    status_poll_interval: float = DEFAULT_STATUS_POLL_INTERVAL,
   ) -> None:
+    """Args:
+    host: the robot's address.
+    port: the robot-server's port.
+    transport: wire transport to use instead of a real one, for offline runs.
+    request_timeout: how long one request/response may take, in seconds. Only a
+      transport this robot builds itself can carry it, so passing it alongside a
+      ``transport`` is refused; give that transport the budget instead. The
+      attribute reads ``None`` when a transport came in: the budget is that
+      transport's, and this object does not know it.
+    command_timeout: how long to poll a command before giving up, in seconds. A
+      command that names its own motion time gets ``max(command_timeout, motion +
+      COMMAND_POLL_HEADROOM)``.
+    status_poll_interval: delay between two command-status reads, in seconds.
+    """
+    if transport is not None and request_timeout is not None:
+      raise ValueError(
+        "request_timeout does not reach an injected transport. Build the transport "
+        "with the budget you want, e.g. HttpxTransport(base_url, timeout=...)."
+      )
+    for name, value in (
+      ("request_timeout", request_timeout),
+      ("command_timeout", command_timeout),
+      ("status_poll_interval", status_poll_interval),
+    ):
+      if value is not None and value <= 0:
+        raise ValueError(f"{name} must be greater than 0, got {value}")
     self.host, self.port = host, port
     self.base_url = f"http://{host}:{port}"
+    self.command_timeout = command_timeout
+    self.status_poll_interval = status_poll_interval
     # Built here rather than on connect: a pylabrobot io refuses construction
     # once a capture is armed, so a robot built first can still be recorded.
-    self._transport: OpentronsTransport = transport or HttpxTransport(base_url=self.base_url)
+    if transport is None:
+      self.request_timeout: Optional[float] = (
+        DEFAULT_REQUEST_TIMEOUT if request_timeout is None else request_timeout
+      )
+      self._transport: OpentronsTransport = HttpxTransport(
+        base_url=self.base_url, timeout=self.request_timeout
+      )
+    else:
+      self.request_timeout = None
+      self._transport = transport
     self.run_id: Optional[str] = None
     self.pipette: Optional[PipetteInfo] = None
     self.api_version: Optional[str] = None
@@ -206,7 +256,7 @@ class OpentronsRobot(abc.ABC):
     command_type: str,
     params: Optional[Dict[str, Any]] = None,
     wait: bool = True,
-    timeout: float = 30.0,
+    timeout: Optional[float] = None,
   ) -> Dict[str, Any]:
     """Send any robot command by name, for the parts of the robot this class does not wrap.
 
@@ -276,7 +326,7 @@ class OpentronsRobot(abc.ABC):
     command_type: str,
     params: Dict[str, Any],
     wait: bool = True,
-    timeout: float = 30.0,
+    timeout: Optional[float] = None,
   ) -> Dict[str, Any]:
     """Execute a command within the current run.
 
@@ -289,7 +339,7 @@ class OpentronsRobot(abc.ABC):
         "aspirateInPlace", "pickUpTip", "loadLabware".
       params: Command-specific parameters.
       wait: If True, poll until completion.
-      timeout: Max seconds to wait.
+      timeout: Max seconds to wait. Defaults to the robot's ``command_timeout``.
 
     Returns:
       The completed command data dict (includes "result" field).
@@ -299,7 +349,13 @@ class OpentronsRobot(abc.ABC):
       RuntimeError: If the command times out.
     """
     assert self.run_id is not None, "No active run. Call create_run() first."
-    timeout = max(timeout, _plunger_seconds(params) + COMMAND_POLL_HEADROOM)
+    if timeout is None:
+      timeout = self.command_timeout
+    # Headroom rides on a command's own motion time; it is not a floor under a
+    # command that has none, or no budget below it could ever be set.
+    motion = _plunger_seconds(params)
+    if motion > 0:
+      timeout = max(timeout, motion + COMMAND_POLL_HEADROOM)
     payload = {
       "data": {
         "commandType": command_type,
@@ -317,19 +373,21 @@ class OpentronsRobot(abc.ABC):
     if not cmd_id:
       return cmd_data
 
-    # Poll for completion
+    # Status is read once more after the deadline passes: a command that finished
+    # during the last sleep succeeded, and calling that a timeout aborts a real move.
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+    while True:
       resp = await self._get(f"/runs/{self.run_id}/commands/{cmd_id}")
       cmd_data = resp.get("data", {})
       status = cmd_data.get("status", "")
       if status == "succeeded":
         return cmd_data
-      elif status == "failed":
+      if status == "failed":
         raise OpentronsCommandError(command_type, cmd_data.get("error", {}))
-      await asyncio.sleep(0.2)
-
-    raise RuntimeError(f"Opentrons command '{command_type}' timed out after {timeout}s")
+      remaining = deadline - time.monotonic()
+      if remaining <= 0:
+        raise RuntimeError(f"Opentrons command '{command_type}' timed out after {timeout}s")
+      await asyncio.sleep(min(self.status_poll_interval, remaining))
 
   # --- Instrument Discovery ---
 

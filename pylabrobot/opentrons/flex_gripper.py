@@ -27,10 +27,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Gripper moves are slow physical operations (pick + travel + place), so give
-# them far more headroom than the 30s ``_execute_command`` default.
-_MOVE_LABWARE_TIMEOUT = 120.0
-
 # Grip-force bounds (Newtons) the robot-server accepts for closeGripperJaw.
 _GRIPPER_MIN_FORCE = 2.0
 _GRIPPER_MAX_FORCE = 30.0
@@ -123,7 +119,6 @@ class FlexGripper:
         "newLocation": slot_wire_location(to_slot),
         "strategy": "usingGripper",
       },
-      timeout=_MOVE_LABWARE_TIMEOUT,
     )
 
     deck.unassign_child_at_slot(from_slot)

@@ -607,6 +607,13 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
     self.star.io = unittest.mock.AsyncMock()
     await super().asyncSetUp()
 
+  async def asyncTearDown(self):
+    # send_command starts the reading thread, whose loop polls on asyncio.sleep.
+    # Left running it outlives this test and busy-spins in any later test that
+    # replaces asyncio.sleep with a mock.
+    await self.star.stop()
+    await super().asyncTearDown()
+
   async def test_send_command_correct_response(self):
     self.star.io.read.side_effect = [b"C0QMid0001"]
     resp = await self.star.send_command("C0", command="QM", fmt="id####")
