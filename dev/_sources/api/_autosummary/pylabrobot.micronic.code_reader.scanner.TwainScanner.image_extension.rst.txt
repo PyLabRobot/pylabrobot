@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.scanner.TwainScanner.image\_extension
+======================================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.scanner
+
+.. autoattribute:: TwainScanner.image_extension

@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.driver.RackScanEntry.position
+==============================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.driver
+
+.. autoattribute:: RackScanEntry.position

@@ -1,0 +1,6 @@
+﻿pylabrobot.micronic.code\_reader.errors.MicronicError
+=====================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.errors
+
+.. autoexception:: MicronicError

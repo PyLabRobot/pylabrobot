@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.driver.RackScanResult.\_\_init\_\_
+===================================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.driver
+
+.. automethod:: RackScanResult.__init__

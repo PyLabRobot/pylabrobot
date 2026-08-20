@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.micronic.code\_reader.scanner.Scanner
+================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.scanner
+
+.. autoclass:: Scanner
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Scanner.image_extension
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Scanner.__init__
+      ~Scanner.acquire
+      ~Scanner.setup
+      ~Scanner.stop
+   
+   

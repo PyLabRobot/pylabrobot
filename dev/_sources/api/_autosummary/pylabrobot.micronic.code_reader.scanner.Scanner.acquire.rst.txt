@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.scanner.Scanner.acquire
+========================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.scanner
+
+.. automethod:: Scanner.acquire

@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.driver.MicronicRD235.scan\_rack\_id
+====================================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.driver
+
+.. automethod:: MicronicRD235.scan_rack_id

@@ -1,0 +1,6 @@
+pylabrobot.micronic.code\_reader.scanner.SaneScanner.stop
+=========================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.scanner
+
+.. automethod:: SaneScanner.stop

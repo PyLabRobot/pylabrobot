@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.micronic.code\_reader.driver.RackScanResult
+======================================================
+
+.. currentmodule:: pylabrobot.micronic.code_reader.driver
+
+.. autoclass:: RackScanResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~RackScanResult.rack_barcode
+      ~RackScanResult.rack_id
+      ~RackScanResult.entries
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~RackScanResult.__init__
+   
+   
