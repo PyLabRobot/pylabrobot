@@ -131,13 +131,6 @@ class ManualOperator:
     )
 
     move_details = {} if details is None else details.copy()
-    move_details.update(
-      {
-        "resource": resource.name,
-        "source": source.name,
-        "destination": destination.name,
-      }
-    )
     if destination_location is not None:
       move_details["destination_location"] = destination_location.serialize()
 

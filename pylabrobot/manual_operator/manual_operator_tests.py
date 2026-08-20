@@ -126,10 +126,7 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     self.assertIs(destination.resource, plate)
     self.assertEqual(plate.location, Coordinate(4, 5, 6))
     request = provider.requests[0]
-    self.assertEqual(
-      request.details,
-      {"resource": "plate", "source": "source", "destination": "destination"},
-    )
+    self.assertEqual(request.details, {})
 
   async def test_move_resource_uses_explicit_destination_location(self):
     source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
@@ -144,13 +141,12 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
       source=source,
       destination=destination,
       destination_location=location,
-      details={"reason": "manual handoff", "source": "ignored override"},
+      details={"reason": "manual handoff"},
     )
 
     self.assertIs(plate.parent, destination)
     self.assertEqual(plate.location, location)
     self.assertEqual(provider.requests[0].details["reason"], "manual handoff")
-    self.assertEqual(provider.requests[0].details["source"], "source")
     self.assertEqual(
       provider.requests[0].details["destination_location"],
       {"x": 1, "y": 2, "z": 3, "type": "Coordinate"},

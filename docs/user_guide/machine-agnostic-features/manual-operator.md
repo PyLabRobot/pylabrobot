@@ -108,6 +108,6 @@ Use stable action identifiers such as `centrifuge.spin`, `plate_reader.read`, or
 `quality_control.inspect`. When the manual action has an automated counterpart, use that
 operation's canonical field names and PLR default units inside `details`. `move_resource()` emits
 `manual_operator.resource.move.*` with the direct moved resource plus its true `source` and
-`destination` resource references. The normal
+`destination` resource references; do not mirror those endpoints as free-form `details`. The normal
 `resource.unassigned` and `resource.assigned` state-transition events record the subsequent model
 update.

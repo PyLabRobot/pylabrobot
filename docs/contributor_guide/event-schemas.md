@@ -165,6 +165,21 @@ These are state-transition records rather than semantic operation lifecycles.
 | `liquid_handler.resource_move` | `device`, `resources` | Moves the currently held resource without assigning it to a destination. |
 | `liquid_handler.resource_drop` | `device`, `resources`, `destination` | Drops the currently held resource at a resource or geometric destination. |
 
+### Manual operator actions
+
+Manual actions use the semantic lifecycle `manual_operator.<action>.*`, where `<action>` is a
+stable, developer-defined action identifier such as `centrifuge.spin`, `plate_reader.read`, or
+`quality_control.inspect`.
+
+| Operation | Fields | Notes |
+| --- | --- | --- |
+| `manual_operator.<action>` | `device`, optional `resources`, `manual_action`, `title`, `instructions`, `confirmation_text`, `details`; **completed only:** optional `confirmed_by`, optional `result_message` | `device` is the `ManualOperator`; `details` contains action-specific request data. When the action has an automated counterpart, reuse its canonical field names and PLR default units inside `details`. |
+| `manual_operator.resource.move` | `device`, `resources`, `source`, `destination`, `manual_action`, `title`, `instructions`, `confirmation_text`, optional `details`; **completed only:** optional `confirmed_by`, optional `result_message` | `resources` contains the directly moved resource. `source` and `destination` are its actual modeled transfer endpoints. The subsequent model update emits normal `resource.unassigned` and `resource.assigned` state transitions. |
+
+Manual action providers decide how an operator acknowledges the request. Cancellation,
+provider-reported failure, invalid provider results, and provider exceptions produce the normal
+failed lifecycle record with `error_type` and `error_message`.
+
 ## Liquid handling
 
 ### Channelized liquid operations
