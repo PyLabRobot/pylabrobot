@@ -134,6 +134,25 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     self.assertIs(request.source, source)
     self.assertIs(request.destination, destination)
 
+  async def test_move_resource_reassigns_between_holders_on_the_same_root(self):
+    deck = Resource("deck", size_x=1000, size_y=1000, size_z=10)
+    source = ResourceHolder("plate_module_0", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder("handover_nest", size_x=100, size_y=100, size_z=10)
+    deck.assign_child_resource(source, location=Coordinate(0, 0, 0))
+    deck.assign_child_resource(destination, location=Coordinate(200, 0, 0))
+    plate = Resource("plate", size_x=80, size_y=60, size_z=15)
+    source.assign_child_resource(plate)
+
+    await ManualOperator(RecordingProvider(OperatorActionResult.completed())).move_resource(
+      resource=plate,
+      source=source,
+      destination=destination,
+    )
+
+    self.assertIsNone(source.resource)
+    self.assertIs(destination.resource, plate)
+    self.assertIs(plate.parent, destination)
+
   async def test_move_resource_uses_explicit_destination_location(self):
     source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
     destination = Resource("destination", size_x=100, size_y=100, size_z=10)
@@ -204,6 +223,35 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     self.assertIs(source.resource, plate)
     self.assertIsNone(destination.resource)
     self.assertEqual(plate.rotation.z, 90)
+
+  async def test_move_resource_restores_original_pose_when_destination_assignment_fails(self):
+    deck = Resource("deck", size_x=1000, size_y=1000, size_z=10)
+    source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
+    destination = ResourceHolder("destination", size_x=100, size_y=100, size_z=10)
+    deck.assign_child_resource(source, location=Coordinate(0, 0, 0))
+    deck.assign_child_resource(destination, location=Coordinate(200, 0, 0))
+    plate = Resource("plate", size_x=127, size_y=85, size_z=15, rotation=Rotation(z=90))
+    source.assign_child_resource(plate)
+    original_location = plate.location
+
+    def fail_assignment(_resource: Resource) -> None:
+      raise RuntimeError("destination assignment failed")
+
+    destination.register_will_assign_resource_callback(fail_assignment)
+
+    with self.assertRaisesRegex(RuntimeError, "destination assignment failed"):
+      await ManualOperator(RecordingProvider(OperatorActionResult.completed())).move_resource(
+        resource=plate,
+        source=source,
+        destination=destination,
+        destination_rotation=Rotation(z=0),
+      )
+
+    self.assertIs(source.resource, plate)
+    self.assertIs(plate.parent, source)
+    self.assertEqual(plate.location, original_location)
+    self.assertEqual(plate.rotation.z, 90)
+    self.assertIsNone(destination.resource)
 
   async def test_move_resource_rejects_incorrect_source_before_prompt(self):
     actual_source = ResourceHolder("actual_source", size_x=100, size_y=100, size_z=10)

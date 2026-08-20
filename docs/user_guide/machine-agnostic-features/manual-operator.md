@@ -87,12 +87,13 @@ await operator.move_resource(
 
 The method validates the source and destination before prompting, but leaves the resource assigned
 to its source while the operator works. After the provider reports completion, it validates the
-model again and assigns the resource to the destination using PLR's normal resource-assignment
-machinery. A `ResourceHolder` supplies its normal child location; other destinations can use an
+model again, detaches the resource from its source, and assigns it to the destination using PLR's
+normal resource-assignment machinery. This supports transfers between holders on the same deck
+root. A `ResourceHolder` supplies its normal child location; other destinations can use an
 explicit `destination_location=Coordinate(...)`. Pass an explicit
 `destination_rotation=Rotation(...)` when the manual move changes orientation. The rotation is
 never inferred from the destination holder and is applied before a holder calculates its child
-location.
+location. If final assignment fails, the original parent, location, and rotation are restored.
 
 Cancellation, reported failure, and provider exceptions do not modify the resource model. If the
 model changes while the operator request is pending, the method raises an error rather than

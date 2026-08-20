@@ -174,17 +174,30 @@ class ManualOperator:
         "the completed physical move was not applied to the model."
       ) from error
 
-    previous_rotation = resource.rotation
-    if requested_rotation is not None:
-      resource.rotation = requested_rotation
+    previous_location = resource.location
+    previous_rotation = Rotation(
+      x=resource.rotation.x,
+      y=resource.rotation.y,
+      z=resource.rotation.z,
+    )
+    source.unassign_child_resource(resource)
     try:
+      if requested_rotation is not None:
+        resource.rotation = requested_rotation
       destination.assign_child_resource(
         resource=resource,
         location=destination_location,
         reassign=True,
       )
     except Exception:
+      if resource.parent is not None:
+        resource.parent.unassign_child_resource(resource)
       resource.rotation = previous_rotation
+      source.assign_child_resource(
+        resource=resource,
+        location=previous_location,
+        reassign=True,
+      )
       raise
     return result
 
