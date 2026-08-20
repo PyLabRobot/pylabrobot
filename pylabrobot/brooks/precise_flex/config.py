@@ -47,8 +47,11 @@ class StationAccess:
     clearance: ZClearance in mm. Distance backed off from the plate when
       approaching and departing.
     z_above: ZAbove in mm. Vertical offset used with a horizontal approach.
-    grasp_offset: ZGrasp in mm, added to the clearance while a plate is held, to
-      allow for the plate in the gripper.
+    grasp_offset: ZGrasp in mm. Extra height the retreat rises while a plate is in the
+      jaws, on top of the resource and the travel margin, so a deep nest lets the skirt
+      out. Empty jaws do not take it: neither a pick that caught nothing nor a place
+      after the release. Nor does a horizontal station, which leaves by ``z_above`` and
+      then withdraws level, with a shelf overhead and no room to rise into.
   """
 
   approach: ApproachDirection = "vertical"
@@ -103,7 +106,12 @@ class PreciseFlexConfiguration:
   reach_class: Literal["standard", "extended", "unknown"] = "extended"
 
   @property
-  def gripper_width_range(self) -> tuple:
+  def gripper_axis_limits(self) -> tuple[float, float]:
+    """Travel limits of the gripper axis, in the controller's own units.
+
+    Not millimetres: a jaw width reaches these through
+    ``PreciseFlex.closed_gripper_position``, so callers must convert.
+    """
     return self.soft_limits[Axis.GRIPPER]
 
   @property

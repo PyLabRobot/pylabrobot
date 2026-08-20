@@ -4,10 +4,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.brooks.precise_flex import (
   Axis,
+  IKError,
   OutOfRangeOfMotionError,
   PreciseFlex,
   PreciseFlexCartesianPose,
+  PreciseFlexError,
   StationAccess,
+  WorkEnvelope,
 )
 from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
 from pylabrobot.resources import Coordinate, Rotation
@@ -22,15 +25,34 @@ def mocked(method: object) -> AsyncMock:
   return cast(AsyncMock, method)
 
 
-def _make_arm(closed_gripper_position: float = 500.0) -> PreciseFlex:
-  """An arm whose transport is stubbed out, so tests assert on the commands it would send."""
+_PAD_1 = Coordinate(329.9, 80.29, 40.48)
+
+
+def _make_arm(
+  closed_gripper_position: float = 500.0,
+  gripper_units: float = 503.0,
+) -> PreciseFlex:
+  """An arm whose transport is stubbed out, so tests assert on the commands it would send.
+
+  `wherej` answers with a pose because pick and place read the gripper axis back to tell a
+  held plate from empty jaws; `gripper_units` is what those reads see. The default is the
+  bench proportion: the jaws are opened a step (10) off the grip position and a plate holds
+  them a little (3) above it, inside that opening. A held position wider than the opening
+  would describe a plate the fingers had already hit on the way in.
+  """
   arm = PreciseFlex(
     host="localhost",
     gripper_length=162.0,
     gripper_z_offset=0.0,
     closed_gripper_position=closed_gripper_position,
   )
-  arm.send_command = AsyncMock(return_value="")  # type: ignore[method-assign]
+
+  async def reply(command: str) -> str:
+    if command == "wherej":
+      return f"40.48 84.76 229.84 -312.57 {gripper_units}"
+    return ""
+
+  arm.send_command = AsyncMock(side_effect=reply)  # type: ignore[method-assign]
   return arm
 
 
@@ -43,14 +65,15 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
 
   async def test_move_gripper_force_sensing_false_opens_with_position(self):
-    # 80 mm â‡’ 500 + (80 - 60) = 520 firmware units.
+    # 80 mm â‡’ 500 + (80 - 60) = 520 firmware units. The settle poll runs first, so the
+    # actuation is the tail of the exchange, not the whole of it.
     await self.arm.move_gripper(width=80.0, force_sensing=False)
-    self.assertEqual(self._sent_commands(), ["GripOpenPos 520.0", "gripper 1"])
+    self.assertEqual(self._sent_commands()[-2:], ["GripOpenPos 520.0", "gripper 1"])
 
   async def test_move_gripper_force_sensing_true_closes_with_position(self):
     # 60 mm (the closed reference) â‡’ exactly closed_gripper_position.
     await self.arm.move_gripper(width=60.0, force_sensing=True)
-    self.assertEqual(self._sent_commands(), ["GripClosePos 500.0", "gripper 2"])
+    self.assertEqual(self._sent_commands()[-2:], ["GripClosePos 500.0", "gripper 2"])
 
   async def test_move_gripper_position_command_precedes_move(self):
     await self.arm.move_gripper(width=120.0, force_sensing=False)
@@ -80,13 +103,70 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     await arm.move_gripper(width=80.0, force_sensing=False)
     commands = [c.args[0] for c in mocked(arm.send_command).call_args_list]
     # 80 mm â‡’ 1000 + (80 - 60) = 1020 units.
-    self.assertEqual(commands, ["GripOpenPos 1020.0", "gripper 1"])
+    self.assertEqual(commands[-2:], ["GripOpenPos 1020.0", "gripper 1"])
 
   def test_mm_to_firmware_units_helper(self):
     # Direct check of the linear mapping.
     self.assertEqual(self.arm._mm_to_firmware_units(60.0), 500.0)
     self.assertEqual(self.arm._mm_to_firmware_units(145.0), 585.0)
     self.assertEqual(self.arm._mm_to_firmware_units(100.0), 540.0)
+
+
+class TestGripperWidthsAdoptedFromSoftLimits(unittest.IsolatedAsyncioTestCase):
+  """A width has to mean the same jaw travel before and after the axis limits are read.
+
+  Bench numbers: the gripper axis reports [69.0, 134.0] and the fitted gripper closes at
+  75.5. The two differ, which is the case that used to strand the top of the range and
+  shift every width underneath it.
+  """
+
+  AXIS_MIN, AXIS_MAX = 69.0, 134.0
+  CLOSED_AT = 75.5
+
+  def setUp(self):
+    self.arm = _make_arm(closed_gripper_position=self.CLOSED_AT)
+
+  def _discover(self, arm=None, limits=None):
+    discovered = MagicMock()
+    discovered.gripper_axis_limits = limits or (self.AXIS_MIN, self.AXIS_MAX)
+    discovered.has_rail = False
+    discovered.is_dual_gripper = False
+    (arm or self.arm)._adopt_configuration(discovered)
+
+  def _sent(self, arm=None) -> list[str]:
+    return [c.args[0] for c in mocked((arm or self.arm).send_command).call_args_list]
+
+  async def test_a_width_commands_the_same_travel_before_and_after_discovery(self):
+    await self.arm.move_gripper(80.0, force_sensing=False)
+    before = self._sent()
+    self._discover()
+    await self.arm.move_gripper(80.0, force_sensing=False)
+    after = self._sent()[len(before) :]
+    self.assertEqual(before[0], after[0], "discovery moved what 80 mm means")
+
+  async def test_opening_to_the_advertised_max_reaches_the_axis_ceiling(self):
+    self._discover()
+    await self.arm.move_gripper(self.arm.max_gripper_width, force_sensing=False)
+    self.assertIn(f"GripOpenPos {self.AXIS_MAX}", self._sent())
+
+  async def test_closing_to_the_advertised_min_reaches_the_axis_floor(self):
+    self._discover()
+    await self.arm.move_gripper(self.arm.min_gripper_width, force_sensing=True)
+    self.assertIn(f"GripClosePos {self.AXIS_MIN}", self._sent())
+
+  async def test_an_advertised_end_survives_its_own_float_round_trip(self):
+    # Limits that are not halves: the reconverted ceiling lands a few ulps out, and the
+    # guard has to read that as float dust rather than as out of range.
+    arm = _make_arm(closed_gripper_position=75.53)
+    self._discover(arm=arm, limits=(70.3, 134.097))
+    await arm.move_gripper(arm.max_gripper_width, force_sensing=False)
+    self.assertIn("GripOpenPos 134.097", self._sent(arm))
+
+  def test_the_soft_limits_stay_in_firmware_units(self):
+    self._discover()
+    self.assertEqual(
+      (self.arm._gripper_soft_min, self.arm._gripper_soft_max), (self.AXIS_MIN, self.AXIS_MAX)
+    )
 
 
 class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
@@ -139,6 +219,8 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       [event.data["command"] for event in firmware_events],
       [
+        "wherej",  # the settle poll the jaws wait behind
+        "wherej",
         "GripOpenPos 520.0",
         "gripper 1",
       ],
@@ -283,7 +365,7 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
   async def test_park_without_position_falls_back_to_movetosafe(self):
     """While parking_position is unset (no configuration), park() uses the firmware movetosafe."""
     await self.arm.park()
-    mocked(self.arm.send_command).assert_awaited_once_with("movetosafe")
+    mocked(self.arm.send_command).assert_awaited_with("movetosafe")
     self.assertEqual(self._movej_cmds(), [])
 
 
@@ -713,7 +795,7 @@ class TestPreciseFlexMoveToSafe(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_to_safe_hands_the_route_to_the_controller(self):
     await self.arm.move_to_safe()
-    mocked(self.arm.send_command).assert_awaited_once_with("movetosafe")
+    mocked(self.arm.send_command).assert_awaited_with("movetosafe")
 
   async def test_move_to_safe_commands_no_joint_target(self):
     # The controller plans the route, so the driver must not send joints of its own.
@@ -722,50 +804,364 @@ class TestPreciseFlexMoveToSafe(unittest.IsolatedAsyncioTestCase):
     self.assertFalse([c for c in sent if c.startswith(("moveJ", "moveC"))], sent)
 
 
-class TestPreciseFlexStationAccess(unittest.IsolatedAsyncioTestCase):
-  """How the arm reaches a station is the caller's to set.
+class TestPickAndPlaceAreComposedOfMoves(unittest.IsolatedAsyncioTestCase):
+  """Pick and place are built from the verbs this arm is known to answer.
 
-  Labware does not agree on one geometry: a plate on an open pad wants a few mm
-  of allowance for the skirt, a hotel has to be entered from the side.
+  The controller's own PickPlate reads a station location, which is persistent controller
+  state with a type of its own, and it runs the approach out of reach of the caller. Every
+  leg here is an ordinary guarded move plus a gripper command, so the route is the
+  driver's and the access geometry is the caller's.
   """
-
-  POSE: dict[int, float] = {
-    Axis.BASE: 50.0,
-    Axis.SHOULDER: 10.0,
-    Axis.ELBOW: 200.0,
-    Axis.WRIST: 90.0,
-    Axis.GRIPPER: 0.0,
-  }
 
   def setUp(self):
     self.arm = _make_arm()
-    self.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
+    self.moves: list[tuple[float, float, float]] = []
 
-  def _station_type_cmd(self) -> str:
-    sent = [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
-    return next(c for c in sent if c.startswith("StationType"))
+    async def record(location, direction, **kwargs):
+      self.moves.append((round(location.x, 2), round(location.y, 2), round(location.z, 2)))
 
-  async def test_default_keeps_the_previous_station_geometry(self):
-    # Callers that pass nothing keep what the driver used to hardcode.
-    await self.arm.pick_up_at_joint_position(self.POSE, resource_width=80.0)
-    self.assertEqual(self._station_type_cmd(), "StationType 1 1 0 100.0 0.0 10.0")
+    patcher = patch.object(self.arm, "move_to_location", AsyncMock(side_effect=record))
+    patcher.start()
+    self.addCleanup(patcher.stop)
 
-  async def test_vertical_access_carries_its_own_clearance_and_grasp_offset(self):
-    await self.arm.pick_up_at_joint_position(
-      self.POSE, resource_width=80.0, access=StationAccess(clearance=20.0, grasp_offset=3.0)
+  def _sent(self) -> list[str]:
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+
+  async def test_a_vertical_pick_goes_above_the_plate_down_and_lifts_it_clear(self):
+    await self.arm.pick_up_at_location(
+      _PAD_1, direction=2.03, resource_width=80.0,
+      resource_height=14.0, travel_margin=10.0,
+      access=StationAccess(clearance=20.0, grasp_offset=0.0),
     )
-    self.assertEqual(self._station_type_cmd(), "StationType 1 1 0 20.0 0.0 3.0")
-
-  async def test_horizontal_access_flips_the_station_access_type(self):
-    await self.arm.pick_up_at_joint_position(
-      self.POSE,
-      resource_width=80.0,
-      access=StationAccess(approach="horizontal", clearance=50.0, z_above=15.0, grasp_offset=3.0),
+    self.assertEqual(
+      self.moves,
+      [(329.9, 80.29, 60.48), (329.9, 80.29, 40.48), (329.9, 80.29, 64.48)],
+      "approach at +clearance, plate, then up by the resource plus the margin",
     )
-    self.assertEqual(self._station_type_cmd(), "StationType 1 0 0 50.0 15.0 3.0")
 
-  async def test_drop_carries_the_access_too(self):
-    await self.arm.drop_at_joint_position(
-      self.POSE, resource_width=80.0, access=StationAccess(clearance=20.0, grasp_offset=3.0)
+  async def test_the_lift_off_a_pick_clears_the_skirt_by_default(self):
+    # Departing at grip height leaves the skirt in the nest for the next traverse to drag.
+    await self.arm.pick_up_at_location(_PAD_1, direction=2.03, resource_width=80.0)
+    self.assertEqual(
+      self.moves[-1], (329.9, 80.29, round(40.476 + 14.35 + 10.0 + 10.0, 2)),
+      "the resource, the travel margin, and the station's loaded allowance",
     )
-    self.assertEqual(self._station_type_cmd(), "StationType 1 1 0 20.0 0.0 3.0")
+
+  async def test_the_lift_is_the_caller_s_to_set(self):
+    await self.arm.pick_up_at_location(
+      _PAD_1, direction=2.03, resource_width=80.0, resource_height=44.0, travel_margin=6.0,
+      access=StationAccess(grasp_offset=0.0),
+    )
+    self.assertEqual(self.moves[-1], (329.9, 80.29, round(40.476 + 50.0, 2)))
+
+  async def test_a_retreat_holding_a_plate_carries_the_station_s_grasp_offset(self):
+    # An operator raises grasp_offset because that nest is deep; a fixed lift leaves the
+    # plate still inside it when the traverse starts.
+    await self.arm.pick_up_at_location(
+      _PAD_1, direction=2.03, resource_width=80.0, resource_height=14.0, travel_margin=10.0,
+      access=StationAccess(clearance=20.0, grasp_offset=60.0),
+    )
+    self.assertEqual(self.moves[-1], (329.9, 80.29, round(40.476 + 14.0 + 10.0 + 60.0, 2)))
+
+  async def test_a_retreat_with_empty_jaws_does_not(self):
+    # Nothing is being carried out of the nest after a release, so the allowance for a
+    # held plate does not apply.
+    await self.arm.drop_at_location(
+      _PAD_1, direction=2.03, resource_height=14.0, travel_margin=10.0,
+      access=StationAccess(clearance=20.0, grasp_offset=60.0),
+    )
+    self.assertEqual(self.moves[-1], (329.9, 80.29, 64.48))
+
+  async def test_the_jaws_open_before_the_arm_reaches_in(self):
+    # Descending onto a plate with the fingers still closed is how you break one.
+    order: list[str] = []
+
+    async def note_move(location, direction, **kwargs):
+      order.append("move")
+
+    async def note_grip(position, force_sensing=False):
+      order.append("close" if force_sensing else "open")
+
+    with patch.object(self.arm, "move_to_location", AsyncMock(side_effect=note_move)):
+      with patch.object(self.arm, "move_gripper_joint_position", AsyncMock(side_effect=note_grip)):
+        await self.arm.pick_up_at_location(_PAD_1, direction=2.03, resource_width=80.0)
+    self.assertEqual(order, ["open", "move", "move", "close", "move"])
+
+  async def test_the_jaws_open_a_step_off_the_grip_position_not_to_the_stop(self):
+    # Sweeping to the axis stop is a long move to no purpose, and on a full deck it is the
+    # move that meets the neighbours.
+    await self.arm.pick_up_at_location(
+      _PAD_1, direction=2.03, resource_width=80.0, jaw_opening=10.0
+    )
+    self.assertIn("GripOpenPos 510.0", self._sent())  # closed_gripper_position 500 + 10
+
+  async def test_the_jaws_never_open_past_the_axis_ceiling(self):
+    self.arm._gripper_soft_max = 505.0
+    await self.arm.pick_up_at_location(
+      _PAD_1, direction=2.03, resource_width=80.0, jaw_opening=40.0
+    )
+    self.assertIn("GripOpenPos 505.0", self._sent())
+
+  async def test_the_grip_commands_the_calibrated_position_not_the_axis_floor(self):
+    # Commanding past a held plate holds a standing position error, which the controller
+    # reads as an overheating motor (-3104) rather than as a grip.
+    await self.arm.pick_up_at_location(_PAD_1, direction=2.03, resource_width=80.0)
+    self.assertIn("GripClosePos 500.0", self._sent())
+
+  async def test_a_horizontal_pick_stands_off_comes_in_lifts_and_backs_out(self):
+    # A shelf is entered along the approach direction, not from above.
+    await self.arm.pick_up_at_location(
+      Coordinate(300.0, 0.0, 50.0), direction=0.0, resource_width=80.0,
+      access=StationAccess(approach="horizontal", clearance=40.0, z_above=10.0),
+    )
+    self.assertEqual(
+      self.moves,
+      [(260.0, 0.0, 60.0), (260.0, 0.0, 50.0), (300.0, 0.0, 50.0),
+       (300.0, 0.0, 60.0), (260.0, 0.0, 60.0)],
+    )
+
+  async def test_a_place_reaches_in_releases_and_lifts_the_fingers_clear(self):
+    # The fingers sit around the skirt after opening, so they rise the same way.
+    await self.arm.drop_at_location(
+      _PAD_1, direction=2.03, resource_height=14.0, travel_margin=10.0,
+      access=StationAccess(clearance=20.0),
+    )
+    self.assertEqual(
+      self.moves,
+      [(329.9, 80.29, 60.48), (329.9, 80.29, 40.48), (329.9, 80.29, 64.48)],
+    )
+
+  async def test_a_place_opens_a_step_off_where_the_plate_held_the_jaws(self):
+    # Sweeping to the full width would meet the neighbours in a hotel.
+    await self.arm.drop_at_location(_PAD_1, direction=2.03, jaw_opening=10.0)
+    self.assertIn("GripOpenPos 513.0", self._sent())  # jaws held at 503 by the plate
+
+  async def test_nothing_is_written_to_a_station(self):
+    await self.arm.pick_up_at_location(_PAD_1, direction=2.03, resource_width=80.0)
+    for verb in ("locXyz", "locAngles", "locConfig", "StationType", "pickplate", "placeplate"):
+      self.assertFalse([c for c in self._sent() if c.lower().startswith(verb.lower())], verb)
+
+  async def test_the_grasp_data_still_goes_out_before_the_pick(self):
+    # Where the close stops is `closed_gripper_position`, not anything in here; whether the
+    # controller reads GraspData for a plain `gripper 2` is unconfirmed on the arm.
+    await self.arm.pick_up_at_location(
+      _PAD_1, direction=2.03, resource_width=80.0, finger_speed_pct=40.0, grasp_force=12.0
+    )
+    self.assertEqual(self._sent()[0], "GraspData 80.0 40.0 12.0")
+    self.assertIn("GripClosePos 500.0", self._sent())
+
+
+class TestPickReportsEmptyJaws(unittest.IsolatedAsyncioTestCase):
+  """A pick that closes on nothing has to say so, or the arm carries air to the next station."""
+
+  def _arm(self, gripper_units: float) -> PreciseFlex:
+    arm = _make_arm(gripper_units=gripper_units)
+    patcher = patch.object(arm, "move_to_location", AsyncMock())
+    patcher.start()
+    self.addCleanup(patcher.stop)
+    return arm
+
+  async def test_jaws_settling_on_the_grip_position_mean_no_plate(self):
+    arm = self._arm(gripper_units=500.5)
+    with self.assertRaises(PreciseFlexError) as caught:
+      await arm.pick_up_at_location(_PAD_1, direction=2.03, resource_width=80.0)
+    self.assertIn("nothing in it", str(caught.exception))
+
+  async def test_jaws_held_open_by_a_plate_are_a_successful_pick(self):
+    arm = self._arm(gripper_units=503.0)
+    await arm.pick_up_at_location(_PAD_1, direction=2.03, resource_width=80.0)
+
+  async def test_a_failed_pick_leaves_the_arm_clear_of_the_station(self):
+    # Aborting where it stands parks the arm down in the nest for whatever runs next.
+    arm = _make_arm(gripper_units=500.5)
+    moves: list[float] = []
+
+    async def record(location, direction, **kwargs):
+      moves.append(round(location.z, 2))
+
+    with patch.object(arm, "move_to_location", AsyncMock(side_effect=record)):
+      with self.assertRaises(PreciseFlexError):
+        await arm.pick_up_at_location(
+          _PAD_1, direction=2.03, resource_width=80.0, resource_height=14.0, travel_margin=10.0
+        )
+    self.assertEqual(moves[-1], 64.48, "the arm should have risen clear before raising")
+
+
+class TestPickTargetIsCheckedBeforeItMoves(unittest.IsolatedAsyncioTestCase):
+  """An unreachable target must fail on the call, not part way through a motion."""
+
+  def setUp(self):
+    self.arm = _make_arm()
+    self.arm._configuration = MagicMock(
+      work_envelope=WorkEnvelope(inner=100.0, outer=600.0, zmin=0.0, zmax=400.0)
+    )
+
+  def _sent(self) -> list[str]:
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+
+  async def test_a_target_beyond_the_annulus_is_refused(self):
+    with self.assertRaises(IKError):
+      await self.arm.pick_up_at_location(
+        Coordinate(2000.0, 0.0, 40.0), direction=0.0, resource_width=80.0
+      )
+    self.assertFalse(self._sent(), "nothing should reach the controller")
+
+  async def test_a_target_below_the_z_travel_is_refused(self):
+    with self.assertRaises(IKError):
+      await self.arm.drop_at_location(Coordinate(300.0, 80.0, -50.0), direction=0.0)
+
+  async def test_a_retreat_that_would_leave_the_z_travel_is_refused_too(self):
+    # The grip point is inside the travel and the lift is not. Catching it on the lift
+    # would mean failing with the plate already in the jaws.
+    with self.assertRaises(IKError):
+      await self.arm.pick_up_at_location(
+        Coordinate(300.0, 80.0, 395.0), direction=0.0, resource_width=80.0,
+        access=StationAccess(clearance=2.0, grasp_offset=20.0),
+      )
+    self.assertFalse(self._sent(), "nothing should reach the controller")
+
+  async def test_a_shelf_is_measured_by_its_own_lift_not_the_standoff(self):
+    # `clearance` is a horizontal standoff on a shelf, so it is not a height at all, and
+    # a station near the top of the travel must not be refused for it.
+    with patch.object(self.arm, "move_to_location", AsyncMock()):
+      await self.arm.drop_at_location(
+        Coordinate(300.0, 80.0, 395.0), direction=0.0,
+        access=StationAccess(approach="horizontal", clearance=100.0, z_above=3.0),
+      )
+
+
+class TestNothingIsCommandedWhileTheArmIsStillMoving(unittest.IsolatedAsyncioTestCase):
+  """`moveJ` returns as soon as the controller accepts it, and the connection stays free
+  during the motion, so a command sent straight after lands mid-travel. For the gripper that
+  is a plate in the jaws: the fingers were opened a step off the grip position, and closing
+  them while the arm is still coming down the approach meets the skirt on the way in.
+
+  The settle poll is the barrier. These tests read the wire with the poll marked, so they see
+  motion ordering rather than call ordering.
+  """
+
+  SETTLED = "<<settled>>"
+
+  def setUp(self):
+    self.arm = _make_arm()
+    self.wire: list[str] = []
+
+    async def record(command: str) -> str:
+      self.wire.append(command)
+      return "40.48 84.76 229.84 -312.57 503.0" if command == "wherej" else ""
+
+    self.arm.send_command = AsyncMock(side_effect=record)  # type: ignore[method-assign]
+
+    async def note_settled(*_args: object, **_kwargs: object) -> None:
+      self.wire.append(self.SETTLED)
+
+    patcher = patch.object(self.arm, "_wait_for_eom", AsyncMock(side_effect=note_settled))
+    patcher.start()
+    self.addCleanup(patcher.stop)
+
+  def _assert_the_arm_had_stopped_before_each_gripper_command(self) -> None:
+    moves = [i for i, command in enumerate(self.wire) if command.startswith("moveJ")]
+    for i, command in enumerate(self.wire):
+      if not command.startswith("gripper"):
+        continue
+      preceding = [m for m in moves if m < i]
+      if not preceding:
+        continue
+      self.assertIn(
+        self.SETTLED,
+        self.wire[preceding[-1] + 1 : i],
+        f"{command!r} was issued with the arm still moving: {self.wire}",
+      )
+
+  async def test_a_pick_does_not_close_the_jaws_during_the_descent(self):
+    await self.arm.pick_up_at_location(_PAD_1, direction=2.03, resource_width=80.0)
+    self.assertIn("gripper 2", self.wire)
+    self._assert_the_arm_had_stopped_before_each_gripper_command()
+
+  async def test_a_place_does_not_open_the_jaws_during_the_descent(self):
+    await self.arm.drop_at_location(_PAD_1, direction=2.03)
+    self.assertIn("gripper 1", self.wire)
+    self._assert_the_arm_had_stopped_before_each_gripper_command()
+
+  async def test_a_gripper_command_after_a_bare_travel_move_waits_too(self):
+    # The same exposure outside pick and place: `move_to_location` returns while the arm
+    # is still travelling, so the barrier belongs to the gripper, not to one call site.
+    await self.arm.move_to_location(_PAD_1, direction=2.03)
+    await self.arm.move_gripper(width=80.0)
+    self._assert_the_arm_had_stopped_before_each_gripper_command()
+
+  async def test_the_controller_s_safe_retraction_waits_for_the_arm_too(self):
+    await self.arm.move_to_location(_PAD_1, direction=2.03)
+    await self.arm.move_to_safe()
+    self.assertEqual(self.wire[-2:], [self.SETTLED, "movetosafe"])
+
+
+class TestPickAndPlaceOnARailArm(unittest.IsolatedAsyncioTestCase):
+  """A rail-equipped arm refuses any Cartesian move that does not say where the rail belongs,
+  so every leg of a pick has to carry it. The bench arm has no rail, which is why nothing
+  here shows up in a hardware run.
+  """
+
+  def setUp(self):
+    self.arm = _make_arm()
+    self.arm._has_rail = True
+
+  def _sent(self) -> list[str]:
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+
+  async def test_a_pick_runs_to_completion_instead_of_stranding_the_arm(self):
+    await self.arm.pick_up_at_location(
+      _PAD_1, direction=2.03, resource_width=80.0, rail_position=120.0
+    )
+    self.assertIn("gripper 2", self._sent(), "the pick never reached the grip")
+    self.assertTrue([c for c in self._sent() if c.startswith("MoveRail")])
+
+  async def test_a_place_runs_to_completion_instead_of_stranding_the_arm(self):
+    await self.arm.drop_at_location(_PAD_1, direction=2.03, rail_position=120.0)
+    self.assertIn("gripper 1", self._sent(), "the place never reached the release")
+
+  async def test_every_leg_is_told_where_the_rail_belongs(self):
+    legs: list[object] = []
+
+    async def record(location, direction, **kwargs):
+      legs.append(kwargs.get("rail_position"))
+
+    with patch.object(self.arm, "move_to_location", AsyncMock(side_effect=record)):
+      await self.arm.pick_up_at_location(
+        _PAD_1, direction=2.03, resource_width=80.0, rail_position=120.0
+      )
+    self.assertEqual(legs, [120.0, 120.0, 120.0])
+
+
+class TestPickAndPlaceEventsCarryTheStationAccess(unittest.IsolatedAsyncioTestCase):
+  """The event payload is built from the call's own arguments, so an argument the payload
+  does not name is a TypeError the moment a listener is installed.
+  """
+
+  async def test_a_pick_with_an_access_still_emits(self):
+    arm = _make_arm()
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with patch.object(arm, "move_to_location", AsyncMock()):
+      with use_event_bus(event_bus):
+        await arm.pick_up_at_location(
+          _PAD_1, direction=2.03, resource_width=80.0, access=StationAccess(clearance=20.0)
+        )
+
+    self.assertEqual(events[0].name, "precise_flex.pick_up_at_location.started")
+
+  async def test_a_place_with_an_access_still_emits(self):
+    arm = _make_arm()
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with patch.object(arm, "move_to_location", AsyncMock()):
+      with use_event_bus(event_bus):
+        await arm.drop_at_location(
+          _PAD_1, direction=2.03, access=StationAccess(clearance=20.0)
+        )
+
+    self.assertEqual(events[0].name, "precise_flex.drop_at_location.started")
