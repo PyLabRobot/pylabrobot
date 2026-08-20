@@ -806,6 +806,21 @@
     "oem": "https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html"
   },
   {
+    "id": "micronic-code-reader",
+    "vendor": "Micronic",
+    "name": "RD235",
+    "kind": "barcode scanner",
+    "capabilities": [
+      "barcode reading"
+    ],
+    "status": "full",
+    "api": "pylabrobot.micronic.MicronicRD235",
+    "api_version": "v1",
+    "code_slug": "micronic/code_reader",
+    "doc_slug": "micronic/code_reader/hello-world",
+    "oem": "https://www.micronic.com/products/code-reader/"
+  },
+  {
     "id": "molecular-devices-imagexpress-micro",
     "vendor": "Molecular Devices",
     "name": "ImageXpress Micro",

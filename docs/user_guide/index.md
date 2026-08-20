@@ -41,6 +41,7 @@ inheco/index
 kbioscience/index
 kbiosystems/index
 mettler_toledo/index
+micronic/index
 molecular_devices/index
 qinstruments/index
 sartorius/index
