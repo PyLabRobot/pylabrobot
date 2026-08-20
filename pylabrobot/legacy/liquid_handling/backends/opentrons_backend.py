@@ -1,5 +1,7 @@
+import asyncio
 import inspect
 import logging
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
@@ -43,6 +45,8 @@ except ImportError as e:
 # https://github.com/Opentrons/opentrons/issues/14590
 # https://labautomation.io/t/connect-pylabrobot-to-ot2/2862/18
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
+
+_SAVE_POSITION_TIMEOUT = 30.0
 
 logger = logging.getLogger(__name__)
 
@@ -650,12 +654,34 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       raise NoChannelError(f"Channel {channel} not available on this OT-2 setup.")
     return pipettes[channel]
 
-  def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
+  async def _save_position(self, pipette_id: str) -> Dict[str, Any]:
+    """Ask the robot where a pipette is, and wait for the answer.
+
+    ``ot_api`` wraps no ``savePosition``, so this enqueues the command and polls it
+    the way ``ot_api``'s own command wrapper does.
+    """
+
+    command_id = self._ot.runs.enqueue_command(
+      "savePosition", {"pipetteId": pipette_id}, intent="setup"
+    )
+    deadline = time.monotonic() + _SAVE_POSITION_TIMEOUT
+    while time.monotonic() < deadline:
+      result = self._ot.runs.get_command(command_id)
+      status = result["data"]["status"]
+      if status == "failed":
+        error = result["data"]["error"]
+        raise RuntimeError(f"savePosition failed with {error['errorType']}: {error['detail']}")
+      if status not in ("queued", "running"):
+        return result
+      await asyncio.sleep(0.05)
+    raise RuntimeError("savePosition timed out")
+
+  async def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     """Return the pipette id and current coordinate for a given channel."""
 
     pipette_id = self._pipette_id_for_channel(channel)
     try:
-      res = self._ot.lh.save_position(pipette_id=pipette_id)
+      res = await self._save_position(pipette_id)
       pos = res["data"]["result"]["position"]
       current = Coordinate(pos["x"], pos["y"], pos["z"])
     except Exception as exc:
@@ -668,10 +694,40 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     _ = self._pipette_id_for_channel(channel)
 
+  async def get_channel_position(self, channel: int) -> Coordinate:
+    """Where a channel is right now, in deck coordinates."""
+
+    _, current = await self._current_channel_position(channel)
+    return current
+
+  async def move_channel_to(
+    self,
+    channel: int,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+    z: Optional[float] = None,
+  ):
+    """Move a channel to an absolute position, holding the axes left out.
+
+    One coordinated move rather than the per-axis calls chained: the robot lifts to the traversal
+    height and travels once, where three separate moves each descend and can clip labware between
+    them.
+    """
+
+    pipette_id, current = await self._current_channel_position(channel)
+    target = Coordinate(
+      x=current.x if x is None else x,
+      y=current.y if y is None else y,
+      z=current.z if z is None else z,
+    )
+    await self.move_pipette_head(
+      location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
+    )
+
   async def move_channel_x(self, channel: int, x: float):
     """Move a channel to an absolute x coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=x, y=current.y, z=current.z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
@@ -680,7 +736,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def move_channel_y(self, channel: int, y: float):
     """Move a channel to an absolute y coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=current.x, y=y, z=current.z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
@@ -689,7 +745,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def move_channel_z(self, channel: int, z: float):
     """Move a channel to an absolute z coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=current.x, y=current.y, z=z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
