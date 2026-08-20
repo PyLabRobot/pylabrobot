@@ -13,7 +13,7 @@ from typing import Dict, Literal
 from pylabrobot.brooks.precise_flex.kinematics import JointPose
 
 from . import kinematics
-from .kinematics import WorkEnvelope
+from .kinematics import ApproachDirection, WorkEnvelope
 
 # -- axis addressing -------------------------------------------------------
 
@@ -33,6 +33,28 @@ class Axis(IntEnum):
 
 
 # -- device configuration --------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StationAccess:
+  """How the arm reaches a station and backs out of it.
+
+  These are the firmware ``StationType`` values. The defaults reproduce the
+  station the driver used to configure for every location.
+
+  Attributes:
+    approach: Reach the plate from above (an open nest) or from the side (a hotel).
+    clearance: ZClearance in mm. Distance backed off from the plate when
+      approaching and departing.
+    z_above: ZAbove in mm. Vertical offset used with a horizontal approach.
+    grasp_offset: ZGrasp in mm, added to the clearance while a plate is held, to
+      allow for the plate in the gripper.
+  """
+
+  approach: ApproachDirection = "vertical"
+  clearance: float = 100.0
+  z_above: float = 0.0
+  grasp_offset: float = 10.0
 
 
 @dataclass(frozen=True)

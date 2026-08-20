@@ -8,7 +8,7 @@ import warnings
 from typing import Callable, ClassVar, Dict, List, Literal, NamedTuple, Optional, Sequence
 
 from pylabrobot.brooks.precise_flex import kinematics
-from pylabrobot.brooks.precise_flex.config import Axis, PreciseFlexConfiguration
+from pylabrobot.brooks.precise_flex.config import Axis, PreciseFlexConfiguration, StationAccess
 from pylabrobot.brooks.precise_flex.kinematics import JointPose
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources.coordinate import Coordinate
@@ -216,25 +216,39 @@ class PreciseFlex:
   # -- lifecycle -------------------------------------------------------------
 
   async def setup(self, skip_home: bool = False):
-    """Initialize the PreciseFlex driver.
-
-    Opens the socket connection, sets response mode to PC, powers on the
-    robot, attaches it, and (optionally) homes it.
+    """Bring the arm fully up: link, control, and (unless skipped) home.
 
     Args:
       skip_home: If True, skip the homing step during setup.
     """
-    await self.io.setup()
-    await self.set_response_mode("pc")
-    await self.power_on_robot()
-    await self.attach(1)
+    await self.connect()
+    await self.initialize()
     if not skip_home:
       await self.home()
+    await self._handle_out_of_range_axes()
+
+  async def connect(self) -> None:
+    """Open the link and agree the response protocol. Powers nothing, moves nothing."""
+    await self.io.setup()
+    await self.set_response_mode("pc")
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
+  async def initialize(self) -> None:
+    """Raise high power, take control, and adopt the controller's own configuration.
+
+    Moves nothing. Homing is ``home()``, deliberately separate: it sweeps the arm
+    through its whole envelope, which is not something to do just to bring it up.
+    """
+    await self.power_on_robot()
+    await self.attach(1)
     await self.stop_freedrive_mode()
-    # Resolve the device configuration once and adopt it as the source of truth;
-    # without it the class defaults stay in place.
+    await self._discover_configuration()
+
+  async def _discover_configuration(self) -> None:
+    """Adopt what the controller reports, so the class defaults are not used blind.
+
+    The link lengths land here, so skipping this leaves IK solving for the wrong arm.
+    """
     try:
       self._configuration = await self._request_configuration()
     except Exception as exc:  # discovery is best-effort
@@ -249,10 +263,16 @@ class PreciseFlex:
       self.parking_position = self.PARKING_POSITION_RIGHT
     self._log_configuration_summary(self._configuration)
     self._assess_configuration(self._configuration)
-    await self._handle_out_of_range_axes()
 
   async def stop(self):
     """Stop the PreciseFlex driver."""
+    await self.disconnect()
+
+  async def disconnect(self) -> None:
+    """Hand the arm back and close the link. Moves nothing.
+
+    Drops high power as well as releasing the link, because ``initialize`` raised it.
+    """
     await self.detach()
     await self.power_off_robot()
     await self._exit()
@@ -1263,9 +1283,13 @@ class PreciseFlex:
       raise ValueError(f"finger_speed_pct must be between 0 and 100, got {finger_speed_pct}")
     await self.send_command(f"GraspData {plate_width} {finger_speed_pct} {grasp_force}")
 
-  async def _set_grip_detail(self):
-    """Configure a default vertical station type for pick/place operations."""
-    await self.send_command(f"StationType {self.location_index} 1 0 100 0 10")
+  async def _set_grip_detail(self, access: Optional[StationAccess] = None):
+    """Tell the controller how to reach the pick/place station and back out of it."""
+    access = access or StationAccess()
+    await self.send_command(
+      f"StationType {self.location_index} {1 if access.approach == 'vertical' else 0} 0 "
+      f"{access.clearance} {access.z_above} {access.grasp_offset}"
+    )
 
   def _mm_to_firmware_units(self, width_mm: float) -> float:
     """Convert a jaw width (mm) to the firmware's native position unit.
@@ -1958,6 +1982,49 @@ class PreciseFlex:
       await self._set_speed(speed_pct)
     await self._guarded_move_j(lambda current: {**current, **position})
 
+  async def move_one_axis(
+    self,
+    axis: Axis,
+    position: float,
+    speed_pct: Optional[float] = None,
+  ) -> None:
+    """Move one axis to an absolute position, leaving every other axis where it is.
+
+    Guarded like any other commanded move. Not to be confused with ``_move_one_axis``,
+    which skips the guard on purpose so it can recover an axis the controller has
+    already blocked.
+
+    Args:
+      axis: The axis to move.
+      position: Absolute target for that axis.
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+    """
+    await self.move_to_joint_position({axis: position}, speed_pct=speed_pct)
+
+  async def move_one_axis_relative(
+    self,
+    axis: Axis,
+    distance: float,
+    speed_pct: Optional[float] = None,
+  ) -> None:
+    """Shift one axis by ``distance`` from where it is now, leaving the others alone.
+
+    The offset is applied to the pose read inside the guarded move rather than to a
+    position read beforehand, so it cannot act on a stale reading. If the first
+    attempt is blocked and recovery shifts the axis, the retry offsets from the
+    recovered position, which is what a relative move should mean.
+
+    Args:
+      axis: The axis to move.
+      distance: Signed offset to apply to that axis, in the axis's own units.
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+    """
+    if speed_pct is not None:
+      await self._set_speed(speed_pct)
+    await self._guarded_move_j(lambda current: {**current, axis: current[axis] + distance})
+
   async def request_gripper_pose(self) -> PreciseFlexCartesianPose:
     """Get the current pose using our kinematics model (no firmware `wherec`)."""
     _, pose = await self._request_state()
@@ -2260,6 +2327,7 @@ class PreciseFlex:
     resource_width: float,
     finger_speed_pct: float = 50.0,
     grasp_force: float = 10.0,
+    access: Optional[StationAccess] = None,
   ) -> None:
     """Pick up at the specified joint position.
 
@@ -2280,12 +2348,13 @@ class PreciseFlex:
       finger_speed_pct=finger_speed_pct,
       grasp_force=grasp_force,
     )
-    await self._pick_plate_j(position)
+    await self._pick_plate_j(position, access)
 
   async def drop_at_joint_position(
     self,
     position: JointPose,
     resource_width: float,
+    access: Optional[StationAccess] = None,
   ) -> None:
     """Drop at the specified joint position.
 
@@ -2299,7 +2368,7 @@ class PreciseFlex:
       position,
       resource_width,
     )
-    await self._place_plate_j(position)
+    await self._place_plate_j(position, access)
 
   async def pick_up_at_location(
     self,
@@ -2311,6 +2380,7 @@ class PreciseFlex:
     orientation: Optional[ElbowOrientation] = None,
     wrist: Optional[Wrist] = None,
     rail_position: Optional[float] = None,
+    access: Optional[StationAccess] = None,
   ) -> None:
     """Pick up at the specified Cartesian location.
 
@@ -2324,6 +2394,8 @@ class PreciseFlex:
         picks the closest configuration.
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
+      access: How the arm reaches the station and backs out of it. Defaults to a
+        vertical approach with 100 mm clearance and 10 mm of allowance for the plate.
     """
     logger.info(
       "[PreciseFlex %s] pick_up: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
@@ -2351,7 +2423,7 @@ class PreciseFlex:
       finger_speed_pct=finger_speed_pct,
       grasp_force=grasp_force,
     )
-    await self._pick_plate_c(cartesian_position=coords)
+    await self._pick_plate_c(cartesian_position=coords, access=access)
 
   async def drop_at_location(
     self,
@@ -2361,6 +2433,7 @@ class PreciseFlex:
     orientation: Optional[ElbowOrientation] = None,
     wrist: Optional[Wrist] = None,
     rail_position: Optional[float] = None,
+    access: Optional[StationAccess] = None,
   ) -> None:
     """Drop at the specified Cartesian location.
 
@@ -2372,6 +2445,8 @@ class PreciseFlex:
         picks the closest configuration.
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
+      access: How the arm reaches the station and backs out of it. Defaults to a
+        vertical approach with 100 mm clearance and 10 mm of allowance for the plate.
     """
     logger.info(
       "[PreciseFlex %s] drop: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
@@ -2394,12 +2469,14 @@ class PreciseFlex:
       orientation=orientation,
       wrist=wrist,
     )
-    await self._place_plate_c(cartesian_position=coords)
+    await self._place_plate_c(cartesian_position=coords, access=access)
 
-  async def _pick_plate_j(self, joint_position: JointPose):
+  async def _pick_plate_j(
+    self, joint_position: JointPose, access: Optional[StationAccess] = None
+  ):
     """Pick a plate from the specified position using joint coordinates."""
     await self._set_joint_angles(self.location_index, joint_position)
-    await self._set_grip_detail()
+    await self._set_grip_detail(access)
     horizontal_compliance_int = 1 if self.horizontal_compliance else 0
     ret_code = await self.send_command(
       f"pickplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
@@ -2407,24 +2484,32 @@ class PreciseFlex:
     if ret_code == "0":
       raise PreciseFlexError(-1, "the force-controlled gripper detected no plate present.")
 
-  async def _place_plate_j(self, joint_position: JointPose):
+  async def _place_plate_j(
+    self, joint_position: JointPose, access: Optional[StationAccess] = None
+  ):
     """Place a plate at the specified position using joint coordinates."""
     await self._set_joint_angles(self.location_index, joint_position)
-    await self._set_grip_detail()
+    await self._set_grip_detail(access)
     horizontal_compliance_int = 1 if self.horizontal_compliance else 0
     await self.send_command(
       f"placeplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
     )
 
-  async def _pick_plate_c(self, cartesian_position: PreciseFlexCartesianPose):
+  async def _pick_plate_c(
+    self, cartesian_position: PreciseFlexCartesianPose,
+    access: Optional[StationAccess] = None,
+  ):
     """Pick a plate at a Cartesian position via IK + joint-space pickplate."""
     joints = await self._cart_to_joints(cartesian_position)
-    await self._pick_plate_j(joints)
+    await self._pick_plate_j(joints, access)
 
-  async def _place_plate_c(self, cartesian_position: PreciseFlexCartesianPose):
+  async def _place_plate_c(
+    self, cartesian_position: PreciseFlexCartesianPose,
+    access: Optional[StationAccess] = None,
+  ):
     """Place a plate at a Cartesian position via IK + joint-space placeplate."""
     joints = await self._cart_to_joints(cartesian_position)
-    await self._place_plate_j(joints)
+    await self._place_plate_j(joints, access)
 
   # -- parking ------------------------------------------------------------------------------
 
@@ -2456,6 +2541,16 @@ class PreciseFlex:
       )
     else:
       await self.send_command("movetosafe")
+
+  async def move_to_safe(self) -> None:
+    """Run the controller's own retraction to its taught safe position.
+
+    This is the firmware ``movetosafe``: a sequence of safe moves the controller plans itself, not a
+    single joint target. The pose and the route live in the controller, so neither can be read back
+    or checked against the soft limits from here. ``park()`` is the counterpart this driver can
+    reason about. No collision checks against 3rd-party obstacles.
+    """
+    await self.send_command("movetosafe")
 
   def _validate_parking_position(self, position: JointPose) -> None:
     """Reject anything that is not a JointPose of in-range axes (limits checked once known)."""
