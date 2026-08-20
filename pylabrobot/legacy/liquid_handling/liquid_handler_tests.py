@@ -7,6 +7,7 @@ from unittest.mock import PropertyMock
 
 import pytest
 
+from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.legacy.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
 from pylabrobot.legacy.liquid_handling.channel_positioning import (
@@ -27,6 +28,7 @@ from pylabrobot.resources import (
   PetriDish,
   Plate,
   Resource,
+  ResourceHolder,
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
@@ -619,6 +621,221 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       use_channels=[0],
       ops=[_make_disp(well, vol=10, offset=Coordinate(x=1, y=1, z=1), tip=t)],
     )
+
+  async def test_aspirate_and_dispense_emit_well_accurate_events(self):
+    well = self.plate.get_item("A1")
+    well.tracker.set_volume(20)
+    self.lh.update_head_state({0: self.tip_rack.get_item("A1").get_tip()})
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await self.lh.aspirate([well], vols=[10])
+      await self.lh.dispense([well], vols=[10])
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "liquid_handler.aspirate.started",
+        "liquid_handler.aspirate.completed",
+        "liquid_handler.dispense.started",
+        "liquid_handler.dispense.completed",
+      ],
+    )
+    context = events[0].context
+    self.assertEqual([resource["name"] for resource in context["resources"]], [well.name])
+    self.assertEqual(context["resources"][0]["type"], "Well")
+    self.assertTrue(
+      any(
+        ancestor["name"] == "plate" and ancestor["type"] == "Plate"
+        for ancestor in context["resources"][0]["ancestors"]
+      )
+    )
+    operation = context["liquid_operations"][0]
+    self.assertEqual(operation["channel"], 0)
+    self.assertEqual(operation["resource"]["name"], well.name)
+    self.assertEqual(operation["plate"]["name"], "plate")
+    self.assertEqual(operation["volume"], 10.0)
+    self.assertNotIn("volume_ul", operation)
+
+  async def test_tip_pickup_and_discard_emit_direct_tip_resources(self):
+    tip_spot = self.tip_rack.get_item("A1")
+    trash = self.deck.get_trash_area()
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await self.lh.pick_up_tips([tip_spot])
+      await self.lh.discard_tips()
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "liquid_handler.tip_pickup.started",
+        "liquid_handler.tip_pickup.completed",
+        "liquid_handler.tip_drop.started",
+        "liquid_handler.tip_drop.completed",
+      ],
+    )
+    pickup = events[0].context
+    self.assertEqual(pickup["resources"][0]["name"], tip_spot.name)
+    self.assertEqual(pickup["resources"][0]["type"], "TipSpot")
+    self.assertTrue(
+      any(
+        ancestor["name"] == self.tip_rack.name and ancestor["type"] == "TipRack"
+        for ancestor in pickup["resources"][0]["ancestors"]
+      )
+    )
+    self.assertEqual(pickup["tip_operations"], [{"channel": 0, "resource": pickup["resources"][0]}])
+    discard = events[2].context
+    self.assertEqual(discard["resources"][0]["name"], trash.name)
+    self.assertEqual(discard["resources"][0]["type"], "Trash")
+    self.assertEqual(discard["tip_operations"][0]["resource"], discard["resources"][0])
+
+  async def test_resource_pickup_emits_source_holder(self):
+    source = ResourceHolder("source", size_x=130, size_y=90, size_z=0)
+    self.plate.unassign()
+    self.deck.assign_child_resource(source, location=Coordinate(100, 100, 0))
+    source.assign_child_resource(self.plate, location=Coordinate.zero())
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await self.lh.pick_up_resource(self.plate)
+
+    self.assertEqual(events[0].name, "liquid_handler.resource_pickup.started")
+    self.assertEqual(events[0].context["resources"][0]["name"], self.plate.name)
+    self.assertEqual(events[0].context["source"]["name"], "source")
+    self.assertIs(self.plate.parent, source)
+
+  async def test_96_head_tip_operations_emit_direct_rack_resources(self):
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await self.lh.pick_up_tips96(self.tip_rack)
+      await self.lh.drop_tips96(self.tip_rack)
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "liquid_handler.tip_pickup_96.started",
+        "liquid_handler.tip_pickup_96.completed",
+        "liquid_handler.tip_drop_96.started",
+        "liquid_handler.tip_drop_96.completed",
+      ],
+    )
+    self.assertEqual(events[0].context["resources"][0]["name"], self.tip_rack.name)
+    self.assertEqual(events[0].context["resources"][0]["type"], "TipRack")
+
+  async def _exercise_evented_operations_with_argument_style(
+    self, *, use_keywords: bool
+  ) -> list[PLREvent]:
+    tip_spot = self.tip_rack.get_item("A1")
+    well = self.plate.get_item("A1")
+    well.tracker.set_volume(10)
+    zero = Coordinate.zero()
+    destination = ResourceHolder("destination", size_x=200, size_y=200, size_z=0)
+    self.deck.assign_child_resource(
+      destination, location=Coordinate(600, 100, 0), ignore_collision=True
+    )
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      if use_keywords:
+        await self.lh.pick_up_tips(tip_spots=[tip_spot], use_channels=[0], offsets=[zero])
+        await self.lh.aspirate(
+          resources=[well],
+          vols=[1],
+          use_channels=[0],
+          flow_rates=[None],
+          offsets=[zero],
+          liquid_height=[None],
+          blow_out_air_volume=[None],
+          spread="wide",
+          mix=None,
+        )
+        await self.lh.dispense(
+          resources=[well],
+          vols=[1],
+          use_channels=[0],
+          flow_rates=[None],
+          offsets=[zero],
+          liquid_height=[None],
+          blow_out_air_volume=[None],
+          spread="wide",
+          mix=None,
+        )
+        await self.lh.drop_tips(
+          tip_spots=[tip_spot],
+          use_channels=[0],
+          offsets=[zero],
+          allow_nonzero_volume=False,
+        )
+        await self.lh.pick_up_tips96(tip_rack=self.tip_rack, offset=zero)
+        await self.lh.drop_tips96(resource=self.tip_rack, offset=zero, allow_nonzero_volume=False)
+        await self.lh.pick_up_resource(
+          resource=self.plate,
+          offset=zero,
+          pickup_distance_from_top=5.0,
+          direction=GripDirection.FRONT,
+        )
+        await self.lh.move_picked_up_resource(
+          to=Coordinate(500, 100, 100), offset=zero, direction=GripDirection.FRONT
+        )
+        await self.lh.drop_resource(
+          destination=destination, offset=zero, direction=GripDirection.FRONT
+        )
+      else:
+        await self.lh.pick_up_tips([tip_spot], [0], [zero])
+        await self.lh.aspirate([well], [1], [0], [None], [zero], [None], [None], "wide", None)
+        await self.lh.dispense([well], [1], [0], [None], [zero], [None], [None], "wide", None)
+        await self.lh.drop_tips([tip_spot], [0], [zero], False)
+        await self.lh.pick_up_tips96(self.tip_rack, zero)
+        await self.lh.drop_tips96(self.tip_rack, zero, False)
+        await self.lh.pick_up_resource(self.plate, zero, 5.0, GripDirection.FRONT)
+        await self.lh.move_picked_up_resource(Coordinate(500, 100, 100), zero, GripDirection.FRONT)
+        await self.lh.drop_resource(destination, zero, GripDirection.FRONT)
+
+    return events
+
+  async def test_evented_operations_accept_positional_arguments(self):
+    events = await self._exercise_evented_operations_with_argument_style(use_keywords=False)
+    self._assert_evented_operation_argument_test_events(events)
+
+  async def test_evented_operations_accept_keyword_arguments(self):
+    events = await self._exercise_evented_operations_with_argument_style(use_keywords=True)
+    self._assert_evented_operation_argument_test_events(events)
+
+  def _assert_evented_operation_argument_test_events(self, events: list[PLREvent]) -> None:
+    started = [event for event in events if event.name.endswith(".started")]
+    self.assertEqual(
+      [event.name for event in started],
+      [
+        "liquid_handler.tip_pickup.started",
+        "liquid_handler.aspirate.started",
+        "liquid_handler.dispense.started",
+        "liquid_handler.tip_drop.started",
+        "liquid_handler.tip_pickup_96.started",
+        "liquid_handler.tip_drop_96.started",
+        "liquid_handler.resource_pickup.started",
+        "liquid_handler.resource_move.started",
+        "liquid_handler.resource_drop.started",
+      ],
+    )
+    self.assertEqual(started[0].context["tip_operations"][0]["channel"], 0)
+    self.assertEqual(started[1].context["liquid_operations"][0]["volume"], 1.0)
+    self.assertEqual(started[4].context["resources"][0]["name"], self.tip_rack.name)
+    self.assertEqual(started[5].context["resources"][0]["name"], self.tip_rack.name)
+    self.assertEqual(started[6].context["resources"][0]["name"], self.plate.name)
+    self.assertEqual(started[7].context["resources"][0]["name"], self.plate.name)
+    self.assertEqual(started[8].context["destination"]["name"], "destination")
 
   async def test_return_tips(self):
     tip_spot = self.tip_rack.get_item("A1")

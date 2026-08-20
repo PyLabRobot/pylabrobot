@@ -1,6 +1,7 @@
 from typing import Optional
 
 from pylabrobot.io.capture import CaptureReader, capturer
+from pylabrobot.io.command_line import CommandLineTransport, CommandLineValidator
 from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.serial import Serial, SerialValidator
@@ -28,6 +29,7 @@ def validate(capture_file: str):
       Serial: SerialValidator,
       FTDI: FTDIValidator,
       HID: HIDValidator,
+      CommandLineTransport: CommandLineValidator,
     }
     if not hasattr(obj, "io"):
       return False

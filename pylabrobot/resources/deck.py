@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, cast
+from typing import Any, Dict, List, Mapping, Optional, cast
 
 from pylabrobot.resources.errors import ResourceNotFoundError
 
@@ -26,6 +26,7 @@ class Deck(Resource):
     name: str = "deck",
     origin: Coordinate = Coordinate(0, 0, 0),
     category: str = "deck",
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Initialize a new deck."""
 
@@ -35,6 +36,7 @@ class Deck(Resource):
       size_y=size_y,
       size_z=size_z,
       category=category,
+      metadata=metadata,
     )
     self.location = origin
     self._resources: Dict[str, Resource] = {}

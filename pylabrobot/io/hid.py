@@ -43,17 +43,8 @@ class HID(IOBase):
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new HID object while capture or validation is active")
 
-  async def setup(self):
-    """
-    Sets up the HID device by enumerating connected devices, matching the specified
-    VID, PID, and optional serial number, and opening a connection to the device.
-    """
-    if not USE_HID:
-      raise RuntimeError(
-        "hid is not installed. Install with: pip install pylabrobot[hid]. "
-        f"Import error: {_HID_IMPORT_ERROR}"
-      )
-
+  def _setup_sync(self) -> None:
+    """Enumerate, match and open the device. Runs on the executor that owns all device calls."""
     # --- 1. Enumerate all HID devices ---
     all_devices = hid.enumerate()
     candidates = [
@@ -102,19 +93,55 @@ class HID(IOBase):
     self.device = hid.Device(
       path=chosen["path"]  # safer than vid/pid/serial triple
     )
+
+  async def setup(self):
+    """
+    Sets up the HID device by enumerating connected devices, matching the specified
+    VID, PID, and optional serial number, and opening a connection to the device.
+    """
+    if not USE_HID:
+      raise RuntimeError(
+        "hid is not installed. Install with: pip install pylabrobot[hid]. "
+        f"Import error: {_HID_IMPORT_ERROR}"
+      )
+
     self._executor = ThreadPoolExecutor(max_workers=1)
+    loop = asyncio.get_running_loop()
+    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    try:
+      await asyncio.shield(setup_future)
+    except BaseException as exc:
+      if isinstance(exc, asyncio.CancelledError):
+        try:
+          await setup_future
+        except BaseException:
+          pass
+      if self.device is not None:
+        try:
+          await loop.run_in_executor(self._executor, self.device.close)
+        except Exception:
+          logger.warning("Failed to close HID device after setup failure", exc_info=True)
+        self.device = None
+      self._shutdown_executor()
+      raise
 
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))
 
+  def _shutdown_executor(self) -> None:
+    if self._executor is not None:
+      # the worker is idle here, so this does not block the event loop
+      self._executor.shutdown(wait=False, cancel_futures=True)
+      self._executor = None
+
   async def stop(self):
     if self.device is not None:
-      self.device.close()
+      loop = asyncio.get_running_loop()
+      await loop.run_in_executor(self._executor, self.device.close)
+      self.device = None
     logger.log(LOG_LEVEL_IO, "Closing HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="close", data=""))
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+    self._shutdown_executor()
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
     r"""Writes data to the HID device.

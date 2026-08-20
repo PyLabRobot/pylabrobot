@@ -47,7 +47,7 @@ extensions = [
   "IPython.sphinxext.ipython_console_highlighting",
   "sphinx_reredirects",
   "sphinx_sitemap",
-  "plr_devices",
+  "plr_devices.directive",
 ]
 
 intersphinx_mapping = {

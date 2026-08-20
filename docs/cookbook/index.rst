@@ -32,10 +32,11 @@ teach, and accelerate your own automation workflows.
    :header: Send PyLabRobot notifications to Slack
    :card_description: <ul>
       <li>Post run start/finish/failure messages to a Slack channel</li>
+      <li>Forward semantic PLR EventBus operations automatically</li>
       <li>Uses only the Python standard library (no extra deps)</li>
       <li>Webhook URL stored in a local file outside the repo</li></ul>
    :link: slack_notifications.html
-   :tags: Notifications Slack Monitoring
+   :tags: Notifications Slack Monitoring EventBus
 
 .. plrcardgrid::
 

@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, List, Optional
 
+from pylabrobot.events import emit_event
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
@@ -159,6 +160,13 @@ class USB(IOBase):
         data=data.decode("unicode_escape", errors="backslashreplace"),
       )
     )
+    emit_event(
+      "io.write",
+      transport="usb",
+      device=self.human_readable_device_name,
+      device_id=self._unique_id,
+      data=data.decode("utf-8", errors="backslashreplace"),
+    )
 
   def _read_packet(
     self,
@@ -236,7 +244,7 @@ class USB(IOBase):
     if timeout is None:
       timeout = self.read_timeout
 
-    def read_or_timeout():
+    def read_or_timeout() -> bytes:
       # Attempt to read packets until timeout, or when we identify the right id.
       timeout_time = time.time() + timeout
 
@@ -268,7 +276,7 @@ class USB(IOBase):
             data=resp.decode("unicode_escape", errors="backslashreplace"),
           )
         )
-        return resp
+        return bytes(resp)
 
       raise TimeoutError(
         f"Timeout while reading from USB device '{self.human_readable_device_name}'."
@@ -277,7 +285,16 @@ class USB(IOBase):
     loop = asyncio.get_running_loop()
     if self._read_executor is None or self.dev is None:
       raise RuntimeError(f"Call setup() first for USB device '{self.human_readable_device_name}'.")
-    return await loop.run_in_executor(self._read_executor, read_or_timeout)
+    response = await loop.run_in_executor(self._read_executor, read_or_timeout)
+    # Emit on the calling task, not the executor thread, so the operation context survives.
+    emit_event(
+      "io.read",
+      transport="usb",
+      device=self.human_readable_device_name,
+      device_id=self._unique_id,
+      data=response.decode("utf-8", errors="backslashreplace"),
+    )
+    return response
 
   def get_available_devices(self) -> List["usb.core.Device"]:
     """Get a list of available devices that match the specified vendor and product IDs, and serial
@@ -383,21 +400,8 @@ class USB(IOBase):
 
     return bytearray(res)
 
-  async def setup(self, empty_buffer=True):
-    """Initialize the USB connection to the machine."""
-
-    if self.dev is not None:
-      # previous setup did not properly finish,
-      # or we are re-initializing the device.
-      logger.warning("USB device already connected. Closing previous connection.")
-      await self.stop()
-
-    if not USE_USB:
-      raise RuntimeError(
-        "pyusb/libusb is not installed. Install with: pip install pylabrobot[usb]. "
-        f"Import error: {_USB_IMPORT_ERROR}. "
-        "https://docs.pylabrobot.org/installation.html"
-      )
+  def _setup_sync(self, empty_buffer: bool) -> None:
+    """Open the device, resolve the endpoints and drain stale packets. Runs off the event loop."""
 
     logger.info("Finding USB device...")
 
@@ -457,22 +461,67 @@ class USB(IOBase):
       while self._read_packet() is not None:
         pass
 
+  async def setup(self, empty_buffer=True):
+    """Initialize the USB connection to the machine."""
+
+    if self.dev is not None:
+      # previous setup did not properly finish,
+      # or we are re-initializing the device.
+      logger.warning("USB device already connected. Closing previous connection.")
+      await self.stop()
+
+    if not USE_USB:
+      raise RuntimeError(
+        "pyusb/libusb is not installed. Install with: pip install pylabrobot[usb]. "
+        f"Import error: {_USB_IMPORT_ERROR}. "
+        "https://docs.pylabrobot.org/installation.html"
+      )
+
     self._read_executor = ThreadPoolExecutor(max_workers=self.max_workers)
     self._write_executor = ThreadPoolExecutor(max_workers=self.max_workers)
+
+    loop = asyncio.get_running_loop()
+    setup_future = loop.run_in_executor(self._read_executor, self._setup_sync, empty_buffer)
+    try:
+      await asyncio.shield(setup_future)
+    except BaseException as exc:
+      if isinstance(exc, asyncio.CancelledError):
+        try:
+          await setup_future
+        except BaseException:
+          pass
+      if self.dev is not None:
+        dev = self.dev
+        try:
+          await loop.run_in_executor(self._read_executor, lambda: usb.util.dispose_resources(dev))
+        except Exception:
+          logger.warning("Failed to dispose USB device after setup failure", exc_info=True)
+        self.dev = None
+        self.read_endpoint = None
+        self.write_endpoint = None
+      self._shutdown_executors()
+      raise
+
+  def _shutdown_executors(self) -> None:
+    for executor in (self._read_executor, self._write_executor):
+      if executor is not None:
+        # the workers are idle here, so this does not block the event loop
+        executor.shutdown(wait=False, cancel_futures=True)
+    self._read_executor = self._write_executor = None
 
   async def stop(self):
     """Close the USB connection to the machine. Safe to call multiple times."""
 
     if self.dev is None:
+      self._shutdown_executors()
       return
     logger.warning("Closing connection to USB device.")
-    usb.util.dispose_resources(self.dev)
+    loop = asyncio.get_running_loop()
+    dev = self.dev
+    await loop.run_in_executor(self._read_executor, lambda: usb.util.dispose_resources(dev))
     self.dev = None
 
-    for executor in (self._read_executor, self._write_executor):
-      if executor is not None:
-        executor.shutdown(wait=True)
-    self._read_executor = self._write_executor = None
+    self._shutdown_executors()
 
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""

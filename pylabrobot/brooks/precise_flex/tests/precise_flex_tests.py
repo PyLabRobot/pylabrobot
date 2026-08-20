@@ -9,6 +9,7 @@ from pylabrobot.brooks.precise_flex import (
   PreciseFlexCartesianPose,
   StationAccess,
 )
+from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
 from pylabrobot.resources import Coordinate, Rotation
 
 
@@ -86,6 +87,65 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.arm._mm_to_firmware_units(60.0), 500.0)
     self.assertEqual(self.arm._mm_to_firmware_units(145.0), 585.0)
     self.assertEqual(self.arm._mm_to_firmware_units(100.0), 540.0)
+
+
+class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
+  async def test_gripper_event_uses_default_length_unit_field(self):
+    arm = _make_arm()
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await arm.move_gripper(width=80.0)
+
+    self.assertEqual(events[0].data["width"], 80.0)
+    self.assertNotIn("width_mm", events[0].data)
+
+  async def test_gripper_event_and_nested_firmware_commands_inherit_resource_context(self):
+    arm = PreciseFlex(
+      host="localhost",
+      gripper_length=162.0,
+      gripper_z_offset=0.0,
+      closed_gripper_position=500.0,
+    )
+    arm.io.write = AsyncMock()  # type: ignore[method-assign]
+    arm.io.readline = AsyncMock(return_value=b"0\n")  # type: ignore[method-assign]
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with (
+      use_event_bus(event_bus),
+      event_context(
+        resources=[{"name": "sample_plate"}],
+        source={"name": "source_nest"},
+        destination={"name": "destination_nest"},
+      ),
+    ):
+      await arm.move_gripper_joint_position(520.0)
+
+    self.assertEqual(events[0].name, "precise_flex.move_gripper_joint_position.started")
+    self.assertEqual(events[-1].name, "precise_flex.move_gripper_joint_position.completed")
+    self.assertEqual(events[0].data["gripper_joint_position"], 520.0)
+    self.assertEqual(events[0].data["device"]["name"], "precise_flex")
+    self.assertEqual(events[0].context["resources"], [{"name": "sample_plate"}])
+    self.assertEqual(events[0].context["source"], {"name": "source_nest"})
+    self.assertEqual(events[0].context["destination"], {"name": "destination_nest"})
+
+    firmware_events = [
+      event for event in events if event.name == "precise_flex.firmware_command.started"
+    ]
+    self.assertEqual(
+      [event.data["command"] for event in firmware_events],
+      [
+        "GripOpenPos 520.0",
+        "gripper 1",
+      ],
+    )
+    self.assertTrue(
+      all(event.context["resources"] == [{"name": "sample_plate"}] for event in firmware_events)
+    )
 
 
 class TestPreciseFlex400OutOfRangeRecovery(unittest.IsolatedAsyncioTestCase):

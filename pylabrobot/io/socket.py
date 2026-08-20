@@ -37,6 +37,7 @@ class Socket(IOBase):
     write_timeout: float = 30,
     ssl_context: Optional[ssl.SSLContext] = None,
     server_hostname: Optional[str] = None,
+    source_ip: Optional[str] = None,
   ):
     self.human_readable_device_name = human_readable_device_name
     self._host = host
@@ -47,6 +48,7 @@ class Socket(IOBase):
     self._write_timeout = write_timeout
     self._ssl_context = ssl_context
     self._server_hostname = server_hostname
+    self._source_ip = source_ip
     self._unique_id = f"{self._host}:{self._port}"
     self._read_lock = asyncio.Lock()
     self._write_lock = asyncio.Lock()
@@ -59,11 +61,13 @@ class Socket(IOBase):
     await self._connect()
 
   async def _connect(self):
+    local_addr = (self._source_ip, 0) if self._source_ip is not None else None
     self._reader, self._writer = await asyncio.open_connection(
       host=self._host,
       port=self._port,
       ssl=self._ssl_context,
       server_hostname=self._server_hostname,
+      local_addr=local_addr,
     )
 
   async def stop(self):
@@ -97,6 +101,7 @@ class Socket(IOBase):
       "type": "Socket",
       "read_timeout": self._read_timeout,
       "write_timeout": self._write_timeout,
+      "source_ip": self._source_ip,
     }
 
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
