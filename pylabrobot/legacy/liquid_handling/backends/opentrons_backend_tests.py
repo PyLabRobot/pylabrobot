@@ -151,6 +151,58 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     await self.test_tip_pick_up()
     await self.lh.drop_tips(self.tip_rack["A1"])
 
+  @staticmethod
+  def _at(x: float, y: float, z: float) -> dict:
+    return {
+      "data": {"status": "succeeded", "result": {"position": {"x": x, "y": y, "z": z}}},
+    }
+
+  @patch("ot_api.runs.get_command")
+  @patch("ot_api.runs.enqueue_command")
+  async def test_get_channel_position_asks_the_robot_to_save_its_position(
+    self, mock_enqueue, mock_get_command
+  ):
+    mock_enqueue.return_value = "cmd-1"
+    mock_get_command.return_value = self._at(11.0, 22.0, 33.0)
+
+    position = await self.backend.get_channel_position(0)
+
+    self.assertEqual(position, Coordinate(11.0, 22.0, 33.0))
+    self.assertEqual(mock_enqueue.call_args.args[0], "savePosition")
+    self.assertEqual(mock_enqueue.call_args.args[1], {"pipetteId": "left-pipette-id"})
+
+  @patch("ot_api.runs.get_command")
+  @patch("ot_api.runs.enqueue_command")
+  async def test_a_failed_save_position_names_the_robot_error(self, mock_enqueue, mock_get_command):
+    mock_enqueue.return_value = "cmd-1"
+    mock_get_command.return_value = {
+      "data": {
+        "status": "failed",
+        "error": {"errorType": "MustHomeError", "detail": "Must home first"},
+      }
+    }
+
+    with self.assertRaises(RuntimeError):
+      await self.backend.get_channel_position(0)
+
+  @patch("ot_api.lh.move_arm")
+  @patch("ot_api.runs.get_command")
+  @patch("ot_api.runs.enqueue_command")
+  async def test_move_channel_to_travels_once_holding_the_axes_left_out(
+    self, mock_enqueue, mock_get_command, mock_move_arm
+  ):
+    mock_enqueue.return_value = "cmd-1"
+    mock_get_command.return_value = self._at(11.0, 22.0, 33.0)
+
+    await self.backend.move_channel_to(0, x=50.0, z=5.0)
+
+    mock_move_arm.assert_called_once()
+    kwargs = mock_move_arm.call_args.kwargs
+    self.assertEqual(kwargs["location_x"], 50.0)
+    self.assertEqual(kwargs["location_y"], 22.0)  # not named, so held
+    self.assertEqual(kwargs["location_z"], 5.0)
+    self.assertEqual(kwargs["minimum_z_height"], self.backend.traversal_height)
+
   @patch("ot_api.lh.aspirate_in_place")
   @patch("ot_api.lh.move_arm")
   async def test_aspirate(self, mock_move=None, mock_aspirate=None):
