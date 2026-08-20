@@ -1279,12 +1279,21 @@ class FlexHead8(_FlexHead):
   (``_ensure_all_mode``).
 
   Verified on real 8-channel Flex hardware (Opentrons Flex, robot-server
-  API 8.8): setup, homing, and column tip pickup confirmed against the
-  hardware tip-presence sensor. Ops outside that verified lineage log the
+  API 8.8) by the ``docs/user_guide/opentrons/flex/hello-world.ipynb`` and
+  ``use_channels_smoke.ipynb`` runs: setup and homing; tip pickup in
+  full-column (ALL), single-nozzle (SINGLE, H1), and partial-column (QUADRANT,
+  front four) layouts, and tip drop in the full-column and single-nozzle
+  layouts, confirmed against the hardware tip-presence sensor; and
+  aspirate/dispense into a plate in the full-column and single-nozzle layouts.
+  Ops outside that set -- container/reservoir ops, touch_tip, liquid_probe, and
+  the motion surface -- are coded but not yet hardware-verified and log the
   one-time untested-hardware notice, same as the other heads.
   """
 
-  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset({"pick_up_tips"})
+  _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
+    {"pick_up_tips", "pick_up_single_tip", "pick_up_partial", "drop_tips", "drop_single_tip",
+     "aspirate", "dispense"}
+  )
 
   def __init__(
     self,
@@ -1483,6 +1492,7 @@ class FlexHead8(_FlexHead):
     ``configureNozzleLayout`` is emitted here (no tip is on yet, so the engine
     accepts it); the ``pickUpTip`` is anchored at the well under the primary nozzle.
     """
+    self._warn_untested_hardware("pick_up_partial")
     ordered = sorted(use_channels)
     top = self.channels - 1
     if ordered[-1] == top:  # front-anchored partial (includes H1)
