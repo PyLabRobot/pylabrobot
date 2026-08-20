@@ -51,6 +51,10 @@ class DashboardOperatorActionProvider:
     return OperatorActionResult.completed(confirmed_by=result.user)
 ```
 
+`OperatorActionRequest` carries any direct modeled `resources` plus optional `source` and
+`destination` endpoints. Providers that cross a process boundary can serialize those objects in
+their own transport format; `details` remains for operation-specific request data.
+
 For a complete notebook example using a chatterbox incubator, manual plate transfer, plate reader,
 and optional EventBus subscriber, see the
 [ManualOperator Jupyter cookbook](../../cookbook/manual_operator_jupyter.ipynb).

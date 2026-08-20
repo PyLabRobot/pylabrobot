@@ -49,10 +49,13 @@ class ManualOperator:
       instructions=instructions,
       confirmation_text=confirmation_text,
       details={} if details is None else details,
+      resources=resources or (),
+      source=source,
+      destination=destination,
     )
     operation_data: Dict[str, Any] = {
       "device": device_reference(self, name=self.name),
-      "resources": [resource_reference(resource) for resource in resources or ()],
+      "resources": [resource_reference(resource) for resource in request.resources],
       "manual_action": request.action,
       "title": request.title,
       "instructions": request.instructions,

@@ -2,7 +2,9 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
+
+from pylabrobot.resources import Resource
 
 
 class OperatorActionStatus(str, Enum):
@@ -27,6 +29,9 @@ class OperatorActionRequest:
   instructions: str
   confirmation_text: str = "Confirm action completed"
   details: Dict[str, Any] = field(default_factory=dict)
+  resources: Sequence[Resource] = field(default_factory=tuple)
+  source: Optional[Resource] = None
+  destination: Optional[Resource] = None
 
   def __post_init__(self) -> None:
     for field_name in (
@@ -39,6 +44,7 @@ class OperatorActionRequest:
       if not getattr(self, field_name).strip():
         raise ValueError(f"{field_name} must not be empty")
     object.__setattr__(self, "details", self.details.copy())
+    object.__setattr__(self, "resources", tuple(self.resources))
 
 
 @dataclass(frozen=True)

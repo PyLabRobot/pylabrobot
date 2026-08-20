@@ -53,6 +53,9 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(request.operator_name, "cell_operator")
     self.assertEqual(request.action, "centrifuge.spin")
     self.assertEqual(request.details["duration"], 180)
+    self.assertEqual(request.resources, ())
+    self.assertIsNone(request.source)
+    self.assertIsNone(request.destination)
 
   async def test_cancelled_result_raises_specific_error(self):
     provider = RecordingProvider(OperatorActionResult.cancelled(message="Protocol stopped"))
@@ -127,6 +130,9 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(plate.location, Coordinate(4, 5, 6))
     request = provider.requests[0]
     self.assertEqual(request.details, {})
+    self.assertEqual(request.resources, (plate,))
+    self.assertIs(request.source, source)
+    self.assertIs(request.destination, destination)
 
   async def test_move_resource_uses_explicit_destination_location(self):
     source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
