@@ -1291,8 +1291,15 @@ class FlexHead8(_FlexHead):
   """
 
   _HARDWARE_VERIFIED_OPS: FrozenSet[str] = frozenset(
-    {"pick_up_tips", "pick_up_single_tip", "pick_up_partial", "drop_tips", "drop_single_tip",
-     "aspirate", "dispense"}
+    {
+      "pick_up_tips",
+      "pick_up_single_tip",
+      "pick_up_partial",
+      "drop_tips",
+      "drop_single_tip",
+      "aspirate",
+      "dispense",
+    }
   )
 
   def __init__(

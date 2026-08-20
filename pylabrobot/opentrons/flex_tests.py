@@ -1201,7 +1201,7 @@ class DeclaredIdentityTests(unittest.TestCase):
 
   def test_a_declared_load_name_is_what_the_resource_loads_by(self):
     plate = cor_96_wellplate_360uL_Fb(name="anything at all")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
     load_name, version = OpentronsFlex._ot_declared_identity(plate)
     self.assertEqual(load_name, "corning_96_wellplate_360ul_flat")
     self.assertEqual(version, 1)
@@ -1210,15 +1210,17 @@ class DeclaredIdentityTests(unittest.TestCase):
     # Revision 1 is the only one every robot holds, so a caller who wants a
     # later one (for its gripper grip height) has to say so.
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "corning_96_wellplate_360ul_flat"
-    plate.ot_version = 2
-    self.assertEqual(OpentronsFlex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2))
+    plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+    plate.ot_version = 2  # type: ignore[attr-defined]
+    self.assertEqual(
+      OpentronsFlex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2)
+    )
 
   def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
     # The robot resolves against its own shipped definitions AND a lab's own
     # uploads, so any list here would be wrong for somebody's robot.
     plate = cor_96_wellplate_360uL_Fb(name="plate")
-    plate.ot_load_name = "a_lab_uploaded_this_one_themselves"
+    plate.ot_load_name = "a_lab_uploaded_this_one_themselves"  # type: ignore[attr-defined]
     load_name, version = OpentronsFlex._ot_declared_identity(plate)
     self.assertEqual(load_name, "a_lab_uploaded_this_one_themselves")
     self.assertEqual(version, 1)
