@@ -9,7 +9,7 @@ between opentrons 8.3.0 (-177.42) and 8.8.1 (-169.42).
 """
 
 from dataclasses import dataclass
-from typing import List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Tuple
 
 from pylabrobot.resources import Coordinate
 

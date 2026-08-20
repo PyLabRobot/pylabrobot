@@ -86,7 +86,7 @@ class FlexGripper:
         pylabrobot uploads. It therefore applies ONLY to labware pylabrobot
         uploads a definition for: a resource resolving to an official
         Opentrons load name (``ot_load_name`` set, a standard tip-rack name,
-        or a name starting with "opentrons_") loads the catalogue definition
+        or a name starting with ``opentrons_``) loads the catalogue definition
         instead, whose grip height is the vendor's to state -- and when that
         definition states none, the robot grips at the labware's mid-height
         rather than at this value. Honored on the labware's FIRST load in the

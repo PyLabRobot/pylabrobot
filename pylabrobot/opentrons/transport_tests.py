@@ -5,9 +5,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
-import httpx
+import pytest
 
 import pylabrobot
 from pylabrobot.io.errors import ValidationError
@@ -20,7 +20,13 @@ from pylabrobot.opentrons.transport import (
   ReplayTransport,
 )
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
-from pylabrobot.testing.http_server import serving
+
+if TYPE_CHECKING:
+  import httpx
+else:
+  httpx = pytest.importorskip("httpx")
+
+from pylabrobot.testing.http_server import serving  # noqa: E402
 
 
 class _StubRobot(OpentronsRobot):

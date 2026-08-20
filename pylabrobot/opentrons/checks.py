@@ -10,9 +10,11 @@ from typing import List, Optional
 
 from pylabrobot.opentrons.envelope import (
   FLEX_8CH_NOZZLE_A1_Y,
-  FLEX_8CH_NOZZLE_H1_Y as FLEX_8CH_NOZZLE_H1_Y,  # re-exported for callers importing from checks
   FLEX_ENVELOPE,
   nozzle_offset_y,
+)
+from pylabrobot.opentrons.envelope import (
+  FLEX_8CH_NOZZLE_H1_Y as FLEX_8CH_NOZZLE_H1_Y,  # re-exported for callers importing from checks
 )
 from pylabrobot.opentrons.robot import PipetteInfo
 from pylabrobot.resources import Coordinate, Resource

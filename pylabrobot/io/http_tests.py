@@ -4,15 +4,21 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
-import httpx
+import pytest
 
 import pylabrobot
 from pylabrobot.io.capture import CaptureReader
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.http import HTTP, HTTPValidator
-from pylabrobot.testing.http_server import serving as _serving
+
+if TYPE_CHECKING:
+  import httpx
+else:
+  httpx = pytest.importorskip("httpx")
+
+from pylabrobot.testing.http_server import serving as _serving  # noqa: E402
 
 BASE_URL = "http://robot.test:31950"
 
