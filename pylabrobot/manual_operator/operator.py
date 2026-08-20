@@ -122,7 +122,11 @@ class ManualOperator:
       destination_location: Optional resource location relative to ``destination``. Resource
         holders calculate their normal child location when this is omitted.
       destination_rotation: Optional resource-local rotation to apply before destination
-        assignment. This is not inferred from ``destination``.
+        assignment. It is relative to ``destination``, not an absolute/world rotation. After
+        assignment, PLR composes the destination's absolute rotation with this local rotation.
+        For a manual replacement of an automated transfer, pass the destination-local pose the
+        automated transfer would produce; do not copy the source local rotation unless it is
+        physically correct for ``destination``. This is not inferred from ``destination``.
       title: Provider-facing title. Defaults to ``"Move <resource name>"``.
       instructions: Provider-facing instructions. Defaults to a concise source-to-destination
         instruction.

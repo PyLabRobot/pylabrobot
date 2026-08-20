@@ -95,6 +95,13 @@ explicit `destination_location=Coordinate(...)`. Pass an explicit
 never inferred from the destination holder and is applied before a holder calculates its child
 location. If final assignment fails, the original parent, location, and rotation are restored.
 
+`destination_rotation` is the resource's local rotation relative to `destination`, not an
+absolute/world rotation. After assignment, the resource's absolute rotation is composed from the
+destination's absolute rotation and this local rotation. For a manual move that replaces an
+automated transfer, pass the destination-local pose that the automated transfer would produce; do
+not copy the source resource's local rotation unless that is physically correct for the
+destination.
+
 Cancellation, reported failure, and provider exceptions do not modify the resource model. If the
 model changes while the operator request is pending, the method raises an error rather than
 overwriting the newer state.
