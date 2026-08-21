@@ -1248,5 +1248,46 @@ class DeclaredIdentityTests(unittest.TestCase):
       OpentronsFlex._ot_declared_identity(plate)
 
 
+class TestFlexHead8SingleOpPipettingHeight(unittest.TestCase):
+  """A single-nozzle op on the 8-channel head takes a pipetting height, so a
+  caller is not stuck with the default bottom clearance on a cherry-pick."""
+
+  def setUp(self):
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+
+  def tearDown(self):
+    set_tip_tracking(False)
+    set_volume_tracking(False)
+
+  def _run_single_ops(self, **height):
+    flex, transport, head = _flex_head8()
+    try:
+      rack = flex_96_tiprack_50ul(name="rack")
+      plate = cor_96_wellplate_360uL_Fb(name="plate")
+      plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
+      flex.deck.assign_child_at_slot(rack, "C1")
+      flex.deck.assign_child_at_slot(plate, "C2")
+      asyncio.run(head.pick_up_single_tip(rack, well="A1", primary_nozzle="H1"))
+      asyncio.run(head.dispense_single(plate, well="A1", volume=20, **height))
+      asyncio.run(head.aspirate_single(plate, well="A1", volume=20, **height))
+      return (
+        next(c for c in transport.commands if c["commandType"] == "dispense"),
+        next(c for c in transport.commands if c["commandType"] == "aspirate"),
+      )
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_liquid_height_rides_the_wire_on_single_nozzle_ops(self):
+    dispense_cmd, aspirate_cmd = self._run_single_ops(liquid_height=3.0)
+    for cmd in (dispense_cmd, aspirate_cmd):
+      self.assertEqual(cmd["params"]["wellLocation"]["origin"], "bottom")
+      self.assertEqual(cmd["params"]["wellLocation"]["offset"]["z"], 3.0)
+
+  def test_omitted_liquid_height_keeps_the_default_bottom_clearance(self):
+    dispense_cmd, aspirate_cmd = self._run_single_ops()
+    for cmd in (dispense_cmd, aspirate_cmd):
+      self.assertEqual(cmd["params"]["wellLocation"]["offset"]["z"], 1.0)
+
 if __name__ == "__main__":
   unittest.main()
