@@ -11,7 +11,6 @@ from .standard import (
   OperatorActionFailedError,
   OperatorActionRequest,
   OperatorActionResult,
-  OperatorActionStatus,
 )
 
 
@@ -87,11 +86,11 @@ class ManualOperator:
 
       if not isinstance(result, OperatorActionResult):
         raise TypeError("OperatorActionProvider.request() must return OperatorActionResult")
-      if result.status == OperatorActionStatus.CANCELLED:
+      if result.status == "cancelled":
         raise OperatorActionCancelledError(request, result)
-      if result.status == OperatorActionStatus.FAILED:
+      if result.status == "failed":
         raise OperatorActionFailedError(request, result)
-      if result.status != OperatorActionStatus.COMPLETED:
+      if result.status != "completed":
         raise ValueError(f"Unsupported operator action status: {result.status!r}")
     assert result is not None
     return result

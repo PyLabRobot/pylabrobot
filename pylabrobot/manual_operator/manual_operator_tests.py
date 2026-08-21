@@ -84,17 +84,25 @@ class TestManualOperator(unittest.IsolatedAsyncioTestCase):
 
   async def test_request_copies_details(self):
     details = {"duration": 60}
+    resources = [Resource("plate", size_x=80, size_y=60, size_z=15)]
     request = OperatorActionRequest(
       operator_name="operator",
       action="centrifuge.spin",
       title="Spin",
       instructions="Spin the plate.",
       details=details,
+      resources=resources,
     )
 
     details["duration"] = 120
+    resources.clear()
 
     self.assertEqual(request.details["duration"], 60)
+    self.assertEqual(len(request.resources), 1)
+
+  async def test_result_rejects_unknown_status(self):
+    with self.assertRaisesRegex(ValueError, "Unsupported operator action status"):
+      OperatorActionResult(status="unknown")  # type: ignore[arg-type]
 
   async def test_move_resource_reassigns_only_after_completion(self):
     source = ResourceHolder("source", size_x=100, size_y=100, size_z=10)
