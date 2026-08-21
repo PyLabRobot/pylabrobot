@@ -44,10 +44,18 @@ logger = logging.getLogger(__name__)
 # Float dust allowed when a converted jaw width is compared with the axis limit it
 # was derived from.
 _GRIPPER_UNIT_EPS = 1e-6
+_GRIPPER_LIMIT_HEADROOM = 0.5
+"""How far inside its soft limits a commanded gripper target is held, in axis units.
+
+The servo overshoots: commanding the advertised maximum landed the axis at 134.062
+against a limit of 134.0, and the controller then refused every move until the arm
+was homed. Nothing gains from driving to the exact end, so no caller is allowed to."""
 
 # Both in gripper-axis units, relative to the calibrated grip position. Opening is a small
 # step off the plate rather than a sweep to the stop, which is a long move to no purpose.
-_JAW_OPENING = 10.0
+# 14 clears an SBS skirt by a few mm a side: measured on the bench, a grip position of 75.5
+# and an opening of 14 puts the jaws at 89.5, which passes a plate without catching it.
+_JAW_OPENING = 14.0
 # A plate holds the jaws open past the commanded grip; empty jaws settle on it.
 _PLATE_PRESENT_MARGIN = 2.0
 
@@ -910,9 +918,7 @@ class PreciseFlex:
     await self._open_to(joints[Axis.GRIPPER] + jaw_opening)
 
   async def _open_to(self, position: float) -> None:
-    """Open the jaws to a gripper-axis position, never past the axis ceiling."""
-    if self._gripper_soft_max is not None:
-      position = min(position, self._gripper_soft_max)
+    """Open the jaws to a gripper-axis position, held inside the axis limits."""
     await self.move_gripper_joint_position(position, force_sensing=False)
 
   def _assert_within_work_envelope(
@@ -2537,6 +2543,15 @@ class PreciseFlex:
   _gripper_soft_min: Optional[float] = None
   _gripper_soft_max: Optional[float] = None
 
+  @property
+  def default_open_position(self) -> float:
+    """Where the jaws stand off the calibrated grip position, in gripper-axis units.
+
+    What an open with no width in it should reach for. The stops are a long move to no
+    purpose, and driving to one is what strands the axis outside its limits.
+    """
+    return self.closed_gripper_position + _JAW_OPENING
+
   @evented_operation(
     "precise_flex.move_gripper",
     lambda self, width, force_sensing=False: {
@@ -2582,7 +2597,7 @@ class PreciseFlex:
           f"axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - check "
           f"closed_gripper_position (currently {self.closed_gripper_position})."
         )
-      units = min(max(units, self._gripper_soft_min), self._gripper_soft_max)
+      units = self._within_gripper_limits(units)
     await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(units)
@@ -2609,6 +2624,7 @@ class PreciseFlex:
     This is the counterpart to :meth:`move_gripper` for integrations with
     taught joint-space routes. The caller owns the joint calibration.
     """
+    position = self._within_gripper_limits(position)
     await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(position)
@@ -2616,6 +2632,26 @@ class PreciseFlex:
     else:
       await self._set_grip_open_pos(position)
       await self.send_command("gripper 1")
+
+  def _within_gripper_limits(self, units: float) -> float:
+    """A gripper target held inside whichever soft limits are known, with headroom.
+
+    Each end is applied on its own: an arm that has read one limit and not the other
+    still gets the end it knows about.
+    """
+    low = high = None
+    if self._gripper_soft_min is not None:
+      low = self._gripper_soft_min + _GRIPPER_LIMIT_HEADROOM
+    if self._gripper_soft_max is not None:
+      high = self._gripper_soft_max - _GRIPPER_LIMIT_HEADROOM
+    if low is not None and high is not None and low > high:
+      # A range narrower than the headroom itself: the middle is the safest target.
+      return (low + high) / 2
+    if low is not None:
+      units = max(units, low)
+    if high is not None:
+      units = min(units, high)
+    return units
 
   async def is_gripper_closed(self) -> bool:
     """(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.
