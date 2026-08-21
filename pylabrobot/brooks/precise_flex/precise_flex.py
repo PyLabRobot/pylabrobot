@@ -5,8 +5,19 @@ import dataclasses
 import logging
 import time
 import warnings
+from contextlib import asynccontextmanager
 from math import cos, hypot, radians, sin
-from typing import Callable, ClassVar, Dict, List, Literal, NamedTuple, Optional, Sequence
+from typing import (
+  AsyncIterator,
+  Callable,
+  ClassVar,
+  Dict,
+  List,
+  Literal,
+  NamedTuple,
+  Optional,
+  Sequence,
+)
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.config import Axis, PreciseFlexConfiguration, StationAccess
@@ -926,8 +937,7 @@ class PreciseFlex:
       )
     if not envelope.zmin <= location.z <= envelope.zmax:
       raise IKError(
-        f"target z={location.z} is outside the arm's Z travel "
-        f"[{envelope.zmin}, {envelope.zmax}]"
+        f"target z={location.z} is outside the arm's Z travel [{envelope.zmin}, {envelope.zmax}]"
       )
     if location.z + highest_lift > envelope.zmax:
       raise IKError(
@@ -1306,6 +1316,34 @@ class PreciseFlex:
   async def _request_speed(self) -> float:
     """Get the current speed percentage of the arm's movement."""
     return await self.request_profile_speed(self.profile_index)
+
+  @asynccontextmanager
+  async def _at_speed(self, speed_pct: Optional[float]) -> AsyncIterator[None]:
+    """Run a move at its own speed, then put the profile speed back.
+
+    The restore belongs here rather than with the caller: a fault between the move
+    and the restore would otherwise leave the arm slow for everything after it.
+    """
+    if speed_pct is None:
+      yield
+      return
+    prior = await self._request_speed()
+    await self._set_speed(speed_pct)
+    try:
+      yield
+    finally:
+      try:
+        await self._set_speed(prior)
+      except Exception:
+        # Raising here replaces whatever the move was already failing with, so name the
+        # state plainly: the arm is still at the move's speed and nothing else will reset it.
+        logger.error(
+          "[PreciseFlex %s] could not restore profile speed to %s; the arm is still at %s",
+          self.io._host,
+          prior,
+          speed_pct,
+        )
+        raise
 
   # -- brakes, torque & freedrive -----------------------------------------------------------
 
@@ -2187,7 +2225,8 @@ class PreciseFlex:
     Args:
       position: Target joint pose. Omitted axes keep their live values.
       speed_pct: Movement speed override as a percentage (0-100). If None, uses the current
-        speed setting.
+        speed setting. This STICKS: it is not restored afterwards, unlike the scoped
+        ``speed_pct`` on ``pick_up_at_location`` / ``drop_at_location``.
     """
     if speed_pct is not None:
       await self._set_speed(speed_pct)
@@ -2627,7 +2666,7 @@ class PreciseFlex:
 
   @evented_operation(
     "precise_flex.pick_up_at_location",
-    lambda self, location, direction, resource_width, finger_speed_pct=50.0, grasp_force=10.0, resource_height=_SBS_PLATE_HEIGHT, travel_margin=_TRAVEL_MARGIN, jaw_opening=_JAW_OPENING, plate_present_margin=_PLATE_PRESENT_MARGIN, orientation=None, rail_position=None, access=None: {
+    lambda self, location, direction, resource_width, finger_speed_pct=50.0, grasp_force=10.0, resource_height=_SBS_PLATE_HEIGHT, travel_margin=_TRAVEL_MARGIN, jaw_opening=_JAW_OPENING, plate_present_margin=_PLATE_PRESENT_MARGIN, orientation=None, rail_position=None, access=None, speed_pct=None: {
       "device": _controller_reference(self),
       "target": _cartesian_target_reference(
         location,
@@ -2638,6 +2677,7 @@ class PreciseFlex:
       "resource_width": float(resource_width),
       "finger_speed_pct": float(finger_speed_pct),
       "grasp_force": float(grasp_force),
+      "speed_pct": speed_pct,
     },
   )
   async def pick_up_at_location(
@@ -2654,6 +2694,7 @@ class PreciseFlex:
     orientation: Optional[ElbowOrientation] = None,
     rail_position: Optional[float] = None,
     access: Optional[StationAccess] = None,
+    speed_pct: Optional[float] = None,
   ) -> None:
     """Pick up at the specified Cartesian location.
 
@@ -2679,6 +2720,9 @@ class PreciseFlex:
       rail_position: Linear rail position in mm. Required when the arm has a rail.
       access: How the arm reaches the station and backs out of it. Defaults to a
         vertical approach with 100 mm clearance and 10 mm of loaded lift allowance.
+      speed_pct: Run this one pick at this percentage of full speed, restoring the
+        prior speed afterwards. None leaves the arm's current speed alone. Unlike
+        ``move_to_location``, this does NOT stick: the speed is scoped to this call.
 
     ``resource_width``, ``finger_speed_pct`` and ``grasp_force`` go out verbatim as
     ``GraspData``, which the vendor documents as feeding ``PickPlate`` alone. Whether the
@@ -2703,34 +2747,37 @@ class PreciseFlex:
     self._assert_within_work_envelope(
       location, rail_position or 0.0, _highest_lift(access, loaded_lift)
     )
-    if rail_position is not None:
-      await self.move_rail(rail_position)
-    await self._set_grasp_data(
-      plate_width=resource_width,
-      finger_speed_pct=finger_speed_pct,
-      grasp_force=grasp_force,
-    )
-    await self._open_to(self.closed_gripper_position + jaw_opening)
-    await self._reach_in(location, direction, access, orientation, rail_position)
-    try:
-      await self._grip(plate_present_margin)
-    except PreciseFlexError:
-      # Failing with the arm still down in the nest leaves it there for whatever runs next.
-      # Empty jaws, so the loaded allowance does not apply.
-      await self._back_out(
-        location,
-        direction,
-        access,
-        orientation,
-        rail_position,
-        lift=resource_height + travel_margin,
+    async with self._at_speed(speed_pct):
+      if rail_position is not None:
+        await self.move_rail(rail_position)
+      await self._set_grasp_data(
+        plate_width=resource_width,
+        finger_speed_pct=finger_speed_pct,
+        grasp_force=grasp_force,
       )
-      raise
-    await self._back_out(location, direction, access, orientation, rail_position, lift=loaded_lift)
+      await self._open_to(self.closed_gripper_position + jaw_opening)
+      await self._reach_in(location, direction, access, orientation, rail_position)
+      try:
+        await self._grip(plate_present_margin)
+      except PreciseFlexError:
+        # Failing with the arm still down in the nest leaves it there for whatever runs next.
+        # Empty jaws, so the loaded allowance does not apply.
+        await self._back_out(
+          location,
+          direction,
+          access,
+          orientation,
+          rail_position,
+          lift=resource_height + travel_margin,
+        )
+        raise
+      await self._back_out(
+        location, direction, access, orientation, rail_position, lift=loaded_lift
+      )
 
   @evented_operation(
     "precise_flex.drop_at_location",
-    lambda self, location, direction, resource_height=_SBS_PLATE_HEIGHT, travel_margin=_TRAVEL_MARGIN, jaw_opening=_JAW_OPENING, orientation=None, rail_position=None, access=None: {
+    lambda self, location, direction, resource_height=_SBS_PLATE_HEIGHT, travel_margin=_TRAVEL_MARGIN, jaw_opening=_JAW_OPENING, orientation=None, rail_position=None, access=None, speed_pct=None: {
       "device": _controller_reference(self),
       "target": _cartesian_target_reference(
         location,
@@ -2738,6 +2785,7 @@ class PreciseFlex:
         orientation=orientation,
         rail_position=rail_position,
       ),
+      "speed_pct": speed_pct,
     },
   )
   async def drop_at_location(
@@ -2750,6 +2798,7 @@ class PreciseFlex:
     orientation: Optional[ElbowOrientation] = None,
     rail_position: Optional[float] = None,
     access: Optional[StationAccess] = None,
+    speed_pct: Optional[float] = None,
   ) -> None:
     """Drop at the specified Cartesian location.
 
@@ -2770,6 +2819,9 @@ class PreciseFlex:
       rail_position: Linear rail position in mm. Required when the arm has a rail.
       access: How the arm reaches the station and backs out of it. Defaults to a
         vertical approach with 100 mm clearance.
+      speed_pct: Run this one place at this percentage of full speed, restoring the
+        prior speed afterwards. None leaves the arm's current speed alone. Unlike
+        ``move_to_location``, this does NOT stick: the speed is scoped to this call.
     """
     logger.info(
       "[PreciseFlex %s] drop: x=%s, y=%s, z=%s, direction=%s",
@@ -2787,13 +2839,19 @@ class PreciseFlex:
     self._assert_within_work_envelope(
       location, rail_position or 0.0, _highest_lift(access, resource_height + travel_margin)
     )
-    if rail_position is not None:
-      await self.move_rail(rail_position)
-    await self._reach_in(location, direction, access, orientation, rail_position)
-    await self._release(jaw_opening)
-    await self._back_out(
-      location, direction, access, orientation, rail_position, lift=resource_height + travel_margin
-    )
+    async with self._at_speed(speed_pct):
+      if rail_position is not None:
+        await self.move_rail(rail_position)
+      await self._reach_in(location, direction, access, orientation, rail_position)
+      await self._release(jaw_opening)
+      await self._back_out(
+        location,
+        direction,
+        access,
+        orientation,
+        rail_position,
+        lift=resource_height + travel_margin,
+      )
 
   # -- parking ------------------------------------------------------------------------------
 
