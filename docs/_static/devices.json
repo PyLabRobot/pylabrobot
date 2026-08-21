@@ -16,6 +16,22 @@
     "notes": "BenchCel 4R four-stacker configuration; protocol verified with firmware 3.2.20.0."
   },
   {
+    "id": "agilent-bravo",
+    "vendor": "Agilent",
+    "name": "Bravo",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.agilent.AgilentBravoBackend",
+    "api_version": "v1",
+    "code_slug": "agilent/bravo",
+    "doc_slug": "agilent/bravo/hello-world",
+    "notes": "Four hardware generations (Darwin, Agile 7612, Bravo SRT, legacy Agile) plus a simulation controller; the protocol and controller layers are exercised against real instruments, but the PyLabRobot transport, deck mapping, and backend are not."
+  },
+  {
     "id": "agilent-vspin",
     "vendor": "Agilent",
     "name": "VSpin",

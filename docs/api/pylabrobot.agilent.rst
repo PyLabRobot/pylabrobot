@@ -86,6 +86,21 @@ BioTek Synergy H1
     SynergyH1
 
 
+Bravo
+-----
+
+.. currentmodule:: pylabrobot.agilent.bravo
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    Bravo
+    AgilentBravoBackend
+    BravoDeck
+
+
 VSpin
 -----
 
