@@ -488,11 +488,15 @@ class STARChatterboxBackend(STARBackend):
     logger.info("positioning channels in y: %s make_space: %s", ys, make_space)
 
   async def request_pip_height_last_lld(self) -> List[float]:
-    """Return the absolute heights latched by simulated LLD, one per channel.
+    """Return the absolute heights latched by simulated liquid-level detection (LLD).
 
-    `_run_lld_on_channel_batch` records each simulated measurement by physical
-    channel. Values remain latched until another simulated LLD updates that channel.
-    Channels with no recorded simulated LLD are initialized to 0.0.
+    `_run_lld_on_channel_batch` records each simulated measurement by physical channel.
+    Values remain latched until another simulated LLD updates that channel. Channels with
+    no recorded simulated LLD report the initial value of 0.0.
+
+    Returns:
+      Simulated absolute liquid heights (mm) from the last LLD event for each channel,
+      ordered by channel index.
     """
     return list(self._last_lld_absolute_heights)
 
