@@ -37,7 +37,7 @@ def _make_arm(
 
   `wherej` answers with a pose because pick and place read the gripper axis back to tell a
   held plate from empty jaws; `gripper_units` is what those reads see. The default is the
-  bench proportion: the jaws are opened a step (10) off the grip position and a plate holds
+  bench proportion: the jaws are opened a step (14) off the grip position and a plate holds
   them a little (3) above it, inside that opening. A held position wider than the opening
   would describe a plate the fingers had already hit on the way in.
   """
@@ -628,6 +628,25 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self._cmds("wherej"), ["wherej"])  # exactly one position read
     self.assertEqual(len(self._cmds("moveJ")), 1)
 
+  async def test_a_stranded_gripper_is_told_that_homing_recovers_it(self):
+    """The gripper has no brake and drops out of range whenever power goes, which is how
+    it strands the arm. Telling the operator homing will not help sends them looking for
+    a recovery they do not need."""
+    self.arm._recover_out_of_range = False
+    self.arm._configuration = MagicMock(soft_limits={Axis.GRIPPER: (69.0, 134.0)})
+    self._stub("0 0.0 90.0 0.0 0.0")  # gripper at 0.0, below its floor
+    with self.assertRaises(OutOfRangeOfMotionError) as ctx:
+      await self.arm.move_to_joint_position({Axis.SHOULDER: 0.0})
+    self.assertIn("home the arm", str(ctx.exception))
+
+  async def test_a_stranded_rotary_axis_is_told_homing_will_not_help(self):
+    """The rotary axes are absolute: homing re-reads the same out-of-range value."""
+    self.arm._recover_out_of_range = False
+    self._stub("0 93.5 90.0 0.0 0")
+    with self.assertRaises(OutOfRangeOfMotionError) as ctx:
+      await self.arm.move_to_joint_position({Axis.SHOULDER: 0.0})
+    self.assertIn("Homing will not recover it", str(ctx.exception))
+
   async def test_move_to_location_is_also_guarded(self):
     """The Cartesian path funnels through the same guard: an out-of-range axis raises and sends no
     moveJ, like the joint path. The IK target is stubbed - it is the guard wiring, not IK, pinned
@@ -1033,6 +1052,19 @@ class TestPickReportsEmptyJaws(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(PreciseFlexError) as caught:
       await arm.pick_up_at_location(_PAD_1, direction=2.03, resource_width=80.0)
     self.assertIn("nothing in it", str(caught.exception))
+
+  async def test_the_report_names_the_two_numbers_that_decided_it(self):
+    """A plate that IS in the jaws and reported as absent means the margin or the grip
+    position is wrong for that resource. Reporting only the threshold leaves nobody able
+    to tell which of the two to change."""
+    arm = self._arm(gripper_units=500.5)
+    with self.assertRaises(PreciseFlexError) as caught:
+      await arm.pick_up_at_location(
+        _PAD_1, direction=2.03, resource_width=80.0, plate_present_margin=4.0
+      )
+    message = str(caught.exception)
+    self.assertIn("more than 4.0", message)  # the margin it was given
+    self.assertIn("500.0", message)  # the grip position it closed to
 
   async def test_jaws_held_open_by_a_plate_are_a_successful_pick(self):
     arm = self._arm(gripper_units=503.0)

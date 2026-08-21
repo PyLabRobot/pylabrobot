@@ -908,8 +908,10 @@ class PreciseFlex:
     if joints[Axis.GRIPPER] < self.closed_gripper_position + plate_present_margin:
       raise PreciseFlexError(
         -1,
-        f"the gripper closed to {joints[Axis.GRIPPER]:.1f} with nothing in it; a resource "
-        f"would have held it above {self.closed_gripper_position + plate_present_margin:.1f}.",
+        f"the gripper closed to {joints[Axis.GRIPPER]:.1f} with nothing in it: a held resource "
+        f"keeps the jaws more than {plate_present_margin:.1f} above the grip position "
+        f"({self.closed_gripper_position:.1f}). If something IS in the jaws, that pair is wrong "
+        f"for this resource - the width of the face being gripped is what decides both.",
       )
 
   async def _release(self, jaw_opening: float) -> None:
@@ -2092,9 +2094,8 @@ class PreciseFlex:
     if outside:
       raise OutOfRangeOfMotionError(
         f"axis outside its soft limit after setup: {self._fmt_axes(outside)}. The controller rejects all "
-        f"commanded moves in this state. Recover with recover_axes_within_limits(), or freedrive "
-        f"the axis back into range manually (required for the wrist, or when an axis is far past "
-        f"its limit).",
+        f"commanded moves in this state. {self._recovery_advice(outside)} Freedrive the axis back into "
+        f"range by hand when it is far past its limit, and always for the wrist.",
         axes=outside,
       )
 
@@ -2113,6 +2114,25 @@ class PreciseFlex:
       if value is not None and not (lo <= value <= hi):
         outside[axis] = (value, (lo, hi))
     return outside
+
+  @staticmethod
+  def _recovery_advice(axes: Dict[Axis, tuple]) -> str:
+    """What actually gets these axes back inside their limits.
+
+    The rotary axes are absolute, so homing re-reads the same out-of-range value and
+    changes nothing. The gripper is the exception: it has no brake, so it drops out of
+    range whenever the motors lose power, and homing does re-seat it.
+    """
+    if Axis.GRIPPER in axes:
+      return (
+        "Call recover_axes_within_limits() to drive it back into range, or home the arm: "
+        "the gripper has no brake, so it falls when the motors lose power, and homing "
+        "re-seats it."
+      )
+    return (
+      "Homing will not recover it (the rotary axes are absolute); call "
+      "recover_axes_within_limits() to drive it back into range."
+    )
 
   @staticmethod
   def _fmt_axes(axes: Dict[Axis, tuple]) -> str:
@@ -2141,8 +2161,7 @@ class PreciseFlex:
     if out_of_range:
       raise OutOfRangeOfMotionError(
         f"axis out of range: {self._fmt_axes(out_of_range)}. The controller rejects every commanded "
-        f"move while an axis is out of range. Homing will not recover it (the rotary axes are "
-        f"absolute); call recover_axes_within_limits() to drive it back into range.",
+        f"move while an axis is out of range. {self._recovery_advice(out_of_range)}",
         axes=out_of_range,
       )
     for axis, (value, limit) in self._axes_outside_soft_limits(target).items():
