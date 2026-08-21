@@ -5,7 +5,6 @@ from typing import Any, Dict, Literal, Optional, Sequence
 
 from pylabrobot.resources import Resource
 
-
 OperatorActionStatus = Literal["completed", "cancelled", "failed"]
 """Outcome reported by an operator-action provider."""
 
