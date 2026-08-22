@@ -46,6 +46,9 @@ LOK = "LOK"
 ouput = "ouput"
 hegiht = "hegiht"
 
+# "unparseable" is an accepted English variant used by the Opentrons version parser.
+unparseable = "unparseable"
+
 [files]
 extend-exclude = [
     "*.ipynb"
