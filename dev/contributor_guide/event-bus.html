@@ -772,6 +772,29 @@ frontend and diagnostic producer. Use an existing schema whenever the operation 
 accurate conventions, add the proposed contract to the registry in the same contribution, and
 treat maintainer review as establishing the standard for future implementations of that operation.
 Do not create an undocumented vendor-local alias for an existing concept.</p>
+<section id="manual-operator-actions">
+<h3>Manual operator actions<a class="headerlink" href="#manual-operator-actions" title="Link to this heading">#</a></h3>
+<p>Manual operations use <code class="docutils literal notranslate"><span class="pre">manual_operator.&lt;action&gt;</span></code> so the event records both the manual executor and
+the semantic work requested. Represent the <code class="docutils literal notranslate"><span class="pre">ManualOperator</span></code> as <code class="docutils literal notranslate"><span class="pre">device</span></code>, list any direct modeled
+resources in <code class="docutils literal notranslate"><span class="pre">resources</span></code>, and preserve action-specific request data without substituting inferred
+deck resources. When an automated counterpart defines canonical parameter names and units, reuse
+them inside the manual operation’s <code class="docutils literal notranslate"><span class="pre">details</span></code>. A genuine manual resource transfer additionally
+includes its actual <code class="docutils literal notranslate"><span class="pre">source</span></code> and <code class="docutils literal notranslate"><span class="pre">destination</span></code> resource references.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">"device"</span><span class="p">:</span> <span class="n">device_reference</span><span class="p">(</span><span class="n">manual_operator</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">manual_operator</span><span class="o">.</span><span class="n">name</span><span class="p">),</span>
+  <span class="s2">"resources"</span><span class="p">:</span> <span class="p">[</span><span class="n">resource_reference</span><span class="p">(</span><span class="n">plate</span><span class="p">)],</span>
+  <span class="s2">"manual_action"</span><span class="p">:</span> <span class="s2">"centrifuge.spin"</span><span class="p">,</span>
+  <span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Spin sample plate"</span><span class="p">,</span>
+  <span class="s2">"details"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"relative_centrifugal_force"</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+    <span class="s2">"duration"</span><span class="p">:</span> <span class="mi">180</span><span class="p">,</span>
+  <span class="p">},</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Operator cancellation or a provider-reported failure is a failed lifecycle outcome. Completion
+metadata such as <code class="docutils literal notranslate"><span class="pre">confirmed_by</span></code> belongs only on the <code class="docutils literal notranslate"><span class="pre">.completed</span></code> event.</p>
+</section>
 </section>
 <section id="failure-events">
 <h2>Failure events<a class="headerlink" href="#failure-events" title="Link to this heading">#</a></h2>
@@ -867,7 +890,10 @@ be reviewed as deliberately as its implementation.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-an-instrumentation-style">Choosing an instrumentation style</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#event-contract">Event contract</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#required-fields-for-semantic-device-operations">Required fields for semantic device operations</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#canonical-operation-schemas">Canonical operation schemas</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#canonical-operation-schemas">Canonical operation schemas</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-operator-actions">Manual operator actions</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#failure-events">Failure events</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#contributor-checklist">Contributor checklist</a></li>
 </ul>

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>HighRes &#8212; PyLabRobot dev documentation</title>
+    <title>Operator actions &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -48,7 +48,7 @@
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../_static/plr_devices.js?v=2dde28f2"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/high_res/index';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/machine-agnostic-features/manual-operator';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -58,12 +58,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/high_res/index.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/machine-agnostic-features/manual-operator.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="HighRes LidValet" href="lid-valet/hello-world.html" />
-    <link rel="prev" title="Adjust iSWAP gripper parallelity" href="../hamilton/star/hardware/adjusting-iswap-gripper-parrallelity.html" />
+    <link rel="next" title="Configuring PLR" href="../configuration.html" />
+    <link rel="prev" title="SiLA Device Discovery" href="sila-discovery.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.2" />
@@ -539,7 +539,7 @@
 </details></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
-<ul class="current nav bd-sidenav">
+<ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -590,8 +590,8 @@
 </details></li>
 </ul>
 </details></li>
-<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">HighRes</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="lid-valet/hello-world.html">HighRes LidValet</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -648,27 +648,27 @@
 </details></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
-<ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../machine-agnostic-features/event-bus.html">EventBus</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/event-bus/machine-lifecycle.html">Machine lifecycle events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/event-bus/incubator.html">Incubator events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/event-bus/liquid-handler.html">LiquidHandler events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/event-bus/thermal-and-shaking.html">Shaker and temperature-controller events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/event-bus/diagnostic-transports.html">Diagnostic transport events</a></li>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="event-bus.html">EventBus</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="event-bus/machine-lifecycle.html">Machine lifecycle events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-bus/incubator.html">Incubator events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-bus/liquid-handler.html">LiquidHandler events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-bus/thermal-and-shaking.html">Shaker and temperature-controller events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-bus/diagnostic-transports.html">Diagnostic transport events</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../machine-agnostic-features/manual-operator.html">Operator actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="error-handling-general.html">Error Handling in PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sila-discovery.html">SiLA Device Discovery</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Operator actions</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
 <ul class="nav bd-sidenav">
@@ -716,7 +716,7 @@
     
     <li class="breadcrumb-item"><a href="../index.html" class="nav-link">User guide</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">HighRes</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Operator actions</span></li>
   </ul>
 </nav>
 </div>
@@ -733,13 +733,124 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="highres">
-<h1>HighRes<a class="headerlink" href="#highres" title="Link to this heading">#</a></h1>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="lid-valet/hello-world.html">HighRes LidValet</a></li>
+  <section class="tex2jax_ignore mathjax_ignore" id="operator-actions">
+<h1>Operator actions<a class="headerlink" href="#operator-actions" title="Link to this heading">#</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">ManualOperator</span></code> lets a protocol await work performed by a person without coupling the protocol
+to a terminal, notebook, graphical interface, or external task system.</p>
+<section id="why-use-a-manual-operator">
+<h2>Why use a manual operator?<a class="headerlink" href="#why-use-a-manual-operator" title="Link to this heading">#</a></h2>
+<p>Many protocols start with a direct <code class="docutils literal notranslate"><span class="pre">input()</span></code> call. That is a reasonable choice for a simple
+notebook pause, but <code class="docutils literal notranslate"><span class="pre">ManualOperator</span></code> gives the same physical handoff a reusable PLR contract:</p>
+<ul class="simple">
+<li><p><strong>Provider independence:</strong> keep the protocol code unchanged while presenting the request through
+terminal input, a notebook, a custom GUI, LIMS, Slack, or another acknowledgement system.</p></li>
+<li><p><strong>Explicit outcomes:</strong> providers report <code class="docutils literal notranslate"><span class="pre">completed</span></code>, <code class="docutils literal notranslate"><span class="pre">cancelled</span></code>, or <code class="docutils literal notranslate"><span class="pre">failed</span></code> rather than
+reducing every acknowledgement to Enter being pressed.</p></li>
+<li><p><strong>Resource-model reconciliation:</strong> <code class="docutils literal notranslate"><span class="pre">move_resource()</span></code> validates a manual transfer before and
+after acknowledgement, then applies the corresponding PLR assignment only when the model is
+still consistent.</p></li>
+<li><p><strong>Native traceability:</strong> an active EventBus receives a correlated lifecycle with the action,
+affected resources, endpoints, operator acknowledgement, and failure details where applicable.</p></li>
 </ul>
+<p>The built-in console provider is intentionally simple. It is a practical default for users who
+only need an interactive pause; more capable providers are optional application integrations.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.manual_operator</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConsoleOperatorActionProvider</span><span class="p">,</span> <span class="n">ManualOperator</span>
+
+<span class="n">operator</span> <span class="o">=</span> <span class="n">ManualOperator</span><span class="p">(</span><span class="n">ConsoleOperatorActionProvider</span><span class="p">(),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"cell_operator"</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">operator</span><span class="o">.</span><span class="n">perform</span><span class="p">(</span>
+  <span class="n">action</span><span class="o">=</span><span class="s2">"centrifuge.spin"</span><span class="p">,</span>
+  <span class="n">title</span><span class="o">=</span><span class="s2">"Spin sample plate"</span><span class="p">,</span>
+  <span class="n">instructions</span><span class="o">=</span><span class="s2">"Spin plate_1 at 300 x g for 180 seconds, then return it to the handover nest."</span><span class="p">,</span>
+  <span class="n">details</span><span class="o">=</span><span class="p">{</span>
+    <span class="s2">"relative_centrifugal_force"</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+    <span class="s2">"duration"</span><span class="p">:</span> <span class="mi">180</span><span class="p">,</span>
+  <span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
 </div>
+<p>The built-in console provider treats Enter as a successful acknowledgement. Applications can
+implement <code class="docutils literal notranslate"><span class="pre">OperatorActionProvider</span></code> to present the same request through a graphical interface,
+HTTP service, LIMS, or message broker:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.manual_operator</span><span class="w"> </span><span class="kn">import</span> <span class="n">OperatorActionRequest</span><span class="p">,</span> <span class="n">OperatorActionResult</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">DashboardOperatorActionProvider</span><span class="p">:</span>
+  <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">OperatorActionRequest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperatorActionResult</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">dashboard</span><span class="o">.</span><span class="n">publish_and_wait</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">OperatorActionResult</span><span class="o">.</span><span class="n">completed</span><span class="p">(</span><span class="n">confirmed_by</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">user</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">OperatorActionRequest</span></code> carries any direct modeled <code class="docutils literal notranslate"><span class="pre">resources</span></code> plus optional <code class="docutils literal notranslate"><span class="pre">source</span></code> and
+<code class="docutils literal notranslate"><span class="pre">destination</span></code> endpoints. Providers that cross a process boundary can serialize those objects in
+their own transport format; <code class="docutils literal notranslate"><span class="pre">details</span></code> remains for operation-specific request data.</p>
+<p>For a complete notebook example using a chatterbox incubator, manual plate transfer, plate reader,
+and optional EventBus subscriber, see the
+<a class="reference internal" href="../../cookbook/manual_operator_jupyter.html"><span class="std std-doc">ManualOperator Jupyter cookbook</span></a>.</p>
+<p>Providers return one of three explicit outcomes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">completed</span></code>: <code class="docutils literal notranslate"><span class="pre">perform()</span></code> returns the result and the protocol continues.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cancelled</span></code>: <code class="docutils literal notranslate"><span class="pre">perform()</span></code> raises <code class="docutils literal notranslate"><span class="pre">OperatorActionCancelledError</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">failed</span></code>: <code class="docutils literal notranslate"><span class="pre">perform()</span></code> raises <code class="docutils literal notranslate"><span class="pre">OperatorActionFailedError</span></code>.</p></li>
+</ul>
+<p>An acknowledgement records what the operator reported. It does not prove that the physical work
+occurred. Protocol-specific validation and resource-model reconciliation should happen before or
+after <code class="docutils literal notranslate"><span class="pre">perform()</span></code> as appropriate.</p>
+</section>
+<section id="moving-a-resource">
+<h2>Moving a resource<a class="headerlink" href="#moving-a-resource" title="Link to this heading">#</a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">move_resource()</span></code> when the manual action transfers a modeled PLR resource between two modeled
+locations:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Rotation</span>
+
+<span class="k">await</span> <span class="n">operator</span><span class="o">.</span><span class="n">move_resource</span><span class="p">(</span>
+  <span class="n">resource</span><span class="o">=</span><span class="n">sample_plate</span><span class="p">,</span>
+  <span class="n">source</span><span class="o">=</span><span class="n">centrifuge_loader</span><span class="p">,</span>
+  <span class="n">destination</span><span class="o">=</span><span class="n">handover_nest</span><span class="p">,</span>
+  <span class="n">destination_rotation</span><span class="o">=</span><span class="n">Rotation</span><span class="p">(</span><span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The method validates the source and destination before prompting, but leaves the resource assigned
+to its source while the operator works. After the provider reports completion, it validates the
+model again, detaches the resource from its source, and assigns it to the destination using PLR’s
+normal resource-assignment machinery. This supports transfers between holders on the same deck
+root. A <code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code> supplies its normal child location; other destinations can use an
+explicit <code class="docutils literal notranslate"><span class="pre">destination_location=Coordinate(...)</span></code>. Pass an explicit
+<code class="docutils literal notranslate"><span class="pre">destination_rotation=Rotation(...)</span></code> when the manual move changes orientation. The rotation is
+never inferred from the destination holder and is applied before a holder calculates its child
+location. If final assignment fails, the original parent, location, and rotation are restored.</p>
+<p><code class="docutils literal notranslate"><span class="pre">destination_rotation</span></code> is the resource’s local rotation relative to <code class="docutils literal notranslate"><span class="pre">destination</span></code>, not an
+absolute/world rotation. After assignment, the resource’s absolute rotation is composed from the
+destination’s absolute rotation and this local rotation. For a manual move that replaces an
+automated transfer, pass the destination-local pose that the automated transfer would produce; do
+not copy the source resource’s local rotation unless that is physically correct for the
+destination.</p>
+<p>Cancellation, reported failure, and provider exceptions do not modify the resource model. If the
+model changes while the operator request is pending, the method raises an error rather than
+overwriting the newer state.</p>
+</section>
+<section id="eventbus-integration">
+<h2>EventBus integration<a class="headerlink" href="#eventbus-integration" title="Link to this heading">#</a></h2>
+<p>When an EventBus subscriber is active, each awaited action emits one correlated lifecycle using
+the requested action as its semantic subtype:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>manual_operator.centrifuge.spin.started
+manual_operator.centrifuge.spin.completed
+</pre></div>
+</div>
+<p>The event identifies the <code class="docutils literal notranslate"><span class="pre">ManualOperator</span></code> as <code class="docutils literal notranslate"><span class="pre">device</span></code>, includes any direct PLR <code class="docutils literal notranslate"><span class="pre">resources</span></code> passed
+to <code class="docutils literal notranslate"><span class="pre">perform()</span></code>, and preserves the request’s title, instructions, confirmation text, and structured
+details. The completed event adds <code class="docutils literal notranslate"><span class="pre">confirmed_by</span></code> and the provider’s result message when supplied.
+Cancellation, reported failure, invalid provider results, and provider exceptions emit <code class="docutils literal notranslate"><span class="pre">.failed</span></code>
+with the normal EventBus error fields.</p>
+<p>Use stable action identifiers such as <code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code>, <code class="docutils literal notranslate"><span class="pre">plate_reader.read</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">quality_control.inspect</span></code>. When the manual action has an automated counterpart, use that
+operation’s canonical field names and PLR default units inside <code class="docutils literal notranslate"><span class="pre">details</span></code>. <code class="docutils literal notranslate"><span class="pre">move_resource()</span></code> emits
+<code class="docutils literal notranslate"><span class="pre">manual_operator.resource.move.*</span></code> with the direct moved resource plus its true <code class="docutils literal notranslate"><span class="pre">source</span></code> and
+<code class="docutils literal notranslate"><span class="pre">destination</span></code> resource references; do not mirror those endpoints as free-form <code class="docutils literal notranslate"><span class="pre">details</span></code>. The normal
+<code class="docutils literal notranslate"><span class="pre">resource.unassigned</span></code> and <code class="docutils literal notranslate"><span class="pre">resource.assigned</span></code> state-transition events record the subsequent model
+update.</p>
+</section>
 </section>
 
 
@@ -753,20 +864,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../hamilton/star/hardware/adjusting-iswap-gripper-parrallelity.html"
+       href="sila-discovery.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Adjust iSWAP gripper parallelity</p>
+        <p class="prev-next-title">SiLA Device Discovery</p>
       </div>
     </a>
     <a class="right-next"
-       href="lid-valet/hello-world.html"
+       href="../configuration.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">HighRes LidValet</p>
+        <p class="prev-next-title">Configuring PLR</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -782,10 +893,24 @@
 
 
   <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-use-a-manual-operator">Why use a manual operator?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#moving-a-resource">Moving a resource</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#eventbus-integration">EventBus integration</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/high_res/index.md">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/machine-agnostic-features/manual-operator.md">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -800,7 +925,7 @@
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/user_guide/high_res/index.md.txt">
+    <a href="../../_sources/user_guide/machine-agnostic-features/manual-operator.md.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
