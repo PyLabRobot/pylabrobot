@@ -2,10 +2,10 @@ import unittest
 from collections import deque
 import types
 from typing import Deque, List, Sequence, Tuple
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control import FileTransferControl
-from pylabrobot.capabilities.electroporation.standard import ElectroporationProtocol
+from .standard import ElectroporationProtocol
 
 
 def _program_listing(entries: Sequence[Tuple[str, int]]) -> bytes:
@@ -29,17 +29,11 @@ def _sd_listing(command: str, entries: Sequence[str]) -> bytes:
 
 class _FakeSerial:
   def __init__(self) -> None:
-    self.setup_calls = 0
-    self.stop_calls = 0
+    self.setup = AsyncMock()
+    self.stop = AsyncMock()
     self.writes: List[bytes] = []
     self.read_chunks: Deque[bytes] = deque()
     self.readline_chunks: Deque[bytes] = deque()
-
-  async def setup(self) -> None:
-    self.setup_calls += 1
-
-  async def stop(self) -> None:
-    self.stop_calls += 1
 
   async def write(self, data: bytes) -> None:
     self.writes.append(data)
@@ -79,15 +73,9 @@ class _ConstructedSerial:
     self.baudrate = baudrate
     self.timeout = timeout
     self.write_timeout = write_timeout
-    self.setup_calls = 0
-    self.stop_calls = 0
+    self.setup = AsyncMock()
+    self.stop = AsyncMock()
     _ConstructedSerial.instances.append(self)
-
-  async def setup(self) -> None:
-    self.setup_calls += 1
-
-  async def stop(self) -> None:
-    self.stop_calls += 1
 
   async def write(self, data: bytes) -> None:
     del data
@@ -108,8 +96,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     await control.setup()
     await control.stop()
 
-    self.assertEqual(fake.setup_calls, 1)
-    self.assertEqual(fake.stop_calls, 1)
+    fake.setup.assert_awaited_once_with()
+    fake.stop.assert_awaited_once_with()
 
   async def test_setup_autodiscovers_btx_port_then_uses_shared_serial(self):
     _ConstructedSerial.instances.clear()
@@ -142,8 +130,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(serial_io.baudrate, 9600)
     self.assertEqual(serial_io.timeout, 1.0)
     self.assertEqual(serial_io.write_timeout, 1.0)
-    self.assertEqual(serial_io.setup_calls, 1)
-    self.assertEqual(serial_io.stop_calls, 1)
+    serial_io.setup.assert_awaited_once_with()
+    serial_io.stop.assert_awaited_once_with()
     self.assertEqual(control.port, "/dev/cu.btx")
 
   async def test_list_protocols_parses_program_table(self):
@@ -270,7 +258,7 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
         ),
       )
 
-  async def test_get_protocol_decodes_payload(self):
+  async def test_request_protocol_decodes_payload(self):
     fake = _FakeSerial()
     fake.read_chunks.append(
       (
@@ -282,7 +270,7 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     )
     control = FileTransferControl(serial_io=fake)
 
-    result = await control.get_protocol("JJ")
+    result = await control.request_protocol("JJ")
 
     self.assertEqual(result["protocol"], "JJ")
     self.assertEqual(result["decoded"]["name"], "JJ")
@@ -391,7 +379,7 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
       ],
     )
 
-  async def test_device_info_helpers(self):
+  async def test_request_device_info_helpers(self):
     fake = _FakeSerial()
     fake.read_chunks.append(b"BTX Gemini 4.0.4\nSerial number: 1135421\n:")
     fake.read_chunks.append(b"1135421\n:")
@@ -401,10 +389,10 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     )
     control = FileTransferControl(serial_io=fake)
 
-    version = await control.get_version()
-    serial_number = await control.get_serial_number()
-    device_time = await control.get_device_time()
-    stats = await control.get_comm_stats()
+    version = await control.request_version()
+    serial_number = await control.request_serial_number()
+    device_time = await control.request_device_time()
+    stats = await control.request_comm_stats()
 
     self.assertEqual(version, "BTX Gemini 4.0.4")
     self.assertEqual(serial_number, "1135421")

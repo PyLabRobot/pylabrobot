@@ -216,17 +216,18 @@ class TheGhostTouch:
     self._detector = _GeminiScreenDetector(min_conf=min_conf)
     self.ser: serial.Serial | None = None
 
-  def __enter__(self) -> "TheGhostTouch":
-    """Open the RSI serial session."""
+  async def setup(self) -> None:
+    """Set up the RSI serial session."""
     self._require_dependencies()
-    self._get_transport().open()
+    await asyncio.to_thread(self._get_transport().open)
     self.ser = self._get_transport().ser
-    return self
 
-  def __exit__(self, exc_type, exc, tb) -> None:
-    """Close the RSI serial session."""
-    self._get_transport().close()
-    self.ser = None
+  async def stop(self) -> None:
+    """Stop the RSI serial session."""
+    try:
+      await asyncio.to_thread(self._get_transport().close)
+    finally:
+      self.ser = None
 
   def _require_dependencies(self) -> None:
     if not _HAS_SERIAL:

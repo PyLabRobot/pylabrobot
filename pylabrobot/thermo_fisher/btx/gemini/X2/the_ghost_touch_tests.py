@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 import unittest
 from typing import Optional, cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -37,15 +37,9 @@ class _FakeAsyncSerial:
   def __init__(self, reads: Optional[list[bytes]] = None):
     self.reads: list[bytes] = list(reads or [])
     self.writes: list[bytes] = []
-    self.setup_calls = 0
-    self.stop_calls = 0
+    self.setup = AsyncMock()
+    self.stop = AsyncMock()
     self.reset_calls = 0
-
-  async def setup(self) -> None:
-    self.setup_calls += 1
-
-  async def stop(self) -> None:
-    self.stop_calls += 1
 
   async def write(self, data: bytes) -> None:
     self.writes.append(data)
@@ -165,8 +159,8 @@ class TestTheGhostTouch(unittest.TestCase):
     finally:
       transport.close()
 
-    self.assertEqual(fake.setup_calls, 1)
-    self.assertEqual(fake.stop_calls, 1)
+    fake.setup.assert_awaited_once_with()
+    fake.stop.assert_awaited_once_with()
     self.assertGreaterEqual(fake.reset_calls, 2)
     self.assertEqual(fake.writes[:2], [b"echo off\r", b"scap\r"])
     self.assertEqual(frame.raw_len, FRAME_BYTES + 1)

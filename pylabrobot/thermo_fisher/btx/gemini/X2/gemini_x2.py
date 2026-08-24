@@ -16,10 +16,9 @@ from typing import (
   runtime_checkable,
 )
 
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.electroporation import (
-  Electroporation,
-  ElectroporationBackend,
+from .file_transfer_control import FileTransferControl
+from .ht200 import BTXHT200
+from .standard import (
   ElectroporationCancellationDetails,
   ElectroporationCancellationResult,
   ElectroporationCleanup,
@@ -30,10 +29,6 @@ from pylabrobot.capabilities.electroporation import (
   ElectroporationRunResult,
   PreparedElectroporationRun,
 )
-from pylabrobot.device import Device, Driver
-
-from .file_transfer_control import FileTransferControl
-from .ht200 import BTXHT200
 from .the_ghost_touch import (
   CancelledPreparedUserProtocolResult,
   PreparedUserProtocolResult,
@@ -44,10 +39,10 @@ from .the_ghost_touch import (
 
 @runtime_checkable
 class _GhostTouchSession(Protocol):
-  def __enter__(self) -> "_GhostTouchSession":
+  async def setup(self) -> None:
     pass
 
-  def __exit__(self, exc_type, exc, tb) -> None:
+  async def stop(self) -> None:
     pass
 
   def ensure_home(self) -> Any:
@@ -74,7 +69,6 @@ class _GhostTouchSession(Protocol):
     pass
 
 
-GhostTouchFactory = Callable[..., _GhostTouchSession]
 GhostTouchResult = TypeVar("GhostTouchResult")
 
 
@@ -127,109 +121,11 @@ class MatchedRunLogResult:
     }
 
 
-class BTXGeminiX2Driver(Driver):
+class BTXGeminiX2:
   """BTX Gemini X2 driver.
 
   Owns the file-transfer connection lifecycle and the temporary handoff into the RSI touch
   control session.
-  """
-
-  def __init__(
-    self,
-    port: Optional[str] = None,
-    *,
-    file_transfer_control: Optional[FileTransferControl] = None,
-    ghost_touch_factory: Optional[GhostTouchFactory] = None,
-    ghost_touch_kwargs: Optional[dict[str, Any]] = None,
-  ) -> None:
-    super().__init__()
-    self.port = port or (file_transfer_control.port if file_transfer_control is not None else None)
-    self.file_transfer_control = file_transfer_control or FileTransferControl(port=port)
-    self._ghost_touch_factory = ghost_touch_factory or TheGhostTouch
-    self._ghost_touch_kwargs = dict(ghost_touch_kwargs or {})
-
-  async def setup(self, backend_params: Optional[BackendParams] = None):
-    del backend_params
-    await self.file_transfer_control.setup()
-    if self.file_transfer_control.port is not None:
-      self.port = self.file_transfer_control.port
-
-  async def stop(self):
-    await self.file_transfer_control.stop()
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "port": self.port,
-    }
-
-  async def list_protocols(self) -> list[str]:
-    return await self.file_transfer_control.list_protocols()
-
-  async def get_protocol(self, protocol_name: str) -> Dict[str, Any]:
-    return await self.file_transfer_control.get_protocol(protocol_name)
-
-  async def add_protocol(
-    self,
-    protocol_name: str,
-    protocol: ElectroporationProtocol,
-    overwrite: bool = False,
-  ) -> Dict[str, Any]:
-    return await self.file_transfer_control.add_protocol(
-      protocol_name, protocol, overwrite=overwrite
-    )
-
-  async def delete_protocol(self, protocol_name: str, missing_ok: bool = False) -> Dict[str, Any]:
-    return await self.file_transfer_control.delete_protocol(protocol_name, missing_ok=missing_ok)
-
-  async def list_log_files(self, root: str = "\\BTXDATA") -> list[str]:
-    return await self.file_transfer_control.list_log_files(root=root)
-
-  async def fetch_sd_file(self, sd_path: str) -> str:
-    return await self.file_transfer_control.fetch_sd_file(sd_path)
-
-  async def get_version(self) -> str:
-    return await self.file_transfer_control.get_version()
-
-  async def get_serial_number(self) -> str:
-    return await self.file_transfer_control.get_serial_number()
-
-  async def get_device_time(self) -> str:
-    return await self.file_transfer_control.get_device_time()
-
-  def parse_run_log(self, text: str) -> Dict[str, Any]:
-    return self.file_transfer_control.parse_run_log(text)
-
-  async def run_with_ghost_touch(
-    self,
-    action: Callable[[_GhostTouchSession], GhostTouchResult],
-  ) -> GhostTouchResult:
-    await self.file_transfer_control.stop()
-    try:
-      return await asyncio.to_thread(self._run_with_ghost_touch_sync, action)
-    finally:
-      await self.file_transfer_control.setup()
-      if self.file_transfer_control.port is not None:
-        self.port = self.file_transfer_control.port
-
-  def _run_with_ghost_touch_sync(
-    self,
-    action: Callable[[_GhostTouchSession], GhostTouchResult],
-  ) -> GhostTouchResult:
-    with self._open_ghost_touch() as ghost_touch:
-      return action(ghost_touch)
-
-  def _open_ghost_touch(self) -> _GhostTouchSession:
-    if self.port is None:
-      raise RuntimeError("Gemini X2 serial port is not resolved. Call setup() first.")
-    session = self._ghost_touch_factory(port=self.port, **self._ghost_touch_kwargs)
-    if not isinstance(session, _GhostTouchSession):
-      session = cast(_GhostTouchSession, session)
-    return session
-
-
-class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
-  """Prepared-run BTX Gemini X2 backend.
 
   The Gemini X2 uses two separate control paths on the same USB-connected device:
   `FileTransferControl` for Protocol Manager style file/protocol access, and `TheGhostTouch`
@@ -247,66 +143,106 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
     PLATE_HANDLER_RESET_STATE_CONTINUE_CURRENT_POSITION,
   }
 
-  @dataclass(frozen=True)
-  class PrepareRunParams(BackendParams):
-    plate_handler_reset_state: str = "unknown"
-
   def __init__(
     self,
-    driver: BTXGeminiX2Driver,
+    port: Optional[str] = None,
     *,
+    ghost_touch_kwargs: Optional[dict[str, Any]] = None,
     plate_handler: Optional[BTXHT200] = None,
     temporary_protocol_prefix: str = DEFAULT_TEMPORARY_PROTOCOL_PREFIX,
   ) -> None:
-    self.driver = driver
+    self.port = port
+    self._file_transfer_control = FileTransferControl(port=port)
+    self._ghost_touch_factory = TheGhostTouch
+    self._ghost_touch_kwargs = dict(ghost_touch_kwargs or {})
     self.plate_handler = plate_handler or BTXHT200()
     self._temporary_protocol_prefix = temporary_protocol_prefix
-    self._is_setup = False
 
-  async def _on_setup(self, backend_params: Optional[BackendParams] = None):
-    del backend_params
+  async def setup(self) -> None:
+    await self._file_transfer_control.setup()
+    if self._file_transfer_control.port is not None:
+      self.port = self._file_transfer_control.port
+    # Existing reserved protocols are allowed for resuming a prepared run, but nothing may sort
+    # ahead of the reserved prefix used by the touchscreen's first-protocol workflow.
+    await self._ensure_temporary_protocol_prefix_order_safe(self._temporary_protocol_prefix)
+
+  async def stop(self) -> None:
+    await self._file_transfer_control.stop()
+
+  async def list_protocols(self) -> list[str]:
+    return await self._file_transfer_control.list_protocols()
+
+  async def request_protocol(self, protocol_name: str) -> Dict[str, Any]:
+    return await self._file_transfer_control.request_protocol(protocol_name)
+
+  async def add_protocol(
+    self,
+    protocol_name: str,
+    protocol: ElectroporationProtocol,
+    overwrite: bool = False,
+  ) -> Dict[str, Any]:
+    return await self._file_transfer_control.add_protocol(
+      protocol_name, protocol, overwrite=overwrite
+    )
+
+  async def delete_protocol(self, protocol_name: str, missing_ok: bool = False) -> Dict[str, Any]:
+    return await self._file_transfer_control.delete_protocol(protocol_name, missing_ok=missing_ok)
+
+  async def list_log_files(self, root: str = "\\BTXDATA") -> list[str]:
+    return await self._file_transfer_control.list_log_files(root=root)
+
+  async def fetch_sd_file(self, sd_path: str) -> str:
+    return await self._file_transfer_control.fetch_sd_file(sd_path)
+
+  async def request_version(self) -> str:
+    return await self._file_transfer_control.request_version()
+
+  async def request_serial_number(self) -> str:
+    return await self._file_transfer_control.request_serial_number()
+
+  async def request_device_time(self) -> str:
+    return await self._file_transfer_control.request_device_time()
+
+  def parse_run_log(self, text: str) -> Dict[str, Any]:
+    return self._file_transfer_control.parse_run_log(text)
+
+  async def run_with_ghost_touch(
+    self,
+    action: Callable[[_GhostTouchSession], GhostTouchResult],
+  ) -> GhostTouchResult:
+    await self._file_transfer_control.stop()
     try:
-      # Setup only enforces ordering safety so a later process can resume an already prepared
-      # `!PLR_...` run token without being blocked by the existing temp protocol.
-      await self._ensure_temporary_protocol_prefix_order_safe(self._temporary_protocol_prefix)
-      self._is_setup = True
-    except Exception:
-      self._is_setup = False
-      raise
+      ghost_touch = self._open_ghost_touch()
+      try:
+        await ghost_touch.setup()
+        return await asyncio.to_thread(action, ghost_touch)
+      finally:
+        await ghost_touch.stop()
+    finally:
+      await self._file_transfer_control.setup()
+      if self._file_transfer_control.port is not None:
+        self.port = self._file_transfer_control.port
 
-  async def _on_stop(self):
-    self._is_setup = False
-
-  def serialize(self) -> dict:
-    return {
-      "temporary_protocol_prefix": self._temporary_protocol_prefix,
-      "plate_handler": {
-        "device": self.plate_handler.__class__.__name__,
-        "model": "HT-200",
-        "assumed_pulse_count": self.plate_handler.assumed_pulse_count,
-        "assumed_column_adjust": self.plate_handler.assumed_column_adjust,
-      },
-    }
+  def _open_ghost_touch(self) -> _GhostTouchSession:
+    if self.port is None:
+      raise RuntimeError("Gemini X2 serial port is not resolved. Call setup() first.")
+    session = self._ghost_touch_factory(port=self.port, **self._ghost_touch_kwargs)
+    if not isinstance(session, _GhostTouchSession):
+      session = cast(_GhostTouchSession, session)
+    return session
 
   async def prepare_temporary_protocol(
     self,
     protocol: ElectroporationProtocol,
     plate_columns: Optional[int] = None,
     prefix: Optional[str] = None,
-    backend_params: Optional[BackendParams] = None,
+    plate_handler_reset_state: str = "unknown",
   ) -> PreparedElectroporationRun:
     """Create a temporary protocol and leave the Gemini armed on ``Run Protocol``."""
-    self._require_setup()
-    if backend_params is None:
-      backend_params = self.PrepareRunParams()
-    if not isinstance(backend_params, self.PrepareRunParams):
-      raise TypeError(
-        "backend_params must be BTXGeminiX2ElectroporationBackend.PrepareRunParams or None."
-      )
     resolved_prefix = self._temporary_protocol_prefix if prefix is None else prefix
     resolved_reset_state = self._resolve_plate_handler_reset_state(
       plate_columns=plate_columns,
-      plate_handler_reset_state=backend_params.plate_handler_reset_state,
+      plate_handler_reset_state=plate_handler_reset_state,
     )
     assumed_plate_handler_pulse_count, assumed_plate_handler_column_adjust = (
       self._resolve_plate_handler_manual_state(plate_columns=plate_columns)
@@ -316,16 +252,16 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
     await self._ensure_temporary_protocol_prefix_available(resolved_prefix)
 
     # This snapshot lets start_prepared_run() identify the new log by diffing BTXDATA after GO.
-    baseline_log_paths = tuple(await self.driver.list_log_files())
+    baseline_log_paths = tuple(await self.list_log_files())
     protocol_name = self._make_temporary_protocol_name(resolved_prefix)
-    add_result = await self.driver.add_protocol(
+    add_result = await self.add_protocol(
       protocol_name=protocol_name,
       protocol=protocol,
       overwrite=False,
     )
 
     try:
-      rsi_result = await self._run_with_ghost_touch(
+      rsi_result = await self.run_with_ghost_touch(
         lambda ghost_touch: ghost_touch.prepare_user_protocol(
           protocol_name=protocol_name,
           plate_columns=plate_columns,
@@ -361,11 +297,10 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
     max_run_seconds: float = 420.0,
   ) -> ElectroporationRunResult:
     """Verify, start, and collect the result for a previously prepared temporary run."""
-    self._require_setup()
     prepared = self._coerce_prepared_run(prepared_run)
 
     started_at_utc = self._now_utc_iso()
-    rsi_result = await self._run_with_ghost_touch(
+    rsi_result = await self.run_with_ghost_touch(
       lambda ghost_touch: ghost_touch.start_prepared_user_protocol(
         protocol_name=prepared.protocol_name,
         home_after=home_after,
@@ -424,10 +359,9 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
     home_after: bool = True,
   ) -> ElectroporationCancellationResult:
     """Return the Gemini to a safe screen and delete the prepared temporary protocol."""
-    self._require_setup()
     prepared = self._coerce_prepared_run(prepared_run)
 
-    rsi_result = await self.driver.run_with_ghost_touch(
+    rsi_result = await self.run_with_ghost_touch(
       lambda ghost_touch: ghost_touch.cancel_prepared_user_protocol(home_after=home_after)
     )
     cleanup = await self._cleanup_temporary_protocol(prepared.protocol_name, missing_ok=True)
@@ -452,18 +386,17 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
       ),
     )
 
-  async def get_device_info(self) -> Dict[str, Any]:
+  async def request_device_info(self) -> Dict[str, Any]:
     """Return Gemini identity plus the supported electroporation workflow surface."""
-    self._require_setup()
-    version = await self.driver.get_version()
-    serial_number = await self.driver.get_serial_number()
-    device_time = await self.driver.get_device_time()
-    protocols = await self.driver.list_protocols()
+    version = await self.request_version()
+    serial_number = await self.request_serial_number()
+    device_time = await self.request_device_time()
+    protocols = await self.list_protocols()
     plate_handler_info = self.plate_handler.get_device_info()
     return {
-      "backend": self.__class__.__name__,
+      "device": self.__class__.__name__,
       "model": "Gemini X2",
-      "port": self.driver.port,
+      "port": self.port,
       "version": version,
       "serial_number": serial_number,
       "device_time": device_time,
@@ -479,49 +412,6 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
       "protocol_transfer_control": "FileTransferControl",
       "touch_control": "TheGhostTouch",
     }
-
-  async def list_protocols(self) -> list[str]:
-    """List all user protocols visible through the PM serial interface."""
-    self._require_setup()
-    return await self.driver.list_protocols()
-
-  async def get_protocol(self, protocol_name: str) -> Dict[str, Any]:
-    """Fetch one stored user protocol by name."""
-    self._require_setup()
-    return await self.driver.get_protocol(protocol_name)
-
-  async def add_protocol(
-    self,
-    protocol_name: str,
-    protocol: ElectroporationProtocol,
-    overwrite: bool = False,
-  ) -> Dict[str, Any]:
-    """Developer helper: write a user protocol directly through file transfer."""
-    self._require_setup()
-    return await self.driver.add_protocol(protocol_name, protocol, overwrite=overwrite)
-
-  async def delete_protocol(self, protocol_name: str, missing_ok: bool = False) -> Dict[str, Any]:
-    """Developer helper: delete a stored user protocol."""
-    self._require_setup()
-    return await self.driver.delete_protocol(protocol_name, missing_ok=missing_ok)
-
-  async def list_log_files(self, root: str = "\\BTXDATA") -> list[str]:
-    """Developer helper: enumerate run logs stored on the Gemini SD card."""
-    self._require_setup()
-    return await self.driver.list_log_files(root=root)
-
-  async def fetch_sd_file(self, sd_path: str) -> str:
-    """Developer helper: fetch one SD-card file from the Gemini."""
-    self._require_setup()
-    return await self.driver.fetch_sd_file(sd_path)
-
-  def parse_run_log(self, text: str) -> Dict[str, Any]:
-    """Developer helper: parse a BTX run log into normalized fields."""
-    return self.driver.parse_run_log(text)
-
-  def _require_setup(self) -> None:
-    if not self._is_setup:
-      raise RuntimeError("Call setup() before using the Gemini X2 backend.")
 
   def _resolve_plate_handler_reset_state(
     self,
@@ -557,7 +447,7 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
 
   async def _ensure_temporary_protocol_prefix_order_safe(self, prefix: str) -> None:
     conflicts = self._temporary_protocol_preceding_conflicts(
-      await self.driver.list_protocols(),
+      await self.list_protocols(),
       prefix,
     )
     if conflicts:
@@ -570,7 +460,7 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
       )
 
   async def _ensure_temporary_protocol_prefix_available(self, prefix: str) -> None:
-    protocols = await self.driver.list_protocols()
+    protocols = await self.list_protocols()
     preceding = self._temporary_protocol_preceding_conflicts(protocols, prefix)
     collisions = self._temporary_protocol_prefix_collisions(protocols, prefix)
     conflicts = sorted(set(preceding + collisions), key=str.casefold)
@@ -620,15 +510,8 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
       return prepared_run
     return PreparedElectroporationRun.from_dict(prepared_run)
 
-  async def _run_with_ghost_touch(
-    self,
-    action: Callable[[_GhostTouchSession], GhostTouchResult],
-  ) -> GhostTouchResult:
-    self._require_setup()
-    return await self.driver.run_with_ghost_touch(action)
-
   async def _force_home_via_ghost_touch(self) -> None:
-    await self.driver.run_with_ghost_touch(lambda ghost_touch: ghost_touch.ensure_home())
+    await self.run_with_ghost_touch(lambda ghost_touch: ghost_touch.ensure_home())
 
   async def _cleanup_temporary_protocol(
     self,
@@ -641,7 +524,7 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
     delete_retry_used = False
 
     try:
-      delete_result = await self.driver.delete_protocol(
+      delete_result = await self.delete_protocol(
         protocol_name,
         missing_ok=missing_ok,
       )
@@ -652,7 +535,7 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
         delete_retry_used = True
         try:
           await self._force_home_via_ghost_touch()
-          delete_result = await self.driver.delete_protocol(
+          delete_result = await self.delete_protocol(
             protocol_name,
             missing_ok=missing_ok,
           )
@@ -674,12 +557,12 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
   ) -> MatchedRunLogResult:
     # Logs are matched by "new since prepare" plus protocol name, rather than by "latest log",
     # to avoid picking up unrelated historical runs.
-    after_logs = set(await self.driver.list_log_files())
+    after_logs = set(await self.list_log_files())
     new_logs = sorted(after_logs - before_logs)
 
     for log_path in new_logs:
-      text = await self.driver.fetch_sd_file(log_path)
-      parsed = self.driver.parse_run_log(text)
+      text = await self.fetch_sd_file(log_path)
+      parsed = self.parse_run_log(text)
       if parsed["summary"]["protocol_name"] == protocol_name:
         return MatchedRunLogResult(
           before_count=len(before_logs),
@@ -706,35 +589,3 @@ class BTXGeminiX2ElectroporationBackend(ElectroporationBackend):
 
   def _now_utc_iso(self) -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-class BTXGeminiX2(Device):
-  """BTX Gemini X2 electroporator."""
-
-  def __init__(
-    self,
-    port: Optional[str] = None,
-    *,
-    file_transfer_control: Optional[FileTransferControl] = None,
-    ghost_touch_factory: Optional[GhostTouchFactory] = None,
-    ghost_touch_kwargs: Optional[dict[str, Any]] = None,
-    plate_handler: Optional[BTXHT200] = None,
-    temporary_protocol_prefix: str = BTXGeminiX2ElectroporationBackend.DEFAULT_TEMPORARY_PROTOCOL_PREFIX,
-  ) -> None:
-    driver = BTXGeminiX2Driver(
-      port=port,
-      file_transfer_control=file_transfer_control,
-      ghost_touch_factory=ghost_touch_factory,
-      ghost_touch_kwargs=ghost_touch_kwargs,
-    )
-    super().__init__(driver=driver)
-    self.driver: BTXGeminiX2Driver = driver
-    self.plate_handler = plate_handler or BTXHT200()
-    self.electroporation = Electroporation(
-      backend=BTXGeminiX2ElectroporationBackend(
-        driver=driver,
-        plate_handler=self.plate_handler,
-        temporary_protocol_prefix=temporary_protocol_prefix,
-      )
-    )
-    self._capabilities = [self.electroporation]

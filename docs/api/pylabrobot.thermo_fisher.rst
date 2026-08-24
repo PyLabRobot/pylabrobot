@@ -57,8 +57,23 @@ BTX Gemini X2
   :recursive:
 
     BTXGeminiX2
-    BTXGeminiX2Driver
-    BTXGeminiX2ElectroporationBackend
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    ElectroporationProtocol
+    ElectroporationPreparationDetails
+    ElectroporationExecutionDetails
+    ElectroporationCancellationDetails
+    ElectroporationLogCapture
+    ElectroporationCleanup
+    PreparedElectroporationRun
+    ElectroporationRunResult
+    ElectroporationCancellationResult
 
 .. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control
 

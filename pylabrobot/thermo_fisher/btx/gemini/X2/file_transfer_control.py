@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from math import isfinite
 from typing import Any, Dict, Mapping, Optional, Protocol, TypedDict, runtime_checkable
 
-from pylabrobot.capabilities.electroporation.standard import ElectroporationProtocol
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.serial import Serial
+
+from .standard import ElectroporationProtocol
 
 try:
   import serial.tools.list_ports
@@ -128,7 +129,7 @@ class FileTransferControl:
     """Return only the stored Gemini user protocol names."""
     return [row["name"] for row in await self.list_protocols_with_size()]
 
-  async def get_protocol(self, protocol_name: str) -> Dict[str, Any]:
+  async def request_protocol(self, protocol_name: str) -> Dict[str, Any]:
     """Fetch and decode a stored protocol payload by name."""
     name = self._sanitize_protocol_name(protocol_name)
     command = f'sendmtd "{name}"'
@@ -138,7 +139,7 @@ class FileTransferControl:
     payload_hex, payload = self._extract_method_payload(response)
     decoded = self._decode_method_payload(payload)
     return self._operation_result(
-      "get_protocol",
+      "request_protocol",
       name,
       payload_hex=payload_hex,
       payload_bytes=len(payload),
@@ -261,19 +262,19 @@ class FileTransferControl:
     log_paths.sort()
     return log_paths
 
-  async def get_version(self) -> str:
+  async def request_version(self) -> str:
     """Return the Gemini software version string."""
     return await self._read_single_value_command("version")
 
-  async def get_serial_number(self) -> str:
+  async def request_serial_number(self) -> str:
     """Return the Gemini serial number."""
     return await self._read_single_value_command("sn")
 
-  async def get_device_time(self) -> str:
+  async def request_device_time(self) -> str:
     """Return the current date/time reported by the Gemini."""
     return await self._read_single_value_command("time")
 
-  async def get_comm_stats(self) -> Dict[str, int]:
+  async def request_comm_stats(self) -> Dict[str, int]:
     """Return the device communication counters from ``status``/``stat``."""
     response = await self.send_text_command("status")
     error = self._extract_error(response)
@@ -295,7 +296,7 @@ class FileTransferControl:
     return stats
 
   def parse_run_log(self, text: str) -> Dict[str, Any]:
-    """Parse a BTX run log into the small summary used by the Gemini backend."""
+    """Parse a BTX run log into the small summary used by the Gemini workflow."""
     cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
     fields = self._parse_log_fields(cleaned)
 
@@ -764,7 +765,7 @@ class FileTransferControl:
     pulse_interval_seconds = common["pulse_interval_seconds"]
     if pulse_count != 1 or abs(pulse_interval_seconds) > 1e-9:
       raise ValueError(
-        "Exponential protocols currently support only pulse_count=1 in this backend. "
+        "Exponential protocols currently support only pulse_count=1 in this driver. "
         "The Gemini X2 manual mentions up to 2 pulses depending on amplitude limit, "
         "but the PM payload/current-limit behavior is not documented well enough to "
         "support that safely. Use pulse_count=1 and omit pulse_interval_seconds."
