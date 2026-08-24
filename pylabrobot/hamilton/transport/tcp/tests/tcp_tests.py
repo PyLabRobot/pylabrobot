@@ -1013,6 +1013,21 @@ class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(client.stop)
     return client, queue
 
+  @staticmethod
+  async def _await_registered(client) -> None:
+    """Block until a command has registered its pending response.
+
+    Frames must only be fed once the command is waiting. Queueing them earlier
+    is a race: the reader may drain them first and correctly drop them as
+    unmatched, after which the command waits forever. Whether that happened
+    varied by Python version, so it is made explicit here.
+    """
+    for _ in range(1000):
+      if client._pending_response is not None:
+        return
+      await asyncio.sleep(0)
+    raise AssertionError("command never registered a pending response")
+
   async def test_events_arriving_between_commands_reach_subscribers(self):
     seen: list = []
     client, queue = self._make_client([self._frame(Hoi2Action.EVENT, Address(1, 1, 257))])
@@ -1029,16 +1044,16 @@ class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(seen[0].hoi.action_code, Hoi2Action.EVENT)
 
   async def test_ack_is_skipped_and_terminal_frame_is_delivered(self):
-    client, _ = self._make_client(
-      [
-        self._frame(Hoi2Action.COMMAND_ACK, Address(1, 1, 257)),
-        self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)),
-      ]
+    client, queue = self._make_client([])
+    task = asyncio.ensure_future(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
     )
-    result = await asyncio.wait_for(
-      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
-    )
-    self.assertIsNotNone(result)
+    await self._await_registered(client)
+
+    queue.put_nowait(self._frame(Hoi2Action.COMMAND_ACK, Address(1, 1, 257)))
+    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
+
+    self.assertIsNotNone(await asyncio.wait_for(task, timeout=5))
 
   async def test_unmatched_late_frame_is_not_given_to_the_next_command(self):
     """A response arriving with no command waiting must be dropped, not queued."""
@@ -1046,10 +1061,11 @@ class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
     client, queue = self._make_client([late])
 
     # Let the reader consume the stale frame while nothing is awaiting it.
-    for _ in range(10):
+    for _ in range(100):
       if queue.empty():
         break
       await asyncio.sleep(0)
+    self.assertTrue(queue.empty(), "reader never consumed the stale frame")
 
     # The next command must wait for its own response, not inherit the stale one.
     with self.assertRaises(asyncio.TimeoutError):
@@ -1057,12 +1073,13 @@ class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
         client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=0.25
       )
 
-    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
-    self.assertIsNotNone(
-      await asyncio.wait_for(
-        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
-      )
+    # ...and still completes when its own response does arrive.
+    task = asyncio.ensure_future(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
     )
+    await self._await_registered(client)
+    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
+    self.assertIsNotNone(await asyncio.wait_for(task, timeout=5))
 
   async def test_harp_control_frame_without_hoi_body_is_skipped(self):
     """The device sends a HARP control frame (options, no HOI body) after registration.
@@ -1090,13 +1107,15 @@ class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
   async def test_reader_survives_an_unparseable_frame(self):
     """A malformed frame is skipped; the next command still gets its response."""
     client, queue = self._make_client([])
+    task = asyncio.ensure_future(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+    )
+    await self._await_registered(client)
+
     queue.put_nowait(ValueError("Not enough data for u8 at offset 0"))
     queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
 
-    result = await asyncio.wait_for(
-      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
-    )
-    self.assertIsNotNone(result)
+    self.assertIsNotNone(await asyncio.wait_for(task, timeout=5))
     self.assertTrue(client._is_reader_running())
 
   async def test_reader_failure_fails_the_waiting_command(self):
