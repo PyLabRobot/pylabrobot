@@ -986,6 +986,41 @@ class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
       )
     )
 
+  async def test_harp_control_frame_without_hoi_body_is_skipped(self):
+    """The device sends a HARP control frame (options, no HOI body) after registration.
+
+    Captured from an MLPrep at 127.0.0.1:2000. It has no HOI header at all, so
+    parsing it as a command response raises; the reader must skip it.
+    """
+    control = bytes.fromhex(
+      "24000630000000000000000002000600ffff0100020020000a00010801000100ffff04020000"
+    )
+    harp = HarpPacket.unpack(IpPacket.unpack(control).payload)
+    self.assertEqual(harp.protocol, 2)
+    self.assertEqual(harp.payload, b"")
+    self.assertEqual(len(harp.options), 10)
+
+    class FakeClient(HamiltonTCPClient):
+      async def read_exact(self, num_bytes: int, timeout=None):  # type: ignore[override]
+        del timeout
+        return control[:num_bytes] if num_bytes == 2 else control[2 : 2 + num_bytes]
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client._connected = True
+    self.assertIsNone(await client._read_one_message())
+
+  async def test_reader_survives_an_unparseable_frame(self):
+    """A malformed frame is skipped; the next command still gets its response."""
+    client, queue = self._make_client([])
+    queue.put_nowait(ValueError("Not enough data for u8 at offset 0"))
+    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
+
+    result = await asyncio.wait_for(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+    )
+    self.assertIsNotNone(result)
+    self.assertTrue(client._is_reader_running())
+
   async def test_reader_failure_fails_the_waiting_command(self):
     """A dead reader must surface on the waiting command instead of hanging it."""
 

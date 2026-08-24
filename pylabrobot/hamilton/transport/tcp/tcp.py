@@ -52,7 +52,7 @@ from pylabrobot.hamilton.transport.tcp.messages import (
   RegistrationMessage,
   RegistrationResponse,
 )
-from pylabrobot.hamilton.transport.tcp.packets import Address
+from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, IpPacket
 from pylabrobot.hamilton.transport.tcp.protocol import (
   Hoi2Action,
   HoiRequestId,
@@ -99,7 +99,9 @@ class HamiltonTCPClient:
 
     # Background reader. Owns the socket from the end of setup() until stop().
     # Because the lock above allows one command in flight, the response handoff
-    # is a single slot rather than a map of pending requests.
+    # is a single slot rather than a map of pending requests. Responses do carry
+    # the request's address and sequence number, so this can become a keyed demux
+    # if commands are ever allowed to overlap.
     self._reader_task: Optional[asyncio.Task] = None
     self._pending_response: Optional[asyncio.Future] = None
     self._pending_expect: Optional[Tuple[Address, int]] = None
@@ -273,7 +275,12 @@ class HamiltonTCPClient:
 
   async def _read_one_message(
     self, timeout: Optional[float] = None
-  ) -> Union[RegistrationResponse, CommandResponse]:
+  ) -> Optional[Union[RegistrationResponse, CommandResponse]]:
+    """Read one length-prefixed frame and route it by protocol.
+
+    Returns ``None`` for frames that carry no routable message. Each frame is
+    consumed in full regardless, so skipping one never desynchronizes the stream.
+    """
     size_data = await self.read_exact(2, timeout=timeout)
     packet_size = Reader(size_data).u16()
 
@@ -289,6 +296,17 @@ class HamiltonTCPClient:
       harp_protocol = complete_data[harp_protocol_offset]
 
       if harp_protocol == 2:
+        harp = HarpPacket.unpack(IpPacket.unpack(complete_data).payload)
+        if not harp.payload:
+          # HARP-level control frame: options, no HOI body. The device sends one
+          # to the client shortly after registration. Nothing to route.
+          logger.debug(
+            "Ignoring HARP control frame from %s (action=%d, %d option bytes)",
+            harp.src,
+            harp.action_code,
+            len(harp.options),
+          )
+          return None
         resp = CommandResponse.from_bytes(complete_data)
         if resp.hoi.action_code == Hoi2Action.EVENT and self._event_handlers:
           self._dispatch_event(resp)
@@ -313,7 +331,16 @@ class HamiltonTCPClient:
     """
     try:
       while True:
-        message = await self._read_one_message()
+        try:
+          message = await self._read_one_message()
+        except ValueError as exc:
+          # A malformed frame must not take the reader down with it. Frames are
+          # length-prefixed and consumed whole, so skipping one keeps the stream
+          # in sync.
+          logger.warning("Skipping unparseable frame: %s", exc)
+          continue
+        if message is None:
+          continue
         if not isinstance(message, CommandResponse):
           logger.warning("Reader dropped an unexpected %s frame", type(message).__name__)
           continue
@@ -346,9 +373,11 @@ class HamiltonTCPClient:
 
     expected = self._pending_expect
     if expected is not None and (message.harp.src, message.harp.seq) != expected:
-      # Whether the device echoes the request sequence number is not established,
-      # so this only reports the mismatch. Frequent warnings here mean the pairing
-      # is real and the single-slot handoff can become a keyed demux.
+      # MLPrep firmware echoes the request address and sequence number on every
+      # response (26/26 over a live introspection session), so a mismatch here is
+      # unexpected. It is reported rather than rejected because that evidence
+      # covers one device family; rejecting outright would strand a command on
+      # firmware that pairs responses differently.
       logger.warning(
         "Response from %s seq=%d does not match outstanding command to %s seq=%d",
         message.harp.src,
@@ -646,6 +675,8 @@ class HamiltonTCPClient:
     """Read inline until the first terminal frame. Used before the reader starts."""
     while True:
       response_message = await self._read_one_message(timeout=read_timeout)
+      if response_message is None:
+        continue
       if not isinstance(response_message, CommandResponse):
         raise RuntimeError(
           f"Expected a CommandResponse for {command.__class__.__name__}, "
