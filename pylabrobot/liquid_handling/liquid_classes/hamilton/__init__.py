@@ -1,3 +1,10 @@
-from .base import HamiltonLiquidClass
-from .star import get_star_liquid_class
-from .vantage import get_vantage_liquid_class
+import warnings
+
+warnings.warn(
+  "Importing from pylabrobot.liquid_handling.liquid_classes.hamilton is deprecated. "
+  "Use pylabrobot.legacy.liquid_handling.liquid_classes.hamilton instead.",
+  DeprecationWarning,
+  stacklevel=2,
+)
+
+from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton import *  # noqa: F401,F403,E402

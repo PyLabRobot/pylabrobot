@@ -4,7 +4,7 @@ Thank you for your interest in contributing to PyLabRobot! This document will he
 
 ## Getting Started
 
-See the installation instructions [here](../user_guide/_getting-started/installation.md). For contributing, you should install PyLabRobot from source.
+See the installation instructions [here](../user_guide/getting-started/installation.md). For contributing, you should install PyLabRobot from source.
 
 If this is your first time contributing to open source, check out [How to Open Source](how-to-open-source.md) for an easy introduction.
 
@@ -50,6 +50,20 @@ make typecheck
 ### Pre-commit hooks
 
 PyLabRobot uses [pre-commit](https://pre-commit.com/) to run the above commands before every commit. To install pre-commit, run `pip install pre-commit` and then `pre-commit install`.
+
+## Code conventions
+
+Code and comments describe current behavior, not project history. Do not add diary or changelog comments such as "new", "now", or "previously", and do not add provenance stories to code, commits, or pull requests.
+
+Do not commit one-time backfill or migration scripts. Run one-time operations ad hoc so the repository contains only permanent software.
+
+Do not use reflective attribute access. `getattr`, `setattr`, `hasattr`, `delattr`, and equivalent techniques are not allowed. Do not work around this rule with `vars`, direct `__dict__` access, `__getattribute__`, wrappers around these functions, or attribute names constructed as strings.
+
+Define explicit, typed methods and properties instead. When a value or callable must be selected by name, use a typed mapping with a fixed set of keys. Model behavioral differences with normal control flow or polymorphism so static analysis and readers can see every supported path.
+
+## API conventions
+
+Use PyLabRobot's [default units](../user_guide/getting-started/units.md) in public APIs. Omit the unit from a parameter or attribute name when it uses the PyLabRobot default—for example, use `temperature`, not `temperature_celsius`. Deviate from the default only for a compelling reason, make the alternative unit explicit, and document why it is necessary. Convert device-native units internally.
 
 ## Writing documentation
 

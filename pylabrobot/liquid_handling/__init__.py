@@ -1,14 +1,10 @@
-from .backends import *
-from .liquid_handler import LiquidHandler
-from .standard import (
-  Drop,
-  DropTipRack,
-  MultiHeadAspirationPlate,
-  MultiHeadDispensePlate,
-  Pickup,
-  PickupTipRack,
-  ResourceMove,
-  SingleChannelAspiration,
-  SingleChannelDispense,
+import warnings
+
+warnings.warn(
+  "Importing from pylabrobot.liquid_handling is deprecated. "
+  "Use pylabrobot.legacy.liquid_handling instead.",
+  DeprecationWarning,
+  stacklevel=2,
 )
-from .strictness import Strictness, get_strictness, set_strictness
+
+from pylabrobot.legacy.liquid_handling import *  # noqa: F401,F403,E402

@@ -4,9 +4,11 @@ import warnings
 from collections import OrderedDict
 from typing import (
   TYPE_CHECKING,
+  Any,
   Dict,
   List,
   Literal,
+  Mapping,
   Optional,
   Sequence,
   Tuple,
@@ -15,57 +17,16 @@ from typing import (
 )
 
 from pylabrobot.resources.liquid import Liquid
-from pylabrobot.resources.resource_holder import get_child_location
 
 from .itemized_resource import ItemizedResource
+from .lid import Lid, Liddable
 from .resource import Coordinate, Resource
 
 if TYPE_CHECKING:
   from .well import Well
 
 
-class Lid(Resource):
-  """Lid for plates."""
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    nesting_z_height: float,
-    category: str = "lid",
-    model: Optional[str] = None,
-  ):
-    """Create a lid for a plate.
-
-    Args:
-      name: Name of the lid.
-      size_x: Size of the lid in x-direction.
-      size_y: Size of the lid in y-direction.
-      size_z: Size of the lid in z-direction.
-      nesting_z_height: the overlap in mm between the lid and its parent plate (in the z-direction).
-    """
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      category=category,
-      model=model,
-    )
-    self.nesting_z_height = nesting_z_height
-    if nesting_z_height == 0:
-      print(f"{self.name}: Are you certain that the lid nests 0 mm with its parent plate?")
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "nesting_z_height": self.nesting_z_height,
-    }
-
-
-class Plate(ItemizedResource["Well"]):
+class Plate(Liddable, ItemizedResource["Well"]):
   """Base class for Plate resources."""
 
   def __init__(
@@ -81,6 +42,7 @@ class Plate(ItemizedResource["Well"]):
     model: Optional[str] = None,
     plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
     stacking_z_height: Optional[float] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Initialize a Plate resource.
 
@@ -105,29 +67,13 @@ class Plate(ItemizedResource["Well"]):
       ordering=ordering,
       category=category,
       model=model,
+      metadata=metadata,
     )
-    self._lid: Optional[Lid] = None
     self.plate_type = plate_type
     self.stacking_z_height = stacking_z_height
 
     if lid is not None:
       self.assign_child_resource(lid)
-
-  @property
-  def lid(self) -> Optional[Lid]:
-    return self._lid
-
-  @lid.setter
-  def lid(self, lid: Optional[Lid]) -> None:
-    if lid is None:
-      self.unassign_child_resource(self._lid)
-    else:
-      self.assign_child_resource(lid)
-    self._lid = lid
-
-  def get_lid_location(self, lid: Lid) -> Coordinate:
-    """Get location of the lid when assigned to the plate. Takes into account sinking and rotation."""
-    return get_child_location(lid) + Coordinate(0, 0, self.get_size_z() - lid.nesting_z_height)
 
   def assign_child_resource(
     self,
@@ -135,27 +81,17 @@ class Plate(ItemizedResource["Well"]):
     location: Optional[Coordinate] = None,
     reassign: bool = True,
   ):
-    if isinstance(resource, Lid):
-      if self.has_lid():
-        raise ValueError(f"Plate '{self.name}' already has a lid.")
-      self._lid = resource
-      default_location = self.get_lid_location(resource)
-      location = location or default_location
-    else:
-      assert location is not None, "Location must be specified for if resource is not a lid."
+    if not isinstance(resource, Lid) and location is None:
+      raise ValueError("Location must be specified if resource is not a lid.")
     return super().assign_child_resource(resource, location=location, reassign=reassign)
 
-  def unassign_child_resource(self, resource):
-    if isinstance(resource, Lid) and resource == self.lid:
-      self._lid = None
-    return super().unassign_child_resource(resource)
-
   def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "plate_type": self.plate_type,
-      "stacking_z_height": self.stacking_z_height,
-    }
+    data = super().serialize()
+    if self.plate_type != "skirted":
+      data["plate_type"] = self.plate_type
+    if self.stacking_z_height is not None:
+      data["stacking_z_height"] = self.stacking_z_height
+    return data
 
   def __eq__(self, other) -> bool:
     # `stacking_z_height` is a physical dimension (the pitch a plate adds to a stack), so plates
@@ -185,16 +121,17 @@ class Plate(ItemizedResource["Well"]):
 
     return super().get_item(identifier)
 
-  def get_wells(self, identifier: Union[str, Sequence[int]]) -> List["Well"]:
+  def get_wells(self, identifier: Optional[Union[str, Sequence[int]]] = None) -> List["Well"]:
     """Get the wells with the given identifier.
+
+    If no identifier is given, all wells are returned.
 
     See :meth:`~.get_items` for more information.
     """
 
+    if identifier is None:
+      return super().get_items(list(range(self.num_items)))
     return super().get_items(identifier)
-
-  def has_lid(self) -> bool:
-    return self.lid is not None
 
   def set_well_volumes(
     self,
