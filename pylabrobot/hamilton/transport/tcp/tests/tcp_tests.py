@@ -9,6 +9,7 @@ Focused on high-value invariants:
 
 from __future__ import annotations
 
+import asyncio
 import struct
 import unittest
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from unittest.mock import AsyncMock
 
 import pylabrobot.hamilton.transport.tcp.introspection as introspection_mod
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
-from pylabrobot.hamilton.transport.tcp.error_tables import NIMBUS_ERROR_CODES
+from pylabrobot.hamilton.nimbus.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.transport.tcp.hoi_error import (
   HoiError,
   parse_hamilton_error_entries,
@@ -497,6 +498,13 @@ class TestWarningAndExceptionSemantics(unittest.TestCase):
 
 
 class TestErrorEntryChannelDetection(unittest.TestCase):
+  """``uses_physical_channels`` is declared by the command, not inferred from its fields.
+
+  Device peers (Nimbus/Prep) set it True so per-channel firmware errors surface as
+  ChannelizedError; everything else leaves it False so an instrument-wide fault is
+  not attributed to a synthetic ch0.
+  """
+
   @dataclass
   class _Ap:
     channel: int
@@ -506,17 +514,18 @@ class TestErrorEntryChannelDetection(unittest.TestCase):
     protocol = HamiltonProtocol.OBJECT_DISCOVERY
     interface_id = 1
     command_id = 1
+    uses_physical_channels = True
     dest: Address
     aspirate_parameters: list
 
     def __post_init__(self):
       super().__init__(self.dest)
 
-  def test_true_when_struct_array_has_channel(self):
+  def test_true_when_command_declares_physical_channels(self):
     c = TestErrorEntryChannelDetection._CmdPrep(
       Address(1, 1, 1), aspirate_parameters=[TestErrorEntryChannelDetection._Ap(0)]
     )
-    self.assertTrue(c.error_entries_use_physical_channels())
+    self.assertTrue(c.uses_physical_channels)
 
   @dataclass
   class _CmdVoid(TCPCommand):
@@ -528,24 +537,41 @@ class TestErrorEntryChannelDetection(unittest.TestCase):
     def __post_init__(self):
       super().__init__(self.dest)
 
-  def test_false_for_void_command(self):
+  def test_false_by_default_for_void_command(self):
     c = TestErrorEntryChannelDetection._CmdVoid(Address(1, 1, 1))
-    self.assertFalse(c.error_entries_use_physical_channels())
+    self.assertFalse(c.uses_physical_channels)
 
   @dataclass
   class _CmdNimbus(TCPCommand):
     protocol = HamiltonProtocol.OBJECT_DISCOVERY
     interface_id = 1
     command_id = 4
+    uses_physical_channels = True
     dest: Address
     channels_involved: tuple
 
     def __post_init__(self):
       super().__init__(self.dest)
 
-  def test_true_when_channels_involved_present(self):
+  def test_true_when_channels_involved_command_declares_it(self):
     c = TestErrorEntryChannelDetection._CmdNimbus(Address(1, 1, 1), (1, 0))
-    self.assertTrue(c.error_entries_use_physical_channels())
+    self.assertTrue(c.uses_physical_channels)
+
+  def test_carrying_per_channel_fields_alone_does_not_enable_it(self):
+    """A command with channel-shaped fields that does not declare the flag stays False."""
+
+    @dataclass
+    class _CmdUndeclared(TCPCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 1
+      dest: Address
+      channels_involved: tuple
+
+      def __post_init__(self):
+        super().__init__(self.dest)
+
+    self.assertFalse(_CmdUndeclared(Address(1, 1, 1), (1, 0)).uses_physical_channels)
 
 
 class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
@@ -612,6 +638,7 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 1
       command_id = 4
+      uses_physical_channels = True
       dest: Address
       channels_involved: tuple
 
@@ -651,6 +678,462 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
     self.assertIn(0, ctx.exception.errors)
     self.assertEqual(len(ctx.exception.kwargs["hoi_entries"]), 1)
     self.assertIn(0, ctx.exception.kwargs["hoi_exceptions"])
+
+
+class TestCommandSerialization(unittest.IsolatedAsyncioTestCase):
+  """One command in flight at a time, and enrichment must not deadlock against the lock."""
+
+  @staticmethod
+  def _ok_response(src: Address) -> CommandResponse:
+    hoi = HoiPacket(
+      interface_id=1,
+      action_code=Hoi2Action.COMMAND_RESPONSE,
+      action_id=0,
+      params=HoiParams().add(1, I32).build(),
+    )
+    harp = HarpPacket(
+      src=src, dst=Address(2, 1, 65535), seq=1, protocol=2, action_code=4, payload=hoi.pack()
+    )
+    return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+  @dataclass
+  class _Cmd(TCPCommand):
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 1
+    dest: Address
+
+    def __post_init__(self):
+      super().__init__(self.dest)
+
+  async def test_concurrent_commands_do_not_interleave_on_the_wire(self):
+    events: list[str] = []
+
+    class FakeClient(HamiltonTCPClient):
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+        events.append("write")
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        # Yield control so an unserialized second command could interleave here.
+        await asyncio.sleep(0)
+        events.append("read")
+        return TestCommandSerialization._ok_response(Address(1, 1, 257))
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+
+    await asyncio.gather(
+      client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))),
+      client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))),
+    )
+
+    self.assertEqual(events, ["write", "read", "write", "read"])
+
+  async def test_error_enrichment_reentrancy_does_not_deadlock(self):
+    """Error enrichment sends introspection commands through the same lock.
+
+    Holding the transaction lock across enrichment would deadlock here rather
+    than raising, so this asserts the lock is released before decoding.
+    """
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
+    err_params = (
+      HoiParams()
+      .add(
+        f"0x{entry.module_id:04X}.0x{entry.node_id:04X}.0x{entry.object_id:04X}:"
+        f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}",
+        Str,
+      )
+      .build()
+    )
+
+    class FakeClient(HamiltonTCPClient):
+      reads = 0
+
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        FakeClient.reads += 1
+        # Only the first command fails; the introspection round-trips that
+        # enrichment issues afterwards succeed.
+        if FakeClient.reads > 1:
+          return TestCommandSerialization._ok_response(Address(1, 1, 257))
+        hoi = HoiPacket(
+          interface_id=1,
+          action_code=Hoi2Action.STATUS_EXCEPTION,
+          action_id=0,
+          params=err_params,
+        )
+        harp = HarpPacket(
+          src=Address(1, 1, 257),
+          dst=Address(2, 1, 65535),
+          seq=1,
+          protocol=2,
+          action_code=4,
+          payload=hoi.pack(),
+        )
+        return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+
+    # Real introspection round-trips: each re-enters _transact and takes the lock.
+    async def _get_interface_name(addr, iface_id):
+      del addr, iface_id
+      await client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+      return "Pipette"
+
+    client.introspection.get_interface_name = _get_interface_name  # type: ignore[method-assign]
+    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    with self.assertRaises(HoiError):
+      await asyncio.wait_for(
+        client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+      )
+
+
+class TestConnectionLifecycle(unittest.IsolatedAsyncioTestCase):
+  """No command is ever transmitted twice, and a session leaves no state behind."""
+
+  async def test_read_failure_does_not_retransmit_the_command(self):
+    """The regression this transport exists to avoid: a timed-out read re-running a motion.
+
+    The write may already have reached the instrument, so the command must be
+    written exactly once and the failure surfaced to the caller.
+    """
+    writes: list[bytes] = []
+
+    class FakeClient(HamiltonTCPClient):
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del timeout
+        writes.append(data)
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        raise TimeoutError("device did not answer")
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+
+    with self.assertRaises(TimeoutError):
+      await client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+
+    self.assertEqual(len(writes), 1)
+
+  async def test_connection_errors_do_not_retransmit_either(self):
+    for exc in (ConnectionResetError("reset"), BrokenPipeError("pipe"), OSError("io")):
+      with self.subTest(exc=type(exc).__name__):
+        writes: list[bytes] = []
+
+        class FakeClient(HamiltonTCPClient):
+          async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+            del timeout
+            writes.append(data)
+
+          async def _read_one_message(self, timeout=None, _exc=exc):  # type: ignore[override]
+            del timeout
+            raise _exc
+
+        client = FakeClient(host="127.0.0.1", port=0)
+        client.client_address = Address(2, 1, 65535)
+
+        with self.assertRaises(type(exc)):
+          await client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+        self.assertEqual(len(writes), 1)
+
+  async def test_io_on_a_disconnected_client_names_setup(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    self.assertFalse(client.is_connected)
+    for op in (client.write(b"x"), client.read(1), client.read_exact(1)):
+      with self.assertRaises(ConnectionError) as ctx:
+        await op
+      self.assertIn("setup()", str(ctx.exception))
+
+  async def test_setup_twice_without_stop_is_refused(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client._connected = True
+    with self.assertRaises(RuntimeError) as ctx:
+      await client.setup()
+    self.assertIn("stop()", str(ctx.exception))
+
+  def test_clearing_session_state_drops_everything_scoped_to_the_session(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client._client_id = 5
+    client.client_address = Address(2, 5, 65535)
+    client._sequence_numbers[Address(1, 1, 257)] = 42
+    client._instrument_addresses["arm"] = Address(1, 1, 257)
+    client._global_object_addresses = [Address(1, 1, 1)]
+    client.registry.set_root_address(Address(1, 1, 1))
+    client.registry.register(
+      "root", ObjectInfo("root", "", method_count=0, subobject_count=0, address=Address(1, 1, 1))
+    )
+
+    client._clear_session_state_for_setup()
+
+    self.assertIsNone(client._client_id)
+    self.assertIsNone(client.client_address)
+    self.assertEqual(client._sequence_numbers, {})
+    self.assertEqual(client._instrument_addresses, {})
+    self.assertEqual(list(client.global_object_addresses), [])
+    self.assertIsNone(client.registry.get_root_address())
+    self.assertIsNone(client.registry.address_for("root"))
+    self.assertIsNone(client.registry.path(Address(1, 1, 1)))
+
+  def test_sequence_numbers_restart_after_a_session_ends(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    dest = Address(1, 1, 257)
+    first = [client._allocate_sequence_number(dest) for _ in range(3)]
+    client._clear_session_state_for_setup()
+    self.assertEqual(client._allocate_sequence_number(dest), first[0])
+
+
+class TestErrorEnrichmentRecursion(unittest.IsolatedAsyncioTestCase):
+  """A device that fails its own introspection queries must not recurse."""
+
+  async def test_device_failing_every_request_still_raises_once(self):
+    """Every read returns STATUS_EXCEPTION, including enrichment's own queries.
+
+    Enrichment asks the device for interface and method names; those queries hit
+    the same failure, which would enrich again. Without the re-entrancy guard this
+    recurses until the interpreter aborts (55 reads before RecursionError).
+    """
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
+    err_params = (
+      HoiParams()
+      .add(
+        f"0x{entry.module_id:04X}.0x{entry.node_id:04X}.0x{entry.object_id:04X}:"
+        f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}",
+        Str,
+      )
+      .build()
+    )
+    reads = 0
+
+    class FakeClient(HamiltonTCPClient):
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        nonlocal reads
+        reads += 1
+        hoi = HoiPacket(
+          interface_id=1,
+          action_code=Hoi2Action.STATUS_EXCEPTION,
+          action_id=0,
+          params=err_params,
+        )
+        harp = HarpPacket(
+          src=Address(1, 1, 257),
+          dst=Address(2, 1, 65535),
+          seq=1,
+          protocol=2,
+          action_code=4,
+          payload=hoi.pack(),
+        )
+        return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+
+    # Real introspection, deliberately not stubbed: enrichment issues real queries.
+    with self.assertRaises(HoiError) as ctx:
+      await asyncio.wait_for(
+        client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=10
+      )
+
+    self.assertEqual(ctx.exception.entries[0].result, 0x0F08)
+    # Bounded work: the failing command plus enrichment's first query, no cascade.
+    self.assertLessEqual(reads, 5)
+
+  async def test_guard_is_released_so_later_errors_still_enrich(self):
+    """The re-entrancy guard must not leak across commands."""
+    from pylabrobot.hamilton.transport.tcp import tcp as tcp_module
+
+    self.assertFalse(tcp_module._enriching.get())
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client.introspection.get_interface_name = AsyncMock(return_value="Pipette")  # type: ignore[method-assign]
+    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    entry = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4E)
+    iface, _desc = await client._describe_entry(entry)
+    self.assertEqual(iface, "Pipette")
+    self.assertFalse(tcp_module._enriching.get())
+
+    # Second call still enriches rather than falling back to terse text.
+    iface2, _desc2 = await client._describe_entry(entry)
+    self.assertEqual(iface2, "Pipette")
+
+
+class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
+  """The reader owns the socket for the session and routes frames by kind."""
+
+  @staticmethod
+  def _frame(action_code: int, src: Address, seq: int = 1) -> CommandResponse:
+    hoi = HoiPacket(
+      interface_id=1,
+      action_code=action_code,
+      action_id=0,
+      params=HoiParams().add(1, I32).build(),
+    )
+    harp = HarpPacket(
+      src=src, dst=Address(2, 1, 65535), seq=seq, protocol=2, action_code=4, payload=hoi.pack()
+    )
+    return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+  def _make_client(self, frames: list):
+    """Client whose reader consumes *frames*, then blocks as an idle socket would."""
+    queue: asyncio.Queue = asyncio.Queue()
+    for f in frames:
+      queue.put_nowait(f)
+
+    class FakeClient(HamiltonTCPClient):
+      writes = 0
+
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+        FakeClient.writes += 1
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        message = await queue.get()
+        if isinstance(message, BaseException):
+          raise message
+        if message.hoi.action_code == Hoi2Action.EVENT:
+          self._dispatch_event(message)
+        return message
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+    client._connected = True
+    client._reader_task = asyncio.create_task(client._reader_loop())
+    self.addAsyncCleanup(client.stop)
+    return client, queue
+
+  async def test_events_arriving_between_commands_reach_subscribers(self):
+    seen: list = []
+    client, queue = self._make_client([self._frame(Hoi2Action.EVENT, Address(1, 1, 257))])
+    client.on_event(seen.append)
+
+    # No command is in flight; the reader still has to observe the event.
+    del queue
+    for _ in range(10):
+      if seen:
+        break
+      await asyncio.sleep(0)
+
+    self.assertEqual(len(seen), 1)
+    self.assertEqual(seen[0].hoi.action_code, Hoi2Action.EVENT)
+
+  async def test_ack_is_skipped_and_terminal_frame_is_delivered(self):
+    client, _ = self._make_client(
+      [
+        self._frame(Hoi2Action.COMMAND_ACK, Address(1, 1, 257)),
+        self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)),
+      ]
+    )
+    result = await asyncio.wait_for(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+    )
+    self.assertIsNotNone(result)
+
+  async def test_unmatched_late_frame_is_not_given_to_the_next_command(self):
+    """A response arriving with no command waiting must be dropped, not queued."""
+    late = self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 999), seq=99)
+    client, queue = self._make_client([late])
+
+    # Let the reader consume the stale frame while nothing is awaiting it.
+    for _ in range(10):
+      if queue.empty():
+        break
+      await asyncio.sleep(0)
+
+    # The next command must wait for its own response, not inherit the stale one.
+    with self.assertRaises(asyncio.TimeoutError):
+      await asyncio.wait_for(
+        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=0.25
+      )
+
+    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
+    self.assertIsNotNone(
+      await asyncio.wait_for(
+        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+      )
+    )
+
+  async def test_harp_control_frame_without_hoi_body_is_skipped(self):
+    """The device sends a HARP control frame (options, no HOI body) after registration.
+
+    Captured from an MLPrep at 127.0.0.1:2000. It has no HOI header at all, so
+    parsing it as a command response raises; the reader must skip it.
+    """
+    control = bytes.fromhex(
+      "24000630000000000000000002000600ffff0100020020000a00010801000100ffff04020000"
+    )
+    harp = HarpPacket.unpack(IpPacket.unpack(control).payload)
+    self.assertEqual(harp.protocol, 2)
+    self.assertEqual(harp.payload, b"")
+    self.assertEqual(len(harp.options), 10)
+
+    class FakeClient(HamiltonTCPClient):
+      async def read_exact(self, num_bytes: int, timeout=None):  # type: ignore[override]
+        del timeout
+        return control[:num_bytes] if num_bytes == 2 else control[2 : 2 + num_bytes]
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client._connected = True
+    self.assertIsNone(await client._read_one_message())
+
+  async def test_reader_survives_an_unparseable_frame(self):
+    """A malformed frame is skipped; the next command still gets its response."""
+    client, queue = self._make_client([])
+    queue.put_nowait(ValueError("Not enough data for u8 at offset 0"))
+    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
+
+    result = await asyncio.wait_for(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+    )
+    self.assertIsNotNone(result)
+    self.assertTrue(client._is_reader_running())
+
+  async def test_reader_failure_fails_the_waiting_command(self):
+    """A dead reader must surface on the waiting command instead of hanging it."""
+
+    class Boom(Exception):
+      pass
+
+    client, queue = self._make_client([])
+    task = asyncio.ensure_future(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+    )
+    for _ in range(10):
+      if client._pending_response is not None:
+        break
+      await asyncio.sleep(0)
+
+    queue.put_nowait(Boom())  # _read_one_message raises when the reader dequeues this
+
+    with self.assertRaises(Boom):
+      await asyncio.wait_for(task, timeout=5)
+
+  async def test_command_after_reader_death_reports_the_connection(self):
+    class Boom(Exception):
+      pass
+
+    client, queue = self._make_client([])
+    queue.put_nowait(Boom())
+    for _ in range(10):
+      if client._reader_task is not None and client._reader_task.done():
+        break
+      await asyncio.sleep(0)
+
+    with self.assertRaises(ConnectionError):
+      await asyncio.wait_for(
+        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+      )
 
 
 class TestHcResultDescriptionNimbusTable(unittest.IsolatedAsyncioTestCase):

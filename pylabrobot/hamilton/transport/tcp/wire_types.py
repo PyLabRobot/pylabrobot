@@ -15,7 +15,7 @@ from __future__ import annotations
 import struct as _struct
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Optional, get_args, get_origin
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.transport.tcp.messages import HoiParams
@@ -341,12 +341,29 @@ StrArray = Annotated[list, StringArrayType()]
 # Type registry and decode_fragment
 # ---------------------------------------------------------------------------
 
+
+def wire_type_of(annotation: Any) -> Optional[WireType]:
+  """Return the :class:`WireType` carried by *annotation*, or None if it carries none.
+
+  Accepts either an ``Annotated`` alias (``I32``, ``Str``, ``Annotated[Foo, Struct()]``)
+  or a bare ``WireType`` instance, so call sites can pass whichever they hold. Fields
+  annotated with plain types (e.g. ``Address``) have no wire representation and yield
+  None.
+  """
+  if isinstance(annotation, WireType):
+    return annotation
+  if get_origin(annotation) is not Annotated:
+    return None
+  meta = get_args(annotation)[1]
+  return meta if isinstance(meta, WireType) else None
+
+
 _WIRE_TYPE_REGISTRY: dict[int, WireType] = {}
 
 
-def _register(alias: type) -> None:
-  meta = getattr(alias, "__metadata__", (None,))[0]
-  assert meta is not None, f"Expected Annotated alias with metadata: {alias}"
+def _register(alias: Any) -> None:
+  meta = wire_type_of(alias)
+  assert meta is not None, f"Expected Annotated alias with WireType metadata: {alias}"
   _WIRE_TYPE_REGISTRY[meta.type_id] = meta
 
 

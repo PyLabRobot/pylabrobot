@@ -102,9 +102,12 @@ class HoiParams:
 
     wire_type may be a WireType instance or an Annotated alias (e.g. I32, Str).
     """
-    if hasattr(wire_type, "__metadata__"):
-      wire_type = wire_type.__metadata__[0]
-    return cast("HoiParams", wire_type.encode_into(value, self))
+    from pylabrobot.hamilton.transport.tcp.wire_types import wire_type_of
+
+    meta = wire_type_of(wire_type)
+    if meta is None:
+      raise TypeError(f"Not a wire type or Annotated wire-type alias: {wire_type!r}")
+    return cast("HoiParams", meta.encode_into(value, self))
 
   # ------------------------------------------------------------------
   # Ergonomic shims — each delegates to add() with the matching alias
@@ -186,16 +189,13 @@ class HoiParams:
     from dataclasses import fields as dc_fields
     from typing import get_type_hints
 
-    from pylabrobot.hamilton.transport.tcp.wire_types import WireType
+    from pylabrobot.hamilton.transport.tcp.wire_types import wire_type_of
 
     hints = get_type_hints(type(obj), include_extras=True)
     params = cls()
     for f in dc_fields(obj):
-      ann = hints.get(f.name)
-      if ann is None or not hasattr(ann, "__metadata__"):
-        continue
-      meta = ann.__metadata__[0]
-      if not isinstance(meta, WireType):
+      meta = wire_type_of(hints.get(f.name))
+      if meta is None:
         continue
       params = meta.encode_into(getattr(obj, f.name), params)
     return cast("HoiParams", params)
@@ -427,7 +427,7 @@ def interpret_hoi_success_payload(command: Any, params_bytes: bytes) -> Any:
   if not params_bytes:
     return None
 
-  if hasattr(cls, "Response"):
+  if cls.Response is not None:
     return parse_into_struct(HoiParamsParser(params_bytes), cls.Response)
 
   return command.parse_response_parameters(params_bytes)
@@ -455,17 +455,15 @@ def parse_into_struct(parser: HoiParamsParser, cls: type) -> Any:
     CountedFlatArray,
     Struct,
     StructArray,
-    WireType,
+    wire_type_of,
   )
 
   hints = get_type_hints(cls, include_extras=True)
   values: dict[str, Any] = {}
   for f in dc_fields(cls):
     ann = hints.get(f.name)
-    if ann is None or not hasattr(ann, "__metadata__"):
-      continue
-    meta = ann.__metadata__[0]
-    if not isinstance(meta, WireType):
+    meta = wire_type_of(ann)
+    if meta is None:
       continue
 
     if isinstance(meta, CountedFlatArray):

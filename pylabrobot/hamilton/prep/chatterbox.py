@@ -151,12 +151,11 @@ class PrepChatterboxClient(PrepClient):
   async def send_command(
     self,
     command: TCPCommand,
-    ensure_connection: bool = True,
     return_raw: bool = False,
     raise_on_error: bool = True,
     read_timeout: Optional[float] = None,
   ) -> Any:
-    del ensure_connection, raise_on_error, read_timeout
+    del raise_on_error, read_timeout
     # Exercise the JIT resolve path so that missing firmware paths surface
     # the same error offline as they would against hardware.
     from .prep_commands import _UNRESOLVED, PrepCommand

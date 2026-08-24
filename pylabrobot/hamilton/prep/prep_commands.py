@@ -1270,6 +1270,27 @@ class PrepCommand(TCPCommand):
       self.dest = _UNRESOLVED
     super().__init__(self.dest)
 
+  @property
+  def uses_physical_channels(self) -> bool:  # type: ignore[override]
+    """Whether this command's firmware errors map onto physical channels.
+
+    True when the command carries a per-channel ``StructArray`` -- the same
+    fields :meth:`_channel_index_for_entry` maps entries through. Prep declares
+    over a hundred command types whose per-channel-ness follows directly from
+    their wire shape, so it is derived here rather than repeated as a flag on
+    each one. Commands without such a field (``PrepGetPositions``,
+    ``PrepIsParked``, ...) stay False so an instrument-wide fault raises
+    :class:`HoiError` instead of being attributed to a synthetic ``ch0``.
+
+    The transport itself no longer guesses this; deriving it is the device
+    layer's business, where the wire shapes are known.
+    """
+    for f in fields(self):
+      value = getattr(self, f.name, None)
+      if isinstance(value, list) and value and getattr(value[0], "channel", None) is not None:
+        return True
+    return False
+
   def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
     """Map HoiResult entry → 0-indexed channel via the first per-channel struct-array field.
 

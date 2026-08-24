@@ -25,7 +25,7 @@ import logging
 from typing import Any, Optional
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
-from pylabrobot.hamilton.transport.tcp.error_tables import PREP_ERROR_CODES
+from pylabrobot.hamilton.prep.error_tables import PREP_ERROR_CODES
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 
@@ -61,8 +61,6 @@ class PrepClient(HamiltonTCPClient):
     port: int = 2000,
     read_timeout: float = 300.0,
     write_timeout: float = 30.0,
-    auto_reconnect: bool = True,
-    max_reconnect_attempts: int = 3,
     connection_timeout: int = 600,
   ):
     super().__init__(
@@ -70,8 +68,6 @@ class PrepClient(HamiltonTCPClient):
       port=port,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
-      auto_reconnect=auto_reconnect,
-      max_reconnect_attempts=max_reconnect_attempts,
       connection_timeout=connection_timeout,
     )
     self._mlprep_address: Optional[Address] = None
@@ -114,7 +110,6 @@ class PrepClient(HamiltonTCPClient):
     self,
     command: TCPCommand,
     *,
-    ensure_connection: bool,
     return_raw: bool,
     raise_on_error: bool,
     read_timeout: Optional[float] = None,
@@ -138,7 +133,6 @@ class PrepClient(HamiltonTCPClient):
       command.dest_address = addr
     return await super()._send_raw(
       command,
-      ensure_connection=ensure_connection,
       return_raw=return_raw,
       raise_on_error=raise_on_error,
       read_timeout=read_timeout,
