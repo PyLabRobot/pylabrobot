@@ -16,10 +16,20 @@ in-flight command completed, and it does not stop instrument motion, so continui
 across a reconnect must never be assumed. Reconnecting silently would only hide
 when that happened. :attr:`HamiltonTCPClient.is_connected` is available for callers
 that want to implement their own policy.
+
+Concurrency
+-----------
+One command is in flight at a time. Concurrent callers are serialized on a single
+lock spanning write-through-terminal-response, so commands never interleave on the
+socket. The instrument's own concurrency semantics over TCP are not yet
+established; until they are, this is deliberately conservative and there is no
+per-object or read/write parallelism (contrast ``pylabrobot.hamilton.star.lock``,
+where the module topology is known well enough to overlap commands).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Callable, ClassVar, Dict, Optional, Sequence, Tuple, Union, cast
 
@@ -80,6 +90,11 @@ class HamiltonTCPClient:
 
     self._connected = False
     self._connection_timeout = connection_timeout
+
+    # Serializes command exchanges on the socket. TCP-side concurrency semantics
+    # are not yet established for this protocol, so only one command is in flight
+    # at a time (cf. pylabrobot.hamilton.star.lock for the STAR equivalent).
+    self._command_lock = asyncio.Lock()
 
     self._client_id: Optional[int] = None
     self.client_address: Optional[Address] = None
@@ -501,6 +516,59 @@ class HamiltonTCPClient:
       read_timeout=read_timeout,
     )
 
+  async def _transact(
+    self, command: TCPCommand, *, read_timeout: Optional[float] = None
+  ) -> CommandResponse:
+    """Exchange one request/response pair on the wire, serialized against all others.
+
+    The lock spans sequence-number allocation, build, write, and the read of the
+    terminal response, so two commands can never interleave on the socket. It is
+    released before the caller decodes or enriches that response: enrichment
+    resolves interface and method names through :attr:`introspection`, which sends
+    further commands through this same method, and holding the lock across that
+    would deadlock on the first firmware error.
+
+    Intermediate ``COMMAND_ACK`` and ``EVENT`` frames are skipped; the first
+    terminal frame is returned.
+    """
+    async with self._command_lock:
+      if command.source_address is None:
+        if self.client_address is None:
+          raise RuntimeError("Client not initialized - call setup() first to assign client_address")
+        command.source_address = self.client_address
+
+      command.sequence_number = self._allocate_sequence_number(command.dest_address)
+      message = command.build()
+
+      log_params = command.get_log_params()
+      logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
+
+      await self.write(message)
+
+      while True:
+        response_message = await self._read_one_message(timeout=read_timeout)
+        if not isinstance(response_message, CommandResponse):
+          raise RuntimeError(
+            f"Expected a CommandResponse for {command.__class__.__name__}, "
+            f"got {type(response_message).__name__}"
+          )
+        action = Hoi2Action(response_message.hoi.action_code)
+        if action is Hoi2Action.COMMAND_ACK:
+          logger.debug(
+            "%s COMMAND_ACK from %s; awaiting terminal response",
+            command.__class__.__name__,
+            response_message.harp.src,
+          )
+          continue
+        if action is Hoi2Action.EVENT:
+          logger.debug(
+            "%s EVENT from %s; skipping past to await terminal response",
+            command.__class__.__name__,
+            response_message.harp.src,
+          )
+          continue
+        return response_message
+
   async def _send_raw(
     self,
     command: TCPCommand,
@@ -515,42 +583,8 @@ class HamiltonTCPClient:
     may or may not have been executed by the instrument, so re-sending it could
     run a motion twice; recovery is the caller's decision.
     """
-    if command.source_address is None:
-      if self.client_address is None:
-        raise RuntimeError("Client not initialized - call setup() first to assign client_address")
-      command.source_address = self.client_address
-
-    command.sequence_number = self._allocate_sequence_number(command.dest_address)
-    message = command.build()
-
-    log_params = command.get_log_params()
-    logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
-
-    await self.write(message)
-
-    while True:
-      response_message = await self._read_one_message(timeout=read_timeout)
-      if not isinstance(response_message, CommandResponse):
-        raise RuntimeError(
-          f"Expected a CommandResponse for {command.__class__.__name__}, "
-          f"got {type(response_message).__name__}"
-        )
-      action = Hoi2Action(response_message.hoi.action_code)
-      if action is Hoi2Action.COMMAND_ACK:
-        logger.debug(
-          "%s COMMAND_ACK from %s; awaiting terminal response",
-          command.__class__.__name__,
-          response_message.harp.src,
-        )
-        continue
-      if action is Hoi2Action.EVENT:
-        logger.debug(
-          "%s EVENT from %s; skipping past to await terminal response",
-          command.__class__.__name__,
-          response_message.harp.src,
-        )
-        continue
-      break
+    response_message = await self._transact(command, read_timeout=read_timeout)
+    action = Hoi2Action(response_message.hoi.action_code)
 
     if action in (
       Hoi2Action.STATUS_EXCEPTION,

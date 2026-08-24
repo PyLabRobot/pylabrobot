@@ -9,6 +9,7 @@ Focused on high-value invariants:
 
 from __future__ import annotations
 
+import asyncio
 import struct
 import unittest
 from dataclasses import dataclass
@@ -677,6 +678,121 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
     self.assertIn(0, ctx.exception.errors)
     self.assertEqual(len(ctx.exception.kwargs["hoi_entries"]), 1)
     self.assertIn(0, ctx.exception.kwargs["hoi_exceptions"])
+
+
+class TestCommandSerialization(unittest.IsolatedAsyncioTestCase):
+  """One command in flight at a time, and enrichment must not deadlock against the lock."""
+
+  @staticmethod
+  def _ok_response(src: Address) -> CommandResponse:
+    hoi = HoiPacket(
+      interface_id=1,
+      action_code=Hoi2Action.COMMAND_RESPONSE,
+      action_id=0,
+      params=HoiParams().add(1, I32).build(),
+    )
+    harp = HarpPacket(
+      src=src, dst=Address(2, 1, 65535), seq=1, protocol=2, action_code=4, payload=hoi.pack()
+    )
+    return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+  @dataclass
+  class _Cmd(TCPCommand):
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 1
+    dest: Address
+
+    def __post_init__(self):
+      super().__init__(self.dest)
+
+  async def test_concurrent_commands_do_not_interleave_on_the_wire(self):
+    events: list[str] = []
+
+    class FakeClient(HamiltonTCPClient):
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+        events.append("write")
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        # Yield control so an unserialized second command could interleave here.
+        await asyncio.sleep(0)
+        events.append("read")
+        return TestCommandSerialization._ok_response(Address(1, 1, 257))
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+
+    await asyncio.gather(
+      client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))),
+      client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))),
+    )
+
+    self.assertEqual(events, ["write", "read", "write", "read"])
+
+  async def test_error_enrichment_reentrancy_does_not_deadlock(self):
+    """Error enrichment sends introspection commands through the same lock.
+
+    Holding the transaction lock across enrichment would deadlock here rather
+    than raising, so this asserts the lock is released before decoding.
+    """
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
+    err_params = (
+      HoiParams()
+      .add(
+        f"0x{entry.module_id:04X}.0x{entry.node_id:04X}.0x{entry.object_id:04X}:"
+        f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}",
+        Str,
+      )
+      .build()
+    )
+
+    class FakeClient(HamiltonTCPClient):
+      reads = 0
+
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        FakeClient.reads += 1
+        # Only the first command fails; the introspection round-trips that
+        # enrichment issues afterwards succeed.
+        if FakeClient.reads > 1:
+          return TestCommandSerialization._ok_response(Address(1, 1, 257))
+        hoi = HoiPacket(
+          interface_id=1,
+          action_code=Hoi2Action.STATUS_EXCEPTION,
+          action_id=0,
+          params=err_params,
+        )
+        harp = HarpPacket(
+          src=Address(1, 1, 257),
+          dst=Address(2, 1, 65535),
+          seq=1,
+          protocol=2,
+          action_code=4,
+          payload=hoi.pack(),
+        )
+        return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+
+    # Real introspection round-trips: each re-enters _transact and takes the lock.
+    async def _get_interface_name(addr, iface_id):
+      del addr, iface_id
+      await client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+      return "Pipette"
+
+    client.introspection.get_interface_name = _get_interface_name  # type: ignore[method-assign]
+    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    with self.assertRaises(HoiError):
+      await asyncio.wait_for(
+        client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+      )
 
 
 class TestHcResultDescriptionNimbusTable(unittest.IsolatedAsyncioTestCase):
