@@ -373,7 +373,7 @@ class HamiltonTCPClient:
           # A malformed frame must not take the reader down with it. Frames are
           # length-prefixed and consumed whole, so skipping one keeps the stream
           # in sync.
-          logger.warning("Skipping unparseable frame: %s", exc)
+          logger.warning("Skipping unparsable frame: %s", exc)
           continue
         if message is None:
           continue
