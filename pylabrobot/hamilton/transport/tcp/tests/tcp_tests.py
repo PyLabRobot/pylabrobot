@@ -497,6 +497,13 @@ class TestWarningAndExceptionSemantics(unittest.TestCase):
 
 
 class TestErrorEntryChannelDetection(unittest.TestCase):
+  """``uses_physical_channels`` is declared by the command, not inferred from its fields.
+
+  Device peers (Nimbus/Prep) set it True so per-channel firmware errors surface as
+  ChannelizedError; everything else leaves it False so an instrument-wide fault is
+  not attributed to a synthetic ch0.
+  """
+
   @dataclass
   class _Ap:
     channel: int
@@ -506,17 +513,18 @@ class TestErrorEntryChannelDetection(unittest.TestCase):
     protocol = HamiltonProtocol.OBJECT_DISCOVERY
     interface_id = 1
     command_id = 1
+    uses_physical_channels = True
     dest: Address
     aspirate_parameters: list
 
     def __post_init__(self):
       super().__init__(self.dest)
 
-  def test_true_when_struct_array_has_channel(self):
+  def test_true_when_command_declares_physical_channels(self):
     c = TestErrorEntryChannelDetection._CmdPrep(
       Address(1, 1, 1), aspirate_parameters=[TestErrorEntryChannelDetection._Ap(0)]
     )
-    self.assertTrue(c.error_entries_use_physical_channels())
+    self.assertTrue(c.uses_physical_channels)
 
   @dataclass
   class _CmdVoid(TCPCommand):
@@ -528,24 +536,41 @@ class TestErrorEntryChannelDetection(unittest.TestCase):
     def __post_init__(self):
       super().__init__(self.dest)
 
-  def test_false_for_void_command(self):
+  def test_false_by_default_for_void_command(self):
     c = TestErrorEntryChannelDetection._CmdVoid(Address(1, 1, 1))
-    self.assertFalse(c.error_entries_use_physical_channels())
+    self.assertFalse(c.uses_physical_channels)
 
   @dataclass
   class _CmdNimbus(TCPCommand):
     protocol = HamiltonProtocol.OBJECT_DISCOVERY
     interface_id = 1
     command_id = 4
+    uses_physical_channels = True
     dest: Address
     channels_involved: tuple
 
     def __post_init__(self):
       super().__init__(self.dest)
 
-  def test_true_when_channels_involved_present(self):
+  def test_true_when_channels_involved_command_declares_it(self):
     c = TestErrorEntryChannelDetection._CmdNimbus(Address(1, 1, 1), (1, 0))
-    self.assertTrue(c.error_entries_use_physical_channels())
+    self.assertTrue(c.uses_physical_channels)
+
+  def test_carrying_per_channel_fields_alone_does_not_enable_it(self):
+    """A command with channel-shaped fields that does not declare the flag stays False."""
+
+    @dataclass
+    class _CmdUndeclared(TCPCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 1
+      dest: Address
+      channels_involved: tuple
+
+      def __post_init__(self):
+        super().__init__(self.dest)
+
+    self.assertFalse(_CmdUndeclared(Address(1, 1, 1), (1, 0)).uses_physical_channels)
 
 
 class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
@@ -612,6 +637,7 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 1
       command_id = 4
+      uses_physical_channels = True
       dest: Address
       channels_involved: tuple
 

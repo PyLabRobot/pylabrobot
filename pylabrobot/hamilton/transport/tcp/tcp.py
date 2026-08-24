@@ -370,7 +370,10 @@ class HamiltonTCPClient:
 
     await self.write(packet)
     response = await self._read_one_message()
-    assert isinstance(response, RegistrationResponse)
+    if not isinstance(response, RegistrationResponse):
+      raise RuntimeError(
+        f"Expected a RegistrationResponse during root discovery, got {type(response).__name__}"
+      )
 
     root_objects = self._parse_registration_response(response)
     if len(root_objects) != 1:
@@ -406,7 +409,10 @@ class HamiltonTCPClient:
 
     await self.write(packet)
     response = await self._read_one_message()
-    assert isinstance(response, RegistrationResponse)
+    if not isinstance(response, RegistrationResponse):
+      raise RuntimeError(
+        f"Expected a RegistrationResponse during global discovery, got {type(response).__name__}"
+      )
     self._global_object_addresses = self._parse_registration_response(response)
 
   def _parse_registration_response(self, response: RegistrationResponse) -> list[Address]:
@@ -524,7 +530,11 @@ class HamiltonTCPClient:
 
     while True:
       response_message = await self._read_one_message(timeout=read_timeout)
-      assert isinstance(response_message, CommandResponse)
+      if not isinstance(response_message, CommandResponse):
+        raise RuntimeError(
+          f"Expected a CommandResponse for {command.__class__.__name__}, "
+          f"got {type(response_message).__name__}"
+        )
       action = Hoi2Action(response_message.hoi.action_code)
       if action is Hoi2Action.COMMAND_ACK:
         logger.debug(
@@ -557,7 +567,7 @@ class HamiltonTCPClient:
         logger.debug(enriched_msg)
         return None
 
-      if command.error_entries_use_physical_channels():
+      if command.uses_physical_channels:
         per_channel: Dict[int, Exception] = {}
         context_by_channel: Dict[int, Optional[str]] = {}
         hoi_exceptions: Dict[int, Exception] = {}

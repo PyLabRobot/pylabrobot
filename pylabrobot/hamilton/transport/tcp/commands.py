@@ -7,9 +7,8 @@ annotations and parse_into_struct). Wire → HoiParams → Packets → Messages 
 
 from __future__ import annotations
 
-import inspect
 from dataclasses import fields, is_dataclass
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 from pylabrobot.hamilton.transport.tcp.messages import (
   CommandMessage,
@@ -48,14 +47,25 @@ class TCPCommand:
   """
 
   # Class-level attributes that subclasses must override
-  protocol: Optional[HamiltonProtocol] = None
-  interface_id: Optional[int] = None
-  command_id: Optional[int] = None
+  protocol: ClassVar[Optional[HamiltonProtocol]] = None
+  interface_id: ClassVar[Optional[int]] = None
+  command_id: ClassVar[Optional[int]] = None
+
+  # Nested dataclass describing the success payload, shadowed by subclasses that
+  # declare one. None means the command decodes its own response via
+  # parse_response_parameters().
+  Response: ClassVar[Optional[type]] = None
+
+  # Whether STATUS_EXCEPTION entries map onto PLR channel indices. Commands that
+  # carry per-channel wire parameters set this so the client raises
+  # ChannelizedError; everything else raises HoiError rather than attributing an
+  # instrument-wide fault to a synthetic ch0.
+  uses_physical_channels: ClassVar[bool] = False
 
   # Action configuration (can be overridden by subclasses)
-  action_code: int = 3  # Default: COMMAND_REQUEST
-  harp_protocol: int = 2  # Default: HOI2
-  ip_protocol: int = 6  # Default: OBJECT_DISCOVERY
+  action_code: ClassVar[int] = 3  # Default: COMMAND_REQUEST
+  harp_protocol: ClassVar[int] = 2  # Default: HOI2
+  ip_protocol: ClassVar[int] = 6  # Default: OBJECT_DISCOVERY
 
   def __init__(self, dest: Address):
     """Initialize TCP command.
@@ -94,8 +104,8 @@ class TCPCommand:
   def get_log_params(self) -> dict:
     """Get parameters to log for this command.
 
-    Lazily computes the parameters by inspecting the __init__ signature
-    and reading current attribute values from self.
+    Reads the declared dataclass fields. Non-dataclass subclasses declare no
+    fields and log nothing, matching ``build_parameters``.
 
     Subclasses can override to customize formatting (e.g., unit conversions,
     array truncation).
@@ -103,13 +113,10 @@ class TCPCommand:
     Returns:
       Dictionary of parameter names to values
     """
-    exclude = {"self", "dest"}
-    sig = inspect.signature(type(self).__init__)
-    params = {}
-    for param_name in sig.parameters:
-      if param_name not in exclude and hasattr(self, param_name):
-        params[param_name] = getattr(self, param_name)
-    return params
+    if not is_dataclass(self):
+      return {}
+    exclude = {"dest", "dest_address"}
+    return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in exclude}
 
   def build(
     self, src: Optional[Address] = None, seq: Optional[int] = None, response_required: bool = True
@@ -164,26 +171,6 @@ class TCPCommand:
     via ``channels_involved`` bitmask or per-channel struct-array reflection.
     """
     return entry_index
-
-  def error_entries_use_physical_channels(self) -> bool:
-    """Whether ``STATUS_EXCEPTION`` entries should be mapped to PLR channel indices.
-
-    Returns ``True`` when the command carries per-channel wire parameters:
-    Prep ``StructArray`` elements with a ``channel`` field, or Nimbus
-    ``channels_involved`` parallel arrays. Void MLPrep / status queries return
-    ``False`` so the client raises :class:`~pylabrobot.hamilton.transport.tcp.hoi_error.HoiError`
-    instead of attributing errors to synthetic ``ch0``.
-    """
-    if not is_dataclass(self):
-      return False
-    for f in fields(self):
-      if f.name == "channels_involved":
-        return True
-      value = getattr(self, f.name, None)
-      if isinstance(value, list) and value:
-        if getattr(value[0], "channel", None) is not None:
-          return True
-    return False
 
   def interpret_response(self, response: CommandResponse) -> Any:
     """Pure decoder for a success response — never raises on channel errors.
