@@ -795,6 +795,101 @@ class TestCommandSerialization(unittest.IsolatedAsyncioTestCase):
       )
 
 
+class TestConnectionLifecycle(unittest.IsolatedAsyncioTestCase):
+  """No command is ever transmitted twice, and a session leaves no state behind."""
+
+  async def test_read_failure_does_not_retransmit_the_command(self):
+    """The regression this transport exists to avoid: a timed-out read re-running a motion.
+
+    The write may already have reached the instrument, so the command must be
+    written exactly once and the failure surfaced to the caller.
+    """
+    writes: list[bytes] = []
+
+    class FakeClient(HamiltonTCPClient):
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del timeout
+        writes.append(data)
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        raise TimeoutError("device did not answer")
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+
+    with self.assertRaises(TimeoutError):
+      await client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+
+    self.assertEqual(len(writes), 1)
+
+  async def test_connection_errors_do_not_retransmit_either(self):
+    for exc in (ConnectionResetError("reset"), BrokenPipeError("pipe"), OSError("io")):
+      with self.subTest(exc=type(exc).__name__):
+        writes: list[bytes] = []
+
+        class FakeClient(HamiltonTCPClient):
+          async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+            del timeout
+            writes.append(data)
+
+          async def _read_one_message(self, timeout=None, _exc=exc):  # type: ignore[override]
+            del timeout
+            raise _exc
+
+        client = FakeClient(host="127.0.0.1", port=0)
+        client.client_address = Address(2, 1, 65535)
+
+        with self.assertRaises(type(exc)):
+          await client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+        self.assertEqual(len(writes), 1)
+
+  async def test_io_on_a_disconnected_client_names_setup(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    self.assertFalse(client.is_connected)
+    for op in (client.write(b"x"), client.read(1), client.read_exact(1)):
+      with self.assertRaises(ConnectionError) as ctx:
+        await op
+      self.assertIn("setup()", str(ctx.exception))
+
+  async def test_setup_twice_without_stop_is_refused(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client._connected = True
+    with self.assertRaises(RuntimeError) as ctx:
+      await client.setup()
+    self.assertIn("stop()", str(ctx.exception))
+
+  def test_clearing_session_state_drops_everything_scoped_to_the_session(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client._client_id = 5
+    client.client_address = Address(2, 5, 65535)
+    client._sequence_numbers[Address(1, 1, 257)] = 42
+    client._instrument_addresses["arm"] = Address(1, 1, 257)
+    client._global_object_addresses = [Address(1, 1, 1)]
+    client.registry.set_root_address(Address(1, 1, 1))
+    client.registry.register(
+      "root", ObjectInfo("root", "", method_count=0, subobject_count=0, address=Address(1, 1, 1))
+    )
+
+    client._clear_session_state_for_setup()
+
+    self.assertIsNone(client._client_id)
+    self.assertIsNone(client.client_address)
+    self.assertEqual(client._sequence_numbers, {})
+    self.assertEqual(client._instrument_addresses, {})
+    self.assertEqual(list(client.global_object_addresses), [])
+    self.assertIsNone(client.registry.get_root_address())
+    self.assertIsNone(client.registry.address_for("root"))
+    self.assertIsNone(client.registry.path(Address(1, 1, 1)))
+
+  def test_sequence_numbers_restart_after_a_session_ends(self):
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    dest = Address(1, 1, 257)
+    first = [client._allocate_sequence_number(dest) for _ in range(3)]
+    client._clear_session_state_for_setup()
+    self.assertEqual(client._allocate_sequence_number(dest), first[0])
+
+
 class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
   """The reader owns the socket for the session and routes frames by kind."""
 

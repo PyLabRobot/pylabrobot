@@ -17,9 +17,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Plate`: optional `stacking_z_height` parameter -- the per-plate vertical pitch when plates are stacked directly on top of each other (`size_z` minus the nesting overlap), mirroring `NestedTipRack.stacking_z_height`. Because it is a physical dimension, plates that differ in it no longer compare equal; `Plate` also now serializes `stacking_z_height` and the pre-existing `plate_type` so both round-trip through `deserialize`/`copy`. (#1110)
 - `ResourceStack`: bare plates stacked in the z direction now nest into one another by their `stacking_z_height` (a stack of `N` identical plates is `size_z + (N - 1) * stacking_z_height` tall, for both `get_size_z()` and child placement). Plates without a `stacking_z_height`, and plates wearing a lid, do not nest, so existing behaviour is unchanged. (#1112)
 
+- Background reader task on `pylabrobot.hamilton.transport.tcp.HamiltonTCPClient` that owns the socket for the session, so `on_event` subscribers receive events between commands and a response arriving with no command waiting is dropped and logged instead of being handed to the next command (#1195).
+- Command serialization on `HamiltonTCPClient`: one command is in flight at a time. The lock spans write through terminal response and is released before the response is decoded, because error enrichment sends further commands through the same path (#1195).
+- `ObjectRegistry.clear()` (`pylabrobot.hamilton.transport.tcp.introspection`), used to drop path and address mappings that are scoped to a single connected session (#1195).
+
 ### Fixed
 
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).
+- `HamiltonTCPClient` no longer retransmits a command after a failed read. A read timeout on a slow motion command previously re-sent it, which could execute the motion twice (#1195).
+- `HamiltonTCPClient.setup()` now resets all per-session state (client id, sequence numbers, instrument addresses, object registry) rather than carrying it into the new session, and refuses to run on an already-connected client instead of leaking the socket (#1195).
+
+### Changed
+
+- `HamiltonTCPClient` no longer reconnects automatically; `auto_reconnect` and `max_reconnect_attempts` are gone from its constructor. Recovery is `await client.stop()` followed by `await client.setup()`, matching every other transport in the library. `is_connected` remains for callers implementing their own policy (#1195).
+- `TCPCommand` declares `Response` and `uses_physical_channels` as class attributes instead of the transport inferring them by attribute probing. Commands with per-channel firmware errors must set `uses_physical_channels = True` to raise `ChannelizedError` (#1195).
 
 ## 0.2.1
 
