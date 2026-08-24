@@ -4,7 +4,7 @@ import types
 from typing import Deque, List, Sequence, Tuple
 from unittest.mock import patch
 
-from pylabrobot.btx.file_transfer_control import FileTransferControl
+from pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control import FileTransferControl
 from pylabrobot.capabilities.electroporation.standard import ElectroporationProtocol
 
 
@@ -121,14 +121,14 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     )
 
     with (
-      patch("pylabrobot.btx.file_transfer_control._HAS_LIST_PORTS", True),
+      patch("pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control._HAS_LIST_PORTS", True),
       patch(
-        "pylabrobot.btx.file_transfer_control.serial",
+        "pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control.serial",
         fake_serial_module,
         create=True,
       ),
       patch(
-        "pylabrobot.btx.file_transfer_control.Serial",
+        "pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control.Serial",
         _ConstructedSerial,
       ),
     ):

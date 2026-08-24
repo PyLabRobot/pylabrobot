@@ -11,7 +11,7 @@ pytest.importorskip("numpy")
 pytest.importorskip("PIL")
 pytest.importorskip("serial")
 
-from pylabrobot.btx.the_ghost_touch import (
+from pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch import (
   Detection,
   FRAME_BYTES,
   FRAME_H,
@@ -131,7 +131,10 @@ class TestTheGhostTouch(unittest.TestCase):
   def test_require_dependencies_reports_missing_tesseract(self):
     touch = TheGhostTouch(port="/dev/test")
 
-    with patch("pylabrobot.btx.the_ghost_touch.shutil.which", return_value=None):
+    with patch(
+      "pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch.shutil.which",
+      return_value=None,
+    ):
       with self.assertRaisesRegex(RuntimeError, "external `tesseract` command"):
         touch._require_dependencies()
 

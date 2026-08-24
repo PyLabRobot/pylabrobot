@@ -1,13 +1,13 @@
 import unittest
 from typing import Any, Dict, List, Optional, cast
 
-from pylabrobot.btx.file_transfer_control import FileTransferControl
-from pylabrobot.btx.gemini_x2 import (
+from pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control import FileTransferControl
+from pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2 import (
   BTXGeminiX2Driver,
   BTXGeminiX2ElectroporationBackend,
   GhostTouchFactory,
 )
-from pylabrobot.btx.ht200 import BTXHT200
+from pylabrobot.thermo_fisher.btx.gemini.X2.ht200 import BTXHT200
 from pylabrobot.capabilities.electroporation.standard import (
   ElectroporationPreparationDetails,
   ElectroporationProtocol,

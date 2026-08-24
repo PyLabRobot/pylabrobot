@@ -46,3 +46,43 @@ ALPS Heat Sealers
     ThermoScientificALPS5000
     ALPS5000Status
 
+BTX Gemini X2
+-------------
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BTXGeminiX2
+    BTXGeminiX2Driver
+    BTXGeminiX2ElectroporationBackend
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    FileTransferControl
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    TheGhostTouch
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.ht200
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BTXHT200
