@@ -1104,7 +1104,7 @@ class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
     client._connected = True
     self.assertIsNone(await client._read_one_message())
 
-  async def test_reader_survives_an_unparseable_frame(self):
+  async def test_reader_survives_an_unparsable_frame(self):
     """A malformed frame is skipped; the next command still gets its response."""
     client, queue = self._make_client([])
     task = asyncio.ensure_future(
