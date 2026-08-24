@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).
 - `HamiltonTCPClient` no longer retransmits a command after a failed read. A read timeout on a slow motion command previously re-sent it, which could execute the motion twice (#1195).
 - `HamiltonTCPClient.setup()` now resets all per-session state (client id, sequence numbers, instrument addresses, object registry) rather than carrying it into the new session, and refuses to run on an already-connected client instead of leaking the socket (#1195).
+- `HamiltonTCPClient` no longer fails every command after the device sends a HARP control frame. MLPrep firmware sends one (options, no HOI body) shortly after registration; it was parsed as a command response and killed the reader. Frames with no routable message are skipped, as are unparseable frames, which is safe because frames are length-prefixed and consumed whole (#1195).
 
 ### Changed
 
