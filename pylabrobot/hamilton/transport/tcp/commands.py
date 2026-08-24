@@ -47,9 +47,12 @@ class TCPCommand:
   """
 
   # Class-level attributes that subclasses must override
-  protocol: ClassVar[Optional[HamiltonProtocol]] = None
-  interface_id: ClassVar[Optional[int]] = None
-  command_id: ClassVar[Optional[int]] = None
+  # Not ClassVar: subclasses may redeclare these as per-instance dataclass fields
+  # when the value varies per command instance rather than per type (see
+  # PrepStatusRequest, which carries command_id on the instance).
+  protocol: Optional[HamiltonProtocol] = None
+  interface_id: Optional[int] = None
+  command_id: Optional[int] = None
 
   # Nested dataclass describing the success payload, shadowed by subclasses that
   # declare one. None means the command decodes its own response via
@@ -62,10 +65,10 @@ class TCPCommand:
   # instrument-wide fault to a synthetic ch0.
   uses_physical_channels: ClassVar[bool] = False
 
-  # Action configuration (can be overridden by subclasses)
-  action_code: ClassVar[int] = 3  # Default: COMMAND_REQUEST
-  harp_protocol: ClassVar[int] = 2  # Default: HOI2
-  ip_protocol: ClassVar[int] = 6  # Default: OBJECT_DISCOVERY
+  # Action configuration (can be overridden by subclasses, per type or per instance)
+  action_code: int = 3  # Default: COMMAND_REQUEST
+  harp_protocol: int = 2  # Default: HOI2
+  ip_protocol: int = 6  # Default: OBJECT_DISCOVERY
 
   def __init__(self, dest: Address):
     """Initialize TCP command.
