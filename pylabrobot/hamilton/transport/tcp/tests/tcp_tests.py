@@ -890,6 +890,84 @@ class TestConnectionLifecycle(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(client._allocate_sequence_number(dest), first[0])
 
 
+class TestErrorEnrichmentRecursion(unittest.IsolatedAsyncioTestCase):
+  """A device that fails its own introspection queries must not recurse."""
+
+  async def test_device_failing_every_request_still_raises_once(self):
+    """Every read returns STATUS_EXCEPTION, including enrichment's own queries.
+
+    Enrichment asks the device for interface and method names; those queries hit
+    the same failure, which would enrich again. Without the re-entrancy guard this
+    recurses until the interpreter aborts (55 reads before RecursionError).
+    """
+    entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
+    err_params = (
+      HoiParams()
+      .add(
+        f"0x{entry.module_id:04X}.0x{entry.node_id:04X}.0x{entry.object_id:04X}:"
+        f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}",
+        Str,
+      )
+      .build()
+    )
+    reads = 0
+
+    class FakeClient(HamiltonTCPClient):
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        nonlocal reads
+        reads += 1
+        hoi = HoiPacket(
+          interface_id=1,
+          action_code=Hoi2Action.STATUS_EXCEPTION,
+          action_id=0,
+          params=err_params,
+        )
+        harp = HarpPacket(
+          src=Address(1, 1, 257),
+          dst=Address(2, 1, 65535),
+          seq=1,
+          protocol=2,
+          action_code=4,
+          payload=hoi.pack(),
+        )
+        return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+
+    # Real introspection, deliberately not stubbed: enrichment issues real queries.
+    with self.assertRaises(HoiError) as ctx:
+      await asyncio.wait_for(
+        client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=10
+      )
+
+    self.assertEqual(ctx.exception.entries[0].result, 0x0F08)
+    # Bounded work: the failing command plus enrichment's first query, no cascade.
+    self.assertLessEqual(reads, 5)
+
+  async def test_guard_is_released_so_later_errors_still_enrich(self):
+    """The re-entrancy guard must not leak across commands."""
+    from pylabrobot.hamilton.transport.tcp import tcp as tcp_module
+
+    self.assertFalse(tcp_module._enriching.get())
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client.introspection.get_interface_name = AsyncMock(return_value="Pipette")  # type: ignore[method-assign]
+    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    entry = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4E)
+    iface, _desc = await client._describe_entry(entry)
+    self.assertEqual(iface, "Pipette")
+    self.assertFalse(tcp_module._enriching.get())
+
+    # Second call still enriches rather than falling back to terse text.
+    iface2, _desc2 = await client._describe_entry(entry)
+    self.assertEqual(iface2, "Pipette")
+
+
 class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
   """The reader owns the socket for the session and routes frames by kind."""
 

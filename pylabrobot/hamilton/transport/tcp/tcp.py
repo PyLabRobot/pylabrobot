@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextvars import ContextVar
 from typing import Any, Callable, ClassVar, Dict, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand, hamilton_error_for_entry
@@ -65,6 +66,13 @@ from pylabrobot.io.socket import Socket
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 
 logger = logging.getLogger(__name__)
+
+# Set while an error is being turned into a readable message. Enrichment asks the
+# device for interface and method names, and those queries can themselves fail; without
+# this guard each failure would enrich again, recursing until the interpreter gives up.
+# A ContextVar rather than an attribute so concurrent callers cannot see each other's
+# state: a task inherits a copy of the context and its changes stay local to it.
+_enriching: ContextVar[bool] = ContextVar("hamilton_tcp_enriching", default=False)
 
 
 class HamiltonTCPClient:
@@ -145,8 +153,26 @@ class HamiltonTCPClient:
   def _invalidate_introspection_session(self) -> None:
     self._introspection_impl = None
 
+  @staticmethod
+  def _offline_description(entry: HcResultEntry) -> str:
+    """Describe an entry without asking the device anything."""
+    return HC_RESULT_PROTOCOL.get(entry.result) or f"HC_RESULT=0x{entry.result:04X}"
+
   async def _describe_entry(self, entry: HcResultEntry) -> Tuple[Optional[str], str]:
     """Resolve an HcResultEntry to (interface_name, description) for error reporting."""
+    if _enriching.get():
+      # Already describing an error: this entry belongs to a query that enrichment
+      # itself issued. Fall back to the static tables so a device that fails its
+      # introspection queries degrades to terse text instead of recursing.
+      return None, self._offline_description(entry)
+
+    token = _enriching.set(True)
+    try:
+      return await self._describe_entry_impl(entry)
+    finally:
+      _enriching.reset(token)
+
+  async def _describe_entry_impl(self, entry: HcResultEntry) -> Tuple[Optional[str], str]:
     addr = Address(entry.module_id, entry.node_id, entry.object_id)
     iface_name = await self.introspection.get_interface_name(addr, entry.interface_id)
     # Vendor tables key on (module, node, object_id, interface_id, hc_result). The wire
@@ -168,6 +194,16 @@ class HamiltonTCPClient:
   async def _format_entry_context(self, entry: HcResultEntry) -> Optional[str]:
     """Resolve an HcResultEntry to a human-readable method context string."""
     addr = Address(entry.module_id, entry.node_id, entry.object_id)
+    if _enriching.get():
+      return f"addr={addr}, iface={entry.interface_id}, action={entry.action_id}"
+
+    token = _enriching.set(True)
+    try:
+      return await self._format_entry_context_impl(entry, addr)
+    finally:
+      _enriching.reset(token)
+
+  async def _format_entry_context_impl(self, entry: HcResultEntry, addr: Address) -> Optional[str]:
     path = self._registry.path(addr)
     path_part = f"path={path}" if path else "path=?"
     descriptor = await self._lookup_method_descriptor(addr, entry.interface_id, entry.action_id)
