@@ -13,6 +13,7 @@ from typing import (
   TypeVar,
 )
 
+from pylabrobot.events import emit_event
 from pylabrobot.io.usb import USB
 
 T = TypeVar("T")
@@ -241,16 +242,34 @@ class HamiltonUSBDriver(metaclass=ABCMeta):
       auto_id=auto_id,
       **kwargs,
     )
-    resp = await self._write_and_read_command(
-      id_=id_,
-      cmd=cmd,
-      write_timeout=write_timeout,
-      read_timeout=read_timeout,
-      wait=wait,
-    )
-    if resp is not None and fmt is not None:
-      return self._parse_response(resp, fmt)
-    return resp
+    event_data = {
+      "transport": "hamilton_usb",
+      "driver": type(self).__name__,
+      "module": module,
+      "command": command,
+      "command_id": id_,
+      "raw_command": cmd,
+    }
+    emit_event("firmware.command.started", **event_data)
+    try:
+      resp = await self._write_and_read_command(
+        id_=id_,
+        cmd=cmd,
+        write_timeout=write_timeout,
+        read_timeout=read_timeout,
+        wait=wait,
+      )
+      result = self._parse_response(resp, fmt) if resp is not None and fmt is not None else resp
+    except BaseException as error:
+      emit_event(
+        "firmware.command.failed",
+        **event_data,
+        error_type=type(error).__name__,
+        error_message=str(error),
+      )
+      raise
+    emit_event("firmware.command.completed", **event_data, response=resp)
+    return result
 
   async def _write_and_read_command(
     self,

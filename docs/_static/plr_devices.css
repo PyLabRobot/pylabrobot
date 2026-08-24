@@ -1,0 +1,330 @@
+/* ==== PyLabRobot device registry: tables and cards ==== */
+
+.plr-devices {
+  --plr-device-radius: 8px;
+  margin: 1.25rem 0 2rem;
+}
+
+/* ---- Search ---- */
+
+.plr-device-search {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.plr-device-search__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--pst-color-border, #ccc);
+  border-radius: var(--plr-device-radius);
+  background: var(--pst-color-surface, #f7f7f7);
+  color: var(--pst-color-text-base, #222);
+  font-size: 0.95rem;
+}
+
+.plr-device-search__input:focus {
+  outline: none;
+  border-color: var(--pst-color-primary, #1a4ed8);
+  box-shadow: 0 0 0 2px rgba(26, 78, 216, 0.18);
+}
+
+/* ---- Filter chips ---- */
+
+.plr-device-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.plr-device-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.plr-device-chips__label {
+  flex: 0 0 5.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--pst-color-text-muted, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.plr-device-chip {
+  padding: 0.15rem 0.65rem;
+  border: 1px solid var(--pst-color-border, #ccc);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--pst-color-text-base, #222);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.plr-device-chip:hover {
+  border-color: var(--pst-color-primary, #1a4ed8);
+  color: var(--pst-color-primary, #1a4ed8);
+}
+
+.plr-device-chip[aria-pressed="true"] {
+  background: var(--pst-color-primary, #1a4ed8);
+  border-color: var(--pst-color-primary, #1a4ed8);
+  color: #fff;
+}
+
+/* ---- Table ---- */
+
+.plr-device-table-wrapper {
+  overflow-x: auto;
+}
+
+table.plr-device-table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  table-layout: auto;
+}
+
+table.plr-device-table th,
+table.plr-device-table td {
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--pst-color-border, #e0e0e0);
+}
+
+table.plr-device-table th {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--pst-color-text-muted, #666);
+  white-space: nowrap;
+}
+
+table.plr-device-table tbody tr:hover {
+  background: var(--pst-color-surface, #f4f4f4);
+}
+
+/* Filtering hides rows with the hidden attribute; make sure no theme rule reinstates them. */
+table.plr-device-table tbody tr[hidden] {
+  display: none;
+}
+
+/* Vendor and device names wrap within the same width rather than stretching the table. */
+table.plr-device-table td:first-child,
+td.plr-device-name {
+  max-width: 11rem;
+}
+
+td.plr-device-name {
+  font-weight: 600;
+}
+
+td.plr-device-capabilities {
+  min-width: 12rem;
+}
+
+.plr-device-note {
+  margin-left: 0.15rem;
+  color: var(--pst-color-text-muted, #666);
+}
+
+/* ---- Tooltips ---- */
+
+/* The table scrolls horizontally, and an overflow container clips absolutely positioned children
+   on both axes. So the tooltip is a single element on <body>, positioned by plr_devices.js, and
+   is never inside the thing it would be clipped by. */
+
+.plr-tip {
+  cursor: help;
+}
+
+.plr-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 18rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  background: var(--pst-color-text-base, #222);
+  color: var(--pst-color-background, #fff);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.plr-tooltip[data-visible="true"] {
+  opacity: 1;
+}
+
+/* ---- Badges ---- */
+
+/* Tints rather than fixed palettes: a translucent hue darkens a light background and lightens a
+   dark one, and the text is inherited. One rule works in both themes, and matches the inline
+   styling of the cards generated into the notebooks. */
+
+.plr-device-badge,
+.plr-device-status {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--plr-device-radius);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: inherit;
+}
+
+.plr-device-badge {
+  margin: 0 0.25rem 0.2rem 0;
+  background: hsl(var(--plr-badge-hue, 210) 70% 50% / 0.22);
+  border: 1px solid hsl(var(--plr-badge-hue, 210) 70% 50% / 0.45);
+}
+
+.plr-device-status {
+  font-weight: 600;
+  background: hsl(var(--plr-status-hue) 70% 50% / 0.22);
+  border: 1px solid hsl(var(--plr-status-hue) 70% 50% / 0.45);
+}
+
+.plr-device-status--full { --plr-status-hue: 145; }
+.plr-device-status--mostly { --plr-status-hue: 215; }
+.plr-device-status--basic { --plr-status-hue: 45; }
+
+.plr-device-status--wip {
+  background: rgba(127, 127, 127, 0.09);
+  border: 1px solid rgba(127, 127, 127, 0.35);
+}
+
+.plr-device-api-version {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--pst-color-border, #ccc);
+  border-radius: var(--plr-device-radius);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--pst-color-text-muted, #666);
+}
+
+.plr-device-link + .plr-device-link {
+  margin-left: 0.5rem;
+}
+
+/* One fixed slot per link kind, so docs/code/OEM line up down the column even when a device is
+   missing one of them. */
+td.plr-device-links {
+  white-space: nowrap;
+}
+
+.plr-device-slot {
+  display: inline-block;
+  width: 4.4rem;
+}
+
+/* ---- Card ---- */
+
+.plr-device-card {
+  --plr-device-radius: 8px;
+  margin: 1.25rem 0;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.09);
+}
+
+.plr-device-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.plr-device-card__vendor {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pst-color-text-muted, #666);
+}
+
+.plr-device-card__name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--pst-color-text-base, #111);
+}
+
+.plr-device-card__status {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.plr-device-card__kind {
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+  color: var(--pst-color-text-muted, #666);
+}
+
+.plr-device-card__badges {
+  margin-top: 0.6rem;
+}
+
+.plr-device-card__badges:empty {
+  display: none;
+}
+
+.plr-device-card__row {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.plr-device-card__key {
+  flex: 0 0 4.6rem;
+  font-weight: 600;
+  color: var(--pst-color-text-muted, #666);
+}
+
+.plr-device-card__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+code.plr-device-api {
+  font-size: 0.82rem;
+  background: transparent;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.plr-device-card__links {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.plr-device-card__links:empty {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .plr-device-chips__label {
+    flex-basis: 100%;
+  }
+}
