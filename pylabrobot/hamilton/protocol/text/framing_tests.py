@@ -2,6 +2,7 @@ import datetime
 import unittest
 
 from pylabrobot.hamilton.protocol.text.framing import (
+  assemble_channel_command,
   assemble_command,
   find_error_fields,
   parse_firmware_version_date,
@@ -97,22 +98,32 @@ class TestAssembleCommand(unittest.TestCase):
       assemble_command("C0", "TT", id_=2, tt="04", tf=True, tl="0871"), "C0TTid0002tt04tf1tl0871"
     )
 
-  def test_list_is_one_hot_expanded_and_marked_when_short_of_the_channels(self):
-    # two values across three channels, of which the third is not involved; the trailing "&" says
-    # the list stops short of the machine's channel count
-    self.assertEqual(
-      assemble_command(
-        "C0", "TP", id_=3, tip_pattern=[True, True, False], num_channels=8, xp=[100, 200]
-      ),
-      "C0TPid0003xp100 200 100&",
-    )
-
   def test_trailing_underscore_is_stripped_so_reserved_words_can_be_parameters(self):
     self.assertEqual(assemble_command("C0", "ZA", id_=4, za="2000", in_="5"), "C0ZAid0004za2000in5")
 
   def test_parameter_name_must_be_two_characters(self):
     with self.assertRaises(ValueError):
       assemble_command("C0", "ZA", id_=1, zzz="2000")
+
+
+class TestAssembleChannelCommand(unittest.TestCase):
+  """A list parameter carries one value per involved channel and is expanded to one per channel."""
+
+  def test_list_is_one_hot_expanded_and_marked_when_short_of_the_channels(self):
+    # two values across three channels, of which the third is not involved; the trailing "&" says
+    # the list stops short of the machine's channel count
+    self.assertEqual(
+      assemble_channel_command(
+        "C0", "TP", tip_pattern=[True, True, False], num_channels=8, id_=3, xp=[100, 200]
+      ),
+      "C0TPid0003xp100 200 100&",
+    )
+
+  def test_a_full_length_list_is_left_alone_and_unmarked(self):
+    self.assertEqual(
+      assemble_channel_command("C0", "TP", tip_pattern=None, num_channels=3, id_=1, xp=[1, 2, 3]),
+      "C0TPid0001xp1 2 3",
+    )
 
 
 class TestFindErrorFields(unittest.TestCase):

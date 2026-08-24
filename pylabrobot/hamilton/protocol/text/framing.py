@@ -11,7 +11,7 @@ either. What a given value *means* belongs with the machine that reports it.
 
 import datetime
 import re
-from typing import Dict, List, Optional, Sequence, TypeVar
+from typing import Any, Dict, List, Optional, Sequence, TypeVar
 
 T = TypeVar("T")
 
@@ -218,8 +218,6 @@ def assemble_command(
   module: str,
   command: str,
   id_: Optional[int] = None,
-  tip_pattern: Optional[List[bool]] = None,
-  num_channels: Optional[int] = None,
   **kwargs,
 ) -> str:
   """Assemble a firmware command.
@@ -228,21 +226,15 @@ def assemble_command(
     module: 2 character module identifier (C0 for master, ...)
     command: 2 character command identifier (QM for request status, ...)
     id_: The command id, written as `id####` immediately after the command. Omitted when None.
-    tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
-      This value is used to convert the list values in kwargs to the correct length.
-    num_channels: The machine's channel count, needed only to terminate a list parameter that is
-      shorter than the head.
     kwargs: any named parameters. The parameter name should also be 2 characters long. The value
-      can be any size.
+      can be any size. A trailing underscore is stripped, so reserved words can be parameters.
 
   Returns:
     The assembled command string.
 
   Raises:
     ValueError: If a keyword argument is not 2 characters long.
-    RuntimeError: If a list parameter is given without `num_channels`.
   """
-
   cmd = module + command
   if id_ is not None:
     cmd += f"id{id_:04}"  # id has to be the first param
@@ -253,30 +245,67 @@ def assemble_command(
     elif isinstance(v, bool):
       v = 1 if v else 0
     elif isinstance(v, list):
-      # If this command is 'one-hot' encoded, for the channels, then the list should be the
-      # same length as the 'one-hot' encoding key (tip_pattern.) If the list is shorter than
-      # that, it will be 'one-hot encoded automatically. Note that this may raise an error if
-      # the number of values provided is not the same as the number of channels used.
-      if tip_pattern is not None:
-        if len(v) != len(tip_pattern):
-          # convert one-hot encoded list to int list
-          v = to_list(v, tip_pattern)
-        # list is now of length len(tip_pattern)
-      if isinstance(v[0], bool):  # convert bool list to int list
-        v = [int(x) for x in v]
-      if num_channels is None:
-        raise RuntimeError(
-          f"encoding the list parameter '{k}' needs the machine's channel count, which is only "
-          "known after setup"
-        )
-      v = " ".join([str(e) for e in v]) + ("&" if len(v) < num_channels else "")
-    if k.endswith("_"):  # workaround for kwargs named in, as, ...
+      v = " ".join(str(e) for e in v)
+    if k.endswith("_"):
       k = k[:-1]
     if len(k) != 2:
       raise ValueError("Keyword arguments should be 2 characters long, but got: " + k)
     cmd += f"{k}{v}"
 
   return cmd
+
+
+def encode_channel_list(
+  values: List[Any],
+  tip_pattern: List[bool],
+  num_channels: int,
+) -> str:
+  """Encode one parameter that carries a value per channel.
+
+  Args:
+    values: One value per involved channel, or one per channel of the machine.
+    tip_pattern: Which channels are involved.
+    num_channels: The machine's channel count.
+
+  Returns:
+    The values separated by spaces, terminated with `&` when they stop short of the machine.
+  """
+  if len(values) != len(tip_pattern):
+    values = to_list(values, tip_pattern)
+  if isinstance(values[0], bool):
+    values = [int(x) for x in values]
+  return " ".join(str(v) for v in values) + ("&" if len(values) < num_channels else "")
+
+
+def assemble_channel_command(
+  module: str,
+  command: str,
+  tip_pattern: Optional[List[bool]],
+  num_channels: int,
+  id_: Optional[int] = None,
+  **kwargs,
+) -> str:
+  """Assemble a firmware command whose list parameters carry a value per channel.
+
+  Args:
+    module: 2 character module identifier.
+    command: 2 character command identifier.
+    tip_pattern: Which channels are involved, used to expand a list given per involved channel.
+      When None, a list is taken to already hold one value per channel.
+    num_channels: The machine's channel count.
+    id_: The command id. Omitted when None.
+    kwargs: any named parameters.
+
+  Returns:
+    The assembled command string.
+  """
+  encoded: Dict[str, Any] = {
+    k: encode_channel_list(v, tip_pattern or [True] * len(v), num_channels)
+    if isinstance(v, list)
+    else v
+    for k, v in kwargs.items()
+  }
+  return assemble_command(module, command, id_=id_, **encoded)
 
 
 def find_error_fields(
