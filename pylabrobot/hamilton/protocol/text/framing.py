@@ -11,6 +11,12 @@ either. What a given value *means* belongs with the machine that reports it.
 
 import datetime
 import re
+from typing import Dict, List, Optional, Sequence, TypeVar
+
+T = TypeVar("T")
+
+# Error fields that mean "no error".
+_NO_ERROR_FIELDS = ("00", "00/00")
 
 
 def parse_fw_string(resp: str, fmt: str = "") -> dict:
@@ -168,3 +174,170 @@ def parse_firmware_version_date(fw_version: str) -> datetime.date:
   if year_match is None:
     raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
   return datetime.date(int(year_match.group(1)), 1, 1)
+
+
+def to_list(val: List[T], tip_pattern: List[bool]) -> List[T]:
+  """Convert a list of values to a list of values with the correct length.
+
+  This is roughly one-hot encoding. STAR expects a value for a list parameter at the position
+  for the corresponding channel. If `tip_pattern` is False, there, the value itself is ignored,
+  but it must be present.
+
+  Args:
+    val: A list of values, exactly one for each channel that is involved in the operation.
+    tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
+
+  Returns:
+    A list of values with the correct length. Each value that is not involved in the operation
+    is set to the first value in `val`, which is ignored by STAR.
+  """
+
+  # use the default value if a channel is not involved, otherwise use the value in val
+  if len(val) == 0:
+    raise ValueError("val must not be empty")
+  if len(val) > len(tip_pattern):
+    raise ValueError(f"val has more entries ({len(val)}) than tip_pattern ({len(tip_pattern)})")
+
+  result: List[T] = []
+  arg_index = 0
+  for channel_involved in tip_pattern:
+    if channel_involved:
+      if arg_index >= len(val):
+        raise ValueError(f"Too few values for tip pattern {tip_pattern}: {val}")
+      result.append(val[arg_index])
+      arg_index += 1
+    else:
+      # this value will be ignored, so just use a value we know is valid
+      result.append(val[0])
+  if arg_index < len(val):
+    raise ValueError(f"Too many values for tip pattern {tip_pattern}: {val}")
+  return result
+
+
+def assemble_command(
+  module: str,
+  command: str,
+  id_: Optional[int] = None,
+  tip_pattern: Optional[List[bool]] = None,
+  num_channels: Optional[int] = None,
+  **kwargs,
+) -> str:
+  """Assemble a firmware command.
+
+  Args:
+    module: 2 character module identifier (C0 for master, ...)
+    command: 2 character command identifier (QM for request status, ...)
+    id_: The command id, written as `id####` immediately after the command. Omitted when None.
+    tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
+      This value is used to convert the list values in kwargs to the correct length.
+    num_channels: The machine's channel count, needed only to terminate a list parameter that is
+      shorter than the head.
+    kwargs: any named parameters. The parameter name should also be 2 characters long. The value
+      can be any size.
+
+  Returns:
+    The assembled command string.
+
+  Raises:
+    ValueError: If a keyword argument is not 2 characters long.
+    RuntimeError: If a list parameter is given without `num_channels`.
+  """
+
+  cmd = module + command
+  if id_ is not None:
+    cmd += f"id{id_:04}"  # id has to be the first param
+
+  for k, v in kwargs.items():
+    if isinstance(v, datetime.datetime):
+      v = v.strftime("%Y-%m-%d %h:%M")
+    elif isinstance(v, bool):
+      v = 1 if v else 0
+    elif isinstance(v, list):
+      # If this command is 'one-hot' encoded, for the channels, then the list should be the
+      # same length as the 'one-hot' encoding key (tip_pattern.) If the list is shorter than
+      # that, it will be 'one-hot encoded automatically. Note that this may raise an error if
+      # the number of values provided is not the same as the number of channels used.
+      if tip_pattern is not None:
+        if len(v) != len(tip_pattern):
+          # convert one-hot encoded list to int list
+          v = to_list(v, tip_pattern)
+        # list is now of length len(tip_pattern)
+      if isinstance(v[0], bool):  # convert bool list to int list
+        v = [int(x) for x in v]
+      if num_channels is None:
+        raise RuntimeError(
+          f"encoding the list parameter '{k}' needs the machine's channel count, which is only "
+          "known after setup"
+        )
+      v = " ".join([str(e) for e in v]) + ("&" if len(v) < num_channels else "")
+    if k.endswith("_"):  # workaround for kwargs named in, as, ...
+      k = k[:-1]
+    if len(k) != 2:
+      raise ValueError("Keyword arguments should be 2 characters long, but got: " + k)
+    cmd += f"{k}{v}"
+
+  return cmd
+
+
+def find_error_fields(
+  resp: str,
+  module_id_length: int,
+  master_module_id: str,
+  other_module_ids: Sequence[str],
+) -> Dict[str, str]:
+  """Find the error field each module reported in a reply.
+
+  The master reports `er<code>/<trace>` and may append one field per failing module. Any other
+  module, addressed directly, reports `er<trace>` and never carries nested fields. Fields meaning
+  "no error" are dropped, so an empty result means the reply is clean.
+
+  Args:
+    resp: The reply as received from the machine.
+    module_id_length: Number of characters in a module identifier.
+    master_module_id: The identifier of the master module, e.g. `"C0"`.
+    other_module_ids: Every module the master may report alongside itself, in the order it lists
+      them.
+
+  Returns:
+    The error field of each failing module, keyed by module identifier. Empty if none failed.
+  """
+  module = resp[:module_id_length]
+
+  if module == master_module_id:
+    exp = rf"er(?P<{master_module_id}>[0-9]{{2}}/[0-9]{{2}})"
+    for other in other_module_ids:
+      exp += f" ?(?:{other}(?P<{other}>[0-9]{{2}}/[0-9]{{2}}))?"
+  else:
+    exp = f"er(?P<{module}>[0-9]{{2}})"
+
+  match = re.search(exp, resp)
+  if match is None:
+    return {}
+
+  return {
+    module_id: field
+    for module_id, field in match.groupdict().items()
+    if field is not None and field not in _NO_ERROR_FIELDS
+  }
+
+
+def read_id(command: str) -> Optional[int]:
+  """Read the `id####` a raw command string carries, if any.
+
+  Args:
+    command: A fully assembled command string.
+
+  Returns:
+    Its id, or None if it carries none.
+
+  Raises:
+    ValueError: If an `id` marker is present but not followed by 4 digits.
+  """
+  id_index = command.find("id")
+  if id_index == -1:
+    return None
+
+  id_str = command[id_index + 2 : id_index + 6]
+  if not id_str.isdigit():
+    raise ValueError("Id must be a 4 digit int.")
+  return int(id_str)
