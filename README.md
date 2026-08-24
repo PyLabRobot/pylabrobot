@@ -5,7 +5,7 @@
 <div style="text-align: center" align="center">
 <a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> |
 <a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> |
-<a href="https://docs.pylabrobot.org/stable/user_guide/_getting-started/installation.html"><strong>Installation</strong></a> |
+<a href="https://docs.pylabrobot.org/stable/user_guide/getting-started/installation.html"><strong>Installation</strong></a> |
 <a href="https://docs.pylabrobot.org/stable/user_guide/index.html"><strong>Getting started</strong></a>
 </div>
 
@@ -193,7 +193,7 @@ await tc.run_pcr_profile(
 
 [docs.pylabrobot.org](https://docs.pylabrobot.org)
 
-- [Installation](https://docs.pylabrobot.org/stable/user_guide/_getting-started/installation.html)
+- [Installation](https://docs.pylabrobot.org/stable/user_guide/getting-started/installation.html)
 - [Getting Started](https://docs.pylabrobot.org/stable/user_guide/index.html)
 - [Contributing](https://docs.pylabrobot.org/stable/contributor_guide/index.html)
 - [API Reference](https://docs.pylabrobot.org/stable/api/pylabrobot.html)

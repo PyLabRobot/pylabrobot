@@ -1,15 +1,19 @@
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from pylabrobot.serializer import serialize
 from pylabrobot.utils.interpolation import interpolate_1d
 
 from .coordinate import Coordinate
+from .lid import Liddable
 from .resource import Resource
 from .volume_tracker import VolumeTracker
 
 
-class Container(Resource):
-  """A container is an abstract base class for a resource that can hold liquid."""
+class Container(Liddable, Resource):
+  """A container is an abstract base class for a resource that can hold liquid.
+
+  Via the :class:`Liddable` mixin, a container (trough, tube, petri dish, well) can host a lid.
+  """
 
   def __init__(
     self,
@@ -25,6 +29,7 @@ class Container(Resource):
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones: Optional[List[Tuple[Coordinate, Coordinate]]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Create a new container.
 
@@ -48,6 +53,7 @@ class Container(Resource):
       size_z=size_z,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self._material_z_thickness = material_z_thickness
     self.height_volume_data = (

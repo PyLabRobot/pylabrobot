@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -42,6 +42,7 @@ class ResourceHolder(Resource):
     model=None,
     child_location: Coordinate = Coordinate.zero(),
     preferred_pickup_location: Optional[Coordinate] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     Resource.__init__(
       self,
@@ -53,6 +54,7 @@ class ResourceHolder(Resource):
       category=category,
       model=model,
       preferred_pickup_location=preferred_pickup_location,
+      metadata=metadata,
     )
     self.child_location = child_location
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import warnings
 from abc import ABCMeta
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Sequence, Union, cast
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip, TipCreator
@@ -30,6 +30,7 @@ class TipSpot(Resource):
     make_tip: TipCreator,
     size_z: float = 0,
     category: str = "tip_spot",
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Initialize a tip spot.
 
@@ -40,6 +41,7 @@ class TipSpot(Resource):
       size_z: the size of the tip spot in the z direction.
       make_tip: a function that creates a tip for the tip spot.
       category: the category of the tip spot.
+      metadata: metadata for the tip spot.
     """
 
     super().__init__(
@@ -48,6 +50,7 @@ class TipSpot(Resource):
       size_y=size_x,
       size_z=size_z,
       category=category,
+      metadata=metadata,
     )
     self.tracker = TipTracker(thing="Tip spot")
     self.parent: Optional["TipRack"] = None
@@ -122,9 +125,10 @@ class TipSpot(Resource):
       name=data["name"],
       size_x=data["size_x"],
       size_y=data["size_y"],
-      size_z=data["size_z"],
+      size_z=data.get("size_z", 0),
       make_tip=make_tip,
       category=data.get("category", "tip_spot"),
+      metadata=data.get("metadata"),
     )
 
   def serialize_state(self) -> Dict[str, Any]:
@@ -159,6 +163,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     category: str = "tip_rack",
     model: Optional[str] = None,
     with_tips: bool = True,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name,
@@ -169,6 +174,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       ordering=ordering,
       category=category,
       model=model,
+      metadata=metadata,
     )
 
     if ordered_items is not None and len(ordered_items) > 0:
