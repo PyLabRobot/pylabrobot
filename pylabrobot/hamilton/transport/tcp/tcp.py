@@ -90,11 +90,19 @@ class HamiltonTCPClient:
 
     self._connected = False
     self._connection_timeout = connection_timeout
+    self._read_timeout = read_timeout
 
     # Serializes command exchanges on the socket. TCP-side concurrency semantics
     # are not yet established for this protocol, so only one command is in flight
     # at a time (cf. pylabrobot.hamilton.star.lock for the STAR equivalent).
     self._command_lock = asyncio.Lock()
+
+    # Background reader. Owns the socket from the end of setup() until stop().
+    # Because the lock above allows one command in flight, the response handoff
+    # is a single slot rather than a map of pending requests.
+    self._reader_task: Optional[asyncio.Task] = None
+    self._pending_response: Optional[asyncio.Future] = None
+    self._pending_expect: Optional[Tuple[Address, int]] = None
 
     self._client_id: Optional[int] = None
     self.client_address: Optional[Address] = None
@@ -293,6 +301,68 @@ class HamiltonTCPClient:
     logger.warning(f"Unknown IP protocol: {ip_protocol}, attempting CommandResponse parse")
     return CommandResponse.from_bytes(complete_data)
 
+  def _is_reader_running(self) -> bool:
+    return self._reader_task is not None and not self._reader_task.done()
+
+  async def _reader_loop(self) -> None:
+    """Read frames continuously and route them to events or the waiting command.
+
+    Owning the socket for the whole session is what makes events observable
+    between commands, and what stops a late response from being mistaken for the
+    next command's answer.
+    """
+    try:
+      while True:
+        message = await self._read_one_message()
+        if not isinstance(message, CommandResponse):
+          logger.warning("Reader dropped an unexpected %s frame", type(message).__name__)
+          continue
+        action = Hoi2Action(message.hoi.action_code)
+        if action is Hoi2Action.EVENT:
+          # Already dispatched to subscribers by _read_one_message.
+          continue
+        if action is Hoi2Action.COMMAND_ACK:
+          logger.debug("COMMAND_ACK from %s; awaiting terminal response", message.harp.src)
+          continue
+        self._deliver_response(message)
+    except asyncio.CancelledError:
+      raise
+    except BaseException as exc:
+      # A live connection losing its reader would hang every later command, so
+      # hand the failure to whoever is waiting and make the cause visible.
+      self._fail_pending(exc)
+      if self._connected:
+        logger.exception("Hamilton TCP reader stopped unexpectedly: %s", exc)
+
+  def _deliver_response(self, message: CommandResponse) -> None:
+    future = self._pending_response
+    if future is None or future.done():
+      logger.warning(
+        "Dropping response from %s (action=%#x): no command is awaiting it",
+        message.harp.src,
+        message.hoi.action_code,
+      )
+      return
+
+    expected = self._pending_expect
+    if expected is not None and (message.harp.src, message.harp.seq) != expected:
+      # Whether the device echoes the request sequence number is not established,
+      # so this only reports the mismatch. Frequent warnings here mean the pairing
+      # is real and the single-slot handoff can become a keyed demux.
+      logger.warning(
+        "Response from %s seq=%d does not match outstanding command to %s seq=%d",
+        message.harp.src,
+        message.harp.seq,
+        expected[0],
+        expected[1],
+      )
+    future.set_result(message)
+
+  def _fail_pending(self, exc: BaseException) -> None:
+    future = self._pending_response
+    if future is not None and not future.done():
+      future.set_exception(exc)
+
   async def setup(self):
     if self._connected:
       raise RuntimeError(
@@ -305,6 +375,11 @@ class HamiltonTCPClient:
     await self._register_client()
     await self._discover_root()
     await self._discover_globals()
+
+    # The handshake above reads inline because it exchanges Init and Registration
+    # frames rather than commands. Everything past this point is HOI command
+    # traffic, so the reader takes over the socket here.
+    self._reader_task = asyncio.create_task(self._reader_loop())
 
     root_addr = self._registry.get_root_address()
     if root_addr is not None:
@@ -543,31 +618,55 @@ class HamiltonTCPClient:
       log_params = command.get_log_params()
       logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
 
-      await self.write(message)
+      if self._reader_task is not None and self._reader_task.done():
+        raise ConnectionError(
+          f"{self.io._unique_id} reader is not running - call stop() then setup()"
+        )
 
-      while True:
-        response_message = await self._read_one_message(timeout=read_timeout)
-        if not isinstance(response_message, CommandResponse):
-          raise RuntimeError(
-            f"Expected a CommandResponse for {command.__class__.__name__}, "
-            f"got {type(response_message).__name__}"
-          )
-        action = Hoi2Action(response_message.hoi.action_code)
-        if action is Hoi2Action.COMMAND_ACK:
-          logger.debug(
-            "%s COMMAND_ACK from %s; awaiting terminal response",
-            command.__class__.__name__,
-            response_message.harp.src,
-          )
-          continue
-        if action is Hoi2Action.EVENT:
-          logger.debug(
-            "%s EVENT from %s; skipping past to await terminal response",
-            command.__class__.__name__,
-            response_message.harp.src,
-          )
-          continue
-        return response_message
+      if not self._is_reader_running():
+        # Pre-setup: the reader does not own the socket yet, so read inline.
+        await self.write(message)
+        return await self._read_terminal_frame(command, read_timeout=read_timeout)
+
+      loop = asyncio.get_running_loop()
+      future: asyncio.Future = loop.create_future()
+      self._pending_response = future
+      self._pending_expect = (command.dest_address, command.sequence_number)
+      try:
+        await self.write(message)
+        timeout = self._read_timeout if read_timeout is None else read_timeout
+        return cast(CommandResponse, await asyncio.wait_for(future, timeout=timeout))
+      finally:
+        self._pending_response = None
+        self._pending_expect = None
+
+  async def _read_terminal_frame(
+    self, command: TCPCommand, *, read_timeout: Optional[float] = None
+  ) -> CommandResponse:
+    """Read inline until the first terminal frame. Used before the reader starts."""
+    while True:
+      response_message = await self._read_one_message(timeout=read_timeout)
+      if not isinstance(response_message, CommandResponse):
+        raise RuntimeError(
+          f"Expected a CommandResponse for {command.__class__.__name__}, "
+          f"got {type(response_message).__name__}"
+        )
+      action = Hoi2Action(response_message.hoi.action_code)
+      if action is Hoi2Action.COMMAND_ACK:
+        logger.debug(
+          "%s COMMAND_ACK from %s; awaiting terminal response",
+          command.__class__.__name__,
+          response_message.harp.src,
+        )
+        continue
+      if action is Hoi2Action.EVENT:
+        logger.debug(
+          "%s EVENT from %s; skipping past to await terminal response",
+          command.__class__.__name__,
+          response_message.harp.src,
+        )
+        continue
+      return response_message
 
   async def _send_raw(
     self,
@@ -725,11 +824,26 @@ class HamiltonTCPClient:
     return await self.resolve_path(resolved)
 
   async def stop(self):
+    # Mark disconnected first so the reader reports its own cancellation as an
+    # ordinary shutdown rather than an unexpected failure.
+    self._connected = False
+
+    reader_task = self._reader_task
+    self._reader_task = None
+    if reader_task is not None and not reader_task.done():
+      reader_task.cancel()
+      try:
+        await reader_task
+      except asyncio.CancelledError:
+        pass
+      except Exception as e:
+        logger.warning(f"Error while stopping reader: {e}")
+    self._fail_pending(ConnectionError(f"{self.io._unique_id} stopped - call setup()"))
+
     try:
       await self.io.stop()
     except Exception as e:
       logger.warning(f"Error during stop: {e}")
     finally:
-      self._connected = False
       self._invalidate_introspection_session()
     logger.info("Hamilton TCP client stopped")

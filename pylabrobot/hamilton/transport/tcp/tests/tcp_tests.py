@@ -795,6 +795,139 @@ class TestCommandSerialization(unittest.IsolatedAsyncioTestCase):
       )
 
 
+class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
+  """The reader owns the socket for the session and routes frames by kind."""
+
+  @staticmethod
+  def _frame(action_code: int, src: Address, seq: int = 1) -> CommandResponse:
+    hoi = HoiPacket(
+      interface_id=1,
+      action_code=action_code,
+      action_id=0,
+      params=HoiParams().add(1, I32).build(),
+    )
+    harp = HarpPacket(
+      src=src, dst=Address(2, 1, 65535), seq=seq, protocol=2, action_code=4, payload=hoi.pack()
+    )
+    return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+  def _make_client(self, frames: list):
+    """Client whose reader consumes *frames*, then blocks as an idle socket would."""
+    queue: asyncio.Queue = asyncio.Queue()
+    for f in frames:
+      queue.put_nowait(f)
+
+    class FakeClient(HamiltonTCPClient):
+      writes = 0
+
+      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
+        del data, timeout
+        FakeClient.writes += 1
+
+      async def _read_one_message(self, timeout=None):  # type: ignore[override]
+        del timeout
+        message = await queue.get()
+        if isinstance(message, BaseException):
+          raise message
+        if message.hoi.action_code == Hoi2Action.EVENT:
+          self._dispatch_event(message)
+        return message
+
+    client = FakeClient(host="127.0.0.1", port=0)
+    client.client_address = Address(2, 1, 65535)
+    client._connected = True
+    client._reader_task = asyncio.create_task(client._reader_loop())
+    self.addAsyncCleanup(client.stop)
+    return client, queue
+
+  async def test_events_arriving_between_commands_reach_subscribers(self):
+    seen: list = []
+    client, queue = self._make_client([self._frame(Hoi2Action.EVENT, Address(1, 1, 257))])
+    client.on_event(seen.append)
+
+    # No command is in flight; the reader still has to observe the event.
+    del queue
+    for _ in range(10):
+      if seen:
+        break
+      await asyncio.sleep(0)
+
+    self.assertEqual(len(seen), 1)
+    self.assertEqual(seen[0].hoi.action_code, Hoi2Action.EVENT)
+
+  async def test_ack_is_skipped_and_terminal_frame_is_delivered(self):
+    client, _ = self._make_client(
+      [
+        self._frame(Hoi2Action.COMMAND_ACK, Address(1, 1, 257)),
+        self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)),
+      ]
+    )
+    result = await asyncio.wait_for(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+    )
+    self.assertIsNotNone(result)
+
+  async def test_unmatched_late_frame_is_not_given_to_the_next_command(self):
+    """A response arriving with no command waiting must be dropped, not queued."""
+    late = self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 999), seq=99)
+    client, queue = self._make_client([late])
+
+    # Let the reader consume the stale frame while nothing is awaiting it.
+    for _ in range(10):
+      if queue.empty():
+        break
+      await asyncio.sleep(0)
+
+    # The next command must wait for its own response, not inherit the stale one.
+    with self.assertRaises(asyncio.TimeoutError):
+      await asyncio.wait_for(
+        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=0.25
+      )
+
+    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
+    self.assertIsNotNone(
+      await asyncio.wait_for(
+        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+      )
+    )
+
+  async def test_reader_failure_fails_the_waiting_command(self):
+    """A dead reader must surface on the waiting command instead of hanging it."""
+
+    class Boom(Exception):
+      pass
+
+    client, queue = self._make_client([])
+    task = asyncio.ensure_future(
+      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+    )
+    for _ in range(10):
+      if client._pending_response is not None:
+        break
+      await asyncio.sleep(0)
+
+    queue.put_nowait(Boom())  # _read_one_message raises when the reader dequeues this
+
+    with self.assertRaises(Boom):
+      await asyncio.wait_for(task, timeout=5)
+
+  async def test_command_after_reader_death_reports_the_connection(self):
+    class Boom(Exception):
+      pass
+
+    client, queue = self._make_client([])
+    queue.put_nowait(Boom())
+    for _ in range(10):
+      if client._reader_task is not None and client._reader_task.done():
+        break
+      await asyncio.sleep(0)
+
+    with self.assertRaises(ConnectionError):
+      await asyncio.wait_for(
+        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+      )
+
+
 class TestHcResultDescriptionNimbusTable(unittest.IsolatedAsyncioTestCase):
   """NIMBUS_ERROR_CODES keys use interface_id in the 4th slot; describe_entry must match that."""
 
