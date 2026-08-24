@@ -2136,8 +2136,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         tip_presences_after_discard = await self.request_tip_presence()
         if any(tip_presences_after_discard):
           raise RuntimeError(
-            "Failed to discard tips during backend initialization: "
-            f"{tip_presences_after_discard}"
+            f"Failed to discard tips during backend initialization: {tip_presences_after_discard}"
           )
       self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
