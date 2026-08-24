@@ -24,8 +24,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.prep.error_tables import PREP_ERROR_CODES
+from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 

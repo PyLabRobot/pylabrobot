@@ -17,8 +17,8 @@ from typing import Annotated, cast
 from unittest.mock import AsyncMock
 
 import pylabrobot.hamilton.transport.tcp.introspection as introspection_mod
-from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.nimbus.error_tables import NIMBUS_ERROR_CODES
+from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.hoi_error import (
   HoiError,
   parse_hamilton_error_entries,
