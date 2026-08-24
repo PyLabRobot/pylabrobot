@@ -2,11 +2,24 @@
 
 Use :attr:`HamiltonTCPClient.introspection` as the **only** supported entry for
 Interface-0 discovery and type work.
+
+Connection lifecycle
+--------------------
+Connecting is always caller-driven. :meth:`HamiltonTCPClient.setup` performs the
+init handshake (during which the device assigns the client id that identifies the
+session), registers the client, and discovers the root and global objects. There
+is no automatic reconnection: if the connection drops, recovery is
+``await client.stop()`` followed by ``await client.setup()``.
+
+That is deliberate. Re-establishing the session cannot tell the caller whether an
+in-flight command completed, and it does not stop instrument motion, so continuity
+across a reconnect must never be assumed. Reconnecting silently would only hide
+when that happened. :attr:`HamiltonTCPClient.is_connected` is available for callers
+that want to implement their own policy.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Callable, ClassVar, Dict, Optional, Sequence, Tuple, Union, cast
 
@@ -55,8 +68,6 @@ class HamiltonTCPClient:
     port: int,
     read_timeout: float = 300.0,
     write_timeout: float = 30.0,
-    auto_reconnect: bool = True,
-    max_reconnect_attempts: int = 3,
     connection_timeout: int = 600,
   ):
     self.io = Socket(
@@ -68,9 +79,6 @@ class HamiltonTCPClient:
     )
 
     self._connected = False
-    self._reconnect_attempts = 0
-    self.auto_reconnect = auto_reconnect
-    self.max_reconnect_attempts = max_reconnect_attempts
     self._connection_timeout = connection_timeout
 
     self._client_id: Optional[int] = None
@@ -185,52 +193,27 @@ class HamiltonTCPClient:
         logger.exception("Event handler %r raised: %s", handler, exc)
 
   def _clear_session_state_for_setup(self) -> None:
+    """Drop every piece of state scoped to one connected session.
+
+    A session's identity is the client id the device assigns during the init
+    handshake. Sequence numbers, discovered object addresses and the path
+    registry are all keyed to that session and are meaningless — actively
+    misleading — once it ends, so ``setup()`` starts from empty every time.
+    """
+    self._client_id = None
+    self.client_address = None
+    self._sequence_numbers = {}
+    self._instrument_addresses = {}
     self._global_object_addresses = []
+    self._registry.clear()
     self._invalidate_introspection_session()
 
-  async def _ensure_connected(self):
+  def _require_connected(self) -> None:
     if not self._connected:
-      if not self.auto_reconnect:
-        raise ConnectionError(
-          f"{self.io._unique_id} Connection not established and auto-reconnect disabled"
-        )
-      logger.info(f"{self.io._unique_id} Connection not established, attempting to reconnect...")
-      await self._reconnect()
-
-  async def _reconnect(self):
-    if not self.auto_reconnect:
-      raise ConnectionError(f"{self.io._unique_id} Auto-reconnect disabled")
-
-    for attempt in range(self.max_reconnect_attempts):
-      try:
-        logger.info(
-          f"{self.io._unique_id} Reconnection attempt {attempt + 1}/{self.max_reconnect_attempts}"
-        )
-
-        try:
-          await self.stop()
-        except Exception:
-          pass
-
-        if attempt > 0:
-          wait_time = 1.0 * (2 ** (attempt - 1))
-          await asyncio.sleep(wait_time)
-
-        await self.setup()
-        self._reconnect_attempts = 0
-        logger.info(f"{self.io._unique_id} Reconnection successful")
-        return
-
-      except Exception as e:
-        logger.warning(f"{self.io._unique_id} Reconnection attempt {attempt + 1} failed: {e}")
-
-    self._connected = False
-    raise ConnectionError(
-      f"{self.io._unique_id} Failed to reconnect after {self.max_reconnect_attempts} attempts"
-    )
+      raise ConnectionError(f"{self.io._unique_id} not connected - call setup()")
 
   async def write(self, data: bytes, timeout: Optional[float] = None):
-    await self._ensure_connected()
+    self._require_connected()
 
     try:
       await self.io.write(data, timeout=timeout)
@@ -240,7 +223,7 @@ class HamiltonTCPClient:
       raise
 
   async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
-    await self._ensure_connected()
+    self._require_connected()
 
     try:
       data = await self.io.read(num_bytes, timeout=timeout)
@@ -251,7 +234,7 @@ class HamiltonTCPClient:
       raise
 
   async def read_exact(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
-    await self._ensure_connected()
+    self._require_connected()
 
     try:
       data = await self.io.read_exact(num_bytes, timeout=timeout)
@@ -296,10 +279,13 @@ class HamiltonTCPClient:
     return CommandResponse.from_bytes(complete_data)
 
   async def setup(self):
+    if self._connected:
+      raise RuntimeError(
+        f"{self.io._unique_id} already set up - call stop() before setting up again"
+      )
     self._clear_session_state_for_setup()
     await self.io.setup()
     self._connected = True
-    self._reconnect_attempts = 0
     await self._initialize_connection()
     await self._register_client()
     await self._discover_root()
@@ -464,7 +450,6 @@ class HamiltonTCPClient:
     """Send a command and return the interpreted response. Raises on any firmware error."""
     return await self._send_raw(
       command,
-      ensure_connection=True,
       return_raw=False,
       raise_on_error=True,
       read_timeout=read_timeout,
@@ -486,7 +471,6 @@ class HamiltonTCPClient:
       Optional[tuple],
       await self._send_raw(
         command,
-        ensure_connection=True,
         return_raw=True,
         raise_on_error=False,
         read_timeout=read_timeout,
@@ -499,10 +483,13 @@ class HamiltonTCPClient:
     *,
     read_timeout: Optional[float] = None,
   ) -> Any:
-    """Send an Interface-0 introspection command during setup (no reconnect on failure)."""
+    """Send an Interface-0 introspection command.
+
+    Behaviourally identical to :meth:`send_command`; kept as a distinct name so
+    introspection call sites read as discovery rather than device control.
+    """
     return await self._send_raw(
       command,
-      ensure_connection=False,
       return_raw=False,
       raise_on_error=True,
       read_timeout=read_timeout,
@@ -512,194 +499,171 @@ class HamiltonTCPClient:
     self,
     command: TCPCommand,
     *,
-    ensure_connection: bool,
     return_raw: bool,
     raise_on_error: bool,
     read_timeout: Optional[float] = None,
   ) -> Any:
-    connection_errors = (
-      BrokenPipeError,
-      ConnectionError,
-      ConnectionResetError,
-      ConnectionAbortedError,
-      TimeoutError,
-      OSError,
-    )
-    max_attempts = 2 if ensure_connection else 1
-    last_error: Optional[BaseException] = None
+    """Transmit *command* once and interpret the terminal response.
 
-    for attempt in range(max_attempts):
-      try:
-        if command.source_address is None:
-          if self.client_address is None:
-            raise RuntimeError(
-              "Client not initialized - call setup() first to assign client_address"
+    Never retransmits. A command that fails after the write has left the client
+    may or may not have been executed by the instrument, so re-sending it could
+    run a motion twice; recovery is the caller's decision.
+    """
+    if command.source_address is None:
+      if self.client_address is None:
+        raise RuntimeError("Client not initialized - call setup() first to assign client_address")
+      command.source_address = self.client_address
+
+    command.sequence_number = self._allocate_sequence_number(command.dest_address)
+    message = command.build()
+
+    log_params = command.get_log_params()
+    logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
+
+    await self.write(message)
+
+    while True:
+      response_message = await self._read_one_message(timeout=read_timeout)
+      assert isinstance(response_message, CommandResponse)
+      action = Hoi2Action(response_message.hoi.action_code)
+      if action is Hoi2Action.COMMAND_ACK:
+        logger.debug(
+          "%s COMMAND_ACK from %s; awaiting terminal response",
+          command.__class__.__name__,
+          response_message.harp.src,
+        )
+        continue
+      if action is Hoi2Action.EVENT:
+        logger.debug(
+          "%s EVENT from %s; skipping past to await terminal response",
+          command.__class__.__name__,
+          response_message.harp.src,
+        )
+        continue
+      break
+
+    if action in (
+      Hoi2Action.STATUS_EXCEPTION,
+      Hoi2Action.COMMAND_EXCEPTION,
+      Hoi2Action.INVALID_ACTION_RESPONSE,
+    ):
+      entries = parse_hamilton_error_entries(response_message.hoi.params)
+      if not entries:
+        raw = parse_hamilton_error_params(response_message.hoi.params)
+        enriched_msg = f"Hamilton error {action.name} (action={action:#x}): {raw}"
+        if raise_on_error:
+          logger.error(enriched_msg)
+          raise RuntimeError(enriched_msg)
+        logger.debug(enriched_msg)
+        return None
+
+      if command.error_entries_use_physical_channels():
+        per_channel: Dict[int, Exception] = {}
+        context_by_channel: Dict[int, Optional[str]] = {}
+        hoi_exceptions: Dict[int, Exception] = {}
+        for idx, entry in enumerate(entries):
+          _iface_name, desc = await self._describe_entry(entry)
+          err = hamilton_error_for_entry(entry, desc)
+          hoi_exceptions[idx] = err
+          channel = command._channel_index_for_entry(idx, entry)
+          if channel is None:
+            channel = idx
+          per_channel.setdefault(channel, err)
+          if channel not in context_by_channel:
+            context_by_channel[channel] = await self._format_entry_context(entry)
+
+        if raise_on_error:
+          channel_summary = ", ".join(
+            (
+              f"ch{ch}: {per_channel[ch]} ({context_by_channel[ch]})"
+              if context_by_channel.get(ch)
+              else f"ch{ch}: {per_channel[ch]}"
             )
-          command.source_address = self.client_address
-
-        command.sequence_number = self._allocate_sequence_number(command.dest_address)
-        message = command.build()
-
-        log_params = command.get_log_params()
-        logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
-
-        await self.write(message)
-
-        while True:
-          response_message = await self._read_one_message(timeout=read_timeout)
-          assert isinstance(response_message, CommandResponse)
-          action = Hoi2Action(response_message.hoi.action_code)
-          if action is Hoi2Action.COMMAND_ACK:
-            logger.debug(
-              "%s COMMAND_ACK from %s; awaiting terminal response",
-              command.__class__.__name__,
-              response_message.harp.src,
-            )
-            continue
-          if action is Hoi2Action.EVENT:
-            logger.debug(
-              "%s EVENT from %s; skipping past to await terminal response",
-              command.__class__.__name__,
-              response_message.harp.src,
-            )
-            continue
-          break
-
-        if action in (
-          Hoi2Action.STATUS_EXCEPTION,
-          Hoi2Action.COMMAND_EXCEPTION,
-          Hoi2Action.INVALID_ACTION_RESPONSE,
-        ):
-          entries = parse_hamilton_error_entries(response_message.hoi.params)
-          if not entries:
-            raw = parse_hamilton_error_params(response_message.hoi.params)
-            enriched_msg = f"Hamilton error {action.name} (action={action:#x}): {raw}"
-            if raise_on_error:
-              logger.error(enriched_msg)
-              raise RuntimeError(enriched_msg)
-            logger.debug(enriched_msg)
-            return None
-
-          if command.error_entries_use_physical_channels():
-            per_channel: Dict[int, Exception] = {}
-            context_by_channel: Dict[int, Optional[str]] = {}
-            hoi_exceptions: Dict[int, Exception] = {}
-            for idx, entry in enumerate(entries):
-              _iface_name, desc = await self._describe_entry(entry)
-              err = hamilton_error_for_entry(entry, desc)
-              hoi_exceptions[idx] = err
-              channel = command._channel_index_for_entry(idx, entry)
-              if channel is None:
-                channel = idx
-              per_channel.setdefault(channel, err)
-              if channel not in context_by_channel:
-                context_by_channel[channel] = await self._format_entry_context(entry)
-
-            if raise_on_error:
-              channel_summary = ", ".join(
-                (
-                  f"ch{ch}: {per_channel[ch]} ({context_by_channel[ch]})"
-                  if context_by_channel.get(ch)
-                  else f"ch{ch}: {per_channel[ch]}"
-                )
-                for ch in sorted(per_channel)
-              )
-              logger.error(
-                "Hamilton %s (action=%#x) on %d channel(s): %s",
-                action.name,
-                action,
-                len(per_channel),
-                channel_summary,
-              )
-              raise ChannelizedError(
-                errors=per_channel,
-                raw_response=response_message.hoi.params,
-                hoi_entries=list(entries),
-                hoi_exceptions=hoi_exceptions,
-              )
-            logger.debug(
-              "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
-              action.name,
-              action,
-              len(entries),
-            )
-            return None
-
-          entry_errors: Dict[int, Exception] = {}
-          context_by_idx: Dict[int, Optional[str]] = {}
-          for idx, entry in enumerate(entries):
-            _iface_name, desc = await self._describe_entry(entry)
-            err = hamilton_error_for_entry(entry, desc)
-            entry_errors[idx] = err
-            context_by_idx[idx] = await self._format_entry_context(entry)
-
-          if raise_on_error:
-            summary = ", ".join(
-              (
-                f"entry[{idx}]: {entry_errors[idx]} ({context_by_idx[idx]})"
-                if context_by_idx.get(idx)
-                else f"entry[{idx}]: {entry_errors[idx]}"
-              )
-              for idx in sorted(entry_errors)
-            )
-            logger.error(
-              "Hamilton %s (action=%#x), instrument-wide error (%d entries): %s",
-              action.name,
-              action,
-              len(entries),
-              summary,
-            )
-            raise HoiError(
-              exceptions=entry_errors,
-              entries=list(entries),
-              raw_response=response_message.hoi.params,
-            )
-          logger.debug(
-            "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
+            for ch in sorted(per_channel)
+          )
+          logger.error(
+            "Hamilton %s (action=%#x) on %d channel(s): %s",
             action.name,
             action,
-            len(entries),
+            len(per_channel),
+            channel_summary,
           )
-          return None
-
-        if return_raw:
-          return (response_message.hoi.params,)
-
-        result = command.interpret_response(response_message)
-        fatal = command.fatal_entries_by_channel(response_message)
-        if fatal:
-          fatal_per_channel: Dict[int, Exception] = {}
-          fatal_context_by_channel: Dict[int, Optional[str]] = {}
-          for ch, e in fatal.items():
-            _iface_name, desc = await self._describe_entry(e)
-            fatal_per_channel[ch] = hamilton_error_for_entry(e, desc)
-            fatal_context_by_channel[ch] = await self._format_entry_context(e)
-          logger.error(
-            "Hamilton command fatal entries: %s",
-            ", ".join(
-              (
-                f"ch{ch}: {fatal_per_channel[ch]} ({fatal_context_by_channel[ch]})"
-                if fatal_context_by_channel.get(ch)
-                else f"ch{ch}: {fatal_per_channel[ch]}"
-              )
-              for ch in sorted(fatal_per_channel)
-            ),
+          raise ChannelizedError(
+            errors=per_channel,
+            raw_response=response_message.hoi.params,
+            hoi_entries=list(entries),
+            hoi_exceptions=hoi_exceptions,
           )
-          raise ChannelizedError(errors=fatal_per_channel, raw_response=response_message.hoi.params)
-        return result
-
-      except connection_errors as e:
-        last_error = e
-        self._connected = False
-        if not self.auto_reconnect or attempt == max_attempts - 1:
-          raise
-        logger.warning(
-          f"{self.io._unique_id} Command failed (connection error), reconnecting and retrying: {e}"
+        logger.debug(
+          "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
+          action.name,
+          action,
+          len(entries),
         )
-        await self._reconnect()
+        return None
 
-    assert last_error is not None
-    raise last_error
+      entry_errors: Dict[int, Exception] = {}
+      context_by_idx: Dict[int, Optional[str]] = {}
+      for idx, entry in enumerate(entries):
+        _iface_name, desc = await self._describe_entry(entry)
+        err = hamilton_error_for_entry(entry, desc)
+        entry_errors[idx] = err
+        context_by_idx[idx] = await self._format_entry_context(entry)
+
+      if raise_on_error:
+        summary = ", ".join(
+          (
+            f"entry[{idx}]: {entry_errors[idx]} ({context_by_idx[idx]})"
+            if context_by_idx.get(idx)
+            else f"entry[{idx}]: {entry_errors[idx]}"
+          )
+          for idx in sorted(entry_errors)
+        )
+        logger.error(
+          "Hamilton %s (action=%#x), instrument-wide error (%d entries): %s",
+          action.name,
+          action,
+          len(entries),
+          summary,
+        )
+        raise HoiError(
+          exceptions=entry_errors,
+          entries=list(entries),
+          raw_response=response_message.hoi.params,
+        )
+      logger.debug(
+        "Hamilton %s (action=%#x) suppressed; entries=%d (raise_on_error=False)",
+        action.name,
+        action,
+        len(entries),
+      )
+      return None
+
+    if return_raw:
+      return (response_message.hoi.params,)
+
+    result = command.interpret_response(response_message)
+    fatal = command.fatal_entries_by_channel(response_message)
+    if fatal:
+      fatal_per_channel: Dict[int, Exception] = {}
+      fatal_context_by_channel: Dict[int, Optional[str]] = {}
+      for ch, e in fatal.items():
+        _iface_name, desc = await self._describe_entry(e)
+        fatal_per_channel[ch] = hamilton_error_for_entry(e, desc)
+        fatal_context_by_channel[ch] = await self._format_entry_context(e)
+      logger.error(
+        "Hamilton command fatal entries: %s",
+        ", ".join(
+          (
+            f"ch{ch}: {fatal_per_channel[ch]} ({fatal_context_by_channel[ch]})"
+            if fatal_context_by_channel.get(ch)
+            else f"ch{ch}: {fatal_per_channel[ch]}"
+          )
+          for ch in sorted(fatal_per_channel)
+        ),
+      )
+      raise ChannelizedError(errors=fatal_per_channel, raw_response=response_message.hoi.params)
+    return result
 
   async def resolve_path(self, path: str) -> Address:
     """Resolve dot-path to Address (delegates to introspection)."""

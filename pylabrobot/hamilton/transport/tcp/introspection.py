@@ -265,6 +265,12 @@ class ObjectRegistry:
     self._address_to_path: Dict[Address, str] = {}
     self._root_address: Optional[Address] = None
 
+  def clear(self) -> None:
+    """Drop every mapping. Object addresses are scoped to one connected session."""
+    self._objects.clear()
+    self._address_to_path.clear()
+    self._root_address = None
+
   def set_root_address(self, address: Address) -> None:
     self._root_address = address
 
