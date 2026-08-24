@@ -17,7 +17,7 @@ from pylabrobot.revvity.celigo.config import (
   LinearAxisConfig,
 )
 from pylabrobot.revvity.celigo.errors import CeligoError
-from pylabrobot.revvity.celigo.protocol import complete_cleanup, require_payload_length
+from pylabrobot.revvity.celigo.protocol import complete_cleanup, validate_payload_length
 
 if TYPE_CHECKING:
   from pylabrobot.revvity.celigo.celigo import Celigo
@@ -224,7 +224,7 @@ class MotorController:
 
     for attempt in range(attempts):
       response = await self._board.send_command(opcode, payload)
-      require_payload_length(response, 2, "motor query")
+      validate_payload_length(response, 2, "motor query")
       (extended_status,) = struct.unpack_from(">H", response, 0)
       if extended_status in (_NO_MOTOR_NUMBER, _BAD_MOTOR_NUMBER):
         raise CeligoError(
@@ -237,9 +237,9 @@ class MotorController:
       if extended_status != _NO_CONTROLLER_ERROR:
         raise CeligoError(f"Unexpected motor status {extended_status} for command {command!r}")
 
-      require_payload_length(response, 4, "motor query")
+      validate_payload_length(response, 4, "motor query")
       (response_length,) = struct.unpack_from(">H", response, 2)
-      require_payload_length(response, 4 + response_length, "motor query")
+      validate_payload_length(response, 4 + response_length, "motor query")
       motor_response = response[4 : 4 + response_length]
       if not uses_length_prefixed_commands:
         return motor_response.decode("latin-1")

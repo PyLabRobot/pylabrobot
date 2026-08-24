@@ -12,7 +12,7 @@ from pylabrobot.revvity.celigo.config import (
   load_galvo_optical_calibration,
   load_illumination_channels,
 )
-from pylabrobot.revvity.celigo.tests.helpers import make_linear_axis_config, require
+from pylabrobot.revvity.celigo.tests.helpers import make_linear_axis_config
 
 # A trimmed but structurally faithful USBIOHardwareConfig.config.
 COMMON_MOTOR_XML = """
@@ -130,7 +130,8 @@ class TestConfigFromXml(unittest.TestCase):
 
   def test_axes_parsed(self):
     cfg = CeligoHardwareConfig.from_xml(self.path)
-    x_axis = require(cfg.x_axis)
+    x_axis = cfg.x_axis
+    assert x_axis is not None
     self.assertEqual(x_axis.motion_name, "X Axis")
     self.assertEqual(x_axis.axis_index, 1)
     self.assertEqual(x_axis.comm_index, 1)
@@ -142,22 +143,28 @@ class TestConfigFromXml(unittest.TestCase):
 
   def test_type_coercion(self):
     cfg = CeligoHardwareConfig.from_xml(self.path)
-    x_axis = require(cfg.x_axis)
+    x_axis = cfg.x_axis
+    assert x_axis is not None
     self.assertIsInstance(x_axis.max_velocity, float)
     self.assertIsInstance(x_axis.axis_index, int)
     self.assertIsInstance(x_axis.enabled, bool)
 
   def test_unknown_field_kept_in_extra(self):
     cfg = CeligoHardwareConfig.from_xml(self.path)
-    self.assertEqual(require(cfg.x_axis).unrecognized_fields.get("SomeUnknownField"), "123")
+    x_axis = cfg.x_axis
+    assert x_axis is not None
+    self.assertEqual(x_axis.unrecognized_fields.get("SomeUnknownField"), "123")
 
   def test_z_axis_positions(self):
     cfg = CeligoHardwareConfig.from_xml(self.path)
-    self.assertEqual(require(cfg.z_axis).max_position, 14.5)
+    z_axis = cfg.z_axis
+    assert z_axis is not None
+    self.assertEqual(z_axis.max_position, 14.5)
 
   def test_filter_wheel(self):
     cfg = CeligoHardwareConfig.from_xml(self.path)
-    fw = require(cfg.dichroic_filter_wheel)
+    fw = cfg.dichroic_filter_wheel
+    assert fw is not None
     self.assertEqual(fw.number_of_filters, 6)
     self.assertEqual(len(fw.filter_map), 2)
     self.assertEqual(fw.filter_map[0].logical_number, 1)
@@ -166,7 +173,8 @@ class TestConfigFromXml(unittest.TestCase):
 
   def test_io_config(self):
     cfg = CeligoHardwareConfig.from_xml(self.path)
-    io = require(cfg.io)
+    io = cfg.io
+    assert io is not None
     self.assertEqual(len(io.lighting_ios), 2)
     self.assertEqual(io.lighting_ios[1].io_name, "Green 483/536")
     self.assertEqual(len(io.analog_ins), 1)
@@ -181,7 +189,9 @@ class TestDirectConstruction(unittest.TestCase):
     cfg = CeligoHardwareConfig(
       x_axis=make_linear_axis_config(motion_name="X", axis_index=1, max_velocity=50.0),
     )
-    self.assertEqual(require(cfg.x_axis).max_velocity, 50.0)
+    x_axis = cfg.x_axis
+    assert x_axis is not None
+    self.assertEqual(x_axis.max_velocity, 50.0)
     self.assertIsNone(cfg.y_axis)
 
 
@@ -303,7 +313,8 @@ class TestExtraLoaders(unittest.TestCase):
       "</XGalvo></USBIOConfigurationFile>",
     )
     cfg = CeligoHardwareConfig.from_xml(_write(xml))
-    x_galvo = require(cfg.x_galvo)
+    x_galvo = cfg.x_galvo
+    assert x_galvo is not None
     self.assertEqual(x_galvo.max_voltage, 10.0)
     self.assertTrue(x_galvo.invert_voltage)
     self.assertEqual(x_galvo.position_error_window, 20)
@@ -376,7 +387,9 @@ class TestAggregateConfig(unittest.TestCase):
       config = CeligoConfig.from_install(install_root)
 
     self.assertEqual(config.magnification, 3)
-    self.assertEqual(require(config.hardware.x_axis).motion_name, "X Axis")
+    x_axis = config.hardware.x_axis
+    assert x_axis is not None
+    self.assertEqual(x_axis.motion_name, "X Axis")
 
   def test_magnification_channels_are_memory_resident_after_load(self):
     with tempfile.TemporaryDirectory() as directory:

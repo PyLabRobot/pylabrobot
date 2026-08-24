@@ -6,7 +6,7 @@ import math
 import random
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, List, Literal, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Tuple, Union
 
 from pylabrobot.resources.plate import Plate
 from pylabrobot.revvity.celigo.camera import CameraFrame
@@ -16,8 +16,6 @@ from pylabrobot.revvity.celigo.navigation import effective_fov_mm, well_to_sampl
 
 if TYPE_CHECKING:
   from pylabrobot.revvity.celigo.celigo import FocusResult
-else:
-  FocusResult = Any
 
 
 CoordinateMM = Tuple[float, float]
@@ -27,12 +25,12 @@ AutofocusMethod = Literal["image", "hardware"]
 _EXACT_ROUTE_LIMIT = 14
 
 
-def _require_finite(value: float, name: str) -> None:
+def _validate_finite(value: float, name: str) -> None:
   if not math.isfinite(value):
     raise ValueError(f"{name} must be finite")
 
 
-def _require_positive_integer(value: int, name: str) -> None:
+def _validate_positive_integer(value: int, name: str) -> None:
   if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
     raise ValueError(f"{name} must be a positive integer")
 
@@ -41,8 +39,8 @@ def _validate_block_shape(block_shape: BlockShape) -> BlockShape:
   if not isinstance(block_shape, tuple) or len(block_shape) != 2:
     raise ValueError("block_shape must be a (columns, rows) tuple")
   columns, rows = block_shape
-  _require_positive_integer(columns, "block columns")
-  _require_positive_integer(rows, "block rows")
+  _validate_positive_integer(columns, "block columns")
+  _validate_positive_integer(rows, "block rows")
   return columns, rows
 
 
@@ -73,7 +71,7 @@ class ScanRegion:
       (self.right, "right"),
       (self.bottom, "bottom"),
     ):
-      _require_finite(value, name)
+      _validate_finite(value, name)
     if self.right <= self.left:
       raise ValueError("right must be greater than left")
     if self.bottom <= self.top:
@@ -119,10 +117,10 @@ class ScanEstimateModel:
       (self.seconds_per_stage_position, "seconds_per_stage_position"),
       (self.seconds_per_autofocus, "seconds_per_autofocus"),
     ):
-      _require_finite(value, name)
+      _validate_finite(value, name)
       if value < 0:
         raise ValueError(f"{name} must be non-negative")
-    _require_positive_integer(self.bytes_per_pixel, "bytes_per_pixel")
+    _validate_positive_integer(self.bytes_per_pixel, "bytes_per_pixel")
 
 
 @dataclass(frozen=True)
@@ -138,11 +136,11 @@ class Capture:
       raise ValueError("channel must be a non-empty string")
     object.__setattr__(self, "channel", self.channel.strip())
     if self.exposure_ms is not None:
-      _require_finite(self.exposure_ms, "exposure_ms")
+      _validate_finite(self.exposure_ms, "exposure_ms")
       if self.exposure_ms <= 0:
         raise ValueError("exposure_ms must be positive")
     if self.gain is not None:
-      _require_finite(self.gain, "gain")
+      _validate_finite(self.gain, "gain")
       if self.gain < 0:
         raise ValueError("gain must be non-negative")
 
@@ -256,7 +254,7 @@ class ScanSpec:
   ) -> "ScanSpec":
     """Create a reproducible random sample of blocks within physical bounds."""
     _validate_scan_region(bounds)
-    _require_positive_integer(count, "count")
+    _validate_positive_integer(count, "count")
     validated_shape = _validate_block_shape(block_shape)
     if isinstance(seed, bool) or not isinstance(seed, int):
       raise ValueError("seed must be an integer")
@@ -445,9 +443,7 @@ def build_scan_plan(
   if not isinstance(estimates, ScanEstimateModel):
     raise TypeError("estimate_model must be a ScanEstimateModel")
 
-  capture_geometries = tuple(
-    _capture_geometry(config, capture) for capture in spec.captures
-  )
+  capture_geometries = tuple(_capture_geometry(config, capture) for capture in spec.captures)
   layouts = _build_layouts(spec.geometry, capture_geometries)
   coordinate_systems = CoordinateSystems.from_config(
     config.calibration,
@@ -522,9 +518,7 @@ def _normalize_captures(
 ) -> Tuple[Capture, ...]:
   if captures is not None:
     if channel is not None or exposure_ms is not None or gain is not None:
-      raise ValueError(
-        "captures cannot be combined with channel, exposure_ms, or gain"
-      )
+      raise ValueError("captures cannot be combined with channel, exposure_ms, or gain")
     normalized = tuple(captures)
     if not normalized or any(not isinstance(capture, Capture) for capture in normalized):
       raise ValueError("captures must contain at least one Capture")
@@ -544,8 +538,8 @@ def _normalize_centers(centers_mm: Sequence[CoordinateMM]) -> Tuple[CoordinateMM
   if not centers:
     raise ValueError("centers_mm must contain at least one coordinate")
   for index, (x_mm, y_mm) in enumerate(centers):
-    _require_finite(x_mm, f"centers_mm[{index}].x")
-    _require_finite(y_mm, f"centers_mm[{index}].y")
+    _validate_finite(x_mm, f"centers_mm[{index}].x")
+    _validate_finite(y_mm, f"centers_mm[{index}].y")
   return centers
 
 
@@ -587,7 +581,7 @@ def _capture_geometry(config: CeligoConfig, capture: Capture) -> _CaptureGeometr
     (x_correction, f"{capture.channel} X pixel-scale correction"),
     (y_correction, f"{capture.channel} Y pixel-scale correction"),
   ):
-    _require_finite(value, name)
+    _validate_finite(value, name)
     if value <= 0:
       raise ValueError(f"{name} must be positive")
 
@@ -600,37 +594,25 @@ def _capture_geometry(config: CeligoConfig, capture: Capture) -> _CaptureGeometr
     (base_step_x_mm, "frame X step"),
     (base_step_y_mm, "frame Y step"),
   ):
-    _require_finite(value, name)
+    _validate_finite(value, name)
     if value <= 0:
       raise ValueError(f"{name} must be positive")
   geometry = _CaptureGeometry(
     frame_x_mm=(
-      calibration.image_width_pixels
-      * calibration.microns_per_pixel_x
-      / 1000.0
-      * x_correction
+      calibration.image_width_pixels * calibration.microns_per_pixel_x / 1000.0 * x_correction
     ),
     frame_y_mm=(
-      calibration.image_height_pixels
-      * calibration.microns_per_pixel_y
-      / 1000.0
-      * y_correction
+      calibration.image_height_pixels * calibration.microns_per_pixel_y / 1000.0 * y_correction
     ),
     step_x_mm=base_step_x_mm * x_correction,
     step_y_mm=base_step_y_mm * y_correction,
     max_block_columns=max(
       1,
-      math.floor(
-        2 * config.navigation.max_galvo_deflection_x_mm
-        / (base_step_x_mm * x_correction)
-      ),
+      math.floor(2 * config.navigation.max_galvo_deflection_x_mm / (base_step_x_mm * x_correction)),
     ),
     max_block_rows=max(
       1,
-      math.floor(
-        2 * config.navigation.max_galvo_deflection_y_mm
-        / (base_step_y_mm * y_correction)
-      ),
+      math.floor(2 * config.navigation.max_galvo_deflection_y_mm / (base_step_y_mm * y_correction)),
     ),
   )
   for value, name in (
@@ -639,7 +621,7 @@ def _capture_geometry(config: CeligoConfig, capture: Capture) -> _CaptureGeometr
     (geometry.step_x_mm, "frame X step"),
     (geometry.step_y_mm, "frame Y step"),
   ):
-    _require_finite(value, name)
+    _validate_finite(value, name)
     if value <= 0:
       raise ValueError(f"{name} must be positive")
   return geometry
@@ -679,12 +661,8 @@ def _random_layouts(
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   _validate_shape_for_captures(geometry.block_shape, capture_geometries)
-  block_width_mm = max(
-    item.block_size_mm(geometry.block_shape)[0] for item in capture_geometries
-  )
-  block_height_mm = max(
-    item.block_size_mm(geometry.block_shape)[1] for item in capture_geometries
-  )
+  block_width_mm = max(item.block_size_mm(geometry.block_shape)[0] for item in capture_geometries)
+  block_height_mm = max(item.block_size_mm(geometry.block_shape)[1] for item in capture_geometries)
   if geometry.non_overlapping:
     x_candidates = _non_overlapping_block_centers(
       geometry.bounds.left,
@@ -735,10 +713,7 @@ def _shortest_travel_order(points: Sequence[CoordinateMM]) -> List[CoordinateMM]
   """Order selected points along a short open path without changing the selection."""
   if len(points) <= 1:
     return list(points)
-  distances = [
-    [math.dist(start, end) for end in points]
-    for start in points
-  ]
+  distances = [[math.dist(start, end) for end in points] for start in points]
   if len(points) <= _EXACT_ROUTE_LIMIT:
     order = _exact_open_path(distances)
   else:
@@ -844,10 +819,7 @@ def _path_length(
   order: Sequence[int],
   distances: Sequence[Sequence[float]],
 ) -> float:
-  return sum(
-    distances[start][end]
-    for start, end in zip(order, order[1:])
-  )
+  return sum(distances[start][end] for start, end in zip(order, order[1:]))
 
 
 def _full_coverage_layouts(
@@ -914,12 +886,8 @@ def _full_coverage_layouts(
         _BlockLayout(
           selections=tuple(
             _BlockSelection(
-              x_centers_mm=tuple(
-                x_centers_by_capture[capture_index][index] for index in x_indices
-              ),
-              y_centers_mm=tuple(
-                y_centers_by_capture[capture_index][index] for index in y_indices
-              ),
+              x_centers_mm=tuple(x_centers_by_capture[capture_index][index] for index in x_indices),
+              y_centers_mm=tuple(y_centers_by_capture[capture_index][index] for index in y_indices),
             )
             for capture_index in range(len(capture_geometries))
           ),
@@ -967,12 +935,8 @@ def _compile_block(
       if not _contains(layout.bounds, bounds):
         raise ValueError(f"Planned block {block_index} extends outside the scan bounds")
 
-  all_x_centers = [
-    center for selection in layout.selections for center in selection.x_centers_mm
-  ]
-  all_y_centers = [
-    center for selection in layout.selections for center in selection.y_centers_mm
-  ]
+  all_x_centers = [center for selection in layout.selections for center in selection.x_centers_mm]
+  all_y_centers = [center for selection in layout.selections for center in selection.y_centers_mm]
   center_x_mm = (min(all_x_centers) + max(all_x_centers)) / 2.0
   center_y_mm = (min(all_y_centers) + max(all_y_centers)) / 2.0
   stage_x_mm, stage_y_mm = coordinate_systems.sample_mm_to_stage_mm(
@@ -1077,12 +1041,8 @@ def _selection_from_center(
   first_x_mm = center_x_mm - (columns - 1) * geometry.step_x_mm / 2.0
   first_y_mm = center_y_mm - (rows - 1) * geometry.step_y_mm / 2.0
   return _BlockSelection(
-    x_centers_mm=tuple(
-      first_x_mm + index * geometry.step_x_mm for index in range(columns)
-    ),
-    y_centers_mm=tuple(
-      first_y_mm + index * geometry.step_y_mm for index in range(rows)
-    ),
+    x_centers_mm=tuple(first_x_mm + index * geometry.step_x_mm for index in range(columns)),
+    y_centers_mm=tuple(first_y_mm + index * geometry.step_y_mm for index in range(rows)),
   )
 
 
@@ -1109,8 +1069,7 @@ def _coverage_axis_centers(
   center_span = maximum_center - minimum_center
   if center_span < -1e-9:
     raise ValueError(
-      f"Scan bound length {end_mm - start_mm:g} mm is smaller than the "
-      f"{frame_mm:g} mm camera frame"
+      f"Scan bound length {end_mm - start_mm:g} mm is smaller than the {frame_mm:g} mm camera frame"
     )
   if center_span <= 1e-9:
     return ((start_mm + end_mm) / 2.0,)
@@ -1133,8 +1092,7 @@ def _coverage_axis_centers_with_count(
   maximum_center = end_mm - frame_mm / 2.0
   if maximum_center < minimum_center - 1e-9:
     raise ValueError(
-      f"Scan bound length {end_mm - start_mm:g} mm is smaller than the "
-      f"{frame_mm:g} mm camera frame"
+      f"Scan bound length {end_mm - start_mm:g} mm is smaller than the {frame_mm:g} mm camera frame"
     )
   if count == 1:
     return ((start_mm + end_mm) / 2.0,)

@@ -6,8 +6,9 @@ import math
 import unittest
 from datetime import timedelta
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.revvity.celigo.camera import CameraFrame
 from pylabrobot.revvity.celigo.config import IlluminationChannelConfig
 from pylabrobot.revvity.celigo.navigation import well_to_sample_mm
@@ -25,7 +26,6 @@ from pylabrobot.revvity.celigo.tests.helpers import (
   make_celigo,
   make_navigation_config,
   make_test_config,
-  stub,
 )
 
 
@@ -106,7 +106,7 @@ class TestScanRegion(unittest.TestCase):
 
 class TestScanSpec(unittest.TestCase):
   def setUp(self):
-    self.plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="imaging_plate")
 
   def test_single_capture_shorthand_is_normalized(self):
     spec = ScanSpec.points(
@@ -338,7 +338,7 @@ class TestScanPlanning(unittest.TestCase):
 class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.celigo = make_celigo(config=_config())
-    self.plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    self.plate = cor_96_wellplate_360uL_Fb(name="imaging_plate")
 
   async def test_execute_runs_the_exact_plan_and_moves_stage_once_per_block(self):
     spec = ScanSpec.wells(
@@ -390,12 +390,11 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
         focus=None,
       )
 
-    stub(
-      self.celigo,
-      _move_to_scan_block=move_to_scan_block,
-      _acquire_scan_position=acquire_scan_position,
-    )
-    result = await self.celigo.execute(plan)
+    with (
+      patch.object(self.celigo, "_move_to_scan_block", move_to_scan_block),
+      patch.object(self.celigo, "_acquire_scan_position", acquire_scan_position),
+    ):
+      result = await self.celigo.execute(plan)
 
     self.assertIsInstance(result, ScanResult)
     self.assertIs(result.plan, plan)
@@ -417,13 +416,10 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
       [call["autofocus"] for call in acquisition_calls],
       ["image"] + [None] * 11 + ["image"] + [None] * 11,
     )
-    self.assertTrue(
-      all(isinstance(frame_result, FrameResult) for frame_result in result.frames)
-    )
+    self.assertTrue(all(isinstance(frame_result, FrameResult) for frame_result in result.frames))
     self.assertTrue(
       all(
-        frame_result.planned is planned
-        for frame_result, planned in zip(result.frames, plan.frames)
+        frame_result.planned is planned for frame_result, planned in zip(result.frames, plan.frames)
       )
     )
 
@@ -454,16 +450,15 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
     async def on_frame(frame):
       reported.append(frame)
 
-    stub(
-      self.celigo,
-      _move_to_scan_block=move_to_scan_block,
-      _acquire_scan_position=acquire_scan_position,
-    )
-    result = await self.celigo._execute_scan_plan(
-      plan,
-      on_frame=on_frame,
-      initial_brightfield_z_mm=2.5,
-    )
+    with (
+      patch.object(self.celigo, "_move_to_scan_block", move_to_scan_block),
+      patch.object(self.celigo, "_acquire_scan_position", acquire_scan_position),
+    ):
+      result = await self.celigo._execute_scan_plan(
+        plan,
+        on_frame=on_frame,
+        initial_brightfield_z_mm=2.5,
+      )
 
     self.assertEqual(z_targets, [2.5, 2.7])
     self.assertEqual(reported, list(result.frames))
@@ -483,9 +478,12 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
       execution_calls.append(actual_plan)
       return expected_result
 
-    stub(self.celigo, plan=plan, execute=execute)
     estimates = ScanEstimateModel(seconds_per_frame=1)
-    result = await self.celigo.scan(spec, estimate_model=estimates)
+    with (
+      patch.object(self.celigo, "plan", plan),
+      patch.object(self.celigo, "execute", execute),
+    ):
+      result = await self.celigo.scan(spec, estimate_model=estimates)
 
     self.assertIs(result, expected_result)
     self.assertEqual(planning_calls, [(spec, estimates)])
@@ -499,18 +497,18 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
       scan_calls.append((spec, estimate_model))
       return expected_result
 
-    stub(self.celigo, scan=scan)
     estimates = ScanEstimateModel()
-    result = await self.celigo.scan_wells(
-      self.plate,
-      ["a1", "B2"],
-      channel="brightfield",
-      block_shape=(2, 3),
-      exposure_ms=1.25,
-      gain=2,
-      autofocus="image",
-      estimate_model=estimates,
-    )
+    with patch.object(self.celigo, "scan", scan):
+      result = await self.celigo.scan_wells(
+        self.plate,
+        ["a1", "B2"],
+        channel="brightfield",
+        block_shape=(2, 3),
+        exposure_ms=1.25,
+        gain=2,
+        autofocus="image",
+        estimate_model=estimates,
+      )
 
     self.assertIs(result, expected_result)
     spec, actual_estimates = scan_calls[0]

@@ -32,7 +32,7 @@ import struct
 import time
 from dataclasses import dataclass
 from datetime import timedelta
-from functools import partial
+from functools import cached_property, partial
 from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Sequence, Tuple, cast
 
 from pylabrobot.io.ftdi import FTDI
@@ -60,7 +60,7 @@ from pylabrobot.revvity.celigo.motion import (
 from pylabrobot.revvity.celigo.navigation import well_to_sample_mm, well_to_stage_mm
 from pylabrobot.revvity.celigo.protocol import (
   complete_cleanup,
-  require_payload_length,
+  validate_payload_length,
 )
 from pylabrobot.revvity.celigo.scan import (
   AutofocusMethod,
@@ -366,7 +366,6 @@ class Celigo:
     self._last_fluorescence_power_change: Optional[float] = None
     self.controller_info: Optional[ControllerInfo] = None
     self._command_sequence = 1
-    self._command_lock = asyncio.Lock()
     self.io = FTDI(
       human_readable_device_name="Celigo",
       device_id=device_id,
@@ -383,6 +382,10 @@ class Celigo:
   def controller_firmware_version(self) -> Optional[Tuple[int, int, int]]:
     """The identified controller-board firmware version, if setup has reached identification."""
     return None if self.controller_info is None else self.controller_info.firmware_version
+
+  @cached_property
+  def _command_lock(self) -> asyncio.Lock:
+    return asyncio.Lock()
 
   def _build_linear_axes(self) -> Dict[LinearAxisName, LinearAxis]:
     hardware = self.config.hardware
@@ -725,14 +728,14 @@ class Celigo:
   async def request_controller_status(self) -> ControllerStatus:
     """Request and decode the current controller status."""
     response = await self.send_command(_CMD_CONTROLLER_STATUS)
-    require_payload_length(response, 8, "controller status")
+    validate_payload_length(response, 8, "controller status")
     flags, extended_status = struct.unpack_from(">II", response, 0)
     return ControllerStatus(flags, extended_status)
 
   async def request_controller_info(self) -> ControllerInfo:
     """Read board identity (SEND_CONFIG): device index, firmware version, UART buffer size."""
     response = await self.send_command(_CMD_SEND_CONFIG)
-    require_payload_length(response, 10, "controller info")
+    validate_payload_length(response, 10, "controller info")
     device_index, encoded_firmware, uart_buffer_length = struct.unpack_from(
       ">hii",
       response,
@@ -777,7 +780,7 @@ class Celigo:
   async def request_detected_motor_addresses(self) -> List[DetectedMotorAddress]:
     """Return the EZStepper addresses reported by the controller's UARTs."""
     response = await self.send_command(_CMD_SEND_MOTOR_CONFIG)
-    require_payload_length(response, 40, "motor configuration")
+    validate_payload_length(response, 40, "motor configuration")
     motors: List[DetectedMotorAddress] = []
     offset = 0
     for uart_index in range(8):
@@ -874,7 +877,7 @@ class Celigo:
   async def request_digital_input_bitmask(self) -> int:
     """Read the digital input port as a raw bitmask."""
     response = await self.send_command(_CMD_READ_DIG_PORT)
-    require_payload_length(response, 2, "digital input")
+    validate_payload_length(response, 2, "digital input")
     return int(struct.unpack_from(">H", response, 0)[0])
 
   async def request_digital_input(self, bit_index: int) -> bool:
@@ -886,7 +889,7 @@ class Celigo:
   async def request_digital_output_bitmask(self) -> int:
     """Read back the digital output register as a raw bitmask."""
     response = await self.send_command(_CMD_GET_DIG_OUT_VALUE)
-    require_payload_length(response, 2, "digital output")
+    validate_payload_length(response, 2, "digital output")
     return int(struct.unpack_from(">H", response, 0)[0])
 
   async def request_digital_output(self, bit_index: int) -> bool:
@@ -922,7 +925,7 @@ class Celigo:
       _CMD_GET_ANALOG_OUT_VALUE,
       struct.pack(">H", channel_index),
     )
-    require_payload_length(response, 4, "analog output")
+    validate_payload_length(response, 4, "analog output")
     echoed_channel_index, dac_count = struct.unpack_from(">HH", response, 0)
     if echoed_channel_index != channel_index:
       raise CeligoError(
@@ -939,7 +942,7 @@ class Celigo:
       _CMD_READ_AD_CHANNEL,
       struct.pack(">H", channel_index),
     )
-    require_payload_length(response, 2, "analog input")
+    validate_payload_length(response, 2, "analog input")
     return int(struct.unpack_from(">H", response, 0)[0])
 
   async def set_analog_output_voltage(
@@ -993,9 +996,9 @@ class Celigo:
   async def request_barcode(self) -> str:
     """Read the barcode reader's ASCII response."""
     response = await self.send_command(_CMD_READ_BARCODE_MSG)
-    require_payload_length(response, 4, "barcode")
+    validate_payload_length(response, 4, "barcode")
     response_length = struct.unpack_from(">H", response, 2)[0]
-    require_payload_length(response, 4 + response_length, "barcode")
+    validate_payload_length(response, 4 + response_length, "barcode")
     return response[4 : 4 + response_length].decode(
       "ascii",
       errors="replace",
@@ -1772,17 +1775,15 @@ class Celigo:
 
     started_at = time.monotonic()
     frame_results: List[FrameResult] = []
-    frames_by_block: Dict[int, List[PlannedFrame]] = {
-      block.index: [] for block in plan.blocks
-    }
+    frames_by_block: Dict[int, List[PlannedFrame]] = {block.index: [] for block in plan.blocks}
     for planned_frame in plan.frames:
-      try:
-        frames_by_block[planned_frame.block.index].append(planned_frame)
-      except KeyError as exc:
+      block_frames = frames_by_block.get(planned_frame.block.index)
+      if block_frames is None:
         raise ValueError(
           f"Planned frame {planned_frame.index} references unknown block "
           f"{planned_frame.block.index}"
-        ) from exc
+        )
+      block_frames.append(planned_frame)
 
     for block in plan.blocks:
       settled_stage_position_mm = await self._move_to_scan_block(block)
@@ -1807,9 +1808,7 @@ class Celigo:
           settled_stage_position_mm=settled_stage_position_mm,
         )
         if acquisition.focus is not None:
-          focused_brightfield_z_mm = (
-            acquisition.z_mm - channel_config.z_offset_to_brightfield_mm
-          )
+          focused_brightfield_z_mm = acquisition.z_mm - channel_config.z_offset_to_brightfield_mm
         frame_result = FrameResult(
           planned=planned_frame,
           frame=acquisition.frame,
@@ -1869,7 +1868,7 @@ class Celigo:
       _CMD_SIGNAL_DIAGNOSTICS,
       struct.pack(">h", diagnostic_operation),
     )
-    require_payload_length(response, 4, "signal diagnostics")
+    validate_payload_length(response, 4, "signal diagnostics")
     return int(struct.unpack_from(">i", response, 0)[0])
 
   async def set_camera_trigger_line(self, asserted: bool) -> None:

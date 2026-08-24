@@ -260,7 +260,7 @@ class FTDI(IOBase):
       usb.util.dispose_resources(device)
 
   def _reattach_kernel_driver(self) -> None:
-    detached = self._detached_kernel_driver
+    detached = getattr(self, "_detached_kernel_driver", None)
     self._detached_kernel_driver = None
     if detached is None:
       return

@@ -14,7 +14,7 @@ from pylabrobot.revvity.celigo.galvo import (
   voltage_delta_to_dac_count,
   volts_to_dac_count,
 )
-from pylabrobot.revvity.celigo.protocol import complete_cleanup, require_payload_length
+from pylabrobot.revvity.celigo.protocol import complete_cleanup, validate_payload_length
 
 if TYPE_CHECKING:
   from pylabrobot.revvity.celigo.celigo import Celigo
@@ -51,23 +51,16 @@ def _delay_seconds_to_controller_ticks(delay: float) -> int:
   return ticks
 
 
-def _require_galvo_config(
-  axis: GalvoAxisName,
-  config: Optional[GalvoConfig],
-) -> GalvoConfig:
-  if config is None or not config.enabled:
-    raise CeligoError(f"{axis.upper()} galvo is not configured")
-  return config
-
-
 def _encode_firing_targets(
   x_config: Optional[GalvoConfig],
   y_config: Optional[GalvoConfig],
   voltage_offsets: List[Tuple[float, float]],
   center_voltages: Tuple[float, float],
 ) -> List[Tuple[int, int]]:
-  configured_x = _require_galvo_config("x", x_config)
-  configured_y = _require_galvo_config("y", y_config)
+  if x_config is None or not x_config.enabled:
+    raise CeligoError("X galvo is not configured")
+  if y_config is None or not y_config.enabled:
+    raise CeligoError("Y galvo is not configured")
   targets = []
   for x_offset, y_offset in voltage_offsets:
     targets.append(
@@ -75,14 +68,14 @@ def _encode_firing_targets(
         volts_to_dac_count(
           logical_to_hardware_voltage(
             "x",
-            configured_x,
+            x_config,
             center_voltages[0] + x_offset,
           )
         ),
         volts_to_dac_count(
           logical_to_hardware_voltage(
             "y",
-            configured_y,
+            y_config,
             center_voltages[1] + y_offset,
           )
         ),
@@ -114,14 +107,16 @@ def _encode_grid(
   size_voltages: Tuple[float, float],
   center_voltages: Tuple[float, float],
 ) -> _GridDacCounts:
-  configured_x = _require_galvo_config("x", x_config)
-  configured_y = _require_galvo_config("y", y_config)
+  if x_config is None or not x_config.enabled:
+    raise CeligoError("X galvo is not configured")
+  if y_config is None or not y_config.enabled:
+    raise CeligoError("Y galvo is not configured")
   if any(
     voltage <= 0 or not math.isfinite(voltage) for voltage in (*spacing_voltages, *size_voltages)
   ):
     raise ValueError("grid spacing and size voltages must be finite and positive")
-  _validate_grid_extent("x", configured_x, center_voltages[0], size_voltages[0])
-  _validate_grid_extent("y", configured_y, center_voltages[1], size_voltages[1])
+  _validate_grid_extent("x", x_config, center_voltages[0], size_voltages[0])
+  _validate_grid_extent("y", y_config, center_voltages[1], size_voltages[1])
   try:
     x_spacing = voltage_delta_to_dac_count(spacing_voltages[0])
     y_spacing = voltage_delta_to_dac_count(spacing_voltages[1])
@@ -134,8 +129,8 @@ def _encode_grid(
     y_spacing=y_spacing,
     x_size=x_size,
     y_size=y_size,
-    x_center=volts_to_dac_count(logical_to_hardware_voltage("x", configured_x, center_voltages[0])),
-    y_center=volts_to_dac_count(logical_to_hardware_voltage("y", configured_y, center_voltages[1])),
+    x_center=volts_to_dac_count(logical_to_hardware_voltage("x", x_config, center_voltages[0])),
+    y_center=volts_to_dac_count(logical_to_hardware_voltage("y", y_config, center_voltages[1])),
   )
 
 
@@ -180,9 +175,9 @@ class Laser:
     """Read an ASCII response from the laser UART."""
     await self._assert_safe()
     response = await self._celigo.send_command(_CMD_READ_LASER_COMM)
-    require_payload_length(response, 4, "laser response")
+    validate_payload_length(response, 4, "laser response")
     response_length = struct.unpack_from(">H", response, 2)[0]
-    require_payload_length(response, 4 + response_length, "laser response")
+    validate_payload_length(response, 4 + response_length, "laser response")
     return response[4 : 4 + response_length].rstrip(b"\x00").decode("ascii", errors="replace")
 
   async def fire(

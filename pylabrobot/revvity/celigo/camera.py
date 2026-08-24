@@ -218,12 +218,7 @@ class CameraFrame:
 
     def chunk(name: bytes, payload: bytes) -> bytes:
       checksum = zlib.crc32(name + payload) & 0xFFFFFFFF
-      return (
-        struct.pack(">I", len(payload))
-        + name
-        + payload
-        + struct.pack(">I", checksum)
-      )
+      return struct.pack(">I", len(payload)) + name + payload + struct.pack(">I", checksum)
 
     header = struct.pack(
       ">IIBBBBB",
@@ -298,7 +293,6 @@ class LumeneraCamera:
     self._handle: Optional[int] = None
     self._streaming = False
     self._pending_cleanup: Optional[concurrent.futures.Future[Any]] = None
-    self._lock = asyncio.Lock()
     self.width = 0
     self.height = 0
     self.x_offset = 0
@@ -311,6 +305,10 @@ class LumeneraCamera:
   @property
   def is_open(self) -> bool:
     return self._handle is not None and self._pending_cleanup is None
+
+  @functools.cached_property
+  def _lock(self) -> asyncio.Lock:
+    return asyncio.Lock()
 
   def _queue_deferred_close(
     self, executor: _SerializedDaemonExecutor

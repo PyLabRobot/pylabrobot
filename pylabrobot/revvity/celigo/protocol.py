@@ -9,7 +9,7 @@ from pylabrobot.revvity.celigo.errors import CeligoError
 _T = TypeVar("_T")
 
 
-def require_payload_length(
+def validate_payload_length(
   payload: bytes,
   minimum_byte_count: int,
   operation: str,

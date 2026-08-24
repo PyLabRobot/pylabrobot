@@ -1270,7 +1270,7 @@ class CeligoConfig:
       if os.path.isfile(os.path.join(config_directory, filename))
     }
 
-    def require_companion_file(filename: str) -> str:
+    def companion_file(filename: str) -> str:
       path = files_by_name.get(filename.lower())
       if path is None:
         raise FileNotFoundError(
@@ -1278,12 +1278,12 @@ class CeligoConfig:
         )
       return path
 
-    illumination_calibration_path = require_companion_file("leaphardwarecalibration.config")
-    channel_config_path = require_companion_file("ChannelConfig.xml")
-    calibration_path = require_companion_file("CalibrationConfig.xml")
-    hardware_defaults_path = require_companion_file("HardwareDefaultConfig.xml")
-    galvo_calibration_path = require_companion_file("GalvoCalibrationConfig.xml")
-    navigation_path = require_companion_file("NavigationConfig.xml")
+    illumination_calibration_path = companion_file("leaphardwarecalibration.config")
+    channel_config_path = companion_file("ChannelConfig.xml")
+    calibration_path = companion_file("CalibrationConfig.xml")
+    hardware_defaults_path = companion_file("HardwareDefaultConfig.xml")
+    galvo_calibration_path = companion_file("GalvoCalibrationConfig.xml")
+    navigation_path = companion_file("NavigationConfig.xml")
     illumination_root = ET.parse(illumination_calibration_path).getroot()
 
     return cls(

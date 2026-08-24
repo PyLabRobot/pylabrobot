@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 from pylabrobot.revvity.celigo.config import Calibrated2DPolynomialTransform, GalvoConfig
 from pylabrobot.revvity.celigo.coordinates import sample_offset_mm_to_galvo_offset_mm
 from pylabrobot.revvity.celigo.errors import CeligoError
-from pylabrobot.revvity.celigo.protocol import require_payload_length
+from pylabrobot.revvity.celigo.protocol import validate_payload_length
 
 if TYPE_CHECKING:
   from pylabrobot.revvity.celigo.celigo import Celigo
@@ -139,15 +139,6 @@ def logical_to_hardware_voltage(
   return -logical_voltage if axis_config.invert_voltage else logical_voltage
 
 
-def _require_axis_config(
-  axis: GalvoAxisName,
-  axis_config: Optional[GalvoConfig],
-) -> GalvoConfig:
-  if axis_config is None or not axis_config.enabled:
-    raise CeligoError(f"{axis.upper()} galvo is not configured")
-  return axis_config
-
-
 class Galvo:
   """Galvo positioning, calibration, and status operations owned by a Celigo."""
 
@@ -190,7 +181,9 @@ class Galvo:
   def _axis_config(self, axis: GalvoAxisName) -> GalvoConfig:
     hardware = self._celigo.config.hardware
     axis_config = hardware.x_galvo if axis == "x" else hardware.y_galvo
-    return _require_axis_config(axis, axis_config)
+    if axis_config is None or not axis_config.enabled:
+      raise CeligoError(f"{axis.upper()} galvo is not configured")
+    return axis_config
 
   def _center_voltage(
     self,
@@ -267,7 +260,7 @@ class Galvo:
     else:
       response = await self._celigo.send_command(_CMD_MOVE_GALVO, payload)
     if wait_until_settled:
-      require_payload_length(response, 2, "galvo move")
+      validate_payload_length(response, 2, "galvo move")
       if struct.unpack_from(">H", response, 0)[0] != 0:
         raise CeligoError(f"{axis.upper()} galvo did not settle")
       if axis_config.big_move_delay:
@@ -329,7 +322,7 @@ class Galvo:
   async def request_controller_status(self) -> GalvoControllerStatus:
     """Read the complete galvo and laser-firing state from the controller."""
     response = await self._celigo.send_command(_CMD_REQUEST_CONTROLLER_STATUS)
-    require_payload_length(response, 23, "galvo controller status")
+    validate_payload_length(response, 23, "galvo controller status")
     x_ready, y_ready, x_dac_count, y_dac_count = struct.unpack_from(">BBHH", response, 0)
     fire_table_size, points_loaded, fire_table_index = struct.unpack_from(">iii", response, 6)
     firing_status = response[18]
@@ -379,7 +372,7 @@ class Galvo:
       1,
     )
     response = await self._celigo.send_command(_CMD_CALIBRATE_GALVO, payload)
-    require_payload_length(response, 2, "galvo calibration")
+    validate_payload_length(response, 2, "galvo calibration")
     calibration_status = int(struct.unpack_from(">H", response, 0)[0])
     return calibration_status == 0
 
@@ -392,11 +385,11 @@ class Galvo:
       _CMD_GET_GALVO_CAL_DATA,
       struct.pack(">H", _GALVO_INDEX[axis]),
     )
-    require_payload_length(response, 2, "galvo calibration data")
+    validate_payload_length(response, 2, "galvo calibration data")
     (item_count,) = struct.unpack_from(">h", response, 0)
     if item_count < 0:
       raise CeligoError(f"Invalid galvo calibration item count: {item_count}")
-    require_payload_length(response, 2 + 4 * item_count, "galvo calibration data")
+    validate_payload_length(response, 2 + 4 * item_count, "galvo calibration data")
     return [
       struct.unpack_from(">hh", response, 2 + 4 * item_index) for item_index in range(item_count)
     ]
@@ -404,9 +397,9 @@ class Galvo:
   async def request_position_trace_dac_counts(self) -> List[Tuple[int, int]]:
     """Read captured galvo position/move pairs in controller DAC counts."""
     response = await self._celigo.send_command(_CMD_GET_GALVO_POS_DATA)
-    require_payload_length(response, 2, "galvo position data")
+    validate_payload_length(response, 2, "galvo position data")
     (position_count,) = struct.unpack_from(">H", response, 0)
-    require_payload_length(response, 2 + 4 * position_count, "galvo position data")
+    validate_payload_length(response, 2 + 4 * position_count, "galvo position data")
     return [
       struct.unpack_from(">HH", response, 2 + 4 * position_index)
       for position_index in range(position_count)

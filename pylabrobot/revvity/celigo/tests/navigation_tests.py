@@ -2,7 +2,7 @@
 
 import unittest
 
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.tecan.plates import DeepWell_Greiner_1536_Well
 from pylabrobot.resources.vwr.plates import VWR_1_troughplate_195000uL_Ub
 from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
@@ -38,14 +38,14 @@ def _coords():
 
 class TestPlateNavigation(unittest.TestCase):
   def test_well_sample_position_uses_plate_geometry_without_stage_calibration(self):
-    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    plate = cor_96_wellplate_360uL_Fb(name="imaging_plate")
     x, y = well_to_sample_mm(plate, "A1")
     self.assertAlmostEqual(x, 14.3)
     self.assertAlmostEqual(y, 11.28)
 
   def test_plr_plate_uses_its_resource_geometry(self):
     _, _, cs = _coords()
-    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    plate = cor_96_wellplate_360uL_Fb(name="imaging_plate")
     a1 = well_to_stage_mm(plate, "A1", cs)
     a2 = well_to_stage_mm(plate, "A2", cs)
     b1 = well_to_stage_mm(plate, "B1", cs)
@@ -56,7 +56,7 @@ class TestPlateNavigation(unittest.TestCase):
 
   def test_out_of_range(self):
     _, _, cs = _coords()
-    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    plate = cor_96_wellplate_360uL_Fb(name="imaging_plate")
     with self.assertRaises(ValueError):
       well_to_stage_mm(plate, "I1", cs)
 
@@ -88,7 +88,7 @@ class TestPlateNavigation(unittest.TestCase):
 class TestWellToStage(unittest.TestCase):
   def test_a1_stage_position(self):
     _, _, cs = _coords()
-    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    plate = cor_96_wellplate_360uL_Fb(name="imaging_plate")
     x, y = well_to_stage_mm(plate, "A1", cs)
     # this config has no calibrated corner offset, so stage = sample + default corner:
     self.assertAlmostEqual(x, 16.459)
@@ -96,7 +96,7 @@ class TestWellToStage(unittest.TestCase):
 
   def test_adjacent_wells_differ_by_pitch(self):
     _, _, cs = _coords()
-    plate = Cor_96_wellplate_360ul_Fb(name="imaging_plate")
+    plate = cor_96_wellplate_360uL_Fb(name="imaging_plate")
     a1 = well_to_stage_mm(plate, "A1", cs)
     a2 = well_to_stage_mm(plate, "A2", cs)
     b1 = well_to_stage_mm(plate, "B1", cs)

@@ -4,7 +4,7 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.revvity.celigo.celigo import Celigo, CeligoError
 from pylabrobot.revvity.celigo.config import (
   CeligoHardwareConfig,
@@ -23,7 +23,6 @@ from pylabrobot.revvity.celigo.tests.helpers import (
   make_hardware_default_config,
   make_linear_axis_config,
   make_test_config,
-  stub,
 )
 
 
@@ -149,8 +148,10 @@ class TestConfiguredFilter(unittest.IsolatedAsyncioTestCase):
       targets.append(target)
       return target
 
-    stub(driver.dichroic_filter, request_encoder_ticks=request_encoder_ticks)
-    with patch.object(Axis, "move_to_ticks", new=move_axis):
+    with (
+      patch.object(driver.dichroic_filter, "request_encoder_ticks", request_encoder_ticks),
+      patch.object(Axis, "move_to_ticks", new=move_axis),
+    ):
       self.assertEqual(await driver.dichroic_filter.move_to(3), -1980)
     self.assertEqual(targets, [-1980])
 
@@ -173,8 +174,10 @@ class TestConfiguredFilter(unittest.IsolatedAsyncioTestCase):
     async def move_axis(_axis, target, **_kwargs):
       return target
 
-    stub(driver.magnification_changer, request_encoder_ticks=request_encoder_ticks)
-    with patch.object(Axis, "move_to_ticks", new=move_axis):
+    with (
+      patch.object(driver.magnification_changer, "request_encoder_ticks", request_encoder_ticks),
+      patch.object(Axis, "move_to_ticks", new=move_axis),
+    ):
       self.assertEqual(await driver.magnification_changer.move_to(5), 2000)
     self.assertEqual(driver.config.magnification, 5)
 
@@ -230,19 +233,23 @@ class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
     async def set_analog_output_count(channel, value):
       analog.append((channel, value))
 
-    stub(driver.dichroic_filter, move_to=move_filter)
-    stub(driver, set_digital_output=set_digital)
-    stub(driver, set_analog_output_count=set_analog_output_count)
-    await driver.select_channel("green")
+    with (
+      patch.object(driver.dichroic_filter, "move_to", move_filter),
+      patch.multiple(
+        driver,
+        set_digital_output=set_digital,
+        set_analog_output_count=set_analog_output_count,
+      ),
+    ):
+      await driver.select_channel("green")
+      self.assertEqual(moves, [2])
+      self.assertEqual(digital, [(6, False), (4, False), (5, True)])
+      self.assertEqual(analog, [(0, 0), (2, 0)])
+      self.assertEqual(driver.current_channel, "green")
 
-    self.assertEqual(moves, [2])
-    self.assertEqual(digital, [(6, False), (4, False), (5, True)])
-    self.assertEqual(analog, [(0, 0), (2, 0)])
-    self.assertEqual(driver.current_channel, "green")
-
-    await driver.set_illumination_enabled(True)
-    self.assertEqual(analog[-1], (2, 3276))
-    self.assertEqual(digital[-1], (6, True))
+      await driver.set_illumination_enabled(True)
+      self.assertEqual(analog[-1], (2, 3276))
+      self.assertEqual(digital[-1], (6, True))
 
   async def test_channel_intensity_override_is_a_percentage(self):
     driver = make_celigo(hardware=_config())
@@ -255,11 +262,16 @@ class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
     async def set_analog_output_count(channel_index, dac_count):
       analog.append((channel_index, dac_count))
 
-    stub(driver.dichroic_filter, move_to=no_op)
-    stub(driver, set_digital_output=no_op)
-    stub(driver, set_analog_output_count=set_analog_output_count)
-    await driver.select_channel("green")
-    await driver.set_illumination_enabled(True, intensity_percent=30)
+    with (
+      patch.object(driver.dichroic_filter, "move_to", no_op),
+      patch.multiple(
+        driver,
+        set_digital_output=no_op,
+        set_analog_output_count=set_analog_output_count,
+      ),
+    ):
+      await driver.select_channel("green")
+      await driver.set_illumination_enabled(True, intensity_percent=30)
 
     self.assertEqual(analog[-1], (2, 1228))
 
@@ -284,11 +296,17 @@ class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
     async def set_analog(channel, value):
       analog.append((channel, value))
 
-    stub(driver.dichroic_filter, move_to=no_op)
-    stub(driver, set_digital_output=set_digital, set_analog_output_count=set_analog)
-    await driver.select_channel("green")
-    await driver.set_illumination_enabled(True)
-    await driver.turn_off_illumination()
+    with (
+      patch.object(driver.dichroic_filter, "move_to", no_op),
+      patch.multiple(
+        driver,
+        set_digital_output=set_digital,
+        set_analog_output_count=set_analog,
+      ),
+    ):
+      await driver.select_channel("green")
+      await driver.set_illumination_enabled(True)
+      await driver.turn_off_illumination()
 
     self.assertEqual(digital[:3], [(6, True), (4, True), (5, False)])
     self.assertEqual(digital[3], (6, False))
@@ -310,8 +328,10 @@ class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
       moves.append(logical_filter)
       return 0
 
-    stub(driver.dichroic_filter, move_to=move_filter)
-    with self.assertRaisesRegex(CeligoError, "is disabled"):
+    with (
+      patch.object(driver.dichroic_filter, "move_to", move_filter),
+      self.assertRaisesRegex(CeligoError, "is disabled"),
+    ):
       await driver.select_channel("green")
     self.assertEqual(moves, [])
 
@@ -328,8 +348,10 @@ class TestConfiguredChannel(unittest.IsolatedAsyncioTestCase):
       moves.append(logical_filter)
       return 0
 
-    stub(driver.dichroic_filter, move_to=move_filter)
-    with self.assertRaisesRegex(CeligoError, "not configured as an output"):
+    with (
+      patch.object(driver.dichroic_filter, "move_to", move_filter),
+      self.assertRaisesRegex(CeligoError, "not configured as an output"),
+    ):
       await driver.select_channel("green")
     self.assertEqual(moves, [])
 
@@ -356,14 +378,14 @@ class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
     driver = make_celigo(hardware=_config())
     driver.config.calibration = make_calibration_config()
     driver.config.hardware_defaults = make_hardware_default_config()
-    driver.set_plate(Cor_96_wellplate_360ul_Fb(name="imaging_plate"))
+    driver.set_plate(cor_96_wellplate_360uL_Fb(name="imaging_plate"))
     calls = []
 
     async def close_to_sample(x_mm, y_mm):
       calls.append((x_mm, y_mm))
 
-    stub(driver, close_drawer_to_sample_mm=close_to_sample)
-    await driver.close_drawer("A1")
+    with patch.object(driver, "close_drawer_to_sample_mm", close_to_sample):
+      await driver.close_drawer("A1")
     self.assertEqual(len(calls), 1)
     self.assertAlmostEqual(calls[0][0], 14.3)
     self.assertAlmostEqual(calls[0][1], 11.28)
@@ -400,11 +422,13 @@ class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
       calls.append(("y", position))
       return position
 
-    stub(driver, turn_off_illumination=turn_off)
-    stub(driver.z_axis, move_to=move_z)
-    stub(driver.x_axis, move_to=move_x)
-    stub(driver.y_axis, move_to=move_y)
-    await driver.close_drawer_to_sample_mm(4, 5)
+    with (
+      patch.object(driver, "turn_off_illumination", turn_off),
+      patch.object(driver.z_axis, "move_to", move_z),
+      patch.object(driver.x_axis, "move_to", move_x),
+      patch.object(driver.y_axis, "move_to", move_y),
+    ):
+      await driver.close_drawer_to_sample_mm(4, 5)
     self.assertIsNone(driver.current_channel)
     self.assertEqual(
       calls,
@@ -425,11 +449,11 @@ class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
     async def unexpected():
       self.fail("invalid drawer target changed illumination")
 
-    stub(driver, turn_off_illumination=unexpected)
-    with self.assertRaisesRegex(ValueError, "must be finite"):
-      await driver.close_drawer_to_sample_mm(float("nan"), 5)
-    with self.assertRaisesRegex(CeligoError, "outside configured range"):
-      await driver.close_drawer_to_sample_mm(100, 5)
+    with patch.object(driver, "turn_off_illumination", unexpected):
+      with self.assertRaisesRegex(ValueError, "must be finite"):
+        await driver.close_drawer_to_sample_mm(float("nan"), 5)
+      with self.assertRaisesRegex(CeligoError, "outside configured range"):
+        await driver.close_drawer_to_sample_mm(100, 5)
 
   async def test_open_drawer_retries_and_requires_target_limit(self):
     hardware = _config()
@@ -451,17 +475,19 @@ class TestConfiguredDrawer(unittest.IsolatedAsyncioTestCase):
     ):
       attempted.append(("x", distance_ticks, move_current_percent))
 
-    stub(driver, turn_off_illumination=no_op)
-    stub(driver.z_axis, move_to=no_op)
-    stub(driver.y_axis, move_to=no_op)
-    stub(driver.x_axis, request_is_negative_limit_active=no_limit)
-    stub(
-      driver.x_axis,
-      _limit_move_distance_ticks=lambda: 5,
-      _move_relative_to_limit=relative,
-    )
-    stub(driver.y_axis, _limit_move_distance_ticks=lambda: 5)
-    with self.assertRaisesRegex(CeligoError, "X limit was not reached"):
+    with (
+      patch.object(driver, "turn_off_illumination", no_op),
+      patch.object(driver.z_axis, "move_to", no_op),
+      patch.object(driver.y_axis, "move_to", no_op),
+      patch.multiple(
+        driver.x_axis,
+        request_is_negative_limit_active=no_limit,
+        _limit_move_distance_ticks=lambda: 5,
+        _move_relative_to_limit=relative,
+      ),
+      patch.object(driver.y_axis, "_limit_move_distance_ticks", lambda: 5),
+      self.assertRaisesRegex(CeligoError, "X limit was not reached"),
+    ):
       await driver.open_drawer()
     self.assertEqual(attempted, [("x", -5, 55)] * 3)
 

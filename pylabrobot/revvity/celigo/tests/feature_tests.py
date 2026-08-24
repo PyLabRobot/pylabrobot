@@ -53,7 +53,6 @@ from pylabrobot.revvity.celigo.tests.helpers import (
   make_filter_wheel_config,
   make_galvo_config,
   make_linear_axis_config,
-  stub,
 )
 
 
@@ -119,15 +118,16 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def detected_motor_addresses():
       return []
 
-    stub(
-      celigo,
-      abort_controller_operation=no_op,
-      request_controller_info=controller_info,
-      request_detected_motor_addresses=detected_motor_addresses,
-      _initialize_safe_outputs=no_op,
-    )
-
-    with self.assertRaisesRegex(CeligoError, "both be enabled or both be absent"):
+    with (
+      patch.multiple(
+        celigo,
+        abort_controller_operation=no_op,
+        request_controller_info=controller_info,
+        request_detected_motor_addresses=detected_motor_addresses,
+        _initialize_safe_outputs=no_op,
+      ),
+      self.assertRaisesRegex(CeligoError, "both be enabled or both be absent"),
+    ):
       await celigo._initialize_hardware()
 
   async def test_hardware_initialization_centers_galvos_for_active_magnification(self):
@@ -154,16 +154,22 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       centered_magnifications.append(magnification)
       return 0.0, 0.0
 
-    stub(
-      celigo,
-      abort_controller_operation=no_op,
-      request_controller_info=controller_info,
-      request_detected_motor_addresses=detected_motor_addresses,
-      _initialize_safe_outputs=no_op,
-    )
-    stub(celigo.galvo, _set_settling_window=no_op, calibrate=calibrate, home=home)
-
-    await celigo._initialize_hardware()
+    with (
+      patch.multiple(
+        celigo,
+        abort_controller_operation=no_op,
+        request_controller_info=controller_info,
+        request_detected_motor_addresses=detected_motor_addresses,
+        _initialize_safe_outputs=no_op,
+      ),
+      patch.multiple(
+        celigo.galvo,
+        _set_settling_window=no_op,
+        calibrate=calibrate,
+        home=home,
+      ),
+    ):
+      await celigo._initialize_hardware()
 
     self.assertEqual(centered_magnifications, [5])
 
@@ -187,15 +193,19 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       operations.append(f"magnification_move_{magnification}")
       return 0
 
-    stub(celigo, turn_off_illumination=lambda: track("illumination_off"))
-    stub(celigo.z_axis, home=lambda: track("z_home"))
-    stub(celigo.magnification_changer, home=lambda: track("magnification_home"))
-    stub(celigo.magnification_changer, move_to=move_magnification)
-    stub(celigo.x_axis, home=lambda: track("x_home"))
-    stub(celigo.y_axis, home=lambda: track("y_home"))
-    stub(celigo.dichroic_filter, home=lambda: track("dichroic_home"))
-
-    await celigo.home_imaging_axes()
+    with (
+      patch.object(celigo, "turn_off_illumination", lambda: track("illumination_off")),
+      patch.object(celigo.z_axis, "home", lambda: track("z_home")),
+      patch.multiple(
+        celigo.magnification_changer,
+        home=lambda: track("magnification_home"),
+        move_to=move_magnification,
+      ),
+      patch.object(celigo.x_axis, "home", lambda: track("x_home")),
+      patch.object(celigo.y_axis, "home", lambda: track("y_home")),
+      patch.object(celigo.dichroic_filter, "home", lambda: track("dichroic_home")),
+    ):
+      await celigo.home_imaging_axes()
 
     self.assertEqual(
       operations,
@@ -229,14 +239,15 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def detected_motor_addresses():
       return [DetectedMotorAddress(uart_index=0, motor_index=2)]
 
-    stub(
-      celigo,
-      abort_controller_operation=no_op,
-      request_controller_info=controller_info,
-      request_detected_motor_addresses=detected_motor_addresses,
-    )
-
-    with self.assertRaisesRegex(CeligoError, r"X Axis \(1\)"):
+    with (
+      patch.multiple(
+        celigo,
+        abort_controller_operation=no_op,
+        request_controller_info=controller_info,
+        request_detected_motor_addresses=detected_motor_addresses,
+      ),
+      self.assertRaisesRegex(CeligoError, r"X Axis \(1\)"),
+    ):
       await celigo._initialize_hardware()
 
   def test_duplicate_enabled_motor_addresses_are_rejected(self):
@@ -279,9 +290,12 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def output(bit, on):
       digital.append((bit, on))
 
-    stub(celigo, set_analog_output_count=dac)
-    stub(celigo, set_digital_output=output)
-    await celigo._initialize_safe_outputs()
+    with patch.multiple(
+      celigo,
+      set_analog_output_count=dac,
+      set_digital_output=output,
+    ):
+      await celigo._initialize_safe_outputs()
     self.assertEqual(analog, [(0, 0), (1, 0), (2, 0), (3, 0)])
     self.assertEqual(digital, [(bit, False) for bit in range(12)])
 
@@ -323,8 +337,14 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def set_digital(bit, high):
       digital.append((bit, high))
 
-    stub(celigo, set_analog_output_count=set_analog, set_digital_output=set_digital)
-    with patch("pylabrobot.revvity.celigo.celigo.asyncio.sleep", new_callable=AsyncMock) as sleep:
+    with (
+      patch.multiple(
+        celigo,
+        set_analog_output_count=set_analog,
+        set_digital_output=set_digital,
+      ),
+      patch("pylabrobot.revvity.celigo.celigo.asyncio.sleep", new_callable=AsyncMock) as sleep,
+    ):
       await celigo._initialize_safe_outputs()
 
     self.assertEqual(analog, [(0, 0), (1, 0), (2, 4095), (3, 0)])
@@ -341,8 +361,8 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       data = "EZStepper Controller V7.21" if command.endswith("&\r") else ""
       return f"/0`{data}"
 
-    stub(celigo.motor_controller, send_command=motor_query)
-    await celigo.dichroic_filter._initialize()
+    with patch.object(celigo.motor_controller, "send_command", motor_query):
+      await celigo.dichroic_filter._initialize()
     self.assertEqual(commands[0], "/4&\r")
     self.assertEqual(commands[1], "/4T\r")
     self.assertEqual(commands[2], "/4N32R\r")
@@ -368,11 +388,14 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def fail_firmware_query():
       raise CeligoError("firmware query failed")
 
-    stub(
-      celigo.x_axis.motor,
-      request_motor_controller_firmware_version=fail_firmware_query,
-    )
-    with self.assertRaisesRegex(CeligoError, "firmware query failed"):
+    with (
+      patch.object(
+        celigo.x_axis.motor,
+        "request_motor_controller_firmware_version",
+        fail_firmware_query,
+      ),
+      self.assertRaisesRegex(CeligoError, "firmware query failed"),
+    ):
       await celigo.x_axis._initialize()
     self.assertFalse(celigo.x_axis.is_initialized)
     self.assertFalse(celigo.x_axis._supports_accurate_encoder_index)
@@ -416,8 +439,8 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def write_analog(channel, value):
       analog_writes.append((channel, value))
 
-    stub(celigo, set_analog_output_count=write_analog)
-    await celigo.turn_off_illumination()
+    with patch.object(celigo, "set_analog_output_count", write_analog):
+      await celigo.turn_off_illumination()
     self.assertEqual(analog_writes, [(0, 0), (2, 0)])
 
   async def test_illumination_shutdown_zeros_analog_outputs_after_strobe_failure(self):
@@ -457,12 +480,14 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def write_analog(channel, value):
       analog_writes.append((channel, value))
 
-    stub(
-      celigo,
-      set_digital_output=fail_strobe,
-      set_analog_output_count=write_analog,
-    )
-    with self.assertRaisesRegex(CeligoError, "strobe write failed"):
+    with (
+      patch.multiple(
+        celigo,
+        set_digital_output=fail_strobe,
+        set_analog_output_count=write_analog,
+      ),
+      self.assertRaisesRegex(CeligoError, "strobe write failed"),
+    ):
       await celigo.turn_off_illumination()
     self.assertEqual(analog_writes, [(2, 0)])
 
@@ -477,9 +502,11 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def fail_wait(*_args, **_kwargs):
       raise TimeoutError("simulated timeout")
 
-    stub(celigo.motor_controller, send_command=send)
-    stub(celigo.dichroic_filter.motor, wait_until_ready=fail_wait)
-    with self.assertRaises(TimeoutError):
+    with (
+      patch.object(celigo.motor_controller, "send_command", send),
+      patch.object(celigo.dichroic_filter.motor, "wait_until_ready", fail_wait),
+      self.assertRaises(TimeoutError),
+    ):
       await celigo.dichroic_filter.move_to_ticks(2000)
 
     self.assertEqual(commands.count("/4T\r"), 3)
@@ -507,19 +534,18 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def set_parameter(token, value, _description):
       cleanup_operations.append(f"{token}{value}")
 
-    stub(
+    with patch.multiple(
       celigo.dichroic_filter.motor,
       send_command=send,
       wait_until_ready=wait_until_ready,
       _terminate=terminate,
       _set_parameter=set_parameter,
-    )
-
-    move = asyncio.create_task(celigo.dichroic_filter.move_to_ticks(2000))
-    await wait_started.wait()
-    move.cancel()
-    with self.assertRaises(asyncio.CancelledError):
-      await move
+    ):
+      move = asyncio.create_task(celigo.dichroic_filter.move_to_ticks(2000))
+      await wait_started.wait()
+      move.cancel()
+      with self.assertRaises(asyncio.CancelledError):
+        await move
 
     self.assertEqual(cleanup_operations, ["terminate", "h30"])
 
@@ -536,9 +562,11 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       wait_count += 1
       return next(waits)
 
-    stub(celigo.motor_controller, send_command=send)
-    stub(celigo.dichroic_filter.motor, wait_until_ready=wait)
-    self.assertEqual(await celigo.dichroic_filter.move_to_ticks(100), 100)
+    with (
+      patch.object(celigo.motor_controller, "send_command", send),
+      patch.object(celigo.dichroic_filter.motor, "wait_until_ready", wait),
+    ):
+      self.assertEqual(await celigo.dichroic_filter.move_to_ticks(100), 100)
     self.assertEqual(wait_count, 2)
 
   async def test_normal_accurate_home_checks_limit_indexes_and_moves_to_minimum(self):
@@ -593,14 +621,18 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       absolute_moves.append(target)
       return target
 
-    stub(celigo.x_axis, request_encoder_ticks=encoder)
-    stub(celigo.x_axis, _move_homing_relative_ticks=relative)
-    stub(celigo.x_axis, request_limit_flags=get_flags)
-    stub(celigo.x_axis.motor, _set_mode=no_op, _set_parameter=no_op)
-    stub(celigo.x_axis, _restore_homing_configuration=no_op)
-    stub(celigo.x_axis, _home_to_encoder_index=index_home)
-
-    with patch.object(Axis, "move_to_ticks", new=absolute):
+    with (
+      patch.multiple(
+        celigo.x_axis,
+        request_encoder_ticks=encoder,
+        _move_homing_relative_ticks=relative,
+        request_limit_flags=get_flags,
+        _restore_homing_configuration=no_op,
+        _home_to_encoder_index=index_home,
+      ),
+      patch.multiple(celigo.x_axis.motor, _set_mode=no_op, _set_parameter=no_op),
+      patch.object(Axis, "move_to_ticks", new=absolute),
+    ):
       self.assertEqual(await celigo.x_axis.home(), -1181)
     self.assertEqual(
       relative_moves,
@@ -656,14 +688,18 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def absolute(_axis, target, **_kwargs):
       return target
 
-    stub(celigo.z_axis.motor, _set_mode=no_op, _set_parameter=no_op)
-    stub(celigo.z_axis, _restore_homing_configuration=no_op)
-    stub(celigo.z_axis, request_encoder_ticks=encoder)
-    stub(celigo.z_axis, _move_homing_relative_ticks=relative)
-    stub(celigo.z_axis, request_limit_flags=get_flags)
-    stub(celigo.z_axis, _home_to_encoder_index=home_index)
-
-    with patch.object(Axis, "move_to_ticks", new=absolute):
+    with (
+      patch.multiple(celigo.z_axis.motor, _set_mode=no_op, _set_parameter=no_op),
+      patch.multiple(
+        celigo.z_axis,
+        _restore_homing_configuration=no_op,
+        request_encoder_ticks=encoder,
+        _move_homing_relative_ticks=relative,
+        request_limit_flags=get_flags,
+        _home_to_encoder_index=home_index,
+      ),
+      patch.object(Axis, "move_to_ticks", new=absolute),
+    ):
       self.assertEqual(await celigo.z_axis.home(), 126)
     self.assertEqual(index_home, [(25000, 378, 1, 68.13756613756614)])
     self.assertTrue(celigo.z_axis.has_position_reference)
@@ -713,13 +749,22 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
     async def terminate():
       commands.append((1, "T", False))
 
-    stub(celigo.x_axis, request_encoder_ticks=encoder)
-    stub(celigo.x_axis, _move_homing_relative_ticks=relative)
-    stub(celigo.x_axis, request_limit_flags=get_flags)
-    stub(celigo.x_axis.motor, _set_mode=no_op, _set_parameter=no_op, _terminate=terminate)
-    stub(celigo.x_axis, _restore_homing_configuration=restore)
-
-    with self.assertRaisesRegex(CeligoError, "without activating"):
+    with (
+      patch.multiple(
+        celigo.x_axis,
+        request_encoder_ticks=encoder,
+        _move_homing_relative_ticks=relative,
+        request_limit_flags=get_flags,
+        _restore_homing_configuration=restore,
+      ),
+      patch.multiple(
+        celigo.x_axis.motor,
+        _set_mode=no_op,
+        _set_parameter=no_op,
+        _terminate=terminate,
+      ),
+      self.assertRaisesRegex(CeligoError, "without activating"),
+    ):
       await celigo.x_axis.home()
     self.assertFalse(celigo.x_axis.has_position_reference)
     self.assertEqual(commands[-1], (1, "T", False))
@@ -738,9 +783,11 @@ class TestAccurateFilterHome(unittest.IsolatedAsyncioTestCase):
     async def timeout(*_args, **_kwargs):
       raise TimeoutError("simulated index timeout")
 
-    stub(celigo.motor_controller, send_command=send)
-    stub(celigo.dichroic_filter.motor, wait_until_ready=timeout)
-    with self.assertRaises(TimeoutError):
+    with (
+      patch.object(celigo.motor_controller, "send_command", send),
+      patch.object(celigo.dichroic_filter.motor, "wait_until_ready", timeout),
+      self.assertRaises(TimeoutError),
+    ):
       await celigo.dichroic_filter._home_to_encoder_index(
         2400,
         600,
@@ -772,10 +819,15 @@ class TestAccurateFilterHome(unittest.IsolatedAsyncioTestCase):
     async def get_flags():
       return next(flags)
 
-    stub(celigo.dichroic_filter, _home_to_encoder_index=home_index)
-    stub(celigo.dichroic_filter.motor, _set_mode=set_mode)
-    stub(celigo.dichroic_filter, request_limit_flags=get_flags)
-    with patch.object(Axis, "move_to_ticks", new=move_axis):
+    with (
+      patch.multiple(
+        celigo.dichroic_filter,
+        _home_to_encoder_index=home_index,
+        request_limit_flags=get_flags,
+      ),
+      patch.object(celigo.dichroic_filter.motor, "_set_mode", set_mode),
+      patch.object(Axis, "move_to_ticks", new=move_axis),
+    ):
       self.assertEqual(await celigo.dichroic_filter.home(), 4020)
     self.assertEqual(moves, [20, 2020, 4020])
     self.assertTrue(celigo.dichroic_filter.has_position_reference)
@@ -798,16 +850,16 @@ class TestCameraFrame(unittest.TestCase):
     self.assertEqual(encoded[:8], b"\x89PNG\r\n\x1a\n")
     ihdr_length = struct.unpack(">I", encoded[8:12])[0]
     self.assertEqual(encoded[12:16], b"IHDR")
-    self.assertEqual(struct.unpack(">IIBBBBB", encoded[16 : 16 + ihdr_length]), (2, 2, 8, 0, 0, 0, 0))
+    self.assertEqual(
+      struct.unpack(">IIBBBBB", encoded[16 : 16 + ihdr_length]), (2, 2, 8, 0, 0, 0, 0)
+    )
     idat_offset = 16 + ihdr_length + 4
     idat_length = struct.unpack(">I", encoded[idat_offset : idat_offset + 4])[0]
     self.assertEqual(encoded[idat_offset + 4 : idat_offset + 8], b"IDAT")
     compressed = encoded[idat_offset + 8 : idat_offset + 8 + idat_length]
     self.assertEqual(zlib.decompress(compressed), b"\x00\x00\x7f\x00\xff\x40")
 
-    thumbnail = CameraFrame(bytes(range(24)), 6, 4, 8, 1.0, 0.0, 0.0).to_png_bytes(
-      maximum_size=3
-    )
+    thumbnail = CameraFrame(bytes(range(24)), 6, 4, 8, 1.0, 0.0, 0.0).to_png_bytes(maximum_size=3)
     self.assertEqual(struct.unpack(">II", thumbnail[16:24]), (3, 2))
 
 
@@ -913,10 +965,10 @@ class TestLumeneraCamera(unittest.IsolatedAsyncioTestCase):
   def test_sdk_signature_is_bound_to_the_called_attribute(self):
     library = _FakeLucamLibrary()
     camera_open = _SignatureRecordingFunction(library.LucamCameraOpen)
-    library.LucamCameraOpen = camera_open  # type: ignore[method-assign]
     camera = LumeneraCamera(library=library)
 
-    camera._load_library()
+    with patch.object(library, "LucamCameraOpen", camera_open):
+      camera._load_library()
 
     self.assertIs(camera_open.restype, ctypes.c_void_p)
     self.assertEqual(camera_open.argtypes, [ctypes.c_uint32])
@@ -962,9 +1014,11 @@ class TestLumeneraCamera(unittest.IsolatedAsyncioTestCase):
       frame_rate._obj.value = 10.0
       return 1
 
-    library.LucamGetFormat = unsupported  # type: ignore[method-assign]
     camera = LumeneraCamera(library=library)
-    with self.assertRaisesRegex(Exception, "Unsupported Lumenera pixel format"):
+    with (
+      patch.object(library, "LucamGetFormat", unsupported),
+      self.assertRaisesRegex(Exception, "Unsupported Lumenera pixel format"),
+    ):
       await camera.setup()
     self.assertTrue(library.closed)
     self.assertFalse(camera.is_open)
@@ -980,9 +1034,11 @@ class TestLumeneraCamera(unittest.IsolatedAsyncioTestCase):
       release.wait()
       return 1
 
-    library.LucamCameraOpen = blocking_open  # type: ignore[method-assign]
     camera = LumeneraCamera(library=library, sdk_call_timeout=0.01)
-    with self.assertRaisesRegex(CameraError, "close is queued"):
+    with (
+      patch.object(library, "LucamCameraOpen", blocking_open),
+      self.assertRaisesRegex(CameraError, "close is queued"),
+    ):
       await camera.setup()
     self.assertTrue(started.is_set())
     self.assertFalse(camera.is_open)
@@ -1009,8 +1065,8 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
       commands.append((opcode, payload))
       return struct.pack(">H", 0)
 
-    stub(celigo, send_command=send_command)
-    self.assertTrue(await celigo.galvo.calibrate("x", timeout=0.9))
+    with patch.object(celigo, "send_command", send_command):
+      self.assertTrue(await celigo.galvo.calibrate("x", timeout=0.9))
     self.assertEqual(commands[0][0], _CMD_CALIBRATE_GALVO)
     self.assertEqual(struct.unpack(">HHH", commands[0][1]), (0, 900, 1))
 
@@ -1050,18 +1106,18 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
       transaction_timeouts.append(reply_timeout)
       return b"\x00\x00"
 
-    stub(celigo, send_command=transact)
-    targets = celigo.galvo.voltages_for_offset(2)
-    self.assertAlmostEqual(targets[0], 5.2)
-    self.assertAlmostEqual(targets[1], 4.8)
-    raw = await celigo.galvo.move_single("x", 5.2)
-    self.assertEqual(raw, -5.2)
-    _index, _dac, wait, timeout = struct.unpack(">HiHH", transactions[0][1])
-    self.assertEqual((wait, timeout), (1, 6000))
-    self.assertEqual(transaction_timeouts, [7.0])
-    self.assertEqual(celigo.reply_timeout, 2.0)
-    with self.assertRaisesRegex(CeligoError, "outside configured range"):
-      await celigo.galvo.move_single("x", 10.1)
+    with patch.object(celigo, "send_command", transact):
+      targets = celigo.galvo.voltages_for_offset(2)
+      self.assertAlmostEqual(targets[0], 5.2)
+      self.assertAlmostEqual(targets[1], 4.8)
+      raw = await celigo.galvo.move_single("x", 5.2)
+      self.assertEqual(raw, -5.2)
+      _index, _dac, wait, timeout = struct.unpack(">HiHH", transactions[0][1])
+      self.assertEqual((wait, timeout), (1, 6000))
+      self.assertEqual(transaction_timeouts, [7.0])
+      self.assertEqual(celigo.reply_timeout, 2.0)
+      with self.assertRaisesRegex(CeligoError, "outside configured range"):
+        await celigo.galvo.move_single("x", 10.1)
 
   async def test_move_both_starts_both_axes_before_polling_and_applies_configured_delay(self):
     celigo = make_celigo()
@@ -1095,9 +1151,11 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
         fire_table_index=0,
       )
 
-    stub(celigo, send_command=send_command)
-    stub(celigo.galvo, request_controller_status=request_status)
-    with patch("pylabrobot.revvity.celigo.galvo.asyncio.sleep", new_callable=AsyncMock) as sleep:
+    with (
+      patch.object(celigo, "send_command", send_command),
+      patch.object(celigo.galvo, "request_controller_status", request_status),
+      patch("pylabrobot.revvity.celigo.galvo.asyncio.sleep", new_callable=AsyncMock) as sleep,
+    ):
       self.assertEqual(await celigo.galvo.move_both(1.0, 2.0), (1.0, 2.0))
 
     self.assertEqual([opcode for opcode, _ in transactions], [_CMD_MOVE_GALVO] * 2)
@@ -1165,7 +1223,6 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
         )
       )
     )
-    stub(celigo, camera=camera)
     celigo.config.calibration = make_calibration_config(
       image_width_pixels=5,
       image_height_pixels=5,
@@ -1178,15 +1235,22 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
       camera.z = target_encoder_ticks
       return target_encoder_ticks
 
-    stub(celigo.z_axis, request_encoder_ticks=request_encoder_ticks, move_to_ticks=move_z)
-    result = await celigo.autofocus(
-      center_z_ticks=10,
-      span_ticks=4,
-      coarse_step_ticks=2,
-      fine_step_ticks=1,
-      evaluator=lambda frame: frame.data[0],
-      settle_seconds=0,
-    )
+    with (
+      patch.object(celigo, "camera", camera),
+      patch.multiple(
+        celigo.z_axis,
+        request_encoder_ticks=request_encoder_ticks,
+        move_to_ticks=move_z,
+      ),
+    ):
+      result = await celigo.autofocus(
+        center_z_ticks=10,
+        span_ticks=4,
+        coarse_step_ticks=2,
+        fine_step_ticks=1,
+        evaluator=lambda frame: frame.data[0],
+        settle_seconds=0,
+      )
     self.assertEqual(result.z_ticks, 12)
     self.assertEqual(camera.z, 12)
 
@@ -1214,7 +1278,6 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
         ),
       )
     )
-    stub(celigo, camera=camera)
     celigo.config.calibration = make_calibration_config(
       calibrated_z_position=1.0,
       image_width_pixels=5,
@@ -1266,13 +1329,20 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     async def no_op(*_args, **_kwargs):
       return None
 
-    stub(celigo, move_to_well=move_to_well)
-    stub(celigo, select_channel=select)
-    stub(celigo, set_illumination_enabled=no_op, turn_off_illumination=no_op)
-    stub(celigo.z_axis, move_to=move_z)
-    stub(celigo.galvo, voltages_for_offset=lambda _filter, _offset: (0.0, 0.0))
-    stub(celigo.galvo, move_both=move_both)
-    result = await celigo.acquire("A1", "green")
+    with (
+      patch.multiple(
+        celigo,
+        camera=camera,
+        move_to_well=move_to_well,
+        select_channel=select,
+        set_illumination_enabled=no_op,
+        turn_off_illumination=no_op,
+      ),
+      patch.object(celigo.z_axis, "move_to", move_z),
+      patch.object(celigo.galvo, "voltages_for_offset", return_value=(0.0, 0.0)),
+      patch.object(celigo.galvo, "move_both", move_both),
+    ):
+      result = await celigo.acquire("A1", "green")
     self.assertEqual(moved_z, [1.1])
     self.assertEqual(result.z_mm, 1.1)
 
@@ -1300,7 +1370,6 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
         ),
       )
     )
-    stub(celigo, camera=camera)
     celigo.config.calibration = make_calibration_config(
       calibrated_z_position=2.0,
       image_width_pixels=5,
@@ -1340,13 +1409,20 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     async def no_op(*_args, **_kwargs):
       return None
 
-    stub(celigo, move_to_well=move_to_well)
-    stub(celigo, select_channel=select)
-    stub(celigo, set_illumination_enabled=no_op, turn_off_illumination=no_op)
-    stub(celigo.z_axis, move_to=move_z)
-    stub(celigo.galvo, voltages_for_offset=lambda _filter, _offset: (0.0, 0.0))
-    stub(celigo.galvo, move_both=move_both)
-    result = await celigo.acquire("A1", "green")
+    with (
+      patch.multiple(
+        celigo,
+        camera=camera,
+        move_to_well=move_to_well,
+        select_channel=select,
+        set_illumination_enabled=no_op,
+        turn_off_illumination=no_op,
+      ),
+      patch.object(celigo.z_axis, "move_to", move_z),
+      patch.object(celigo.galvo, "voltages_for_offset", return_value=(0.0, 0.0)),
+      patch.object(celigo.galvo, "move_both", move_both),
+    ):
+      result = await celigo.acquire("A1", "green")
     self.assertEqual(moved_z, [2.1])
     self.assertEqual(result.z_mm, 2.1)
 
@@ -1360,9 +1436,14 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     async def turn_off_illumination():
       extinguished.append(True)
 
-    stub(celigo, _acquire_field=fail)
-    stub(celigo, turn_off_illumination=turn_off_illumination)
-    with self.assertRaisesRegex(CeligoError, "capture failure"):
+    with (
+      patch.multiple(
+        celigo,
+        _acquire_field=fail,
+        turn_off_illumination=turn_off_illumination,
+      ),
+      self.assertRaisesRegex(CeligoError, "capture failure"),
+    ):
       await celigo.acquire("A1", "brightfield")
     self.assertEqual(extinguished, [True])
 
@@ -1377,9 +1458,12 @@ class TestHostAutofocus(unittest.IsolatedAsyncioTestCase):
     async def turn_off_illumination():
       extinguished.append(True)
 
-    stub(celigo, _acquire_field=acquire_field)
-    stub(celigo, turn_off_illumination=turn_off_illumination)
-    self.assertIs(await celigo.acquire("A1", "brightfield"), result)
+    with patch.multiple(
+      celigo,
+      _acquire_field=acquire_field,
+      turn_off_illumination=turn_off_illumination,
+    ):
+      self.assertIs(await celigo.acquire("A1", "brightfield"), result)
     self.assertEqual(extinguished, [True])
 
 
@@ -1406,15 +1490,15 @@ class TestCameraGeometry(unittest.IsolatedAsyncioTestCase):
     camera = _FocusCamera()
     camera.width = 5
     camera.height = 5
-    stub(celigo, camera=camera)
     celigo.config.calibration = make_calibration_config(
       image_width_pixels=4,
       image_height_pixels=4,
     )
-    frame = await celigo.camera.capture(flush_frames=0)
-    self.assertEqual((frame.width, frame.height), (5, 5))
-    with self.assertRaisesRegex(CeligoError, "does not match calibrated"):
-      await celigo.capture_frame(flush_frames=0)
+    with patch.object(celigo, "camera", camera):
+      frame = await celigo.camera.capture(flush_frames=0)
+      self.assertEqual((frame.width, frame.height), (5, 5))
+      with self.assertRaisesRegex(CeligoError, "does not match calibrated"):
+        await celigo.capture_frame(flush_frames=0)
 
 
 class TestExternalCameraSignals(unittest.IsolatedAsyncioTestCase):
@@ -1432,9 +1516,9 @@ class TestExternalCameraSignals(unittest.IsolatedAsyncioTestCase):
     async def diagnostic(operation):
       return {4: 0, 5: 1}[operation]
 
-    stub(celigo, _send_signal_diagnostic_command=diagnostic)
-    self.assertTrue(await celigo.request_is_camera_busy())
-    self.assertFalse(await celigo.request_is_camera_integrating())
+    with patch.object(celigo, "_send_signal_diagnostic_command", diagnostic):
+      self.assertTrue(await celigo.request_is_camera_busy())
+      self.assertFalse(await celigo.request_is_camera_integrating())
 
   async def test_unavailable_signal_returns_none(self):
     celigo = make_celigo()
@@ -1443,8 +1527,8 @@ class TestExternalCameraSignals(unittest.IsolatedAsyncioTestCase):
     async def diagnostic(_operation):
       return 2
 
-    stub(celigo, _send_signal_diagnostic_command=diagnostic)
-    self.assertIsNone(await celigo.request_is_camera_busy())
+    with patch.object(celigo, "_send_signal_diagnostic_command", diagnostic):
+      self.assertIsNone(await celigo.request_is_camera_busy())
 
 
 class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
@@ -1474,10 +1558,13 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
     async def ready(**_kwargs):
       return True
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo, send_command=transact)
-    stub(celigo, wait_for_controller_ready=ready)
-    await celigo.laser.fire(laser_index=1, shots=3, delay=0.00025)
+    with patch.multiple(
+      celigo,
+      request_controller_status=status,
+      send_command=transact,
+      wait_for_controller_ready=ready,
+    ):
+      await celigo.laser.fire(laser_index=1, shots=3, delay=0.00025)
 
     self.assertEqual(transactions[0][0], _CMD_FIRE_LASER)
     self.assertEqual(struct.unpack(">Hii", transactions[0][1]), (1, 3, 25))
@@ -1499,12 +1586,16 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
     async def abort():
       aborts.append(True)
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo, send_command=transact)
-    stub(celigo, wait_for_controller_ready=not_ready)
-    stub(celigo, abort_controller_operation=abort)
-
-    with self.assertRaisesRegex(TimeoutError, "did not complete"):
+    with (
+      patch.multiple(
+        celigo,
+        request_controller_status=status,
+        send_command=transact,
+        wait_for_controller_ready=not_ready,
+        abort_controller_operation=abort,
+      ),
+      self.assertRaisesRegex(TimeoutError, "did not complete"),
+    ):
       await celigo.laser.fire(laser_index=0, shots=1)
 
     self.assertEqual(aborts, [True])
@@ -1530,12 +1621,16 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
     async def abort():
       aborts.append(True)
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo, send_command=transact)
-    stub(celigo, wait_for_controller_ready=not_ready)
-    stub(celigo, abort_controller_operation=abort)
-
-    with self.assertRaisesRegex(TimeoutError, "grid firing did not complete"):
+    with (
+      patch.multiple(
+        celigo,
+        request_controller_status=status,
+        send_command=transact,
+        wait_for_controller_ready=not_ready,
+        abort_controller_operation=abort,
+      ),
+      self.assertRaisesRegex(TimeoutError, "grid firing did not complete"),
+    ):
       await celigo.laser.fire_grid(
         0,
         (0.1, 0.1),
@@ -1574,14 +1669,18 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
     async def abort():
       aborts.append(True)
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo.galvo, request_controller_status=targeting_status)
-    stub(celigo.laser, _load_firing_targets=load)
-    stub(celigo, send_command=transact)
-    stub(celigo, wait_for_controller_ready=not_ready)
-    stub(celigo, abort_controller_operation=abort)
-
-    with self.assertRaisesRegex(TimeoutError, "Targeted laser firing did not complete"):
+    with (
+      patch.multiple(
+        celigo,
+        request_controller_status=status,
+        send_command=transact,
+        wait_for_controller_ready=not_ready,
+        abort_controller_operation=abort,
+      ),
+      patch.object(celigo.galvo, "request_controller_status", targeting_status),
+      patch.object(celigo.laser, "_load_firing_targets", load),
+      self.assertRaisesRegex(TimeoutError, "Targeted laser firing did not complete"),
+    ):
       await celigo.laser.fire_targets(
         [(0.0, 0.0)],
         0,
@@ -1605,10 +1704,13 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
         return struct.pack(">HH", 0, 3) + b"OK\x00"
       return b""
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo, send_command=transact)
-    await celigo.laser.send_command("STATUS?")
-    self.assertEqual(await celigo.laser.request_uart_response(), "OK")
+    with patch.multiple(
+      celigo,
+      request_controller_status=status,
+      send_command=transact,
+    ):
+      await celigo.laser.send_command("STATUS?")
+      self.assertEqual(await celigo.laser.request_uart_response(), "OK")
     self.assertEqual(
       transactions,
       [
@@ -1638,18 +1740,21 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
       del timeout, poll
       return True
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo, send_command=transact)
-    stub(celigo, wait_for_controller_ready=ready)
-    await celigo.laser.fire_grid(
-      0,
-      (0.1, 0.1),
-      (1.0, 1.0),
-      (0.0, 0.0),
-      1,
-      1,
-      delay_between_repeats=0.0025,
-    )
+    with patch.multiple(
+      celigo,
+      request_controller_status=status,
+      send_command=transact,
+      wait_for_controller_ready=ready,
+    ):
+      await celigo.laser.fire_grid(
+        0,
+        (0.1, 0.1),
+        (1.0, 1.0),
+        (0.0, 0.0),
+        1,
+        1,
+        delay_between_repeats=0.0025,
+      )
     self.assertEqual(transactions[0][0], _CMD_FIRE_GALVO_GRID)
     self.assertEqual(len(transactions[0][1]), 32)
     self.assertEqual(struct.unpack(">HHHHHHHiiiiH", transactions[0][1])[9], 250)
@@ -1683,10 +1788,13 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
     async def ready(**_kwargs):
       return True
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo, send_command=transact)
-    stub(celigo, wait_for_controller_ready=ready)
-    await celigo.laser._load_firing_targets([(0.1, -0.1)], (1.6, 1.5))
+    with patch.multiple(
+      celigo,
+      request_controller_status=status,
+      send_command=transact,
+      wait_for_controller_ready=ready,
+    ):
+      await celigo.laser._load_firing_targets([(0.1, -0.1)], (1.6, 1.5))
     self.assertEqual(transactions[0][0], _CMD_LOAD_FIRING_TABLE)
     x_dac, y_dac = struct.unpack_from(">HH", transactions[0][1], 4)
     self.assertAlmostEqual(dac_count_to_volts(x_dac), -1.7, places=3)
@@ -1716,11 +1824,16 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
         targeted.append(opcode)
       return b""
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo.galvo, request_controller_status=targeting_status)
-    stub(celigo.laser, _load_firing_targets=load)
-    stub(celigo, send_command=transact)
-    with self.assertRaises(CeligoError):
+    with (
+      patch.multiple(
+        celigo,
+        request_controller_status=status,
+        send_command=transact,
+      ),
+      patch.object(celigo.galvo, "request_controller_status", targeting_status),
+      patch.object(celigo.laser, "_load_firing_targets", load),
+      self.assertRaises(CeligoError),
+    ):
       await celigo.laser.fire_targets(
         [(0.0, 0.0)],
         0,
@@ -1773,12 +1886,17 @@ class TestLaserSafety(unittest.IsolatedAsyncioTestCase):
     async def ready(**_kwargs):
       return True
 
-    stub(celigo, request_controller_status=status)
-    stub(celigo.galvo, request_controller_status=targeting_status)
-    stub(celigo.laser, _load_firing_targets=load)
-    stub(celigo, send_command=transact)
-    stub(celigo, wait_for_controller_ready=ready)
-    await celigo.laser.fire_targets([(0.0, 0.0)], 1, 1)
+    with (
+      patch.multiple(
+        celigo,
+        request_controller_status=status,
+        send_command=transact,
+        wait_for_controller_ready=ready,
+      ),
+      patch.object(celigo.galvo, "request_controller_status", targeting_status),
+      patch.object(celigo.laser, "_load_firing_targets", load),
+    ):
+      await celigo.laser.fire_targets([(0.0, 0.0)], 1, 1)
     self.assertEqual(centers, [(0.2, 0.1)])
 
 

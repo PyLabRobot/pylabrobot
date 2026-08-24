@@ -1,14 +1,12 @@
 """Shared constructor-based test fixtures for the Celigo driver."""
 
-import inspect
 from dataclasses import replace
-from typing import Any, Optional, Tuple, TypeVar
+from typing import Any, Optional, Tuple
 from unittest.mock import patch
 
 from pylabrobot.revvity.celigo.camera import CameraFrame
 from pylabrobot.revvity.celigo.celigo import Celigo
 from pylabrobot.revvity.celigo.config import (
-  AxisConfig,
   CalibrationConfig,
   CeligoConfig,
   CeligoHardwareConfig,
@@ -21,25 +19,6 @@ from pylabrobot.revvity.celigo.config import (
   LinearAxisConfig,
   NavigationConfig,
 )
-
-_T = TypeVar("_T")
-
-
-def require(value: Optional[_T]) -> _T:
-  """Return a required parsed value or fail the test with a clear error."""
-  if value is None:
-    raise AssertionError("expected a configured value, got None")
-  return value
-
-
-def stub(target: object, **attributes: Any) -> None:
-  """Install explicitly scoped test doubles on a known test target."""
-  for name, value in attributes.items():
-    try:
-      inspect.getattr_static(target, name)
-    except AttributeError as exc:
-      raise AttributeError(f"{type(target).__name__} has no attribute {name!r}") from exc
-    object.__setattr__(target, name, value)
 
 
 class FakeCamera:
@@ -97,60 +76,6 @@ class FakeCamera:
       gain=self.gain,
       captured_at=0.0,
     )
-
-
-class FakeTransport:
-  """Non-I/O transport carrying only constructor-level identity."""
-
-  def __init__(self, device_id: Optional[str] = None) -> None:
-    self.device_id = device_id
-
-
-def make_axis_config(**changes: Any) -> AxisConfig:
-  """Build a complete generic motor config for a focused test."""
-  config = AxisConfig(
-    motion_name="Test axis",
-    config_version=0,
-    motor_type=0,
-    comm_index=0,
-    controller_index=0,
-    axis_index=1,
-    enabled=True,
-    max_velocity=0.0,
-    max_acceleration=0.0,
-    max_deceleration=0.0,
-    max_s_acceleration=0,
-    moderate_acceleration=0.0,
-    minimum_acceleration=0.0,
-    moderate_s_acceleration=0,
-    minimum_s_acceleration=0,
-    s_curve_support=False,
-    home_type="",
-    homing_velocity=0.0,
-    index_velocity=0.0,
-    homing_short_move=0,
-    home_offset=0.0,
-    positive_limit=False,
-    negative_limit=False,
-    limit_polarity=0,
-    invert_axis_direction=False,
-    default_positive_direction=False,
-    moving_current_percentage=0,
-    holding_current_percentage=0,
-    loading_current_percentage=0,
-    moving_overload_limit=0,
-    mode_enable_limits=False,
-    mode_enable_step_and_direction=False,
-    mode_enable_position_correction=False,
-    mode_enable_motor_slave_to_encoder=False,
-    coarse_position_error_window=0,
-    fine_position_error_window=0,
-    gain=0,
-    encoder_to_motor_tick_ratio=0.0,
-    backlash_compensation=0,
-    motor_response_time=0,
-  )
-  return replace(config, **changes)
 
 
 def make_linear_axis_config(**changes: Any) -> LinearAxisConfig:
@@ -346,16 +271,19 @@ def make_test_config() -> CeligoConfig:
   )
 
 
-def make_celigo(**kwargs: Any) -> Celigo:
-  """Construct a hardware-free ``Celigo`` that tests may replace methods on dynamically."""
-  config = kwargs.setdefault("config", make_test_config())
-  hardware = kwargs.pop("hardware", None)
+def make_celigo(
+  *,
+  config: Optional[CeligoConfig] = None,
+  hardware: Optional[CeligoHardwareConfig] = None,
+  allow_laser: bool = False,
+) -> Celigo:
+  """Construct a hardware-free ``Celigo`` for tests."""
+  config = make_test_config() if config is None else config
   if hardware is not None:
     config.hardware = hardware
   camera = FakeCamera()
-  transport = FakeTransport(device_id=kwargs.get("device_id"))
   with (
-    patch("pylabrobot.revvity.celigo.celigo.FTDI", return_value=transport),
+    patch("pylabrobot.revvity.celigo.celigo.FTDI", return_value=object()),
     patch("pylabrobot.revvity.celigo.celigo.LumeneraCamera", return_value=camera),
   ):
-    return Celigo(**kwargs)
+    return Celigo(config=config, allow_laser=allow_laser)

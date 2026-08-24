@@ -46,6 +46,12 @@ LOK = "LOK"
 ouput = "ouput"
 hegiht = "hegiht"
 
+# Celigo vendor XML schema identifiers. These spellings appear in instrument
+# configuration files and must remain exact for configuration loading.
+Accleration = "Accleration"
+Tranformation = "Tranformation"
+tranformation = "tranformation"
+
 [files]
 extend-exclude = [
     "*.ipynb"
