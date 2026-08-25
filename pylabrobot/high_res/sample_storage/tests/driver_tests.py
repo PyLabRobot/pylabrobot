@@ -138,7 +138,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     rack = driver.racks[0]
     self.assertEqual(rack.name, "discovered_store_stacker_2")
     self.assertEqual(rack.capacity, 24)
-    self.assertEqual(rack.metadata["stacker"], 2)
+    self.assertNotIn("stacker", rack.metadata)
+    self.assertEqual(driver._racks_by_number, {2: rack})
     self.assertEqual(driver._locate(rack.sites[0]), (2, 1))
     self.assertEqual(driver._locate(rack.sites[23]), (2, 24))
 
@@ -178,7 +179,9 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
 
     await self.driver.setup()
 
-    self.assertEqual(self.driver._nest_numbers, [1, 2])
+    self.assertEqual(
+      [nest.name for nest in self.driver.nests], ["sample_store_nest_1", "sample_store_nest_2"]
+    )
     self.assertEqual(len(self.driver.nests), 2)
     self.assertTrue(all(nest.resource is None for nest in self.driver.nests))
 
@@ -201,8 +204,21 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
 
     await self.driver.setup()
 
-    self.assertEqual(self.driver._nest_numbers, [1, 2])
+    self.assertEqual(
+      [nest.name for nest in self.driver.nests], ["sample_store_nest_1", "sample_store_nest_2"]
+    )
     self.assertIs(self.driver.nests[0].resource, plate)
+
+  async def test_setup_rejects_noncontiguous_initial_nests(self):
+    self.socket.captures["neststatus"] = [
+      "ACK! neststatus 12",
+      "1: CLEAR",
+      "3: CLEAR",
+      "OK! neststatus 12",
+    ]
+
+    with self.assertRaisesRegex(RuntimeError, r"contiguous nest numbers.*\[1, 3\]"):
+      await self.driver.setup()
 
   async def test_setup_keeps_user_configured_model(self):
     driver = HighResSampleStorage(
@@ -792,7 +808,7 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
 
     release_transfer.set()
     self.assertIs(await first, self.plate)
-    with self.assertRaisesRegex(ValueError, "not a known stacker slot"):
+    with self.assertRaisesRegex(ValueError, "not attached to a plate carrier"):
       await second
     self.assertEqual(pick_calls, [(1, 1, 1, True)])
 

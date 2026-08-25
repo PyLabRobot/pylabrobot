@@ -118,10 +118,8 @@ class HighResSampleStorage(Resource):
     # robot-facing coordinates are intentionally undefined relative to the
     # store, so the corresponding resources are attached with location=None.
     self.nests: List[PlateHolder] = []
-    self._nest_numbers: List[int] = []
 
-    self._racks: List[PlateCarrier] = []
-    self._site_locations: Dict[int, Tuple[int, int]] = {}
+    self._racks_by_number: Dict[int, PlateCarrier] = {}
     self._racks_loaded = racks is not None
     if racks is not None:
       for rack_index, rack in enumerate(racks):
@@ -197,8 +195,13 @@ class HighResSampleStorage(Resource):
     if not nest_status:
       raise RuntimeError("The sample store did not report any nests.")
     if not self.nests:
-      self._nest_numbers = sorted(nest_status)
-      for nest_number in self._nest_numbers:
+      nest_numbers = sorted(nest_status)
+      expected_nest_numbers = list(range(1, len(nest_numbers) + 1))
+      if nest_numbers != expected_nest_numbers:
+        raise RuntimeError(
+          f"The sample store must report contiguous nest numbers starting at 1; got {nest_numbers}."
+        )
+      for nest_number in nest_numbers:
         nest = PlateHolder(
           name=f"{self.name}_nest_{nest_number}",
           size_x=127.76,
@@ -212,16 +215,16 @@ class HighResSampleStorage(Resource):
       await self.home()
 
   def _add_rack(self, rack: PlateCarrier, stacker: int) -> None:
-    """Attach one rack and index its sites by physical stacker and slot."""
+    """Attach one rack under its physical stacker number."""
     if stacker < 1:
       raise ValueError(f"Stacker number must be positive; got {stacker}.")
-    self.assign_child_resource(rack, location=None)
-    self._racks.append(rack)
+    if stacker in self._racks_by_number:
+      raise ValueError(f"Stacker {stacker} is already configured.")
     for spot, site in rack.sites.items():
       if spot < 0:
         raise ValueError(f"Rack site spot must be non-negative; got {spot} for {site.name!r}.")
-      # PLR carrier spots are zero-based; HighRes stacker slots are one-based.
-      self._site_locations[id(site)] = (stacker, spot + 1)
+    self.assign_child_resource(rack, location=None)
+    self._racks_by_number[stacker] = rack
 
   async def _load_racks_from_device(self) -> None:
     """Create empty stacker resources from ``getstackerdimensions``."""
@@ -230,7 +233,7 @@ class HighResSampleStorage(Resource):
       raise RuntimeError("The sample store did not report any stacker dimensions.")
 
     reported_stackers = set()
-    for stacker_dimensions in dimensions:
+    for stacker_dimensions in sorted(dimensions, key=lambda value: value.stacker):
       stacker = stacker_dimensions.stacker
       if stacker in reported_stackers:
         raise RuntimeError(f"The sample store reported stacker {stacker} more than once.")
@@ -243,11 +246,10 @@ class HighResSampleStorage(Resource):
         slot_height=stacker_dimensions.slot_height,
         slot_count=stacker_dimensions.slot_count,
       )
-      rack.metadata["stacker"] = stacker
       self._add_rack(rack, stacker=stacker)
 
     self._racks_loaded = True
-    logger.info("Loaded %d configured stackers for %s", len(self._racks), self.name)
+    logger.info("Loaded %d configured stackers for %s", len(self._racks_by_number), self.name)
 
   async def stop(self):
     logger.info("Stopping %s", self.name)
@@ -736,13 +738,13 @@ class HighResSampleStorage(Resource):
 
   @property
   def racks(self) -> List[PlateCarrier]:
-    return self._racks
+    return list(self._racks_by_number.values())
 
   def get_num_free_sites(self) -> int:
-    return sum(len(rack.get_free_sites()) for rack in self._racks)
+    return sum(len(rack.get_free_sites()) for rack in self._racks_by_number.values())
 
   def get_site_by_plate_name(self, plate_name: str) -> PlateHolder:
-    for rack in self._racks:
+    for rack in self._racks_by_number.values():
       for site in rack.sites.values():
         if site.resource is not None and site.resource.name == plate_name:
           return site
@@ -755,7 +757,7 @@ class HighResSampleStorage(Resource):
       plate_height = max(plate_height, lid_location.z + plate.lid.get_size_z())
     available = [
       site
-      for rack in self._racks
+      for rack in self._racks_by_number.values()
       for site in rack.get_free_sites()
       if site.get_size_z() >= plate_height
     ]
@@ -783,19 +785,38 @@ class HighResSampleStorage(Resource):
     return random.choice(self._find_available_sites_sorted(plate))
 
   def _locate(self, site: PlateHolder) -> Tuple[int, int]:
-    if id(site) not in self._site_locations:
-      raise ValueError(f"Site '{site.name}' is not a known stacker slot.")
-    return self._site_locations[id(site)]
+    rack = site.parent
+    if not isinstance(rack, PlateCarrier):
+      raise ValueError(f"Site '{site.name}' is not attached to a plate carrier.")
+
+    stacker = next(
+      (
+        number
+        for number, configured_rack in self._racks_by_number.items()
+        if configured_rack is rack
+      ),
+      None,
+    )
+    if stacker is None:
+      raise ValueError(f"Site '{site.name}' is not in a known stacker.")
+
+    spot = next(
+      (spot for spot, configured_site in rack.sites.items() if configured_site is site), None
+    )
+    if spot is None:
+      raise ValueError(f"Site '{site.name}' is not a known slot in stacker {stacker}.")
+    # PLR carrier spots are zero-based; HighRes stacker slots are one-based.
+    return stacker, spot + 1
 
   def _nest_for_tray(self, tray_index: int) -> int:
-    """Map a 0-based tray index to a nest number reported by the device."""
-    if not self._nest_numbers:
+    """Map a 0-based tray index to its one-based device nest number."""
+    if not self.nests:
       raise RuntimeError("Nests have not been loaded; call setup() first.")
-    if not 0 <= tray_index < len(self._nest_numbers):
+    if not 0 <= tray_index < len(self.nests):
       raise ValueError(
-        f"sample store has trays 0..{len(self._nest_numbers) - 1}; got tray_index={tray_index}."
+        f"sample store has trays 0..{len(self.nests) - 1}; got tray_index={tray_index}."
       )
-    return self._nest_numbers[tray_index]
+    return tray_index + 1
 
   async def fetch_plate_to_loading_tray(self, plate: Union[Plate, str], tray_index: int) -> Plate:
     async with self._transfer_lock:
