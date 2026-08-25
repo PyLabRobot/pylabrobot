@@ -62,6 +62,13 @@ class DecodeEmcyTests(unittest.TestCase):
     self.assertTrue(state.underflow)
     self.assertFalse(state.queue_low)
 
+  def test_can_message_lost_suppresses_callback(self):
+    state = _NodeEmcyState()
+    desc, disable, suppress = _decode_emcy(EmcyFrame(0x8110, 0, 0xBD, 0, 0), state)
+    self.assertEqual(desc, "CAN message lost (corrupted or overrun)")
+    self.assertFalse(disable)
+    self.assertTrue(suppress)
+
   def test_unknown_code_falls_back_to_hex(self):
     state = _NodeEmcyState()
     desc, disable, suppress = _decode_emcy(EmcyFrame(0x1234, 0, 0xAB, 0, 0), state)
@@ -117,6 +124,13 @@ class DispatchEmcyTests(unittest.TestCase):
     self.assertEqual(nid, 1)
     self.assertEqual(desc, "E-stop button was pressed")
     self.assertTrue(disable)
+
+  def test_can_message_lost_suppresses_callback(self):
+    received = []
+    self.driver.add_emcy_callback(lambda *args: received.append(args))
+    self.driver._dispatch_emcy(1, _frame(0x8110, 0xBD))
+    self.assertEqual(received, [])
+    self.assertIsNone(self.driver.emcy_move_error)
 
   def test_callback_suppressed_for_interpolation_underflow(self):
     received = []

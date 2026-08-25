@@ -1,6 +1,7 @@
 {
   "editor.tabSize": 2,
   "files.trimTrailingWhitespace": true,
+  "python.defaultInterpreterPath": "C:\\Users\\admin_lab\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
   "python.linting.mypyEnabled": true,
   "python.linting.enabled": true,
   "python.testing.pytestArgs": ["."],

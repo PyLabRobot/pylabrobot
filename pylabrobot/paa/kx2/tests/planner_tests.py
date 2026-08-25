@@ -410,6 +410,19 @@ class DirectionAwareDelta(unittest.TestCase):
     assert plan_short is not None and plan_normal is not None  # type narrowing for mypy
     self.assertAlmostEqual(plan_short.move_time, plan_normal.move_time, places=6)
 
+  def test_shortest_way_encoder_stays_on_current_wrap(self):
+    """Unlimited encoders count across revolutions. From 350° to the INI
+    value 10° the short move is +20°, so the commanded target is 370 counts
+    — not 10, which would unwind 340° the long way."""
+    cfg_short = self._wrist_cfg(JointMoveDirection.ShortestWay)
+    plan = kinematics.plan_joint_move(
+      {Axis.WRIST: 350.0}, {Axis.WRIST: 10.0}, cfg_short, GripperParams(),
+    )
+    self.assertIsNotNone(plan)
+    assert plan is not None
+    m = _move_for(plan, Axis.WRIST)
+    self.assertEqual(m.position, 370)
+
   def test_normal_direction_uses_literal_delta(self):
     """Normal mode = no wrap. delta is target - current, no shortcut."""
     cfg_normal = self._wrist_cfg(JointMoveDirection.Normal)
@@ -521,6 +534,8 @@ class EncoderUnitConversion(unittest.TestCase):
     z_move = _move_for(plan, Axis.Z)
     self.assertEqual(z_move.velocity, 100)    # max_vel * |conv|
     self.assertEqual(z_move.acceleration, 100)
+    self.assertTrue(z_move.noop)
+    self.assertFalse(_move_for(plan, Axis.SHOULDER).noop)
 
 
 # --- 9. gripper-speed cap path ---------------------------------------------
@@ -734,6 +749,43 @@ class SyncAlgorithmExactValues(unittest.TestCase):
     self._assert_enc_close(wr.velocity, 9444)
     self._assert_enc_close(wr.acceleration, 27705)
     self.assertAlmostEqual(plan.move_time, 0.774597, places=3)
+
+
+class LinearJointInterpolation(unittest.TestCase):
+  def test_velocities_proportional_to_distance(self):
+    """Peak-style: v/dist is the same for every axis so they share s(t)."""
+    cfg = _config(
+      shoulder=_axis(max_vel=100.0, max_accel=200.0),
+      z=_axis(min_travel=0.0, max_travel=400.0, max_vel=100.0, max_accel=200.0),
+    )
+    plan = kinematics.plan_joint_move(
+      {Axis.SHOULDER: 0.0, Axis.Z: 0.0},
+      {Axis.SHOULDER: 20.0, Axis.Z: 40.0},
+      cfg, GripperParams(),
+      linear_joint=True,
+    )
+    self.assertIsNotNone(plan)
+    assert plan is not None
+    sh = _move_for(plan, Axis.SHOULDER)
+    z = _move_for(plan, Axis.Z)
+    self.assertAlmostEqual(sh.velocity / 20.0, z.velocity / 40.0, delta=0.05)
+    self.assertAlmostEqual(sh.acceleration / 20.0, z.acceleration / 40.0, delta=0.05)
+
+  def test_wrap_encoder_still_stays_on_current_revolution(self):
+    cfg = _config(
+      wrist=_axis(
+        min_travel=-180.0, max_travel=180.0, unlimited_travel=True,
+        joint_move_direction=JointMoveDirection.ShortestWay,
+        max_vel=360.0, max_accel=720.0,
+      )
+    )
+    plan = kinematics.plan_joint_move(
+      {Axis.WRIST: 350.0}, {Axis.WRIST: 10.0}, cfg, GripperParams(),
+      linear_joint=True,
+    )
+    self.assertIsNotNone(plan)
+    assert plan is not None
+    self.assertEqual(_move_for(plan, Axis.WRIST).position, 370)
 
 
 if __name__ == "__main__":

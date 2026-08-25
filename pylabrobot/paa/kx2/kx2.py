@@ -348,17 +348,20 @@ class KX2:
   ) -> None:
     """EMCY callback. Runs on the asyncio loop thread.
 
-    Logs every EMCY at error level. When the drive flagged a fatal fault
-    (``disable_motors=True``), schedules an MO=0 on every motion axis as a
-    coroutine — mirrors the C# motor-disable in KX2RobotControl.cs:15395-15404
-    minus the indicator-light I/O (no PLR analog).
+    Fatal faults (``disable_motors=True``) are logged at error and schedule
+    MO=0 on every motion axis — mirrors the C# motor-disable in
+    KX2RobotControl.cs:15395-15404 minus the indicator-light I/O (no PLR
+    analog). Non-fatal codes are already logged by ``_dispatch_emcy`` at
+    INFO/DEBUG; re-logging them here at ERROR drowned the console with
+    CAN-overrun chatter (0x8110).
     """
+    if not disable_motors:
+      return
+
     logger.error(
       "KX2 EMCY axis=%d code=0x%04X elmo=0x%02X: %s",
       node_id, frame.err_code, frame.elmo_err_code, description,
     )
-    if not disable_motors:
-      return
 
     async def _disable_all() -> None:
       for axis in MOTION_AXES:
@@ -439,10 +442,19 @@ class KX2:
     await asyncio.sleep(0.5)
 
     discovered = sorted(network.scanner.nodes)
-    if discovered != self.node_id_list:
+    expected = list(self.node_id_list)
+    missing = [nid for nid in expected if nid not in discovered]
+    if missing:
       raise CanError(
-        f"Node IDs on CAN bus do not match expected list: "
-        f"{discovered} != {self.node_id_list}"
+        f"Expected CAN node IDs missing from bus: {missing} "
+        f"(discovered={discovered}, expected={expected})"
+      )
+    extras = [nid for nid in discovered if nid not in expected]
+    if extras:
+      logger.warning(
+        "Ignoring unexpected CAN node IDs on bus: %s (expected=%s)",
+        extras,
+        expected,
       )
 
     for nid in self.node_id_list:
@@ -1103,6 +1115,7 @@ class KX2:
     want = 1 if state else 0
     max_attempts = 20
     inter_attempt_sleep_s = 0.5
+    mo_settle_s = 1.0
     for attempt in range(1, max_attempts + 1):
       if not use_ds402:
         await self.write(node_id, "MO", 0, want)
@@ -1122,23 +1135,36 @@ class KX2:
         await self._control_word_set(node_id=node_id, value=0x07)  # Switch on
         await self._wait_sw_bit(node_id, bit_mask=1 << 1, want_high=True)
         await self._control_word_set(node_id=node_id, value=0x0F)  # Enable op
-        # Bit 2 (Operation enabled) is confirmed by the MO query below.
+        # Bit 2 (Operation enabled) can lag the CW write after a bus
+        # reconnect; wait for it before treating MO as failed.
+        await self._wait_sw_bit(
+          node_id, bit_mask=1 << 2, want_high=True, timeout_s=0.5,
+        )
       else:
         # DS402 disable: Op Enabled -> Switched On -> Ready to Switch On.
         # Matches C# (clscanmotor.cs:4540-4543) — back-to-back, no inter-CW sleep.
         await self._control_word_set(node_id=node_id, value=7)
         await self._control_word_set(node_id=node_id, value=6)
-      await asyncio.sleep(0.1)
-      mo = await self.query_int(node_id, "MO", 0)
+      mo = await self._wait_motor_on(node_id, want=want, timeout_s=mo_settle_s)
       if mo == want:
         return
-      logger.warning(
-        "motor_enable(state=%s) attempt %d/%d failed for node %d (MO=%s); retrying",
+      logger.debug(
+        "motor_enable(state=%s) attempt %d/%d for node %d still MO=%s; retrying",
         state, attempt, max_attempts, node_id, mo,
       )
       await asyncio.sleep(inter_attempt_sleep_s)
     verb = "enable" if state else "disable"
     raise CanError(f"Motor failed to {verb} (node_id = {node_id}) after {max_attempts} attempts")
+
+  async def _wait_motor_on(self, node_id: int, *, want: int, timeout_s: float) -> int:
+    """Poll Elmo MO until it matches ``want`` or ``timeout_s`` elapses."""
+    assert self._loop is not None
+    deadline = self._loop.time() + timeout_s
+    mo = await self.query_int(node_id, "MO", 0)
+    while mo != want and self._loop.time() < deadline:
+      await asyncio.sleep(0.05)
+      mo = await self.query_int(node_id, "MO", 0)
+    return mo
 
   async def motors_ensure_enabled(
     self, node_ids: List[int], *, use_ds402: bool = True,
@@ -1166,7 +1192,7 @@ class KX2:
       nid_int = int(nid)
       if await self.motor_is_enabled(nid_int):
         continue
-      logger.warning("node %d: re-enabling (was disabled)", nid_int)
+      logger.debug("node %d: enabling (was disabled)", nid_int)
       await self.motor_enable(node_id=nid_int, state=True, use_ds402=use_ds402)
 
   # --- motion primitives --------------------------------------------------
@@ -1393,6 +1419,20 @@ class KX2:
 
     await asyncio.gather(*(_poll_axis(n) for n in node_ids))
 
+  async def _control_word_broadcast(self, node_ids: List[int], value: int) -> None:
+    """Write the same control word to every node, then one SYNC.
+
+    RPDO1 is SynchronousCyclic. Sending the last node's RPDO in the same
+    burst as the SYNC lets that drive miss the latch (wrist is usually
+    last → bit 12 never rises). Queue every RPDO first, then SYNC.
+    """
+    ids = [int(n) for n in node_ids]
+    if not ids:
+      return
+    for nid in ids:
+      await self._control_word_set(nid, value, sync=False)
+    await self._can_sync()
+
   async def ppm_begin_motion(
     self, node_ids: List[int], *, relative: bool = False
   ) -> None:
@@ -1408,15 +1448,82 @@ class KX2:
     # falls and rises within milliseconds and the drive doesn't always see
     # the edge. Polling bit 12 high is the only authoritative confirmation
     # that the new setpoint was actually latched.
+    #
+    # Multi-axis moves share one rising edge (one SYNC) so shoulder and
+    # wrist start together. Handshake-per-axis started the first node
+    # hundreds of ms before the last; yaw = shoulder+wrist drifted and
+    # then recovered — the gripper looked like it swung left and came back.
     relative_bit = 0x40 if relative else 0
     cw_low = 47 + relative_bit
     cw_high = 47 + 0x10 + relative_bit
     # Auto-recover from prior disable (post-E-stop, post-find_z IL halt,
     # post-freedrive). A disabled drive never raises SW bit 12, so the PPM
     # trigger spins all 10 attempts before failing.
-    await self.motors_ensure_enabled([int(n) for n in node_ids])
-    for nid in node_ids:
-      await self._trigger_new_setpoint(int(nid), cw_low, cw_high)
+    ids = [int(n) for n in node_ids]
+    await self.motors_ensure_enabled(ids)
+    if len(ids) <= 1:
+      for nid in ids:
+        await self._trigger_new_setpoint(nid, cw_low, cw_high)
+      return
+    await self._trigger_new_setpoint_group(ids, cw_low, cw_high)
+
+  async def _trigger_new_setpoint_group(
+    self,
+    node_ids: List[int],
+    cw_low: int,
+    cw_high: int,
+    *,
+    max_attempts: int = 10,
+  ) -> None:
+    """PPM new-setpoint handshake with one shared bit-4 rising edge.
+
+    Missed edges retry the *group* handshake so every axis stays on the
+    same clock. Falling back to a per-axis trigger would start the misser
+    late (wrist yaw flap).
+    """
+    ids = [int(n) for n in node_ids]
+    for attempt in range(1, max_attempts + 1):
+      await self._control_word_broadcast(ids, cw_low)
+      still_high = await self._wait_setpoint_ack_all(ids, want_high=False)
+      if still_high:
+        logger.debug(
+          "PPM group start: axes %s setpoint_ack didn't clear (attempt %d/%d)",
+          still_high, attempt, max_attempts,
+        )
+        continue
+      await self._control_word_broadcast(ids, cw_high)
+      pending = await self._wait_setpoint_ack_all(
+        ids, want_high=True, timeout=0.1,
+      )
+      if not pending:
+        if attempt > 1:
+          logger.debug("PPM group setpoint accepted on attempt %d", attempt)
+        return
+      logger.debug(
+        "PPM group start: axes %s missed the shared edge (attempt %d/%d); "
+        "retrying together",
+        pending, attempt, max_attempts,
+      )
+    raise CanError(
+      f"Axes {ids}: drives did not accept grouped PPM setpoint after "
+      f"{max_attempts} attempts"
+    )
+
+  async def _wait_setpoint_ack_all(
+    self,
+    node_ids: List[int],
+    *,
+    want_high: bool,
+    timeout: float = 0.05,
+  ) -> List[int]:
+    """Wait for bit 12 on every node. Returns ids that did not match."""
+    results = await asyncio.gather(
+      *[
+        self._wait_setpoint_ack(nid, want_high=want_high, timeout=timeout)
+        for nid in node_ids
+      ]
+    )
+    return [nid for nid, ok in zip(node_ids, results) if not ok]
 
   async def _trigger_new_setpoint(
     self,
@@ -1663,6 +1770,21 @@ class KX2:
     self, srch_vel: int, srch_acc: int, max_pe: int, hs_pe: int, timeout: float,
   ) -> None:
     sg = Axis.SERVO_GRIPPER
+    # JV must stay inside [VL[2], VH[2]] or the drive raises EMCY 0x8481
+    # (Speed limit exceeded). UF-stored home_search_vel can sit on the limit
+    # or above a lowered VH after a prior fault — clamp with the same 1.01
+    # margin used elsewhere for firmware velocity caps.
+    vh2 = await self.query_int(sg, "VH", 2)
+    vl2 = await self.query_int(sg, "VL", 2)
+    abs_limit = min(abs(int(vh2)), abs(int(vl2)) if vl2 != 0 else abs(int(vh2)))
+    abs_limit = max(0, int(abs_limit / 1.01))
+    if abs_limit > 0 and abs(int(srch_vel)) > abs_limit:
+      logger.warning(
+        "Clamping gripper home search vel %s -> %s (VH[2]=%s VL[2]=%s)",
+        srch_vel, abs_limit if srch_vel >= 0 else -abs_limit, vh2, vl2,
+      )
+      srch_vel = abs_limit if srch_vel >= 0 else -abs_limit
+
     await self.write(sg, "ER", 3, max_pe * 10)
     await self.write(sg, "AC", 0, srch_acc)
     await self.write(sg, "DC", 0, srch_acc)
@@ -1781,10 +1903,26 @@ class KX2:
     # Don't swallow motor_enable failures here — homing is the next step
     # and will fault with a confusing "homing failure" error if the motor
     # never came up. Better to surface the real cause.
-    await self.motor_enable(
-      node_id=Axis.SERVO_GRIPPER, state=True, use_ds402=False
-    )
-    await self.servo_gripper_home()
+    sg = Axis.SERVO_GRIPPER
+    await self.motor_enable(node_id=sg, state=True, use_ds402=False)
+
+    # A prior failed home can leave MF "Speed limit exceeded" sticky; cycle
+    # MO so the next JV/home attempt isn't dead on arrival.
+    if await self.motor_get_fault(sg) is not None:
+      logger.warning("Servo gripper has a sticky fault before home; re-enabling")
+      await self.motor_enable(node_id=sg, state=False, use_ds402=False)
+      await asyncio.sleep(0.2)
+      self.clear_emcy_state(node_id=int(sg))
+      await self.motor_enable(node_id=sg, state=True, use_ds402=False)
+
+    # Skip a full hard-stop home when the drive already reports Homed —
+    # re-homing every setup() is what trips intermittent 0x8481 on this
+    # hardware after a previous session left VH/vel state tight.
+    if await self.gripper_get_homed_status() == HomeStatus.Homed:
+      logger.info("Servo gripper already Homed; skipping home search")
+      await self._set_servo_gripper_force_limit(100)
+    else:
+      await self.servo_gripper_home()
     await self.servo_gripper_close()
 
   async def servo_gripper_home(self) -> None:
@@ -2284,12 +2422,14 @@ class KX2:
     *,
     max_gripper_speed: Optional[float] = None,
     max_gripper_acceleration: Optional[float] = None,
+    linear_joint: bool = False,
   ) -> None:
     async with self._motion_guard():
       await self._motors_move_joint_locked(
         cmd_pos,
         max_gripper_speed=max_gripper_speed,
         max_gripper_acceleration=max_gripper_acceleration,
+        linear_joint=linear_joint,
       )
 
   async def _motors_move_joint_locked(
@@ -2298,6 +2438,7 @@ class KX2:
     *,
     max_gripper_speed: Optional[float] = None,
     max_gripper_acceleration: Optional[float] = None,
+    linear_joint: bool = False,
   ) -> None:
     """Caller MUST hold _motion_guard. Used by find_z's spawned poll/move
     task, which can't re-enter the guard from a fresh asyncio Task."""
@@ -2310,6 +2451,7 @@ class KX2:
       gripper_params=self._gripper_params,
       max_gripper_speed=max_gripper_speed,
       max_gripper_acceleration=max_gripper_acceleration,
+      linear_joint=linear_joint,
     )
     if plan is None:  # every axis a no-op
       return
@@ -2355,7 +2497,9 @@ class KX2:
         nid, 24708, 0, acc, _ElmoObjectDataType.UNSIGNED32
       )
 
-    node_ids = [move.node_id for move in plan.moves]
+    node_ids = [move.node_id for move in plan.moves if not move.noop]
+    if not node_ids:
+      return
     await self.ppm_begin_motion(node_ids)
     await self.wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
 
@@ -2779,13 +2923,20 @@ class KX2:
     *,
     max_gripper_speed: Optional[float] = None,
     max_gripper_acceleration: Optional[float] = None,
+    linear_joint: bool = False,
   ) -> None:
+    """Move arm joints to ``position``.
+
+    ``linear_joint=True`` interpolates every moving axis on one clock
+    (Peak pendant go-to). Default is independent per-axis trapezoids.
+    """
     async with self._motion_guard():
       cmd_pos = {Axis(int(k)): float(v) for k, v in position.items()}
       await self._motors_move_joint_locked(
         cmd_pos=cmd_pos,
         max_gripper_speed=max_gripper_speed,
         max_gripper_acceleration=max_gripper_acceleration,
+        linear_joint=linear_joint,
       )
 
   async def pick_up_at_joint_position(

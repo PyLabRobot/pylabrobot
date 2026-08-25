@@ -91,6 +91,10 @@ class DispatchEmcyLogLevelTests(unittest.TestCase):
     rec = self._dispatch_at(_frame(0xFF02, 0x8A))
     self.assertEqual(rec.levelno, logging.DEBUG)
 
+  def test_can_message_lost_logs_at_debug(self):
+    rec = self._dispatch_at(_frame(0x8110, 0xBD))
+    self.assertEqual(rec.levelno, logging.DEBUG)
+
   def test_queue_low_logs_at_info(self):
     rec = self._dispatch_at(_frame(0xFF00, 0x56, data1=10, data2=5))
     self.assertEqual(rec.levelno, logging.INFO)

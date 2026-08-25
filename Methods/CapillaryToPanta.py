@@ -1,13 +1,16 @@
 """Pick a capillary from Stack1Bottom and place it on the Panta teach point.
 
-Reads Peak/KX2 ``TeachPoints.ini`` and ``GripperConfig.ini`` (default:
-``~/Desktop/Panta Docs``), then:
+Reads Peak/KX2 ``TeachPoints.ini`` and ``GripperConfig.ini``, then:
 
-  1. Opens the servo gripper
-  2. Moves to ``Stack1Bottom``
-  3. Closes on the capillary
-  4. Lifts +50 mm on the Z axis
-  5. Moves to ``Panta`` and opens the gripper
+  1. Opens the servo gripper fully (axis max travel)
+  2. Moves to ``lift_mm`` above ``Stack1Bottom``
+  3. Moves down to ``Stack1Bottom``
+  4. Closes the gripper to ``CLOSED_MM``
+  5. Lifts to ``lift_mm`` above ``Stack1Bottom``
+  6. Moves to ``lift_mm`` above ``Panta``
+  7. Moves down to ``Panta``
+  8. Opens the gripper fully
+  9. Retracts to ``lift_mm`` above ``Panta``
 
 Requires the PAA KX2 driver (``pylabrobot.paa.kx2``), available on the
 ``kx2-backend`` branch. Install CAN deps with::
@@ -34,13 +37,17 @@ from typing import Dict, Mapping, Optional, Union
 
 from pylabrobot.paa.kx2 import Axis, KX2
 
-DEFAULT_PANTA_DOCS = Path("/Users/clustig/Desktop/Panta Docs")
+DEFAULT_PANTA_DOCS = Path(r"C:\Program Files (x86)\PAA\Overlord3\KX2")
 TEACH_POINTS_FILENAME = "TeachPoints.ini"
 GRIPPER_CONFIG_FILENAME = "GripperConfig.ini"
 
 STACK1_BOTTOM = "Stack1Bottom"
 PANTA = "Panta"
 LIFT_MM = 50.0
+CLOSED_MM = 21.5
+# Peak's ServoGripperForcePercent (10%) is a grip squeeze limit, not a
+# transit current. Closing 26 mm -> 2 mm at 10% leaves the jaws stuck open.
+CLOSE_FORCE_PERCENT = 30
 
 # TeachPoints.ini Axis1..Axis4 <-> KX2 motion axes (see GripperConfig
 # DriveParamCache ShoulderAx/ZAx/ElbowAx/WristAx).
@@ -114,11 +121,12 @@ async def run_capillary_to_panta(
   max_gripper_acceleration: Optional[float] = None,
   kx2: Optional[KX2] = None,
 ) -> None:
-  """Pick from ``Stack1Bottom``, lift ``lift_mm``, place on ``Panta``.
+  """Approach/pick/place with ``lift_mm`` clearance above stack and Panta.
 
   Args:
     panta_docs: Directory containing ``TeachPoints.ini`` and ``GripperConfig.ini``.
-    lift_mm: Z lift after gripping, before traveling to Panta.
+    lift_mm: Z clearance used above ``Stack1Bottom`` and ``Panta`` for approach
+      and retract moves.
     check_plate_gripped: Pass through to :meth:`KX2.close_gripper`. Capillaries
       are not plates; default False avoids a false "no plate" fault.
     max_gripper_speed: Optional Cartesian speed cap (mm/s) for arm moves.
@@ -129,7 +137,7 @@ async def run_capillary_to_panta(
   gripper_path = Path(panta_docs) / GRIPPER_CONFIG_FILENAME
 
   teach_points = load_teach_points(teach_path)
-  open_mm, closed_mm, force_percent = load_gripper_widths(gripper_path)
+  closed_mm = CLOSED_MM
 
   for required in (STACK1_BOTTOM, PANTA):
     if required not in teach_points:
@@ -139,17 +147,19 @@ async def run_capillary_to_panta(
       )
 
   pick = teach_points[STACK1_BOTTOM]
-  lifted = _with_z_lift(pick, lift_mm)
+  pick_above = _with_z_lift(pick, lift_mm)
   place = teach_points[PANTA]
+  place_above = _with_z_lift(place, lift_mm)
 
   owns_arm = kx2 is None
   arm = kx2 if kx2 is not None else KX2()
 
   print(f"Teach points: {teach_path}")
   print(f"Gripper config: {gripper_path}")
-  print(f"  open={open_mm} mm  closed={closed_mm} mm  force={force_percent}%")
+  print(f"  closed={closed_mm} mm  close_force={CLOSE_FORCE_PERCENT}%")
+  print(f"  pick above {STACK1_BOTTOM} (+{lift_mm} mm Z): {pick_above}")
   print(f"  pick {STACK1_BOTTOM}: {pick}")
-  print(f"  lift +{lift_mm} mm Z -> {lifted}")
+  print(f"  place above {PANTA} (+{lift_mm} mm Z): {place_above}")
   print(f"  place {PANTA}: {place}")
 
   try:
@@ -162,27 +172,40 @@ async def run_capillary_to_panta(
       max_gripper_acceleration=max_gripper_acceleration,
     )
 
-    print("Opening gripper...")
-    await arm.open_gripper(open_mm)
+    full_open_mm = arm._cfg.axes[Axis.SERVO_GRIPPER].max_travel
 
-    print(f"Moving to {STACK1_BOTTOM}...")
+    print(f"Opening gripper fully ({full_open_mm} mm)...")
+    await arm.open_gripper(full_open_mm)
+    print(f"  gripper now {await arm.motor_get_current_position(Axis.SERVO_GRIPPER):.2f} mm")
+
+    print(f"Moving to {lift_mm} mm above {STACK1_BOTTOM}...")
+    await arm.move_to_joint_position(pick_above, **move_kw)
+
+    print(f"Moving down to {STACK1_BOTTOM}...")
     await arm.move_to_joint_position(pick, **move_kw)
 
-    print("Closing on capillary...")
+    print(f"Closing gripper to {closed_mm} mm (force={CLOSE_FORCE_PERCENT}%)...")
     await arm.close_gripper(
       closed_mm,
       check_plate_gripped=check_plate_gripped,
-      max_force_percent=force_percent,
+      max_force_percent=CLOSE_FORCE_PERCENT,
     )
+    print(f"  gripper now {await arm.motor_get_current_position(Axis.SERVO_GRIPPER):.2f} mm")
 
-    print(f"Lifting {lift_mm} mm off the stack...")
-    await arm.move_to_joint_position(lifted, **move_kw)
+    print(f"Lifting to {lift_mm} mm above {STACK1_BOTTOM}...")
+    await arm.move_to_joint_position(pick_above, **move_kw)
 
-    print(f"Moving to {PANTA}...")
+    print(f"Moving to {lift_mm} mm above {PANTA}...")
+    await arm.move_to_joint_position(place_above, **move_kw)
+
+    print(f"Moving down to {PANTA}...")
     await arm.move_to_joint_position(place, **move_kw)
 
-    print("Releasing capillary...")
-    await arm.open_gripper(open_mm)
+    print(f"Opening gripper fully ({full_open_mm} mm)...")
+    await arm.open_gripper(full_open_mm)
+
+    print(f"Retracting to {lift_mm} mm above {PANTA}...")
+    await arm.move_to_joint_position(place_above, **move_kw)
     print("Done.")
   finally:
     if owns_arm:
@@ -201,7 +224,7 @@ def _parse_args() -> argparse.Namespace:
     "--lift-mm",
     type=float,
     default=LIFT_MM,
-    help=f"Z lift after gripping (default: {LIFT_MM})",
+    help=f"Z clearance above stack/Panta for approach and retract (default: {LIFT_MM})",
   )
   parser.add_argument(
     "--check-plate-gripped",

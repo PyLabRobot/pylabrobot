@@ -321,6 +321,7 @@ def plan_joint_move(
   *,
   max_gripper_speed: Optional[float] = None,
   max_gripper_acceleration: Optional[float] = None,
+  linear_joint: bool = False,
 ) -> Optional[MotorsMovePlan]:
   """Pure planner: joint-space target -> per-axis encoder plan.
 
@@ -342,6 +343,10 @@ def plan_joint_move(
   ``max_gripper_speed`` / ``max_gripper_acceleration`` cap joint velocities
   so the worst-case Cartesian gripper speed/accel along the trajectory
   stays at or under the cap.
+
+  ``linear_joint`` (Peak pendant-style): every moving axis shares one
+  ``s(t)`` so joints stay in proportion. The default independent trapezoids
+  can let a short rotary axis finish before a long prismatic one.
   """
   if max_gripper_speed is not None and max_gripper_speed <= 0.0:
     raise ValueError(f"max_gripper_speed must be positive, got {max_gripper_speed}")
@@ -450,13 +455,15 @@ def plan_joint_move(
   # slowest-accel axis (shrink `a` so all ramps end together); (3) scale (v,a)
   # together so all axes finish together at the slowest total time.
   dist: Dict[Axis, float] = {}
+  signed_delta: Dict[Axis, float] = {}
   v: Dict[Axis, float] = {}
   a: Dict[Axis, float] = {}
   ta: Dict[Axis, float] = {}
   tt: Dict[Axis, float] = {}
   for ax in axes:
     ax_cfg = cfg.axes[ax]
-    dist[ax] = abs(_directional_delta(target[ax], curr[ax], ax_cfg))
+    signed_delta[ax] = _directional_delta(target[ax], curr[ax], ax_cfg)
+    dist[ax] = abs(signed_delta[ax])
     v[ax] = capped_v.get(ax, ax_cfg.max_vel)
     a[ax] = capped_a.get(ax, ax_cfg.max_accel)
     if dist[ax] >= 0.01 and a[ax] > 0:
@@ -467,27 +474,45 @@ def plan_joint_move(
   if not moving:
     return None
 
-  lead_acc_t = max(ta[ax] for ax in moving)
-  for ax in moving:
-    if ta[ax] < lead_acc_t:
-      a[ax] = v[ax] / lead_acc_t
-    v[ax], a[ax], _, tt[ax] = _profile(dist[ax], v[ax], a[ax])
-
-  lead_T = max(tt[ax] for ax in moving)
-  for ax in moving:
-    if tt[ax] < lead_T:
-      v[ax], a[ax] = _stretch_to_time(dist[ax], v[ax], a[ax], lead_T)
+  if linear_joint:
+    # One s(t) for every joint (Peak go-to). Lead keeps its firmware profile;
+    # others get v,a proportional to travel so they share that clock.
+    lead_ax = max(moving, key=lambda ax: tt[ax])
+    lead_ta, lead_T = ta[lead_ax], tt[lead_ax]
+    denom = lead_T - lead_ta
+    if denom < 1e-9:
+      denom = max(lead_ta, 1e-9)
+    for ax in moving:
+      v[ax] = dist[ax] / denom
+      a[ax] = v[ax] / lead_ta if lead_ta > 1e-9 else a[ax]
+      v[ax], a[ax], ta[ax], tt[ax] = _profile(dist[ax], v[ax], a[ax])
+    move_time = max(tt[ax] for ax in moving)
+  else:
+    lead_acc_t = max(ta[ax] for ax in moving)
+    for ax in moving:
+      if ta[ax] < lead_acc_t:
+        a[ax] = v[ax] / lead_acc_t
       v[ax], a[ax], _, tt[ax] = _profile(dist[ax], v[ax], a[ax])
 
-  move_time = max(tt[ax] for ax in moving)
+    lead_T = max(tt[ax] for ax in moving)
+    for ax in moving:
+      if tt[ax] < lead_T:
+        v[ax], a[ax] = _stretch_to_time(dist[ax], v[ax], a[ax], lead_T)
+        v[ax], a[ax], _, tt[ax] = _profile(dist[ax], v[ax], a[ax])
 
-  # Convert back to encoder units. Elbow target is still in angle space here
-  # — the encoder count for an elbow joint is angle * conv, not mm * conv.
+    move_time = max(tt[ax] for ax in moving)
+
+  # Encoder target is current + signed travel, not the 0–360 teach value.
+  # Unlimited shoulder/wrist count across revolutions (PU); commanding the
+  # wrapped INI angle (e.g. 5.7° while sitting at 364°) is a ~358° unwind.
   moves = []
   for ax in axes:
     ax_cfg = cfg.axes[ax]
     conv = ax_cfg.motor_conversion_factor
-    enc_pos = target[ax] * conv
+    if ax in curr:
+      enc_pos = (curr[ax] + signed_delta[ax]) * conv
+    else:
+      enc_pos = target[ax] * conv
     # Skipped axes get firmware max — same formula as moving axes. They
     # don't move (dist < 0.01), so vel/accel are nominal; the previous
     # 1000.0 constant was 0.03–4% of firmware max across axes, leaving
@@ -501,6 +526,7 @@ def plan_joint_move(
       velocity=int(round(enc_vel)),
       acceleration=int(round(enc_accel)),
       direction=ax_cfg.joint_move_direction,
+      noop=ax not in moving,
     ))
   return MotorsMovePlan(moves=moves, move_time=move_time)
 

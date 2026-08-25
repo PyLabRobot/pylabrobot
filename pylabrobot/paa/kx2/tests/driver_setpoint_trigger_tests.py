@@ -191,5 +191,96 @@ class TriggerNewSetpointMaxAttemptsOneTests(unittest.TestCase):
     self.assertEqual(script.calls, [47, 63])
 
 
+def _build_group_driver(nids: List[int], script: _SwScript) -> KX2:
+  drv = KX2()
+  loop = asyncio.get_event_loop()
+  drv._loop = loop
+  drv._statusword = {nid: 0 for nid in nids}
+  drv._statusword_event = {nid: asyncio.Event() for nid in nids}
+
+  async def _fake_cw_set(node_id: int, value: int, sync: bool = True) -> None:
+    script.calls.append(value)
+    step = script.consume()
+    tag = step[0]
+    if tag == "set_low":
+      drv._statusword[node_id] = drv._statusword.get(node_id, 0) & ~SW_BIT_12
+      drv._statusword_event[node_id].set()
+    elif tag == "set_high":
+      drv._statusword[node_id] = drv._statusword.get(node_id, 0) | SW_BIT_12
+      drv._statusword_event[node_id].set()
+    elif tag == "hang":
+      pass
+    else:
+      raise AssertionError(f"unknown step {tag!r}")
+
+  async def _fake_sdo_upload(node_id: int, idx: int, sub: int) -> bytes:
+    return drv._statusword.get(node_id, 0).to_bytes(2, "little") + b"\x00\x00"
+
+  async def _fake_ensure_enabled(node_ids, use_ds402=True):
+    return
+
+  async def _fake_sync() -> None:
+    return
+
+  drv._control_word_set = _fake_cw_set  # type: ignore[assignment]
+  drv._can_sdo_upload = _fake_sdo_upload  # type: ignore[assignment]
+  drv.motors_ensure_enabled = _fake_ensure_enabled  # type: ignore[assignment]
+  drv._can_sync = _fake_sync  # type: ignore[assignment]
+  return drv
+
+
+class PpmBeginMotionGroupStartTests(unittest.TestCase):
+  def test_two_axes_share_one_rising_edge(self):
+    """Both axes drop bit 4, then both raise it — not handshake-per-axis.
+
+    Sequential start is [low, high, low, high] and lets the first axis
+    move hundreds of ms before the last. Group start is [low, low, high,
+    high] so one SYNC latches every new setpoint together.
+    """
+    nids = [1, 4]
+    script = _SwScript([
+      ("set_low",), ("set_low",),
+      ("set_high",), ("set_high",),
+    ])
+
+    async def _go():
+      drv = _build_group_driver(nids, script)
+      await drv.ppm_begin_motion(nids)
+
+    asyncio.new_event_loop().run_until_complete(_go())
+    self.assertEqual(script.calls, [47, 47, 63, 63])
+    self.assertEqual(script.steps, [])
+
+  def test_single_axis_still_handshakes_alone(self):
+    script = _SwScript([("set_low",), ("set_high",)])
+
+    async def _go():
+      drv = _build_group_driver([4], script)
+      await drv.ppm_begin_motion([4])
+
+    asyncio.new_event_loop().run_until_complete(_go())
+    self.assertEqual(script.calls, [47, 63])
+
+  def test_missed_group_edge_retries_together(self):
+    """Axis 4 misses the shared rising edge. Retry the group handshake so
+    it does not start hundreds of ms behind axis 1.
+    """
+    nids = [1, 4]
+    script = _SwScript([
+      ("set_low",), ("set_low",),
+      ("set_high",), ("hang",),
+      ("set_low",), ("set_low",),
+      ("set_high",), ("set_high",),
+    ])
+
+    async def _go():
+      drv = _build_group_driver(nids, script)
+      await drv.ppm_begin_motion(nids)
+
+    asyncio.new_event_loop().run_until_complete(_go())
+    self.assertEqual(script.calls, [47, 47, 63, 63, 47, 47, 63, 63])
+    self.assertEqual(script.steps, [])
+
+
 if __name__ == "__main__":
   unittest.main()

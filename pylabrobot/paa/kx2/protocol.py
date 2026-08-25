@@ -154,6 +154,11 @@ class MotorMoveParam:
   acceleration: int   # encoder counts/sec^2
   relative: bool = False
   direction: JointMoveDirection = JointMoveDirection.ShortestWay
+  # True when travel is below the planner's 0.01 threshold. Execute still
+  # writes vel/accel registers so they don't go stale, but must not run the
+  # PPM new-setpoint handshake — Elmo leaves SW bit 12 low when 0x607A is
+  # already the current position.
+  noop: bool = False
 
 
 @dataclass
@@ -286,9 +291,9 @@ def _decode_emcy(
   """Decode an EMCY frame into (description, disable_motors, suppress_callback).
 
   Mutates ``state`` for IPM queue events. Mirrors clscanmotor.cs:1070-1267
-  one-for-one. ``suppress_callback`` corresponds to the C# `flag2` and is only
-  set for the elmo 0x8A interpolation underflow under errCode 0xFF02 — that
-  case updates internal state but does not raise the user-visible event.
+  one-for-one. ``suppress_callback`` corresponds to the C# `flag2` and is
+  also set for CAN overrun (0x8110): that code is non-fatal and extremely
+  chatty on a busy PCAN-USB bus, so it is kept at DEBUG like IPM underflow.
   """
   err = frame.err_code
   elmo = frame.elmo_err_code
@@ -299,6 +304,12 @@ def _decode_emcy(
   # byte is ignored: any frame with err_code=0 is a reset regardless.
   if err == 0:
     return ("Error reset", False, True)
+
+  # Elmo 0xBD / CANopen 0x8110: the drive's CAN controller dropped a frame
+  # (receive overrun). Common under SDO bursts at setup and during motion
+  # on PCAN-USB; not a motor fault. Peak's pendant does not surface these.
+  if err == 0x8110:
+    return ("CAN message lost (corrupted or overrun)", False, True)
 
   if err == 0xFF00:
     if elmo == 0x56:
