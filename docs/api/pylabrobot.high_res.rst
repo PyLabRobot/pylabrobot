@@ -23,4 +23,5 @@ pylabrobot.high_res package
     EnvironmentControl
     SteriStore
     TundraStore
+    UnresolvedPlateTransfer
     high_res_stacker

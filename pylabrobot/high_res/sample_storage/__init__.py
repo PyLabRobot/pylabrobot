@@ -15,6 +15,7 @@ from .driver import (
   NoFreeSiteError,
   PlateNotFoundError,
   StackerDimensions,
+  UnresolvedPlateTransfer,
   VersionInfo,
 )
 from .steri_store import SteriStore

@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import random
-from typing import Dict, List, Literal, Optional, Tuple, Union, cast
+from dataclasses import dataclass
+from typing import Awaitable, Callable, Dict, List, Literal, Mapping, Optional, Tuple, Union, cast
 
 from pylabrobot.events import event_operation, resource_reference
 from pylabrobot.io.socket import Socket
@@ -48,6 +49,22 @@ from .types import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class UnresolvedPlateTransfer:
+  """A plate move whose physical result and PLR state are not reconciled.
+
+  The resource tree remains at its last confirmed state until
+  :meth:`HighResSampleStorage.resolve_unresolved_transfer` reconciles it.
+  """
+
+  plate: Plate
+  source: PlateHolder
+  destination: PlateHolder
+  command: str
+  error_type: str
+  error_message: str
+
+
 class HighResSampleStorage(Resource):
   """Base device for HighRes Biosolutions sample stores.
 
@@ -57,6 +74,11 @@ class HighResSampleStorage(Resource):
   plate slots); plates enter and leave through one of the device's *nests*
   (transfer stations). Fetch and store operations address a particular nest
   with a 0-based ``tray_index``.
+
+  If a plate move is interrupted without a definitive outcome, the driver
+  exposes it through :attr:`unresolved_transfer` and blocks further plate moves
+  until :meth:`resolve_unresolved_transfer` reconciles the physical and PLR
+  locations.
 
   Subclasses set :attr:`_model_name`; callers can override it with ``model``.
   This configured model selects model-specific behavior. The product name
@@ -76,7 +98,7 @@ class HighResSampleStorage(Resource):
     self,
     host: str,
     name: str,
-    racks: Optional[List[PlateCarrier]] = None,
+    racks: Optional[Mapping[int, PlateCarrier]] = None,
     size_x: float = 0,
     size_y: float = 0,
     size_z: float = 0,
@@ -91,9 +113,10 @@ class HighResSampleStorage(Resource):
     Args:
       host: IP address of the store. The factory default is ``192.168.127.60``;
         all HighRes devices also answer on the backdoor ``10.253.253.253``.
-      racks: Stacker resources in one-based device order. When omitted, ``setup()``
-        reads the configured dimensions from the device and creates empty stackers.
-        Passing an empty list explicitly configures no stackers and disables discovery.
+      racks: Mapping of physical stacker numbers to stacker resources. When omitted,
+        ``setup()`` reads the configured dimensions from the device and creates empty
+        stackers. Passing an empty mapping explicitly configures no stackers and disables
+        discovery.
       port: Remote-control server port (always 1000).
       read_timeout: Timeout (s) for query/status commands.
       motion_timeout: Timeout (s) for long-running motion commands
@@ -122,8 +145,10 @@ class HighResSampleStorage(Resource):
     self._racks_by_number: Dict[int, PlateCarrier] = {}
     self._racks_loaded = racks is not None
     if racks is not None:
-      for rack_index, rack in enumerate(racks):
-        self._add_rack(rack, stacker=rack_index + 1)
+      for stacker in racks:
+        self._validate_stacker_number(stacker)
+      for stacker in sorted(racks):
+        self._add_rack(racks[stacker], stacker=stacker)
 
     # Slide (Y) and lift (Z) positions near zero are retracted. Faulted moves
     # can leave either axis extended even when firmware still reports homed.
@@ -148,6 +173,7 @@ class HighResSampleStorage(Resource):
     # transfer also includes resource validation and bookkeeping on either side
     # of the hardware command. Keep that entire transaction atomic.
     self._transfer_lock = asyncio.Lock()
+    self._unresolved_transfer: Optional[UnresolvedPlateTransfer] = None
 
   @property
   def read_timeout(self) -> float:
@@ -160,6 +186,11 @@ class HighResSampleStorage(Resource):
   @property
   def model_info(self) -> ModelInfo:
     return self._model_info
+
+  @property
+  def unresolved_transfer(self) -> Optional[UnresolvedPlateTransfer]:
+    """The plate move whose physical outcome must be reconciled, if any."""
+    return self._unresolved_transfer
 
   def serialize(self) -> dict:
     raise NotImplementedError("HighRes sample store serialization is not implemented yet.")
@@ -216,8 +247,7 @@ class HighResSampleStorage(Resource):
 
   def _add_rack(self, rack: PlateCarrier, stacker: int) -> None:
     """Attach one rack under its physical stacker number."""
-    if stacker < 1:
-      raise ValueError(f"Stacker number must be positive; got {stacker}.")
+    self._validate_stacker_number(stacker)
     if stacker in self._racks_by_number:
       raise ValueError(f"Stacker {stacker} is already configured.")
     for spot, site in rack.sites.items():
@@ -225,6 +255,11 @@ class HighResSampleStorage(Resource):
         raise ValueError(f"Rack site spot must be non-negative; got {spot} for {site.name!r}.")
     self.assign_child_resource(rack, location=None)
     self._racks_by_number[stacker] = rack
+
+  @staticmethod
+  def _validate_stacker_number(stacker: int) -> None:
+    if not isinstance(stacker, int) or isinstance(stacker, bool) or stacker < 1:
+      raise ValueError(f"Stacker number must be a positive integer; got {stacker!r}.")
 
   async def _load_racks_from_device(self) -> None:
     """Create empty stacker resources from ``getstackerdimensions``."""
@@ -273,6 +308,8 @@ class HighResSampleStorage(Resource):
     """
     if not command or command != command.strip() or "\r" in command or "\n" in command:
       raise ValueError("command must be a non-empty single line without surrounding whitespace")
+    if command.partition(" ")[0] in ("pick", "place", "nesttransfer"):
+      self._require_no_unresolved_transfer()
     if timeout is None:
       timeout = self._read_timeout
     encoded_command = command.encode("ascii") + b"\r\n"
@@ -778,6 +815,138 @@ class HighResSampleStorage(Resource):
           f"but its sensor reports {actual_state or 'missing'}."
         )
 
+  def _require_no_unresolved_transfer(self) -> None:
+    transfer = self._unresolved_transfer
+    if transfer is not None:
+      raise RuntimeError(
+        f"Plate location is unresolved after transfer command {transfer.command!r}; "
+        "call resolve_unresolved_transfer() before another plate move."
+      )
+
+  def _record_unresolved_transfer(
+    self,
+    *,
+    plate: Plate,
+    source: PlateHolder,
+    destination: PlateHolder,
+    command: str,
+    error: BaseException,
+  ) -> None:
+    self._unresolved_transfer = UnresolvedPlateTransfer(
+      plate=plate,
+      source=source,
+      destination=destination,
+      command=command,
+      error_type=type(error).__name__,
+      error_message=str(error),
+    )
+    logger.error(
+      "Plate %s transfer via %r is unresolved between %s and %s: %s",
+      plate.name,
+      command,
+      source.name,
+      destination.name,
+      error,
+    )
+
+  async def _execute_plate_transfer(
+    self,
+    *,
+    plate: Plate,
+    source: PlateHolder,
+    destination: PlateHolder,
+    command: str,
+    move: Callable[[], Awaitable[object]],
+    plate_not_found_is_definitive: bool = False,
+  ) -> Plate:
+    """Execute one physical move and commit its resource-tree transition."""
+    self._require_no_unresolved_transfer()
+    try:
+      await move()
+    except BaseException as error:
+      if not (plate_not_found_is_definitive and isinstance(error, PlateNotFoundError)):
+        self._record_unresolved_transfer(
+          plate=plate,
+          source=source,
+          destination=destination,
+          command=command,
+          error=error,
+        )
+      raise
+
+    try:
+      plate.unassign()
+      destination.assign_child_resource(plate)
+    except BaseException as error:
+      # The device completed the move, but PLR could not commit the same state.
+      # Keep the transfer unresolved so a caller must reconcile both views.
+      self._record_unresolved_transfer(
+        plate=plate,
+        source=source,
+        destination=destination,
+        command=command,
+        error=error,
+      )
+      raise
+    return plate
+
+  async def resolve_unresolved_transfer(
+    self, location: Literal["source", "destination", "unassigned"]
+  ) -> Plate:
+    """Reconcile an ambiguous plate move without issuing further motion.
+
+    The spatula must be empty. Any source or destination nest is checked against
+    its live plate sensor. Stacker slots have no non-destructive presence sensor,
+    so selecting a stacker endpoint is explicit operator confirmation that the
+    plate was found there. Use ``"unassigned"`` when inspection establishes that
+    the plate is outside the modeled source and destination.
+    """
+    async with self._transfer_lock:
+      transfer = self._unresolved_transfer
+      if transfer is None:
+        raise RuntimeError("There is no unresolved plate transfer.")
+      if location not in ("source", "destination", "unassigned"):
+        raise ValueError(
+          f"location must be 'source', 'destination', or 'unassigned'; got {location!r}."
+        )
+
+      target = (
+        transfer.source
+        if location == "source"
+        else transfer.destination
+        if location == "destination"
+        else None
+      )
+      if target is not None and transfer.plate.parent is not target:
+        target.check_can_drop_resource_here(transfer.plate)
+
+      if await self.request_spatula_is_holding():
+        raise RuntimeError(
+          "Cannot resolve the plate location while the spatula reports that it is holding a plate."
+        )
+
+      expected_nests: Dict[int, NestState] = {}
+      for tray_index, nest in enumerate(self.nests):
+        if nest is transfer.source or nest is transfer.destination:
+          expected_nests[tray_index + 1] = "occupied" if nest is target else "clear"
+      if expected_nests:
+        await self._require_nest_states(expected_nests)
+
+      if target is None:
+        transfer.plate.unassign()
+      elif transfer.plate.parent is not target:
+        transfer.plate.unassign()
+        target.assign_child_resource(transfer.plate)
+
+      self._unresolved_transfer = None
+      logger.info(
+        "Resolved plate %s after %r as %s",
+        transfer.plate.name,
+        transfer.command,
+        target.name if target is not None else "unassigned",
+      )
+      return transfer.plate
+
   def find_smallest_site_for_plate(self, plate: Plate) -> PlateHolder:
     return self._find_available_sites_sorted(plate)[0]
 
@@ -820,6 +989,7 @@ class HighResSampleStorage(Resource):
 
   async def fetch_plate_to_loading_tray(self, plate: Union[Plate, str], tray_index: int) -> Plate:
     async with self._transfer_lock:
+      self._require_no_unresolved_transfer()
       if isinstance(plate, str):
         stored_site = self.get_site_by_plate_name(plate)
         stored_resource = stored_site.resource
@@ -834,6 +1004,7 @@ class HighResSampleStorage(Resource):
       nest = self.nests[tray_index]
       nest.check_can_drop_resource_here(plate)
       await self._require_nest_states({nest_number: "clear"})
+      command = f"pick {stacker} {slot} {nest_number}"
 
       with event_operation(
         "incubator.fetch_plate",
@@ -842,11 +1013,14 @@ class HighResSampleStorage(Resource):
         source=resource_reference(parent),
         destination=resource_reference(nest),
       ):
-        await self._pick(stacker, slot, nest_number)
-
-        plate.unassign()
-        nest.assign_child_resource(plate)
-        return plate
+        return await self._execute_plate_transfer(
+          plate=plate,
+          source=parent,
+          destination=nest,
+          command=command,
+          move=lambda: self._pick(stacker, slot, nest_number),
+          plate_not_found_is_definitive=True,
+        )
 
   async def take_in_plate(
     self,
@@ -854,6 +1028,7 @@ class HighResSampleStorage(Resource):
     site: Union[PlateHolder, Literal["random", "smallest"]] = "smallest",
   ) -> Plate:
     async with self._transfer_lock:
+      self._require_no_unresolved_transfer()
       self._nest_for_tray(tray_index)
       plate = self.nests[tray_index].resource
       if not isinstance(plate, Plate):
@@ -883,6 +1058,7 @@ class HighResSampleStorage(Resource):
 
   async def store_plate(self, plate: Plate, site: PlateHolder, tray_index: int) -> None:
     async with self._transfer_lock:
+      self._require_no_unresolved_transfer()
       self._nest_for_tray(tray_index)
       nest = self.nests[tray_index]
       with event_operation(
@@ -903,6 +1079,7 @@ class HighResSampleStorage(Resource):
     the device during :meth:`setup`.
     """
     async with self._transfer_lock:
+      self._require_no_unresolved_transfer()
       if source_tray_index == destination_tray_index:
         raise ValueError("Source and destination tray indices must be different.")
       source_number = self._nest_for_tray(source_tray_index)
@@ -914,6 +1091,7 @@ class HighResSampleStorage(Resource):
         raise ResourceNotFoundError(f"No plate on tray {source_tray_index}.")
       destination.check_can_drop_resource_here(plate)
       await self._require_nest_states({source_number: "occupied", destination_number: "clear"})
+      command = f"nesttransfer {source_number} {destination_number}"
 
       with event_operation(
         "incubator.transfer_plate",
@@ -929,12 +1107,13 @@ class HighResSampleStorage(Resource):
           source_number,
           destination_number,
         )
-        await self.send_command(
-          f"nesttransfer {source_number} {destination_number}", timeout=self.motion_timeout
+        return await self._execute_plate_transfer(
+          plate=plate,
+          source=source,
+          destination=destination,
+          command=command,
+          move=lambda: self.send_command(command, timeout=self.motion_timeout),
         )
-        plate.unassign()
-        destination.assign_child_resource(plate)
-        return plate
 
   async def _store_plate(self, plate: Plate, site: PlateHolder, tray_index: int) -> None:
     stacker, slot = self._locate(site)
@@ -944,8 +1123,12 @@ class HighResSampleStorage(Resource):
       raise ValueError(f"Plate '{plate.name}' is not on tray {tray_index}.")
     site.check_can_drop_resource_here(plate)
     await self._require_nest_states({nest_number: "occupied"})
+    command = f"place {stacker} {slot} {nest_number}"
 
-    await self._place(stacker, slot, nest_number)
-
-    plate.unassign()
-    site.assign_child_resource(plate)
+    await self._execute_plate_transfer(
+      plate=plate,
+      source=nest,
+      destination=site,
+      command=command,
+      move=lambda: self._place(stacker, slot, nest_number),
+    )

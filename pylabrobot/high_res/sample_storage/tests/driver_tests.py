@@ -8,7 +8,9 @@ from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.high_res.sample_storage import AmbiStore, SteriStore, TundraStore
 from pylabrobot.high_res.sample_storage.driver import HighResSampleStorage
 from pylabrobot.high_res.sample_storage.driver.errors import (
+  HighResSampleStorageAbortedError,
   HighResSampleStorageError,
+  HighResSampleStorageFault,
   HighResSampleStorageProtocolError,
   PlateNotFoundError,
 )
@@ -97,15 +99,19 @@ class FakeSocket:
 class TimeoutAfterAckSocket(FakeSocket):
   """Return one acknowledgement and then simulate a stalled device response."""
 
+  def __init__(self, captures: Dict[str, List[str]], timeout_command: str):
+    super().__init__(captures)
+    self.timeout_command = timeout_command
+
   async def readuntil(self, separator: bytes = b"\n", timeout=None) -> bytes:
-    if len(self._queue) == 1:
+    if self.written[-1] == self.timeout_command and len(self._queue) == 1:
       raise TimeoutError("simulated response timeout")
     return await super().readuntil(separator=separator, timeout=timeout)
 
 
 class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.driver = SteriStore(host="10.253.253.253", name="sample_store", racks=[])
+    self.driver = SteriStore(host="10.253.253.253", name="sample_store", racks={})
     self.socket = FakeSocket(CAPTURES)
     self.driver.io = self.socket  # type: ignore[assignment]
     self.retrieval = self.driver
@@ -142,6 +148,12 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(driver._racks_by_number, {2: rack})
     self.assertEqual(driver._locate(rack.sites[0]), (2, 1))
     self.assertEqual(driver._locate(rack.sites[23]), (2, 24))
+
+  def test_init_rejects_invalid_physical_stacker_number(self):
+    rack = PlateCarrier(name="rack", size_x=130, size_y=90, size_z=100)
+
+    with self.assertRaisesRegex(ValueError, "positive integer"):
+      HighResSampleStorage(host="10.253.253.253", name="sample_store", racks={0: rack})
 
   async def test_repeated_setup_reuses_discovered_stackers(self):
     driver = SteriStore(host="10.253.253.253", name="discovered_store")
@@ -222,7 +234,7 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_keeps_user_configured_model(self):
     driver = HighResSampleStorage(
-      host="10.253.253.253", name="generic_store", racks=[], model="TundraStore"
+      host="10.253.253.253", name="generic_store", racks={}, model="TundraStore"
     )
     driver.io = FakeSocket(CAPTURES)  # type: ignore[assignment]
 
@@ -234,7 +246,7 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_device_report_does_not_add_environment_control(self):
     driver = HighResSampleStorage(
-      host="10.253.253.253", name="generic_store", racks=[], model="AmbiStore"
+      host="10.253.253.253", name="generic_store", racks={}, model="AmbiStore"
     )
     socket = FakeSocket(CAPTURES)
     driver.io = socket  # type: ignore[assignment]
@@ -246,7 +258,7 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_unverified_models_warn_during_setup_without_hiding_signature(self):
     for model_class in (AmbiStore, TundraStore):
-      driver = model_class(host="10.253.253.253", name="unverified", racks=[])
+      driver = model_class(host="10.253.253.253", name="unverified", racks={})
       driver.io = FakeSocket(CAPTURES)  # type: ignore[assignment]
       with self.assertLogs(
         "pylabrobot.high_res.sample_storage.driver.driver", level="WARNING"
@@ -293,7 +305,7 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
       await self.driver.send_command("bad")
 
   async def test_send_command_closes_transport_after_response_timeout(self):
-    socket = TimeoutAfterAckSocket({"slow": ["ACK! slow 1", "OK! slow 1"]})
+    socket = TimeoutAfterAckSocket({"slow": ["ACK! slow 1", "OK! slow 1"]}, timeout_command="slow")
     self.driver.io = socket  # type: ignore[assignment]
 
     with self.assertRaisesRegex(TimeoutError, "simulated response timeout"):
@@ -682,7 +694,7 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     )
     self.site.assign_child_resource(self.plate)
 
-    self.driver = HighResSampleStorage(host="10.253.253.253", name="sample_store", racks=[rack])
+    self.driver = HighResSampleStorage(host="10.253.253.253", name="sample_store", racks={1: rack})
     self.socket = FakeSocket(CAPTURES)
     self.driver.io = self.socket  # type: ignore[assignment]
 
@@ -708,6 +720,7 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(self.site.resource)
     self.assertIs(self.driver.nests[0].resource, self.plate)
     self.assertIs(self.plate.parent, self.driver.nests[0])
+    self.assertIsNone(self.driver.unresolved_transfer)
 
   async def test_fetch_refuses_physically_occupied_destination_nest(self):
     self._set_nest_status("PLATE_AVAILABLE")
@@ -753,11 +766,11 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     rack.assign_child_resource(second_inserted, location=Coordinate.zero(), spot=2)
 
     driver = HighResSampleStorage(
-      host="10.253.253.253", name="explicit_slots", racks=[rack], model="SteriStore"
+      host="10.253.253.253", name="explicit_slots", racks={7: rack}, model="SteriStore"
     )
 
-    self.assertEqual(driver._locate(first_inserted), (1, 8))
-    self.assertEqual(driver._locate(second_inserted), (1, 3))
+    self.assertEqual(driver._locate(first_inserted), (7, 8))
+    self.assertEqual(driver._locate(second_inserted), (7, 3))
 
   def test_site_selection_rejects_slots_that_are_too_short_for_lidded_plate(self):
     short = PlateHolder(name="short", size_x=127.76, size_y=85.48, size_z=16, pedestal_size_z=0)
@@ -770,7 +783,7 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
       Lid(name="lid", size_x=127.76, size_y=85.48, size_z=5, nesting_z_height=2)
     )
     driver = HighResSampleStorage(
-      host="10.253.253.253", name="height_store", racks=[rack], model="SteriStore"
+      host="10.253.253.253", name="height_store", racks={1: rack}, model="SteriStore"
     )
 
     self.assertIs(driver.find_smallest_site_for_plate(plate), tall)
@@ -865,6 +878,7 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(self.driver.nests[0].resource)
     self.assertIs(self.site.resource, self.plate)
     self.assertIs(self.plate.parent, self.site)
+    self.assertIsNone(self.driver.unresolved_transfer)
 
   async def test_store_refuses_logical_plate_when_physical_nest_is_clear(self):
     self.plate.unassign()
@@ -904,6 +918,7 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
         "incubator.transfer_plate.completed",
       ],
     )
+    self.assertIsNone(self.driver.unresolved_transfer)
 
   async def test_transfer_plate_between_nests_requires_live_sensor_agreement(self):
     self.plate.unassign()
@@ -914,6 +929,160 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(self.socket.written, ["neststatus"])
     self.assertIs(self.driver.nests[1].resource, self.plate)
+
+  async def test_aborted_nest_transfer_records_both_nest_endpoints(self):
+    self.plate.unassign()
+    self.driver.nests[1].assign_child_resource(self.plate)
+    self._set_nest_status("CLEAR", "PLATE_AVAILABLE")
+    self.socket.captures["nesttransfer 2 1"] = [
+      "ACK! nesttransfer 2 1 50",
+      "ABORTED! nesttransfer 2 1 50",
+    ]
+
+    with self.assertRaises(HighResSampleStorageAbortedError):
+      await self.driver.transfer_plate_between_nests(1, 0)
+
+    transfer = self.driver.unresolved_transfer
+    self.assertIsNotNone(transfer)
+    assert transfer is not None
+    self.assertIs(transfer.source, self.driver.nests[1])
+    self.assertIs(transfer.destination, self.driver.nests[0])
+    self.assertIs(self.plate.parent, self.driver.nests[1])
+
+  async def test_timeout_after_pick_ack_records_unresolved_transfer(self):
+    command = "pick 1 1 1"
+    captures = dict(CAPTURES)
+    captures[command] = [f"ACK! {command} 42", f"OK! {command} 42"]
+    socket = TimeoutAfterAckSocket(captures, timeout_command=command)
+    self.driver.io = socket  # type: ignore[assignment]
+
+    with self.assertRaisesRegex(TimeoutError, "simulated response timeout"):
+      await self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0)
+
+    transfer = self.driver.unresolved_transfer
+    self.assertIsNotNone(transfer)
+    assert transfer is not None
+    self.assertEqual(transfer.command, command)
+    self.assertEqual(transfer.error_type, "TimeoutError")
+    self.assertIs(self.plate.parent, self.site)
+    self.assertEqual(socket.stop_calls, 1)
+
+  async def test_cancelled_pick_records_unresolved_transfer(self):
+    started = asyncio.Event()
+
+    async def blocked_pick(stacker: int, slot: int, nest: int, close_door: bool = True):
+      started.set()
+      await asyncio.Event().wait()
+
+    self.driver._pick = blocked_pick  # type: ignore[method-assign]
+    task = asyncio.create_task(self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+
+    with self.assertRaises(asyncio.CancelledError):
+      await task
+
+    transfer = self.driver.unresolved_transfer
+    self.assertIsNotNone(transfer)
+    assert transfer is not None
+    self.assertEqual(transfer.command, "pick 1 1 1")
+    self.assertEqual(transfer.error_type, "CancelledError")
+    self.assertIs(self.plate.parent, self.site)
+
+  async def test_aborted_pick_records_unresolved_transfer(self):
+    self.socket.captures["pick 1 1 1"] = [
+      "ACK! pick 1 1 1 42",
+      "ABORTED! pick 1 1 1 42",
+    ]
+
+    with self.assertRaises(HighResSampleStorageAbortedError):
+      await self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0)
+
+    transfer = self.driver.unresolved_transfer
+    self.assertIsNotNone(transfer)
+    assert transfer is not None
+    self.assertEqual(transfer.error_type, "HighResSampleStorageAbortedError")
+    self.assertIs(self.plate.parent, self.site)
+
+  async def test_unsafe_pick_records_unresolved_transfer_and_recovery_does_not_clear_it(self):
+    self.socket.captures["pick 1 1 1"] = [
+      "ACK! pick 1 1 1 42",
+      "Error 1: 42: Z height is unsafe for rotation, check machine",
+      "ERROR! pick 1 1 1 42",
+    ]
+
+    with self.assertRaises(HighResSampleStorageFault):
+      await self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0)
+
+    transfer = self.driver.unresolved_transfer
+    self.assertIsNotNone(transfer)
+    assert transfer is not None
+    self.assertEqual(transfer.error_type, "HighResSampleStorageFault")
+
+    self.socket.captures["enable"] = ["ACK! enable 43", "OK! enable 43"]
+    self.socket.captures["spatulaout"] = ["ACK! spatulaout 44", "OK! spatulaout 44"]
+    self.socket.captures["home"] = ["ACK! home 45", "OK! home 45"]
+    self.socket.captures["homedstatus"] = [
+      "ACK! homedstatus 46",
+      "homed",
+      "OK! homedstatus 46",
+    ]
+    self.socket.captures["status"] = [
+      "ACK! status 47",
+      "Carousel: 0.0",
+      "Y axis: 0.0",
+      "Z axis: 0.0",
+      "OK! status 47",
+    ]
+
+    self.assertTrue(await self.driver.recover())
+    self.assertIs(self.driver.unresolved_transfer, transfer)
+
+  async def test_resolve_unresolved_fetch_to_destination_uses_live_sensors(self):
+    async def ambiguous_pick(stacker: int, slot: int, nest: int, close_door: bool = True):
+      raise TimeoutError("completion was lost")
+
+    self.driver._pick = ambiguous_pick  # type: ignore[method-assign]
+    with self.assertRaises(TimeoutError):
+      await self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0)
+
+    self._set_nest_status("PLATE_AVAILABLE")
+    result = await self.driver.resolve_unresolved_transfer("destination")
+
+    self.assertIs(result, self.plate)
+    self.assertIs(self.plate.parent, self.driver.nests[0])
+    self.assertIsNone(self.site.resource)
+    self.assertIsNone(self.driver.unresolved_transfer)
+    self.assertEqual(self.socket.written[-2:], ["platestatus", "neststatus"])
+
+  async def test_reconcile_rejects_spatula_plate_and_can_mark_plate_unassigned(self):
+    async def ambiguous_pick(stacker: int, slot: int, nest: int, close_door: bool = True):
+      raise TimeoutError("completion was lost")
+
+    self.driver._pick = ambiguous_pick  # type: ignore[method-assign]
+    with self.assertRaises(TimeoutError):
+      await self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0)
+
+    transfer = self.driver.unresolved_transfer
+    self.socket.captures["platestatus"] = [
+      "ACK! platestatus 9",
+      "PLATE_AVAILABLE",
+      "OK! platestatus 9",
+    ]
+    with self.assertRaisesRegex(RuntimeError, "spatula reports that it is holding a plate"):
+      await self.driver.resolve_unresolved_transfer("unassigned")
+    self.assertIs(self.driver.unresolved_transfer, transfer)
+
+    self.socket.captures["platestatus"] = [
+      "ACK! platestatus 10",
+      "NO_PLATE",
+      "OK! platestatus 10",
+    ]
+    result = await self.driver.resolve_unresolved_transfer("unassigned")
+
+    self.assertIs(result, self.plate)
+    self.assertIsNone(self.plate.parent)
+    self.assertIsNone(self.driver.unresolved_transfer)
 
   async def test_failed_fetch_leaves_resource_in_site(self):
     self.socket.captures["pick 1 1 1"] = [
@@ -932,8 +1101,9 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertIs(self.site.resource, self.plate)
     self.assertIsNone(self.driver.nests[0].resource)
+    self.assertIsNone(self.driver.unresolved_transfer)
 
-  async def test_failed_store_leaves_resource_on_nest(self):
+  async def test_failed_store_records_unresolved_transfer_and_blocks_another_move(self):
     self.plate.unassign()
     self.driver.nests[0].assign_child_resource(self.plate)
     self._set_nest_status("PLATE_AVAILABLE")
@@ -942,12 +1112,51 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
       "Error 1: 44: Place failed",
       "ERROR! place 1 1 1 44",
     ]
+    self.socket.captures["homedstatus"] = [
+      "ACK! homedstatus 45",
+      "homed",
+      "OK! homedstatus 45",
+    ]
 
     with self.assertRaises(HighResSampleStorageError):
       await self.driver.store_plate(self.plate, self.site, tray_index=0)
 
     self.assertIs(self.driver.nests[0].resource, self.plate)
     self.assertIsNone(self.site.resource)
+    transfer = self.driver.unresolved_transfer
+    self.assertIsNotNone(transfer)
+    assert transfer is not None
+    self.assertIs(transfer.plate, self.plate)
+    self.assertIs(transfer.source, self.driver.nests[0])
+    self.assertIs(transfer.destination, self.site)
+    self.assertEqual(transfer.command, "place 1 1 1")
+    self.assertEqual(transfer.error_type, "HighResSampleStorageError")
+
+    written = list(self.socket.written)
+    with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
+      await self.driver.store_plate(self.plate, self.site, tray_index=0)
+    with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
+      await self.driver.send_command("nesttransfer 1 2")
+    self.assertEqual(self.socket.written, written)
+
+  async def test_resolve_unresolved_store_to_source_uses_live_nest_sensor(self):
+    self.plate.unassign()
+    self.driver.nests[0].assign_child_resource(self.plate)
+    self._set_nest_status("PLATE_AVAILABLE")
+
+    async def ambiguous_place(stacker: int, slot: int, nest: int, close_door: bool = True):
+      raise TimeoutError("completion was lost")
+
+    self.driver._place = ambiguous_place  # type: ignore[method-assign]
+    with self.assertRaises(TimeoutError):
+      await self.driver.store_plate(self.plate, self.site, tray_index=0)
+
+    result = await self.driver.resolve_unresolved_transfer("source")
+
+    self.assertIs(result, self.plate)
+    self.assertIs(self.plate.parent, self.driver.nests[0])
+    self.assertIsNone(self.driver.unresolved_transfer)
+    self.assertEqual(self.socket.written[-2:], ["platestatus", "neststatus"])
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from .driver import HighResSampleStorage
+from .driver import HighResSampleStorage, UnresolvedPlateTransfer
 from .environment import EnvironmentControl
 from .errors import (
   HighResSampleStorageAbortedError,

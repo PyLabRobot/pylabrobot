@@ -42,7 +42,7 @@ class ScriptedSocket:
 
 class HighResSampleStorageRecoveryTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.driver = HighResSampleStorage(host="10.253.253.253", name="sample_store", racks=[])
+    self.driver = HighResSampleStorage(host="10.253.253.253", name="sample_store", racks={})
     self.retrieval = self.driver
 
   async def test_empty_slot_pick_raises_plate_not_found_and_stays_homed(self):
