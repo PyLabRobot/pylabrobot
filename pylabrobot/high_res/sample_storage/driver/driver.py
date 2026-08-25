@@ -7,6 +7,7 @@ from typing import Awaitable, Callable, Dict, List, Literal, Mapping, Optional, 
 from pylabrobot.events import event_operation, resource_reference
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import (
+  Coordinate,
   Plate,
   PlateCarrier,
   PlateHolder,
@@ -14,6 +15,8 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   Rotation,
 )
+from pylabrobot.resources.barcode import Barcode
+from pylabrobot.serializer import deserialize
 
 from ..stackers import high_res_stacker
 from .environment import EnvironmentControl
@@ -166,8 +169,11 @@ class HighResSampleStorage(Resource):
       read_timeout=read_timeout,
       write_timeout=read_timeout,
     )
+    self._host = host
+    self._port = port
     self._read_timeout = read_timeout
     self._motion_timeout = motion_timeout
+    self._transport_invalidated = False
     self._command_lock = asyncio.Lock()
     # A command lock prevents protocol responses from interleaving, but a plate
     # transfer also includes resource validation and bookkeeping on either side
@@ -193,7 +199,203 @@ class HighResSampleStorage(Resource):
     return self._unresolved_transfer
 
   def serialize(self) -> dict:
-    raise NotImplementedError("HighRes sample store serialization is not implemented yet.")
+    """Serialize the device configuration and current resource inventory."""
+    data = Resource.serialize(self)
+    data.update(
+      {
+        "host": self._host,
+        "port": self._port,
+        "read_timeout": self.read_timeout,
+        "motion_timeout": self.motion_timeout,
+        "racks_loaded": self._racks_loaded,
+        "rack_map": [
+          {
+            "stacker": stacker,
+            "resource_name": rack.name,
+            "site_map": [
+              {"spot": spot, "resource_name": site.name} for spot, site in rack.sites.items()
+            ],
+          }
+          for stacker, rack in self._racks_by_number.items()
+        ],
+        "nest_names": [nest.name for nest in self.nests],
+      }
+    )
+    if self._unresolved_transfer is not None:
+      transfer = self._unresolved_transfer
+      data["unresolved_transfer"] = {
+        "plate": transfer.plate.serialize(),
+        "source_name": transfer.source.name,
+        "destination_name": transfer.destination.name,
+        "command": transfer.command,
+        "error_type": transfer.error_type,
+        "error_message": transfer.error_message,
+      }
+    return data
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "HighResSampleStorage":
+    """Restore a serialized sample store without connecting to hardware."""
+    data_copy = data.copy()
+    data_copy.pop("type", None)
+    data_copy.pop("parent_name", None)
+    children_data = data_copy.pop("children", [])
+    location_data = data_copy.pop("location", None)
+    rotation_data = data_copy.pop("rotation", None)
+    barcode_data = data_copy.pop("barcode", None)
+    preferred_pickup_location_data = data_copy.pop("preferred_pickup_location", None)
+    metadata = data_copy.pop("metadata", {})
+    rack_map = data_copy.pop("rack_map", [])
+    nest_names = data_copy.pop("nest_names", [])
+    racks_loaded = data_copy.pop("racks_loaded", True)
+    unresolved_data = data_copy.pop("unresolved_transfer", None)
+
+    if not isinstance(children_data, list):
+      raise TypeError("children must be a list")
+    if not isinstance(rack_map, list):
+      raise TypeError("rack_map must be a list")
+    if not isinstance(nest_names, list) or not all(isinstance(name, str) for name in nest_names):
+      raise TypeError("nest_names must be a list of strings")
+    if not isinstance(metadata, dict):
+      raise TypeError("metadata must be a dict")
+
+    child_records: Dict[str, Tuple[Resource, dict]] = {}
+    for child_data in children_data:
+      if not isinstance(child_data, dict):
+        raise TypeError("serialized child resources must be dictionaries")
+      child = Resource.deserialize(child_data, allow_marshal=allow_marshal)
+      child_records[child.name] = (child, child_data)
+
+    racks: Dict[int, PlateCarrier] = {}
+    rack_names = set()
+    for entry in rack_map:
+      if not isinstance(entry, dict):
+        raise TypeError("rack_map entries must be dictionaries")
+      stacker = entry.get("stacker")
+      resource_name = entry.get("resource_name")
+      if not isinstance(stacker, int) or isinstance(stacker, bool):
+        raise TypeError("rack_map stacker numbers must be integers")
+      if not isinstance(resource_name, str):
+        raise TypeError("rack_map resource names must be strings")
+      try:
+        rack = child_records[resource_name][0]
+      except KeyError as exc:
+        raise ValueError(f"Serialized rack {resource_name!r} is missing from children.") from exc
+      if not isinstance(rack, PlateCarrier):
+        raise TypeError(f"Serialized rack {resource_name!r} is not a PlateCarrier.")
+      site_map = entry.get("site_map", [])
+      if not isinstance(site_map, list):
+        raise TypeError("rack_map site_map values must be lists")
+      sites_by_name = {site.name: site for site in rack.sites.values()}
+      restored_sites: Dict[int, PlateHolder] = {}
+      for site_entry in site_map:
+        if not isinstance(site_entry, dict):
+          raise TypeError("site_map entries must be dictionaries")
+        spot = site_entry.get("spot")
+        site_name = site_entry.get("resource_name")
+        if not isinstance(spot, int) or isinstance(spot, bool):
+          raise TypeError("site_map spots must be integers")
+        if not isinstance(site_name, str):
+          raise TypeError("site_map resource names must be strings")
+        try:
+          restored_sites[spot] = sites_by_name[site_name]
+        except KeyError as exc:
+          raise ValueError(
+            f"Serialized site {site_name!r} is missing from rack {resource_name!r}."
+          ) from exc
+      if len(restored_sites) != len(rack.sites):
+        raise ValueError(f"Serialized site mapping for rack {resource_name!r} is incomplete.")
+      rack.sites = restored_sites
+      racks[stacker] = rack
+      rack_names.add(resource_name)
+
+    if not racks_loaded and racks:
+      raise ValueError("A store awaiting rack discovery cannot contain serialized racks.")
+
+    rotation = (
+      cast(Rotation, deserialize(rotation_data, allow_marshal=allow_marshal))
+      if rotation_data is not None
+      else None
+    )
+    store = cls(
+      host=data_copy.pop("host"),
+      name=data_copy.pop("name"),
+      racks=racks if racks_loaded else None,
+      size_x=data_copy.pop("size_x"),
+      size_y=data_copy.pop("size_y"),
+      size_z=data_copy.pop("size_z"),
+      rotation=rotation,
+      category=data_copy.pop("category", "plate_store"),
+      model=data_copy.pop("model", None),
+      port=data_copy.pop("port", 1000),
+      read_timeout=data_copy.pop("read_timeout", 30.0),
+      motion_timeout=data_copy.pop("motion_timeout", 240.0),
+    )
+    if data_copy:
+      raise TypeError(f"Unexpected serialized sample-store fields: {sorted(data_copy)}")
+
+    store.metadata = metadata.copy()
+    if barcode_data is not None:
+      if not isinstance(barcode_data, dict):
+        raise TypeError("barcode must be a dict")
+      store.barcode = Barcode(**barcode_data)
+    if preferred_pickup_location_data is not None:
+      store.preferred_pickup_location = cast(
+        Coordinate,
+        deserialize(preferred_pickup_location_data, allow_marshal=allow_marshal),
+      )
+    if location_data is not None:
+      store.location = cast(Coordinate, deserialize(location_data, allow_marshal=allow_marshal))
+
+    used_child_names = set(rack_names)
+    for nest_name in nest_names:
+      try:
+        nest, _ = child_records[nest_name]
+      except KeyError as exc:
+        raise ValueError(f"Serialized nest {nest_name!r} is missing from children.") from exc
+      if not isinstance(nest, PlateHolder):
+        raise TypeError(f"Serialized nest {nest_name!r} is not a PlateHolder.")
+      store.assign_child_resource(nest, location=None)
+      store.nests.append(nest)
+      used_child_names.add(nest_name)
+
+    for child_name, (child, child_data) in child_records.items():
+      if child_name in used_child_names:
+        continue
+      child_location_data = child_data.get("location")
+      child_location = (
+        cast(Coordinate, deserialize(child_location_data, allow_marshal=allow_marshal))
+        if child_location_data is not None
+        else None
+      )
+      store.assign_child_resource(child, location=child_location)
+
+    if unresolved_data is not None:
+      if not isinstance(unresolved_data, dict):
+        raise TypeError("unresolved_transfer must be a dict")
+      plate_data = unresolved_data["plate"]
+      if not isinstance(plate_data, dict) or not isinstance(plate_data.get("name"), str):
+        raise TypeError("unresolved_transfer plate must be a serialized resource")
+      try:
+        plate_resource = store.get_resource(plate_data["name"])
+      except ResourceNotFoundError:
+        plate_resource = Resource.deserialize(plate_data, allow_marshal=allow_marshal)
+      source = store.get_resource(unresolved_data["source_name"])
+      destination = store.get_resource(unresolved_data["destination_name"])
+      if not isinstance(plate_resource, Plate):
+        raise TypeError("unresolved_transfer plate is not a Plate")
+      if not isinstance(source, PlateHolder) or not isinstance(destination, PlateHolder):
+        raise TypeError("unresolved_transfer endpoints must be PlateHolders")
+      store._unresolved_transfer = UnresolvedPlateTransfer(
+        plate=plate_resource,
+        source=source,
+        destination=destination,
+        command=unresolved_data["command"],
+        error_type=unresolved_data["error_type"],
+        error_message=unresolved_data["error_message"],
+      )
+
+    return store
 
   # --- lifecycle ------------------------------------------------------------
 
@@ -201,9 +403,11 @@ class HighResSampleStorage(Resource):
     if self._verification_warning is not None:
       logger.warning("%s", self._verification_warning)
     await self.io.setup()
+    self._transport_invalidated = False
     try:
       await self._setup_connected(home=home)
     except BaseException:
+      self._transport_invalidated = True
       await self.io.stop()
       raise
 
@@ -286,9 +490,12 @@ class HighResSampleStorage(Resource):
     self._racks_loaded = True
     logger.info("Loaded %d configured stackers for %s", len(self._racks_by_number), self.name)
 
-  async def stop(self):
+  async def stop(self) -> None:
     logger.info("Stopping %s", self.name)
-    await self.io.stop()
+    try:
+      await self.io.stop()
+    finally:
+      self._transport_invalidated = True
 
   # --- transport ------------------------------------------------------------
 
@@ -296,7 +503,7 @@ class HighResSampleStorage(Resource):
     raw = await self.io.readuntil(b"\n", timeout=timeout)
     return raw.decode("ascii", errors="replace").rstrip("\r\n")
 
-  async def send_command(self, command: str, timeout: Optional[float] = None) -> List[str]:
+  async def _send_command(self, command: str, timeout: Optional[float] = None) -> List[str]:
     """Send a command and return its data lines (those between the ``ACK!`` echo
     and the completion line).
 
@@ -356,6 +563,7 @@ class HighResSampleStorage(Resource):
         logger.exception(
           "Invalidating %s connection after incomplete command %r", self.name, command
         )
+        self._transport_invalidated = True
         try:
           await self.io.stop()
         except BaseException:
@@ -373,6 +581,14 @@ class HighResSampleStorage(Resource):
       raise HighResSampleStorageProtocolError(command, line, "unknown completion status")
     return data_lines
 
+  async def _reconnect_invalidated_transport(self) -> None:
+    """Reconnect after an incomplete response left the command stream unusable."""
+    if not self._transport_invalidated:
+      return
+    logger.info("Reconnecting to %s before transfer reconciliation", self.name)
+    await self.io.setup()
+    self._transport_invalidated = False
+
   @staticmethod
   def _parse_envelope(token: str, line: str, command: str) -> Tuple[str, str]:
     prefix = f"{token} "
@@ -388,7 +604,7 @@ class HighResSampleStorage(Resource):
   # --- shared device queries ------------------------------------------------
 
   async def request_version(self) -> VersionInfo:
-    raw = parse_kv(await self.send_command("version"))
+    raw = parse_kv(await self._send_command("version"))
     return VersionInfo(
       product_name=raw.get("Product Name"),
       serial_number=raw.get("Serial Number"),
@@ -405,7 +621,7 @@ class HighResSampleStorage(Resource):
     temperature and humidity controls.
     """
     out: Dict[str, EnvironmentParameter] = {}
-    for line in await self.send_command("environmentstatus"):
+    for line in await self._send_command("environmentstatus"):
       if ":" not in line:
         continue
       name, _, rest = line.partition(":")
@@ -432,7 +648,7 @@ class HighResSampleStorage(Resource):
   async def request_axis_positions(self) -> Dict[str, float]:
     """Return the ``status`` report: carousel/theta/Y/Z positions."""
     out: Dict[str, float] = {}
-    for key, value in parse_kv(await self.send_command("status")).items():
+    for key, value in parse_kv(await self._send_command("status")).items():
       try:
         out[key] = float(value)
       except ValueError:
@@ -440,13 +656,13 @@ class HighResSampleStorage(Resource):
     return out
 
   async def request_is_homed(self) -> bool:
-    lines = await self.send_command("homedstatus")
+    lines = await self._send_command("homedstatus")
     return any(line.strip().lower() == "homed" for line in lines)
 
   async def request_door_status(self) -> Dict[str, DoorState]:
     """Parsed ``doorstatus`` output, keyed by door name."""
     doors: Dict[str, DoorState] = {}
-    for name, value in parse_kv(await self.send_command("doorstatus")).items():
+    for name, value in parse_kv(await self._send_command("doorstatus")).items():
       state = value.lower()
       doors[name] = cast(DoorState, state) if state in DOOR_STATES else "unknown"
     return doors
@@ -454,7 +670,7 @@ class HighResSampleStorage(Resource):
   async def request_nest_status(self) -> Dict[int, NestState]:
     """Parsed ``neststatus`` output, keyed by nest number."""
     nests: Dict[int, NestState] = {}
-    for key, value in parse_kv(await self.send_command("neststatus")).items():
+    for key, value in parse_kv(await self._send_command("neststatus")).items():
       try:
         nest = int(key)
       except ValueError:
@@ -467,7 +683,7 @@ class HighResSampleStorage(Resource):
 
   async def request_spatula_is_holding(self) -> bool:
     """Whether a plate is currently held on the spatula (``platestatus``)."""
-    lines = await self.send_command("platestatus")
+    lines = await self._send_command("platestatus")
     return not any("NO_PLATE" in line for line in lines)
 
   async def request_nest_is_holding(self, nest: int) -> bool:
@@ -501,7 +717,7 @@ class HighResSampleStorage(Resource):
     """Parse ``getstackerdimensions`` (``<stacker>: <zero_offset> <slot_height>
     <slot_count>``)."""
     dims: List[StackerDimensions] = []
-    for line in await self.send_command("getstackerdimensions"):
+    for line in await self._send_command("getstackerdimensions"):
       key, _, rest = line.partition(":")
       try:
         stacker = int(key)
@@ -521,7 +737,7 @@ class HighResSampleStorage(Resource):
   async def request_settings(self) -> HighResSampleStorageSettings:
     """Read the device's full settings file (``NAME = value`` pairs) into a
     frozen :class:`HighResSampleStorageSettings`."""
-    lines = await self.send_command("settings", timeout=self.read_timeout)
+    lines = await self._send_command("settings", timeout=self.read_timeout)
     return HighResSampleStorageSettings.from_lines(lines)
 
   async def request_stacker_barcodes(
@@ -559,7 +775,7 @@ class HighResSampleStorage(Resource):
     command = f"barcode {stacker}"
     if slot is not None:
       command += f" {slot}"
-    return await self.send_command(command, timeout=self.motion_timeout)
+    return await self._send_command(command, timeout=self.motion_timeout)
 
   # --- motion ---------------------------------------------------------------
 
@@ -570,7 +786,7 @@ class HighResSampleStorage(Resource):
     if await self.request_spatula_is_holding():
       raise RuntimeError("Cannot home while the spatula reports that it is holding a plate.")
     logger.info("Homing %s", self.name)
-    await self.send_command("home", timeout=self.motion_timeout)
+    await self._send_command("home", timeout=self.motion_timeout)
     logger.info("Homed %s", self.name)
 
   async def request_is_parked(self) -> bool:
@@ -614,7 +830,7 @@ class HighResSampleStorage(Resource):
     for attempt in range(1, 4):
       for command in ("enable", "spatulaout"):
         try:
-          await self.send_command(command, timeout=self.motion_timeout)
+          await self._send_command(command, timeout=self.motion_timeout)
         except HighResSampleStorageError as exc:
           logger.warning(
             "Recovery attempt %d: %s failed on %s: %s",
@@ -624,7 +840,7 @@ class HighResSampleStorage(Resource):
             exc,
           )
       try:
-        await self.send_command("home", timeout=self.motion_timeout)
+        await self._send_command("home", timeout=self.motion_timeout)
       except HighResSampleStorageError as exc:
         logger.warning("Recovery attempt %d: home failed on %s: %s", attempt, self.name, exc)
       if await self.request_is_parked():
@@ -659,7 +875,7 @@ class HighResSampleStorage(Resource):
       nest,
     )
     try:
-      await self.send_command(command, timeout=self.motion_timeout)
+      await self._send_command(command, timeout=self.motion_timeout)
     except HighResSampleStorageError as exc:
       if left_unsafe(exc.error_lines) or not await self.request_is_homed():
         logger.error("Pick left %s unsafe: %s", self.name, exc)
@@ -690,7 +906,7 @@ class HighResSampleStorage(Resource):
       slot,
     )
     try:
-      await self.send_command(command, timeout=self.motion_timeout)
+      await self._send_command(command, timeout=self.motion_timeout)
     except HighResSampleStorageError as exc:
       if left_unsafe(exc.error_lines) or not await self.request_is_homed():
         logger.error("Place left %s unsafe: %s", self.name, exc)
@@ -738,7 +954,7 @@ class HighResSampleStorage(Resource):
     """
     try:
       logger.info("Opening robot doors on %s", self.name)
-      await self.send_command("openalldoors", timeout=self.motion_timeout)
+      await self._send_command("openalldoors", timeout=self.motion_timeout)
     except HighResSampleStorageError:
       logger.warning("Open-all-doors returned an error on %s; checking door sensors", self.name)
       if await self._wait_for_robot_doors(target="open", moving="opening"):
@@ -754,7 +970,7 @@ class HighResSampleStorage(Resource):
     """
     try:
       logger.info("Closing robot doors on %s", self.name)
-      await self.send_command("closealldoors", timeout=self.motion_timeout)
+      await self._send_command("closealldoors", timeout=self.motion_timeout)
     except HighResSampleStorageError:
       logger.warning("Close-all-doors returned an error on %s; checking door sensors", self.name)
       if await self._wait_for_robot_doors(target="closed", moving="closing"):
@@ -769,7 +985,7 @@ class HighResSampleStorage(Resource):
     abort, so this is recovery for device- or externally-initiated aborts.
     """
     logger.info("Clearing abort state on %s", self.name)
-    await self.send_command("clearabort")
+    await self._send_command("clearabort")
 
   # --- plate retrieval -------------------------------------------------------
 
@@ -909,6 +1125,8 @@ class HighResSampleStorage(Resource):
         raise ValueError(
           f"location must be 'source', 'destination', or 'unassigned'; got {location!r}."
         )
+
+      await self._reconnect_invalidated_transport()
 
       target = (
         transfer.source
@@ -1112,7 +1330,7 @@ class HighResSampleStorage(Resource):
           source=source,
           destination=destination,
           command=command,
-          move=lambda: self.send_command(command, timeout=self.motion_timeout),
+          move=lambda: self._send_command(command, timeout=self.motion_timeout),
         )
 
   async def _store_plate(self, plate: Plate, site: PlateHolder, tray_index: int) -> None:

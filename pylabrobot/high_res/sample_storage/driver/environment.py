@@ -94,13 +94,13 @@ class EnvironmentControl:
       raise ValueError(f"{channel} must be between 0 and 1.")
     await self._require_controllable_channel(channel)
     logger.info("Setting %s %s target to %g", self._driver.name, channel, value)
-    await self._driver.send_command(f"environmentset {channel} {value * 100:g}")
+    await self._driver._send_command(f"environmentset {channel} {value * 100:g}")
 
   async def _set_control_enabled(self, channel: str, enabled: bool) -> None:
     await self._require_controllable_channel(channel)
     action = "enable" if enabled else "disable"
     logger.info("Setting %s %s control to %s", self._driver.name, channel, action)
-    await self._driver.send_command(f"environment {action} {channel.lower()}")
+    await self._driver._send_command(f"environment {action} {channel.lower()}")
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -140,7 +140,7 @@ class EnvironmentControl:
         f"for {self._driver.model}."
       )
     logger.info("Setting %s temperature target to %g C", self._driver.name, temperature)
-    await self._driver.send_command(f"environmentset TEMP {temperature}")
+    await self._driver._send_command(f"environmentset TEMP {temperature}")
 
   @evented_operation("temperature_controller.activate", _control_event_context)
   async def start_temperature_control(self) -> None:

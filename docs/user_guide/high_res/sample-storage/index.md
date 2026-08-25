@@ -58,22 +58,24 @@ Use `ip -brief link` to find `<interface>`. Verify the isolated link with
 
 ## Setup
 
-Pass the storage racks in stacker order and instantiate the appropriate model. For example:
+Pass the storage racks as a mapping from one-based physical stacker numbers to their PLR resources,
+then instantiate the appropriate model. Stacker numbers may be sparse. For example:
 
 ```python
 from pylabrobot.high_res.sample_storage import SteriStore
 
+racks = {1: rack_1, 3: rack_3}
 store = SteriStore(host="192.168.127.60", name="steristore", racks=racks)
 await store.setup()
 ```
 
-Each rack maps to its one-based device stacker by list position. Within a rack, the zero-based
+Each mapping key is the rack's one-based device stacker number. Within a rack, the zero-based
 carrier `spot` maps to the one-based physical slot: spot 0 is device slot 1, spot 1 is slot 2, and
-so on. Dictionary insertion order does not affect this mapping.
+so on. Mapping insertion order does not affect this relationship.
 
 Alternatively, omit `racks` to select device-discovery mode. During `setup()`, the driver reads the
 configured zero offset, slot height, and slot count with the read-only `getstackerdimensions`
-command and creates empty stacker resources. Passing `racks=[]` explicitly represents a store with
+command and creates empty stacker resources. Passing `racks={}` explicitly represents a store with
 no configured racks and does not enable discovery.
 
 During setup, the device-reported transfer nests become `store.nests`. Their locations relative to
@@ -108,9 +110,11 @@ plate = await store.transfer_plate_between_nests(
 )
 ```
 
-The driver verifies the live source and destination sensors before every fetch, store, or
-nest-to-nest transfer. A mismatch between the physical device and the PLR resource tree stops the
-operation before motion begins.
+The driver verifies every transfer-nest endpoint with its live presence sensor before motion. The
+stacker itself has no non-destructive per-slot presence query: fetching detects an empty source only
+during the pick, while storing relies on the PLR resource tree to determine that the destination
+slot is free. Keep the modeled stacker inventory synchronized with the physical store; barcode
+`EMPTY` is not a plate-presence result.
 
 ## Barcode scans
 
@@ -130,3 +134,15 @@ physical slot is empty; use resource bookkeeping or a physical plate-presence wo
 `request_is_parked()` verifies that the device is homed and that both the spatula slide and lift
 axes are retracted. `recover()` refuses to move when the spatula sensor reports a plate, because
 the plate's physical support must be inspected before a safe recovery path can be chosen.
+
+If a transfer response is interrupted or otherwise ambiguous, the driver keeps the last confirmed
+resource assignment in place, records `store.unresolved_transfer`, and blocks additional plate
+motion. Inspect the machine, then reconcile the observed result without further motion:
+
+```python
+await store.resolve_unresolved_transfer("source")
+```
+
+Use `"destination"` when the plate completed the move or `"unassigned"` when it is at neither
+modeled endpoint. If the incomplete response invalidated the TCP stream, reconciliation reconnects
+automatically before reading the spatula and nest sensors.

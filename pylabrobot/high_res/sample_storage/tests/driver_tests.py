@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import json
 import unittest
 from typing import Dict, List
 from unittest.mock import AsyncMock
@@ -16,7 +17,7 @@ from pylabrobot.high_res.sample_storage.driver.errors import (
 )
 from pylabrobot.high_res.sample_storage.driver.models import get_model_info
 from pylabrobot.high_res.sample_storage.driver.settings import HighResSampleStorageSettings
-from pylabrobot.resources import Coordinate, Lid, Plate, PlateCarrier, PlateHolder, Well
+from pylabrobot.resources import Coordinate, Lid, Plate, PlateCarrier, PlateHolder, Resource, Well
 
 # Real responses captured from a SteriStore (firmware 3.0.0.119, serial
 # HRB-2209-35148) over the port-1000 remote-control server.
@@ -268,7 +269,7 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
       self.assertIn("host: str", str(inspect.signature(model_class)))
 
   async def test_send_command_strips_ack_and_completion(self):
-    data = await self.driver.send_command("neststatus")
+    data = await self.driver._send_command("neststatus")
     self.assertEqual(data, ["1: CLEAR", "2: CLEAR"])
     self.assertEqual(self.socket.written, ["neststatus"])
 
@@ -276,13 +277,13 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     self.socket.captures["bad"] = ["OK! bad 1"]
 
     with self.assertRaisesRegex(HighResSampleStorageProtocolError, "expected ACK! envelope"):
-      await self.driver.send_command("bad")
+      await self.driver._send_command("bad")
 
   async def test_send_command_validates_acknowledged_command(self):
     self.socket.captures["bad"] = ["ACK! other 1", "OK! other 1"]
 
     with self.assertRaisesRegex(HighResSampleStorageProtocolError, "ACK echoed command 'other'"):
-      await self.driver.send_command("bad")
+      await self.driver._send_command("bad")
 
   async def test_send_command_validates_completion_command(self):
     self.socket.captures["bad"] = ["ACK! bad 1", "OK! other 1"]
@@ -290,26 +291,26 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(
       HighResSampleStorageProtocolError, "completion echoed command 'other'"
     ):
-      await self.driver.send_command("bad")
+      await self.driver._send_command("bad")
 
   async def test_send_command_validates_completion_command_id(self):
     self.socket.captures["bad"] = ["ACK! bad 1", "OK! bad 2"]
 
     with self.assertRaisesRegex(HighResSampleStorageProtocolError, "does not match ACK ID '1'"):
-      await self.driver.send_command("bad")
+      await self.driver._send_command("bad")
 
   async def test_send_command_rejects_duplicate_acknowledgement(self):
     self.socket.captures["bad"] = ["ACK! bad 1", "ACK! bad 1", "OK! bad 1"]
 
     with self.assertRaisesRegex(HighResSampleStorageProtocolError, "received a second ACK"):
-      await self.driver.send_command("bad")
+      await self.driver._send_command("bad")
 
   async def test_send_command_closes_transport_after_response_timeout(self):
     socket = TimeoutAfterAckSocket({"slow": ["ACK! slow 1", "OK! slow 1"]}, timeout_command="slow")
     self.driver.io = socket  # type: ignore[assignment]
 
     with self.assertRaisesRegex(TimeoutError, "simulated response timeout"):
-      await self.driver.send_command("slow")
+      await self.driver._send_command("slow")
 
     self.assertEqual(socket.stop_calls, 1)
 
@@ -675,9 +676,26 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       self.retrieval._nest_for_tray(2)
 
-  def test_serialize_is_not_implemented(self):
-    with self.assertRaises(NotImplementedError):
-      self.driver.serialize()
+  async def test_serialization_round_trip_preserves_configuration_and_nests(self):
+    await self.driver.setup()
+    serialized = self.driver.serialize()
+    restored = Resource.deserialize(serialized)
+
+    self.assertIsInstance(restored, SteriStore)
+    assert isinstance(restored, SteriStore)
+    self.assertEqual(restored.serialize(), serialized)
+    self.assertEqual(restored.read_timeout, self.driver.read_timeout)
+    self.assertEqual(restored.motion_timeout, self.driver.motion_timeout)
+
+  def test_serialization_preserves_pending_rack_discovery(self):
+    driver = SteriStore(host="192.0.2.1", name="discovery_store")
+
+    restored = Resource.deserialize(json.loads(json.dumps(driver.serialize())))
+
+    self.assertIsInstance(restored, SteriStore)
+    assert isinstance(restored, SteriStore)
+    self.assertFalse(restored._racks_loaded)
+    self.assertEqual(restored.racks, [])
 
 
 class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
@@ -772,6 +790,13 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(driver._locate(first_inserted), (7, 8))
     self.assertEqual(driver._locate(second_inserted), (7, 3))
 
+    restored = Resource.deserialize(json.loads(json.dumps(driver.serialize())))
+    self.assertIsInstance(restored, HighResSampleStorage)
+    assert isinstance(restored, HighResSampleStorage)
+    restored_rack = restored._racks_by_number[7]
+    self.assertEqual(restored._locate(restored_rack.sites[7]), (7, 8))
+    self.assertEqual(restored._locate(restored_rack.sites[2]), (7, 3))
+
   def test_site_selection_rejects_slots_that_are_too_short_for_lidded_plate(self):
     short = PlateHolder(name="short", size_x=127.76, size_y=85.48, size_z=16, pedestal_size_z=0)
     tall = PlateHolder(name="tall", size_x=127.76, size_y=85.48, size_z=18, pedestal_size_z=0)
@@ -828,6 +853,23 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
   def test_inventory_queries_use_resource_tree(self):
     self.assertEqual(self.driver.get_num_free_sites(), 0)
     self.assertIs(self.driver.get_site_by_plate_name("plate"), self.site)
+
+  def test_serialization_round_trip_preserves_rack_mapping_and_plate_inventory(self):
+    serialized = json.loads(json.dumps(self.driver.serialize()))
+    restored = Resource.deserialize(serialized)
+
+    self.assertIsInstance(restored, HighResSampleStorage)
+    assert isinstance(restored, HighResSampleStorage)
+    self.assertEqual(list(restored._racks_by_number), [1])
+    restored_site = restored.get_site_by_plate_name("plate")
+    self.assertEqual(restored._locate(restored_site), (1, 1))
+    self.assertEqual(
+      [nest.name for nest in restored.nests],
+      [
+        "sample_store_nest_1",
+        "sample_store_nest_2",
+      ],
+    )
 
   async def test_take_in_plate_moves_nest_resource_to_selected_site(self):
     self.plate.unassign()
@@ -966,6 +1008,13 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(transfer.error_type, "TimeoutError")
     self.assertIs(self.plate.parent, self.site)
     self.assertEqual(socket.stop_calls, 1)
+
+    result = await self.driver.resolve_unresolved_transfer("source")
+
+    self.assertIs(result, self.plate)
+    self.assertEqual(socket.setup_calls, 1)
+    self.assertIsNone(self.driver.unresolved_transfer)
+    self.assertEqual(socket.written[-2:], ["platestatus", "neststatus"])
 
   async def test_cancelled_pick_records_unresolved_transfer(self):
     started = asyncio.Event()
@@ -1132,11 +1181,22 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(transfer.command, "place 1 1 1")
     self.assertEqual(transfer.error_type, "HighResSampleStorageError")
 
+    restored = Resource.deserialize(json.loads(json.dumps(self.driver.serialize())))
+    self.assertIsInstance(restored, HighResSampleStorage)
+    assert isinstance(restored, HighResSampleStorage)
+    restored_transfer = restored.unresolved_transfer
+    self.assertIsNotNone(restored_transfer)
+    assert restored_transfer is not None
+    self.assertEqual(restored_transfer.plate.name, "plate")
+    self.assertEqual(restored_transfer.source.name, "sample_store_nest_1")
+    self.assertEqual(restored_transfer.destination.name, "site_1")
+    self.assertEqual(restored_transfer.command, "place 1 1 1")
+
     written = list(self.socket.written)
     with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
       await self.driver.store_plate(self.plate, self.site, tray_index=0)
     with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
-      await self.driver.send_command("nesttransfer 1 2")
+      await self.driver._send_command("nesttransfer 1 2")
     self.assertEqual(self.socket.written, written)
 
   async def test_resolve_unresolved_store_to_source_uses_live_nest_sensor(self):
