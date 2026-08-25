@@ -32,10 +32,20 @@ teach, and accelerate your own automation workflows.
    :header: Send PyLabRobot notifications to Slack
    :card_description: <ul>
       <li>Post run start/finish/failure messages to a Slack channel</li>
+      <li>Forward semantic PLR EventBus operations automatically</li>
       <li>Uses only the Python standard library (no extra deps)</li>
       <li>Webhook URL stored in a local file outside the repo</li></ul>
    :link: slack_notifications.html
-   :tags: Notifications Slack Monitoring
+   :tags: Notifications Slack Monitoring EventBus
+
+.. plrcard::
+   :header: Use ManualOperator in a Jupyter notebook
+   :card_description: <ul>
+      <li>Pause a notebook for an acknowledged manual handoff</li>
+      <li>Reconcile a manually moved plate in PLR's resource model</li>
+      <li>Observe incubator and ManualOperator lifecycle events</li></ul>
+   :link: manual_operator_jupyter.html
+   :tags: ResourceMovement EventBus
 
 .. plrcardgrid::
 
@@ -50,3 +60,4 @@ teach, and accelerate your own automation workflows.
 
    star_movement_plate_to_alpaqua_core
    slack_notifications
+   manual_operator_jupyter

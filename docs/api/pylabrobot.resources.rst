@@ -10,6 +10,7 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
   :nosignatures:
   :recursive:
 
+    barcode.Barcode
     Carrier
     Container
     Coordinate
@@ -29,6 +30,8 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     tip.Tip
     TipCarrier
     TipRack
+    tip_rack.TipSpot
+    Trash
     Trough
     Tube
     TubeCarrier
