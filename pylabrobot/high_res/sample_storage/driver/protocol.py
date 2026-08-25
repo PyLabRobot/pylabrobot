@@ -1,5 +1,4 @@
-"""Low-level wire-protocol constants and helpers shared by the driver and the
-per-capability backends."""
+"""Low-level wire-protocol constants and parsing helpers."""
 
 from typing import Dict, List
 

@@ -1,6 +1,10 @@
 from typing import List
 
 
+class NoFreeSiteError(Exception):
+  pass
+
+
 class HighResSampleStorageError(Exception):
   """A command returned an ``ERROR!`` completion status.
 
@@ -18,11 +22,21 @@ class HighResSampleStorageError(Exception):
 
 
 class HighResSampleStorageAbortedError(Exception):
-  """A command returned an ``ABORTED!`` completion status (e.g. after ``abort``)."""
+  """A command returned an ``ABORTED!`` completion status."""
 
   def __init__(self, command: str):
     self.command = command
     super().__init__(f"'{command}' was aborted")
+
+
+class HighResSampleStorageProtocolError(Exception):
+  """The device returned a malformed or mismatched command response."""
+
+  def __init__(self, command: str, response: str, detail: str):
+    self.command = command
+    self.response = response
+    self.detail = detail
+    super().__init__(f"Invalid response to {command!r}: {detail}; received {response!r}")
 
 
 class PlateNotFoundError(HighResSampleStorageError):
@@ -41,8 +55,8 @@ class HighResSampleStorageFault(HighResSampleStorageError):
 
   The canonical trigger is picking an empty *top* slot. The machine is not
   usable until recovered — call
-  :meth:`HighResSampleStorageAutomatedRetrievalBackend.recover` (retract the
-  spatula and re-home) before issuing further motion.
+  :meth:`HighResSampleStorage.recover` (retract the spatula and re-home) before
+  issuing further motion.
   """
 
   def __init__(self, command: str, error_lines: List[str]):
@@ -64,7 +78,6 @@ _UNSAFE_SIGNATURES = (
 
 def left_unsafe(error_lines: List[str]) -> bool:
   """Whether an error stack indicates the machine was left unsafe (spatula
-  extended / unhomed), requiring
-  :meth:`HighResSampleStorageAutomatedRetrievalBackend.recover`."""
+  extended / unhomed), requiring :meth:`HighResSampleStorage.recover`."""
   blob = " ".join(error_lines).lower()
   return any(sig in blob for sig in _UNSAFE_SIGNATURES)
