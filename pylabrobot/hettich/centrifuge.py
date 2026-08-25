@@ -769,8 +769,12 @@ class HettichRoboticCentrifuge(ABC):
     await self._select_parameter(POSITION_COMMAND, 0x0080)
     await self._wait_for_positioning_end(timeout)
 
-  async def recall_program(self, program: int) -> None:
-    """Recall and activate a stored program (1..89)."""
+  async def select_program(self, program: int) -> None:
+    """Select a stored program without starting centrifugation.
+
+    Args:
+      program: Stored program number, from 1 through 89.
+    """
     if not 1 <= program <= 89:
       raise ValueError("program must be 1..89")
     status = await self.request_status()
@@ -778,7 +782,7 @@ class HettichRoboticCentrifuge(ABC):
     if status.program_number == program:
       return
     await self._select_parameter(PROGRAM_COMMAND, (program << 8) | 0x04)
-    logger.info("[Hettich %s] activated program %d", self.io.port, program)
+    logger.info("[Hettich %s] selected program %d", self.io.port, program)
 
   async def _start_spin(self, run_time: int, speed: int) -> None:
     """Start without waiting, using the device-native acceleration-inclusive run time."""

@@ -366,14 +366,14 @@ class HettichProtocolTests(unittest.IsolatedAsyncioTestCase):
     await active.end_positioning()
     self.assertEqual(telegrams(active)[3], active._build_select("00526", 0x0080))
 
-  async def test_recall_program_is_idempotent_and_activates_a_different_program(self) -> None:
+  async def test_select_program_is_idempotent_and_selects_a_different_program(self) -> None:
     current = make_device(
       [
         enquiry_reply("00634", 0x0262),
         enquiry_reply("00635", 0xA292),
       ]
     )
-    await current.recall_program(2)
+    await current.select_program(2)
     self.assertEqual(telegram_parameters(current), [b"00634", b"00635"])
 
     different = make_device(
@@ -383,7 +383,7 @@ class HettichProtocolTests(unittest.IsolatedAsyncioTestCase):
         bytes([ord("]"), ACK]),
       ]
     )
-    await different.recall_program(2)
+    await different.select_program(2)
     self.assertEqual(telegrams(different)[-1], different._build_select("00523", 0x0204))
 
   async def test_live_value_requests_use_their_protocol_parameters(self) -> None:
