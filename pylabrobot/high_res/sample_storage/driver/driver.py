@@ -14,6 +14,7 @@ from pylabrobot.resources import (
   Rotation,
 )
 
+from ..stackers import high_res_stacker
 from .environment import EnvironmentControl
 from .errors import (
   HighResSampleStorageAbortedError,
@@ -75,7 +76,7 @@ class HighResSampleStorage(Resource):
     self,
     host: str,
     name: str,
-    racks: List[PlateCarrier],
+    racks: Optional[List[PlateCarrier]] = None,
     size_x: float = 0,
     size_y: float = 0,
     size_z: float = 0,
@@ -90,6 +91,9 @@ class HighResSampleStorage(Resource):
     Args:
       host: IP address of the store. The factory default is ``192.168.127.60``;
         all HighRes devices also answer on the backdoor ``10.253.253.253``.
+      racks: Stacker resources in one-based device order. When omitted, ``setup()``
+        reads the configured dimensions from the device and creates empty stackers.
+        Passing an empty list explicitly configures no stackers and disables discovery.
       port: Remote-control server port (always 1000).
       read_timeout: Timeout (s) for query/status commands.
       motion_timeout: Timeout (s) for long-running motion commands
@@ -116,15 +120,12 @@ class HighResSampleStorage(Resource):
     self.nests: List[PlateHolder] = []
     self._nest_numbers: List[int] = []
 
-    self._racks = racks
+    self._racks: List[PlateCarrier] = []
     self._site_locations: Dict[int, Tuple[int, int]] = {}
-    for rack_index, rack in enumerate(self._racks):
-      self.assign_child_resource(rack, location=None)
-      for spot, site in rack.sites.items():
-        if spot < 0:
-          raise ValueError(f"Rack site spot must be non-negative; got {spot} for {site.name!r}.")
-        # PLR carrier spots are zero-based; HighRes stacker slots are one-based.
-        self._site_locations[id(site)] = (rack_index + 1, spot + 1)
+    self._racks_loaded = racks is not None
+    if racks is not None:
+      for rack_index, rack in enumerate(racks):
+        self._add_rack(rack, stacker=rack_index + 1)
 
     # Slide (Y) and lift (Z) positions near zero are retracted. Faulted moves
     # can leave either axis extended even when firmware still reports homed.
@@ -186,6 +187,9 @@ class HighResSampleStorage(Resource):
       version.firmware_version,
     )
 
+    if not self._racks_loaded:
+      await self._load_racks_from_device()
+
     if self._model_info.has_environment_control:
       await self.environment.refresh()
 
@@ -206,6 +210,44 @@ class HighResSampleStorage(Resource):
         self.nests.append(nest)
     if home:
       await self.home()
+
+  def _add_rack(self, rack: PlateCarrier, stacker: int) -> None:
+    """Attach one rack and index its sites by physical stacker and slot."""
+    if stacker < 1:
+      raise ValueError(f"Stacker number must be positive; got {stacker}.")
+    self.assign_child_resource(rack, location=None)
+    self._racks.append(rack)
+    for spot, site in rack.sites.items():
+      if spot < 0:
+        raise ValueError(f"Rack site spot must be non-negative; got {spot} for {site.name!r}.")
+      # PLR carrier spots are zero-based; HighRes stacker slots are one-based.
+      self._site_locations[id(site)] = (stacker, spot + 1)
+
+  async def _load_racks_from_device(self) -> None:
+    """Create empty stacker resources from ``getstackerdimensions``."""
+    dimensions = await self.request_stacker_dimensions()
+    if not dimensions:
+      raise RuntimeError("The sample store did not report any stacker dimensions.")
+
+    reported_stackers = set()
+    for stacker_dimensions in dimensions:
+      stacker = stacker_dimensions.stacker
+      if stacker in reported_stackers:
+        raise RuntimeError(f"The sample store reported stacker {stacker} more than once.")
+      reported_stackers.add(stacker)
+      if stacker_dimensions.slot_count == 0:
+        continue
+      rack = high_res_stacker(
+        name=f"{self.name}_stacker_{stacker}",
+        zero_offset=stacker_dimensions.zero_offset,
+        slot_height=stacker_dimensions.slot_height,
+        slot_count=stacker_dimensions.slot_count,
+      )
+      rack.metadata["stacker"] = stacker
+      self._add_rack(rack, stacker=stacker)
+
+    self._racks_loaded = True
+    logger.info("Loaded %d configured stackers for %s", len(self._racks), self.name)
 
   async def stop(self):
     logger.info("Stopping %s", self.name)

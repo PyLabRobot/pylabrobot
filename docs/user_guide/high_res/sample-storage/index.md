@@ -71,6 +71,11 @@ Each rack maps to its one-based device stacker by list position. Within a rack, 
 carrier `spot` maps to the one-based physical slot: spot 0 is device slot 1, spot 1 is slot 2, and
 so on. Dictionary insertion order does not affect this mapping.
 
+Alternatively, omit `racks` to select device-discovery mode. During `setup()`, the driver reads the
+configured zero offset, slot height, and slot count with the read-only `getstackerdimensions`
+command and creates empty stacker resources. Passing `racks=[]` explicitly represents a store with
+no configured racks and does not enable discovery.
+
 During setup, the device-reported transfer nests become `store.nests`. Their locations relative to
 the store are left undefined because they depend on the surrounding robot installation. Setup does
 not invent plate resources for occupied nests; assign any already-present plates to the matching

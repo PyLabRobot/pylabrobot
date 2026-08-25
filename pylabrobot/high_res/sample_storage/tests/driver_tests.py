@@ -123,6 +123,40 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
       set(self.driver.environment.parameters), {"TEMP", "RH", "CO2", "O2", "TANK1", "TANK2"}
     )
 
+  async def test_setup_discovers_stackers_when_racks_are_omitted(self):
+    driver = SteriStore(host="10.253.253.253", name="discovered_store")
+    socket = FakeSocket(CAPTURES)
+    driver.io = socket  # type: ignore[assignment]
+
+    await driver.setup()
+
+    self.assertEqual(
+      socket.written,
+      ["version", "getstackerdimensions", "environmentstatus", "neststatus"],
+    )
+    self.assertEqual(len(driver.racks), 1)
+    rack = driver.racks[0]
+    self.assertEqual(rack.name, "discovered_store_stacker_2")
+    self.assertEqual(rack.capacity, 24)
+    self.assertEqual(rack.metadata["stacker"], 2)
+    self.assertEqual(driver._locate(rack.sites[0]), (2, 1))
+    self.assertEqual(driver._locate(rack.sites[23]), (2, 24))
+
+  async def test_repeated_setup_reuses_discovered_stackers(self):
+    driver = SteriStore(host="10.253.253.253", name="discovered_store")
+    socket = FakeSocket(CAPTURES)
+    driver.io = socket  # type: ignore[assignment]
+
+    await driver.setup()
+    original_racks = list(driver.racks)
+    await driver.setup()
+
+    self.assertEqual(driver.racks, original_racks)
+    self.assertTrue(
+      all(actual is original for actual, original in zip(driver.racks, original_racks))
+    )
+    self.assertEqual(socket.written.count("getstackerdimensions"), 1)
+
   async def test_setup_reuses_nests_when_called_again(self):
     await self.driver.setup()
     original_nests = list(self.driver.nests)

@@ -23,3 +23,4 @@ pylabrobot.high_res package
     EnvironmentControl
     SteriStore
     TundraStore
+    high_res_stacker

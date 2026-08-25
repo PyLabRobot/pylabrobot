@@ -18,4 +18,5 @@ from .driver import (
   VersionInfo,
 )
 from .steri_store import SteriStore
+from .stackers import high_res_stacker
 from .tundra_store import TundraStore
