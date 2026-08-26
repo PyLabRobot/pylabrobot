@@ -13,7 +13,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, cast
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.usb import USB
@@ -23,6 +23,34 @@ from pylabrobot.resources.well import Well
 
 logger = logging.getLogger(__name__)
 BIN_RE = re.compile(r"^(\d+),BIN:$")
+
+TecanInfinitePlatePosition = Literal[
+  "UNKNOWN", "INIT", "HOME", "IN", "OUT", "HEATING", "SHAKING", "FLOATING"
+]
+TecanInfinitePlateSensorState = Literal["FREE", "TAKEN", "UNDEFINED"]
+TecanInfiniteTemperatureStatus = Literal["ON", "OFF"]
+TecanInfiniteShakingMode = Literal["LINEAR", "ORBITAL"]
+TecanInfiniteInstrumentState = Literal[
+  "standby", "power_down", "power_up", "parked", "busy", "busy_in_background", "message", "unknown"
+]
+
+
+class TecanInfiniteResponseError(RuntimeError):
+  """Reports that reader communication did not confirm a query result or requested change."""
+
+  def __init__(self, command: str, responses: Sequence[str], reason: str) -> None:
+    self.command = command
+    self.responses = tuple(responses)
+    self.reason = reason
+    super().__init__(f"Tecan Infinite response to {command!r} {reason}: {self.responses!r}")
+
+
+@dataclass(frozen=True)
+class TecanInfiniteInstrumentStatus:
+  """Contains the interpreted reader state and the unmodified device response."""
+
+  state: TecanInfiniteInstrumentState
+  raw: str
 
 
 def _integration_microseconds_to_seconds(value: int) -> float:
@@ -428,6 +456,15 @@ class _MeasurementDecoder(ABC):
 class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
   """Backend shell for the Infinite 200 PRO."""
 
+  _PLATE_POSITIONS = {"UNKNOWN", "INIT", "HOME", "IN", "OUT", "HEATING", "SHAKING", "FLOATING"}
+  _STATUS_STATES: Dict[str, TecanInfiniteInstrumentState] = {
+    "ST": "standby",
+    "PD": "power_down",
+    "PU": "power_up",
+    "PA": "parked",
+  }
+  _BUSY_STATUS_RE = re.compile(r"^(?P<background>\+)?BY(?:#.[0-9]+|%[0-9]+|\$.*)?$")
+
   _MODE_CAPABILITY_COMMANDS: Dict[str, List[str]] = {
     "ABS": [
       "#BEAM DIAMETER",
@@ -551,14 +588,410 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
   async def open(self) -> None:
     """Open the reader drawer."""
 
-    await self._send_command("ABSOLUTE MTP,OUT")
-    await self._send_command("BY#T5000")
+    await self._move_plate_transport("OUT")
 
   async def close(self, plate: Optional[Plate]) -> None:  # noqa: ARG002
     """Close the reader drawer."""
 
-    await self._send_command("ABSOLUTE MTP,IN")
-    await self._send_command("BY#T5000")
+    await self._move_plate_transport("IN")
+
+  async def get_plate_position(self) -> TecanInfinitePlatePosition:
+    """Read the position that the reader reports for the plate transport.
+
+    The result can be ``IN``, ``OUT``, or another device state. It does not show whether a
+    microplate is present. It does not prove that the transport moved without an obstruction.
+    """
+
+    command = "?ABSOLUTE MTP,POS"
+    response = await self._query_state(command)
+    if response not in self._PLATE_POSITIONS:
+      raise TecanInfiniteResponseError(command, [response], "contained an unknown position")
+    return cast(TecanInfinitePlatePosition, response)
+
+  async def get_plate_sensor_state(self) -> TecanInfinitePlateSensorState:
+    """Read the plate-position sensor state.
+
+    After a successful inward movement, ``FREE`` means that the sensor position is unoccupied.
+    ``TAKEN`` means that a microplate occupies the sensor position. ``UNDEFINED`` means that the
+    reader does not report a known sensor state. Do not interpret ``UNDEFINED`` as an absent
+    microplate. While the tray is out, the reader can retain the result from the prior inward
+    movement.
+    """
+
+    command = "?SENSOR PLATEPOS"
+    response = await self._query_state(command)
+    if response not in {"FREE", "TAKEN", "UNDEFINED"}:
+      raise TecanInfiniteResponseError(command, [response], "contained an unknown sensor state")
+    return cast(TecanInfinitePlateSensorState, response)
+
+  async def get_current_temperature(self) -> float:
+    """Read the current plate temperature in degrees Celsius."""
+
+    return await self._get_temperature("CURRENT")
+
+  async def get_temperature_target(self) -> float:
+    """Read the target plate temperature in degrees Celsius."""
+
+    return await self._get_temperature("TARGET")
+
+  async def get_temperature_status(self) -> TecanInfiniteTemperatureStatus:
+    """Read whether plate-temperature control is on or off."""
+
+    return await self._get_temperature_status()
+
+  async def set_temperature(self, temperature: float) -> None:
+    """Set the plate-temperature target. Start temperature control.
+
+    The reader accepts command values from 0.0 to 42.0 degrees Celsius in 0.1-degree increments.
+    Tecan specifies an achievable heating range from ambient temperature plus 5 degrees Celsius
+    to 42 degrees Celsius. This method reads the applied target and the control status before it
+    returns.
+    """
+
+    raw_temperature = self._encode_temperature(temperature)
+    await self._send_control_command(f"TEMPERATURE PLATE,TARGET={raw_temperature}")
+    applied_temperature = await self._get_temperature("TARGET", recover_on_timeout=False)
+    if applied_temperature != raw_temperature / 10.0:
+      raise TecanInfiniteResponseError(
+        "?TEMPERATURE PLATE,TARGET",
+        [str(applied_temperature)],
+        f"did not match the requested target {raw_temperature / 10.0}",
+      )
+
+    await self._send_control_command("TEMPERATURE PLATE,STATUS=ON")
+    applied_status = await self._get_temperature_status(recover_on_timeout=False)
+    if applied_status != "ON":
+      raise TecanInfiniteResponseError(
+        "?TEMPERATURE PLATE,STATUS",
+        [applied_status],
+        "did not confirm that temperature control was enabled",
+      )
+
+  async def stop_temperature_control(self) -> None:
+    """Stop plate-temperature control. Confirm that the reader reports ``OFF``."""
+
+    await self._send_control_command("TEMPERATURE PLATE,STATUS=OFF")
+    applied_status = await self._get_temperature_status(recover_on_timeout=False)
+    if applied_status != "OFF":
+      raise TecanInfiniteResponseError(
+        "?TEMPERATURE PLATE,STATUS",
+        [applied_status],
+        "did not confirm that temperature control was disabled",
+      )
+
+  async def get_shaking_mode(self) -> TecanInfiniteShakingMode:
+    """Read the configured shaking mode."""
+
+    command = "?SHAKING MODE"
+    response = await self._query_state(command)
+    if response not in {"LINEAR", "ORBITAL"}:
+      raise TecanInfiniteResponseError(command, [response], "contained an unknown shaking mode")
+    return cast(TecanInfiniteShakingMode, response)
+
+  async def get_shaking_duration(self) -> Optional[int]:
+    """Read the shaking duration in seconds. Return ``None`` if the reader reports ``-1``."""
+
+    duration = await self._get_integer_state("?SHAKING TIME", "shaking duration")
+    if duration == -1:
+      return None
+    if duration < 0:
+      raise TecanInfiniteResponseError(
+        "?SHAKING TIME", [str(duration)], "contained an invalid shaking duration"
+      )
+    return duration
+
+  async def get_shaking_amplitude(self) -> Optional[float]:
+    """Read the shaking amplitude in millimeters. Return ``None`` if the reader reports ``-1``."""
+
+    raw_amplitude = await self._get_integer_state("?SHAKING AMPLITUDE", "shaking amplitude")
+    if raw_amplitude == -1:
+      return None
+    if raw_amplitude < 0:
+      raise TecanInfiniteResponseError(
+        "?SHAKING AMPLITUDE", [str(raw_amplitude)], "contained an invalid shaking amplitude"
+      )
+    return raw_amplitude / 1000.0
+
+  async def shake(
+    self,
+    duration: int,
+    mode: TecanInfiniteShakingMode = "ORBITAL",
+    amplitude: float = 1.0,
+  ) -> None:
+    """Start a timed plate shake. Return after the reader reports standby.
+
+    Set ``duration`` from 1 to 999 seconds. Set ``mode`` to ``LINEAR`` or ``ORBITAL``. Set
+    ``amplitude`` from 1.0 to 6.0 millimeters in 0.5-millimeter increments. The reader calculates
+    the frequency from the mode and amplitude. Cancellation does not stop the timed action after
+    the reader accepts the ``SHAKING ON`` command.
+    """
+
+    if isinstance(duration, bool) or not isinstance(duration, int) or not 1 <= duration <= 999:
+      raise ValueError("Shaking duration must be an integer from 1 to 999 seconds.")
+    if mode not in {"LINEAR", "ORBITAL"}:
+      raise ValueError("Shaking mode must be 'LINEAR' or 'ORBITAL'.")
+    if not math.isfinite(amplitude) or not 1.0 <= amplitude <= 6.0:
+      raise ValueError("Shaking amplitude must be from 1 to 6 mm.")
+    raw_amplitude = round(amplitude * 1000)
+    if not math.isclose(raw_amplitude / 1000.0, amplitude) or raw_amplitude % 500 != 0:
+      raise ValueError("Shaking amplitude must use 0.5 mm increments.")
+
+    await self._set_shaking_mode(mode)
+    await self._set_shaking_amplitude(raw_amplitude, amplitude)
+    await self._set_shaking_duration(duration)
+
+    try:
+      responses = await self._send_command(
+        "SHAKING ON", wait_for_terminal=False, recover_on_timeout=False
+      )
+    except TimeoutError as error:
+      raise TecanInfiniteResponseError(
+        "SHAKING ON",
+        [],
+        "was not received. The shaking action may have started. The reader may still be shaking",
+      ) from error
+    self._require_busy_response("SHAKING ON", responses)
+    if len(responses) == 2:
+      return
+    try:
+      terminal = await self._read_command_response(
+        max_iterations=1, timeout=duration + 5, recover_on_timeout=False
+      )
+    except TimeoutError as error:
+      raise TecanInfiniteResponseError(
+        "SHAKING ON",
+        responses,
+        "started, but completion could not be confirmed; the reader may still be shaking",
+      ) from error
+    if terminal != ["ST"]:
+      raise TecanInfiniteResponseError(
+        "SHAKING ON", terminal, "did not finish with the standby response"
+      )
+
+  async def get_instrument_status(self) -> TecanInfiniteInstrumentStatus:
+    """Read the reader status. Return the interpreted state and the unmodified response."""
+
+    response = await self._query_state("QQ")
+    if response in self._STATUS_STATES:
+      state = self._STATUS_STATES[response]
+    elif response.startswith("MSG"):
+      state = "message"
+    else:
+      busy_match = self._BUSY_STATUS_RE.fullmatch(response)
+      if busy_match is None:
+        state = "unknown"
+      elif busy_match.group("background"):
+        state = "busy_in_background"
+      else:
+        state = "busy"
+    return TecanInfiniteInstrumentStatus(state=state, raw=response)
+
+  async def is_busy(self) -> bool:
+    """Return whether the reader reports a busy state.
+
+    Return ``False`` for a known standby or power state. Raise an error if the response does not
+    identify a known busy or non-busy state.
+    """
+
+    status = await self.get_instrument_status()
+    if status.state in {"busy", "busy_in_background"}:
+      return True
+    if status.state in {"standby", "power_down", "power_up", "parked"}:
+      return False
+    raise TecanInfiniteResponseError(
+      "QQ", [status.raw], "did not report a known busy or non-busy state"
+    )
+
+  async def _move_plate_transport(self, destination: Literal["IN", "OUT"]) -> None:
+    """Move the plate transport. Confirm the final position that the reader reports."""
+
+    command = f"ABSOLUTE MTP,{destination}"
+    try:
+      responses = await self._send_command(
+        command, wait_for_terminal=False, recover_on_timeout=False
+      )
+    except TimeoutError as error:
+      raise TecanInfiniteResponseError(
+        command,
+        [],
+        "was not received. The transport movement may have started. "
+        f"The transport may not be {destination}",
+      ) from error
+    self._require_busy_response(command, responses)
+    if len(responses) == 1:
+      try:
+        terminal = await self._read_command_response(
+          max_iterations=1, timeout=10, recover_on_timeout=False
+        )
+      except TimeoutError as error:
+        raise TecanInfiniteResponseError(
+          command,
+          responses,
+          f"started, but completion could not be confirmed; the transport may not be {destination}",
+        ) from error
+      if terminal != ["ST"]:
+        raise TecanInfiniteResponseError(
+          command, terminal, "did not finish with the standby response"
+        )
+
+    applied_position = await self._query_state("?ABSOLUTE MTP,POS", recover_on_timeout=False)
+    if applied_position != destination:
+      raise TecanInfiniteResponseError(
+        "?ABSOLUTE MTP,POS",
+        [applied_position],
+        f"did not confirm the requested {destination} position",
+      )
+
+  async def _get_temperature(
+    self,
+    reading: Literal["CURRENT", "TARGET"],
+    *,
+    recover_on_timeout: bool = True,
+  ) -> float:
+    command = f"?TEMPERATURE PLATE,{reading}"
+    response = await self._query_state(command, recover_on_timeout=recover_on_timeout)
+    try:
+      return int(response) / 10.0
+    except ValueError as error:
+      raise TecanInfiniteResponseError(
+        command, [response], "did not contain a temperature in tenths of a degree Celsius"
+      ) from error
+
+  async def _get_temperature_status(
+    self,
+    *,
+    recover_on_timeout: bool = True,
+  ) -> TecanInfiniteTemperatureStatus:
+    """Read the plate-temperature status.
+
+    If ``recover_on_timeout`` is ``False``, do not reinitialize the reader after a timeout.
+    """
+
+    command = "?TEMPERATURE PLATE,STATUS"
+    response = await self._query_state(command, recover_on_timeout=recover_on_timeout)
+    if response not in {"ON", "OFF"}:
+      raise TecanInfiniteResponseError(
+        command, [response], "contained an unknown temperature status"
+      )
+    return cast(TecanInfiniteTemperatureStatus, response)
+
+  @staticmethod
+  def _encode_temperature(temperature: float) -> int:
+    """Convert degrees Celsius to the reader value in tenths of a degree."""
+
+    if not math.isfinite(temperature):
+      raise ValueError("Temperature must be finite.")
+    if not 0.0 <= temperature <= 42.0:
+      raise ValueError("Temperature must be from 0 to 42 degrees Celsius.")
+    raw_temperature = round(temperature * 10)
+    if not math.isclose(raw_temperature / 10.0, temperature):
+      raise ValueError("Temperature must use 0.1 degree Celsius increments.")
+    return raw_temperature
+
+  async def _get_integer_state(
+    self, command: str, description: str, *, recover_on_timeout: bool = True
+  ) -> int:
+    """Read one integer-valued device state."""
+
+    response = await self._query_state(command, recover_on_timeout=recover_on_timeout)
+    try:
+      return int(response)
+    except ValueError as error:
+      raise TecanInfiniteResponseError(
+        command, [response], f"did not contain a numeric {description}"
+      ) from error
+
+  async def _set_shaking_mode(self, mode: TecanInfiniteShakingMode) -> None:
+    """Set the shaking mode. Confirm the applied mode from the reader response."""
+
+    await self._send_control_command(f"SHAKING MODE={mode}")
+    applied = await self._query_state("?SHAKING MODE", recover_on_timeout=False)
+    if applied != mode:
+      raise TecanInfiniteResponseError(
+        "?SHAKING MODE", [applied], f"did not match the requested mode {mode}"
+      )
+
+  async def _set_shaking_amplitude(self, raw_amplitude: int, amplitude: float) -> None:
+    """Set the amplitude in thousandths of a millimeter. Confirm the applied value."""
+
+    await self._send_control_command(f"SHAKING AMPLITUDE={raw_amplitude}")
+    applied = await self._get_integer_state(
+      "?SHAKING AMPLITUDE", "shaking amplitude", recover_on_timeout=False
+    )
+    if applied != raw_amplitude:
+      raise TecanInfiniteResponseError(
+        "?SHAKING AMPLITUDE",
+        [str(applied)],
+        f"did not match the requested amplitude {amplitude}",
+      )
+
+  async def _set_shaking_duration(self, duration: int) -> None:
+    """Set the shaking duration. Confirm the applied value from the reader response."""
+
+    await self._send_control_command(f"SHAKING TIME={duration}")
+    applied = await self._get_integer_state(
+      "?SHAKING TIME", "shaking duration", recover_on_timeout=False
+    )
+    if applied != duration:
+      raise TecanInfiniteResponseError(
+        "?SHAKING TIME", [str(applied)], f"did not match the requested duration {duration}"
+      )
+
+  async def _send_control_command(self, command: str) -> None:
+    """Send a command that can change reader state. Require an ``ST`` or ``+`` response.
+
+    Do not reinitialize the reader after a timeout. The resulting reader state can be unknown.
+    """
+
+    try:
+      responses = await self._send_command(
+        command, wait_for_terminal=False, recover_on_timeout=False
+      )
+    except TimeoutError as error:
+      raise TecanInfiniteResponseError(
+        command,
+        [],
+        "may have been accepted, but its outcome could not be confirmed",
+      ) from error
+    if responses not in (["ST"], ["+"]):
+      raise TecanInfiniteResponseError(command, responses, "did not confirm the requested change")
+
+  @staticmethod
+  def _require_busy_response(command: str, responses: Sequence[str]) -> None:
+    """Require a timed busy response for an accepted timed action."""
+
+    if (
+      not responses
+      or not responses[0].startswith("BY#T")
+      or len(responses) > 2
+      or (len(responses) == 2 and responses[1] != "ST")
+    ):
+      raise TecanInfiniteResponseError(command, responses, "did not report a timed busy state")
+
+  async def _query_state(self, command: str, *, recover_on_timeout: bool = True) -> str:
+    """Send one read-only query. Require one response frame that is not a device error.
+
+    If ``recover_on_timeout`` is ``False``, do not reinitialize the reader after a timeout.
+    """
+
+    try:
+      responses = await self._send_command(
+        command, wait_for_terminal=False, recover_on_timeout=recover_on_timeout
+      )
+    except TimeoutError as error:
+      if recover_on_timeout:
+        raise
+      raise TecanInfiniteResponseError(
+        command,
+        [],
+        "could not be read without reinitializing the device; its state is indeterminate",
+      ) from error
+    if len(responses) != 1:
+      raise TecanInfiniteResponseError(command, responses, "did not contain exactly one frame")
+    response = responses[0]
+    if response.startswith("ERR") or response == "-":
+      raise TecanInfiniteResponseError(command, responses, "reported a device error")
+    return response
 
   async def _run_scan(
     self,
@@ -1029,11 +1462,17 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     self._pending_bin_events.clear()
     self._parser = _StreamParser(allow_bare_ascii=True)
 
-  async def _read_packet(self, size: int) -> bytes:
+  async def _read_packet(
+    self, size: int, timeout: Optional[int] = None, *, recover_on_timeout: bool = True
+  ) -> bytes:
     try:
-      data = await self.io.read(size=size)
+      if timeout is None:
+        data = await self.io.read(size=size)
+      else:
+        data = await self.io.read(timeout=timeout, size=size)
     except TimeoutError:
-      await self._recover_transport()
+      if recover_on_timeout:
+        await self._recover_transport()
       raise
     return data
 
@@ -1130,6 +1569,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     wait_for_terminal: bool = True,
     allow_timeout: bool = False,
     read_response: bool = True,
+    recover_on_timeout: bool = True,
   ) -> List[str]:
     logger.debug("[tecan] >> %s", command)
     framed = self._frame_command(command)
@@ -1138,14 +1578,18 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       return []
     if command.startswith(("#", "?")):
       try:
-        return await self._read_command_response(require_terminal=False)
+        return await self._read_command_response(
+          require_terminal=False, recover_on_timeout=recover_on_timeout
+        )
       except TimeoutError:
         if allow_timeout:
           logger.warning("Timeout waiting for response to %s", command)
           return []
         raise
     try:
-      frames = await self._read_command_response(require_terminal=wait_for_terminal)
+      frames = await self._read_command_response(
+        require_terminal=wait_for_terminal, recover_on_timeout=recover_on_timeout
+      )
     except TimeoutError:
       if allow_timeout:
         logger.warning("Timeout waiting for response to %s", command)
@@ -1163,13 +1607,18 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         break
 
   async def _read_command_response(
-    self, max_iterations: int = 8, require_terminal: bool = True
+    self,
+    max_iterations: int = 8,
+    require_terminal: bool = True,
+    timeout: Optional[int] = None,
+    *,
+    recover_on_timeout: bool = True,
   ) -> List[str]:
     """Read response frames and cache any binary payloads that arrive."""
     frames: List[str] = []
     saw_terminal = False
     for _ in range(max_iterations):
-      chunk = await self._read_packet(128)
+      chunk = await self._read_packet(128, timeout=timeout, recover_on_timeout=recover_on_timeout)
       if not chunk:
         break
       for event in self._parser.feed(chunk):
@@ -1183,7 +1632,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         break
       if require_terminal and saw_terminal and not self._parser.has_pending_bin():
         break
-    if require_terminal and not saw_terminal:
+    if require_terminal and not saw_terminal and recover_on_timeout:
       # best effort: drain once more so pending ST doesn't leak into next command
       await self._drain(1)
     return frames
@@ -1341,4 +1790,11 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
 
 __all__ = [
   "ExperimentalTecanInfinite200ProBackend",
+  "TecanInfiniteInstrumentState",
+  "TecanInfiniteInstrumentStatus",
+  "TecanInfinitePlatePosition",
+  "TecanInfinitePlateSensorState",
+  "TecanInfiniteResponseError",
+  "TecanInfiniteShakingMode",
+  "TecanInfiniteTemperatureStatus",
 ]
