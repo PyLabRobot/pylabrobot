@@ -2,11 +2,25 @@ import asyncio
 import logging
 import random
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, List, Literal, Mapping, Optional, Tuple, Union, cast
+from typing import (
+  Any,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Mapping,
+  Optional,
+  Sequence,
+  Tuple,
+  Union,
+  cast,
+)
 
 from pylabrobot.events import event_operation, resource_reference
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import (
+  Coordinate,
   Plate,
   PlateCarrier,
   PlateHolder,
@@ -14,6 +28,8 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   Rotation,
 )
+from pylabrobot.resources.barcode import Barcode
+from pylabrobot.serializer import deserialize as deserialize_value
 
 from ..stackers import high_res_stacker
 from .environment import EnvironmentControl
@@ -109,8 +125,13 @@ class HighResSampleStorage(Resource):
     port: int = 1000,
     read_timeout: float = 30.0,
     motion_timeout: float = 240.0,
-  ):
-    """
+    nests: Optional[Sequence[PlateHolder]] = None,
+    barcode: Optional[Barcode] = None,
+    preferred_pickup_location: Optional[Coordinate] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+  ) -> None:
+    """Create a HighRes sample-store resource and configure its TCP transport.
+
     Args:
       host: IP address of the store. The factory default is ``192.168.127.60``;
         all HighRes devices also answer on the backdoor ``10.253.253.253``.
@@ -124,6 +145,10 @@ class HighResSampleStorage(Resource):
         (``home``, ``pick``, ``place``, door moves).
       model: Model used for model-specific behavior. Defaults to the concrete
         class's model and is never replaced with the device-reported product name.
+      nests: Existing transfer-nest resources when restoring serialized state.
+      barcode: Optional barcode identifying the store resource.
+      preferred_pickup_location: Optional gripper pickup coordinate for the store resource.
+      metadata: Free-form resource metadata.
     """
     configured_model = model if model is not None else self._model_name
     model_info = get_model_info(configured_model)
@@ -136,12 +161,19 @@ class HighResSampleStorage(Resource):
       rotation=rotation,
       category=category,
       model=configured_model,
+      barcode=barcode,
+      preferred_pickup_location=preferred_pickup_location,
+      metadata=metadata,
     )
 
     # The device reports its configured nest numbers during setup. Their
     # robot-facing coordinates are intentionally undefined relative to the
     # store, so the corresponding resources are attached with location=None.
     self.nests: List[PlateHolder] = []
+    if nests is not None:
+      for nest in nests:
+        self.assign_child_resource(nest, location=None)
+        self.nests.append(nest)
 
     self._racks_by_number: Dict[int, PlateCarrier] = {}
     self._racks_loaded = racks is not None
@@ -167,6 +199,8 @@ class HighResSampleStorage(Resource):
       read_timeout=read_timeout,
       write_timeout=read_timeout,
     )
+    self._host = host
+    self._port = port
     self._read_timeout = read_timeout
     self._motion_timeout = motion_timeout
     self._transport_invalidated = False
@@ -195,7 +229,58 @@ class HighResSampleStorage(Resource):
     return self._unresolved_transfer
 
   def serialize(self) -> dict:
-    raise NotImplementedError("HighRes sample store serialization is not implemented yet.")
+    """Serialize the connection configuration and modeled inventory.
+
+    An unresolved transfer cannot be serialized safely because restoring only
+    the last confirmed resource assignment would discard the recovery block.
+    """
+    self._require_no_unresolved_transfer()
+    resource_data = Resource.serialize(self)
+    # These fields preserve physical stacker numbers and transfer-nest ordering.
+    resource_data.pop("children", None)
+    return {
+      **resource_data,
+      "host": self._host,
+      "port": self._port,
+      "read_timeout": self.read_timeout,
+      "motion_timeout": self.motion_timeout,
+      "racks": {str(stacker): rack.serialize() for stacker, rack in self._racks_by_number.items()},
+      "nests": [nest.serialize() for nest in self.nests],
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "HighResSampleStorage":
+    """Restore a sample store and its modeled racks and transfer nests."""
+    racks_data = cast(Dict[str, dict], data.get("racks", {}))
+    racks = {
+      int(stacker): PlateCarrier.deserialize(rack_data, allow_marshal=allow_marshal)
+      for stacker, rack_data in racks_data.items()
+    }
+    barcode_data = cast(Optional[dict], data.get("barcode"))
+    store = cls(
+      host=cast(str, data["host"]),
+      name=cast(str, data["name"]),
+      racks=racks,
+      size_x=cast(float, data.get("size_x", 0)),
+      size_y=cast(float, data.get("size_y", 0)),
+      size_z=cast(float, data.get("size_z", 0)),
+      rotation=cast(Optional[Rotation], deserialize_value(data.get("rotation"))),
+      category=cast(Optional[str], data.get("category")),
+      model=cast(Optional[str], data.get("model")),
+      port=cast(int, data.get("port", 1000)),
+      read_timeout=cast(float, data.get("read_timeout", 30.0)),
+      motion_timeout=cast(float, data.get("motion_timeout", 240.0)),
+      nests=[
+        PlateHolder.deserialize(nest_data, allow_marshal=allow_marshal)
+        for nest_data in cast(List[dict], data.get("nests", []))
+      ],
+      barcode=Barcode(**barcode_data) if barcode_data is not None else None,
+      preferred_pickup_location=cast(
+        Optional[Coordinate], deserialize_value(data.get("preferred_pickup_location"))
+      ),
+      metadata=cast(Optional[Mapping[str, Any]], data.get("metadata")),
+    )
+    return store
 
   # --- lifecycle ------------------------------------------------------------
 
@@ -431,7 +516,7 @@ class HighResSampleStorage(Resource):
       except (ValueError, IndexError):
         continue
 
-      def _opt(i: int, parts=parts) -> Optional[float]:
+      def _opt(i: int) -> Optional[float]:
         try:
           return float(parts[i])
         except (ValueError, IndexError):
@@ -580,7 +665,7 @@ class HighResSampleStorage(Resource):
 
   # --- motion ---------------------------------------------------------------
 
-  async def home(self):
+  async def home(self) -> None:
     """Home the system. The first step closes all doors, which requires the
     pneumatic supply (clean dry air >80 psi); without it this raises
     :class:`HighResSampleStorageError` ("Unable to close all doors")."""
@@ -651,7 +736,7 @@ class HighResSampleStorage(Resource):
     logger.error("Motion recovery failed for %s after 3 attempts", self.name)
     return False
 
-  async def _pick(self, stacker: int, slot: int, nest: int, close_door: bool = True):
+  async def _pick(self, stacker: int, slot: int, nest: int, close_door: bool = True) -> None:
     """Retrieve a plate from ``(stacker, slot)`` to ``nest``.
 
     ``close_door=False`` re-opens the doors after the transfer (see :meth:`_place`).
@@ -690,7 +775,7 @@ class HighResSampleStorage(Resource):
     if not close_door:
       await self.open_all_doors()
 
-  async def _place(self, stacker: int, slot: int, nest: int, close_door: bool = True):
+  async def _place(self, stacker: int, slot: int, nest: int, close_door: bool = True) -> None:
     """Place the plate at ``nest`` into ``(stacker, slot)``.
 
     The store re-seals its doors as part of every transfer, so ``close_door``
@@ -710,7 +795,7 @@ class HighResSampleStorage(Resource):
     try:
       await self._send_command(command, timeout=self.motion_timeout)
     except HighResSampleStorageError as exc:
-      if left_unsafe(exc.error_lines) or not await self.request_is_homed():
+      if left_unsafe(exc.error_lines) or not await self.request_is_parked():
         logger.error("Place left %s unsafe: %s", self.name, exc)
         raise HighResSampleStorageFault(command, exc.error_lines) from exc
       logger.error("Place failed on %s: %s", self.name, exc)

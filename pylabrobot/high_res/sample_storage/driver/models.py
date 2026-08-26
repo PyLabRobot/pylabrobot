@@ -4,6 +4,8 @@ from typing import Dict, Optional, Tuple
 
 @dataclass(frozen=True)
 class ModelInfo:
+  """Environmental capabilities and limits for one sample-store model."""
+
   has_environment_control: bool
   temperature_range: Optional[Tuple[float, float]]
   humidity_range: Optional[Tuple[float, float]]

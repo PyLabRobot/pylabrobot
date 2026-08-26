@@ -227,6 +227,26 @@ class HighResSampleStorageRecoveryTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(HighResSampleStorageFault):
       await self.retrieval._place(2, 5, 1)
 
+  async def test_place_raises_fault_when_homed_but_extended(self):
+    generic_error = [
+      "ACK! place 2 5 1 1",
+      "Error 1: 1: motor fault",
+      "ERROR! place 2 5 1 1",
+    ]
+    sock = ScriptedSocket(
+      [
+        ("place 2 5 1", generic_error),
+        ("homedstatus", self._homed(2)),
+        ("status", self._status(3, y=256.0)),
+      ]
+    )
+    self.driver.io = sock  # type: ignore[assignment]
+
+    with self.assertRaises(HighResSampleStorageFault):
+      await self.retrieval._place(2, 5, 1)
+
+    self.assertEqual(sock.commands, ["place 2 5 1", "homedstatus", "status"])
+
   async def test_place_default_leaves_doors_sealed(self):
     sock = ScriptedSocket([("place 2 5 1", _ok("place 2 5 1", 1))])
     self.driver.io = sock  # type: ignore[assignment]

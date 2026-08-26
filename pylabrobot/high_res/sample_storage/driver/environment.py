@@ -45,7 +45,7 @@ class EnvironmentControl:
   device protocol uses percentages, so ``0.05`` CO2 is sent as ``5``.
   """
 
-  def __init__(self, driver: "HighResSampleStorage"):
+  def __init__(self, driver: "HighResSampleStorage") -> None:
     super().__init__()
     self._driver = driver
     self._parameters: Dict[str, EnvironmentParameter] = {}

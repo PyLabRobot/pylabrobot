@@ -18,6 +18,6 @@ from .driver import (
   UnresolvedPlateTransfer,
   VersionInfo,
 )
-from .steri_store import SteriStore
 from .stackers import high_res_stacker
+from .steri_store import SteriStore
 from .tundra_store import TundraStore

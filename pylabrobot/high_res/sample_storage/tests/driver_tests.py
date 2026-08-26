@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import json
 import unittest
 from typing import Dict, List
 from unittest.mock import AsyncMock
@@ -682,9 +683,20 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       self.retrieval._nest_for_tray(2)
 
-  def test_serialization_is_not_implemented(self):
-    with self.assertRaisesRegex(NotImplementedError, "serialization is not implemented"):
-      self.driver.serialize()
+  async def test_serialization_round_trip(self):
+    await self.driver.setup()
+    self.driver.metadata["owner"] = "lab"
+
+    serialized = json.loads(json.dumps(self.driver.serialize()))
+    restored = SteriStore.deserialize(serialized)
+
+    self.assertIsInstance(restored, SteriStore)
+    self.assertEqual(restored.metadata, {"owner": "lab"})
+    self.assertEqual(
+      [nest.name for nest in restored.nests], [nest.name for nest in self.driver.nests]
+    )
+    self.assertEqual(restored.racks, [])
+    self.assertEqual(restored.serialize(), serialized)
 
 
 class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
@@ -717,6 +729,18 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
       f"2: {nest_2}",
       "OK! neststatus 12",
     ]
+
+  def test_serialization_preserves_stacker_mapping_and_inventory(self):
+    serialized = json.loads(json.dumps(self.driver.serialize()))
+
+    restored = HighResSampleStorage.deserialize(serialized)
+
+    self.assertEqual(list(restored._racks_by_number), [1])
+    restored_plate = restored.get_site_by_plate_name("plate").resource
+    self.assertIsNotNone(restored_plate)
+    assert restored_plate is not None
+    self.assertEqual(restored_plate.name, "plate")
+    self.assertEqual(restored.serialize(), serialized)
 
   async def test_fetch_moves_plate_resource_to_nest(self):
     self.socket.captures["pick 1 1 1"] = ["ACK! pick 1 1 1 40", "OK! pick 1 1 1 40"]
@@ -973,6 +997,8 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(transfer.error_type, "TimeoutError")
     self.assertIs(self.plate.parent, self.site)
     self.assertEqual(socket.stop_calls, 1)
+    with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
+      self.driver.serialize()
 
     result = await self.driver.resolve_unresolved_transfer("source")
 

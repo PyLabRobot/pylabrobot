@@ -2,7 +2,7 @@ from typing import List
 
 
 class NoFreeSiteError(Exception):
-  pass
+  """Raised when no free stacker site can accommodate a plate."""
 
 
 class HighResSampleStorageError(Exception):
@@ -14,7 +14,7 @@ class HighResSampleStorageError(Exception):
   :attr:`error_lines`.
   """
 
-  def __init__(self, command: str, error_lines: List[str]):
+  def __init__(self, command: str, error_lines: List[str]) -> None:
     self.command = command
     self.error_lines = error_lines
     detail = error_lines[-1] if error_lines else "no error detail returned"
@@ -24,7 +24,7 @@ class HighResSampleStorageError(Exception):
 class HighResSampleStorageAbortedError(Exception):
   """A command returned an ``ABORTED!`` completion status."""
 
-  def __init__(self, command: str):
+  def __init__(self, command: str) -> None:
     self.command = command
     super().__init__(f"'{command}' was aborted")
 
@@ -32,7 +32,7 @@ class HighResSampleStorageAbortedError(Exception):
 class HighResSampleStorageProtocolError(Exception):
   """The device returned a malformed or mismatched command response."""
 
-  def __init__(self, command: str, response: str, detail: str):
+  def __init__(self, command: str, response: str, detail: str) -> None:
     self.command = command
     self.response = response
     self.detail = detail
@@ -59,7 +59,7 @@ class HighResSampleStorageFault(HighResSampleStorageError):
   issuing further motion.
   """
 
-  def __init__(self, command: str, error_lines: List[str]):
+  def __init__(self, command: str, error_lines: List[str]) -> None:
     super().__init__(command, error_lines)
     self.args = (f"{self.args[0]}; machine is unsafe — call recover()",)
 

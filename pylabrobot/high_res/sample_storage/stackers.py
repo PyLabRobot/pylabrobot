@@ -1,6 +1,5 @@
 from pylabrobot.resources import Coordinate, PlateCarrier, PlateHolder
 
-
 _STACKER_SIZE_X = 112.3
 _STACKER_SIZE_Y = 146.6
 _SITE_SIZE_X = 85.48
