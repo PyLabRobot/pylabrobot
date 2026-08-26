@@ -848,6 +848,13 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     *,
     recover_on_timeout: bool = True,
   ) -> float:
+    """Read the current or target plate temperature in degrees Celsius.
+
+    Set ``reading`` to ``CURRENT`` for the measured value or ``TARGET`` for the configured target.
+    The reader reports the value in tenths of a degree Celsius. If ``recover_on_timeout`` is
+    ``False``, do not reinitialize the reader after a timeout.
+    """
+
     command = f"?TEMPERATURE PLATE,{reading}"
     response = await self._query_state(command, recover_on_timeout=recover_on_timeout)
     try:
