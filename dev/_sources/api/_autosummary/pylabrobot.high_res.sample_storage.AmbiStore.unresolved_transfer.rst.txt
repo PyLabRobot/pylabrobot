@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.unresolved\_transfer
+===================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoproperty:: AmbiStore.unresolved_transfer

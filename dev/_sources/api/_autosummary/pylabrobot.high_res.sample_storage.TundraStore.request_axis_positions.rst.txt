@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.request\_axis\_positions
+=========================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.request_axis_positions

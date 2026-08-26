@@ -592,6 +592,13 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../high_res/sample-storage/index.html">Sample storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../high_res/sample-storage/ambistore/hello-world.html">HighRes AmbiStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../high_res/sample-storage/steristore/hello-world.html">HighRes SteriStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../high_res/sample-storage/tundrastore/hello-world.html">HighRes TundraStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../high_res/sample-storage/events.html">Sample-storage events</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -655,7 +662,7 @@
 <li class="toctree-l2"><a class="reference internal" href="event-bus/machine-lifecycle.html">Machine lifecycle events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="event-bus/incubator.html">Incubator events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="event-bus/liquid-handler.html">LiquidHandler events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="event-bus/thermal-and-shaking.html">Shaker and temperature-controller events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-bus/thermal-and-shaking.html">Shaker and environmental-controller events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="event-bus/diagnostic-transports.html">Diagnostic transport events</a></li>
 </ul>
 </details></li>
@@ -847,31 +854,34 @@ events.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.storage.Incubator</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">incubator.fetch_plate</span></code>, <code class="docutils literal notranslate"><span class="pre">incubator.take_in_plate</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.liquid_handling.LiquidHandler</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">high_res.sample_storage.HighResSampleStorage</span></code></p></td>
+<td><p>incubator fetch/take-in/nest transfer; temperature, humidity, CO2, and O2 control when supported</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.liquid_handling.LiquidHandler</span></code></p></td>
 <td><p>resource pickup/move/drop; tip pickup/drop; 96-head tip pickup/drop; aspirate; dispense</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.shaking.Shaker</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.shaking.Shaker</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">shaker.shake</span></code>, <code class="docutils literal notranslate"><span class="pre">shaker.stop_shaking</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.temperature_controlling.TemperatureController</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.temperature_controlling.TemperatureController</span></code></p></td>
 <td><p>set temperature, wait for temperature, deactivate</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.centrifuge.Centrifuge</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.centrifuge.Centrifuge</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.centrifuge.Loader</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.centrifuge.Loader</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code>, <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.unload</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agilent.vspin.VSpin</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agilent.vspin.VSpin</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agilent.vspin.Access2</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agilent.vspin.Access2</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code>, <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.unload</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">brooks.precise_flex.PreciseFlex</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">brooks.precise_flex.PreciseFlex</span></code></p></td>
 <td><p>lifecycle, fault/home/freedrive, joint/cartesian/rail/gripper motion, pick/drop, park</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">manual_operator.ManualOperator</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">manual_operator.ManualOperator</span></code></p></td>
 <td><p>arbitrary acknowledged manual actions; resource moves</p></td>
 </tr>
 </tbody>
@@ -882,7 +892,8 @@ events.</p>
 <li><p><a class="reference internal" href="event-bus/machine-lifecycle.html"><span class="std std-doc">Machine lifecycle</span></a></p></li>
 <li><p><a class="reference internal" href="event-bus/incubator.html"><span class="std std-doc">Incubator</span></a></p></li>
 <li><p><a class="reference internal" href="event-bus/liquid-handler.html"><span class="std std-doc">LiquidHandler</span></a></p></li>
-<li><p><a class="reference internal" href="event-bus/thermal-and-shaking.html"><span class="std std-doc">Shaker and temperature controller</span></a></p></li>
+<li><p><a class="reference internal" href="event-bus/thermal-and-shaking.html"><span class="std std-doc">Shaker and environmental controllers</span></a></p></li>
+<li><p><a class="reference internal" href="../high_res/sample-storage/events.html"><span class="std std-doc">HighRes sample storage</span></a></p></li>
 <li><p><a class="reference internal" href="../agilent/vspin/events.html"><span class="std std-doc">VSpin centrifuge and Access2 loader</span></a></p></li>
 <li><p><a class="reference internal" href="event-bus/diagnostic-transports.html"><span class="std std-doc">Diagnostic transports</span></a></p></li>
 <li><p><a class="reference internal" href="../../contributor_guide/event-schemas.html"><span class="std std-doc">Canonical schema for every operation above</span></a></p></li>
@@ -895,8 +906,8 @@ events.</p>
 <h2>Operation reference<a class="headerlink" href="#operation-reference" title="Link to this heading">#</a></h2>
 <section id="incubator">
 <h3>Incubator<a class="headerlink" href="#incubator" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">incubator.fetch_plate</span></code> and <code class="docutils literal notranslate"><span class="pre">incubator.take_in_plate</span></code> include <code class="docutils literal notranslate"><span class="pre">device</span></code>, the moved plate in
-<code class="docutils literal notranslate"><span class="pre">resources</span></code>, and physical <code class="docutils literal notranslate"><span class="pre">source</span></code> and <code class="docutils literal notranslate"><span class="pre">destination</span></code> resource references.</p>
+<p><code class="docutils literal notranslate"><span class="pre">incubator.fetch_plate</span></code>, <code class="docutils literal notranslate"><span class="pre">incubator.take_in_plate</span></code>, and <code class="docutils literal notranslate"><span class="pre">incubator.transfer_plate</span></code> include <code class="docutils literal notranslate"><span class="pre">device</span></code>,
+the moved plate in <code class="docutils literal notranslate"><span class="pre">resources</span></code>, and physical <code class="docutils literal notranslate"><span class="pre">source</span></code> and <code class="docutils literal notranslate"><span class="pre">destination</span></code> resource references.</p>
 </section>
 <section id="liquidhandler">
 <h3>LiquidHandler<a class="headerlink" href="#liquidhandler" title="Link to this heading">#</a></h3>
@@ -906,11 +917,13 @@ operated resources plus <code class="docutils literal notranslate"><span class="
 <code class="docutils literal notranslate"><span class="pre">resource</span></code>, optional owning <code class="docutils literal notranslate"><span class="pre">plate</span></code>, and <code class="docutils literal notranslate"><span class="pre">volume</span></code>. Tip events similarly include direct tip
 locations and per-channel <code class="docutils literal notranslate"><span class="pre">tip_operations</span></code>.</p>
 </section>
-<section id="shaker-and-temperaturecontroller">
-<h3>Shaker and TemperatureController<a class="headerlink" href="#shaker-and-temperaturecontroller" title="Link to this heading">#</a></h3>
+<section id="shaker-and-environmental-controllers">
+<h3>Shaker and environmental controllers<a class="headerlink" href="#shaker-and-environmental-controllers" title="Link to this heading">#</a></h3>
 <p>Shaker events include <code class="docutils literal notranslate"><span class="pre">speed_rpm</span></code> and optional <code class="docutils literal notranslate"><span class="pre">duration</span></code>. Temperature-controller events include
-<code class="docutils literal notranslate"><span class="pre">target_temperature</span></code> where applicable. Both frontends are <code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code>s: when a
-resource is loaded at operation start, it is included as the direct resource in <code class="docutils literal notranslate"><span class="pre">resources</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">target_temperature</span></code> where applicable. The legacy shaker and temperature frontends are
+<code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code>s: when a resource is loaded at operation start, it is included as the direct
+resource in <code class="docutils literal notranslate"><span class="pre">resources</span></code>. HighRes sample-store humidity and gas targets are fractions and use an
+empty <code class="docutils literal notranslate"><span class="pre">resources</span></code> list because the controller acts on the store environment rather than one plate.</p>
 </section>
 <section id="brooks-preciseflex">
 <h3>Brooks PreciseFlex<a class="headerlink" href="#brooks-preciseflex" title="Link to this heading">#</a></h3>
@@ -991,7 +1004,7 @@ and payload fields.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#operation-reference">Operation reference</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#incubator">Incubator</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#liquidhandler">LiquidHandler</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shaker-and-temperaturecontroller">Shaker and TemperatureController</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shaker-and-environmental-controllers">Shaker and environmental controllers</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#brooks-preciseflex">Brooks PreciseFlex</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#agilent-benchcel">Agilent BenchCel</a></li>
 </ul>

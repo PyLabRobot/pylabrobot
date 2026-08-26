@@ -543,6 +543,22 @@
     "oem": "https://www.hettweb.com/products/sbs300robotic/"
   },
   {
+    "id": "highres-ambistore",
+    "vendor": "HighRes Biosolutions",
+    "name": "AmbiStore",
+    "kind": "storage",
+    "capabilities": [
+      "storage"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.high_res.sample_storage.AmbiStore",
+    "api_version": "v1",
+    "code_slug": "high_res/sample_storage",
+    "doc_slug": "high_res/sample-storage/ambistore/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.highres.com/lab-instruments/sample-storage"
+  },
+  {
     "id": "highres-lid-valet",
     "vendor": "HighRes Biosolutions",
     "name": "LidValet",
@@ -572,6 +588,41 @@
     "code_slug": "legacy/centrifuge",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.highres.com/lab-instruments/microspin-centrifuge"
+  },
+  {
+    "id": "highres-steristore",
+    "vendor": "HighRes Biosolutions",
+    "name": "SteriStore",
+    "kind": "storage",
+    "capabilities": [
+      "storage",
+      "heating",
+      "active cooling"
+    ],
+    "status": "full",
+    "api": "pylabrobot.high_res.sample_storage.SteriStore",
+    "api_version": "v1",
+    "code_slug": "high_res/sample_storage",
+    "doc_slug": "high_res/sample-storage/steristore/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.highres.com/lab-instruments/sample-storage"
+  },
+  {
+    "id": "highres-tundrastore",
+    "vendor": "HighRes Biosolutions",
+    "name": "TundraStore",
+    "kind": "storage",
+    "capabilities": [
+      "storage",
+      "active cooling"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.high_res.sample_storage.TundraStore",
+    "api_version": "v1",
+    "code_slug": "high_res/sample_storage",
+    "doc_slug": "high_res/sample-storage/tundrastore/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.highres.com/lab-instruments/sample-storage"
   },
   {
     "id": "inheco-cpac",

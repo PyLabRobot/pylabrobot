@@ -1,0 +1,113 @@
+﻿:orphan:
+
+
+pylabrobot.high\_res.sample\_storage.SteriStore
+===============================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoclass:: SteriStore
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SteriStore.model_info
+      ~SteriStore.motion_timeout
+      ~SteriStore.name
+      ~SteriStore.racks
+      ~SteriStore.read_timeout
+      ~SteriStore.unresolved_transfer
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SteriStore.__init__
+      ~SteriStore.assign_child_by_anchor
+      ~SteriStore.assign_child_resource
+      ~SteriStore.at
+      ~SteriStore.center
+      ~SteriStore.centers
+      ~SteriStore.check_can_drop_resource_here
+      ~SteriStore.clear_abort
+      ~SteriStore.close_all_doors
+      ~SteriStore.copy
+      ~SteriStore.deregister_did_assign_resource_callback
+      ~SteriStore.deregister_did_unassign_resource_callback
+      ~SteriStore.deregister_state_update_callback
+      ~SteriStore.deregister_will_assign_resource_callback
+      ~SteriStore.deregister_will_unassign_resource_callback
+      ~SteriStore.deserialize
+      ~SteriStore.fetch_plate_to_loading_tray
+      ~SteriStore.find_random_site
+      ~SteriStore.find_resource
+      ~SteriStore.find_resources
+      ~SteriStore.find_smallest_site_for_plate
+      ~SteriStore.get_absolute_location
+      ~SteriStore.get_absolute_rotation
+      ~SteriStore.get_absolute_size_x
+      ~SteriStore.get_absolute_size_y
+      ~SteriStore.get_absolute_size_z
+      ~SteriStore.get_all_children
+      ~SteriStore.get_anchor
+      ~SteriStore.get_highest_known_point
+      ~SteriStore.get_location_wrt
+      ~SteriStore.get_num_free_sites
+      ~SteriStore.get_resource
+      ~SteriStore.get_root
+      ~SteriStore.get_site_by_plate_name
+      ~SteriStore.get_size_x
+      ~SteriStore.get_size_y
+      ~SteriStore.get_size_z
+      ~SteriStore.home
+      ~SteriStore.is_in_subtree_of
+      ~SteriStore.load_all_state
+      ~SteriStore.load_from_json_file
+      ~SteriStore.load_state
+      ~SteriStore.load_state_from_file
+      ~SteriStore.named
+      ~SteriStore.open_all_doors
+      ~SteriStore.recover
+      ~SteriStore.register_did_assign_resource_callback
+      ~SteriStore.register_did_unassign_resource_callback
+      ~SteriStore.register_state_update_callback
+      ~SteriStore.register_will_assign_resource_callback
+      ~SteriStore.register_will_unassign_resource_callback
+      ~SteriStore.request_axis_positions
+      ~SteriStore.request_door_status
+      ~SteriStore.request_environment
+      ~SteriStore.request_is_homed
+      ~SteriStore.request_is_parked
+      ~SteriStore.request_nest_is_holding
+      ~SteriStore.request_nest_status
+      ~SteriStore.request_settings
+      ~SteriStore.request_spatula_is_holding
+      ~SteriStore.request_stacker_barcodes
+      ~SteriStore.request_stacker_dimensions
+      ~SteriStore.request_version
+      ~SteriStore.resolve_unresolved_transfer
+      ~SteriStore.rotate
+      ~SteriStore.rotated
+      ~SteriStore.save
+      ~SteriStore.save_state_to_file
+      ~SteriStore.serialize
+      ~SteriStore.serialize_all_state
+      ~SteriStore.serialize_state
+      ~SteriStore.setup
+      ~SteriStore.stop
+      ~SteriStore.store_plate
+      ~SteriStore.take_in_plate
+      ~SteriStore.transfer_plate_between_nests
+      ~SteriStore.unassign
+      ~SteriStore.unassign_child_resource
+   
+   

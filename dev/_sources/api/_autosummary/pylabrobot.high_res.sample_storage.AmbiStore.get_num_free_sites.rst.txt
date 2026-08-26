@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.get\_num\_free\_sites
+====================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.get_num_free_sites

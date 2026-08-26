@@ -1,0 +1,36 @@
+﻿:orphan:
+
+
+pylabrobot.high\_res.sample\_storage.UnresolvedPlateTransfer
+============================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoclass:: UnresolvedPlateTransfer
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~UnresolvedPlateTransfer.plate
+      ~UnresolvedPlateTransfer.source
+      ~UnresolvedPlateTransfer.destination
+      ~UnresolvedPlateTransfer.command
+      ~UnresolvedPlateTransfer.error_type
+      ~UnresolvedPlateTransfer.error_message
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~UnresolvedPlateTransfer.__init__
+   
+   

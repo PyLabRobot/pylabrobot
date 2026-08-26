@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.is\_in\_subtree\_of
+====================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.is_in_subtree_of

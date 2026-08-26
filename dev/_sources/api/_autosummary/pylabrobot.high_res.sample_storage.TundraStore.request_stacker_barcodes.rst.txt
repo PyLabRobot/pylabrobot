@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.request\_stacker\_barcodes
+===========================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.request_stacker_barcodes

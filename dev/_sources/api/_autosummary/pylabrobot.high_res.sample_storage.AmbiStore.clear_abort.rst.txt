@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.clear\_abort
+===========================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.clear_abort

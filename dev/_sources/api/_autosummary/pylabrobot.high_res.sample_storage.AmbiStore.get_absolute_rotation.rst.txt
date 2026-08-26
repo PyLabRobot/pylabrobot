@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.get\_absolute\_rotation
+======================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.get_absolute_rotation

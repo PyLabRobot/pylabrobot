@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Shaker and temperature-controller events &#8212; PyLabRobot dev documentation</title>
+    <title>Shaker and environmental-controller events &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -592,6 +592,13 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../high_res/sample-storage/index.html">Sample storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/ambistore/hello-world.html">HighRes AmbiStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/steristore/hello-world.html">HighRes SteriStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/tundrastore/hello-world.html">HighRes TundraStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/events.html">Sample-storage events</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -655,7 +662,7 @@
 <li class="toctree-l2"><a class="reference internal" href="machine-lifecycle.html">Machine lifecycle events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="incubator.html">Incubator events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="liquid-handler.html">LiquidHandler events</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Shaker and temperature-controller events</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Shaker and environmental-controller events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="diagnostic-transports.html">Diagnostic transport events</a></li>
 </ul>
 </details></li>
@@ -719,7 +726,7 @@
     
     <li class="breadcrumb-item"><a href="../event-bus.html" class="nav-link">EventBus</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Shaker and temperature-controller events</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Shaker and environmental-controller events</span></li>
   </ul>
 </nav>
 </div>
@@ -736,8 +743,8 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="shaker-and-temperature-controller-events">
-<h1>Shaker and temperature-controller events<a class="headerlink" href="#shaker-and-temperature-controller-events" title="Link to this heading">#</a></h1>
+  <section class="tex2jax_ignore mathjax_ignore" id="shaker-and-environmental-controller-events">
+<h1>Shaker and environmental-controller events<a class="headerlink" href="#shaker-and-environmental-controller-events" title="Link to this heading">#</a></h1>
 <p>Each listed semantic operation emits <code class="docutils literal notranslate"><span class="pre">started</span></code>, <code class="docutils literal notranslate"><span class="pre">completed</span></code>, or <code class="docutils literal notranslate"><span class="pre">failed</span></code> lifecycle records.</p>
 <section id="shaker">
 <h2>Shaker<a class="headerlink" href="#shaker" title="Link to this heading">#</a></h2>
@@ -759,9 +766,11 @@
 </table>
 </div>
 </section>
-<section id="temperaturecontroller">
-<h2>TemperatureController<a class="headerlink" href="#temperaturecontroller" title="Link to this heading">#</a></h2>
-<p>The instrumented <code class="docutils literal notranslate"><span class="pre">legacy.temperature_controlling.TemperatureController</span></code> frontend emits:</p>
+<section id="temperature-controllers">
+<h2>Temperature controllers<a class="headerlink" href="#temperature-controllers" title="Link to this heading">#</a></h2>
+<p>Instrumented temperature-control frontends emit the operations their public APIs support. The
+legacy <code class="docutils literal notranslate"><span class="pre">TemperatureController</span></code> does not have a separate activation method; direct frontends such as
+the HighRes sample stores do.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Operation</p></th>
@@ -772,13 +781,16 @@
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.set_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">passive</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.wait_for_temperature</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.activate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.wait_for_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code>, <code class="docutils literal notranslate"><span class="pre">tolerance</span></code>; completed event adds <code class="docutils literal notranslate"><span class="pre">current_temperature</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.hold_temperature</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.hold_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, configured <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code> when known</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.deactivate</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.deactivate</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, configured <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code> when known</p></td>
 </tr>
 </tbody>
@@ -796,6 +808,51 @@ surrounding deck state.</p>
 <p>New direct temperature-controller frontends, such as vendor-specific Inheco frontends, should
 implement this semantic EventBus contract at their own public API boundary. They do not need to
 inherit from the legacy <code class="docutils literal notranslate"><span class="pre">TemperatureController</span></code> class.</p>
+</section>
+<section id="humidity-and-gas-controllers">
+<h2>Humidity and gas controllers<a class="headerlink" href="#humidity-and-gas-controllers" title="Link to this heading">#</a></h2>
+<p>Environmental-control frontends use the same set/activate/deactivate lifecycle for humidity, CO2,
+and O2. Targets are fractions: <code class="docutils literal notranslate"><span class="pre">0.90</span></code> means 90% RH and <code class="docutils literal notranslate"><span class="pre">0.05</span></code> means 5% gas concentration.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Primary fields</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">humidity_controller.set_humidity</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_humidity</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">humidity_controller.activate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">humidity_controller.deactivate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">co2_controller.set_co2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_co2</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">co2_controller.activate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">co2_controller.deactivate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">o2_controller.set_o2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_o2</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">o2_controller.activate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">o2_controller.deactivate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The HighRes sample stores currently emit these operations for their installed controllable
+channels. See the <a class="reference internal" href="../../high_res/sample-storage/events.html"><span class="std std-doc">device event reference</span></a> for model
+coverage.</p>
 </section>
 </section>
 
@@ -847,7 +904,8 @@ inherit from the legacy <code class="docutils literal notranslate"><span class="
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shaker">Shaker</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#temperaturecontroller">TemperatureController</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#temperature-controllers">Temperature controllers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#humidity-and-gas-controllers">Humidity and gas controllers</a></li>
 </ul>
   </nav></div>
 

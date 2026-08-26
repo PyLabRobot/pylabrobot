@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.load\_all\_state
+=================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.load_all_state

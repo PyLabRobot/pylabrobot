@@ -1,0 +1,113 @@
+﻿:orphan:
+
+
+pylabrobot.high\_res.sample\_storage.AmbiStore
+==============================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoclass:: AmbiStore
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AmbiStore.model_info
+      ~AmbiStore.motion_timeout
+      ~AmbiStore.name
+      ~AmbiStore.racks
+      ~AmbiStore.read_timeout
+      ~AmbiStore.unresolved_transfer
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AmbiStore.__init__
+      ~AmbiStore.assign_child_by_anchor
+      ~AmbiStore.assign_child_resource
+      ~AmbiStore.at
+      ~AmbiStore.center
+      ~AmbiStore.centers
+      ~AmbiStore.check_can_drop_resource_here
+      ~AmbiStore.clear_abort
+      ~AmbiStore.close_all_doors
+      ~AmbiStore.copy
+      ~AmbiStore.deregister_did_assign_resource_callback
+      ~AmbiStore.deregister_did_unassign_resource_callback
+      ~AmbiStore.deregister_state_update_callback
+      ~AmbiStore.deregister_will_assign_resource_callback
+      ~AmbiStore.deregister_will_unassign_resource_callback
+      ~AmbiStore.deserialize
+      ~AmbiStore.fetch_plate_to_loading_tray
+      ~AmbiStore.find_random_site
+      ~AmbiStore.find_resource
+      ~AmbiStore.find_resources
+      ~AmbiStore.find_smallest_site_for_plate
+      ~AmbiStore.get_absolute_location
+      ~AmbiStore.get_absolute_rotation
+      ~AmbiStore.get_absolute_size_x
+      ~AmbiStore.get_absolute_size_y
+      ~AmbiStore.get_absolute_size_z
+      ~AmbiStore.get_all_children
+      ~AmbiStore.get_anchor
+      ~AmbiStore.get_highest_known_point
+      ~AmbiStore.get_location_wrt
+      ~AmbiStore.get_num_free_sites
+      ~AmbiStore.get_resource
+      ~AmbiStore.get_root
+      ~AmbiStore.get_site_by_plate_name
+      ~AmbiStore.get_size_x
+      ~AmbiStore.get_size_y
+      ~AmbiStore.get_size_z
+      ~AmbiStore.home
+      ~AmbiStore.is_in_subtree_of
+      ~AmbiStore.load_all_state
+      ~AmbiStore.load_from_json_file
+      ~AmbiStore.load_state
+      ~AmbiStore.load_state_from_file
+      ~AmbiStore.named
+      ~AmbiStore.open_all_doors
+      ~AmbiStore.recover
+      ~AmbiStore.register_did_assign_resource_callback
+      ~AmbiStore.register_did_unassign_resource_callback
+      ~AmbiStore.register_state_update_callback
+      ~AmbiStore.register_will_assign_resource_callback
+      ~AmbiStore.register_will_unassign_resource_callback
+      ~AmbiStore.request_axis_positions
+      ~AmbiStore.request_door_status
+      ~AmbiStore.request_environment
+      ~AmbiStore.request_is_homed
+      ~AmbiStore.request_is_parked
+      ~AmbiStore.request_nest_is_holding
+      ~AmbiStore.request_nest_status
+      ~AmbiStore.request_settings
+      ~AmbiStore.request_spatula_is_holding
+      ~AmbiStore.request_stacker_barcodes
+      ~AmbiStore.request_stacker_dimensions
+      ~AmbiStore.request_version
+      ~AmbiStore.resolve_unresolved_transfer
+      ~AmbiStore.rotate
+      ~AmbiStore.rotated
+      ~AmbiStore.save
+      ~AmbiStore.save_state_to_file
+      ~AmbiStore.serialize
+      ~AmbiStore.serialize_all_state
+      ~AmbiStore.serialize_state
+      ~AmbiStore.setup
+      ~AmbiStore.stop
+      ~AmbiStore.store_plate
+      ~AmbiStore.take_in_plate
+      ~AmbiStore.transfer_plate_between_nests
+      ~AmbiStore.unassign
+      ~AmbiStore.unassign_child_resource
+   
+   

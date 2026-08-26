@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.get\_size\_x
+=============================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.get_size_x

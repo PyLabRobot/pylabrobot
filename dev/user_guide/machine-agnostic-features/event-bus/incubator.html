@@ -592,6 +592,13 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../high_res/sample-storage/index.html">Sample storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/ambistore/hello-world.html">HighRes AmbiStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/steristore/hello-world.html">HighRes SteriStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/tundrastore/hello-world.html">HighRes TundraStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/events.html">Sample-storage events</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -655,7 +662,7 @@
 <li class="toctree-l2"><a class="reference internal" href="machine-lifecycle.html">Machine lifecycle events</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Incubator events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="liquid-handler.html">LiquidHandler events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="thermal-and-shaking.html">Shaker and temperature-controller events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="thermal-and-shaking.html">Shaker and environmental-controller events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="diagnostic-transports.html">Diagnostic transport events</a></li>
 </ul>
 </details></li>
@@ -738,7 +745,8 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="incubator-events">
 <h1>Incubator events<a class="headerlink" href="#incubator-events" title="Link to this heading">#</a></h1>
-<p>The instrumented <code class="docutils literal notranslate"><span class="pre">legacy.storage.Incubator</span></code> frontend emits the following semantic operations:</p>
+<p>The instrumented <code class="docutils literal notranslate"><span class="pre">legacy.storage.Incubator</span></code> and HighRes sample-storage frontends emit the following
+semantic operations where their public APIs support them:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Operation</p></th>
@@ -755,12 +763,19 @@
 <td><p><code class="docutils literal notranslate"><span class="pre">started</span></code>, <code class="docutils literal notranslate"><span class="pre">completed</span></code>, <code class="docutils literal notranslate"><span class="pre">failed</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">incubator.transfer_plate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">started</span></code>, <code class="docutils literal notranslate"><span class="pre">completed</span></code>, <code class="docutils literal notranslate"><span class="pre">failed</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">resources</span></code> contains the direct moved plate. <code class="docutils literal notranslate"><span class="pre">source</span></code> and <code class="docutils literal notranslate"><span class="pre">destination</span></code> identify the relevant
 PLR holders, such as a storage site and loading tray. The completed event can reflect the plate’s
 post-operation resource assignment.</p>
+<p><code class="docutils literal notranslate"><span class="pre">incubator.transfer_plate</span></code> describes a direct move between two transfer nests or other incubator
+endpoints. The HighRes-specific environmental events are documented in its
+<a class="reference internal" href="../../high_res/sample-storage/events.html"><span class="std std-doc">sample-storage event reference</span></a>.</p>
 </section>
 
 

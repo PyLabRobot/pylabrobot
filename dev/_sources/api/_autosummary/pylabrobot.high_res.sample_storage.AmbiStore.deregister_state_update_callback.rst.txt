@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.deregister\_state\_update\_callback
+==================================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.deregister_state_update_callback

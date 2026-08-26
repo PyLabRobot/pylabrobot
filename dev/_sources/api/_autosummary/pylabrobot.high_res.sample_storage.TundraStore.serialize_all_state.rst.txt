@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.serialize\_all\_state
+======================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.serialize_all_state

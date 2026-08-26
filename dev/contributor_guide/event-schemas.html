@@ -721,11 +721,23 @@ operations. When emitted inside a semantic operation, they inherit its event con
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>Controller sensor reading observed by the operation. It is not a resource-temperature measurement unless explicitly documented otherwise.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tolerance</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">target_humidity</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Requested relative-humidity setpoint as a fraction from 0 to 1.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">target_co2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Requested CO2 concentration as a fraction from 0 to 1.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">target_o2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>Requested O2 concentration as a fraction from 0 to 1.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tolerance</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>Allowed temperature difference in PLR’s default temperature unit.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">volume</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">volume</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>Requested liquid volume in PLR’s default volume unit.</p></td>
 </tr>
@@ -761,31 +773,43 @@ only when the value deliberately uses a different representation, such as <code 
 <td><p><code class="docutils literal notranslate"><span class="pre">target_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">temperature_target</span></code>, <code class="docutils literal notranslate"><span class="pre">set_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature_c</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Observed controller temperature</p></td>
+<tr class="row-odd"><td><p>Requested relative humidity</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">target_humidity</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">humidity</span></code>, <code class="docutils literal notranslate"><span class="pre">humidity_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">relative_humidity</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Requested CO2 concentration</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">target_co2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">co2</span></code>, <code class="docutils literal notranslate"><span class="pre">co2_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">co2_fraction</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Requested O2 concentration</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">target_o2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">o2</span></code>, <code class="docutils literal notranslate"><span class="pre">o2_pct</span></code>, <code class="docutils literal notranslate"><span class="pre">o2_fraction</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Observed controller temperature</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">current_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">actual_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">measured_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">current_temperature_c</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>Temperature acceptance range</p></td>
+<tr class="row-odd"><td><p>Temperature acceptance range</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">tolerance</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">temperature_tolerance</span></code>, <code class="docutils literal notranslate"><span class="pre">tolerance_c</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Relative centrifugal force</p></td>
+<tr class="row-even"><td><p>Relative centrifugal force</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">relative_centrifugal_force</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">g</span></code>, <code class="docutils literal notranslate"><span class="pre">g_force</span></code>, <code class="docutils literal notranslate"><span class="pre">rcf</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>Direct operated resources</p></td>
+<tr class="row-odd"><td><p>Direct operated resources</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">plates</span></code>, <code class="docutils literal notranslate"><span class="pre">labware</span></code>, <code class="docutils literal notranslate"><span class="pre">items</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Transfer endpoints</p></td>
+<tr class="row-even"><td><p>Transfer endpoints</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">from</span></code>, <code class="docutils literal notranslate"><span class="pre">to</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>Liquid volume</p></td>
+<tr class="row-odd"><td><p>Liquid volume</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">volume</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">vol</span></code>, <code class="docutils literal notranslate"><span class="pre">volume_ul</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Successful command result</p></td>
+<tr class="row-even"><td><p>Successful command result</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">response</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">reply</span></code>, <code class="docutils literal notranslate"><span class="pre">result_data</span></code></p></td>
 </tr>
@@ -863,6 +887,10 @@ the same lifecycle meaning.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">incubator.take_in_plate</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
 <td><p>Moves the loading-tray plate into storage. A requested selector such as <code class="docutils literal notranslate"><span class="pre">&quot;random&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;smallest&quot;</span></code> may identify an unresolved destination at invocation.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">incubator.transfer_plate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
+<td><p>Moves a plate directly between two transfer nests or other incubator endpoints.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1065,8 +1093,8 @@ record per channel with <code class="docutils literal notranslate"><span class="
 </div>
 </section>
 </section>
-<section id="shaking-and-temperature-control">
-<h2>Shaking and temperature control<a class="headerlink" href="#shaking-and-temperature-control" title="Link to this heading">#</a></h2>
+<section id="shaking-and-environmental-control">
+<h2>Shaking and environmental control<a class="headerlink" href="#shaking-and-environmental-control" title="Link to this heading">#</a></h2>
 <p>Controllers that are <code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code>s include their directly loaded resource in <code class="docutils literal notranslate"><span class="pre">resources</span></code> when
 one is assigned at operation start.</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -1089,17 +1117,57 @@ one is assigned at operation start.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">passive</span></code></p></td>
 <td><p>Records the requested target and cooling policy.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.wait_for_temperature</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.activate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Starts active temperature control at the configured setpoint.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.wait_for_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code>, <code class="docutils literal notranslate"><span class="pre">tolerance</span></code>; <strong>completed only:</strong> <code class="docutils literal notranslate"><span class="pre">current_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">current_temperature</span></code> is the final controller reading that satisfied tolerance.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.hold_temperature</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.hold_temperature</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, optional <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code></p></td>
 <td><p>Records a requested dwell without reissuing a setpoint or asserting that a resource reached temperature.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.deactivate</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">temperature_controller.deactivate</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, optional <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code></p></td>
 <td><p>Stops active temperature control.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">humidity_controller.set_humidity</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_humidity</span></code></p></td>
+<td><p>Records the requested relative-humidity fraction.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">humidity_controller.activate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Starts active humidity control at the configured setpoint.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">humidity_controller.deactivate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Stops active humidity control.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">co2_controller.set_co2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_co2</span></code></p></td>
+<td><p>Records the requested CO2 fraction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">co2_controller.activate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Starts active CO2 control at the configured setpoint.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">co2_controller.deactivate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Stops active CO2 control.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">o2_controller.set_o2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_o2</span></code></p></td>
+<td><p>Records the requested O2 fraction.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">o2_controller.activate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Starts active O2 control at the configured setpoint.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">o2_controller.deactivate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Stops active O2 control.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1401,7 +1469,7 @@ canonical operation name, lifecycle, and payload fields.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#head-tip-operations">96-head tip operations</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shaking-and-temperature-control">Shaking and temperature control</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shaking-and-environmental-control">Shaking and environmental control</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#centrifugation">Centrifugation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#brooks-preciseflex">Brooks PreciseFlex</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-and-controller-state">Lifecycle and controller state</a></li>

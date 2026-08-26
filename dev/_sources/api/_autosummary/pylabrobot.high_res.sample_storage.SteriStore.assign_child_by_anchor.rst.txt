@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.assign\_child\_by\_anchor
+=========================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.assign_child_by_anchor

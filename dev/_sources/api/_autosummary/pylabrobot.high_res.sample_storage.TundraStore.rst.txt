@@ -1,0 +1,113 @@
+﻿:orphan:
+
+
+pylabrobot.high\_res.sample\_storage.TundraStore
+================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoclass:: TundraStore
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TundraStore.model_info
+      ~TundraStore.motion_timeout
+      ~TundraStore.name
+      ~TundraStore.racks
+      ~TundraStore.read_timeout
+      ~TundraStore.unresolved_transfer
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TundraStore.__init__
+      ~TundraStore.assign_child_by_anchor
+      ~TundraStore.assign_child_resource
+      ~TundraStore.at
+      ~TundraStore.center
+      ~TundraStore.centers
+      ~TundraStore.check_can_drop_resource_here
+      ~TundraStore.clear_abort
+      ~TundraStore.close_all_doors
+      ~TundraStore.copy
+      ~TundraStore.deregister_did_assign_resource_callback
+      ~TundraStore.deregister_did_unassign_resource_callback
+      ~TundraStore.deregister_state_update_callback
+      ~TundraStore.deregister_will_assign_resource_callback
+      ~TundraStore.deregister_will_unassign_resource_callback
+      ~TundraStore.deserialize
+      ~TundraStore.fetch_plate_to_loading_tray
+      ~TundraStore.find_random_site
+      ~TundraStore.find_resource
+      ~TundraStore.find_resources
+      ~TundraStore.find_smallest_site_for_plate
+      ~TundraStore.get_absolute_location
+      ~TundraStore.get_absolute_rotation
+      ~TundraStore.get_absolute_size_x
+      ~TundraStore.get_absolute_size_y
+      ~TundraStore.get_absolute_size_z
+      ~TundraStore.get_all_children
+      ~TundraStore.get_anchor
+      ~TundraStore.get_highest_known_point
+      ~TundraStore.get_location_wrt
+      ~TundraStore.get_num_free_sites
+      ~TundraStore.get_resource
+      ~TundraStore.get_root
+      ~TundraStore.get_site_by_plate_name
+      ~TundraStore.get_size_x
+      ~TundraStore.get_size_y
+      ~TundraStore.get_size_z
+      ~TundraStore.home
+      ~TundraStore.is_in_subtree_of
+      ~TundraStore.load_all_state
+      ~TundraStore.load_from_json_file
+      ~TundraStore.load_state
+      ~TundraStore.load_state_from_file
+      ~TundraStore.named
+      ~TundraStore.open_all_doors
+      ~TundraStore.recover
+      ~TundraStore.register_did_assign_resource_callback
+      ~TundraStore.register_did_unassign_resource_callback
+      ~TundraStore.register_state_update_callback
+      ~TundraStore.register_will_assign_resource_callback
+      ~TundraStore.register_will_unassign_resource_callback
+      ~TundraStore.request_axis_positions
+      ~TundraStore.request_door_status
+      ~TundraStore.request_environment
+      ~TundraStore.request_is_homed
+      ~TundraStore.request_is_parked
+      ~TundraStore.request_nest_is_holding
+      ~TundraStore.request_nest_status
+      ~TundraStore.request_settings
+      ~TundraStore.request_spatula_is_holding
+      ~TundraStore.request_stacker_barcodes
+      ~TundraStore.request_stacker_dimensions
+      ~TundraStore.request_version
+      ~TundraStore.resolve_unresolved_transfer
+      ~TundraStore.rotate
+      ~TundraStore.rotated
+      ~TundraStore.save
+      ~TundraStore.save_state_to_file
+      ~TundraStore.serialize
+      ~TundraStore.serialize_all_state
+      ~TundraStore.serialize_state
+      ~TundraStore.setup
+      ~TundraStore.stop
+      ~TundraStore.store_plate
+      ~TundraStore.take_in_plate
+      ~TundraStore.transfer_plate_between_nests
+      ~TundraStore.unassign
+      ~TundraStore.unassign_child_resource
+   
+   

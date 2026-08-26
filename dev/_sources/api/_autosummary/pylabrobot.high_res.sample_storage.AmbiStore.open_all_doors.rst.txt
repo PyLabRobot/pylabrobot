@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.open\_all\_doors
+===============================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.open_all_doors

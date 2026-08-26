@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.TundraStore.take\_in\_plate
+================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: TundraStore.take_in_plate

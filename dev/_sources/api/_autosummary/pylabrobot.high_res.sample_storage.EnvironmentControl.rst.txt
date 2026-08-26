@@ -1,0 +1,60 @@
+﻿:orphan:
+
+
+pylabrobot.high\_res.sample\_storage.EnvironmentControl
+=======================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autoclass:: EnvironmentControl
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~EnvironmentControl.humidity_range
+      ~EnvironmentControl.parameters
+      ~EnvironmentControl.supports_active_cooling
+      ~EnvironmentControl.supports_co2_control
+      ~EnvironmentControl.supports_heating
+      ~EnvironmentControl.supports_humidity_control
+      ~EnvironmentControl.supports_o2_control
+      ~EnvironmentControl.temperature_range
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~EnvironmentControl.__init__
+      ~EnvironmentControl.refresh
+      ~EnvironmentControl.request_current_co2
+      ~EnvironmentControl.request_current_humidity
+      ~EnvironmentControl.request_current_o2
+      ~EnvironmentControl.request_current_temperature
+      ~EnvironmentControl.request_tank_pressures
+      ~EnvironmentControl.request_target_co2
+      ~EnvironmentControl.request_target_humidity
+      ~EnvironmentControl.request_target_o2
+      ~EnvironmentControl.request_target_temperature
+      ~EnvironmentControl.set_co2
+      ~EnvironmentControl.set_humidity
+      ~EnvironmentControl.set_o2
+      ~EnvironmentControl.set_temperature
+      ~EnvironmentControl.start_co2_control
+      ~EnvironmentControl.start_humidity_control
+      ~EnvironmentControl.start_o2_control
+      ~EnvironmentControl.start_temperature_control
+      ~EnvironmentControl.stop_co2_control
+      ~EnvironmentControl.stop_humidity_control
+      ~EnvironmentControl.stop_o2_control
+      ~EnvironmentControl.stop_temperature_control
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.AmbiStore.deregister\_will\_unassign\_resource\_callback
+=============================================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: AmbiStore.deregister_will_unassign_resource_callback

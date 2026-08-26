@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.register\_did\_assign\_resource\_callback
+=========================================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.register_did_assign_resource_callback

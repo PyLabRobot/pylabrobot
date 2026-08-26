@@ -82,6 +82,9 @@ operations. When emitted inside a semantic operation, they inherit its event con
 | `timeout` | `float` | Requested timeout in PLR's default time unit. |
 | `target_temperature` | `float` | Configured or requested controller target temperature. |
 | `current_temperature` | `float` | Controller sensor reading observed by the operation. It is not a resource-temperature measurement unless explicitly documented otherwise. |
+| `target_humidity` | `float` | Requested relative-humidity setpoint as a fraction from 0 to 1. |
+| `target_co2` | `float` | Requested CO2 concentration as a fraction from 0 to 1. |
+| `target_o2` | `float` | Requested O2 concentration as a fraction from 0 to 1. |
 | `tolerance` | `float` | Allowed temperature difference in PLR's default temperature unit. |
 | `volume` | `float` | Requested liquid volume in PLR's default volume unit. |
 
@@ -102,6 +105,9 @@ Use these names consistently across operation families:
 | Requested elapsed time | `duration` | `time`, `duration_s`, `duration_sec`, `seconds` |
 | Maximum wait | `timeout` | `timeout_s`, `wait_time` |
 | Requested thermal setpoint | `target_temperature` | `temperature_target`, `set_temperature`, `target_temperature_c` |
+| Requested relative humidity | `target_humidity` | `humidity`, `humidity_pct`, `relative_humidity` |
+| Requested CO2 concentration | `target_co2` | `co2`, `co2_pct`, `co2_fraction` |
+| Requested O2 concentration | `target_o2` | `o2`, `o2_pct`, `o2_fraction` |
 | Observed controller temperature | `current_temperature` | `actual_temperature`, `measured_temperature`, `current_temperature_c` |
 | Temperature acceptance range | `tolerance` | `temperature_tolerance`, `tolerance_c` |
 | Relative centrifugal force | `relative_centrifugal_force` | `g`, `g_force`, `rcf` |
@@ -141,6 +147,7 @@ These are state-transition records rather than semantic operation lifecycles.
 | --- | --- | --- |
 | `incubator.fetch_plate` | `device`, `resources`, `source`, `destination` | `resources` contains the directly moved plate; endpoints describe the storage site and loading tray when known. |
 | `incubator.take_in_plate` | `device`, `resources`, `source`, `destination` | Moves the loading-tray plate into storage. A requested selector such as `"random"` or `"smallest"` may identify an unresolved destination at invocation. |
+| `incubator.transfer_plate` | `device`, `resources`, `source`, `destination` | Moves a plate directly between two transfer nests or other incubator endpoints. |
 
 ### Stackers
 
@@ -216,7 +223,7 @@ record per channel with `channel` and direct `resource` fields.
 | `liquid_handler.tip_pickup_96` | `device`, `resources` | Direct resource is the operated `TipRack`. |
 | `liquid_handler.tip_drop_96` | `device`, `resources` | Direct resource is the destination `TipRack` or `Trash`. |
 
-## Shaking and temperature control
+## Shaking and environmental control
 
 Controllers that are `ResourceHolder`s include their directly loaded resource in `resources` when
 one is assigned at operation start.
@@ -226,9 +233,19 @@ one is assigned at operation start.
 | `shaker.shake` | `device`, optional `resources`, `speed_rpm`, optional `duration` | Omitted `duration` means shaking continues after the call returns. |
 | `shaker.stop_shaking` | `device`, optional `resources` | Explicitly stops an indefinite shake. |
 | `temperature_controller.set_temperature` | `device`, optional `resources`, `target_temperature`, `passive` | Records the requested target and cooling policy. |
+| `temperature_controller.activate` | `device`, optional `resources` | Starts active temperature control at the configured setpoint. |
 | `temperature_controller.wait_for_temperature` | `device`, optional `resources`, `target_temperature`, `timeout`, `tolerance`; **completed only:** `current_temperature` | `current_temperature` is the final controller reading that satisfied tolerance. |
 | `temperature_controller.hold_temperature` | `device`, optional `resources`, `duration`, optional `target_temperature` | Records a requested dwell without reissuing a setpoint or asserting that a resource reached temperature. |
 | `temperature_controller.deactivate` | `device`, optional `resources`, optional `target_temperature` | Stops active temperature control. |
+| `humidity_controller.set_humidity` | `device`, optional `resources`, `target_humidity` | Records the requested relative-humidity fraction. |
+| `humidity_controller.activate` | `device`, optional `resources` | Starts active humidity control at the configured setpoint. |
+| `humidity_controller.deactivate` | `device`, optional `resources` | Stops active humidity control. |
+| `co2_controller.set_co2` | `device`, optional `resources`, `target_co2` | Records the requested CO2 fraction. |
+| `co2_controller.activate` | `device`, optional `resources` | Starts active CO2 control at the configured setpoint. |
+| `co2_controller.deactivate` | `device`, optional `resources` | Stops active CO2 control. |
+| `o2_controller.set_o2` | `device`, optional `resources`, `target_o2` | Records the requested O2 fraction. |
+| `o2_controller.activate` | `device`, optional `resources` | Starts active O2 control at the configured setpoint. |
+| `o2_controller.deactivate` | `device`, optional `resources` | Stops active O2 control. |
 
 ## Centrifugation
 

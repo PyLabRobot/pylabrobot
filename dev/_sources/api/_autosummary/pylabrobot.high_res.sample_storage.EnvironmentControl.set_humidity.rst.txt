@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.EnvironmentControl.set\_humidity
+=====================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: EnvironmentControl.set_humidity

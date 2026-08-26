@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.close\_all\_doors
+=================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.close_all_doors

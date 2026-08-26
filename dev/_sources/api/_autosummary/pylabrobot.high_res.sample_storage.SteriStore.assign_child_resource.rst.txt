@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.assign\_child\_resource
+=======================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.assign_child_resource

@@ -1,0 +1,6 @@
+pylabrobot.high\_res.sample\_storage.SteriStore.transfer\_plate\_between\_nests
+===============================================================================
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. automethod:: SteriStore.transfer_plate_between_nests
