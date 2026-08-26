@@ -253,8 +253,17 @@ class FTDI(IOBase):
     if device is None:
       raise RuntimeError(f"USB device at bus {bus}, address {address} disappeared before open")
     try:
-      if device.is_kernel_driver_active(interface):
-        device.detach_kernel_driver(interface)
+      try:
+        kernel_driver_active = device.is_kernel_driver_active(interface)
+      except NotImplementedError:
+        logger.debug("USB backend does not support inspecting kernel-driver state")
+        return
+      if kernel_driver_active:
+        try:
+          device.detach_kernel_driver(interface)
+        except NotImplementedError:
+          logger.debug("USB backend does not support detaching kernel drivers")
+          return
         self._detached_kernel_driver = (bus, address, interface)
     finally:
       usb.util.dispose_resources(device)
@@ -451,13 +460,45 @@ class FTDI(IOBase):
 
   async def stop(self):
     loop = asyncio.get_running_loop()
-    if self._dev is not None:
-      await loop.run_in_executor(self._executor, self.dev.close)
-      self._dev = None
-    if self._executor is not None:
-      await loop.run_in_executor(self._executor, self._reattach_kernel_driver)
-    self._shutdown_executor()
-    self._discard_reads()
+    executor = self._executor
+    first_error: Optional[BaseException] = None
+
+    async def attempt(operation) -> None:
+      nonlocal first_error
+      future = loop.run_in_executor(executor, operation)
+      try:
+        await asyncio.shield(future)
+      except asyncio.CancelledError as exc:
+        try:
+          await future
+        except Exception:
+          logger.warning("FTDI shutdown operation failed after cancellation", exc_info=True)
+        if first_error is None:
+          first_error = exc
+      except BaseException as exc:
+        if first_error is None:
+          first_error = exc
+        else:
+          logger.warning("Additional FTDI shutdown operation failed", exc_info=True)
+
+    try:
+      if self._dev is not None:
+        await attempt(self.dev.close)
+        self._dev = None
+      if getattr(self, "_detached_kernel_driver", None) is not None:
+        await attempt(self._reattach_kernel_driver)
+    finally:
+      try:
+        self._shutdown_executor()
+      except BaseException as exc:
+        if first_error is None:
+          first_error = exc
+        else:
+          logger.warning("FTDI executor shutdown failed", exc_info=True)
+      finally:
+        self._discard_reads()
+    if first_error is not None:
+      raise first_error
 
   def _discard_reads(self) -> None:
     """Drop read data buffered here and in flight, once the caller has declared it stale."""

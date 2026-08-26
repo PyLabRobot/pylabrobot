@@ -6,7 +6,7 @@ import math
 import unittest
 from datetime import timedelta
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.revvity.celigo.camera import CameraFrame
@@ -122,6 +122,14 @@ class TestScanSpec(unittest.TestCase):
       (Capture(channel="brightfield", exposure_ms=1.25, gain=2),),
     )
     self.assertEqual(spec.autofocus, "image")
+
+  def test_hardware_autofocus_is_rejected_during_specification(self):
+    with self.assertRaisesRegex(ValueError, "None or 'image'"):
+      ScanSpec.points(
+        [(10, 20)],
+        channel="brightfield",
+        autofocus="hardware",  # type: ignore[arg-type]
+      )
 
   def test_capture_list_is_mutually_exclusive_with_shorthand(self):
     capture = Capture(channel="brightfield")
@@ -422,6 +430,31 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
         frame_result.planned is planned for frame_result, planned in zip(result.frames, plan.frames)
       )
     )
+
+  async def test_execute_rejects_a_plan_after_configuration_changes_before_motion(self):
+    plan = self.celigo.plan(ScanSpec.points([(5, 5)], channel="brightfield"))
+    self.celigo.config.magnification = 5
+
+    with (
+      patch.object(self.celigo, "_move_to_scan_block", AsyncMock()) as move_to_scan_block,
+      self.assertRaisesRegex(ValueError, "configuration does not match"),
+    ):
+      await self.celigo.execute(plan)
+
+    move_to_scan_block.assert_not_awaited()
+
+  async def test_acquire_rejects_hardware_autofocus_before_motion(self):
+    with (
+      patch.object(self.celigo, "move_to_well", AsyncMock()) as move_to_well,
+      self.assertRaisesRegex(ValueError, "None or 'image'"),
+    ):
+      await self.celigo.acquire(
+        "A1",
+        "brightfield",
+        autofocus="hardware",  # type: ignore[arg-type]
+      )
+
+    move_to_well.assert_not_awaited()
 
   async def test_internal_execution_reports_frames_and_accepts_a_tuned_focus_seed(self):
     plan = self.celigo.plan(

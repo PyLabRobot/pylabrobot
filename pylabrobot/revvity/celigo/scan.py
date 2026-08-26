@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
 
 CoordinateMM = Tuple[float, float]
 BlockShape = Tuple[int, int]
-AutofocusMethod = Literal["image", "hardware"]
+AutofocusMethod = Literal["image"]
 
 _EXACT_ROUTE_LIMIT = 14
 
@@ -51,8 +53,19 @@ def _validate_scan_region(region: "ScanRegion") -> "ScanRegion":
 
 
 def _validate_autofocus(autofocus: Optional[AutofocusMethod]) -> None:
-  if autofocus not in (None, "image", "hardware"):
-    raise ValueError("autofocus must be None, 'image', or 'hardware'")
+  if autofocus not in (None, "image"):
+    raise ValueError("autofocus must be None or 'image'")
+
+
+def _configuration_fingerprint(config: CeligoConfig) -> str:
+  """Return a stable fingerprint of the configuration used to compile a scan plan."""
+  serialized = json.dumps(
+    asdict(config),
+    allow_nan=False,
+    separators=(",", ":"),
+    sort_keys=True,
+  )
+  return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -343,6 +356,7 @@ class ScanPlan:
   """An inspectable, hardware-free sequence of validated frame operations."""
 
   spec: ScanSpec
+  configuration_fingerprint: str = field(repr=False)
   blocks: Tuple[ScanBlock, ...]
   frames: Tuple[PlannedFrame, ...]
   estimate_model: ScanEstimateModel
@@ -360,6 +374,10 @@ class ScanPlan:
   @property
   def stage_positions_mm(self) -> Tuple[CoordinateMM, ...]:
     return tuple((block.stage_x_mm, block.stage_y_mm) for block in self.blocks)
+
+  def matches_configuration(self, config: CeligoConfig) -> bool:
+    """Whether this plan was compiled from the supplied configuration state."""
+    return self.configuration_fingerprint == _configuration_fingerprint(config)
 
   def __str__(self) -> str:
     channels = ", ".join(capture.channel for capture in self.spec.captures)
@@ -498,6 +516,7 @@ def build_scan_plan(
   )
   return ScanPlan(
     spec=spec,
+    configuration_fingerprint=_configuration_fingerprint(config),
     blocks=tuple(blocks),
     frames=tuple(frames),
     estimate_model=estimates,

@@ -1454,7 +1454,7 @@ class Celigo:
 
   async def autofocus(
     self,
-    autofocus_method: Literal["image", "hardware"] = "image",
+    autofocus_method: AutofocusMethod = "image",
     center_z_ticks: Optional[int] = None,
     span_ticks: Optional[int] = None,
     coarse_step_ticks: Optional[int] = None,
@@ -1468,17 +1468,10 @@ class Celigo:
     """Find focus by host-side Z stepping, as observed in the Celigo captures.
 
     Image autofocus uses the variance-of-Laplacian metric supplied by
-    :class:`CameraFrame`, or a custom image evaluator. The displacement-sensor path used
-    by vendor ``hardware`` autofocus is not exposed by the packaged camera API and is
-    therefore rejected instead of silently running image autofocus under the wrong name.
+    :class:`CameraFrame`, or a custom image evaluator.
     """
-    if autofocus_method not in ("image", "hardware"):
-      raise ValueError("autofocus_method must be 'image' or 'hardware'")
-    if autofocus_method == "hardware":
-      raise CeligoError(
-        "Hardware autofocus is unavailable because no displacement-sensor interface "
-        "is configured; use autofocus_method='image'"
-      )
+    if autofocus_method != "image":
+      raise ValueError("autofocus_method must be 'image'")
     if fine_step_ticks <= 0:
       raise ValueError("fine_step_ticks must be positive")
     if focus_flush_frames < 0:
@@ -1616,7 +1609,7 @@ class Celigo:
     channel: IlluminationChannelName,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
-    autofocus: Optional[Literal["image", "hardware"]] = None,
+    autofocus: Optional[AutofocusMethod] = None,
     z_mm: Optional[float] = None,
     require_lamp_ready: bool = False,
     galvo_offset_mm: Tuple[float, float] = (0.0, 0.0),
@@ -1624,6 +1617,8 @@ class Celigo:
     positioned_stage_mm: Optional[Tuple[float, float]] = None,
   ) -> AcquisitionResult:
     """Navigate, select optics, optionally focus, and capture one calibrated FOV."""
+    if autofocus not in (None, "image"):
+      raise ValueError("autofocus must be None or 'image'")
     if positioned_stage_mm is None:
       x_mm, y_mm = await self.move_to_well(well, retract_z=True)
     else:
@@ -1677,7 +1672,7 @@ class Celigo:
     channel: IlluminationChannelName,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
-    autofocus: Optional[Literal["image", "hardware"]] = None,
+    autofocus: Optional[AutofocusMethod] = None,
     z_mm: Optional[float] = None,
     require_lamp_ready: bool = False,
     galvo_offset_mm: Tuple[float, float] = (0.0, 0.0),
@@ -1710,7 +1705,7 @@ class Celigo:
     channel: IlluminationChannelName,
     exposure_ms: Optional[float],
     gain: Optional[float],
-    autofocus: Optional[Literal["image", "hardware"]],
+    autofocus: Optional[AutofocusMethod],
     z_mm: Optional[float],
     settled_stage_position_mm: Tuple[float, float],
     machine_auto_exposure: bool = False,
@@ -1772,6 +1767,10 @@ class Celigo:
     """Execute a plan, optionally reporting each completed frame to an internal consumer."""
     if not isinstance(plan, ScanPlan):
       raise TypeError("plan must be a ScanPlan")
+    if not plan.matches_configuration(self.config):
+      raise ValueError(
+        "ScanPlan configuration does not match this Celigo; rebuild it with celigo.plan(...)"
+      )
 
     started_at = time.monotonic()
     frame_results: List[FrameResult] = []
