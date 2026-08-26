@@ -7,7 +7,6 @@ from typing import Awaitable, Callable, Dict, List, Literal, Mapping, Optional, 
 from pylabrobot.events import event_operation, resource_reference
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import (
-  Coordinate,
   Plate,
   PlateCarrier,
   PlateHolder,
@@ -15,8 +14,6 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   Rotation,
 )
-from pylabrobot.resources.barcode import Barcode
-from pylabrobot.serializer import deserialize
 
 from ..stackers import high_res_stacker
 from .environment import EnvironmentControl
@@ -79,9 +76,10 @@ class HighResSampleStorage(Resource):
   with a 0-based ``tray_index``.
 
   If a plate move is interrupted without a definitive outcome, the driver
-  exposes it through :attr:`unresolved_transfer` and blocks further plate moves
-  until :meth:`resolve_unresolved_transfer` reconciles the physical and PLR
-  locations.
+  exposes it through :attr:`unresolved_transfer` and blocks further plate moves,
+  homing, and barcode scans until :meth:`resolve_unresolved_transfer` reconciles
+  the physical and PLR locations. :meth:`recover` remains available to park an
+  unsafe mechanism before reconciliation.
 
   Subclasses set :attr:`_model_name`; callers can override it with ``model``.
   This configured model selects model-specific behavior. The product name
@@ -169,8 +167,6 @@ class HighResSampleStorage(Resource):
       read_timeout=read_timeout,
       write_timeout=read_timeout,
     )
-    self._host = host
-    self._port = port
     self._read_timeout = read_timeout
     self._motion_timeout = motion_timeout
     self._transport_invalidated = False
@@ -199,203 +195,7 @@ class HighResSampleStorage(Resource):
     return self._unresolved_transfer
 
   def serialize(self) -> dict:
-    """Serialize the device configuration and current resource inventory."""
-    data = Resource.serialize(self)
-    data.update(
-      {
-        "host": self._host,
-        "port": self._port,
-        "read_timeout": self.read_timeout,
-        "motion_timeout": self.motion_timeout,
-        "racks_loaded": self._racks_loaded,
-        "rack_map": [
-          {
-            "stacker": stacker,
-            "resource_name": rack.name,
-            "site_map": [
-              {"spot": spot, "resource_name": site.name} for spot, site in rack.sites.items()
-            ],
-          }
-          for stacker, rack in self._racks_by_number.items()
-        ],
-        "nest_names": [nest.name for nest in self.nests],
-      }
-    )
-    if self._unresolved_transfer is not None:
-      transfer = self._unresolved_transfer
-      data["unresolved_transfer"] = {
-        "plate": transfer.plate.serialize(),
-        "source_name": transfer.source.name,
-        "destination_name": transfer.destination.name,
-        "command": transfer.command,
-        "error_type": transfer.error_type,
-        "error_message": transfer.error_message,
-      }
-    return data
-
-  @classmethod
-  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "HighResSampleStorage":
-    """Restore a serialized sample store without connecting to hardware."""
-    data_copy = data.copy()
-    data_copy.pop("type", None)
-    data_copy.pop("parent_name", None)
-    children_data = data_copy.pop("children", [])
-    location_data = data_copy.pop("location", None)
-    rotation_data = data_copy.pop("rotation", None)
-    barcode_data = data_copy.pop("barcode", None)
-    preferred_pickup_location_data = data_copy.pop("preferred_pickup_location", None)
-    metadata = data_copy.pop("metadata", {})
-    rack_map = data_copy.pop("rack_map", [])
-    nest_names = data_copy.pop("nest_names", [])
-    racks_loaded = data_copy.pop("racks_loaded", True)
-    unresolved_data = data_copy.pop("unresolved_transfer", None)
-
-    if not isinstance(children_data, list):
-      raise TypeError("children must be a list")
-    if not isinstance(rack_map, list):
-      raise TypeError("rack_map must be a list")
-    if not isinstance(nest_names, list) or not all(isinstance(name, str) for name in nest_names):
-      raise TypeError("nest_names must be a list of strings")
-    if not isinstance(metadata, dict):
-      raise TypeError("metadata must be a dict")
-
-    child_records: Dict[str, Tuple[Resource, dict]] = {}
-    for child_data in children_data:
-      if not isinstance(child_data, dict):
-        raise TypeError("serialized child resources must be dictionaries")
-      child = Resource.deserialize(child_data, allow_marshal=allow_marshal)
-      child_records[child.name] = (child, child_data)
-
-    racks: Dict[int, PlateCarrier] = {}
-    rack_names = set()
-    for entry in rack_map:
-      if not isinstance(entry, dict):
-        raise TypeError("rack_map entries must be dictionaries")
-      stacker = entry.get("stacker")
-      resource_name = entry.get("resource_name")
-      if not isinstance(stacker, int) or isinstance(stacker, bool):
-        raise TypeError("rack_map stacker numbers must be integers")
-      if not isinstance(resource_name, str):
-        raise TypeError("rack_map resource names must be strings")
-      try:
-        rack = child_records[resource_name][0]
-      except KeyError as exc:
-        raise ValueError(f"Serialized rack {resource_name!r} is missing from children.") from exc
-      if not isinstance(rack, PlateCarrier):
-        raise TypeError(f"Serialized rack {resource_name!r} is not a PlateCarrier.")
-      site_map = entry.get("site_map", [])
-      if not isinstance(site_map, list):
-        raise TypeError("rack_map site_map values must be lists")
-      sites_by_name = {site.name: site for site in rack.sites.values()}
-      restored_sites: Dict[int, PlateHolder] = {}
-      for site_entry in site_map:
-        if not isinstance(site_entry, dict):
-          raise TypeError("site_map entries must be dictionaries")
-        spot = site_entry.get("spot")
-        site_name = site_entry.get("resource_name")
-        if not isinstance(spot, int) or isinstance(spot, bool):
-          raise TypeError("site_map spots must be integers")
-        if not isinstance(site_name, str):
-          raise TypeError("site_map resource names must be strings")
-        try:
-          restored_sites[spot] = sites_by_name[site_name]
-        except KeyError as exc:
-          raise ValueError(
-            f"Serialized site {site_name!r} is missing from rack {resource_name!r}."
-          ) from exc
-      if len(restored_sites) != len(rack.sites):
-        raise ValueError(f"Serialized site mapping for rack {resource_name!r} is incomplete.")
-      rack.sites = restored_sites
-      racks[stacker] = rack
-      rack_names.add(resource_name)
-
-    if not racks_loaded and racks:
-      raise ValueError("A store awaiting rack discovery cannot contain serialized racks.")
-
-    rotation = (
-      cast(Rotation, deserialize(rotation_data, allow_marshal=allow_marshal))
-      if rotation_data is not None
-      else None
-    )
-    store = cls(
-      host=data_copy.pop("host"),
-      name=data_copy.pop("name"),
-      racks=racks if racks_loaded else None,
-      size_x=data_copy.pop("size_x"),
-      size_y=data_copy.pop("size_y"),
-      size_z=data_copy.pop("size_z"),
-      rotation=rotation,
-      category=data_copy.pop("category", "plate_store"),
-      model=data_copy.pop("model", None),
-      port=data_copy.pop("port", 1000),
-      read_timeout=data_copy.pop("read_timeout", 30.0),
-      motion_timeout=data_copy.pop("motion_timeout", 240.0),
-    )
-    if data_copy:
-      raise TypeError(f"Unexpected serialized sample-store fields: {sorted(data_copy)}")
-
-    store.metadata = metadata.copy()
-    if barcode_data is not None:
-      if not isinstance(barcode_data, dict):
-        raise TypeError("barcode must be a dict")
-      store.barcode = Barcode(**barcode_data)
-    if preferred_pickup_location_data is not None:
-      store.preferred_pickup_location = cast(
-        Coordinate,
-        deserialize(preferred_pickup_location_data, allow_marshal=allow_marshal),
-      )
-    if location_data is not None:
-      store.location = cast(Coordinate, deserialize(location_data, allow_marshal=allow_marshal))
-
-    used_child_names = set(rack_names)
-    for nest_name in nest_names:
-      try:
-        nest, _ = child_records[nest_name]
-      except KeyError as exc:
-        raise ValueError(f"Serialized nest {nest_name!r} is missing from children.") from exc
-      if not isinstance(nest, PlateHolder):
-        raise TypeError(f"Serialized nest {nest_name!r} is not a PlateHolder.")
-      store.assign_child_resource(nest, location=None)
-      store.nests.append(nest)
-      used_child_names.add(nest_name)
-
-    for child_name, (child, child_data) in child_records.items():
-      if child_name in used_child_names:
-        continue
-      child_location_data = child_data.get("location")
-      child_location = (
-        cast(Coordinate, deserialize(child_location_data, allow_marshal=allow_marshal))
-        if child_location_data is not None
-        else None
-      )
-      store.assign_child_resource(child, location=child_location)
-
-    if unresolved_data is not None:
-      if not isinstance(unresolved_data, dict):
-        raise TypeError("unresolved_transfer must be a dict")
-      plate_data = unresolved_data["plate"]
-      if not isinstance(plate_data, dict) or not isinstance(plate_data.get("name"), str):
-        raise TypeError("unresolved_transfer plate must be a serialized resource")
-      try:
-        plate_resource = store.get_resource(plate_data["name"])
-      except ResourceNotFoundError:
-        plate_resource = Resource.deserialize(plate_data, allow_marshal=allow_marshal)
-      source = store.get_resource(unresolved_data["source_name"])
-      destination = store.get_resource(unresolved_data["destination_name"])
-      if not isinstance(plate_resource, Plate):
-        raise TypeError("unresolved_transfer plate is not a Plate")
-      if not isinstance(source, PlateHolder) or not isinstance(destination, PlateHolder):
-        raise TypeError("unresolved_transfer endpoints must be PlateHolders")
-      store._unresolved_transfer = UnresolvedPlateTransfer(
-        plate=plate_resource,
-        source=source,
-        destination=destination,
-        command=unresolved_data["command"],
-        error_type=unresolved_data["error_type"],
-        error_message=unresolved_data["error_message"],
-      )
-
-    return store
+    raise NotImplementedError("HighRes sample store serialization is not implemented yet.")
 
   # --- lifecycle ------------------------------------------------------------
 
@@ -761,6 +561,7 @@ class HighResSampleStorage(Resource):
       raise ValueError("slot cannot be specified when stacker is 'all'.")
     if slot is not None and slot < 1:
       raise ValueError("slot must be a positive integer.")
+    self._require_no_unresolved_transfer()
 
     occupied_nests = [
       nest for nest, state in (await self.request_nest_status()).items() if state != "clear"
@@ -783,6 +584,7 @@ class HighResSampleStorage(Resource):
     """Home the system. The first step closes all doors, which requires the
     pneumatic supply (clean dry air >80 psi); without it this raises
     :class:`HighResSampleStorageError` ("Unable to close all doors")."""
+    self._require_no_unresolved_transfer()
     if await self.request_spatula_is_holding():
       raise RuntimeError("Cannot home while the spatula reports that it is holding a plate.")
     logger.info("Homing %s", self.name)
@@ -863,8 +665,8 @@ class HighResSampleStorage(Resource):
       safe-travel retract. Call :meth:`recover` before any further motion.
 
     Note: ``homedstatus`` reports homed even when the spatula is stuck extended
-    at a top slot, so the firmware's own "unsafe for rotation" signal is used
-    (not just :meth:`request_is_homed`) to detect that case.
+    at a top slot, so the error stack and live axis positions are both used to
+    determine whether the machine is parked.
     """
     command = f"pick {stacker} {slot} {nest}"
     logger.info(
@@ -877,7 +679,7 @@ class HighResSampleStorage(Resource):
     try:
       await self._send_command(command, timeout=self.motion_timeout)
     except HighResSampleStorageError as exc:
-      if left_unsafe(exc.error_lines) or not await self.request_is_homed():
+      if left_unsafe(exc.error_lines) or not await self.request_is_parked():
         logger.error("Pick left %s unsafe: %s", self.name, exc)
         raise HighResSampleStorageFault(command, exc.error_lines) from exc
       if any("no plate detected" in line.lower() for line in exc.error_lines):
@@ -1036,7 +838,8 @@ class HighResSampleStorage(Resource):
     if transfer is not None:
       raise RuntimeError(
         f"Plate location is unresolved after transfer command {transfer.command!r}; "
-        "call resolve_unresolved_transfer() before another plate move."
+        "recover the machine if necessary, then call resolve_unresolved_transfer() "
+        "before another plate move, home, or barcode scan."
       )
 
   def _record_unresolved_transfer(

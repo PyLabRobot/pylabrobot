@@ -1,6 +1,5 @@
 import asyncio
 import inspect
-import json
 import unittest
 from typing import Dict, List
 from unittest.mock import AsyncMock
@@ -17,7 +16,7 @@ from pylabrobot.high_res.sample_storage.driver.errors import (
 )
 from pylabrobot.high_res.sample_storage.driver.models import get_model_info
 from pylabrobot.high_res.sample_storage.driver.settings import HighResSampleStorageSettings
-from pylabrobot.resources import Coordinate, Lid, Plate, PlateCarrier, PlateHolder, Resource, Well
+from pylabrobot.resources import Coordinate, Lid, Plate, PlateCarrier, PlateHolder, Well
 
 # Real responses captured from a SteriStore (firmware 3.0.0.119, serial
 # HRB-2209-35148) over the port-1000 remote-control server.
@@ -33,6 +32,13 @@ CAPTURES: Dict[str, List[str]] = {
     "OK! version 1",
   ],
   "homedstatus": ["ACK! homedstatus 5", "not homed", "OK! homedstatus 5"],
+  "status": [
+    "ACK! status 6",
+    "Carousel: 0.0",
+    "Y axis: 0.0",
+    "Z axis: 0.0",
+    "OK! status 6",
+  ],
   "doorstatus": [
     "ACK! doorstatus 17",
     "User Door: CLOSED",
@@ -676,26 +682,9 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       self.retrieval._nest_for_tray(2)
 
-  async def test_serialization_round_trip_preserves_configuration_and_nests(self):
-    await self.driver.setup()
-    serialized = self.driver.serialize()
-    restored = Resource.deserialize(serialized)
-
-    self.assertIsInstance(restored, SteriStore)
-    assert isinstance(restored, SteriStore)
-    self.assertEqual(restored.serialize(), serialized)
-    self.assertEqual(restored.read_timeout, self.driver.read_timeout)
-    self.assertEqual(restored.motion_timeout, self.driver.motion_timeout)
-
-  def test_serialization_preserves_pending_rack_discovery(self):
-    driver = SteriStore(host="192.0.2.1", name="discovery_store")
-
-    restored = Resource.deserialize(json.loads(json.dumps(driver.serialize())))
-
-    self.assertIsInstance(restored, SteriStore)
-    assert isinstance(restored, SteriStore)
-    self.assertFalse(restored._racks_loaded)
-    self.assertEqual(restored.racks, [])
+  def test_serialization_is_not_implemented(self):
+    with self.assertRaisesRegex(NotImplementedError, "serialization is not implemented"):
+      self.driver.serialize()
 
 
 class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
@@ -790,13 +779,6 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(driver._locate(first_inserted), (7, 8))
     self.assertEqual(driver._locate(second_inserted), (7, 3))
 
-    restored = Resource.deserialize(json.loads(json.dumps(driver.serialize())))
-    self.assertIsInstance(restored, HighResSampleStorage)
-    assert isinstance(restored, HighResSampleStorage)
-    restored_rack = restored._racks_by_number[7]
-    self.assertEqual(restored._locate(restored_rack.sites[7]), (7, 8))
-    self.assertEqual(restored._locate(restored_rack.sites[2]), (7, 3))
-
   def test_site_selection_rejects_slots_that_are_too_short_for_lidded_plate(self):
     short = PlateHolder(name="short", size_x=127.76, size_y=85.48, size_z=16, pedestal_size_z=0)
     tall = PlateHolder(name="tall", size_x=127.76, size_y=85.48, size_z=18, pedestal_size_z=0)
@@ -853,23 +835,6 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
   def test_inventory_queries_use_resource_tree(self):
     self.assertEqual(self.driver.get_num_free_sites(), 0)
     self.assertIs(self.driver.get_site_by_plate_name("plate"), self.site)
-
-  def test_serialization_round_trip_preserves_rack_mapping_and_plate_inventory(self):
-    serialized = json.loads(json.dumps(self.driver.serialize()))
-    restored = Resource.deserialize(serialized)
-
-    self.assertIsInstance(restored, HighResSampleStorage)
-    assert isinstance(restored, HighResSampleStorage)
-    self.assertEqual(list(restored._racks_by_number), [1])
-    restored_site = restored.get_site_by_plate_name("plate")
-    self.assertEqual(restored._locate(restored_site), (1, 1))
-    self.assertEqual(
-      [nest.name for nest in restored.nests],
-      [
-        "sample_store_nest_1",
-        "sample_store_nest_2",
-      ],
-    )
 
   async def test_take_in_plate_moves_nest_resource_to_selected_site(self):
     self.plate.unassign()
@@ -1181,22 +1146,15 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(transfer.command, "place 1 1 1")
     self.assertEqual(transfer.error_type, "HighResSampleStorageError")
 
-    restored = Resource.deserialize(json.loads(json.dumps(self.driver.serialize())))
-    self.assertIsInstance(restored, HighResSampleStorage)
-    assert isinstance(restored, HighResSampleStorage)
-    restored_transfer = restored.unresolved_transfer
-    self.assertIsNotNone(restored_transfer)
-    assert restored_transfer is not None
-    self.assertEqual(restored_transfer.plate.name, "plate")
-    self.assertEqual(restored_transfer.source.name, "sample_store_nest_1")
-    self.assertEqual(restored_transfer.destination.name, "site_1")
-    self.assertEqual(restored_transfer.command, "place 1 1 1")
-
     written = list(self.socket.written)
     with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
       await self.driver.store_plate(self.plate, self.site, tray_index=0)
     with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
       await self.driver._send_command("nesttransfer 1 2")
+    with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
+      await self.driver.home()
+    with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
+      await self.driver.request_stacker_barcodes(1)
     self.assertEqual(self.socket.written, written)
 
   async def test_resolve_unresolved_store_to_source_uses_live_nest_sensor(self):

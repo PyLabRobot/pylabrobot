@@ -45,8 +45,8 @@ class HighResSampleStorageRecoveryTests(unittest.IsolatedAsyncioTestCase):
     self.driver = HighResSampleStorage(host="10.253.253.253", name="sample_store", racks={})
     self.retrieval = self.driver
 
-  async def test_empty_slot_pick_raises_plate_not_found_and_stays_homed(self):
-    # The store reports "No plate detected" and stays homed (graceful empty).
+  async def test_empty_slot_pick_raises_plate_not_found_when_parked(self):
+    # The store reports "No plate detected" and stays parked (graceful empty).
     empty = [
       "ACK! pick 5 12 1 50",
       "Error 1: (00:00:01) 50: No plate detected",
@@ -56,13 +56,52 @@ class HighResSampleStorageRecoveryTests(unittest.IsolatedAsyncioTestCase):
       [
         ("pick 5 12 1", empty),
         ("homedstatus", ["ACK! homedstatus 51", "homed", "OK! homedstatus 51"]),
+        (
+          "status",
+          [
+            "ACK! status 52",
+            "Carousel: 0.0",
+            "Y axis: 0.0",
+            "Z axis: 0.0",
+            "OK! status 52",
+          ],
+        ),
       ]
     )
     self.driver.io = sock  # type: ignore[assignment]
     with self.assertRaises(PlateNotFoundError):
       await self.retrieval._pick(5, 12, 1)
     # classified by state, no recovery motion issued
-    self.assertEqual(sock.commands, ["pick 5 12 1", "homedstatus"])
+    self.assertEqual(sock.commands, ["pick 5 12 1", "homedstatus", "status"])
+
+  async def test_empty_slot_pick_raises_fault_when_homed_but_extended(self):
+    empty = [
+      "ACK! pick 5 12 1 50",
+      "Error 1: (00:00:01) 50: No plate detected",
+      "ERROR! pick 5 12 1 50",
+    ]
+    sock = ScriptedSocket(
+      [
+        ("pick 5 12 1", empty),
+        ("homedstatus", ["ACK! homedstatus 51", "homed", "OK! homedstatus 51"]),
+        (
+          "status",
+          [
+            "ACK! status 52",
+            "Carousel: 0.0",
+            "Y axis: 256.0",
+            "Z axis: 0.0",
+            "OK! status 52",
+          ],
+        ),
+      ]
+    )
+    self.driver.io = sock  # type: ignore[assignment]
+
+    with self.assertRaises(HighResSampleStorageFault):
+      await self.retrieval._pick(5, 12, 1)
+
+    self.assertEqual(sock.commands, ["pick 5 12 1", "homedstatus", "status"])
 
   async def test_top_slot_stuck_raises_fault_despite_homed_lie(self):
     # Empty TOP slot: "No plate detected" but the spatula is left extended and

@@ -958,8 +958,6 @@ class Resource(SerializableMixin):
     if subclass is None:
       raise ValueError(f'Could not find subclass with name "{data["type"]}"')
     assert issubclass(subclass, cls)
-    if subclass is not cls:
-      return cast(Self, subclass.deserialize(data, allow_marshal=allow_marshal))
 
     for key in [
       "type",

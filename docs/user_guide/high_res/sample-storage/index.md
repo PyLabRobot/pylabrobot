@@ -136,8 +136,9 @@ axes are retracted. `recover()` refuses to move when the spatula sensor reports 
 the plate's physical support must be inspected before a safe recovery path can be chosen.
 
 If a transfer response is interrupted or otherwise ambiguous, the driver keeps the last confirmed
-resource assignment in place, records `store.unresolved_transfer`, and blocks additional plate
-motion. Inspect the machine, then reconcile the observed result without further motion:
+resource assignment in place, records `store.unresolved_transfer`, and blocks further plate moves,
+homing, and barcode scans. Inspect the machine, recover it when necessary, then reconcile the
+observed result:
 
 ```python
 await store.resolve_unresolved_transfer("source")
