@@ -6,4 +6,5 @@ from .biotek import (
   CytationImagingConfig,
   SynergyH1,
 )
+from .bravo import AgilentBravoBackend, Bravo, BravoDeck
 from .vspin import Access2, Access2Driver, VSpin
