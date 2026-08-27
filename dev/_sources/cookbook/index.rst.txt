@@ -9,6 +9,9 @@ you apply specific PyLabRobot features in real-world contexts.
 Rather than full experimental protocols, these recipes aim to inspire, 
 teach, and accelerate your own automation workflows.
 
+There is also a `community cookbook <https://chory-lab.github.io/plr-cookbook/>`_
+from the Chory Lab with additional PyLabRobot examples.
+
 ------------------------------------------
 
 .. raw:: html
