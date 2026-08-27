@@ -1,6 +1,6 @@
 # Writing PyLabRobot Device Drivers & Hello-World Guides
 
-How to add a device driver and its hello-world notebook, for humans and agents. This guide covers device-specific requirements; follow the [general contribution guide](contributing.md) for shared code style, testing, and contribution conventions. Post on the [PyLabRobot forum](https://discuss.pylabrobot.org) before starting to avoid duplicated effort and get support.
+How to add a device driver and its hello-world notebook, for humans and agents. This guide covers device-specific requirements; follow the [general contribution guide](contributing.md) for shared code style, testing, and contribution conventions, including the [structured concurrency guide](structured-concurrency.md) for asynchronous resource lifecycles. Post on the [PyLabRobot forum](https://discuss.pylabrobot.org) before starting to avoid duplicated effort and get support.
 
 ## 1. Understand the device
 
@@ -14,15 +14,37 @@ Recover the protocol before writing code.
 
 Keep it small and idiomatic to PyLabRobot.
 
-- **One file, one plain class.** The old Driver/Backend split and capability machinery are deprecated — don't use them. Instead write a single plain class whose public methods are the device's operations, talking to hardware through a `pylabrobot.io` transport. Path `pylabrobot/<vendor>/<device>.py`, re-exported from `__init__.py`. Promote to a `<device>/` package only when it genuinely helps — a distinct subsystem, the protocol/framing layer, or a large command table — not by reflex.
+- **One file, one plain class.** The old Driver/Backend split and capability machinery are deprecated — don't use them. Instead write a single vendor-oriented class whose public methods are the device's operations, talking to hardware through a `pylabrobot.io` transport. A driver that owns asynchronous resources inherits `HasLifespan`. Path `pylabrobot/<vendor>/<device>.py`, re-exported from `__init__.py`. Promote to a `<device>/` package only when it genuinely helps — a distinct subsystem, the protocol/framing layer, or a large command table — not by reflex.
 - **Model the device's real objects.** When the hardware has distinct addressable parts — a shaker's daisy-chained nests, a gripper's arm, a multi-channel head — give them their own classes or objects so `nest[2].shake(...)` reads like the machine works. Let the physical layout guide the object model where it makes sense; don't invent a class hierarchy the device doesn't have. A one-part device stays one class.
 - **Keep the logic client-side, in PLR.** Do as much control as possible from PLR rather than delegating to the device's firmware. When the hardware exposes both a canned high-level feature and the lower-level primitives it's built from, prefer driving the primitives so the sequencing, state, and decisions live in readable Python you can inspect and adapt — not in an opaque on-device routine. Reach for a firmware macro only when the primitives genuinely aren't exposed or the timing must be enforced on-device.
 - **Stay OS-agnostic:** no OS-specific libraries or DLLs. Running on Windows, Mac, and Linux is what keeps experiments portable and reproducible.
 - **Use `pylabrobot.io` for all device communication.** Use the appropriate PyLabRobot transport (`USB`, `Serial`, `FTDI`, `HID`, `Socket`, etc.) instead of calling PyUSB, pyserial, hidapi, raw sockets, vendor DLLs, or OS APIs directly from a device driver. If a required transport capability is missing, add it to `pylabrobot.io` rather than bypassing the abstraction.
-- **Async `setup()` / `stop()`** plus public operation methods over those `pylabrobot.io` transport primitives.
+- **Scoped lifecycle plus public operations.** Resource-owning drivers implement `_enter_lifespan`, register cleanup immediately, and are used with `async with`. Do not override or call `setup()` or `stop()` from library code: the inherited methods are a deprecated, asyncio-only application-global bridge for interactive use, not an owned child lifespan. Refer to the [structured concurrency guide](structured-concurrency.md) for details about the lifespan lifecycle.
 - **Log important device events.** Define a module logger with `logger = logging.getLogger(__name__)` and use it for meaningful lifecycle events, operations, state changes, recoveries, and faults. Use the appropriate log level and structured `%`-style arguments; don't use `print()` for runtime status.
 - **Prefer string `Literal[...]` over enums**, especially anything user-facing. A `Literal["standard", "head", "pump"]` argument plus an internal dict mapping to wire codes reads better at the call site than an enum import. `IntEnum` is fine in narrow internal cases (e.g. a fixed set of wire/register codes never exposed to callers).
 - **API docs:** add `docs/api/pylabrobot.<vendor>.rst` plus a line in `docs/api/pylabrobot.rst`.
+
+### Choose reads by the device's framing
+
+`IOBase.read()` is a byte-stream operation: a positive-size request returns at least one byte
+and at most the requested size, not necessarily a whole reply, report, or USB packet. At EOF
+it raises `anyio.EndOfStream`; cancellation retains unreturned bytes for the next read unless
+the input is explicitly purged or the connection ends. Use a caller-owned AnyIO deadline
+around the whole device reply, and assemble length- or terminator-framed protocols from byte
+reads rather than treating one read as one message.
+
+When a protocol depends on physical HID reports or supported USB bulk/interrupt IN packets,
+use `read_to_boundary()` and check both `started_at_boundary` and `ended_at_boundary` before
+parsing. A caller size limit can stop inside a frame; `discard_to_boundary()` can skip an
+unwanted frame. For USB, a `packet` boundary is not inherently an application message end:
+select `short_packet_end` only if the device protocol uses short packets (including zero-length
+packets) as delimiters. Unsupported boundary policies raise `UnsupportedOperation`. `Reader`
+decodes fields from already-delimited bytes; it does not establish or validate framing.
+
+Writes may have reached the device once dispatched, even if a later timeout or error occurs.
+Cancellation before dispatch prevents the write; after dispatch, the transport joins it before
+returning control. Reconcile uncertain device state within the driver's complete transaction
+instead of assuming a failed call did nothing.
 
 ### Share nothing between device drivers
 
@@ -43,13 +65,13 @@ Keep connection, calibration, and state on the device; pass operation-specific s
 
 ### Unverified drivers
 
-If the driver hasn't been checked against real hardware, say so loudly: `setup()` should `logger.warning(...)` that it's untested and invite a change once someone verifies it. Don't quietly present untested code as ready.
+If the driver hasn't been checked against real hardware, say so loudly: lifecycle entry should call `logger.warning(...)` to say that it's untested and invite a change once someone verifies it. Don't quietly present untested code as ready.
 
 ## 3. Hello-world notebook
 
 Every device ships a runnable notebook that takes a user from cabling to first command. Path `docs/user_guide/<vendor>/<device>/hello-world.ipynb`; wire it in via the `<vendor>/index.md` `{toctree}` and add `<vendor>/index` to the Manufacturers `{toctree}` in `docs/user_guide/index.md` (alphabetical).
 
-Sections (markdown cell then code cell): (1) title + property table + untested-warning; (2) how it talks — brief, since users care about the machine, not the wire; (3) physical setup; (4) `setup()`; (5) one section per operation.
+Sections (markdown cell then code cell): (1) title + property table + untested-warning; (2) how it talks — brief, since users care about the machine, not the wire; (3) physical setup; (4) scoped lifecycle; (5) one section per operation. Prefer `async with` in notebook examples. An application-level notebook that needs state across cells may use the inherited deprecated `setup()` / `stop()` compatibility bridge, but must label it as asyncio-only, explain that its lifetime is application-global rather than scoped to the cell, and always include the matching `stop()` step.
 
 Cell rules:
 - **One concept per code cell.** If a physical action happens between steps, that's two cells: `move_tray_out()` → place plate → `move_tray_in()`. Every code cell gets a preceding markdown cell.
@@ -71,3 +93,7 @@ When the device is already registered, edit its existing object instead of addin
 - Validate the hello-world notebook structure and imports without executing its hardware cells.
 - Run the device-registry tests and build the documentation so its API, code, and documentation links are checked.
 - Keep the unverified-driver warning until the implementation has been checked on the real device.
+
+Run `.venv/bin/python -m pytest docs/notebook_lifecycle_tests.py` for the permanent JSON/AST
+notebook gate. It validates notebook structure and lifecycle ordering without importing or executing
+notebook code; hardware cells remain structural-only.

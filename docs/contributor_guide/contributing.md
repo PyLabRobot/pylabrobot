@@ -97,13 +97,17 @@ If you have defined a new resource, it is highly appreciated by the community if
 
 Make sure to add your file to the imports in `__init__.py` of your resources package.
 
-### Writing a new backend
+### Writing a new device driver
 
-Backends are the primary objects used to communicate with hardware. If you want to integrate a new piece of hardware into PyLabRobot, writing a new backend is the way to go. Here's, very generally, how you'd do it:
-
-1. Copy the `pylabrobot/liquid_handling/backends/backend.py` file to a new file, and rename the class to `<BackendName>Backend`.
-2. Remove all `abc` (abstract base class) imports and decorators from the class.
-3. Implement the methods in the class.
+For a new device, follow the [device-driver guide](device-driver-guide.md): v1 drivers are plain,
+vendor-oriented classes that own their asynchronous resources through a scoped lifespan.
+The [resource lifecycle guide](structured-concurrency.md) covers the underlying lifespan API.
+Lifespans are scopes that bound the lifetime of any background activity of a driver,
+and are at the core of structured concurrency.
+If you are new to the concept or need to convert a driver implementation
+that predates structured concurrency, refer to the
+[structured-concurrency migration gotchas](structured-concurrency-gotchas.md)
+before converting its lifecycle.
 
 ## Support
 

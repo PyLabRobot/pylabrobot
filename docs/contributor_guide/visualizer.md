@@ -30,10 +30,11 @@ spins up two threads:
 1. **File server** – a simple HTTP server that serves the static files above.
 2. **Websocket server** – used to push state updates from Python to the browser.
 
-When `Visualizer.setup()` is called, it launches both servers and optionally
-opens a browser pointing to the file server.  As resources are assigned to the
-root resource or their state changes, callbacks in Python send JSON messages to
-the browser via the websocket.
+Entering `async with Visualizer(resource) as visualizer:` launches both servers
+and optionally opens a browser pointing to the file server. Scoped exit closes
+both servers and their handlers. As resources are assigned to the root resource
+or their state changes, callbacks in Python send JSON messages to the browser
+via the websocket.
 
 ## Browser side
 

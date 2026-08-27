@@ -7,6 +7,8 @@
 contributing
 how-to-open-source
 contributing-to-docs
+structured-concurrency
+structured-concurrency-gotchas
 ```
 <hr>
 

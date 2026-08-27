@@ -37,12 +37,12 @@ from pylabrobot.resources import Deck
 
 deck = Deck.load_from_json_file("hamilton-layout.json")
 lh = LiquidHandler(backend=STARBackend(), deck=deck)
-await lh.setup()
 
-await lh.pick_up_tips(lh.deck.get_resource("tip_rack")["A1"])
-await lh.aspirate(lh.deck.get_resource("plate")["A1"], vols=100)
-await lh.dispense(lh.deck.get_resource("plate")["A2"], vols=100)
-await lh.return_tips()
+async with lh:
+  await lh.pick_up_tips(lh.deck.get_resource("tip_rack")["A1"])
+  await lh.aspirate(lh.deck.get_resource("plate")["A1"], vols=100)
+  await lh.dispense(lh.deck.get_resource("plate")["A2"], vols=100)
+  await lh.return_tips()
 ```
 
 To run the same protocol on an **Opentrons**, use the following:
@@ -73,13 +73,13 @@ Moving a plate to a ClarioStar using a liquid handler, and reading luminescence:
 from pylabrobot.plate_reading import PlateReader, CLARIOstarBackend
 
 pr = PlateReader(name="plate reader", backend=CLARIOstarBackend(), size_x=1, size_y=1, size_z=1)
-await pr.setup()
 
 # Use in combination with a liquid handler
 lh.assign_child_resource(pr, location=Coordinate(x, y, z))
-lh.move_plate(lh.deck.get_resource("plate"), pr)
 
-data = await pr.read_luminescence()
+async with lh, pr:
+  await lh.move_plate(lh.deck.get_resource("plate"), pr)
+  data = await pr.read_luminescence(focal_height=0)
 ```
 
 For Cytation5, use the `Cytation5` backend.
@@ -93,9 +93,9 @@ from pylabrobot.centrifuge import Centrifuge, VSpinBackend
 
 vspin_backend = VSpinBackend(device_id="YOUR_FTDI_ID_HERE")
 cf = Centrifuge(name="centrifuge", backend=vspin_backend, size_x=1, size_y=1, size_z=1)
-await cf.setup()
 
-await cf.spin(g=800, duration=60)
+async with cf:
+  await cf.spin(g=800, duration=60)
 ```
 
 For a HighRes Biosolutions MicroSpin, use the MicroSpin factory:
@@ -104,10 +104,10 @@ For a HighRes Biosolutions MicroSpin, use the MicroSpin factory:
 from pylabrobot.centrifuge import MicroSpin
 
 cf = MicroSpin(name="microspin", host="192.168.127.60")
-await cf.setup()
-await cf.backend.home()
 
-await cf.spin(g=800, duration=60)
+async with cf:
+  await cf.backend.home()
+  await cf.spin(g=800, duration=60)
 ```
 
 ### Pumps ([docs](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/pumps/_pumps.html))
@@ -119,8 +119,9 @@ from pylabrobot.pumps import Pump
 from pylabrobot.pumps.cole_parmer.masterflex import Masterflex
 
 p = Pump(backend=Masterflex())
-await p.setup()
-await p.run_for_duration(speed=100, duration=30)
+
+async with p:
+  await p.run_for_duration(speed=100, duration=30)
 ```
 
 ### Scales ([docs](https://docs.pylabrobot.org/stable/user_guide/02_analytical/scales/scales.html))
@@ -131,9 +132,8 @@ Taking a measurement from a Mettler Toledo scale:
 from pylabrobot.mettler_toledo import MTSICSDriver
 
 scale = MTSICSDriver(port="/dev/cu.usbserial-110")
-await scale.setup()
-
-weight = await scale.read_weight()
+async with scale:
+  weight = await scale.read_weight()
 ```
 
 ### Heater shakers ([docs](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/heating_shaking/heating_shaking.html))
@@ -145,8 +145,9 @@ from pylabrobot.heating_shaking import HeaterShaker, InhecoThermoShakeBackend
 
 backend = InhecoThermoShakeBackend()
 hs = HeaterShaker(backend=backend, name="HeaterShaker", size_x=0, size_y=0, size_z=0)
-await hs.setup()
-await hs.set_temperature(37)
+
+async with hs:
+  await hs.set_temperature(37)
 ```
 
 ### Fans ([docs](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/fans/fans.html))
@@ -158,8 +159,9 @@ from pylabrobot.only_fans import Fan
 from pylabrobot.only_fans import HamiltonHepaFanBackend
 
 fan = Fan(backend=HamiltonHepaFanBackend(), name="my fan")
-await fan.setup()
-await fan.turn_on(intensity=100, duration=60)
+
+async with fan:
+  await fan.turn_on(intensity=100, duration=60)
 ```
 
 ### Thermocyclers ([docs](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/thermocycling/thermocycling.html))
