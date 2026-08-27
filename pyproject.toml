@@ -19,16 +19,18 @@ hid = ["hid"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
 opentrons = ["opentrons-http-api-client==0.2.1"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
+liconic-server = ["PyLabRobot[serial]", "grpcio>=1.62.3", "protobuf>=4.25.1"]
 cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila,pico,xarm]"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila,liconic-server,pico,xarm]"]
 test = [
   "pytest",
   "pytest-timeout",
 ]
 dev = [
   "PyLabRobot[all,test]",
+  "grpcio-tools==1.62.3",
 
   # lint/type
   "mypy==1.18.2",
@@ -54,7 +56,13 @@ namespaces = false
 exclude = ["tools*", "docs*"]
 
 [tool.setuptools.package-data]
-pylabrobot = ["visualizer/*", "visualizer/img/*", "version.txt"]
+pylabrobot = [
+  "visualizer/*",
+  "visualizer/img/*",
+  "liconic/storex/experimental_server/*.md",
+  "liconic/storex/experimental_server/*.proto",
+  "version.txt",
+]
 
 [tool.ruff]
 line-length = 100
