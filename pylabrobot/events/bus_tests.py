@@ -1,8 +1,10 @@
 import json
 import unittest
+from contextlib import ExitStack
 
 from pylabrobot.events import (
   EventBus,
+  LifespanEventInfo,
   PLREvent,
   coordinate_reference,
   device_reference,
@@ -10,6 +12,7 @@ from pylabrobot.events import (
   event_context,
   event_operation,
   evented_operation,
+  lifespan_events,
   resource_reference,
   use_event_bus,
 )
@@ -86,6 +89,89 @@ class TestEventBus(unittest.TestCase):
 
 
 class TestEventedOperation(unittest.IsolatedAsyncioTestCase):
+  def test_lifespan_events_track_entry_body_failure_and_exit_independently(self):
+    events: list[PLREvent] = []
+    bus = EventBus()
+    bus.subscribe(events.append)
+    info = LifespanEventInfo("device.setup", "device.stop", {"device": "reader"})
+    body_error = ValueError("body failed")
+
+    with use_event_bus(bus):
+      with self.assertRaises(ValueError) as caught:
+        with lifespan_events(info) as lifecycle:
+          emit_event("device.entry")
+          with lifecycle.lifespan_active:
+            emit_event("device.body")
+            raise body_error
+
+    self.assertIs(caught.exception, body_error)
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "device.setup.started",
+        "device.entry",
+        "device.setup.completed",
+        "device.body",
+        "device.stop.started",
+        "device.stop.completed",
+      ],
+    )
+    self.assertEqual(events[1].context["operation_id"], events[0].context["operation_id"])
+    self.assertEqual(events[-1].context["operation_id"], events[-2].context["operation_id"])
+    self.assertNotEqual(events[0].context["operation_id"], events[-1].context["operation_id"])
+
+  def test_lifespan_events_report_entry_and_exit_failures_at_the_correct_boundary(self):
+    events: list[PLREvent] = []
+    bus = EventBus()
+    bus.subscribe(events.append)
+    info = LifespanEventInfo("device.setup", "device.stop", {"device": "reader"})
+
+    def fail_exit() -> None:
+      raise RuntimeError("exit failed")
+
+    with use_event_bus(bus):
+      with self.assertRaisesRegex(RuntimeError, "entry failed"):
+        with lifespan_events(info):
+          raise RuntimeError("entry failed")
+      with self.assertRaisesRegex(RuntimeError, "exit failed"):
+        with lifespan_events(info) as lifecycle:
+          with ExitStack() as stack:
+            stack.callback(fail_exit)
+            with lifecycle.lifespan_active:
+              pass
+
+    self.assertEqual(
+      [event.name for event in events],
+      [
+        "device.setup.started",
+        "device.setup.failed",
+        "device.setup.started",
+        "device.setup.completed",
+        "device.stop.started",
+        "device.stop.failed",
+      ],
+    )
+
+  def test_lifespan_events_attribute_cleanup_failure_over_body_failure_to_exit(self):
+    events: list[PLREvent] = []
+    bus = EventBus()
+    bus.subscribe(events.append)
+    info = LifespanEventInfo("device.setup", "device.stop", {"device": "reader"})
+
+    def fail_exit() -> None:
+      raise RuntimeError("exit failed")
+
+    with use_event_bus(bus):
+      with self.assertRaisesRegex(RuntimeError, "exit failed"):
+        with lifespan_events(info) as lifecycle:
+          with ExitStack() as stack:
+            stack.callback(fail_exit)
+            with lifecycle.lifespan_active:
+              raise ValueError("body failed")
+
+    self.assertEqual(events[-1].name, "device.stop.failed")
+    self.assertEqual(events[-1].data["error_type"], "RuntimeError")
+
   def test_block_operation_emits_a_correlated_lifecycle(self):
     events: list[PLREvent] = []
     event_bus = EventBus()

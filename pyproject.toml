@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets"]
+dependencies = ["anyio>=4.7", "sniffio", "typing_extensions", "websockets"]
 
 [project.optional-dependencies]
 serial = ["pyserial"]
@@ -26,7 +26,9 @@ xarm = ["xarm-python-sdk"]
 odyssey = ["Pillow"]
 all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
 test = [
-  "pytest",
+  "pytest>=7",
+  "pytest-timeout",
+  "trio",
 ]
 dev = [
   "PyLabRobot[all,test]",
