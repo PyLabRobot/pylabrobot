@@ -658,7 +658,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       res = self._ot.lh.save_position(pipette_id=pipette_id)
       pos = res["data"]["result"]["position"]
       current = Coordinate(pos["x"], pos["y"], pos["z"])
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
       raise RuntimeError("Failed to query current pipette position") from exc
 
     return pipette_id, current

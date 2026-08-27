@@ -554,7 +554,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("ABSOLUTE MTP,OUT")
     await self._send_command("BY#T5000")
 
-  async def close(self, plate: Optional[Plate]) -> None:  # noqa: ARG002
+  async def close(self, plate: Optional[Plate]) -> None:
     """Close the reader drawer."""
 
     await self._send_command("ABSOLUTE MTP,IN")

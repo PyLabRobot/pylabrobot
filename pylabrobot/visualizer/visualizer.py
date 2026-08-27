@@ -392,7 +392,7 @@ class Visualizer:
 
     # 1. VS Code sets __vsc_ipynb_file__ in the IPython user namespace.
     try:
-      ipython = get_ipython()  # type: ignore[name-defined]  # noqa: F821
+      ipython = get_ipython()  # type: ignore[name-defined]
       vsc_file = getattr(ipython, "user_ns", {}).get("__vsc_ipynb_file__")
       if vsc_file:
         return str(os.path.basename(vsc_file))
