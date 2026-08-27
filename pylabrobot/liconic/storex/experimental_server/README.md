@@ -30,6 +30,10 @@ StoreX:
 pip install 'PyLabRobot[liconic-server]'
 ```
 
+The `liconic-server` extra composes the serial transport with PyLabRobot's shared
+`distributed` extra. The latter owns the compatible `grpcio` and `protobuf`
+runtime dependencies used by distributed APIs.
+
 The checked-in Python protobuf modules are generated from `storex.proto`. To
 regenerate them while developing, install `grpcio-tools` or use the repository's
 `dev` extra, then run:

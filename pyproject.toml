@@ -18,12 +18,13 @@ ftdi = ["pylibftdi", "pyusb"]
 hid = ["hid"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
 opentrons = ["opentrons-http-api-client==0.2.1"]
-sila = ["zeroconf>=0.131.0", "grpcio"]
-liconic-server = ["PyLabRobot[serial]", "grpcio>=1.62.3", "protobuf>=4.25.1"]
+distributed = ["grpcio>=1.62.3", "protobuf>=4.25.1"]
+sila = ["PyLabRobot[distributed]", "zeroconf>=0.131.0"]
+liconic-server = ["PyLabRobot[serial,distributed]"]
 cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila,liconic-server,pico,xarm]"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,distributed,sila,liconic-server,pico,xarm]"]
 test = [
   "pytest",
   "pytest-timeout",
