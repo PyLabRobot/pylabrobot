@@ -22,7 +22,7 @@ from pylabrobot.resources import (
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.serializer import deserialize, serialize
 
-from .constants import ControllerError, HandlingError, STOREX_MODELS, StoreXModel
+from .constants import STOREX_MODELS, ControllerError, HandlingError, StoreXModel
 from .errors import controller_error_map, handler_error_map
 
 logger = logging.getLogger(__name__)

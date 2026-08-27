@@ -3,7 +3,6 @@
 from enum import Enum
 from typing import Literal, Tuple
 
-
 # Protocol support is currently limited to the STX product line. Other StoreX
 # lines must be verified before their model identifiers are added here.
 StoreXModel = Literal[
