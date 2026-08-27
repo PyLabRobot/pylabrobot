@@ -112,9 +112,6 @@ PlateLoc
   :recursive:
 
     PlateLoc
-    PlateLocSealer
-    PlateLocSealerBackend
-    PlateLocDriver
     PlateLocSerialProfile
     PlateLocStatus
     PlateLocError
