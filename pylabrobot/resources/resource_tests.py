@@ -1184,3 +1184,73 @@ class TestResourceMetadata(unittest.TestCase):
     self.assertEqual(deck.find_resources(), [deck, plate, trough, waste, well])
     # Non-recursive: self plus direct children only.
     self.assertEqual(deck.find_resources(recursive=False), [deck, plate, trough, waste])
+
+
+class TestNameIndex(unittest.TestCase):
+  """Names are unique across a tree, and the tree remembers which it holds rather than re-reading
+  itself on every assignment. Anything remembered can go stale, so these check it does not."""
+
+  def block(self, name: str) -> Resource:
+    return Resource(name=name, size_x=10, size_y=10, size_z=10)
+
+  def test_a_duplicate_name_is_refused(self):
+    root = self.block("root")
+    root.assign_child_resource(self.block("a"), location=Coordinate.zero())
+    with self.assertRaises(ValueError):
+      root.assign_child_resource(self.block("a"), location=Coordinate.zero())
+
+  def test_a_duplicate_deep_in_the_arriving_subtree_is_refused(self):
+    root = self.block("root")
+    holder = self.block("holder")
+    holder.assign_child_resource(self.block("buried"), location=Coordinate.zero())
+    root.assign_child_resource(holder, location=Coordinate.zero())
+
+    other = self.block("other")
+    other.assign_child_resource(self.block("buried"), location=Coordinate.zero())
+    with self.assertRaises(ValueError):
+      root.assign_child_resource(other, location=Coordinate.zero())
+
+  def test_unassigning_frees_the_name(self):
+    root = self.block("root")
+    plate = self.block("plate")
+    root.assign_child_resource(plate, location=Coordinate.zero())
+    root.unassign_child_resource(plate)
+    root.assign_child_resource(self.block("plate"), location=Coordinate.zero())
+
+  def test_a_subtree_takes_its_names_with_it(self):
+    """The names beneath a resource leave the tree with it, and arrive in whatever tree takes it."""
+    first, second = self.block("first"), self.block("second")
+    holder = self.block("holder")
+    holder.assign_child_resource(self.block("carried"), location=Coordinate.zero())
+    first.assign_child_resource(holder, location=Coordinate.zero())
+
+    # while it is in the first tree, the second knows nothing of what it carries
+    second.assign_child_resource(self.block("carried"), location=Coordinate.zero())
+
+    first.unassign_child_resource(holder)
+    # and now the name it carries collides with the one already there
+    with self.assertRaises(ValueError):
+      second.assign_child_resource(holder, location=Coordinate.zero())
+
+  def test_moving_between_parents_goes_through_the_old_one(self):
+    """A resource is moved by taking it off one parent and putting it on another, in that order.
+
+    Handing it straight to the new parent is refused, because the name is checked while the old
+    parent still holds it. Long-standing behaviour, unrelated to the index, and worth pinning: it is
+    why a plate changing carriers reaches a subscriber as an unassignment and an assignment.
+    """
+    root = self.block("root")
+    left, right = self.block("left"), self.block("right")
+    root.assign_child_resource(left, location=Coordinate.zero())
+    root.assign_child_resource(right, location=Coordinate.zero())
+
+    plate = self.block("plate")
+    left.assign_child_resource(plate, location=Coordinate.zero())
+
+    with self.assertRaises(ValueError):
+      right.assign_child_resource(plate, location=Coordinate.zero())
+
+    left.unassign_child_resource(plate)
+    right.assign_child_resource(plate, location=Coordinate.zero())
+    self.assertIs(plate.parent, right)
+    self.assertEqual(root.get_resource("plate"), plate)
