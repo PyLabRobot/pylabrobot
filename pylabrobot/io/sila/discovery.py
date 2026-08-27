@@ -11,7 +11,6 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import logging
 import os
@@ -20,8 +19,14 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING, AsyncGenerator, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Optional
+
+import anyio
+from anyio.streams.memory import MemoryObjectSendStream
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 try:
   from zeroconf import (  # type: ignore[import-not-found]
@@ -173,55 +178,62 @@ def _decode_nbns_name(data: bytes) -> Optional[str]:
     return None
 
 
-async def _netbios_scan(interface: str, timeout: float = 3.0) -> dict[str, str]:
+async def _netbios_scan(
+  interface: str, timeout: float = 3.0, results: Optional[dict[str, str]] = None
+) -> dict[str, str]:
   """Send a broadcast NetBIOS wildcard query and collect responses.
 
-  Returns a dict mapping IP -> NetBIOS name.
+  Returns a dict mapping IP -> NetBIOS name. When provided, ``results`` is
+  updated as replies arrive so callers retain them if the scan is cancelled.
   """
-  loop = asyncio.get_running_loop()
-  results: dict[str, str] = {}
+  if results is None:
+    results = {}
+  deadline = anyio.current_time() + timeout
 
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-  sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-  sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-  sock.bind((interface, 0))
-  # Use a short blocking timeout so recvfrom in the executor thread returns
-  # promptly rather than blocking forever, while still allowing the asyncio
-  # wait_for to enforce the overall deadline.
-  sock.settimeout(0.5)
-
-  # Link-local is always a /16 subnet (169.254.0.0/16), so broadcast to x.x.255.255.
-  parts = interface.split(".")
-  broadcast = f"{parts[0]}.{parts[1]}.255.255"
-
-  # Use run_in_executor for sendto/recvfrom since the async loop equivalents
-  # (loop.sock_sendto / loop.sock_recvfrom) require Python 3.11+.
   try:
-    await loop.run_in_executor(None, lambda: sock.sendto(_NBNS_WILDCARD_QUERY, (broadcast, 137)))
-  except OSError:
-    logger.debug("NetBIOS broadcast failed on %s", interface)
-    sock.close()
-    return results
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.bind((interface, 0))
+    # Link-local is always a /16 subnet (169.254.0.0/16), so broadcast to x.x.255.255.
+    parts = interface.split(".")
+    broadcast = f"{parts[0]}.{parts[1]}.255.255"
 
-  deadline = loop.time() + timeout
-  while loop.time() < deadline:
+    remaining = deadline - anyio.current_time()
+    if remaining <= 0:
+      return results
+    # Bound the send worker too; it owns the socket until it finishes.
+    sock.settimeout(min(0.5, remaining))
     try:
-      data, (addr, _) = await asyncio.wait_for(
-        loop.run_in_executor(None, lambda: sock.recvfrom(65535)),
-        timeout=max(0.1, deadline - loop.time()),
+      await anyio.to_thread.run_sync(
+        lambda: sock.sendto(_NBNS_WILDCARD_QUERY, (broadcast, 137)),
+        abandon_on_cancel=False,
       )
-    except (asyncio.TimeoutError, socket.timeout, OSError):
-      continue
+    except OSError:
+      logger.debug("NetBIOS broadcast failed on %s", interface)
+      return results
 
-    if addr == interface:
-      continue
+    while (remaining := deadline - anyio.current_time()) > 0:
+      # The worker must finish its recv before cancellation can close the socket.
+      sock.settimeout(min(0.5, remaining))
+      try:
+        data, (addr, _) = await anyio.to_thread.run_sync(
+          lambda: sock.recvfrom(65535), abandon_on_cancel=False
+        )
+      except socket.timeout:
+        continue
+      except OSError:
+        break
 
-    name = _decode_nbns_name(data)
-    if name:
-      results[addr] = name
+      if addr == interface:
+        continue
 
-  sock.close()
-  return results
+      name = _decode_nbns_name(data)
+      if name:
+        results[addr] = name
+    return results
+  finally:
+    sock.close()
 
 
 async def _ping_broadcast(interface: str) -> None:
@@ -235,38 +247,39 @@ async def _ping_broadcast(interface: str) -> None:
   interface — without it the broadcast goes out on the default route.
   On Linux, ``ping -I <iface_name>`` serves the same purpose.
   """
-  loop = asyncio.get_running_loop()
   parts = interface.split(".")
   broadcast = f"{parts[0]}.{parts[1]}.255.255"
 
   if sys.platform == "win32":
     cmd = ["ping", "-n", "3", "-w", "1000", broadcast]
   elif sys.platform == "linux":
-    iface_name = await loop.run_in_executor(None, _interface_name_for_ip_sync, interface)
+    iface_name = await anyio.to_thread.run_sync(
+      _interface_name_for_ip_sync, interface, abandon_on_cancel=False
+    )
     if iface_name:
       cmd = ["ping", "-c", "3", "-W", "1", "-I", iface_name, broadcast]
     else:
       cmd = ["ping", "-c", "3", "-W", "1", broadcast]
   else:
     # macOS / BSD: -b binds to a named interface
-    iface_name = await loop.run_in_executor(None, _interface_name_for_ip_sync, interface)
+    iface_name = await anyio.to_thread.run_sync(
+      _interface_name_for_ip_sync, interface, abandon_on_cancel=False
+    )
     if iface_name:
       cmd = ["ping", "-c", "3", "-W", "1", "-b", iface_name, broadcast]
     else:
       cmd = ["ping", "-c", "3", "-W", "1", broadcast]
 
   try:
-    proc = await asyncio.create_subprocess_exec(
-      *cmd,
-      stdout=asyncio.subprocess.DEVNULL,
-      stderr=asyncio.subprocess.DEVNULL,
-    )
-    await asyncio.wait_for(proc.wait(), timeout=5)
-  except (FileNotFoundError, asyncio.TimeoutError):
+    with anyio.fail_after(5):
+      await anyio.run_process(
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+      )
+  except (FileNotFoundError, TimeoutError):
     pass
 
   # Give devices a moment to respond so ARP entries are populated.
-  await asyncio.sleep(0.5)
+  await anyio.sleep(0.5)
 
 
 async def _arp_scan(interface: str) -> dict[str, str]:
@@ -298,25 +311,23 @@ async def _arp_scan_bsd(interface: str) -> dict[str, str]:
       ? (169.254.245.237) at 0:5:51:e:e5:7e on en13 [ethernet]
   """
   # Resolve our IP to an interface name (e.g. "en13") so we can filter ARP entries.
-  loop = asyncio.get_running_loop()
-  iface_name = await loop.run_in_executor(None, _interface_name_for_ip_sync, interface)
+  iface_name = await anyio.to_thread.run_sync(
+    _interface_name_for_ip_sync, interface, abandon_on_cancel=False
+  )
   if not iface_name:
     logger.debug("could not resolve interface name for %s, skipping ARP scan", interface)
     return {}
 
   try:
-    proc = await asyncio.create_subprocess_exec(
-      "arp",
-      "-an",
-      stdout=asyncio.subprocess.PIPE,
-      stderr=asyncio.subprocess.DEVNULL,
-    )
-    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
-  except (FileNotFoundError, asyncio.TimeoutError):
+    with anyio.fail_after(5):
+      completed = await anyio.run_process(
+        ["arp", "-an"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False
+      )
+  except (FileNotFoundError, TimeoutError):
     return {}
 
   results: dict[str, str] = {}
-  for line in stdout.decode(errors="replace").splitlines():
+  for line in completed.stdout.decode(errors="replace").splitlines():
     if "incomplete" in line:
       continue
     if f"on {iface_name} " not in line and not line.endswith(f"on {iface_name}"):
@@ -346,19 +357,20 @@ async def _arp_scan_linux(interface: str) -> dict[str, str]:
     # Fall back to arp -an on non-procfs Linux systems.
     return await _arp_scan_bsd(interface)
 
-  loop = asyncio.get_running_loop()
   try:
 
     def _read():
       with open("/proc/net/arp") as f:
         return f.read()
 
-    text = await loop.run_in_executor(None, _read)
+    text = await anyio.to_thread.run_sync(_read, abandon_on_cancel=False)
   except OSError:
     return {}
 
   # Determine the OS-level interface name for our IP so we can filter entries.
-  iface_name = await loop.run_in_executor(None, _interface_name_for_ip_sync, interface)
+  iface_name = await anyio.to_thread.run_sync(
+    _interface_name_for_ip_sync, interface, abandon_on_cancel=False
+  )
   if not iface_name:
     logger.debug("could not resolve interface name for %s, skipping ARP scan", interface)
     return {}
@@ -394,19 +406,16 @@ async def _arp_scan_windows(interface: str) -> dict[str, str]:
   Windows groups entries by interface, so we find the section matching our IP.
   """
   try:
-    proc = await asyncio.create_subprocess_exec(
-      "arp",
-      "-a",
-      stdout=asyncio.subprocess.PIPE,
-      stderr=asyncio.subprocess.DEVNULL,
-    )
-    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
-  except (FileNotFoundError, asyncio.TimeoutError):
+    with anyio.fail_after(5):
+      completed = await anyio.run_process(
+        ["arp", "-a"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False
+      )
+  except (FileNotFoundError, TimeoutError):
     return {}
 
   results: dict[str, str] = {}
   in_our_interface = False
-  for line in stdout.decode(errors="replace").splitlines():
+  for line in completed.stdout.decode(errors="replace").splitlines():
     line = line.strip()
     if not line:
       in_our_interface = False
@@ -486,33 +495,28 @@ async def _get_device_identification(
     f"\r\n"
   ).encode() + body
 
-  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   try:
-    if interface:
-      sock.bind((interface, 0))
-    sock.setblocking(False)
+    with anyio.fail_after(timeout):
+      stream = await anyio.connect_tcp(
+        remote_host=host,
+        remote_port=port,
+        local_host=interface,
+      )
+      async with AsyncExitStackWithShielding() as stack:
+        stack.push_shielded_async_callback(stream.aclose)
+        await stream.send(request)
 
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
+        response = bytearray()
+        while True:
+          try:
+            chunk = await stream.receive(4096)
+          except anyio.EndOfStream:
+            break
+          if not chunk:
+            break
+          response.extend(chunk)
 
-    def _remaining() -> float:
-      return max(0.01, deadline - loop.time())
-
-    await asyncio.wait_for(loop.sock_connect(sock, (host, port)), timeout=_remaining())
-    await asyncio.wait_for(loop.sock_sendall(sock, request), timeout=_remaining())
-
-    resp = b""
-    while True:
-      try:
-        chunk = await asyncio.wait_for(loop.sock_recv(sock, 4096), timeout=_remaining())
-        if not chunk:
-          break
-        resp += chunk
-      except asyncio.TimeoutError:
-        break
-
-    # Extract XML from HTTP response
-    text = resp.decode("utf-8", errors="replace")
+    text = response.decode("utf-8", errors="replace")
     if "<?xml" in text:
       xml_start = text.index("<?xml")
       xml_text = text[xml_start:]
@@ -522,10 +526,8 @@ async def _get_device_identification(
           xml_text = xml_text[: -len(suffix)]
           break
       return _parse_device_identification(host, port, xml_text.encode("utf-8"))
-  except (OSError, asyncio.TimeoutError):
+  except (OSError, TimeoutError, anyio.BrokenResourceError):
     pass
-  finally:
-    sock.close()
   return None
 
 
@@ -543,37 +545,53 @@ async def _discover_sila1(
     logger.debug("no interface provided for SiLA 1 discovery, skipping")
     return []
 
-  loop = asyncio.get_running_loop()
-  deadline = loop.time() + timeout
+  deadline = anyio.current_time() + timeout
 
-  # Run host discovery methods in parallel.
-  # Cap NetBIOS at 3s — any device that responds will do so within a second or two.
-  netbios_task = asyncio.ensure_future(_netbios_scan(interface, timeout=min(timeout, 3.0)))
-  arp_task = asyncio.ensure_future(_arp_scan(interface))
-  scan_results = await asyncio.gather(netbios_task, arp_task, return_exceptions=True)
+  scan_results: list[dict[str, str]] = [{}, {}]
+
+  async def scan(index: int, probe: Any, *args: Any) -> None:
+    try:
+      scan_results[index] = await probe(*args)
+    except Exception:
+      return
+
+  with anyio.CancelScope(deadline=deadline):
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(scan, 0, _netbios_scan, interface, min(timeout, 3.0), scan_results[0])
+      task_group.start_soon(scan, 1, _arp_scan, interface)
 
   hosts: dict[str, str] = {}
-  if isinstance(scan_results[0], dict):
-    hosts.update(scan_results[0])
-  if isinstance(scan_results[1], dict):
-    for ip, name in scan_results[1].items():
-      if ip not in hosts:
-        logger.debug("found %s via ARP (not NetBIOS)", ip)
-        hosts[ip] = name
+  hosts.update(scan_results[0])
+  for ip, name in scan_results[1].items():
+    if ip not in hosts:
+      logger.debug("found %s via ARP (not NetBIOS)", ip)
+      hosts[ip] = name
 
   if not hosts:
     return []
 
-  remaining = max(0.01, deadline - loop.time())
   devices: list[SiLADevice] = []
   host_list = [ip for ip in hosts if not ip.endswith(".255")]
-  coros = [
-    _get_device_identification(ip, port, interface=interface, timeout=remaining) for ip in host_list
-  ]
-  results = await asyncio.gather(*coros, return_exceptions=True)
-  for ip, r in zip(host_list, results):
-    if isinstance(r, SiLADevice):
-      devices.append(r)
+  identifications: dict[str, Optional[SiLADevice]] = {}
+
+  async def identify(ip: str) -> None:
+    try:
+      identifications[ip] = await _get_device_identification(
+        ip, port, interface=interface, timeout=max(0, deadline - anyio.current_time())
+      )
+    except Exception:
+      identifications[ip] = None
+
+  if anyio.current_time() < deadline:
+    with anyio.CancelScope(deadline=deadline):
+      async with anyio.create_task_group() as task_group:
+        for ip in host_list:
+          task_group.start_soon(identify, ip)
+
+  for ip in host_list:
+    device = identifications.get(ip)
+    if device is not None:
+      devices.append(device)
     else:
       # Host is reachable but didn't respond to GetDeviceIdentification.
       # Include it with whatever we know (name from NetBIOS, or just the IP).
@@ -590,19 +608,28 @@ async def _discover_sila1(
 SILA_MDNS_TYPE = "_sila._tcp.local."
 
 
-async def _discover_sila2(timeout: float = 5.0) -> list[SiLADevice]:
+async def _discover_sila2(
+  timeout: float = 5.0, deadline: Optional[float] = None
+) -> list[SiLADevice]:
   if not HAS_ZEROCONF:
     logger.warning("zeroconf not installed, skipping SiLA 2 discovery")
     return []
 
-  devices: list[SiLADevice] = []
+  if deadline is None:
+    deadline = anyio.current_time() + timeout
+  if anyio.current_time() >= deadline:
+    return []
+  callback_devices: list[SiLADevice] = []
+  callback_lock = threading.Lock()
 
   class _Listener(ServiceListener):
     def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
       info = zc.get_service_info(type_, name)
       if info and info.addresses and info.port is not None and info.server:
         host = socket.inet_ntoa(info.addresses[0])
-        devices.append(SiLADevice(host=host, port=info.port, name=info.server, sila_version=2))
+        device = SiLADevice(host=host, port=info.port, name=info.server, sila_version=2)
+        with callback_lock:
+          callback_devices.append(device)
 
     def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
       pass
@@ -610,16 +637,24 @@ async def _discover_sila2(timeout: float = 5.0) -> list[SiLADevice]:
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
       pass
 
-  loop = asyncio.get_running_loop()
-  zc = await loop.run_in_executor(None, Zeroconf)
-  try:
-    listener = _Listener()
-    await loop.run_in_executor(None, lambda: ServiceBrowser(zc, SILA_MDNS_TYPE, listener))
-    await asyncio.sleep(timeout)
-  finally:
-    await loop.run_in_executor(None, zc.close)
+  with anyio.CancelScope(deadline=deadline):
+    async with AsyncExitStackWithShielding() as stack:
+      # Cancellation cannot interrupt ownership transfer of a constructed Zeroconf.
+      with anyio.CancelScope(shield=True):
+        zc = await anyio.to_thread.run_sync(Zeroconf, abandon_on_cancel=False)
 
-  return devices
+        async def close_zeroconf() -> None:
+          await anyio.to_thread.run_sync(zc.close, abandon_on_cancel=False)
+
+        stack.push_shielded_async_callback(close_zeroconf)
+      listener = _Listener()
+      await anyio.to_thread.run_sync(
+        lambda: ServiceBrowser(zc, SILA_MDNS_TYPE, listener), abandon_on_cancel=False
+      )
+      await anyio.sleep_until(deadline)
+
+  with callback_lock:
+    return list(callback_devices)
 
 
 # ---------------------------------------------------------------------------
@@ -633,51 +668,76 @@ async def discover_iter(
 ) -> AsyncGenerator[SiLADevice, None]:
   """Async generator that yields :class:`SiLADevice` instances as they are found.
 
-  Runs SiLA 1 and SiLA 2 probes concurrently and yields each device immediately
-  upon discovery, without waiting for all probes to finish.
+  Runs SiLA 1 and SiLA 2 probes concurrently, then yields their results after all
+  discovery resources have left their scopes.
 
   Args:
-    timeout: How long to listen for responses, in seconds.
+    timeout: Overall discovery budget in seconds, starting on the first iteration.
     interface: Local IP address of the interface to use for SiLA 1 discovery.
       If None, auto-detects all link-local interfaces.
 
   Yields:
     SiLADevice instances as they are discovered.
   """
-  if interface:
-    interfaces = [interface]
-  else:
-    interfaces = _get_link_local_interfaces()
-    if not interfaces:
-      logger.debug("no link-local interfaces found, SiLA 1 discovery will be skipped")
+  deadline = anyio.current_time() + timeout
 
-  tasks = [
-    asyncio.ensure_future(c)
-    for c in [_discover_sila1(timeout=timeout, interface=iface) for iface in interfaces]
-    + [_discover_sila2(timeout)]
-  ]
+  send_stream, receive_stream = anyio.create_memory_object_stream[SiLADevice](100)
+
+  async def worker(send: anyio.abc.ObjectSendStream[SiLADevice], probe: Any, *args: Any) -> None:
+    async with send:
+      if anyio.current_time() >= deadline:
+        return
+      try:
+        devices = await probe(*args)
+        for device in devices:
+          await send.send(device)
+      except Exception:
+        return
+
+  async def sila1_probe(iface: str) -> list[SiLADevice]:
+    return await _discover_sila1(max(0, deadline - anyio.current_time()), iface)
 
   seen: set[tuple[str, int]] = set()
-  pending = set(tasks)
-  try:
-    while pending:
-      done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-      for t in done:
-        try:
-          result = t.result()
-        except Exception:
-          continue
-        if isinstance(result, list):
-          for d in result:
-            key = (d.host, d.port)
-            if key not in seen:
-              seen.add(key)
-              yield d
-  finally:
-    for t in pending:
-      t.cancel()
-    if pending:
-      await asyncio.gather(*pending, return_exceptions=True)
+  devices: list[SiLADevice] = []
+  async with anyio.create_task_group() as task_group:
+
+    async def detect_interfaces(send: MemoryObjectSendStream[SiLADevice]) -> None:
+      async with send:
+        interfaces: list[str] = []
+        with anyio.CancelScope(deadline=deadline):
+          interfaces = await anyio.to_thread.run_sync(
+            _get_link_local_interfaces, abandon_on_cancel=False
+          )
+        if not interfaces:
+          logger.debug("no link-local interfaces found, SiLA 1 discovery will be skipped")
+        for iface in interfaces:
+          remaining = deadline - anyio.current_time()
+          if remaining <= 0:
+            break
+          task_group.start_soon(worker, send.clone(), sila1_probe, iface)
+
+    if interface:
+      task_group.start_soon(worker, send_stream.clone(), sila1_probe, interface)
+    else:
+      task_group.start_soon(detect_interfaces, send_stream.clone())
+    task_group.start_soon(
+      worker,
+      send_stream.clone(),
+      _discover_sila2,
+      max(0, deadline - anyio.current_time()),
+      deadline,
+    )
+    await send_stream.aclose()
+
+    async with receive_stream:
+      async for device in receive_stream:
+        key = (device.host, device.port)
+        if key not in seen:
+          seen.add(key)
+          devices.append(device)
+
+  for device in devices:
+    yield device
 
 
 async def discover(
@@ -689,7 +749,7 @@ async def discover(
   Convenience wrapper around :func:`discover_iter` that collects all results into a list.
 
   Args:
-    timeout: How long to listen for responses, in seconds.
+    timeout: Overall discovery budget in seconds, starting when discovery begins.
     interface: Local IP address of the interface to use for SiLA 1 discovery.
       If None, auto-detects all link-local interfaces.
 
@@ -729,4 +789,4 @@ if __name__ == "__main__":
     if not found:
       print("No SiLA devices found.")
 
-  asyncio.run(main())
+  anyio.run(main)

@@ -21,18 +21,19 @@ refused once validation is active::
     cr.done()  # raises if the protocol stopped short of the recording
 """
 
-import asyncio
 import base64
 import json
 import logging
 import urllib.error
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Dict, Mapping, Optional, Tuple
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.capture import (
   CaptureReader,
   Command,
@@ -85,12 +86,16 @@ class _RedirectHandler(urllib.request.HTTPRedirectHandler):
 
 @dataclass
 class HTTPRawCommand(Command):
-  """A raw HTTP exchange; binary bodies are base64 encoded for capture."""
+  """A raw HTTP exchange; binary bodies are base64 encoded for capture.
+
+  Response headers are optional so captures made without them remain replayable.
+  """
 
   path: str
   request_base64: Optional[str]
   status: int
   response_base64: str
+  response_headers: Optional[Dict[str, str]] = None
 
 
 class HTTPError(RuntimeError):
@@ -136,12 +141,11 @@ class HTTPCommand(Command):
     self.status = status
 
 
-class HTTP:
+class HTTP(HasLifespan):
   """Asynchronous HTTP transport for JSON, text, and binary responses.
 
-  The standard-library HTTP client is blocking, so requests run on a private
-  single-thread executor. The executor and a request lock keep a device's
-  request/response stream ordered without blocking the asyncio event loop.
+  The standard-library HTTP client is blocking, so requests run in non-abandoning
+  workers. A shared lock orders each complete exchange and its capture.
 
   Every exchange is recorded to the capture log — successes and refusals both,
   so a driver's error handling replays against the shapes it saw live.
@@ -154,6 +158,7 @@ class HTTP:
     headers: Optional[Mapping[str, str]] = None,
     timeout: float = 30.0,
   ):
+    super().__init__()
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new HTTP object while capture or validation is active")
     if timeout <= 0:
@@ -163,41 +168,35 @@ class HTTP:
     self.base_url = base_url.rstrip("/")
     self.headers = dict(headers or {})
     self.timeout = timeout
-    self._executor: Optional[ThreadPoolExecutor] = None
-    # Built by `setup`, not here. An asyncio primitive binds to a loop when it is constructed, and
-    # a transport is built in ordinary synchronous code - where on Python 3.9 there may be no loop
-    # to bind to, and on any version there may be a different one than the requests will run in.
-    # Nothing needs it before `setup`, which is also where the executor comes from.
-    self._request_lock: Optional[asyncio.Lock] = None
+    self._request_lock = anyio.Lock()
+    self._limiter = anyio.CapacityLimiter(1)
+    self._active = False
 
-  def _require_lock(self) -> asyncio.Lock:
-    """The lock that orders requests on this transport.
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Admit exchanges until the scoped transport closes."""
+    await super()._enter_lifespan(stack)
+    self._active = True
+    stack.push_shielded_async_callback(self._close)
 
-    Returns:
-      The lock, which `setup` built.
+  async def _close(self) -> None:
+    """Prevent new dispatch and wait for the complete exchange in progress."""
+    self._active = False
+    async with self._request_lock:
+      pass
 
-    Raises:
-      RuntimeError: If the transport was never set up, which is also what leaves it without one.
-    """
-    if self._request_lock is None:
+  def _require_active(self) -> None:
+    """Reject requests outside the transport's lifespan."""
+    if not self._active:
       raise RuntimeError(
-        f"HTTP transport for '{self.human_readable_device_name}' is not set up; call setup() first"
+        f"HTTP transport for '{self.human_readable_device_name}' is not active; "
+        "enter its lifespan first"
       )
-    return self._request_lock
-
-  async def setup(self) -> None:
-    if self._executor is None:
-      self._executor = ThreadPoolExecutor(max_workers=1)
-    if self._request_lock is None:
-      self._request_lock = asyncio.Lock()
-
-  async def stop(self) -> None:
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
 
   def _url(self, path: str) -> str:
-    return urllib.parse.urljoin(f"{self.base_url}/", path.lstrip("/"))
+    url = urllib.parse.urljoin(f"{self.base_url}/", path.lstrip("/"))
+    if _origin(self.base_url) != _origin(url):
+      raise ValueError("HTTP request must stay on the device's origin")
+    return url
 
   def _make_request(
     self,
@@ -219,8 +218,9 @@ class HTTP:
       headers["Content-Type"] = "application/json"
 
     request = urllib.request.Request(url, headers=headers, data=body, method=method)
+    opener = urllib.request.build_opener(_RedirectHandler(True))
     try:
-      with urllib.request.urlopen(request, timeout=self.timeout) as response:
+      with opener.open(request, timeout=self.timeout) as response:
         return response.status, response.read().decode("utf-8")
     except urllib.error.HTTPError as error:
       return error.code, error.read().decode("utf-8", errors="replace")
@@ -232,10 +232,7 @@ class HTTP:
     data: Optional[Dict[str, Any]] = None,
   ) -> Dict[str, Any]:
     """Send a JSON request and return the decoded JSON object, raising on non-2xx."""
-    if self._executor is None:
-      raise RuntimeError(
-        f"HTTP transport for '{self.human_readable_device_name}' is not set up; call setup() first"
-      )
+    self._require_active()
 
     normalized_method = method.upper()
     request_json = json.dumps(data, sort_keys=True) if data is not None else None
@@ -248,42 +245,43 @@ class HTTP:
       request_json or "",
     )
 
-    async with self._require_lock():
-      loop = asyncio.get_running_loop()
-      status, body_text = await loop.run_in_executor(
-        self._executor,
-        partial(self._make_request, normalized_method, path, data),
-      )
-
-    # Record the exchange before a refusal raises, so the capture holds the
-    # failed shapes a driver's error handling is written against.
-    if status >= 400:
-      capturer.record(
-        HTTPCommand(
-          device_id=self.base_url,
-          method=normalized_method,
-          path=path,
-          request=request_json,
-          response=body_text,
-          status=status,
+    async with self._request_lock:
+      self._require_active()
+      await anyio.lowlevel.checkpoint()
+      self._require_active()
+      with anyio.CancelScope(shield=True):
+        status, body_text = await anyio.to_thread.run_sync(
+          partial(self._make_request, normalized_method, path, data), limiter=self._limiter
         )
-      )
-      logger.log(LOG_LEVEL_IO, "[%s] response %s %s", self.base_url, status, body_text)
-      raise HTTPError(normalized_method, self._url(path), status, body_text)
+        # Capture before the next exchange, even for a refusal or cancelled caller.
+        if status >= 400:
+          capturer.record(
+            HTTPCommand(
+              device_id=self.base_url,
+              method=normalized_method,
+              path=path,
+              request=request_json,
+              response=body_text,
+              status=status,
+            )
+          )
+          logger.log(LOG_LEVEL_IO, "[%s] response %s %s", self.base_url, status, body_text)
+          raise HTTPError(normalized_method, self._url(path), status, body_text)
 
-    response = {} if body_text == "" else dict(json.loads(body_text))
-    response_json = json.dumps(response, sort_keys=True)
-    logger.log(LOG_LEVEL_IO, "[%s] response %s", self.base_url, response_json)
-    capturer.record(
-      HTTPCommand(
-        device_id=self.base_url,
-        method=normalized_method,
-        path=path,
-        request=request_json,
-        response=response_json,
-        status=status,
-      )
-    )
+        response = {} if body_text == "" else dict(json.loads(body_text))
+        response_json = json.dumps(response, sort_keys=True)
+        logger.log(LOG_LEVEL_IO, "[%s] response %s", self.base_url, response_json)
+        capturer.record(
+          HTTPCommand(
+            device_id=self.base_url,
+            method=normalized_method,
+            path=path,
+            request=request_json,
+            response=response_json,
+            status=status,
+          )
+        )
+      await anyio.lowlevel.checkpoint()
     return response
 
   def _make_raw_request(
@@ -327,22 +325,23 @@ class HTTP:
     Requests are ordered with JSON requests on the same transport. No requests are retried.
     Authentication headers are excluded from logs and captures.
     """
-    if self._executor is None:
-      raise RuntimeError(
-        f"HTTP transport for '{self.human_readable_device_name}' is not set up; call setup() first"
-      )
+    self._require_active()
     method = method.upper()
-    async with self._require_lock():
-      loop = asyncio.get_running_loop()
-      response = await loop.run_in_executor(
-        self._executor,
-        partial(self._make_raw_request, method, path, body, headers or {}, allow_redirects),
-      )
-      if capturer.capture_active:
-        command = await loop.run_in_executor(
-          self._executor, partial(self._encode_raw_capture, method, path, body, response)
+    async with self._request_lock:
+      self._require_active()
+      await anyio.lowlevel.checkpoint()
+      self._require_active()
+      with anyio.CancelScope(shield=True):
+        response = await anyio.to_thread.run_sync(
+          partial(self._make_raw_request, method, path, body, headers or {}, allow_redirects),
+          limiter=self._limiter,
         )
-        capturer.record(command)
+        if capturer.capture_active:
+          command = await anyio.to_thread.run_sync(
+            partial(self._encode_raw_capture, method, path, body, response), limiter=self._limiter
+          )
+          capturer.record(command)
+      await anyio.lowlevel.checkpoint()
     logger.log(
       LOG_LEVEL_IO,
       "[%s] %s %s: HTTP %d, %d bytes",
@@ -366,15 +365,18 @@ class HTTP:
       request_base64=base64.b64encode(body).decode("ascii") if body is not None else None,
       status=response.status,
       response_base64=base64.b64encode(response.body).decode("ascii"),
+      response_headers={
+        key.lower(): value
+        for key, value in response.headers.items()
+        if key.lower() not in ("authorization", "proxy-authorization", "set-cookie")
+      },
     )
 
 
 class HTTPValidator(HTTP):
   """Replays a capture file instead of reaching the device.
 
-  Overrides the single :meth:`request` seam: each call consumes the next
-  recorded exchange, refuses on a method/path/request-body mismatch, and
-  re-raises a recorded non-2xx as the same :class:`HTTPError`.
+  Replays JSON and raw exchanges without opening a network connection.
   """
 
   def __init__(
@@ -393,11 +395,40 @@ class HTTPValidator(HTTP):
     )
     self.cr = cr
 
-  async def setup(self) -> None:
-    """No connection to open."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Validate inside a scope without acquiring a network worker."""
 
-  async def stop(self) -> None:
-    """No connection to close."""
+  async def request_raw(
+    self,
+    method: str,
+    path: str,
+    body: Optional[bytes] = None,
+    *,
+    headers: Optional[Mapping[str, str]] = None,
+    allow_redirects: bool = True,
+  ) -> HTTPResponse:
+    """Replay a raw exchange using the recorded status and binary body."""
+    method = method.upper()
+    command = self.cr.next_command().copy()
+    recorded = HTTPRawCommand(**command)
+    if not (
+      recorded.module == "http"
+      and recorded.device_id == self.base_url
+      and recorded.action == method
+      and recorded.path == path
+    ):
+      raise ValidationError(
+        f"Expected http {method} {path} to {self.base_url}, "
+        f"got {recorded.module} {recorded.action} {recorded.path} to {recorded.device_id}"
+      )
+    request_base64 = base64.b64encode(body).decode("ascii") if body is not None else None
+    if recorded.request_base64 != request_base64:
+      raise ValidationError(f"Request body mismatch on {method} {path}")
+    return HTTPResponse(
+      status=recorded.status,
+      body=base64.b64decode(recorded.response_base64),
+      headers=dict(recorded.response_headers or {}),
+    )
 
   async def request(
     self,
