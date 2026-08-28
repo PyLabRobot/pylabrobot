@@ -9,6 +9,7 @@ from pylabrobot.hettich.centrifuge import (
   ENQ,
   EOT,
   ETX,
+  MIKRO_220_ROBOTIC_ROTORS,
   NAK,
   STX,
   HettichCentrifugeError,
@@ -18,9 +19,8 @@ from pylabrobot.hettich.centrifuge import (
   HettichMikro220RoboticCentrifuge,
   HettichRoboticCentrifuge,
   HettichRotanta460RoboticCentrifuge,
-  HettichRotina380RRoboticCentrifuge,
   HettichRotina380RoboticCentrifuge,
-  MIKRO_220_ROBOTIC_ROTORS,
+  HettichRotina380RRoboticCentrifuge,
 )
 from pylabrobot.io.serial import Serial
 
@@ -85,6 +85,9 @@ class HettichFrameTests(unittest.TestCase):
       self.device._build_enquiry("00604"),
       bytes([0x04, 0x5D, 0x30, 0x30, 0x36, 0x30, 0x34, 0x05]),
     )
+
+  def test_transaction_lock_is_created_lazily(self) -> None:
+    self.assertIsNone(self.device._transaction_lock)
 
   def test_build_select_matches_manual_example(self) -> None:
     self.assertEqual(

@@ -1,4 +1,5 @@
 from .centrifuge import (
+  MIKRO_220_ROBOTIC_ROTORS,
   CentrifugeStatus,
   HatchStatus,
   HettichCentrifugeError,
@@ -8,9 +9,8 @@ from .centrifuge import (
   HettichMikro220RoboticCentrifuge,
   HettichRoboticCentrifuge,
   HettichRotanta460RoboticCentrifuge,
-  HettichRotina380RRoboticCentrifuge,
   HettichRotina380RoboticCentrifuge,
-  MIKRO_220_ROBOTIC_ROTORS,
+  HettichRotina380RRoboticCentrifuge,
   RotorSpecification,
 )
 

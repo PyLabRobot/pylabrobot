@@ -311,7 +311,7 @@ class HettichRoboticCentrifuge(ABC):
       dsrdtr=False,
       xonxoff=False,
     )
-    self._transaction_lock = asyncio.Lock()
+    self._transaction_lock: Optional[asyncio.Lock] = None
     self.device_type_code: Optional[int] = None
     self.device_type: Optional[str] = None
     self.software_version: Optional[str] = None
@@ -505,9 +505,15 @@ class HettichRoboticCentrifuge(ABC):
       f"SELECT {parameter} failed after {self.retries} attempts: {last_error}"
     ) from last_error
 
+  def _get_transaction_lock(self) -> asyncio.Lock:
+    """Return the serial transaction lock, creating it inside the active event loop."""
+    if self._transaction_lock is None:
+      self._transaction_lock = asyncio.Lock()
+    return self._transaction_lock
+
   async def _enquire_parameter(self, parameter: str, allow_nak: bool = True) -> int:
     """Read a parameter while serializing access to the bus."""
-    async with self._transaction_lock:
+    async with self._get_transaction_lock():
       value = await self._request_enquiry(parameter)
       if value is not None:
         return value
@@ -520,7 +526,7 @@ class HettichRoboticCentrifuge(ABC):
 
   async def _select_parameter(self, parameter: str, value: int) -> None:
     """Write a parameter and decode SIOF when the centrifuge returns NAK."""
-    async with self._transaction_lock:
+    async with self._get_transaction_lock():
       acknowledged = await self._request_select(parameter, value)
       if acknowledged:
         return
