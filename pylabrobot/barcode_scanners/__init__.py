@@ -7,4 +7,4 @@ warnings.warn(
   stacklevel=2,
 )
 
-from pylabrobot.legacy.barcode_scanners import *  # noqa: F401,F403,E402
+from pylabrobot.legacy.barcode_scanners import *  # noqa: E402

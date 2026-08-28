@@ -118,6 +118,7 @@ events.
 | --- | --- |
 | `legacy.machines.Machine` | `machine.setup`, `machine.stop` |
 | `legacy.storage.Incubator` | `incubator.fetch_plate`, `incubator.take_in_plate` |
+| `high_res.sample_storage.HighResSampleStorage` | incubator fetch/take-in/nest transfer; temperature, humidity, CO2, and O2 control when supported |
 | `legacy.liquid_handling.LiquidHandler` | resource pickup/move/drop; tip pickup/drop; 96-head tip pickup/drop; aspirate; dispense |
 | `legacy.shaking.Shaker` | `shaker.shake`, `shaker.stop_shaking` |
 | `legacy.temperature_controlling.TemperatureController` | set temperature, wait for temperature, deactivate |
@@ -133,7 +134,8 @@ Detailed operation references:
 - [Machine lifecycle](event-bus/machine-lifecycle.md)
 - [Incubator](event-bus/incubator.md)
 - [LiquidHandler](event-bus/liquid-handler.md)
-- [Shaker and temperature controller](event-bus/thermal-and-shaking.md)
+- [Shaker and environmental controllers](event-bus/thermal-and-shaking.md)
+- [HighRes sample storage](../high_res/sample-storage/events.md)
 - [VSpin centrifuge and Access2 loader](../agilent/vspin/events.md)
 - [Diagnostic transports](event-bus/diagnostic-transports.md)
 - [Canonical schema for every operation above](../../contributor_guide/event-schemas.md)
@@ -153,8 +155,8 @@ event-bus/diagnostic-transports
 
 ### Incubator
 
-`incubator.fetch_plate` and `incubator.take_in_plate` include `device`, the moved plate in
-`resources`, and physical `source` and `destination` resource references.
+`incubator.fetch_plate`, `incubator.take_in_plate`, and `incubator.transfer_plate` include `device`,
+the moved plate in `resources`, and physical `source` and `destination` resource references.
 
 ### LiquidHandler
 
@@ -164,11 +166,13 @@ operated resources plus `liquid_operations`, one record per channel, with `chann
 `resource`, optional owning `plate`, and `volume`. Tip events similarly include direct tip
 locations and per-channel `tip_operations`.
 
-### Shaker and TemperatureController
+### Shaker and environmental controllers
 
 Shaker events include `speed_rpm` and optional `duration`. Temperature-controller events include
-`target_temperature` where applicable. Both frontends are `ResourceHolder`s: when a
-resource is loaded at operation start, it is included as the direct resource in `resources`.
+`target_temperature` where applicable. The legacy shaker and temperature frontends are
+`ResourceHolder`s: when a resource is loaded at operation start, it is included as the direct
+resource in `resources`. HighRes sample-store humidity and gas targets are fractions and use an
+empty `resources` list because the controller acts on the store environment rather than one plate.
 
 ### Brooks PreciseFlex
 
