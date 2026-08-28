@@ -3,6 +3,7 @@ from inspect import isabstract
 from typing import List, TypeVar, cast
 from unittest.mock import AsyncMock, patch
 
+from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.hettich.centrifuge import (
   ACK,
   ENQ,
@@ -558,6 +559,80 @@ class HettichProtocolTests(unittest.IsolatedAsyncioTestCase):
     await device.stop_spin(timeout=1)
 
     self.assertEqual(telegrams(device)[2], device._build_select("00521", 0x0001))
+
+
+class HettichEventTests(unittest.IsolatedAsyncioTestCase):
+  async def test_spin_uses_vspin_event_name_and_field_conventions(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00634", 0x01E8),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00604", 2000),
+        enquiry_reply("00602", 12),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00634", 0x01F0),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ],
+      name="hettich_centrifuge",
+      rotor_catalog_number="2334",
+    )
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await device.spin(duration=30, speed=2000, timeout=60)
+
+    self.assertEqual(
+      [event.name for event in events],
+      ["centrifuge.spin.started", "centrifuge.spin.completed"],
+    )
+    started, completed = events
+    self.assertEqual(started.context["operation_id"], completed.context["operation_id"])
+    self.assertEqual(started.data["device"]["name"], "hettich_centrifuge")
+    self.assertEqual(started.data["resources"], [])
+    self.assertEqual(started.data["bucket_resources"], [])
+    self.assertEqual(started.data["speed_rpm"], 2000)
+    self.assertEqual(started.data["duration"], 30)
+    self.assertAlmostEqual(
+      cast(float, started.data["relative_centrifugal_force"]),
+      device.rcf_at_speed(2000),
+    )
+    self.assertNotIn("speed", started.data)
+    self.assertNotIn("duration_seconds", started.data)
+
+  async def test_spin_failure_emits_requested_parameters(self) -> None:
+    device = make_device([], name="hettich_centrifuge")
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      with self.assertRaisesRegex(ValueError, "duration"):
+        await device.spin(0, 2000)
+
+    self.assertEqual(
+      [event.name for event in events],
+      ["centrifuge.spin.started", "centrifuge.spin.failed"],
+    )
+    started, failed = events
+    self.assertEqual(started.context["operation_id"], failed.context["operation_id"])
+    self.assertEqual(started.data["speed_rpm"], 2000)
+    self.assertEqual(started.data["duration"], 0)
+    self.assertNotIn("relative_centrifugal_force", started.data)
+    self.assertEqual(failed.data["error_type"], "ValueError")
 
 
 if __name__ == "__main__":

@@ -125,6 +125,7 @@ events.
 | `legacy.centrifuge.Loader` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
 | `agilent.vspin.VSpin` | `centrifuge.spin` |
 | `agilent.vspin.Access2` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
+| `hettich.HettichRoboticCentrifuge` | `centrifuge.spin` |
 | `brooks.precise_flex.PreciseFlex` | lifecycle, fault/home/freedrive, joint/cartesian/rail/gripper motion, pick/drop, park |
 
 Detailed operation references:
@@ -133,7 +134,7 @@ Detailed operation references:
 - [Incubator](event-bus/incubator.md)
 - [LiquidHandler](event-bus/liquid-handler.md)
 - [Shaker and temperature controller](event-bus/thermal-and-shaking.md)
-- [VSpin centrifuge and Access2 loader](../agilent/vspin/events.md)
+- [VSpin and Hettich centrifuges, and the Access2 loader](../agilent/vspin/events.md)
 - [Diagnostic transports](event-bus/diagnostic-transports.md)
 - [Canonical schema for every operation above](../../contributor_guide/event-schemas.md)
 

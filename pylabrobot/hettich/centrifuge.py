@@ -5,8 +5,9 @@ import logging
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional
 
+from pylabrobot.events import device_reference, event_operation
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger(__name__)
@@ -255,6 +256,7 @@ class HettichRoboticCentrifuge(ABC):
     retries: int = 3,
     poll_interval: float = 0.5,
     rotor_catalog_number: Optional[str] = None,
+    name: str = "centrifuge",
   ) -> None:
     """Create a Hettich robotic centrifuge connection.
 
@@ -267,6 +269,7 @@ class HettichRoboticCentrifuge(ABC):
       poll_interval: Delay between state requests while waiting for motion.
       rotor_catalog_number: Hettich catalog number for the installed rotor. The
         concrete model class defines which catalog numbers are supported.
+      name: Stable name used to identify this centrifuge in events.
     """
     if address not in _VALID_ADDRESSES:
       raise ValueError("address must be one of A-Z, [, \\, or ]")
@@ -286,6 +289,7 @@ class HettichRoboticCentrifuge(ABC):
         raise ValueError(f"unsupported rotor catalog number; expected one of {supported}")
       raise ValueError(f"rotor specifications are not available for {configuration.name}")
 
+    self.name = name
     self.address = address
     self.retries = retries
     self.poll_interval = poll_interval
@@ -888,56 +892,69 @@ class HettichRoboticCentrifuge(ABC):
     once the measured rotor speed reaches ``speed``. Timing has one-second
     resolution, matching the device protocol.
     """
-    if not 1 <= duration <= MAXIMUM_DURATION:
-      raise ValueError(f"duration must be 1..{MAXIMUM_DURATION} seconds")
-    if timeout is not None and timeout <= duration:
-      raise ValueError("timeout must exceed duration to allow for acceleration and braking")
+    operation_data: dict[str, Any] = {
+      "device": device_reference(self, name=self.name),
+      "resources": [],
+      "bucket_resources": [],
+      "speed_rpm": speed,
+      "duration": duration,
+    }
+    if (
+      self.rotor_specification is not None and 0 <= speed <= self.rotor_specification.maximum_speed
+    ):
+      operation_data["relative_centrifugal_force"] = self.rotor_specification.rcf_at_speed(speed)
 
-    maximum_run_up_time = await self._enquire_parameter(MAXIMUM_RUN_UP_TIME_PARAMETER)
-    maximum_target_duration = MAXIMUM_DURATION - maximum_run_up_time
-    if duration > maximum_target_duration:
-      raise ValueError(
-        f"duration must not exceed {maximum_target_duration} seconds with the centrifuge's "
-        f"configured maximum run-up time of {maximum_run_up_time} seconds"
-      )
-    cycle_timeout: float
-    if timeout is None:
-      maximum_run_down_time = await self._enquire_parameter(MAXIMUM_RUN_DOWN_TIME_PARAMETER)
-      cycle_timeout = (
-        duration + maximum_run_up_time + maximum_run_down_time + DEFAULT_TIMEOUT_MARGIN
-      )
-    else:
-      cycle_timeout = timeout
+    with event_operation("centrifuge.spin", **operation_data):
+      if not 1 <= duration <= MAXIMUM_DURATION:
+        raise ValueError(f"duration must be 1..{MAXIMUM_DURATION} seconds")
+      if timeout is not None and timeout <= duration:
+        raise ValueError("timeout must exceed duration to allow for acceleration and braking")
 
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + cycle_timeout
-    initial_run_time = duration + maximum_run_up_time
-    await self._start_spin(run_time=initial_run_time, speed=speed)
-    try:
-      remaining = deadline - loop.time()
-      if remaining <= 0:
-        raise TimeoutError(
-          f"Centrifuge did not reach {speed} rpm within the {cycle_timeout}-second timeout"
-        )
-      elapsed_at_target = await self._wait_for_target_speed(speed=speed, timeout=remaining)
-      end_time = elapsed_at_target + duration
-      if end_time > MAXIMUM_DURATION:
+      maximum_run_up_time = await self._enquire_parameter(MAXIMUM_RUN_UP_TIME_PARAMETER)
+      maximum_target_duration = MAXIMUM_DURATION - maximum_run_up_time
+      if duration > maximum_target_duration:
         raise ValueError(
-          "duration is too long to exclude acceleration within the device's maximum run time"
+          f"duration must not exceed {maximum_target_duration} seconds with the centrifuge's "
+          f"configured maximum run-up time of {maximum_run_up_time} seconds"
         )
-      await self._select_parameter(RUN_TIME_PARAMETER, end_time)
-      await self._select_parameter(ACTIVATE_PARAMETERS_COMMAND, 0x0001)
+      cycle_timeout: float
+      if timeout is None:
+        maximum_run_down_time = await self._enquire_parameter(MAXIMUM_RUN_DOWN_TIME_PARAMETER)
+        cycle_timeout = (
+          duration + maximum_run_up_time + maximum_run_down_time + DEFAULT_TIMEOUT_MARGIN
+        )
+      else:
+        cycle_timeout = timeout
 
-      remaining = deadline - loop.time()
-      if remaining <= 0:
-        raise TimeoutError(f"Centrifuge cycle exceeded its {cycle_timeout}-second timeout")
-      await self._wait_for_standstill(timeout=remaining, motion_observed=True)
-    except BaseException:
+      loop = asyncio.get_running_loop()
+      deadline = loop.time() + cycle_timeout
+      initial_run_time = duration + maximum_run_up_time
+      await self._start_spin(run_time=initial_run_time, speed=speed)
       try:
-        await self.stop_spin()
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+          raise TimeoutError(
+            f"Centrifuge did not reach {speed} rpm within the {cycle_timeout}-second timeout"
+          )
+        elapsed_at_target = await self._wait_for_target_speed(speed=speed, timeout=remaining)
+        end_time = elapsed_at_target + duration
+        if end_time > MAXIMUM_DURATION:
+          raise ValueError(
+            "duration is too long to exclude acceleration within the device's maximum run time"
+          )
+        await self._select_parameter(RUN_TIME_PARAMETER, end_time)
+        await self._select_parameter(ACTIVATE_PARAMETERS_COMMAND, 0x0001)
+
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+          raise TimeoutError(f"Centrifuge cycle exceeded its {cycle_timeout}-second timeout")
+        await self._wait_for_standstill(timeout=remaining, motion_observed=True)
       except BaseException:
-        logger.exception("[Hettich %s] failed to stop after spin() failed", self.io.port)
-      raise
+        try:
+          await self.stop_spin()
+        except BaseException:
+          logger.exception("[Hettich %s] failed to stop after spin() failed", self.io.port)
+        raise
 
   async def stop_spin(self, timeout: float = 300.0) -> None:
     """Emergency-stop an active run and wait for standstill.
