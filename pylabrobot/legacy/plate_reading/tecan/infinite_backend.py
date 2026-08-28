@@ -595,7 +595,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
 
     await self._move_plate_transport("IN")
 
-  async def get_plate_position(self) -> TecanInfinitePlatePosition:
+  async def request_plate_position(self) -> TecanInfinitePlatePosition:
     """Read the position that the reader reports for the plate transport.
 
     The result can be ``IN``, ``OUT``, or another device state. It does not show whether a
@@ -603,12 +603,12 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """
 
     command = "?ABSOLUTE MTP,POS"
-    response = await self._query_state(command)
+    response = await self._request_state(command)
     if response not in self._PLATE_POSITIONS:
       raise TecanInfiniteResponseError(command, [response], "contained an unknown position")
     return cast(TecanInfinitePlatePosition, response)
 
-  async def get_plate_sensor_state(self) -> TecanInfinitePlateSensorState:
+  async def request_plate_sensor_state(self) -> TecanInfinitePlateSensorState:
     """Read the plate-position sensor state.
 
     After a successful inward movement, ``FREE`` means that the sensor position is unoccupied.
@@ -619,25 +619,25 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """
 
     command = "?SENSOR PLATEPOS"
-    response = await self._query_state(command)
+    response = await self._request_state(command)
     if response not in {"FREE", "TAKEN", "UNDEFINED"}:
       raise TecanInfiniteResponseError(command, [response], "contained an unknown sensor state")
     return cast(TecanInfinitePlateSensorState, response)
 
-  async def get_current_temperature(self) -> float:
+  async def request_current_temperature(self) -> float:
     """Read the current plate temperature in degrees Celsius."""
 
-    return await self._get_temperature("CURRENT")
+    return await self._request_temperature("CURRENT")
 
-  async def get_temperature_target(self) -> float:
+  async def request_target_temperature(self) -> float:
     """Read the target plate temperature in degrees Celsius."""
 
-    return await self._get_temperature("TARGET")
+    return await self._request_temperature("TARGET")
 
-  async def get_temperature_status(self) -> TecanInfiniteTemperatureStatus:
+  async def request_temperature_status(self) -> TecanInfiniteTemperatureStatus:
     """Read whether plate-temperature control is on or off."""
 
-    return await self._get_temperature_status()
+    return await self._request_temperature_status()
 
   async def set_temperature(self, temperature: float) -> None:
     """Set the plate-temperature target. Start temperature control.
@@ -650,7 +650,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
 
     raw_temperature = self._encode_temperature(temperature)
     await self._send_control_command(f"TEMPERATURE PLATE,TARGET={raw_temperature}")
-    applied_temperature = await self._get_temperature("TARGET", recover_on_timeout=False)
+    applied_temperature = await self._request_temperature("TARGET", recover_on_timeout=False)
     if applied_temperature != raw_temperature / 10.0:
       raise TecanInfiniteResponseError(
         "?TEMPERATURE PLATE,TARGET",
@@ -659,7 +659,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       )
 
     await self._send_control_command("TEMPERATURE PLATE,STATUS=ON")
-    applied_status = await self._get_temperature_status(recover_on_timeout=False)
+    applied_status = await self._request_temperature_status(recover_on_timeout=False)
     if applied_status != "ON":
       raise TecanInfiniteResponseError(
         "?TEMPERATURE PLATE,STATUS",
@@ -671,7 +671,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """Stop plate-temperature control. Confirm that the reader reports ``OFF``."""
 
     await self._send_control_command("TEMPERATURE PLATE,STATUS=OFF")
-    applied_status = await self._get_temperature_status(recover_on_timeout=False)
+    applied_status = await self._request_temperature_status(recover_on_timeout=False)
     if applied_status != "OFF":
       raise TecanInfiniteResponseError(
         "?TEMPERATURE PLATE,STATUS",
@@ -679,19 +679,19 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         "did not confirm that temperature control was disabled",
       )
 
-  async def get_shaking_mode(self) -> TecanInfiniteShakingMode:
+  async def request_shaking_mode(self) -> TecanInfiniteShakingMode:
     """Read the configured shaking mode."""
 
     command = "?SHAKING MODE"
-    response = await self._query_state(command)
+    response = await self._request_state(command)
     if response not in {"LINEAR", "ORBITAL"}:
       raise TecanInfiniteResponseError(command, [response], "contained an unknown shaking mode")
     return cast(TecanInfiniteShakingMode, response)
 
-  async def get_shaking_duration(self) -> Optional[int]:
+  async def request_shaking_duration(self) -> Optional[int]:
     """Read the shaking duration in seconds. Return ``None`` if the reader reports ``-1``."""
 
-    duration = await self._get_integer_state("?SHAKING TIME", "shaking duration")
+    duration = await self._request_integer_state("?SHAKING TIME", "shaking duration")
     if duration == -1:
       return None
     if duration < 0:
@@ -700,10 +700,10 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       )
     return duration
 
-  async def get_shaking_amplitude(self) -> Optional[float]:
+  async def request_shaking_amplitude(self) -> Optional[float]:
     """Read the shaking amplitude in millimeters. Return ``None`` if the reader reports ``-1``."""
 
-    raw_amplitude = await self._get_integer_state("?SHAKING AMPLITUDE", "shaking amplitude")
+    raw_amplitude = await self._request_integer_state("?SHAKING AMPLITUDE", "shaking amplitude")
     if raw_amplitude == -1:
       return None
     if raw_amplitude < 0:
@@ -768,10 +768,10 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         "SHAKING ON", terminal, "did not finish with the standby response"
       )
 
-  async def get_instrument_status(self) -> TecanInfiniteInstrumentStatus:
+  async def request_instrument_status(self) -> TecanInfiniteInstrumentStatus:
     """Read the reader status. Return the interpreted state and the unmodified response."""
 
-    response = await self._query_state("QQ")
+    response = await self._request_state("QQ")
     if response in self._STATUS_STATES:
       state = self._STATUS_STATES[response]
     elif response.startswith("MSG"):
@@ -786,14 +786,14 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         state = "busy"
     return TecanInfiniteInstrumentStatus(state=state, raw=response)
 
-  async def is_busy(self) -> bool:
+  async def request_is_busy(self) -> bool:
     """Return whether the reader reports a busy state.
 
     Return ``False`` for a known standby or power state. Raise an error if the response does not
     identify a known busy or non-busy state.
     """
 
-    status = await self.get_instrument_status()
+    status = await self.request_instrument_status()
     if status.state in {"busy", "busy_in_background"}:
       return True
     if status.state in {"standby", "power_down", "power_up", "parked"}:
@@ -834,7 +834,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
           command, terminal, "did not finish with the standby response"
         )
 
-    applied_position = await self._query_state("?ABSOLUTE MTP,POS", recover_on_timeout=False)
+    applied_position = await self._request_state("?ABSOLUTE MTP,POS", recover_on_timeout=False)
     if applied_position != destination:
       raise TecanInfiniteResponseError(
         "?ABSOLUTE MTP,POS",
@@ -842,7 +842,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         f"did not confirm the requested {destination} position",
       )
 
-  async def _get_temperature(
+  async def _request_temperature(
     self,
     reading: Literal["CURRENT", "TARGET"],
     *,
@@ -856,7 +856,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """
 
     command = f"?TEMPERATURE PLATE,{reading}"
-    response = await self._query_state(command, recover_on_timeout=recover_on_timeout)
+    response = await self._request_state(command, recover_on_timeout=recover_on_timeout)
     try:
       return int(response) / 10.0
     except ValueError as error:
@@ -864,7 +864,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         command, [response], "did not contain a temperature in tenths of a degree Celsius"
       ) from error
 
-  async def _get_temperature_status(
+  async def _request_temperature_status(
     self,
     *,
     recover_on_timeout: bool = True,
@@ -875,7 +875,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """
 
     command = "?TEMPERATURE PLATE,STATUS"
-    response = await self._query_state(command, recover_on_timeout=recover_on_timeout)
+    response = await self._request_state(command, recover_on_timeout=recover_on_timeout)
     if response not in {"ON", "OFF"}:
       raise TecanInfiniteResponseError(
         command, [response], "contained an unknown temperature status"
@@ -895,12 +895,12 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       raise ValueError("Temperature must use 0.1 degree Celsius increments.")
     return raw_temperature
 
-  async def _get_integer_state(
+  async def _request_integer_state(
     self, command: str, description: str, *, recover_on_timeout: bool = True
   ) -> int:
     """Read one integer-valued device state."""
 
-    response = await self._query_state(command, recover_on_timeout=recover_on_timeout)
+    response = await self._request_state(command, recover_on_timeout=recover_on_timeout)
     try:
       return int(response)
     except ValueError as error:
@@ -912,7 +912,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """Set the shaking mode. Confirm the applied mode from the reader response."""
 
     await self._send_control_command(f"SHAKING MODE={mode}")
-    applied = await self._query_state("?SHAKING MODE", recover_on_timeout=False)
+    applied = await self._request_state("?SHAKING MODE", recover_on_timeout=False)
     if applied != mode:
       raise TecanInfiniteResponseError(
         "?SHAKING MODE", [applied], f"did not match the requested mode {mode}"
@@ -922,7 +922,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """Set the amplitude in thousandths of a millimeter. Confirm the applied value."""
 
     await self._send_control_command(f"SHAKING AMPLITUDE={raw_amplitude}")
-    applied = await self._get_integer_state(
+    applied = await self._request_integer_state(
       "?SHAKING AMPLITUDE", "shaking amplitude", recover_on_timeout=False
     )
     if applied != raw_amplitude:
@@ -936,7 +936,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """Set the shaking duration. Confirm the applied value from the reader response."""
 
     await self._send_control_command(f"SHAKING TIME={duration}")
-    applied = await self._get_integer_state(
+    applied = await self._request_integer_state(
       "?SHAKING TIME", "shaking duration", recover_on_timeout=False
     )
     if applied != duration:
@@ -975,7 +975,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     ):
       raise TecanInfiniteResponseError(command, responses, "did not report a timed busy state")
 
-  async def _query_state(self, command: str, *, recover_on_timeout: bool = True) -> str:
+  async def _request_state(self, command: str, *, recover_on_timeout: bool = True) -> str:
     """Send one read-only query. Require one response frame that is not a device error.
 
     If ``recover_on_timeout`` is ``False``, do not reinitialize the reader after a timeout.
