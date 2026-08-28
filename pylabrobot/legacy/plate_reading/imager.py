@@ -236,10 +236,9 @@ class Imager(Resource, Machine):
     if isinstance(well, tuple):
       row, column = well
     else:
-      idx = cast(Plate, well.parent).index_of_item(well)
-      if idx is None:
-        raise ValueError(f"Well {well} not in plate {well.parent}")
-      row, column = divmod(idx, cast(Plate, well.parent).num_items_x)
+      plate = cast(Plate, well.parent)
+      row = plate.get_child_row(well)
+      column = plate.get_child_column(well)
 
     if isinstance(exposure_time, AutoExposure):
       assert focal_height != "machine-auto", "Focal height must be specified for auto exposure"
