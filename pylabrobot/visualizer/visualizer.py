@@ -511,7 +511,7 @@ class Visualizer:
             self._socket_handler, self.host, self.ws_port
           ) as server:
             if self.ws_port == 0:
-              self.ws_port = server.sockets[0].getsockname()[1]
+              self.ws_port = next(iter(server.sockets)).getsockname()[1]
             print(f"Websocket server started at http://{self.host}:{self.ws_port}")
             startup.set_result(None)
             await self.stop_
