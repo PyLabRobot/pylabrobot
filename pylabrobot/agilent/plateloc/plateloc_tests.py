@@ -113,30 +113,34 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     await device.setup()
     io.queue_response(b"STAK\r")
 
-    response = await device.send_command("ST 0.030", timeout=0.01)
+    response = await device._send_command("ST 0.030", timeout=0.01)
 
     self.assertEqual(response, "STAK")
     self.assertEqual(io.writes, [b"ST 0.030\r"])
     self.assertTrue(io.reset_input_buffer_called)
-    self.assertEqual(device.last_command, "ST 0.030")
-    self.assertEqual(device.last_response, "STAK")
 
-  async def test_temperature_and_time_writes_are_scaled_and_validated(self):
+  async def test_serialize_contains_only_connection_configuration(self):
+    device = self.make_device(timeout=42)
+
+    serialized = device.serialize()
+
+    self.assertEqual(set(serialized), {"port", "profile", "timeout"})
+    self.assertEqual(serialized["port"], "COM6")
+    self.assertEqual(serialized["timeout"], 42)
+    self.assertEqual(serialized["profile"], device.profile.serialize())
+
+  async def test_temperature_write_is_scaled_and_validated(self):
     device = self.make_device()
     io = self.fake_io(device)
     await device.setup()
     io.queue_response(b"STAK\r")
-    io.queue_response(b"SSAK\r")
 
     await device.set_sealing_temperature(30)
-    await device.set_sealing_time(0.5)
 
-    self.assertEqual(io.writes, [b"ST 0.030\r", b"SS 0.05\r"])
+    self.assertEqual(io.writes, [b"ST 0.030\r"])
 
     with self.assertRaises(ValueError):
       await device.set_sealing_temperature(19)
-    with self.assertRaises(ValueError):
-      await device.set_sealing_time(0.4)
 
   async def test_negative_acknowledgement_raises_protocol_error(self):
     device = self.make_device()
@@ -176,7 +180,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     await device.setup()
     io.queue_response(b"CCAK\r")
 
-    self.assertTrue(await device.check_cycle_complete())
+    self.assertTrue(await device.request_cycle_complete())
     self.assertEqual(io.writes, [b"CC 00\r"])
 
   async def test_cycle_not_complete_returns_false(self):
@@ -185,7 +189,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     await device.setup()
     io.queue_response(b"CCNK\r")
 
-    self.assertFalse(await device.check_cycle_complete())
+    self.assertFalse(await device.request_cycle_complete())
     self.assertEqual(io.writes, [b"CC 00\r"])
 
   async def test_invalid_cycle_complete_response_raises_protocol_error(self):
@@ -195,7 +199,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     io.queue_response(b"unexpected\r")
 
     with self.assertRaisesRegex(PlateLocError, "invalid response"):
-      await device.check_cycle_complete()
+      await device.request_cycle_complete()
 
     self.assertEqual(io.writes, [b"CC 00\r"])
 
@@ -205,11 +209,12 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     await device.setup()
     io.queue_response(b"STAK\r")
     io.queue_response(b"SSAK\r")
+    io.queue_response(b"GOAK\r")
+    io.queue_response(b"CCAK\r")
     io.queue_response(b"SOAK\r")
 
-    await device.set_sealing_temperature(30)
-    await device.set_sealing_time(0.5)
-    await device.move_stage_out()
+    await device.seal(30, 0.5)
+    await device.open()
     io.queue_response(b"CCAK\r")
 
     status = await device.request_status()
@@ -218,12 +223,12 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(status.port, "COM6")
     self.assertTrue(status.connected)
     self.assertEqual(status.target_temperature, 30)
-    self.assertEqual(status.sealing_time, 0.5)
     self.assertEqual(status.stage_position, "open")
     self.assertTrue(status.cycle_complete)
-    self.assertEqual(status.last_command, "CC 00")
-    self.assertEqual(status.last_response, "CCAK")
-    self.assertEqual(io.writes, [b"ST 0.030\r", b"SS 0.05\r", b"SO 00\r", b"CC 00\r"])
+    self.assertEqual(
+      io.writes,
+      [b"ST 0.030\r", b"SS 0.05\r", b"GO 00\r", b"CC 00\r", b"SO 00\r", b"CC 00\r"],
+    )
 
   async def test_seal_waits_for_cycle_completion(self):
     device = self.make_device(timeout=1)
@@ -249,7 +254,15 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
       ],
     )
     self.assertEqual(device.status_snapshot().target_temperature, 120)
-    self.assertEqual(device.status_snapshot().sealing_time, 1.2)
+
+  async def test_seal_validates_duration_before_sending_commands(self):
+    device = self.make_device()
+    io = self.fake_io(device)
+
+    with self.assertRaises(ValueError):
+      await device.seal(120, 0.4)
+
+    self.assertEqual(io.writes, [])
 
   async def test_device_exposes_plain_sealer_api(self):
     device = self.make_device()
@@ -258,8 +271,6 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     await device.setup()
     io.queue_response(b"STAK\r")
     await device.set_sealing_temperature(100)
-    io.queue_response(b"SSAK\r")
-    await device.set_sealing_time(0.5)
     io.queue_response(b"STAK\r")
     io.queue_response(b"SSAK\r")
     io.queue_response(b"GOAK\r")
@@ -277,7 +288,6 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
       io.writes,
       [
         b"ST 0.100\r",
-        b"SS 0.05\r",
         b"ST 0.120\r",
         b"SS 0.12\r",
         b"GO 00\r",
@@ -288,7 +298,6 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
       ],
     )
     self.assertEqual(status.target_temperature, 120)
-    self.assertEqual(status.sealing_time, 1.2)
     self.assertEqual(status.stage_position, "closed")
     self.assertTrue(status.cycle_complete)
     self.assertTrue(io.stop_called)

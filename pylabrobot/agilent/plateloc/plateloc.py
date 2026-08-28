@@ -34,11 +34,8 @@ class PlateLocStatus:
   port: str
   connected: bool
   target_temperature: Optional[float]
-  sealing_time: Optional[float]
   stage_position: Optional[Literal["open", "closed"]]
   cycle_complete: Optional[bool]
-  last_command: Optional[str]
-  last_response: Optional[str]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -100,16 +97,6 @@ class PlateLocSerialProfile:
 class PlateLoc:
   """Direct serial driver for the Agilent PlateLoc thermal microplate sealer."""
 
-  _SET_TEMPERATURE = "ST"
-  _SET_TIME = "SS"
-  _MOVE_STAGE_OUT = "SO"
-  _MOVE_STAGE_IN = "SI"
-  _START_CYCLE = "GO"
-  _STOP_CYCLE = "AC"
-  _APPLY_SEAL = "AS"
-  _CLEAR_ERROR = "CL"
-  _CHECK_CYCLE_COMPLETE = "CC"
-
   def __init__(
     self,
     port: Optional[str] = None,
@@ -129,10 +116,7 @@ class PlateLoc:
     self.timeout = timeout
     self._connected = False
     self._target_temperature: Optional[float] = None
-    self._sealing_time: Optional[float] = None
     self._stage_position: Optional[Literal["open", "closed"]] = None
-    self._last_command: Optional[str] = None
-    self._last_response: Optional[str] = None
     self.io = Serial(
       human_readable_device_name="Agilent PlateLoc Sealer",
       port=port,
@@ -159,16 +143,6 @@ class PlateLoc:
     """Whether :meth:`setup` has completed without a subsequent :meth:`stop`."""
     return self._connected
 
-  @property
-  def last_command(self) -> Optional[str]:
-    """The last command sent, without its carriage-return terminator."""
-    return self._last_command
-
-  @property
-  def last_response(self) -> Optional[str]:
-    """The last response received, without surrounding whitespace."""
-    return self._last_response
-
   async def setup(self) -> None:
     """Open the serial connection."""
     await self.io.setup()
@@ -181,7 +155,7 @@ class PlateLoc:
     self._connected = False
     logger.info("[PlateLoc %s] disconnected", self.port)
 
-  async def send_command(
+  async def _send_command(
     self,
     command: str,
     *,
@@ -192,16 +166,13 @@ class PlateLoc:
     command = command.removesuffix(self.profile.command_terminator)
     await self.io.reset_input_buffer()
     await self.io.write(f"{command}{self.profile.command_terminator}".encode("ascii"))
-    self._last_command = command
 
     if self.profile.read_delay > 0:
       await asyncio.sleep(self.profile.read_delay)
 
-    response = await self.read_response(timeout=timeout, required=required)
-    self._last_response = response
-    return response
+    return await self._read_response(timeout=timeout, required=required)
 
-  async def read_response(
+  async def _read_response(
     self,
     timeout: Optional[float] = None,
     required: bool = True,
@@ -250,7 +221,7 @@ class PlateLoc:
     timeout: Optional[float] = None,
     raise_on_nak: bool = True,
   ) -> str:
-    response = await self.send_command(
+    response = await self._send_command(
       command,
       timeout=timeout if timeout is not None else self.profile.ack_timeout,
       required=True,
@@ -266,78 +237,34 @@ class PlateLoc:
       raise ValueError("Temperature out of range. Please enter a value between 20 and 235 C.")
     target_temperature = round(temperature)
     logger.info("[PlateLoc %s] setting sealing temperature to %.1f C", self.port, temperature)
-    response = await self._send(f"{self._SET_TEMPERATURE} 0.{target_temperature:03d}")
+    response = await self._send(f"ST 0.{target_temperature:03d}")
     self._target_temperature = float(target_temperature)
     return response
-
-  async def set_sealing_time(self, duration: float) -> str:
-    """Set the sealing duration in seconds."""
-    if not (0.5 <= duration <= 12.0):
-      raise ValueError("Duration out of range. Please enter a value between 0.5 and 12.0 s.")
-    sealing_time_deciseconds = round(duration * 10)
-    logger.info("[PlateLoc %s] setting sealing time to %.2f s", self.port, duration)
-    response = await self._send(f"{self._SET_TIME} 0.{sealing_time_deciseconds:02d}")
-    self._sealing_time = sealing_time_deciseconds / 10
-    return response
-
-  async def move_stage_out(self) -> str:
-    """Move the plate stage to its open position."""
-    logger.info("[PlateLoc %s] moving stage out", self.port)
-    response = await self._send(f"{self._MOVE_STAGE_OUT} 00")
-    if self.profile.stage_move_delay > 0:
-      await asyncio.sleep(self.profile.stage_move_delay)
-    self._stage_position = "open"
-    return response
-
-  async def move_stage_in(self) -> str:
-    """Move the plate stage to its closed position."""
-    logger.info("[PlateLoc %s] moving stage in", self.port)
-    response = await self._send(f"{self._MOVE_STAGE_IN} 00")
-    if self.profile.stage_move_delay > 0:
-      await asyncio.sleep(self.profile.stage_move_delay)
-    self._stage_position = "closed"
-    return response
-
-  async def start_cycle(self) -> str:
-    """Start a sealing cycle with the current setpoints."""
-    logger.info("[PlateLoc %s] starting sealing cycle", self.port)
-    return await self._send(f"{self._START_CYCLE} 00")
 
   async def stop_cycle(self) -> str:
     """Stop the active sealing cycle."""
     logger.info("[PlateLoc %s] stopping sealing cycle", self.port)
-    return await self._send(f"{self._STOP_CYCLE} 00")
+    return await self._send("AC 00")
 
-  async def apply_seal(self) -> str:
+  async def _apply_seal(self) -> str:
     """Apply the current seal."""
     logger.info("[PlateLoc %s] applying seal", self.port)
-    return await self._send(f"{self._APPLY_SEAL} 00")
+    return await self._send("AS 00")
 
   async def clear_error(self) -> str:
     """Clear the active PlateLoc error."""
     logger.info("[PlateLoc %s] clearing error", self.port)
-    return await self._send(f"{self._CLEAR_ERROR} 00")
+    return await self._send("CL 00")
 
-  async def check_cycle_complete(self) -> bool:
+  async def request_cycle_complete(self) -> bool:
     """Return whether the current sealing cycle is complete."""
     response = await self._send(
-      f"{self._CHECK_CYCLE_COMPLETE} 00",
+      "CC 00",
       timeout=self.profile.response_timeout,
       raise_on_nak=False,
     )
-    match = self._parse_response(self._CHECK_CYCLE_COMPLETE, response)
+    match = self._parse_response("CC", response)
     return match.group("status") == "A"
-
-  async def wait_for_cycle_complete(self, timeout: Optional[float] = None) -> bool:
-    """Wait until the current sealing cycle completes."""
-    deadline = time.monotonic() + (self.timeout if timeout is None else timeout)
-    while True:
-      if await self.check_cycle_complete():
-        return True
-      remaining = deadline - time.monotonic()
-      if remaining <= 0:
-        raise TimeoutError("Timeout while waiting for PlateLoc cycle to complete")
-      await asyncio.sleep(min(max(self.profile.cycle_poll_interval, 0), remaining))
 
   def status_snapshot(self, cycle_complete: Optional[bool] = None) -> PlateLocStatus:
     """Return the locally tracked state without communicating with the device."""
@@ -345,39 +272,55 @@ class PlateLoc:
       port=self.port,
       connected=self.connected,
       target_temperature=self._target_temperature,
-      sealing_time=self._sealing_time,
       stage_position=self._stage_position,
       cycle_complete=cycle_complete,
-      last_command=self.last_command,
-      last_response=self.last_response,
     )
 
   async def request_status(self, query_cycle_complete: bool = True) -> PlateLocStatus:
     """Return locally tracked state, optionally querying cycle completion."""
-    cycle_complete = await self.check_cycle_complete() if query_cycle_complete else None
+    cycle_complete = await self.request_cycle_complete() if query_cycle_complete else None
     return self.status_snapshot(cycle_complete=cycle_complete)
 
   async def seal(self, temperature: int, duration: float) -> str:
     """Seal a plate at the requested temperature and duration."""
+    if not (0.5 <= duration <= 12.0):
+      raise ValueError("Duration out of range. Please enter a value between 0.5 and 12.0 s.")
     await self.set_sealing_temperature(temperature)
-    await self.set_sealing_time(duration)
-    response = await self.start_cycle()
-    await self.wait_for_cycle_complete()
+    sealing_time_deciseconds = round(duration * 10)
+    logger.info("[PlateLoc %s] setting sealing time to %.2f s", self.port, duration)
+    await self._send(f"SS 0.{sealing_time_deciseconds:02d}")
+    logger.info("[PlateLoc %s] starting sealing cycle", self.port)
+    response = await self._send("GO 00")
+    deadline = time.monotonic() + self.timeout
+    while not await self.request_cycle_complete():
+      remaining = deadline - time.monotonic()
+      if remaining <= 0:
+        raise TimeoutError("Timeout while waiting for PlateLoc cycle to complete")
+      await asyncio.sleep(min(max(self.profile.cycle_poll_interval, 0), remaining))
     return response
 
   async def open(self) -> str:
     """Move the plate stage to its open position."""
-    return await self.move_stage_out()
+    logger.info("[PlateLoc %s] moving stage out", self.port)
+    response = await self._send("SO 00")
+    if self.profile.stage_move_delay > 0:
+      await asyncio.sleep(self.profile.stage_move_delay)
+    self._stage_position = "open"
+    return response
 
   async def close(self) -> str:
     """Move the plate stage to its closed position."""
-    return await self.move_stage_in()
+    logger.info("[PlateLoc %s] moving stage in", self.port)
+    response = await self._send("SI 00")
+    if self.profile.stage_move_delay > 0:
+      await asyncio.sleep(self.profile.stage_move_delay)
+    self._stage_position = "closed"
+    return response
 
   def serialize(self) -> dict:
-    """Serialize the configured connection and locally tracked state."""
+    """Serialize the connection configuration."""
     return {
       "port": self.port,
       "profile": self.profile.serialize(),
       "timeout": self.timeout,
-      "status": dataclasses.asdict(self.status_snapshot()),
     }
