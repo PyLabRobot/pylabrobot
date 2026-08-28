@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLocStatus.stage\_position
+==========================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoattribute:: PlateLocStatus.stage_position

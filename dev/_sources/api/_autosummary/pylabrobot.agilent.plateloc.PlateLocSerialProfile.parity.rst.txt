@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLocSerialProfile.parity
+========================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoattribute:: PlateLocSerialProfile.parity

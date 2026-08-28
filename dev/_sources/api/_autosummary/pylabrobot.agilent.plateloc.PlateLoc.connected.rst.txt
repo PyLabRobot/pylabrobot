@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLoc.connected
+==============================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoproperty:: PlateLoc.connected

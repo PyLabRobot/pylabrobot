@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.plateloc.PlateLoc
+====================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoclass:: PlateLoc
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateLoc.connected
+      ~PlateLoc.port
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateLoc.__init__
+      ~PlateLoc.clear_error
+      ~PlateLoc.close
+      ~PlateLoc.open
+      ~PlateLoc.request_cycle_complete
+      ~PlateLoc.request_status
+      ~PlateLoc.seal
+      ~PlateLoc.serialize
+      ~PlateLoc.set_sealing_temperature
+      ~PlateLoc.setup
+      ~PlateLoc.status_snapshot
+      ~PlateLoc.stop
+      ~PlateLoc.stop_cycle
+   
+   

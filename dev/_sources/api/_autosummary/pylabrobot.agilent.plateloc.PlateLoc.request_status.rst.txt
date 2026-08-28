@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLoc.request\_status
+====================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. automethod:: PlateLoc.request_status

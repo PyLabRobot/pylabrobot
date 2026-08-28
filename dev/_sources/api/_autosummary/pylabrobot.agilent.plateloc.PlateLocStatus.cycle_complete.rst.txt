@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLocStatus.cycle\_complete
+==========================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoattribute:: PlateLocStatus.cycle_complete

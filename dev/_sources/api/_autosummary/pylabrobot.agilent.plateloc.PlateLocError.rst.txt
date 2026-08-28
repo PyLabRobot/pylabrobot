@@ -1,0 +1,6 @@
+﻿pylabrobot.agilent.plateloc.PlateLocError
+=========================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoexception:: PlateLocError

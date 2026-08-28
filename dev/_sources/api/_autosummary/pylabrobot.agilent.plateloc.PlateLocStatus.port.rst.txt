@@ -1,0 +1,6 @@
+pylabrobot.agilent.plateloc.PlateLocStatus.port
+===============================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoattribute:: PlateLocStatus.port

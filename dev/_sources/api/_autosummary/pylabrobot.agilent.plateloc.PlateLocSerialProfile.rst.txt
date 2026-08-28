@@ -1,0 +1,48 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.plateloc.PlateLocSerialProfile
+=================================================
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autoclass:: PlateLocSerialProfile
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateLocSerialProfile.ack_timeout
+      ~PlateLocSerialProfile.baudrate
+      ~PlateLocSerialProfile.bytesize
+      ~PlateLocSerialProfile.command_terminator
+      ~PlateLocSerialProfile.cycle_poll_interval
+      ~PlateLocSerialProfile.dsrdtr
+      ~PlateLocSerialProfile.parity
+      ~PlateLocSerialProfile.read_delay
+      ~PlateLocSerialProfile.response_terminator
+      ~PlateLocSerialProfile.response_timeout
+      ~PlateLocSerialProfile.rtscts
+      ~PlateLocSerialProfile.stage_move_delay
+      ~PlateLocSerialProfile.stopbits
+      ~PlateLocSerialProfile.timeout
+      ~PlateLocSerialProfile.write_timeout
+      ~PlateLocSerialProfile.xonxoff
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateLocSerialProfile.__init__
+      ~PlateLocSerialProfile.deserialize
+      ~PlateLocSerialProfile.serialize
+   
+   
