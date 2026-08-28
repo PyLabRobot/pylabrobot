@@ -1,4 +1,6 @@
 import asyncio
+import concurrent.futures
+import errno
 import functools
 import http.server
 import inspect
@@ -8,7 +10,6 @@ import math
 import os
 import re
 import threading
-import time
 import webbrowser
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -26,6 +27,14 @@ from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import Resource
 
 logger = logging.getLogger(__name__)
+
+_SERVER_PORT_ATTEMPTS = 100
+_SERVER_STARTUP_TIMEOUT = 10.0
+
+
+def _is_address_in_use(error: OSError) -> bool:
+  """Return whether a server failed because its requested address is already in use."""
+  return error.errno == errno.EADDRINUSE
 
 
 @functools.lru_cache(maxsize=None)
@@ -127,9 +136,9 @@ class Visualizer:
     Args:
       host: The hostname of the file and websocket server.
       ws_port: The port of the websocket server. If this port is in use, the port will be
-        incremented until a free port is found.
+        incremented until a free port is found. Use `0` to let the operating system choose a port.
       fs_port: The port of the file server. If this port is in use, the port will be incremented
-        until a free port is found.
+        until a free port is found. Use `0` to let the operating system choose a port.
       open_browser: If `True`, the visualizer will open a browser window when it is started.
       name: A custom name to display in the browser header. If ``None``, the filename of the
         calling script or notebook is detected automatically.
@@ -267,27 +276,27 @@ class Visualizer:
     """Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`."""
 
-    while True:
-      try:
+    try:
+      while True:
         message = await websocket.recv()
-      except websockets.exceptions.ConnectionClosed:
-        return
-      except asyncio.CancelledError:
-        return
+        data = json.loads(message)
+        if data.get("id") in self._pending_response_ids:
+          self.received.append(data)
 
-      data = json.loads(message)
-      if data.get("id") in self._pending_response_ids:
-        self.received.append(data)
+        # If the event is "ready", then we can save the connection and send the saved messages.
+        if data.get("event") == "ready":
+          self._websocket = websocket
+          await self._send_resources_and_state()
 
-      # If the event is "ready", then we can save the connection and send the saved messages.
-      if data.get("event") == "ready":
-        self._websocket = websocket
-        await self._send_resources_and_state()
-
-      if "event" in data:
-        await self.handle_event(data.get("event"), data)
-      else:
-        logger.warning("Unhandled message: %s", message)
+        if "event" in data:
+          await self.handle_event(data.get("event"), data)
+        else:
+          logger.warning("Unhandled message: %s", message)
+    except (websockets.exceptions.ConnectionClosed, asyncio.CancelledError):
+      return
+    finally:
+      if self._websocket is websocket:
+        self._websocket = None
 
   def _assemble_command(
     self,
@@ -485,7 +494,7 @@ class Visualizer:
       raise RuntimeError("The visualizer has already been started.")
 
     await self._run_ws_server()
-    self._run_file_server()
+    await self._run_file_server()
     self.setup_finished = True
 
   async def _run_ws_server(self):
@@ -496,33 +505,39 @@ class Visualizer:
 
     async def run_server():
       self._stop_ = self.loop.create_future()
-      while True:
+      for attempt in range(_SERVER_PORT_ATTEMPTS):
         try:
-          async with websockets.asyncio.server.serve(self._socket_handler, self.host, self.ws_port):
+          async with websockets.asyncio.server.serve(
+            self._socket_handler, self.host, self.ws_port
+          ) as server:
+            if self.ws_port == 0:
+              self.ws_port = next(iter(server.sockets)).getsockname()[1]
             print(f"Websocket server started at http://{self.host}:{self.ws_port}")
-            lock.release()
+            startup.set_result(None)
             await self.stop_
-            break
+            return
         except asyncio.CancelledError:
-          pass
-        except OSError:
-          # If the port is in use, try the next port.
+          raise
+        except OSError as error:
+          if not _is_address_in_use(error) or attempt == _SERVER_PORT_ATTEMPTS - 1:
+            raise
           self.ws_port += 1
 
     def start_loop():
-      self.loop.run_until_complete(run_server())
+      try:
+        self.loop.run_until_complete(run_server())
+      except BaseException as error:
+        if not startup.done():
+          startup.set_exception(error)
 
-    # Acquire a lock to prevent setup from returning until the server is running.
-    lock = threading.Lock()
-    lock.acquire()
+    startup: concurrent.futures.Future[None] = concurrent.futures.Future()
     self._loop = asyncio.new_event_loop()
     self._t = threading.Thread(target=start_loop, daemon=True)
     self.t.start()
 
-    while lock.locked():
-      time.sleep(0.001)
+    await asyncio.wait_for(asyncio.wrap_future(startup), timeout=_SERVER_STARTUP_TIMEOUT)
 
-  def _run_file_server(self):
+  async def _run_file_server(self):
     """Start a simple webserver to serve static files."""
 
     dirname = os.path.dirname(__file__)
@@ -532,7 +547,7 @@ class Visualizer:
         "Could not find Visualizer files. Please run from the root of the repository."
       )
 
-    def start_server(lock):
+    def run_server():
       ws_port, fs_port, source_filename = self.ws_port, self.fs_port, self._source_filename
       favicon_path = self._favicon_path
       liquid_color = self._liquid_color
@@ -579,36 +594,44 @@ class Visualizer:
           else:
             return super().do_GET()
 
-      while True:
+      for attempt in range(_SERVER_PORT_ATTEMPTS):
         try:
           self._httpd = http.server.HTTPServer(
             (self.host, self.fs_port),
             QuietSimpleHTTPRequestHandler,
           )
+          if self.fs_port == 0:
+            self.fs_port = self._httpd.server_port
           print(
             f"File server started at http://{self.host}:{self.fs_port} . "
             "Open this URL in your browser."
           )
-          lock.release()
+          startup.set_result(None)
           break
-        except OSError:
+        except OSError as error:
+          if not _is_address_in_use(error) or attempt == _SERVER_PORT_ATTEMPTS - 1:
+            raise
           self.fs_port += 1
 
       self.httpd.serve_forever()
 
-    lock = threading.Lock()
-    lock.acquire()
+    def start_server():
+      try:
+        run_server()
+      except BaseException as error:
+        if not startup.done():
+          startup.set_exception(error)
+
+    startup: concurrent.futures.Future[None] = concurrent.futures.Future()
     self._fst = threading.Thread(
       name="visualizer_fs",
       target=start_server,
-      args=(lock,),
       daemon=True,
     )
     self.fst.start()
 
     # Wait for the server to start before opening the browser so that we can get the correct port.
-    while lock.locked():
-      time.sleep(0.001)
+    await asyncio.wait_for(asyncio.wrap_future(startup), timeout=_SERVER_STARTUP_TIMEOUT)
 
     if self.open_browser:
       webbrowser.open(f"http://{self.host}:{self.fs_port}")
@@ -630,12 +653,18 @@ class Visualizer:
     self._fst = None
 
     # -- websocket --
-    if self.has_connection():
+    had_connection = self.has_connection()
+    if had_connection:
       # send stop event to the browser
       await self.send_command("stop", wait_for_response=False)
 
-      # must be thread safe, because event loop is running in a separate thread
+    # Must be thread safe because the server event loop runs in a separate thread. The server
+    # must also be stopped when no browser has connected yet.
+    server_thread = self.t
+    if not self.stop_.done():
       self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
+    if not had_connection:
+      await asyncio.to_thread(server_thread.join, _SERVER_STARTUP_TIMEOUT)
 
     # Clear all relevant attributes.
     self.received.clear()
