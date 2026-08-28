@@ -16,6 +16,20 @@
     "notes": "BenchCel 4R four-stacker configuration; protocol verified with firmware 3.2.20.0."
   },
   {
+    "id": "agilent-plateloc",
+    "vendor": "Agilent",
+    "name": "PlateLoc",
+    "kind": "sealer",
+    "capabilities": [
+      "sealing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.agilent.PlateLoc",
+    "api_version": "v1",
+    "code_slug": "agilent/plateloc",
+    "doc_slug": "agilent/plateloc/hello-world"
+  },
+  {
     "id": "agilent-vspin",
     "vendor": "Agilent",
     "name": "VSpin",
