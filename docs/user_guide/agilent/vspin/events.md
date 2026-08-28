@@ -1,8 +1,8 @@
-# Centrifuge and Access2 events
+# VSpin and Access2 events
 
 Each listed semantic operation emits `started`, `completed`, or `failed` lifecycle records. The
-modern Agilent and Hettich frontends and the resource-aware legacy `Centrifuge` and `Loader`
-frontends use the same canonical operation names and payload semantics.
+modern Agilent frontends and the resource-aware legacy `Centrifuge` and `Loader` frontends use the
+same canonical operation names and payload semantics.
 
 ## VSpin centrifuge
 
@@ -16,18 +16,6 @@ requested cycle parameters. `relative_centrifugal_force` is the dimensionless mu
 standard gravity conventionally written as x g, PLR's default unit for relative centrifugal
 force. The event does not infer an actual measured force or completed duration outside the
 frontend call's success or failure lifecycle.
-
-## Hettich robotic centrifuges
-
-| Operation | Primary fields |
-| --- | --- |
-| `centrifuge.spin` | `device`, empty `resources`, empty `bucket_resources`, `speed_rpm`, `duration`, optional `relative_centrifugal_force` |
-
-Hettich uses the same `centrifuge.spin` lifecycle and common field names as VSpin. The driver
-reports the requested rotor speed as `speed_rpm`. If it was constructed with a supported
-`rotor_catalog_number`, it also calculates and reports `relative_centrifugal_force`. The Hettich
-frontend does not currently model rotor positions as PLR resource holders, so both resource lists
-are empty.
 
 ## Access2 loader
 

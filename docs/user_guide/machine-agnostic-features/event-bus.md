@@ -134,7 +134,8 @@ Detailed operation references:
 - [Incubator](event-bus/incubator.md)
 - [LiquidHandler](event-bus/liquid-handler.md)
 - [Shaker and temperature controller](event-bus/thermal-and-shaking.md)
-- [VSpin and Hettich centrifuges, and the Access2 loader](../agilent/vspin/events.md)
+- [VSpin centrifuge and Access2 loader](../agilent/vspin/events.md)
+- [Hettich robotic centrifuges](../hettich/events.md)
 - [Diagnostic transports](event-bus/diagnostic-transports.md)
 - [Canonical schema for every operation above](../../contributor_guide/event-schemas.md)
 
