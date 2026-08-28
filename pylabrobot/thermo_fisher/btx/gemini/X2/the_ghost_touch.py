@@ -518,7 +518,8 @@ class TheGhostTouch:
     deadline = time.time() + max_seconds
     idx = 0
     while time.time() < deadline:
-      snap = self.snapshot(f"run-wait-{idx:02d}")
+      # Use one frame attempt per poll. Retried requests can accumulate during pulse delivery.
+      snap = self._snapshot_run_poll(f"run-wait-{idx:02d}")
       if self._get_detector().is_run_done(snap.detection):
         return snap
       idx += 1
@@ -537,7 +538,15 @@ class TheGhostTouch:
 
   def snapshot(self, prefix: str) -> Snapshot:
     """Capture a frame, save it, OCR it, and classify the current screen state."""
-    frame = self.read_frame()
+    return self._snapshot_from_frame(prefix=prefix, frame=self.read_frame())
+
+  def _snapshot_run_poll(self, prefix: str) -> Snapshot:
+    """Capture one run-state frame without retrying the framebuffer request."""
+    frame = self._get_transport().read_frame(retry=False)
+    return self._snapshot_from_frame(prefix=prefix, frame=frame)
+
+  def _snapshot_from_frame(self, prefix: str, frame: FrameCapture) -> Snapshot:
+    """Save and classify a captured framebuffer."""
     image_path = self._save_frame(frame, prefix)
     detection = self._get_detector().classify_image(image_path)
     return Snapshot(frame=frame, image_path=image_path, detection=detection)
@@ -875,9 +884,10 @@ class _RSITransport:
 
     raise TimeoutError(f"Failed to read full scap frame, collected {len(buf)} bytes")
 
-  def read_frame(self) -> FrameCapture:
+  def read_frame(self, *, retry: bool = True) -> FrameCapture:
     last_err: Exception | None = None
-    for _ in range(self.retries):
+    attempts = self.retries if retry else 1
+    for _ in range(attempts):
       try:
         return self._read_frame_once()
       except Exception as exc:  # pragma: no cover - live hardware path

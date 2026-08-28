@@ -66,6 +66,7 @@ class _TestGhostTouch(TheGhostTouch):
     self.ser = None
     self._snapshots: list[Snapshot] = []
     self.taps: list[tuple[int, int, Optional[int]]] = []
+    self.snapshot_retry_flags: list[bool] = []
 
   def queue_snapshot(
     self, state: str, text: str = "", text_norm: str = "", image_path: str = "img"
@@ -83,9 +84,14 @@ class _TestGhostTouch(TheGhostTouch):
 
   def snapshot(self, prefix: str) -> Snapshot:
     del prefix
+    self.snapshot_retry_flags.append(True)
     if not self._snapshots:
       raise AssertionError("No queued snapshots left")
     return self._snapshots.pop(0)
+
+  def _snapshot_run_poll(self, prefix: str) -> Snapshot:
+    self.snapshot_retry_flags.append(False)
+    return self.snapshot(prefix)
 
   def tap(self, x: int, y: int, down_ms=None) -> None:
     self.taps.append((x, y, down_ms))
@@ -166,6 +172,22 @@ class TestTheGhostTouch(unittest.TestCase):
     self.assertEqual(frame.raw_len, FRAME_BYTES + 1)
     self.assertEqual(frame.rgba.shape, (FRAME_H, FRAME_W, 4))
     self.assertEqual(frame.rgba[0, 0].tolist(), [56, 34, 12, 255])
+
+  def test_rsi_transport_can_disable_frame_retries(self):
+    transport = _RSITransport(port="/dev/test", baud=115200, timeout=0.2, retries=5)
+
+    with (
+      patch.object(
+        transport,
+        "_read_frame_once",
+        side_effect=TimeoutError("frame unavailable"),
+      ) as read_once,
+      patch.object(transport, "drain_input"),
+    ):
+      with self.assertRaisesRegex(TimeoutError, "frame unavailable"):
+        transport.read_frame(retry=False)
+
+    read_once.assert_called_once_with()
 
   def test_user_protocols_top_detector_uses_double_up_arrow_state(self):
     detector = _GeminiScreenDetector(min_conf=0.70)
@@ -331,6 +353,7 @@ class TestTheGhostTouch(unittest.TestCase):
     self.assertIsNotNone(result.home)
     assert result.home is not None
     self.assertEqual(result.home.state, STATE_MAIN_MENU)
+    self.assertEqual(touch.snapshot_retry_flags.count(False), 1)
 
   def test_ensure_home_closes_protocol_details_before_home(self):
     touch = _TestGhostTouch()
