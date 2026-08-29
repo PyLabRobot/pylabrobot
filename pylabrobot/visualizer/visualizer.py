@@ -494,7 +494,11 @@ class Visualizer:
       raise RuntimeError("The visualizer has already been started.")
 
     await self._run_ws_server()
-    await self._run_file_server()
+    try:
+      await self._run_file_server()
+    except BaseException:
+      await self._stop_ws_server(send_stop_event=False)
+      raise
     self.setup_finished = True
 
   async def _run_ws_server(self):
@@ -636,11 +640,40 @@ class Visualizer:
     if self.open_browser:
       webbrowser.open(f"http://{self.host}:{self.fs_port}")
 
+  async def _stop_ws_server(self, send_stop_event: bool) -> None:
+    """Stop the WebSocket server and wait for its thread to exit.
+
+    Args:
+      send_stop_event: Whether to notify a connected browser before stopping the server.
+    """
+
+    server_loop = self.loop
+    server_thread = self.t
+    stop_future = self.stop_
+
+    try:
+      if send_stop_event and self.has_connection():
+        await self.send_command("stop", wait_for_response=False)
+    finally:
+      if not stop_future.done():
+        server_loop.call_soon_threadsafe(stop_future.set_result, "done")
+      await asyncio.to_thread(server_thread.join, _SERVER_STARTUP_TIMEOUT)
+      if server_thread.is_alive():
+        raise TimeoutError("Timed out waiting for the WebSocket server to stop.")
+
+      self.received.clear()
+      self._pending_response_ids.clear()
+      self._websocket = None
+      self._loop = None
+      self._t = None
+      self._stop_ = None
+
   async def stop(self):
     """Stop the visualizer.
 
     Raises:
       RuntimeError: If the visualizer has not been started.
+      TimeoutError: If the WebSocket server does not stop within the timeout.
     """
 
     # -- file server --
@@ -653,26 +686,7 @@ class Visualizer:
     self._fst = None
 
     # -- websocket --
-    had_connection = self.has_connection()
-    if had_connection:
-      # send stop event to the browser
-      await self.send_command("stop", wait_for_response=False)
-
-    # Must be thread safe because the server event loop runs in a separate thread. The server
-    # must also be stopped when no browser has connected yet.
-    server_thread = self.t
-    if not self.stop_.done():
-      self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
-    if not had_connection:
-      await asyncio.to_thread(server_thread.join, _SERVER_STARTUP_TIMEOUT)
-
-    # Clear all relevant attributes.
-    self.received.clear()
-    self._pending_response_ids.clear()
-    self._websocket = None
-    self._loop = None
-    self._t = None
-    self._stop_ = None
+    await self._stop_ws_server(send_stop_event=True)
 
     self.setup_finished = False
 
