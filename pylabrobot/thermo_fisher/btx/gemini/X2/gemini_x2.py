@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import (
   Any,
+  Awaitable,
   Callable,
   Dict,
+  Literal,
   Mapping,
   Optional,
   Protocol,
   TypeVar,
   Union,
-  cast,
-  runtime_checkable,
 )
 
-from .file_transfer_control import FileTransferControl
+from .file_transfer_control import ProtocolDeletionPendingError, _FileTransferControl
 from .ht200 import BTXHT200
 from .standard import (
   ElectroporationCancellationDetails,
@@ -33,11 +35,14 @@ from .the_ghost_touch import (
   CancelledPreparedUserProtocolResult,
   PreparedUserProtocolResult,
   StartedPreparedUserProtocolResult,
-  TheGhostTouch,
+  _TheGhostTouch,
 )
 
+logger = logging.getLogger(__name__)
 
-@runtime_checkable
+PlateHandlerResetState = Literal["unknown", "reset_confirmed", "continue_current_position"]
+
+
 class _GhostTouchSession(Protocol):
   async def setup(self) -> None:
     pass
@@ -45,17 +50,17 @@ class _GhostTouchSession(Protocol):
   async def stop(self) -> None:
     pass
 
-  def ensure_home(self) -> Any:
+  async def ensure_home(self) -> Any:
     pass
 
-  def prepare_user_protocol(
+  async def prepare_user_protocol(
     self,
     protocol_name: str,
     plate_columns: Optional[int] = None,
   ) -> PreparedUserProtocolResult:
     pass
 
-  def start_prepared_user_protocol(
+  async def start_prepared_user_protocol(
     self,
     protocol_name: str,
     home_after: bool = True,
@@ -63,35 +68,16 @@ class _GhostTouchSession(Protocol):
   ) -> StartedPreparedUserProtocolResult:
     pass
 
-  def cancel_prepared_user_protocol(
-    self, home_after: bool = True
-  ) -> CancelledPreparedUserProtocolResult:
+  async def cancel_prepared_user_protocol(self) -> CancelledPreparedUserProtocolResult:
     pass
 
 
 GhostTouchResult = TypeVar("GhostTouchResult")
 
 
-def _result_dict(value: Any) -> Dict[str, Any]:
-  if hasattr(value, "as_dict"):
-    return cast(Dict[str, Any], value.as_dict())
-  return cast(Dict[str, Any], value)
-
-
-def _nested_state(payload: Mapping[str, Any], *path: str) -> Optional[str]:
-  current: Any = payload
-  for key in path:
-    if not isinstance(current, Mapping):
-      return None
-    current = current.get(key)
-  if isinstance(current, str):
-    return current
-  return None
-
-
 @dataclass(frozen=True)
 class TemporaryProtocolCleanupResult:
-  delete_result: Any
+  delete_result: Optional[Dict[str, Any]]
   delete_retry_used: bool
   delete_error: Optional[str]
 
@@ -102,6 +88,15 @@ class TemporaryProtocolCleanupResult:
       "delete_error": self.delete_error,
     }
 
+  def to_cleanup(self) -> ElectroporationCleanup:
+    deleted = None if self.delete_result is None else self.delete_result.get("deleted")
+    return ElectroporationCleanup(
+      deleted=deleted if isinstance(deleted, bool) else None,
+      retry_used=self.delete_retry_used,
+      error=self.delete_error,
+      details=self.as_dict(),
+    )
+
 
 @dataclass(frozen=True)
 class MatchedRunLogResult:
@@ -109,7 +104,7 @@ class MatchedRunLogResult:
   after_count: int
   new_log_paths: tuple[str, ...]
   matched_log_path: Optional[str]
-  matched_log: Any
+  matched_log: Optional[Dict[str, Any]]
 
   def as_dict(self) -> Dict[str, Any]:
     return {
@@ -124,56 +119,88 @@ class MatchedRunLogResult:
 class BTXGeminiX2:
   """BTX Gemini X2 driver.
 
-  Owns the file-transfer connection lifecycle and the temporary handoff into the RSI touch
-  control session.
-
-  The Gemini X2 uses two separate control paths on the same USB-connected device:
-  `FileTransferControl` for Protocol Manager style file/protocol access, and `TheGhostTouch`
-  for the RSI touchscreen workflow that arms and starts a user protocol.
+  The driver owns both mutually exclusive serial modes used by the device: Protocol Manager
+  file transfer and the RSI touchscreen workflow. All device operations are serialized so the
+  two modes cannot be used concurrently.
   """
 
-  UI_PROTOCOL_NAME_BYTES = FileTransferControl.UI_PROTOCOL_NAME_BYTES
+  UI_PROTOCOL_NAME_BYTES = _FileTransferControl.UI_PROTOCOL_NAME_BYTES
   DEFAULT_TEMPORARY_PROTOCOL_PREFIX = "!PLR"
-  PLATE_HANDLER_RESET_STATE_UNKNOWN = "unknown"
-  PLATE_HANDLER_RESET_STATE_RESET_CONFIRMED = "reset_confirmed"
-  PLATE_HANDLER_RESET_STATE_CONTINUE_CURRENT_POSITION = "continue_current_position"
+  PLATE_HANDLER_RESET_STATE_UNKNOWN: PlateHandlerResetState = "unknown"
+  PLATE_HANDLER_RESET_STATE_RESET_CONFIRMED: PlateHandlerResetState = "reset_confirmed"
+  PLATE_HANDLER_RESET_STATE_CONTINUE_CURRENT_POSITION: PlateHandlerResetState = (
+    "continue_current_position"
+  )
   PLATE_HANDLER_RESET_STATES = {
     PLATE_HANDLER_RESET_STATE_UNKNOWN,
     PLATE_HANDLER_RESET_STATE_RESET_CONFIRMED,
     PLATE_HANDLER_RESET_STATE_CONTINUE_CURRENT_POSITION,
   }
+  LOG_POLL_TIMEOUT_SECONDS = 10.0
+  LOG_POLL_INTERVAL_SECONDS = 0.5
 
   def __init__(
     self,
     port: Optional[str] = None,
     *,
-    ghost_touch_kwargs: Optional[dict[str, Any]] = None,
     plate_handler: Optional[BTXHT200] = None,
     temporary_protocol_prefix: str = DEFAULT_TEMPORARY_PROTOCOL_PREFIX,
   ) -> None:
-    self.port = port
-    self._file_transfer_control = FileTransferControl(port=port)
-    self._ghost_touch_factory = TheGhostTouch
-    self._ghost_touch_kwargs = dict(ghost_touch_kwargs or {})
-    self.plate_handler = plate_handler or BTXHT200()
+    self._file_transfer_control = _FileTransferControl(port=port)
+    self.plate_handler = plate_handler if plate_handler is not None else BTXHT200()
     self._temporary_protocol_prefix = temporary_protocol_prefix
+    self._operation_lock = asyncio.Lock()
+    self._is_setup = False
+
+  @property
+  def port(self) -> Optional[str]:
+    """The resolved serial port, if setup has discovered one."""
+    return self._file_transfer_control.port
 
   async def setup(self) -> None:
-    await self._file_transfer_control.setup()
-    if self._file_transfer_control.port is not None:
-      self.port = self._file_transfer_control.port
-    # Existing reserved protocols are allowed for resuming a prepared run, but nothing may sort
-    # ahead of the reserved prefix used by the touchscreen's first-protocol workflow.
-    await self._ensure_temporary_protocol_prefix_order_safe(self._temporary_protocol_prefix)
+    async with self._operation_lock:
+      if self._is_setup:
+        return
+      logger.info("Setting up BTX Gemini X2")
+      try:
+        await self._file_transfer_control.setup()
+        await self._ensure_temporary_protocol_prefix_order_safe(self._temporary_protocol_prefix)
+      except BaseException:
+        await self._stop_file_transfer_after_failure()
+        raise
+      self._is_setup = True
+      logger.info("BTX Gemini X2 ready on port %s", self.port)
 
   async def stop(self) -> None:
-    await self._file_transfer_control.stop()
+    async with self._operation_lock:
+      if not self._is_setup:
+        return
+      logger.info("Stopping BTX Gemini X2")
+      try:
+        await self._file_transfer_control.stop()
+      finally:
+        self._is_setup = False
+      logger.info("BTX Gemini X2 stopped")
+
+  async def _stop_file_transfer_after_failure(self) -> None:
+    try:
+      await self._file_transfer_control.stop()
+    except Exception:
+      logger.exception("Failed to close Gemini X2 after setup failure")
+
+  def _require_setup(self) -> None:
+    if not self._is_setup:
+      raise RuntimeError("BTX Gemini X2 is not set up. Call setup() first.")
 
   async def list_protocols(self) -> list[str]:
-    return await self._file_transfer_control.list_protocols()
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.list_protocols()
 
   async def request_protocol(self, protocol_name: str) -> Dict[str, Any]:
-    return await self._file_transfer_control.request_protocol(protocol_name)
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.request_protocol(protocol_name)
 
   async def add_protocol(
     self,
@@ -181,114 +208,164 @@ class BTXGeminiX2:
     protocol: ElectroporationProtocol,
     overwrite: bool = False,
   ) -> Dict[str, Any]:
-    return await self._file_transfer_control.add_protocol(
-      protocol_name, protocol, overwrite=overwrite
-    )
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.add_protocol(
+        protocol_name, protocol, overwrite=overwrite
+      )
 
-  async def delete_protocol(self, protocol_name: str, missing_ok: bool = False) -> Dict[str, Any]:
-    return await self._file_transfer_control.delete_protocol(protocol_name, missing_ok=missing_ok)
+  async def delete_protocol(
+    self,
+    protocol_name: str,
+    missing_ok: bool = False,
+  ) -> Dict[str, Any]:
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.delete_protocol(protocol_name, missing_ok=missing_ok)
 
   async def list_log_files(self, root: str = "\\BTXDATA") -> list[str]:
-    return await self._file_transfer_control.list_log_files(root=root)
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.list_log_files(root=root)
 
   async def fetch_sd_file(self, sd_path: str) -> str:
-    return await self._file_transfer_control.fetch_sd_file(sd_path)
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.fetch_sd_file(sd_path)
 
   async def request_version(self) -> str:
-    return await self._file_transfer_control.request_version()
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.request_version()
 
   async def request_serial_number(self) -> str:
-    return await self._file_transfer_control.request_serial_number()
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.request_serial_number()
 
   async def request_device_time(self) -> str:
-    return await self._file_transfer_control.request_device_time()
+    async with self._operation_lock:
+      self._require_setup()
+      return await self._file_transfer_control.request_device_time()
 
   def parse_run_log(self, text: str) -> Dict[str, Any]:
     return self._file_transfer_control.parse_run_log(text)
 
-  async def run_with_ghost_touch(
+  async def _run_with_ghost_touch(
     self,
-    action: Callable[[_GhostTouchSession], GhostTouchResult],
+    action: Callable[[_GhostTouchSession], Awaitable[GhostTouchResult]],
   ) -> GhostTouchResult:
-    await self._file_transfer_control.stop()
-    try:
-      ghost_touch = self._open_ghost_touch()
-      try:
-        await ghost_touch.setup()
-        return await asyncio.to_thread(action, ghost_touch)
-      finally:
-        await ghost_touch.stop()
-    finally:
-      await self._file_transfer_control.setup()
-      if self._file_transfer_control.port is not None:
-        self.port = self._file_transfer_control.port
-
-  def _open_ghost_touch(self) -> _GhostTouchSession:
-    if self.port is None:
+    """Temporarily hand the device port to RSI control while holding the device lock."""
+    self._require_setup()
+    port = self.port
+    if port is None:
       raise RuntimeError("Gemini X2 serial port is not resolved. Call setup() first.")
-    session = self._ghost_touch_factory(port=self.port, **self._ghost_touch_kwargs)
-    if not isinstance(session, _GhostTouchSession):
-      session = cast(_GhostTouchSession, session)
-    return session
+
+    logger.info("Switching Gemini X2 from file-transfer control to touchscreen control")
+    try:
+      await self._file_transfer_control.stop()
+    except BaseException:
+      self._is_setup = False
+      raise
+    ghost_touch: _GhostTouchSession = _TheGhostTouch(port=port)
+    primary_error: BaseException | None = None
+    stop_error: Exception | None = None
+    restore_error: Exception | None = None
+    try:
+      await ghost_touch.setup()
+      result = await action(ghost_touch)
+    except BaseException as exc:
+      primary_error = exc
+    finally:
+      try:
+        await ghost_touch.stop()
+      except Exception as exc:
+        stop_error = exc
+        logger.exception("Failed to stop Gemini X2 touchscreen control")
+      try:
+        logger.info("Restoring Gemini X2 file-transfer control")
+        await self._file_transfer_control.setup()
+      except Exception as exc:
+        restore_error = exc
+        self._is_setup = False
+        logger.exception("Failed to restore Gemini X2 file-transfer control")
+
+    if primary_error is not None:
+      raise primary_error.with_traceback(primary_error.__traceback__)
+    if restore_error is not None:
+      raise restore_error
+    if stop_error is not None:
+      raise stop_error
+    return result
 
   async def prepare_temporary_protocol(
     self,
     protocol: ElectroporationProtocol,
     plate_columns: Optional[int] = None,
     prefix: Optional[str] = None,
-    plate_handler_reset_state: str = "unknown",
+    plate_handler_reset_state: PlateHandlerResetState = "unknown",
   ) -> PreparedElectroporationRun:
     """Create a temporary protocol and leave the Gemini armed on ``Run Protocol``."""
-    resolved_prefix = self._temporary_protocol_prefix if prefix is None else prefix
-    resolved_reset_state = self._resolve_plate_handler_reset_state(
-      plate_columns=plate_columns,
-      plate_handler_reset_state=plate_handler_reset_state,
-    )
-    assumed_plate_handler_pulse_count, assumed_plate_handler_column_adjust = (
-      self._resolve_plate_handler_manual_state(plate_columns=plate_columns)
-    )
-    # Preparing a new temp protocol is stricter than setup: earlier-sorting names and same-prefix
-    # temp leftovers both make the "first user protocol" strategy unsafe.
-    await self._ensure_temporary_protocol_prefix_available(resolved_prefix)
-
-    # This snapshot lets start_prepared_run() identify the new log by diffing BTXDATA after GO.
-    baseline_log_paths = tuple(await self.list_log_files())
-    protocol_name = self._make_temporary_protocol_name(resolved_prefix)
-    add_result = await self.add_protocol(
-      protocol_name=protocol_name,
-      protocol=protocol,
-      overwrite=False,
-    )
-
-    try:
-      rsi_result = await self.run_with_ghost_touch(
-        lambda ghost_touch: ghost_touch.prepare_user_protocol(
-          protocol_name=protocol_name,
-          plate_columns=plate_columns,
-        )
+    async with self._operation_lock:
+      self._require_setup()
+      if plate_columns is not None and (
+        isinstance(plate_columns, bool) or not 0 <= plate_columns <= 12
+      ):
+        raise ValueError("plate_columns must be in the range 0..12.")
+      resolved_prefix = self._temporary_protocol_prefix if prefix is None else prefix
+      resolved_reset_state = self._resolve_plate_handler_reset_state(
+        plate_columns=plate_columns,
+        plate_handler_reset_state=plate_handler_reset_state,
       )
-    except Exception:
-      await self._cleanup_temporary_protocol(protocol_name, missing_ok=True)
-      raise
+      assumed_pulse_count, assumed_column_adjust = self._resolve_plate_handler_manual_state(
+        plate_columns=plate_columns
+      )
+      await self._ensure_temporary_protocol_prefix_available(resolved_prefix)
 
-    return PreparedElectroporationRun(
-      protocol_name=protocol_name,
-      protocol=protocol,
-      plate_columns=plate_columns,
-      prefix=resolved_prefix,
-      prepared_at_utc=self._now_utc_iso(),
-      baseline_log_paths=baseline_log_paths,
-      prepare_result=ElectroporationPreparationDetails(
-        prepared_state=_nested_state(_result_dict(rsi_result), "prepared_verification", "state"),
-        protocol_setup=_result_dict(add_result),
-        device_prepare={
-          "plate_handler_reset_state": resolved_reset_state,
-          "assumed_plate_handler_pulse_count": assumed_plate_handler_pulse_count,
-          "assumed_plate_handler_column_adjust": assumed_plate_handler_column_adjust,
-          **_result_dict(rsi_result),
-        },
-      ),
-    )
+      baseline_log_paths = tuple(await self._file_transfer_control.list_log_files())
+      device_serial_number = await self._file_transfer_control.request_serial_number()
+      protocol_name = self._make_temporary_protocol_name(resolved_prefix)
+      logger.info(
+        "Preparing Gemini X2 temporary protocol %s (plate_columns=%s)",
+        protocol_name,
+        plate_columns,
+      )
+      add_result = await self._file_transfer_control.add_protocol(
+        protocol_name=protocol_name,
+        protocol=protocol,
+        overwrite=False,
+      )
+
+      try:
+        rsi_result = await self._run_with_ghost_touch(
+          lambda ghost_touch: ghost_touch.prepare_user_protocol(
+            protocol_name=protocol_name,
+            plate_columns=plate_columns,
+          )
+        )
+      except BaseException:
+        await self._cleanup_temporary_protocol(protocol_name, missing_ok=True)
+        raise
+
+      return PreparedElectroporationRun(
+        protocol_name=protocol_name,
+        device_serial_number=device_serial_number,
+        protocol=protocol,
+        plate_columns=plate_columns,
+        prefix=resolved_prefix,
+        prepared_at_utc=self._now_utc_iso(),
+        baseline_log_paths=baseline_log_paths,
+        prepare_result=ElectroporationPreparationDetails(
+          prepared_state=rsi_result.prepared_verification.state,
+          protocol_setup=add_result,
+          device_prepare={
+            "plate_handler_reset_state": resolved_reset_state,
+            "assumed_plate_handler_pulse_count": assumed_pulse_count,
+            "assumed_plate_handler_column_adjust": assumed_column_adjust,
+            **rsi_result.as_dict(),
+          },
+        ),
+      )
 
   async def start_prepared_run(
     self,
@@ -297,128 +374,131 @@ class BTXGeminiX2:
     max_run_seconds: float = 420.0,
   ) -> ElectroporationRunResult:
     """Verify, start, and collect the result for a previously prepared temporary run."""
-    prepared = self._coerce_prepared_run(prepared_run)
+    async with self._operation_lock:
+      self._require_setup()
+      if max_run_seconds <= 0:
+        raise ValueError("max_run_seconds must be greater than zero.")
+      prepared = self._coerce_prepared_run(prepared_run)
+      await self._verify_prepared_run_identity(prepared, verify_protocol=True)
 
-    started_at_utc = self._now_utc_iso()
-    rsi_result = await self.run_with_ghost_touch(
-      lambda ghost_touch: ghost_touch.start_prepared_user_protocol(
-        protocol_name=prepared.protocol_name,
-        home_after=home_after,
-        max_run_seconds=max_run_seconds,
-      )
-    )
-
-    try:
-      log_capture = await self._collect_matching_new_log(
-        before_logs=set(prepared.baseline_log_paths),
-        protocol_name=prepared.protocol_name,
-      )
-    finally:
-      cleanup = await self._cleanup_temporary_protocol(prepared.protocol_name, missing_ok=True)
-
-    return ElectroporationRunResult(
-      prepared_run=prepared,
-      started_at_utc=started_at_utc,
-      completed_at_utc=self._now_utc_iso(),
-      rsi_result=ElectroporationExecutionDetails(
-        verification_state=_nested_state(_result_dict(rsi_result), "verification", "state"),
-        completed_state=_nested_state(_result_dict(rsi_result), "completed", "state"),
-        final_state=(
-          _nested_state(_result_dict(rsi_result), "home", "state")
-          or _nested_state(_result_dict(rsi_result), "completed", "state")
-        ),
-        device_run=_result_dict(rsi_result),
-      ),
-      log_capture=ElectroporationLogCapture(
-        matched_log_path=cast(Optional[str], _result_dict(log_capture).get("matched_log_path")),
-        summary=dict(
-          cast(Mapping[str, Any], _result_dict(log_capture).get("matched_log", {})).get(
-            "summary", {}
-          )
-          if isinstance(_result_dict(log_capture).get("matched_log"), Mapping)
-          else {}
-        ),
-        details=_result_dict(log_capture),
-      ),
-      cleanup=ElectroporationCleanup(
-        deleted=cast(
-          Optional[bool],
-          cast(Mapping[str, Any], _result_dict(cleanup).get("delete_result", {})).get("deleted"),
+      logger.info("Starting prepared Gemini X2 run for protocol %s", prepared.protocol_name)
+      started_at_utc = self._now_utc_iso()
+      rsi_result = await self._run_with_ghost_touch(
+        lambda ghost_touch: ghost_touch.start_prepared_user_protocol(
+          protocol_name=prepared.protocol_name,
+          home_after=home_after,
+          max_run_seconds=max_run_seconds,
         )
-        if isinstance(_result_dict(cleanup).get("delete_result"), Mapping)
-        else None,
-        retry_used=bool(_result_dict(cleanup).get("delete_retry_used", False)),
-        error=cast(Optional[str], _result_dict(cleanup).get("delete_error")),
-        details=_result_dict(cleanup),
-      ),
-    )
+      )
+      completed_at_utc = rsi_result.completed_at_utc
+
+      try:
+        log_capture = await self._collect_matching_new_log(
+          before_logs=set(prepared.baseline_log_paths),
+          protocol_name=prepared.protocol_name,
+        )
+      finally:
+        cleanup = await self._cleanup_temporary_protocol(prepared.protocol_name, missing_ok=True)
+
+      summary: Dict[str, Any] = {}
+      if log_capture.matched_log is not None:
+        parsed_summary = log_capture.matched_log.get("summary")
+        if isinstance(parsed_summary, Mapping):
+          summary = dict(parsed_summary)
+      return ElectroporationRunResult(
+        prepared_run=prepared,
+        started_at_utc=started_at_utc,
+        completed_at_utc=completed_at_utc,
+        rsi_result=ElectroporationExecutionDetails(
+          verification_state=rsi_result.verification.state,
+          completed_state=rsi_result.completed.state,
+          final_state=(
+            rsi_result.completed.state if rsi_result.home is None else rsi_result.home.state
+          ),
+          device_run=rsi_result.as_dict(),
+        ),
+        log_capture=ElectroporationLogCapture(
+          matched_log_path=log_capture.matched_log_path,
+          summary=summary,
+          details=log_capture.as_dict(),
+        ),
+        cleanup=cleanup.to_cleanup(),
+      )
 
   async def cancel_prepared_run(
     self,
     prepared_run: Union[PreparedElectroporationRun, Mapping[str, Any]],
-    home_after: bool = True,
   ) -> ElectroporationCancellationResult:
-    """Return the Gemini to a safe screen and delete the prepared temporary protocol."""
-    prepared = self._coerce_prepared_run(prepared_run)
+    """Return the Gemini home and delete the prepared temporary protocol."""
+    async with self._operation_lock:
+      self._require_setup()
+      prepared = self._coerce_prepared_run(prepared_run)
+      await self._verify_prepared_run_identity(prepared, verify_protocol=False)
 
-    rsi_result = await self.run_with_ghost_touch(
-      lambda ghost_touch: ghost_touch.cancel_prepared_user_protocol(home_after=home_after)
-    )
-    cleanup = await self._cleanup_temporary_protocol(prepared.protocol_name, missing_ok=True)
+      logger.info("Cancelling prepared Gemini X2 run for protocol %s", prepared.protocol_name)
+      rsi_result = await self._run_with_ghost_touch(
+        lambda ghost_touch: ghost_touch.cancel_prepared_user_protocol()
+      )
+      cleanup = await self._cleanup_temporary_protocol(prepared.protocol_name, missing_ok=True)
 
-    return ElectroporationCancellationResult(
-      prepared_run=prepared,
-      cancelled_at_utc=self._now_utc_iso(),
-      rsi_result=ElectroporationCancellationDetails(
-        final_state=_nested_state(_result_dict(rsi_result), "final_state", "state"),
-        device_cancel=_result_dict(rsi_result),
-      ),
-      cleanup=ElectroporationCleanup(
-        deleted=cast(
-          Optional[bool],
-          cast(Mapping[str, Any], _result_dict(cleanup).get("delete_result", {})).get("deleted"),
-        )
-        if isinstance(_result_dict(cleanup).get("delete_result"), Mapping)
-        else None,
-        retry_used=bool(_result_dict(cleanup).get("delete_retry_used", False)),
-        error=cast(Optional[str], _result_dict(cleanup).get("delete_error")),
-        details=_result_dict(cleanup),
-      ),
-    )
+      return ElectroporationCancellationResult(
+        prepared_run=prepared,
+        cancelled_at_utc=self._now_utc_iso(),
+        rsi_result=ElectroporationCancellationDetails(
+          final_state=rsi_result.final_state.state,
+          device_cancel=rsi_result.as_dict(),
+        ),
+        cleanup=cleanup.to_cleanup(),
+      )
 
   async def request_device_info(self) -> Dict[str, Any]:
     """Return Gemini identity plus the supported electroporation workflow surface."""
-    version = await self.request_version()
-    serial_number = await self.request_serial_number()
-    device_time = await self.request_device_time()
-    protocols = await self.list_protocols()
-    plate_handler_info = self.plate_handler.get_device_info()
-    return {
-      "device": self.__class__.__name__,
-      "model": "Gemini X2",
-      "port": self.port,
-      "version": version,
-      "serial_number": serial_number,
-      "device_time": device_time,
-      "protocol_count": len(protocols),
-      "supports_prepared_temporary_runs": True,
-      "supports_serialized_prepared_runs": True,
-      "supports_stored_protocol_runs": False,
-      "supports_plate_columns": True,
-      "supports_plate_handler_reset_state": True,
-      "plate_handler_reset_states": sorted(self.PLATE_HANDLER_RESET_STATES),
-      "plate_handler": plate_handler_info,
-      "temporary_protocol_prefix": self._temporary_protocol_prefix,
-      "protocol_transfer_control": "FileTransferControl",
-      "touch_control": "TheGhostTouch",
-    }
+    async with self._operation_lock:
+      self._require_setup()
+      version = await self._file_transfer_control.request_version()
+      serial_number = await self._file_transfer_control.request_serial_number()
+      device_time = await self._file_transfer_control.request_device_time()
+      protocols = await self._file_transfer_control.list_protocols()
+      return {
+        "device": self.__class__.__name__,
+        "model": "Gemini X2",
+        "port": self.port,
+        "version": version,
+        "serial_number": serial_number,
+        "device_time": device_time,
+        "protocol_count": len(protocols),
+        "supports_prepared_temporary_runs": True,
+        "supports_serialized_prepared_runs": True,
+        "supports_stored_protocol_runs": False,
+        "supports_plate_columns": True,
+        "supports_plate_handler_reset_state": True,
+        "plate_handler_reset_states": sorted(self.PLATE_HANDLER_RESET_STATES),
+        "plate_handler": self.plate_handler.get_device_info(),
+        "temporary_protocol_prefix": self._temporary_protocol_prefix,
+      }
+
+  async def _verify_prepared_run_identity(
+    self,
+    prepared: PreparedElectroporationRun,
+    *,
+    verify_protocol: bool,
+  ) -> None:
+    current_serial_number = await self._file_transfer_control.request_serial_number()
+    if current_serial_number != prepared.device_serial_number:
+      raise RuntimeError(
+        "Prepared Gemini X2 run belongs to serial number "
+        f"{prepared.device_serial_number!r}, but the connected device is "
+        f"{current_serial_number!r}."
+      )
+    if verify_protocol:
+      await self._file_transfer_control.verify_protocol(prepared.protocol_name, prepared.protocol)
 
   def _resolve_plate_handler_reset_state(
     self,
     *,
     plate_columns: Optional[int],
-    plate_handler_reset_state: str,
-  ) -> str:
+    plate_handler_reset_state: PlateHandlerResetState,
+  ) -> PlateHandlerResetState:
     if plate_handler_reset_state not in self.PLATE_HANDLER_RESET_STATES:
       allowed = ", ".join(sorted(self.PLATE_HANDLER_RESET_STATES))
       raise ValueError(
@@ -447,7 +527,7 @@ class BTXGeminiX2:
 
   async def _ensure_temporary_protocol_prefix_order_safe(self, prefix: str) -> None:
     conflicts = self._temporary_protocol_preceding_conflicts(
-      await self.list_protocols(),
+      await self._file_transfer_control.list_protocols(),
       prefix,
     )
     if conflicts:
@@ -460,7 +540,7 @@ class BTXGeminiX2:
       )
 
   async def _ensure_temporary_protocol_prefix_available(self, prefix: str) -> None:
-    protocols = await self.list_protocols()
+    protocols = await self._file_transfer_control.list_protocols()
     preceding = self._temporary_protocol_preceding_conflicts(protocols, prefix)
     collisions = self._temporary_protocol_prefix_collisions(protocols, prefix)
     conflicts = sorted(set(preceding + collisions), key=str.casefold)
@@ -483,24 +563,27 @@ class BTXGeminiX2:
       raise ValueError("prefix must be ASCII.") from exc
     return f"{prefix_text}_"
 
-  def _temporary_protocol_preceding_conflicts(self, protocols: list[str], prefix: str) -> list[str]:
-    reserved_anchor = self._temporary_protocol_sort_anchor(prefix)
-    anchor_key = reserved_anchor.casefold()
-    conflicts = []
-    for protocol_name in protocols:
-      protocol_key = protocol_name.casefold()
-      if protocol_key < anchor_key:
-        conflicts.append(protocol_name)
-    return sorted(conflicts, key=str.casefold)
+  def _temporary_protocol_preceding_conflicts(
+    self,
+    protocols: list[str],
+    prefix: str,
+  ) -> list[str]:
+    anchor_key = self._temporary_protocol_sort_anchor(prefix).casefold()
+    return sorted(
+      (name for name in protocols if name.casefold() < anchor_key),
+      key=str.casefold,
+    )
 
-  def _temporary_protocol_prefix_collisions(self, protocols: list[str], prefix: str) -> list[str]:
-    reserved_anchor = self._temporary_protocol_sort_anchor(prefix)
-    anchor_key = reserved_anchor.casefold()
-    collisions = []
-    for protocol_name in protocols:
-      if protocol_name.casefold().startswith(anchor_key):
-        collisions.append(protocol_name)
-    return sorted(collisions, key=str.casefold)
+  def _temporary_protocol_prefix_collisions(
+    self,
+    protocols: list[str],
+    prefix: str,
+  ) -> list[str]:
+    anchor_key = self._temporary_protocol_sort_anchor(prefix).casefold()
+    return sorted(
+      (name for name in protocols if name.casefold().startswith(anchor_key)),
+      key=str.casefold,
+    )
 
   def _coerce_prepared_run(
     self,
@@ -511,7 +594,7 @@ class BTXGeminiX2:
     return PreparedElectroporationRun.from_dict(prepared_run)
 
   async def _force_home_via_ghost_touch(self) -> None:
-    await self.run_with_ghost_touch(lambda ghost_touch: ghost_touch.ensure_home())
+    await self._run_with_ghost_touch(lambda ghost_touch: ghost_touch.ensure_home())
 
   async def _cleanup_temporary_protocol(
     self,
@@ -524,25 +607,28 @@ class BTXGeminiX2:
     delete_retry_used = False
 
     try:
-      delete_result = await self.delete_protocol(
+      delete_result = await self._file_transfer_control.delete_protocol(
         protocol_name,
         missing_ok=missing_ok,
       )
-    except RuntimeError as exc:
-      if "still exists after repeated delete attempts" not in str(exc):
-        delete_error = str(exc)
-      else:
-        delete_retry_used = True
-        try:
-          await self._force_home_via_ghost_touch()
-          delete_result = await self.delete_protocol(
-            protocol_name,
-            missing_ok=missing_ok,
-          )
-        except Exception as retry_exc:  # pragma: no cover - hardware-specific recovery
-          delete_error = str(retry_exc)
+    except ProtocolDeletionPendingError:
+      delete_retry_used = True
+      logger.warning(
+        "Gemini X2 protocol %s remained after deletion; returning the touchscreen home and retrying",
+        protocol_name,
+      )
+      try:
+        await self._force_home_via_ghost_touch()
+        delete_result = await self._file_transfer_control.delete_protocol(
+          protocol_name,
+          missing_ok=missing_ok,
+        )
+      except Exception as retry_exc:  # pragma: no cover - hardware-specific recovery
+        delete_error = str(retry_exc)
+        logger.exception("Failed to delete Gemini X2 temporary protocol %s", protocol_name)
     except Exception as exc:  # pragma: no cover - hardware-specific recovery
       delete_error = str(exc)
+      logger.exception("Failed to delete Gemini X2 temporary protocol %s", protocol_name)
 
     return TemporaryProtocolCleanupResult(
       delete_result=delete_result,
@@ -555,37 +641,49 @@ class BTXGeminiX2:
     before_logs: set[str],
     protocol_name: str,
   ) -> MatchedRunLogResult:
-    # Logs are matched by "new since prepare" plus protocol name, rather than by "latest log",
-    # to avoid picking up unrelated historical runs.
-    after_logs = set(await self.list_log_files())
-    new_logs = sorted(after_logs - before_logs)
-
-    for log_path in new_logs:
-      text = await self.fetch_sd_file(log_path)
-      parsed = self.parse_run_log(text)
-      if parsed["summary"]["protocol_name"] == protocol_name:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + self.LOG_POLL_TIMEOUT_SECONDS
+    after_logs = set(before_logs)
+    new_logs: list[str] = []
+    while True:
+      after_logs = set(await self._file_transfer_control.list_log_files())
+      new_logs = sorted(after_logs - before_logs)
+      for log_path in new_logs:
+        text = await self._file_transfer_control.fetch_sd_file(log_path)
+        parsed = self.parse_run_log(text)
+        summary = parsed.get("summary")
+        if isinstance(summary, Mapping) and summary.get("protocol_name") == protocol_name:
+          return MatchedRunLogResult(
+            before_count=len(before_logs),
+            after_count=len(after_logs),
+            new_log_paths=tuple(new_logs),
+            matched_log_path=log_path,
+            matched_log=parsed,
+          )
+      if loop.time() >= deadline:
+        logger.warning(
+          "No new Gemini X2 run log matched protocol %s within %.1f seconds",
+          protocol_name,
+          self.LOG_POLL_TIMEOUT_SECONDS,
+        )
         return MatchedRunLogResult(
           before_count=len(before_logs),
           after_count=len(after_logs),
           new_log_paths=tuple(new_logs),
-          matched_log_path=log_path,
-          matched_log=parsed,
+          matched_log_path=None,
+          matched_log=None,
         )
-
-    raise RuntimeError(
-      f"No new BTXDATA log matched protocol '{protocol_name}'. New logs: {new_logs}"
-    )
+      await asyncio.sleep(self.LOG_POLL_INTERVAL_SECONDS)
 
   def _make_temporary_protocol_name(self, prefix: str) -> str:
     reserved_anchor = self._temporary_protocol_sort_anchor(prefix)
-    timestamp = datetime.now().strftime("%m%d%H%M%S")
-    name = f"{reserved_anchor}{timestamp}"
-    if len(name.encode("ascii")) > self.UI_PROTOCOL_NAME_BYTES:
+    remaining_bytes = self.UI_PROTOCOL_NAME_BYTES - len(reserved_anchor.encode("ascii"))
+    if remaining_bytes < 6:
       raise ValueError(
-        f"Generated temp protocol name {name!r} exceeds the "
+        "Generated temp protocol name would exceed the "
         f"{self.UI_PROTOCOL_NAME_BYTES}-byte Gemini UI limit. Shorten prefix={prefix!r}."
       )
-    return name
+    return f"{reserved_anchor}{uuid.uuid4().hex[:remaining_bytes].upper()}"
 
   def _now_utc_iso(self) -> str:
     return datetime.now(timezone.utc).isoformat()

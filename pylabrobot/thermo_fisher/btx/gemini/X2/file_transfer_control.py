@@ -1,25 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from datetime import datetime, timezone
 from math import isfinite
-from typing import Any, Dict, Mapping, Optional, Protocol, TypedDict, runtime_checkable
+from typing import Any, Dict, Mapping, Optional, Protocol, TypedDict
 
 from pylabrobot.io.binary import Reader, Writer
-from pylabrobot.io.serial import Serial
+from pylabrobot.io.serial import Serial, find_serial_ports
 
 from .standard import ElectroporationProtocol
 
-try:
-  import serial.tools.list_ports
-
-  _HAS_LIST_PORTS = True
-except ImportError:
-  _HAS_LIST_PORTS = False
+logger = logging.getLogger(__name__)
 
 
-@runtime_checkable
 class _SerialLike(Protocol):
   async def setup(self) -> None:
     pass
@@ -33,16 +28,17 @@ class _SerialLike(Protocol):
   async def read(self, num_bytes: int = 1) -> bytes:
     pass
 
-  async def readline(self) -> bytes:
-    pass
-
 
 class _ProgramEntry(TypedDict):
   name: str
   size: int
 
 
-class FileTransferControl:
+class ProtocolDeletionPendingError(RuntimeError):
+  """Raised when a protocol remains visible after the Gemini accepted its deletion."""
+
+
+class _FileTransferControl:
   """Protocol Manager style USB-serial control for the BTX Gemini X2.
 
   This control owns the PM shell path only: stored user protocols, SD-card access,
@@ -74,10 +70,7 @@ class FileTransferControl:
     serial_io: Optional[_SerialLike] = None,
   ) -> None:
     self._serial: Optional[_SerialLike] = serial_io
-    self._serial_io_injected = serial_io is not None
     self._port = port
-    self._vid = vid
-    self._pid = pid
     self._baudrate = baudrate
     self._timeout = timeout
     self._write_timeout = write_timeout
@@ -86,6 +79,8 @@ class FileTransferControl:
       if supported_usb_ids is not None
       else set(self.SUPPORTED_USB_IDS) | {(vid, pid)}
     )
+    self._is_setup = False
+    self._command_lock = asyncio.Lock()
 
   @property
   def port(self) -> Optional[str]:
@@ -93,11 +88,14 @@ class FileTransferControl:
 
   async def setup(self) -> None:
     """Open the Gemini USB-serial port, autodiscovering it when needed."""
-    if not self._serial_io_injected:
+    if self._is_setup:
+      return
+    logger.info("Setting up Gemini X2 file-transfer control on port %s", self._port or "auto")
+    if self._serial is None:
       if self._port is None:
         self._port = self._resolve_port()
       self._serial = Serial(
-        human_readable_device_name="BTX Gemini X2 FileTransferControl",
+        human_readable_device_name="BTX Gemini X2 protocol manager",
         port=self._port,
         baudrate=self._baudrate,
         timeout=self._timeout,
@@ -105,23 +103,39 @@ class FileTransferControl:
       )
 
     serial_dev = self._require_serial()
-    await serial_dev.setup()
+    try:
+      await serial_dev.setup()
+    except Exception:
+      try:
+        await serial_dev.stop()
+      except Exception:
+        logger.debug("Failed to close Gemini serial after setup failure", exc_info=True)
+      raise
+    self._is_setup = True
     resolved_port = getattr(serial_dev, "port", None)
     if isinstance(resolved_port, str):
       self._port = resolved_port
+    logger.info("Gemini X2 file-transfer control ready on port %s", self._port)
 
   async def stop(self) -> None:
     """Close the Gemini USB-serial port."""
-    await self._require_serial().stop()
+    if not self._is_setup:
+      return
+    logger.info("Stopping Gemini X2 file-transfer control on port %s", self._port)
+    try:
+      await self._require_serial().stop()
+    finally:
+      self._is_setup = False
+    logger.info("Gemini X2 file-transfer control stopped")
 
   async def list_protocols_with_size(self) -> list[_ProgramEntry]:
     """List user protocols currently stored on the Gemini."""
-    isprog_response = await self.send_text_command("isprog")
+    isprog_response = await self._send_text_command("isprog")
     isprog_error = self._extract_error(isprog_response)
     if isprog_error is not None and "unknown command" not in isprog_response.lower():
       self._require_no_error(isprog_response, "isprog")
 
-    response = await self.send_text_command('cat "*.BTX"')
+    response = await self._send_text_command('cat "*.BTX"')
     self._require_no_error(response, 'cat "*.BTX"')
     return self._parse_program_table(response)
 
@@ -133,7 +147,7 @@ class FileTransferControl:
     """Fetch and decode a stored protocol payload by name."""
     name = self._sanitize_protocol_name(protocol_name)
     command = f'sendmtd "{name}"'
-    response = await self.send_text_command(command)
+    response = await self._send_text_command(command)
     self._require_no_error(response, command)
 
     payload_hex, payload = self._extract_method_payload(response)
@@ -147,6 +161,57 @@ class FileTransferControl:
       response=response,
     )
 
+  async def verify_protocol(
+    self,
+    protocol_name: str,
+    expected: ElectroporationProtocol,
+  ) -> Dict[str, Any]:
+    """Read back a stored method and require it to match the prepared protocol exactly."""
+    result = await self.request_protocol(protocol_name)
+    decoded = result["decoded"]
+    if not isinstance(decoded, Mapping):
+      raise RuntimeError(f"Gemini protocol {protocol_name!r} had no decoded payload.")
+
+    normalized = self._normalize_protocol_parameters(expected)
+    expected_payload_hex = self._build_method_payload(protocol_name, expected).hex().upper()
+    expected_fields: Dict[str, Any] = {
+      "version": 1,
+      "name": protocol_name,
+      "protocol_type": normalized["protocol_type"],
+      "pulse_amplitude_volts": normalized["pulse_amplitude_volts"],
+      "pulse_count": normalized["pulse_count"],
+      "pulse_interval_ms": normalized["pulse_interval_ms"],
+      "electrode_gap_mm": normalized["electrode_gap_mm"],
+      "pulse_duration_us": 0,
+      "resistance_ohms": 0,
+      "capacitance_uf": 0,
+    }
+    if normalized["protocol_type"] == "square":
+      expected_fields["pulse_duration_us"] = normalized["pulse_duration_us"]
+    else:
+      expected_fields["resistance_ohms"] = normalized["resistance_ohms"]
+      expected_fields["capacitance_uf"] = normalized["capacitance_uf"]
+
+    differences = []
+    for field, expected_value in expected_fields.items():
+      actual_value = decoded.get(field)
+      matches = (
+        abs(float(actual_value) - expected_value) <= 1e-5
+        if field == "electrode_gap_mm" and isinstance(actual_value, (int, float))
+        else actual_value == expected_value
+      )
+      if not matches:
+        differences.append(f"{field}: expected {expected_value!r}, got {actual_value!r}")
+    actual_payload_hex = result.get("payload_hex")
+    if isinstance(actual_payload_hex, str) and actual_payload_hex.upper() != expected_payload_hex:
+      differences.append("raw method payload differs")
+    if differences:
+      raise RuntimeError(
+        f"Stored Gemini protocol {protocol_name!r} no longer matches the prepared run: "
+        + "; ".join(differences)
+      )
+    return result
+
   async def add_protocol(
     self,
     protocol_name: str,
@@ -155,6 +220,9 @@ class FileTransferControl:
   ) -> Dict[str, Any]:
     """Transfer a new user protocol to the Gemini over the PM serial interface."""
     name = self._sanitize_new_protocol_name(protocol_name)
+    logger.info("Adding Gemini X2 protocol %s (overwrite=%s)", name, overwrite)
+    payload = self._build_method_payload(name, protocol)
+    payload_hex = payload.hex().upper()
     existing = await self.list_protocols()
     exists_before = name in existing
 
@@ -163,20 +231,18 @@ class FileTransferControl:
     if exists_before and overwrite:
       await self.delete_protocol(name)
 
-    payload = self._build_method_payload(name, protocol)
-    payload_hex = payload.hex().upper()
-
     meth_command = f"meth {payload_hex}"
-    meth_response = await self.send_text_command(meth_command)
+    meth_response = await self._send_text_command(meth_command)
     self._require_no_error(meth_response, meth_command)
 
-    mend_response = await self.send_text_command("mend")
+    mend_response = await self._send_text_command("mend")
     self._require_no_error(mend_response, "mend")
 
     exists_after = name in await self.list_protocols()
     if not exists_after:
       raise RuntimeError(f'Protocol "{name}" was not visible after transfer.')
 
+    logger.info("Added Gemini X2 protocol %s", name)
     decoded = self._decode_method_payload(payload)
     return self._operation_result(
       "add_protocol",
@@ -192,11 +258,13 @@ class FileTransferControl:
   async def delete_protocol(self, protocol_name: str, missing_ok: bool = False) -> Dict[str, Any]:
     """Delete a stored user protocol from the Gemini."""
     name = self._sanitize_protocol_name(protocol_name)
+    logger.info("Deleting Gemini X2 protocol %s", name)
     exists_before = name in await self.list_protocols()
 
     if not exists_before:
       if not missing_ok:
         raise FileNotFoundError(f'Protocol "{name}" is not present on the device.')
+      logger.info("Gemini X2 protocol %s was already absent", name)
       return self._operation_result(
         "delete_protocol",
         name,
@@ -208,15 +276,18 @@ class FileTransferControl:
     command = f'delm "{name}"'
     response = ""
     for _ in range(8):
-      response = await self.send_text_command(command)
+      response = await self._send_text_command(command)
       self._require_no_error(response, command)
       if name not in await self.list_protocols():
         break
 
     exists_after = name in await self.list_protocols()
     if exists_after:
-      raise RuntimeError(f'Protocol "{name}" still exists after repeated delete attempts.')
+      raise ProtocolDeletionPendingError(
+        f'Protocol "{name}" still exists after repeated delete attempts.'
+      )
 
+    logger.info("Deleted Gemini X2 protocol %s", name)
     return self._operation_result(
       "delete_protocol",
       name,
@@ -230,7 +301,7 @@ class FileTransferControl:
     """List entries in an SD-card directory path."""
     normalized = self._normalize_sd_path(sd_path)
     command = f"sddir {normalized}"
-    response = await self.send_text_command(command)
+    response = await self._send_text_command(command)
     self._require_no_error(response, command)
     return self._parse_sd_dir_listing(response, command)
 
@@ -238,7 +309,7 @@ class FileTransferControl:
     """Read a text file from the Gemini SD card."""
     normalized = self._normalize_sd_path(sd_path)
     command = f"sdsend {normalized}"
-    response = await self.send_text_command(command)
+    response = await self._send_text_command(command)
     self._require_no_error(response, command)
     return self._strip_sd_file_response(response, command)
 
@@ -276,10 +347,10 @@ class FileTransferControl:
 
   async def request_comm_stats(self) -> Dict[str, int]:
     """Return the device communication counters from ``status``/``stat``."""
-    response = await self.send_text_command("status")
+    response = await self._send_text_command("status")
     error = self._extract_error(response)
     if error is not None and "unknown command" in response.lower():
-      response = await self.send_text_command("stat")
+      response = await self._send_text_command("stat")
     self._require_no_error(response, "status/stat")
 
     stats: Dict[str, int] = {}
@@ -324,23 +395,24 @@ class FileTransferControl:
     }
     return {"summary": summary, "text": text}
 
-  async def write_raw(self, data: bytes) -> None:
+  async def _write_raw(self, data: bytes) -> None:
     """Write raw bytes to the Gemini serial interface."""
     await self._require_serial().write(data)
 
-  async def read_raw(self, num_bytes: int = 1) -> bytes:
+  async def _read_raw(self, num_bytes: int = 1) -> bytes:
     """Read raw bytes from the Gemini serial interface."""
     return await self._require_serial().read(num_bytes=num_bytes)
 
-  async def readline_raw(self) -> bytes:
-    """Read one raw line from the Gemini serial interface."""
-    return await self._require_serial().readline()
-
-  async def send_text_command(self, command: str) -> str:
+  async def _send_text_command(self, command: str) -> str:
     """Send one PM shell command and return the prompt-terminated response text."""
-    await self.write_raw((command + "\r\n").encode("utf-8"))
-    response = await self._read_until_prompt()
-    return response.decode("utf-8", errors="replace")
+    if "\r" in command or "\n" in command:
+      raise ValueError("BTX commands cannot contain carriage returns or newlines.")
+    if not self._is_setup:
+      raise RuntimeError("Gemini X2 file-transfer control is not set up.")
+    async with self._command_lock:
+      await self._write_raw((command + "\r\n").encode("utf-8"))
+      response = await self._read_until_prompt()
+      return response.decode("utf-8", errors="replace")
 
   def _require_serial(self) -> _SerialLike:
     if self._serial is None:
@@ -356,13 +428,7 @@ class FileTransferControl:
     }
 
   def _resolve_port(self) -> str:
-    if not _HAS_LIST_PORTS:
-      raise RuntimeError(
-        "pyserial is required for BTX port autodiscovery. Install with: pip install pylabrobot[btx]"
-      )
-
-    ports = serial.tools.list_ports.comports()
-    btx_ports = [p for p in ports if (p.vid, p.pid) in self._supported_usb_ids]
+    btx_ports = find_serial_ports(self._supported_usb_ids)
     if len(btx_ports) == 0:
       raise RuntimeError(
         "No BTX Gemini found with supported VID:PID pairs: "
@@ -370,40 +436,38 @@ class FileTransferControl:
         "If connected, provide the serial port explicitly (e.g., /dev/cu.usbmodem...)."
       )
     if len(btx_ports) > 1:
-      available_ports = [f"{p.device} ({hex(p.vid)}:{hex(p.pid)})" for p in btx_ports]
       raise RuntimeError(
-        f"Multiple BTX Gemini devices found: {available_ports}. Please specify the port explicitly."
+        f"Multiple BTX Gemini devices found: {btx_ports}. Please specify the port explicitly."
       )
 
-    detected = btx_ports[0]
-    if detected.vid is not None:
-      self._vid = detected.vid
-    if detected.pid is not None:
-      self._pid = detected.pid
-    return str(detected.device)
+    logger.info("Autodiscovered Gemini X2 on port %s", btx_ports[0])
+    return btx_ports[0]
 
   async def _read_single_value_command(self, command: str) -> str:
-    response = await self.send_text_command(command)
+    response = await self._send_text_command(command)
     self._require_no_error(response, command)
     lines = [line for line in self._response_lines(response) if line not in {command, ":"}]
-    return lines[0] if len(lines) > 0 else ""
+    if len(lines) == 0:
+      raise RuntimeError(f"BTX command {command!r} returned no value.")
+    return lines[0]
 
   async def _read_until_prompt(self, read_size: int = 512, max_reads: int = 24) -> bytes:
     chunks: list[bytes] = []
-    got_any = False
     for _ in range(max_reads):
-      chunk = await self.read_raw(num_bytes=read_size)
+      chunk = await self._read_raw(num_bytes=read_size)
       if len(chunk) == 0:
-        if got_any:
-          break
         await asyncio.sleep(0.05)
         continue
-      got_any = True
       chunks.append(chunk)
-      if chunk.endswith(b":"):
-        break
+      response = b"".join(chunks)
+      if response.rstrip(b"\r\n").endswith(b":"):
+        return response
       await asyncio.sleep(0.03)
-    return b"".join(chunks)
+    response = b"".join(chunks)
+    raise TimeoutError(
+      "Timed out waiting for the Gemini command prompt; "
+      f"received {len(response)} bytes without a terminating ':'."
+    )
 
   def _response_lines(self, response: str) -> list[str]:
     return [line.strip() for line in response.splitlines()]
@@ -453,17 +517,22 @@ class FileTransferControl:
     return programs
 
   def _normalize_sd_path(self, sd_path: str) -> str:
+    if any(ord(character) < 32 or ord(character) == 127 for character in sd_path):
+      raise ValueError("SD paths cannot contain control characters.")
     path = sd_path.strip().replace("/", "\\")
     if not path.startswith("\\"):
       path = "\\" + path
     path = re.sub(r"\\+", r"\\", path)
-    return path.rstrip("\\") or "\\"
+    components = [component for component in path.split("\\") if component]
+    for component in components:
+      if component in {".", ".."}:
+        raise ValueError("SD paths cannot contain '.' or '..' components.")
+      if not re.fullmatch(r"[^\x00-\x1f\x7f\"<>|:*?]+", component):
+        raise ValueError(f"Unsafe Gemini SD path component: {component!r}.")
+    return "\\" + "\\".join(components) if components else "\\"
 
   def _join_sd_path(self, *parts: str) -> str:
-    cleaned = [part.strip().strip("\\/") for part in parts if part.strip()]
-    if len(cleaned) == 0:
-      return "\\"
-    return "\\" + "\\".join(cleaned)
+    return self._normalize_sd_path("\\".join(parts))
 
   def _parse_sd_dir_listing(self, response: str, command: str) -> list[str]:
     return [line for line in self._response_lines(response) if line not in {"", ":", command}]
@@ -712,7 +781,9 @@ class FileTransferControl:
       raise ValueError("Missing pulse amplitude. Use pulse_amplitude_volts (or voltage).")
     self._validate_amplitude_volts(amplitude_volts)
 
-    pulse_count = self._coerce_int_parameter(parameters, "pulse_count") or 1
+    pulse_count = self._coerce_int_parameter(parameters, "pulse_count")
+    if pulse_count is None:
+      pulse_count = 1
     pulse_interval_seconds = self._coerce_float_parameter(
       parameters, "pulse_interval_seconds", "pulse_interval_sec", "interval_seconds"
     )

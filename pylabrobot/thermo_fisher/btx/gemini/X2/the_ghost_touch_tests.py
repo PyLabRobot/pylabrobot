@@ -1,7 +1,8 @@
 import json
-from pathlib import Path
 import shutil
+import subprocess
 import unittest
+from pathlib import Path
 from typing import Optional, cast
 from unittest.mock import AsyncMock, patch
 
@@ -12,29 +13,30 @@ pytest.importorskip("PIL")
 pytest.importorskip("serial")
 
 from pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch import (
-  Detection,
   FRAME_BYTES,
   FRAME_H,
   FRAME_W,
-  FrameCapture,
-  _RSITransport,
-  _GeminiScreenDetector,
-  _decode_rsi_framebuffer,
-  Snapshot,
   STATE_MAIN_MENU,
   STATE_PROTOCOL_DETAILS,
   STATE_PROTOCOL_FINISH,
   STATE_PROTOCOL_RUN_VIEW,
   STATE_UNKNOWN,
   STATE_USER_PROTOCOLS,
-  TheGhostTouch,
+  Detection,
+  FrameCapture,
+  Snapshot,
+  _decode_rsi_framebuffer,
+  _GeminiScreenDetector,
+  _RSITransport,
+  _TheGhostTouch,
 )
 
 SCREEN_FIXTURES = Path(__file__).parent / "test_data/gemini_x2/screens"
 
 
 class _FakeAsyncSerial:
-  def __init__(self, reads: Optional[list[bytes]] = None):
+  def __init__(self, reads: Optional[list[bytes]] = None, port: str = "/dev/test"):
+    self.port = port
     self.reads: list[bytes] = list(reads or [])
     self.writes: list[bytes] = []
     self.setup = AsyncMock()
@@ -54,19 +56,11 @@ class _FakeAsyncSerial:
     self.reset_calls += 1
 
 
-class _TestGhostTouch(TheGhostTouch):
+class _TestGhostTouch(_TheGhostTouch):
   def __init__(self) -> None:
-    self.port = "/dev/test"
-    self.baud = 115200
-    self.timeout = 15.0
-    self.retries = 1
-    self.min_conf = 0.70
-    self.down_ms = 70
-    self.artifact_dir = "/tmp"
-    self.ser = None
+    super().__init__(port="/dev/test", artifact_dir="/tmp", retries=1)
     self._snapshots: list[Snapshot] = []
     self.taps: list[tuple[int, int, Optional[int]]] = []
-    self.snapshot_retry_flags: list[bool] = []
 
   def queue_snapshot(
     self, state: str, text: str = "", text_norm: str = "", image_path: str = "img"
@@ -82,21 +76,19 @@ class _TestGhostTouch(TheGhostTouch):
       Snapshot(frame=cast(FrameCapture, None), image_path=image_path, detection=detection)
     )
 
-  def snapshot(self, prefix: str) -> Snapshot:
+  async def snapshot(self, prefix: str) -> Snapshot:
     del prefix
-    self.snapshot_retry_flags.append(True)
     if not self._snapshots:
       raise AssertionError("No queued snapshots left")
     return self._snapshots.pop(0)
 
-  def _snapshot_run_poll(self, prefix: str) -> Snapshot:
-    self.snapshot_retry_flags.append(False)
-    return self.snapshot(prefix)
+  async def _snapshot_run_poll(self, prefix: str) -> Snapshot:
+    return await self.snapshot(prefix)
 
-  def tap(self, x: int, y: int, down_ms=None) -> None:
+  async def tap(self, x: int, y: int, down_ms=None) -> None:
     self.taps.append((x, y, down_ms))
 
-  def tap_and_wait(
+  async def tap_and_wait(
     self,
     x: int,
     y: int,
@@ -109,27 +101,27 @@ class _TestGhostTouch(TheGhostTouch):
   ):
     del expected_states, timeout, interval, prefix, initial_delay
     self.taps.append((x, y, down_ms))
-    return self.snapshot("tap-and-wait")
+    return await self.snapshot("tap-and-wait")
 
-  def _scroll_user_protocols_to_top(self, current: Snapshot) -> Snapshot:
+  async def _scroll_user_protocols_to_top(self, current: Snapshot) -> Snapshot:
     return current
 
-  def _summary_matches_protocol(self, image_path: str, protocol_name: str):
+  async def _summary_matches_protocol(self, image_path: str, protocol_name: str):
     del image_path, protocol_name
     return True
 
-  def _run_view_matches_protocol(self, image_path: str, protocol_name: str):
+  async def _run_view_matches_protocol(self, image_path: str, protocol_name: str):
     del image_path, protocol_name
     return True
 
 
-class TestTheGhostTouch(unittest.TestCase):
+class TestTheGhostTouch(unittest.IsolatedAsyncioTestCase):
   def _fixture_protocol_name(self) -> str:
     metadata = json.loads((SCREEN_FIXTURES / "metadata.json").read_text())
     return str(metadata["temporary_protocol"]["name"])
 
   def test_require_dependencies_reports_missing_tesseract(self):
-    touch = TheGhostTouch(port="/dev/test")
+    touch = _TheGhostTouch(port="/dev/test")
 
     with patch(
       "pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch.shutil.which",
@@ -137,6 +129,49 @@ class TestTheGhostTouch(unittest.TestCase):
     ):
       with self.assertRaisesRegex(RuntimeError, "external `tesseract` command"):
         touch._require_dependencies()
+
+  def test_constructor_rejects_invalid_retry_and_confidence_settings(self):
+    with self.assertRaisesRegex(ValueError, "retries"):
+      _TheGhostTouch(port="/dev/test", retries=0)
+    with self.assertRaisesRegex(ValueError, "min_conf"):
+      _TheGhostTouch(port="/dev/test", min_conf=1.1)
+
+  def test_ocr_timeout_and_process_failures_return_empty_text(self):
+    detector = _GeminiScreenDetector(min_conf=0.70, ocr_timeout=0.01)
+
+    with patch(
+      "pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch.subprocess.check_output",
+      side_effect=subprocess.TimeoutExpired("tesseract", 0.01),
+    ):
+      with self.assertLogs(
+        "pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch", level="WARNING"
+      ):
+        self.assertEqual(detector.ocr_text("missing.png", psm=6), "")
+
+  def test_marker_and_protocol_matching_require_token_boundaries(self):
+    detector = _GeminiScreenDetector(min_conf=0.70)
+
+    self.assertFalse(detector.contains_marker("number of columns", "no"))
+    self.assertTrue(detector.contains_marker("answer yes or no", "no"))
+    self.assertTrue(detector.contains_marker("the mainmenu screen", "main menu"))
+    self.assertTrue(detector.protocol_name_matches("Run !PLR_123", "!PLR_123"))
+    self.assertTrue(detector.protocol_name_matches("Run IPLR_123", "!PLR_123"))
+    self.assertFalse(detector.protocol_name_matches("Run !PLR_1234", "!PLR_123"))
+
+  def test_confirm_dialog_does_not_match_unrelated_no_substrings(self):
+    detector = _GeminiScreenDetector(min_conf=0.70)
+    detection = detector.detect_state("Run Protocol number of columns GO Set Meas")
+
+    self.assertFalse(detector.has_confirm_dialog(detection))
+
+  def test_fixture_metadata_markers_classify_without_tesseract(self):
+    detector = _GeminiScreenDetector(min_conf=0.70)
+    metadata = json.loads((SCREEN_FIXTURES / "metadata.json").read_text())
+
+    for screen in metadata["screens"]:
+      text = " ".join(screen["matched"]) or "electroporation method summary"
+      with self.subTest(image=screen["image"]):
+        self.assertEqual(detector.detect_state(text).state, screen["state"])
 
   def test_decode_rsi_framebuffer_uses_bgrx_pixels_and_opaque_alpha(self):
     framebuffer = bytes((12, 34, 56, 0)) * (FRAME_W * FRAME_H)
@@ -148,7 +183,7 @@ class TestTheGhostTouch(unittest.TestCase):
     self.assertEqual(int(rgba[:, :, 3].min()), 255)
     self.assertEqual(int(rgba[:, :, 3].max()), 255)
 
-  def test_rsi_transport_reads_bgrx_frame_via_shared_serial_interface(self):
+  async def test_rsi_transport_reads_bgrx_frame_via_shared_serial_interface(self):
     framebuffer = bytes((12, 34, 56, 0)) * (FRAME_W * FRAME_H)
     fake = _FakeAsyncSerial(reads=[framebuffer[:900000], framebuffer[900000:] + b":"])
     transport = _RSITransport(
@@ -159,11 +194,11 @@ class TestTheGhostTouch(unittest.TestCase):
       serial_io=fake,
     )
 
-    transport.open()
+    await transport.setup()
     try:
-      frame = transport.read_frame()
+      frame = await transport.read_frame()
     finally:
-      transport.close()
+      await transport.stop()
 
     fake.setup.assert_awaited_once_with()
     fake.stop.assert_awaited_once_with()
@@ -173,21 +208,75 @@ class TestTheGhostTouch(unittest.TestCase):
     self.assertEqual(frame.rgba.shape, (FRAME_H, FRAME_W, 4))
     self.assertEqual(frame.rgba[0, 0].tolist(), [56, 34, 12, 255])
 
-  def test_rsi_transport_can_disable_frame_retries(self):
-    transport = _RSITransport(port="/dev/test", baud=115200, timeout=0.2, retries=5)
+  async def test_rsi_transport_can_disable_frame_retries(self):
+    transport = _RSITransport(
+      port="/dev/test",
+      baud=115200,
+      timeout=0.2,
+      retries=5,
+      serial_io=_FakeAsyncSerial(),
+    )
 
-    with (
-      patch.object(
-        transport,
-        "_read_frame_once",
-        side_effect=TimeoutError("frame unavailable"),
-      ) as read_once,
-      patch.object(transport, "drain_input"),
-    ):
+    with patch.object(
+      transport,
+      "_read_frame_once",
+      AsyncMock(side_effect=TimeoutError("frame unavailable")),
+    ) as read_once:
       with self.assertRaisesRegex(TimeoutError, "frame unavailable"):
-        transport.read_frame(retry=False)
+        await transport.read_frame(retry=False)
 
-    read_once.assert_called_once_with()
+    read_once.assert_awaited_once_with()
+
+  async def test_rsi_transport_cleans_up_a_partial_setup_failure(self):
+    fake = _FakeAsyncSerial()
+    fake.setup.side_effect = RuntimeError("open failed")
+    transport = _RSITransport(
+      port="/dev/test",
+      baud=115200,
+      timeout=0.2,
+      retries=1,
+      serial_io=fake,
+    )
+
+    with self.assertRaisesRegex(RuntimeError, "open failed"):
+      await transport.setup()
+
+    fake.stop.assert_awaited_once_with()
+
+  async def test_wait_for_states_can_explicitly_accept_unknown(self):
+    touch = _TestGhostTouch()
+    touch.queue_snapshot(STATE_UNKNOWN, image_path="unknown")
+
+    result = await touch.wait_for_states({STATE_UNKNOWN}, timeout=0.1, interval=0, prefix="unknown")
+
+    self.assertIsNotNone(result)
+    assert result is not None
+    self.assertEqual(result.image_path, "unknown")
+
+  async def test_start_run_refuses_a_blind_second_go_tap(self):
+    touch = _TestGhostTouch()
+    touch.queue_snapshot(
+      STATE_PROTOCOL_RUN_VIEW,
+      text="Run Protocol GO Set Meas",
+      text_norm="run protocol go set meas",
+    )
+    still_prerun = Snapshot(
+      frame=cast(FrameCapture, None),
+      image_path="still-prerun",
+      detection=Detection(
+        state=STATE_PROTOCOL_RUN_VIEW,
+        confidence=1.0,
+        matched=[],
+        text="Run Protocol GO Set Meas",
+        text_norm="run protocol go set meas",
+      ),
+    )
+
+    with patch.object(touch, "_wait_for_run_transition", AsyncMock(return_value=still_prerun)):
+      with self.assertRaisesRegex(RuntimeError, "refusing to tap again"):
+        await touch.start_run()
+
+    self.assertEqual(len(touch.taps), 1)
 
   def test_user_protocols_top_detector_uses_double_up_arrow_state(self):
     detector = _GeminiScreenDetector(min_conf=0.70)
@@ -287,7 +376,7 @@ class TestTheGhostTouch(unittest.TestCase):
     self.assertIn("pulses delivered", finished.matched)
     self.assertEqual(home.state, STATE_MAIN_MENU)
 
-  def test_prepare_user_protocol_accepts_direct_summary_after_row_tap(self):
+  async def test_prepare_user_protocol_accepts_direct_summary_after_row_tap(self):
     touch = _TestGhostTouch()
     touch.queue_snapshot(STATE_MAIN_MENU, text="Main Menu", text_norm="main menu")
     touch.queue_snapshot(STATE_USER_PROTOCOLS, text="User Protocols", text_norm="user protocols")
@@ -310,13 +399,13 @@ class TestTheGhostTouch(unittest.TestCase):
       image_path="verify",
     )
 
-    result = touch.prepare_user_protocol("!PLR_123")
+    result = await touch.prepare_user_protocol("!PLR_123")
 
     self.assertEqual(result.run_view.state, STATE_PROTOCOL_RUN_VIEW)
     self.assertEqual(result.prepared_verification.state, STATE_PROTOCOL_RUN_VIEW)
     self.assertGreaterEqual(len(touch.taps), 3)
 
-  def test_start_prepared_user_protocol_verifies_then_waits_done(self):
+  async def test_start_prepared_user_protocol_verifies_then_waits_done(self):
     touch = _TestGhostTouch()
     touch.queue_snapshot(
       STATE_PROTOCOL_RUN_VIEW,
@@ -346,16 +435,23 @@ class TestTheGhostTouch(unittest.TestCase):
       STATE_MAIN_MENU, text="Main Menu", text_norm="main menu", image_path="home"
     )
 
-    result = touch.start_prepared_user_protocol("!PLR_123", home_after=True, max_run_seconds=10.0)
+    with patch.object(
+      touch,
+      "_snapshot_run_poll",
+      wraps=touch._snapshot_run_poll,
+    ) as run_poll:
+      result = await touch.start_prepared_user_protocol(
+        "!PLR_123", home_after=True, max_run_seconds=10.0
+      )
 
     self.assertEqual(result.verification.image_path, "verify")
     self.assertEqual(result.completed.state, STATE_PROTOCOL_FINISH)
     self.assertIsNotNone(result.home)
     assert result.home is not None
     self.assertEqual(result.home.state, STATE_MAIN_MENU)
-    self.assertEqual(touch.snapshot_retry_flags.count(False), 1)
+    run_poll.assert_awaited_once_with("run-wait-00")
 
-  def test_ensure_home_closes_protocol_details_before_home(self):
+  async def test_ensure_home_closes_protocol_details_before_home(self):
     touch = _TestGhostTouch()
     touch.queue_snapshot(
       STATE_PROTOCOL_DETAILS,
@@ -376,13 +472,13 @@ class TestTheGhostTouch(unittest.TestCase):
       image_path="home",
     )
 
-    result = touch.ensure_home()
+    result = await touch.ensure_home()
 
     self.assertEqual(result.image_path, "home")
     self.assertEqual(touch.taps[0][:2], (739, 414))
     self.assertEqual(touch.taps[1][:2], (726, 326))
 
-  def test_set_plate_columns_confirms_again_when_details_remains_open(self):
+  async def test_set_plate_columns_confirms_again_when_details_remains_open(self):
     touch = _TestGhostTouch()
     touch.queue_snapshot(
       STATE_PROTOCOL_RUN_VIEW,
@@ -409,19 +505,19 @@ class TestTheGhostTouch(unittest.TestCase):
       image_path="run-view-confirmed",
     )
 
-    result = touch.set_plate_columns(3)
+    result = await touch.set_plate_columns(3)
 
     self.assertEqual(result.image_path, "run-view-confirmed")
     self.assertEqual(touch.taps[-2][:2], (739, 414))
     self.assertEqual(touch.taps[-1][:2], (739, 414))
 
-  def test_cancel_prepared_user_protocol_homes(self):
+  async def test_cancel_prepared_user_protocol_homes(self):
     touch = _TestGhostTouch()
     touch.queue_snapshot(
       STATE_MAIN_MENU, text="Main Menu", text_norm="main menu", image_path="home"
     )
 
-    result = touch.cancel_prepared_user_protocol(home_after=True)
+    result = await touch.cancel_prepared_user_protocol()
 
     self.assertTrue(result.cancelled)
     self.assertEqual(result.final_state.image_path, "home")

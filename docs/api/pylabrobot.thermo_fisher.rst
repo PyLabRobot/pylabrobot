@@ -75,24 +75,6 @@ BTX Gemini X2
     ElectroporationRunResult
     ElectroporationCancellationResult
 
-.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    FileTransferControl
-
-.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    TheGhostTouch
-
 .. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.ht200
 
 .. autosummary::

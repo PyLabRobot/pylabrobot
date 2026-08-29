@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional
+from math import isfinite
+from typing import Any, Dict, Literal, Mapping, Optional, cast
 
 
 @dataclass(frozen=True)
@@ -13,7 +14,7 @@ class ElectroporationProtocol:
   - `exponential`: `resistance_ohms` and `capacitance_uf`
   """
 
-  protocol_type: str
+  protocol_type: Literal["square", "exponential"]
   pulse_amplitude_volts: int
   gap_mm: float
   pulse_count: int = 1
@@ -21,6 +22,30 @@ class ElectroporationProtocol:
   duration_us: Optional[int] = None
   resistance_ohms: Optional[int] = None
   capacitance_uf: Optional[int] = None
+
+  def __post_init__(self) -> None:
+    if self.protocol_type not in {"square", "exponential"}:
+      raise ValueError("protocol_type must be 'square' or 'exponential'.")
+    if self.pulse_count <= 0:
+      raise ValueError("pulse_count must be greater than zero.")
+    if self.pulse_amplitude_volts <= 0:
+      raise ValueError("pulse_amplitude_volts must be greater than zero.")
+    if not isfinite(self.gap_mm) or self.gap_mm <= 0:
+      raise ValueError("gap_mm must be a finite value greater than zero.")
+    if self.pulse_interval_seconds is not None and (
+      not isfinite(self.pulse_interval_seconds) or self.pulse_interval_seconds < 0
+    ):
+      raise ValueError("pulse_interval_seconds must be finite and non-negative.")
+
+    if self.protocol_type == "square":
+      if self.duration_us is None:
+        raise ValueError("Square protocols require duration_us.")
+      if self.resistance_ohms is not None or self.capacitance_uf is not None:
+        raise ValueError("Square protocols cannot define resistance_ohms or capacitance_uf.")
+    elif self.duration_us is not None:
+      raise ValueError("Exponential protocols cannot define duration_us.")
+    elif self.resistance_ohms is None or self.capacitance_uf is None:
+      raise ValueError("Exponential protocols require resistance_ohms and capacitance_uf.")
 
   def as_parameters(self) -> Dict[str, Any]:
     return {
@@ -37,7 +62,7 @@ class ElectroporationProtocol:
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> "ElectroporationProtocol":
     return cls(
-      protocol_type=str(data["protocol_type"]),
+      protocol_type=cast(Literal["square", "exponential"], str(data["protocol_type"])),
       pulse_amplitude_volts=int(data["pulse_amplitude_volts"]),
       gap_mm=float(data["gap_mm"]),
       pulse_count=int(data.get("pulse_count", 1)),
@@ -187,6 +212,7 @@ class PreparedElectroporationRun:
   """
 
   protocol_name: str
+  device_serial_number: str
   protocol: ElectroporationProtocol
   plate_columns: Optional[int]
   prefix: str
@@ -197,6 +223,7 @@ class PreparedElectroporationRun:
   def as_dict(self) -> Dict[str, Any]:
     return {
       "protocol_name": self.protocol_name,
+      "device_serial_number": self.device_serial_number,
       "protocol": self.protocol.as_parameters(),
       "plate_columns": self.plate_columns,
       "prefix": self.prefix,
@@ -209,6 +236,7 @@ class PreparedElectroporationRun:
   def from_dict(cls, data: Mapping[str, Any]) -> "PreparedElectroporationRun":
     return cls(
       protocol_name=str(data["protocol_name"]),
+      device_serial_number=str(data["device_serial_number"]),
       protocol=ElectroporationProtocol.from_dict(data["protocol"]),
       plate_columns=None if data["plate_columns"] is None else int(data["plate_columns"]),
       prefix=str(data["prefix"]),

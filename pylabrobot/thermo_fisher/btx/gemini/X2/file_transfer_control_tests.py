@@ -1,10 +1,13 @@
 import unittest
 from collections import deque
-import types
 from typing import Deque, List, Sequence, Tuple
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control import FileTransferControl
+from pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control import (
+  ProtocolDeletionPendingError,
+  _FileTransferControl,
+)
+
 from .standard import ElectroporationProtocol
 
 
@@ -33,7 +36,6 @@ class _FakeSerial:
     self.stop = AsyncMock()
     self.writes: List[bytes] = []
     self.read_chunks: Deque[bytes] = deque()
-    self.readline_chunks: Deque[bytes] = deque()
 
   async def write(self, data: bytes) -> None:
     self.writes.append(data)
@@ -43,18 +45,6 @@ class _FakeSerial:
     if len(self.read_chunks) == 0:
       return b""
     return self.read_chunks.popleft()
-
-  async def readline(self) -> bytes:
-    if len(self.readline_chunks) == 0:
-      return b""
-    return self.readline_chunks.popleft()
-
-
-class _FakePortInfo:
-  def __init__(self, device: str, vid: int | None, pid: int | None) -> None:
-    self.device = device
-    self.vid = vid
-    self.pid = pid
 
 
 class _ConstructedSerial:
@@ -84,14 +74,11 @@ class _ConstructedSerial:
     del num_bytes
     return b""
 
-  async def readline(self) -> bytes:
-    return b""
-
 
 class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
   async def test_setup_stop(self):
     fake = _FakeSerial()
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
 
     await control.setup()
     await control.stop()
@@ -99,31 +86,46 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.setup.assert_awaited_once_with()
     fake.stop.assert_awaited_once_with()
 
+  async def test_setup_and_stop_are_idempotent(self):
+    fake = _FakeSerial()
+    control = _FileTransferControl(serial_io=fake)
+
+    await control.setup()
+    await control.setup()
+    await control.stop()
+    await control.stop()
+
+    fake.setup.assert_awaited_once_with()
+    fake.stop.assert_awaited_once_with()
+
+  async def test_setup_failure_attempts_serial_cleanup(self):
+    fake = _FakeSerial()
+    fake.setup.side_effect = RuntimeError("open failed")
+    control = _FileTransferControl(serial_io=fake)
+
+    with self.assertRaisesRegex(RuntimeError, "open failed"):
+      await control.setup()
+
+    fake.stop.assert_awaited_once_with()
+
   async def test_setup_autodiscovers_btx_port_then_uses_shared_serial(self):
     _ConstructedSerial.instances.clear()
-    fake_ports = [_FakePortInfo("/dev/cu.btx", 0x1FE9, 0x5201)]
-    fake_serial_module = types.SimpleNamespace(
-      tools=types.SimpleNamespace(
-        list_ports=types.SimpleNamespace(comports=lambda: fake_ports),
-      )
-    )
 
     with (
-      patch("pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control._HAS_LIST_PORTS", True),
       patch(
-        "pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control.serial",
-        fake_serial_module,
-        create=True,
-      ),
+        "pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control.find_serial_ports",
+        return_value=["/dev/cu.btx"],
+      ) as find_ports,
       patch(
         "pylabrobot.thermo_fisher.btx.gemini.X2.file_transfer_control.Serial",
         _ConstructedSerial,
       ),
     ):
-      control = FileTransferControl()
+      control = _FileTransferControl()
       await control.setup()
       await control.stop()
 
+    find_ports.assert_called_once_with(_FileTransferControl.SUPPORTED_USB_IDS)
     self.assertEqual(len(_ConstructedSerial.instances), 1)
     serial_io = _ConstructedSerial.instances[0]
     self.assertEqual(serial_io.port, "/dev/cu.btx")
@@ -140,7 +142,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.read_chunks.append(_program_listing([("CD", 1), ("NECATOR", 8)]))
     fake.read_chunks.append(b"Y\n:")
     fake.read_chunks.append(_program_listing([("CD", 1), ("NECATOR", 8)]))
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     rows = await control.list_protocols_with_size()
     names = await control.list_protocols()
@@ -160,7 +163,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.read_chunks.append(b":")
     fake.read_chunks.append(b"Y\n:")
     fake.read_chunks.append(_program_listing([("CD", 1), ("TESTX", 1)]))
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     result = await control.add_protocol(
       "TESTX",
@@ -192,7 +196,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.read_chunks.append(b":")
     fake.read_chunks.append(b"Y\n:")
     fake.read_chunks.append(_program_listing([("CD", 1), ("SQTEST", 1)]))
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     result = await control.add_protocol(
       "SQTEST",
@@ -220,7 +225,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.read_chunks.append(b":")
     fake.read_chunks.append(b"Y\n:")
     fake.read_chunks.append(_program_listing([("CD", 1), ("SQMP", 1)]))
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     result = await control.add_protocol(
       "SQMP",
@@ -242,7 +248,7 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result["decoded"]["pulse_interval_seconds"], 2.0)
 
   async def test_add_exponential_protocol_rejects_multiple_pulse_write(self):
-    control = FileTransferControl(serial_io=_FakeSerial())
+    control = _FileTransferControl(serial_io=_FakeSerial())
 
     with self.assertRaisesRegex(ValueError, "currently support only pulse_count=1"):
       control._build_method_payload(
@@ -258,6 +264,34 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
         ),
       )
 
+  async def test_overwrite_payload_is_validated_before_existing_protocol_is_deleted(self):
+    fake = _FakeSerial()
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
+
+    with self.assertRaisesRegex(ValueError, "Missing pulse amplitude"):
+      await control.add_protocol("TEST", {"protocol_type": "square"}, overwrite=True)
+
+    self.assertEqual(fake.writes, [])
+
+  def test_protocol_model_rejects_zero_pulses_and_mixed_waveform_fields(self):
+    with self.assertRaisesRegex(ValueError, "pulse_count must be greater than zero"):
+      ElectroporationProtocol(
+        protocol_type="square",
+        pulse_amplitude_volts=250,
+        gap_mm=1.0,
+        pulse_count=0,
+        duration_us=1000,
+      )
+    with self.assertRaisesRegex(ValueError, "cannot define resistance"):
+      ElectroporationProtocol(
+        protocol_type="square",
+        pulse_amplitude_volts=250,
+        gap_mm=1.0,
+        duration_us=1000,
+        resistance_ohms=200,
+      )
+
   async def test_request_protocol_decodes_payload(self):
     fake = _FakeSerial()
     fake.read_chunks.append(
@@ -268,7 +302,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
         b"000000000000000000000000000000000000000000000000\nmend\n:"
       )
     )
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     result = await control.request_protocol("JJ")
 
@@ -282,7 +317,7 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(result["decoded"]["electrode_gap_mm"], 2.0)
 
   async def test_decode_manual_square_protocol_includes_interval(self):
-    control = FileTransferControl(serial_io=_FakeSerial())
+    control = _FileTransferControl(serial_io=_FakeSerial())
     payload = bytes.fromhex(
       "01000000544553545351554152450000000000000000000000000000000000000100000000000000"
       "6009000000000000F401000000000000000000000000000003000000D00700000000004000000000"
@@ -300,7 +335,7 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(decoded["pulse_interval_seconds"], 2.0)
 
   async def test_build_square_payload_matches_known_manual_payload(self):
-    control = FileTransferControl(serial_io=_FakeSerial())
+    control = _FileTransferControl(serial_io=_FakeSerial())
 
     payload = control._build_method_payload(
       "TESTSQUARE",
@@ -332,12 +367,80 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.read_chunks.append(_program_listing([("CD", 1)]))
     fake.read_chunks.append(b"Y\n:")
     fake.read_chunks.append(_program_listing([("CD", 1)]))
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     result = await control.delete_protocol("TEST")
 
     self.assertTrue(result["deleted"])
     self.assertFalse(result["exists_after"])
+
+  async def test_delete_protocol_raises_typed_pending_error(self):
+    fake = _FakeSerial()
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
+
+    with (
+      patch.object(control, "list_protocols", AsyncMock(return_value=["TEST"])),
+      patch.object(control, "_send_text_command", AsyncMock(return_value=":")),
+    ):
+      with self.assertRaises(ProtocolDeletionPendingError):
+        await control.delete_protocol("TEST")
+
+  async def test_prompt_reader_rejects_empty_and_partial_responses(self):
+    fake = _FakeSerial()
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
+
+    with self.assertRaisesRegex(TimeoutError, "without a terminating ':'"):
+      await control._read_until_prompt(max_reads=1)
+
+    fake.read_chunks.append(b"partial response")
+    with self.assertRaisesRegex(TimeoutError, "without a terminating ':'"):
+      await control._read_until_prompt(max_reads=1)
+
+  async def test_single_value_command_rejects_a_prompt_without_a_value(self):
+    fake = _FakeSerial()
+    fake.read_chunks.append(b":")
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
+
+    with self.assertRaisesRegex(RuntimeError, "returned no value"):
+      await control.request_version()
+
+  def test_sd_paths_reject_control_characters_and_traversal(self):
+    control = _FileTransferControl(serial_io=_FakeSerial())
+
+    for path in ("\\BTXDATA\nversion", "\\BTXDATA\\..\\secret", "\\BTXDATA\\bad:name"):
+      with self.subTest(path=path):
+        with self.assertRaises(ValueError):
+          control._normalize_sd_path(path)
+
+  async def test_verify_protocol_rejects_any_changed_payload_field(self):
+    control = _FileTransferControl(serial_io=_FakeSerial())
+    expected = ElectroporationProtocol(
+      protocol_type="square",
+      pulse_amplitude_volts=250,
+      gap_mm=1.0,
+      duration_us=1000,
+    )
+    request_protocol = AsyncMock(
+      return_value={
+        "decoded": {
+          "name": "TEST",
+          "protocol_type": "square",
+          "pulse_amplitude_volts": 251,
+          "pulse_count": 1,
+          "pulse_interval_ms": 0,
+          "electrode_gap_mm": 1.0,
+          "pulse_duration_us": 1000,
+        }
+      }
+    )
+
+    with patch.object(control, "request_protocol", request_protocol):
+      with self.assertRaisesRegex(RuntimeError, "pulse_amplitude_volts"):
+        await control.verify_protocol("TEST", expected)
 
   async def test_sd_dir_and_file_helpers(self):
     fake = _FakeSerial()
@@ -350,7 +453,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
         ":\n"
       ).encode("utf-8")
     )
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     entries = await control.list_sd_dir(r"\BTXDATA")
     content = await control.fetch_sd_file(r"\BTXDATA\2026-03\260309\153425.TXT")
@@ -366,7 +470,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.read_chunks.append(
       _sd_listing(r"sddir \BTXDATA\2026-03\260309", ["153008.TXT", "153425.TXT"])
     )
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     logs = await control.list_log_files()
 
@@ -387,7 +492,8 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.read_chunks.append(
       b"\nSuccessful Tx: 57295\nSuccessful Rx: 57296\nFailed: 0\nRetries: 0\n:"
     )
-    control = FileTransferControl(serial_io=fake)
+    control = _FileTransferControl(serial_io=fake)
+    await control.setup()
 
     version = await control.request_version()
     serial_number = await control.request_serial_number()
@@ -401,7 +507,7 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(stats["Successful Rx"], 57296)
 
   async def test_parse_run_log_extracts_summary_fields(self):
-    control = FileTransferControl(serial_io=_FakeSerial())
+    control = _FileTransferControl(serial_io=_FakeSerial())
     parsed = control.parse_run_log(
       "\n".join(
         [
@@ -443,7 +549,7 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     self.assertNotIn("line_count", parsed)
 
   async def test_parse_run_log_extracts_tabular_fields(self):
-    control = FileTransferControl(serial_io=_FakeSerial())
+    control = _FileTransferControl(serial_io=_FakeSerial())
     parsed = control.parse_run_log(
       "\n".join(
         [

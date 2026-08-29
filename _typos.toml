@@ -33,6 +33,12 @@ LOK = "LOK"
 ouput = "ouput"
 hegiht = "hegiht"
 
+# BTX Gemini X2 firmware/OCR vocabulary. `scap` is the RSI framebuffer
+# command; the misspelled protocol variants are OCR corrections.
+scap = "scap"
+protocals = "protocals"
+protocal = "protocal"
+
 [files]
 extend-exclude = [
     "*.ipynb"
