@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, cast
+from typing import Any, List, Mapping, Optional, cast
 
 from pylabrobot.resources.errors import ResourceNotFoundError
 
@@ -39,10 +39,6 @@ class Deck(Resource):
       metadata=metadata,
     )
     self.location = origin
-    self._resources: Dict[str, Resource] = {}
-
-    self.register_did_assign_resource_callback(self._register_resource)
-    self.register_did_unassign_resource_callback(self._deregister_resource)
 
   def serialize(self) -> dict:
     """Serialize this deck."""
@@ -50,53 +46,9 @@ class Deck(Resource):
     super_serialized.pop("model", None)  # deck's don't typically have a model
     return super_serialized
 
-  def _check_naming_conflicts(self, resource: Resource):
-    """overwrite for speed"""
-    if self.has_resource(resource.name):
-      raise ValueError(f"Resource '{resource.name}' already assigned to deck")
-
-  def _register_resource(self, resource: Resource):
-    """Recursively assign the given resource and all child resources to the `self._resources`
-    dictionary. This method is called after a resource is assigned to the deck
-    (did_assign_resource_callback).
-
-    Precondition: All child resources must be assignable, see `self._check_name_exists`.
-    """
-
-    for child in resource.children:
-      self._register_resource(child)
-    self._resources[resource.name] = resource
-
-  def _deregister_resource(self, resource: Resource):
-    """Recursively deregisters the given resource and all child resources from the `self._resources`
-    dictionary. This method is called after a resource is unassigned from the deck
-    (did_unassign_resource_callback).
-    """
-
-    if self.has_resource(resource.name):
-      del self._resources[resource.name]
-    for child in resource.children:
-      self._deregister_resource(child)
-
-  def get_resource(self, name: str) -> Resource:
-    """Returns the resource with the given name.
-
-    Raises:
-      ResourceNotFoundError: If the resource is not found.
-    """
-    if name == self.name:
-      return self
-    if not self.has_resource(name):
-      raise ResourceNotFoundError(f"Resource '{name}' not found")
-    return self._resources[name]
-
-  def has_resource(self, name: str) -> bool:
-    """Returns True if the deck has a resource with the given name."""
-    return name in self._resources
-
   def get_all_resources(self) -> List[Resource]:
     """Returns a list of all resources in the deck."""
-    return list(self._resources.values())
+    return self.get_all_children()
 
   def clear(self, include_trash: bool = False):
     """Removes all resources from the deck.

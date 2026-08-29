@@ -429,10 +429,20 @@ class TestResourceCallback(unittest.TestCase):
     self.r.assign_child_resource(self.child, location=Coordinate.zero())
     self.child.unassign()
 
-    self.assertEqual(self.child._did_assign_resource_callbacks, [])
-    self.assertEqual(self.child._did_unassign_resource_callbacks, [])
-    self.assertEqual(self.child._will_assign_resource_callbacks, [])
-    self.assertEqual(self.child._will_unassign_resource_callbacks, [])
+    # Its own handlers stay; what must go is the parent's, which is what carried an event up.
+
+    self.assertNotIn(
+      self.r._call_did_assign_resource_callbacks, self.child._did_assign_resource_callbacks
+    )
+    self.assertNotIn(
+      self.r._call_did_unassign_resource_callbacks, self.child._did_unassign_resource_callbacks
+    )
+    self.assertNotIn(
+      self.r._call_will_assign_resource_callbacks, self.child._will_assign_resource_callbacks
+    )
+    self.assertNotIn(
+      self.r._call_will_unassign_resource_callbacks, self.child._will_unassign_resource_callbacks
+    )
 
   def test_did_assign_is_passed_up_the_chain(self):
     mock_function = unittest.mock.Mock()
