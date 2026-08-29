@@ -7,7 +7,7 @@ import logging
 import re
 import sys
 from collections.abc import Iterable, Mapping
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot.events import coordinate_reference, emit_event, resource_reference
 from pylabrobot.serializer import SerializableMixin, deserialize, serialize
@@ -181,10 +181,11 @@ class Resource(SerializableMixin):
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
-    # Every name in this tree, kept only by the root and only once anyone asks. A name cannot change
-    # while a resource is assigned, and a tree changes shape in exactly two places, so an index can
-    # be carried forward instead of rebuilt: see `_names_in_tree`.
-    self._name_index: Optional[Set[str]] = None
+    # Everything in this tree, by name, held by whatever is currently its root - which a resource
+    # is until something takes it. A name is looked up by it and two resources may not share one,
+    # so this answers both without walking. `assign_child_resource` hands it to the new root and
+    # `unassign_child_resource` hands it back, which are the only two moments a root changes.
+    self._subtree_resources: Dict[str, Resource] = {name: self}
 
     self._will_assign_resource_callbacks: List[WillAssignResourceCallback] = []
     self._did_assign_resource_callbacks: List[DidAssignResourceCallback] = []
@@ -246,7 +247,11 @@ class Resource(SerializableMixin):
 
     if self.parent is not None:
       raise RuntimeError("Cannot change the name of a resource that is assigned.")
+    # Only a resource with no parent reaches here, so it is a root and holds the map its old
+    # name is in. Nothing above it has to be told.
+    self._subtree_resources.pop(self._name, None)
     self._name = name
+    self._subtree_resources[name] = self
 
   def __eq__(self, other):
     return (
@@ -462,13 +467,12 @@ class Resource(SerializableMixin):
     resource.location = location
     self.children.append(resource)
 
-    # The names that just arrived belong to this tree now, and the subtree stops being a root of
-    # its own, so whatever index it was keeping is no longer about a tree it heads.
-    root = self.get_root()
-    arrived = resource._subtree_names()
-    resource._name_index = None
-    if root._name_index is not None:
-      root._name_index |= arrived
+    # What arrived belongs to this tree's root now, and the subtree stops heading a tree of its
+    # own, so it gives up the map it was keeping. Read from the subtree rather than from its map,
+    # which is only kept current for a root.
+    arriving = {r.name: r for r in [resource] + resource.get_all_children()}
+    self.get_root()._subtree_resources.update(arriving)
+    resource._subtree_resources = {}
 
     # Register callbacks on the new child resource so that they can be propagated up the tree.
     resource.register_will_assign_resource_callback(self._call_will_assign_resource_callbacks)
@@ -612,45 +616,15 @@ class Resource(SerializableMixin):
       current = current.parent
     return False
 
-  def _subtree_names(self) -> Set[str]:
-    """Every name at or beneath this resource."""
-    names = set()
-    stack = [self]
-    while stack:
-      current = stack.pop()
-      names.add(current.name)
-      stack.extend(current.children)
-    return names
-
-  def _names_in_tree(self) -> Set[str]:
-    """Every name in this resource's tree, held by its root.
-
-    Built the first time it is wanted and carried forward after that. Asking each time instead is
-    what made building a facility quadratic: every assignment re-read a tree that had only grown by
-    the thing being added.
-
-    Safe to carry because a name cannot change while a resource is assigned - the setter refuses -
-    and a tree only changes shape in `assign_child_resource` and `unassign_child_resource`, which
-    both keep this in step.
-    """
-    root = self.get_root()
-    if root._name_index is None:
-      root._name_index = root._subtree_names()
-    return root._name_index
-
   def _check_naming_conflicts(self, resource: Resource):
     """Raise if anything in `resource`'s subtree is already named in this one.
 
     Names identify a resource across the whole tree - `get_resource` finds one by name, and
     `serialize_all_state` keys state by it - so two resources may not share one.
     """
-    named = self._names_in_tree()
-    stack = [resource]
-    while stack:
-      current = stack.pop()
-      if current.name in named:
-        raise ValueError(f"Resource with name '{current.name}' already exists in the tree.")
-      stack.extend(current.children)
+    for arriving in [resource] + resource.get_all_children():
+      if arriving.name in self._subtree_resources:
+        raise ValueError(f"Resource with name '{arriving.name}' already exists in the tree.")
 
   def unassign_child_resource(self, resource: Resource):
     """Unassign a child resource from this resource.
@@ -674,15 +648,16 @@ class Resource(SerializableMixin):
     # Preserve the pose for the event before unassignment clears it.
     previous_location = coordinate_reference(resource.location)
 
-    # Update the tree structure. The names go with it: this tree no longer holds them, and the
-    # subtree becomes a root that will work its own out when something first asks.
-    departing = resource._subtree_names()
+    # The map goes with it: this tree gives up those names, and the subtree heads a tree of its
+    # own again, so it takes them back. Read once, before the tree changes shape.
+    departing = {r.name: r for r in [resource] + resource.get_all_children()}
     root = self.get_root()
+    for name in departing:
+      root._subtree_resources.pop(name, None)
     resource.parent = None
     resource.location = None
     self.children.remove(resource)
-    if root._name_index is not None:
-      root._name_index -= departing
+    resource._subtree_resources = departing
 
     # Delete callbacks on the child resource so that they are not propagated up the tree.
     resource.deregister_will_assign_resource_callback(self._call_will_assign_resource_callbacks)
