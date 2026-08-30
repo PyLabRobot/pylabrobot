@@ -219,7 +219,8 @@ def parse_response(frame: bytes, expected_data_length: int) -> NMCResponse:
   if checksum != expected_checksum:
     raise NMCProtocolError(
       "NMC response checksum mismatch: "
-      f"received 0x{checksum:02x}, expected 0x{expected_checksum:02x}"
+      f"received 0x{checksum:02x}, expected 0x{expected_checksum:02x}; "
+      f"response was {frame.hex()}"
     )
   if status & STATUS_CHECKSUM_ERROR:
     raise NMCProtocolError(f"NMC module rejected the command: status 0x{status:02x}")

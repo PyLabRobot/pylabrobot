@@ -184,6 +184,15 @@ class NMCResponseTests(unittest.TestCase):
     self.assertEqual(status.module_version, 12)
     self.assertEqual(status.position_error, -7)
 
+  def test_parse_signed_position_boundaries(self):
+    for position in (-(2**31), 0, 2**31 - 1):
+      with self.subTest(position=position):
+        status = _nmc.parse_servo_status(
+          _response(0x01, Writer().i32(position).finish()),
+          _nmc.SEND_POSITION,
+        )
+        self.assertEqual(status.position, position)
+
   def test_parse_io_status(self):
     mask = _nmc.SEND_INPUTS | _nmc.SEND_ANALOG_1
     status = _nmc.parse_io_status(_response(0x09, bytes.fromhex("341256")), mask)
@@ -236,6 +245,16 @@ class VSpinTrajectoryMathTests(unittest.TestCase):
     self.assertEqual(_nmc.nearest_encoder_position(7900, 100), 8100)
     self.assertEqual(_nmc.nearest_encoder_position(100, 7900), -100)
     self.assertEqual(_nmc.nearest_encoder_position(-100, 100), 100)
+
+  def test_trajectory_rejects_positions_outside_signed_controller_range(self):
+    for position in (-(2**31) - 1, 2**31):
+      with self.subTest(position=position):
+        with self.assertRaisesRegex(ValueError, "signed 32-bit"):
+          _nmc.build_load_trajectory(
+            _nmc.PIC_SERVO_ADDRESS,
+            _nmc.LOAD_POSITION,
+            position=position,
+          )
 
   def test_math_validation(self):
     for acceleration in (0, -0.1, 1.1):

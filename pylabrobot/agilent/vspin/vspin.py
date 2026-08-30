@@ -105,14 +105,22 @@ _STATUS_POLL_INTERVAL = 0.1
 _MOTION_TIMEOUT = 15.0
 _SPIN_TIMEOUT_MARGIN = 5.0
 _TARGET_SPEED_FRACTION = 0.95
-_STOPPED_RPM_TOLERANCE = 15.0
 _IO_TRANSITION_TIMEOUT = 5.0
+_TACHOMETER_TO_RPM = -14.69320388
+_NETWORK_PROBE_TIMEOUT = 0.2
+_INITIAL_BAUD_RATES = (19200, 115200, 57600, 9600)
+_BUCKET_POSITION_TOLERANCE = 10
+_BUCKET_PRESENT_RETRIES = 1
 
 bucket_1_not_set_error = RuntimeError(
   "Bucket 1 position not set. "
   "Please rotate the bucket to bucket 1 using go_to_position and "
   "then calling set_bucket_1_position_to_current."
 )
+
+
+class _PositionAlignmentError(RuntimeError):
+  """Raised when a completed rotor move settles outside its target tolerance."""
 
 
 def _vspin_event_context(
@@ -170,6 +178,7 @@ class VSpin:
     self._spin_active = False
     self._spin_cancel_requested = False
     self._bucket_1_remainder: Optional[int] = None
+    self._home_position: Optional[int] = None
     if device_id is not None:
       self._bucket_1_remainder = _load_vspin_calibrations(device_id)
 
@@ -206,30 +215,8 @@ class VSpin:
   async def setup(self):
     logger.info("[vSpin %s] connected", self.device_id)
     await self.io.setup()
-    for _ in range(3):
-      await self.configure_and_initialize()
-      await self._send_nmc(_nmc.build_set_address(_nmc.PIC_SERVO_ADDRESS))
-    await self._send_nmc(_nmc.build_set_address(_nmc.PIC_SERVO_ADDRESS))
-    servo_id_response = await self._send_nmc(
-      _nmc.build_read_status(_nmc.PIC_SERVO_ADDRESS, _nmc.SEND_MODULE_ID),
-      response_data_length=2,
-    )
-    if servo_id_response.data[0] != _nmc.PIC_SERVO_MODULE_TYPE:
-      raise RuntimeError(
-        f"VSpin expected a PIC-SERVO at address 1, found module type {servo_id_response.data[0]}"
-      )
-    await self._send_nmc(_nmc.build_set_address(_nmc.PIC_IO_ADDRESS))
-    io_id_response = await self._send_nmc(
-      _nmc.build_read_status(_nmc.PIC_IO_ADDRESS, _nmc.SEND_MODULE_ID),
-      response_data_length=2,
-    )
-    if io_id_response.data[0] != _nmc.PIC_IO_MODULE_TYPE:
-      raise RuntimeError(
-        f"VSpin expected a PIC-IO at address 2, found module type {io_id_response.data[0]}"
-      )
-    await self._send_nmc(_nmc.build_set_baud(57600), expect_response=False)
-
-    await self.io.set_baudrate(57600)
+    await self._configure_ftdi()
+    await self._initialize_nmc_network()
     await self.io.set_rts(True)
     await self.io.set_dtr(True)
 
@@ -265,6 +252,12 @@ class VSpin:
     await self.lock_door()
 
     await self._write_io_output(0x0000)
+    await self._wait_for_io_bit(
+      _nmc.INPUT_BUCKET_UNLOCKED,
+      True,
+      active_low=True,
+      name="bucket-unlock sensor",
+    )
 
     await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
@@ -286,15 +279,20 @@ class VSpin:
 
     loop = asyncio.get_running_loop()
     homing_deadline = loop.time() + _MOTION_TIMEOUT
-    status = (await self.request_positions_and_tachometer()).status
-    while status & _nmc.STATUS_HOMING_IN_PROGRESS:
+    homing_status = await self.request_positions_and_tachometer()
+    while homing_status.status & _nmc.STATUS_HOMING_IN_PROGRESS:
+      self._raise_on_servo_fault(homing_status, operation="homing")
       if loop.time() >= homing_deadline:
         raise TimeoutError(
           f"VSpin homing did not finish within {_MOTION_TIMEOUT} seconds; "
-          f"last status was 0x{status:02x}"
+          f"last status was 0x{homing_status.status:02x}"
         )
       await asyncio.sleep(_STATUS_POLL_INTERVAL)
-      status = (await self.request_positions_and_tachometer()).status
+      homing_status = await self.request_positions_and_tachometer()
+    self._raise_on_servo_fault(homing_status, operation="homing")
+    if homing_status.home_position is None:
+      raise RuntimeError("VSpin homing response did not include the home position")
+    self._home_position = homing_status.home_position % FULL_ROTATION
 
     # --- almost the same as go to position ---
     await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
@@ -316,15 +314,22 @@ class VSpin:
     # -----------------------------------------
 
     move_deadline = loop.time() + _MOTION_TIMEOUT
-    status = (await self.request_positions_and_tachometer()).status
-    while not status & _nmc.STATUS_MOVE_DONE:
+    move_status = await self.request_positions_and_tachometer()
+    while not (
+      move_status.status & _nmc.STATUS_MOVE_DONE
+      and move_status.position is not None
+      and abs(move_status.position) <= _BUCKET_POSITION_TOLERANCE
+    ):
+      self._raise_on_servo_fault(move_status, operation="setup positioning")
       if loop.time() >= move_deadline:
         raise TimeoutError(
           f"VSpin setup motion did not finish within {_MOTION_TIMEOUT} seconds; "
-          f"last status was 0x{status:02x}"
+          f"last status was 0x{move_status.status:02x}, "
+          f"last position was {move_status.position}"
         )
       await asyncio.sleep(_STATUS_POLL_INTERVAL)
-      status = (await self.request_positions_and_tachometer()).status
+      move_status = await self.request_positions_and_tachometer()
+    self._raise_on_servo_fault(move_status, operation="setup positioning")
 
     await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
 
@@ -332,7 +337,6 @@ class VSpin:
 
   async def stop(self):
     logger.info("[vSpin %s] disconnected", self.device_id)
-    await self.configure_and_initialize()
     await self.io.stop()
 
   # -- low-level protocol --
@@ -373,7 +377,7 @@ class VSpin:
     async with self._command_lock:
       written = await self.io.write(bytes(cmd))
       if written != len(cmd):
-        raise RuntimeError("Failed to write all bytes")
+        raise RuntimeError(f"VSpin wrote {written} of {len(cmd)} bytes for NMC command {cmd.hex()}")
       return await self._read_exact_response(expected_response_length, timeout=read_timeout)
 
   async def _send_nmc(
@@ -391,7 +395,9 @@ class VSpin:
       async with self._command_lock:
         written = await self.io.write(command)
         if written != len(command):
-          raise RuntimeError("Failed to write all bytes")
+          raise RuntimeError(
+            f"VSpin wrote {written} of {len(command)} bytes for NMC command {command.hex()}"
+          )
       return _nmc.NMCResponse(status=0, data=b"")
 
     if response_data_length is None:
@@ -403,32 +409,121 @@ class VSpin:
       else:
         response_data_length = 0
 
-    response = await self.send_command(
-      command,
-      expected_response_length=response_data_length + 2,
-      read_timeout=timeout,
+    try:
+      response = await self.send_command(
+        command,
+        expected_response_length=response_data_length + 2,
+        read_timeout=timeout,
+      )
+    except TimeoutError as error:
+      raise TimeoutError(f"VSpin NMC command {command.hex()} timed out: {error}") from error
+    try:
+      return _nmc.parse_response(response, response_data_length)
+    except _nmc.NMCProtocolError as error:
+      raise _nmc.NMCProtocolError(
+        f"VSpin NMC command {command.hex()} failed for response {response.hex()}: {error}"
+      ) from error
+
+  async def _initialize_nmc_network(self) -> None:
+    """Find the controller baud, reset the bus, and assign the two known modules."""
+    last_error: Exception | None = None
+    for initial_baudrate in _INITIAL_BAUD_RATES:
+      await self.io.set_baudrate(initial_baudrate)
+      await self._reset_nmc_network()
+      await self.io.set_baudrate(19200)
+      await self._reset_nmc_network()
+      await self.io.usb_purge_rx_buffer()
+
+      try:
+        await self._send_nmc(
+          _nmc.build_set_address(_nmc.PIC_SERVO_ADDRESS),
+          timeout=_NETWORK_PROBE_TIMEOUT,
+        )
+      except (TimeoutError, _nmc.NMCProtocolError) as error:
+        last_error = error
+        await self.io.usb_purge_rx_buffer()
+        continue
+
+      modules: dict[int, tuple[int, int]] = {}
+      servo_id_response = await self._send_nmc(
+        _nmc.build_read_status(_nmc.PIC_SERVO_ADDRESS, _nmc.SEND_MODULE_ID),
+        response_data_length=2,
+      )
+      modules[_nmc.PIC_SERVO_ADDRESS] = (
+        servo_id_response.data[0],
+        servo_id_response.data[1],
+      )
+
+      try:
+        await self._send_nmc(
+          _nmc.build_set_address(_nmc.PIC_IO_ADDRESS),
+          timeout=_NETWORK_PROBE_TIMEOUT,
+        )
+      except (TimeoutError, _nmc.NMCProtocolError) as error:
+        raise RuntimeError(
+          "VSpin found only one NMC module; expected one PIC-SERVO and one PIC-IO"
+        ) from error
+      io_id_response = await self._send_nmc(
+        _nmc.build_read_status(_nmc.PIC_IO_ADDRESS, _nmc.SEND_MODULE_ID),
+        response_data_length=2,
+      )
+      modules[_nmc.PIC_IO_ADDRESS] = (
+        io_id_response.data[0],
+        io_id_response.data[1],
+      )
+
+      try:
+        await self._send_nmc(
+          _nmc.build_set_address(3),
+          timeout=_NETWORK_PROBE_TIMEOUT,
+        )
+      except TimeoutError:
+        await self.io.usb_purge_rx_buffer()
+      else:
+        extra_id_response = await self._send_nmc(
+          _nmc.build_read_status(3, _nmc.SEND_MODULE_ID),
+          response_data_length=2,
+        )
+        raise RuntimeError(
+          "VSpin found an unexpected third NMC module: "
+          f"type {extra_id_response.data[0]}, version {extra_id_response.data[1]}"
+        )
+
+      if modules[_nmc.PIC_SERVO_ADDRESS][0] != _nmc.PIC_SERVO_MODULE_TYPE:
+        raise RuntimeError(
+          "VSpin expected a PIC-SERVO at address 1, found module type "
+          f"{modules[_nmc.PIC_SERVO_ADDRESS][0]}"
+        )
+      if modules[_nmc.PIC_IO_ADDRESS][0] != _nmc.PIC_IO_MODULE_TYPE:
+        raise RuntimeError(
+          "VSpin expected a PIC-IO at address 2, found module type "
+          f"{modules[_nmc.PIC_IO_ADDRESS][0]}"
+        )
+
+      await self._send_nmc(_nmc.build_set_baud(57600), expect_response=False)
+      await self.io.set_baudrate(57600)
+      return
+
+    context = "" if last_error is None else f": {last_error}"
+    raise RuntimeError(
+      f"VSpin NMC initialization found no modules at supported baud rates{context}"
     )
-    return _nmc.parse_response(response, response_data_length)
 
-  async def configure_and_initialize(self):
-    await self.set_configuration_data()
-    await self.initialize()
-
-  async def set_configuration_data(self):
-    """Set the device configuration data."""
+  async def _configure_ftdi(self) -> None:
+    """Configure the FTDI UART before probing the NMC network."""
     await self.io.set_latency_timer(16)
     await self.io.set_line_property(bits=8, stopbits=1, parity=0)
     await self.io.set_flowctrl(0)
     await self.io.set_baudrate(19200)
 
-  async def initialize(self):
+  async def _reset_nmc_network(self) -> None:
+    """Send the vendor hard-reset sequence at the currently selected baud rate."""
     self._servo_status_mask = 0
     self._io_status_mask = 0
     self._io_output_word = 0
     await self.io.write(b"\x00" * 20)
-    for i in range(33):
-      packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
-      await self.io.write(packet)
+    for address in range(33):
+      await self.io.write(_nmc.build_no_op(address) + b"\x00" * 8)
     await self._send_nmc(_nmc.build_hard_reset(), expect_response=False)
 
   # -- hardware status queries --
@@ -455,11 +550,21 @@ class VSpin:
 
   async def request_tachometer(self) -> float:
     """Current speed in rpm."""
-    tack_to_rpm = -14.69320388
     velocity = (await self.request_positions_and_tachometer()).velocity
     if velocity is None:
       raise RuntimeError("VSpin velocity was absent from the configured servo status")
-    return velocity * tack_to_rpm
+    return velocity * _TACHOMETER_TO_RPM
+
+  @staticmethod
+  def _raise_on_servo_fault(status: _nmc.ServoStatus, *, operation: str) -> None:
+    if status.status & _nmc.STATUS_OVERCURRENT:
+      raise RuntimeError(
+        f"VSpin servo overcurrent detected during {operation} (status 0x{status.status:02x})"
+      )
+    if status.status & _nmc.STATUS_POSITION_ERROR:
+      raise RuntimeError(
+        f"VSpin servo position error detected during {operation} (status 0x{status.status:02x})"
+      )
 
   async def _wait_for_target_speed(self, rpm: float, acceleration: float) -> None:
     """Wait until measured speed reaches the requested spin speed."""
@@ -535,21 +640,28 @@ class VSpin:
     )
 
   async def _wait_until_stopped(self, initial_rpm: float, deceleration: float) -> None:
-    """Wait until the tachometer confirms that the rotor has stopped."""
+    """Wait until the controller reports motion complete and zero measured velocity."""
     timeout = _nmc.predicted_ramp_time(initial_rpm, deceleration) + _SPIN_TIMEOUT_MARGIN
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     await self._raise_for_spin_faults()
-    measured_rpm = abs(await self.request_tachometer())
-    while measured_rpm > _STOPPED_RPM_TOLERANCE:
+    status = await self.request_positions_and_tachometer()
+    while True:
+      self._raise_on_servo_fault(status, operation="deceleration")
+      if status.velocity is None:
+        raise RuntimeError("VSpin velocity was absent while confirming deceleration")
+      measured_rpm = abs(status.velocity * _TACHOMETER_TO_RPM)
+      motion_complete = bool(status.status & _nmc.STATUS_MOVE_DONE)
+      if motion_complete and status.velocity == 0:
+        return
       await self._raise_for_spin_faults()
       if loop.time() >= deadline:
         raise TimeoutError(
-          f"VSpin remained at {measured_rpm:.1f} RPM after {timeout:.1f} seconds "
-          "of commanded deceleration"
+          f"VSpin did not finish deceleration within {timeout:.1f} seconds; "
+          f"last status was 0x{status.status:02x} at {measured_rpm:.1f} RPM"
         )
       await asyncio.sleep(_STATUS_POLL_INTERVAL)
-      measured_rpm = abs(await self.request_tachometer())
+      status = await self.request_positions_and_tachometer()
 
   async def stop_spin(self, deceleration: float = 0.8) -> None:
     """Safely abort an active spin and wait for measured speed to reach zero."""
@@ -651,7 +763,9 @@ class VSpin:
     """Set the current position as bucket 1 position and save calibration."""
     current_position = await self.request_position()
     device_id = await self.io.request_serial()
-    remainder = (await self.request_home_position() - current_position) % FULL_ROTATION
+    home_position = await self.request_home_position()
+    self._home_position = home_position % FULL_ROTATION
+    remainder = (home_position - current_position) % FULL_ROTATION
     self._bucket_1_remainder = remainder
     _save_vspin_calibrations(device_id, remainder)
 
@@ -666,7 +780,9 @@ class VSpin:
   async def _request_bucket_position(self, offset: int) -> int:
     if self._bucket_1_remainder is None:
       raise bucket_1_not_set_error
-    home_position = await self.request_home_position()
+    home_position = self._home_position
+    if home_position is None:
+      home_position = await self.request_home_position()
     target_remainder = home_position - self.bucket_1_remainder + offset
     current_position = await self.request_position()
     return _nmc.nearest_encoder_position(
@@ -751,12 +867,22 @@ class VSpin:
     )
 
   async def go_to_bucket1(self):
-    await self.go_to_position(await self.request_bucket_1_position())
-    self._at_bucket = self.bucket1
+    await self._go_to_bucket(self.bucket1, await self.request_bucket_1_position())
 
   async def go_to_bucket2(self):
-    await self.go_to_position(await self.request_bucket_2_position())
-    self._at_bucket = self.bucket2
+    await self._go_to_bucket(self.bucket2, await self.request_bucket_2_position())
+
+  async def _go_to_bucket(self, bucket: ResourceHolder, position: int) -> None:
+    for attempt in range(_BUCKET_PRESENT_RETRIES + 1):
+      try:
+        await self.go_to_position(position)
+      except _PositionAlignmentError:
+        if attempt >= _BUCKET_PRESENT_RETRIES:
+          raise
+        position += FULL_ROTATION
+      else:
+        self._at_bucket = bucket
+        return
 
   async def go_to_position(self, position: int):
     logger.info("[vSpin %s] go_to_position: position=%d", self.device_id, position)
@@ -770,28 +896,51 @@ class VSpin:
     await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE))
     await self._send_nmc(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS))
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
-    await self._send_nmc(
-      _nmc.build_load_trajectory(
-        _nmc.PIC_SERVO_ADDRESS,
-        _POSITION_TRAJECTORY_MODE,
-        position=position,
-        velocity=0x28F5C3,
-        acceleration=0x1AD7,
-      )
-    )
-
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + _MOTION_TIMEOUT
-    current_position = await self.request_position()
-    while abs(current_position - position) > 10:
-      if loop.time() >= deadline:
-        raise TimeoutError(
-          f"VSpin did not reach encoder position {position} within {_MOTION_TIMEOUT} seconds; "
-          f"last position was {current_position}"
+    try:
+      trajectory_response = await self._send_nmc(
+        _nmc.build_load_trajectory(
+          _nmc.PIC_SERVO_ADDRESS,
+          _POSITION_TRAJECTORY_MODE,
+          position=position,
+          velocity=0x28F5C3,
+          acceleration=0x1AD7,
         )
-      await asyncio.sleep(_STATUS_POLL_INTERVAL)
-      current_position = await self.request_position()
+      )
+      motion_started = not bool(trajectory_response.status & _nmc.STATUS_MOVE_DONE)
+
+      loop = asyncio.get_running_loop()
+      deadline = loop.time() + _MOTION_TIMEOUT
+      motion_status = await self.request_positions_and_tachometer()
+      while not motion_status.status & _nmc.STATUS_MOVE_DONE:
+        motion_started = True
+        self._raise_on_servo_fault(motion_status, operation=f"move to position {position}")
+        if loop.time() >= deadline:
+          raise TimeoutError(
+            f"VSpin did not complete motion to encoder position {position} within "
+            f"{_MOTION_TIMEOUT} seconds; last status was 0x{motion_status.status:02x}, "
+            f"last position was {motion_status.position}"
+          )
+        await asyncio.sleep(_STATUS_POLL_INTERVAL)
+        motion_status = await self.request_positions_and_tachometer()
+      self._raise_on_servo_fault(motion_status, operation=f"move to position {position}")
+    except BaseException:
+      try:
+        await asyncio.shield(
+          self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
+        )
+      except Exception:
+        logger.exception("[vSpin %s] failed to turn off motor after position error", self.device_id)
+      raise
+
     await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
+    if motion_status.position is None:
+      raise RuntimeError("VSpin completed motion without returning an encoder position")
+    if abs(motion_status.position - position) > _BUCKET_POSITION_TOLERANCE:
+      transition = "after motion started" if motion_started else "without reporting motion start"
+      raise _PositionAlignmentError(
+        f"VSpin completed move to encoder position {position} {transition}, but settled at "
+        f"{motion_status.position} (tolerance {_BUCKET_POSITION_TOLERANCE})"
+      )
     await self.lock_bucket()
     await self.unlock_door()
     await self.open_door()
@@ -910,36 +1059,6 @@ class VSpin:
       raise
     finally:
       self._spin_active = False
-
-    async def _reset_to_zero():
-      await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
-      await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
-      await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT))
-      await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE))
-      await self._send_nmc(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS))
-      await self._send_nmc(_nmc.build_reset_position(_nmc.PIC_SERVO_ADDRESS))
-      await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _HOMING_GAINS))
-      await self._send_nmc(
-        _nmc.build_load_trajectory(
-          _nmc.PIC_SERVO_ADDRESS,
-          _VELOCITY_TRAJECTORY_MODE,
-          velocity=0x8312,
-          acceleration=0x0112,
-        )
-      )
-      await self._send_nmc(_nmc.build_set_homing(_nmc.PIC_SERVO_ADDRESS, 0x28))
-
-    await _reset_to_zero()
-
-    start = await self.request_home_position()
-    num_tries = 0
-    while await self.request_home_position() == start:
-      await asyncio.sleep(0.1)
-      num_tries += 1
-      if num_tries % 25 == 0:
-        await _reset_to_zero()
-      if num_tries > 100:
-        raise RuntimeError("Home position did not change after spin.")
 
     # The rotor has moved off whichever bucket was parked at the load position.
     self._at_bucket = None

@@ -1,12 +1,153 @@
+import dataclasses
 import unittest
-from unittest.mock import AsyncMock, patch
+from collections import deque
+from unittest.mock import AsyncMock, call, patch
 
-from pylabrobot.agilent.vspin import _nmc
+from pylabrobot.agilent.vspin import _nmc, vspin as vspin_module
 from pylabrobot.agilent.vspin.access2 import Access2
 from pylabrobot.agilent.vspin.errors import CentrifugeDoorError
 from pylabrobot.agilent.vspin.vspin import VSpin
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
+from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Coordinate, Resource
+
+
+_SERVO_STATUS_MASK = (
+  _nmc.SEND_POSITION | _nmc.SEND_ANALOG | _nmc.SEND_VELOCITY | _nmc.SEND_AUXILIARY | _nmc.SEND_HOME
+)
+_IO_STATUS_MASK = _nmc.SEND_INPUTS | _nmc.SEND_ANALOG_1
+
+
+def _nmc_response(status: int, data: bytes = b"") -> bytes:
+  return bytes([status]) + data + bytes([(status + sum(data)) & 0xFF])
+
+
+def _servo_status_data(
+  *,
+  position: int = 0,
+  velocity: int = 0,
+  home_position: int = 0,
+) -> bytes:
+  return Writer().i32(position).u8(0).i16(velocity).u8(0).i32(home_position).finish()
+
+
+def _io_status_data(*, inputs: int = 0) -> bytes:
+  return Writer().u16(inputs).u8(0).finish()
+
+
+def _servo_step(
+  command: bytes,
+  *,
+  status: int = _nmc.STATUS_MOVE_DONE,
+  position: int = 0,
+  velocity: int = 0,
+  home_position: int = 0,
+) -> "_VSpinScriptStep":
+  return _VSpinScriptStep(
+    command,
+    _nmc_response(
+      status,
+      _servo_status_data(
+        position=position,
+        velocity=velocity,
+        home_position=home_position,
+      ),
+    ),
+  )
+
+
+def _io_step(
+  command: bytes,
+  *,
+  status: int = _nmc.STATUS_MOVE_DONE,
+  inputs: int = 0,
+) -> "_VSpinScriptStep":
+  return _VSpinScriptStep(command, _nmc_response(status, _io_status_data(inputs=inputs)))
+
+
+def _empty_step(
+  command: bytes,
+  *,
+  status: int = _nmc.STATUS_MOVE_DONE,
+) -> "_VSpinScriptStep":
+  return _VSpinScriptStep(command, _nmc_response(status))
+
+
+@dataclasses.dataclass(frozen=True)
+class _VSpinScriptStep:
+  command: bytes
+  response: bytes | None
+
+
+class _ScriptedVSpinFTDI:
+  """Validate VSpin writes and replay partial NMC responses from a fixed script."""
+
+  def __init__(self, steps: list[_VSpinScriptStep], max_read_size: int = 3):
+    self._steps = deque(steps)
+    self._response = bytearray()
+    self._max_read_size = max_read_size
+    self.setup_called = False
+    self.stopped = False
+    self.writes: list[bytes] = []
+    self.latency_timers: list[int] = []
+    self.line_properties: list[tuple[int, int, int]] = []
+    self.flow_controls: list[int] = []
+    self.baudrates: list[int] = []
+    self.rts_levels: list[bool] = []
+    self.dtr_levels: list[bool] = []
+    self.rx_purge_count = 0
+
+  async def setup(self) -> None:
+    self.setup_called = True
+
+  async def stop(self) -> None:
+    self.stopped = True
+
+  async def set_latency_timer(self, latency: int) -> None:
+    self.latency_timers.append(latency)
+
+  async def set_line_property(self, bits: int, stopbits: int, parity: int) -> None:
+    self.line_properties.append((bits, stopbits, parity))
+
+  async def set_flowctrl(self, flowctrl: int) -> None:
+    self.flow_controls.append(flowctrl)
+
+  async def set_baudrate(self, baudrate: int) -> None:
+    self.baudrates.append(baudrate)
+
+  async def set_rts(self, level: bool) -> None:
+    self.rts_levels.append(level)
+
+  async def set_dtr(self, level: bool) -> None:
+    self.dtr_levels.append(level)
+
+  async def usb_purge_rx_buffer(self) -> None:
+    self.rx_purge_count += 1
+
+  async def write(self, data: bytes) -> int:
+    if self._response:
+      raise AssertionError(f"VSpin wrote before consuming response {self._response.hex()}")
+    if not self._steps:
+      raise AssertionError(f"Unexpected VSpin write: {data.hex()}")
+    step = self._steps.popleft()
+    if data != step.command:
+      raise AssertionError(f"VSpin wrote {data.hex()}, expected {step.command.hex()}")
+    self.writes.append(data)
+    if step.response is not None:
+      self._response.extend(step.response)
+    return len(data)
+
+  async def read(self, length: int) -> bytes:
+    count = min(length, self._max_read_size, len(self._response))
+    if count == 0:
+      return b""
+    chunk = bytes(self._response[:count])
+    del self._response[:count]
+    return chunk
+
+  def assert_complete(self, test: unittest.TestCase) -> None:
+    test.assertEqual(list(self._steps), [])
+    test.assertEqual(bytes(self._response), b"")
 
 
 class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
@@ -23,12 +164,14 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
     vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
     vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
     vspin.request_tachometer = AsyncMock(  # type: ignore[method-assign]
-      side_effect=[100000, 0]
+      return_value=100000
     )
     vspin.request_position = AsyncMock(  # type: ignore[method-assign]
       side_effect=[0, 10000000, 20000000]
     )
-    vspin.request_home_position = AsyncMock(side_effect=[0, 1])  # type: ignore[method-assign]
+    vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
+      return_value=_nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0)
+    )
     vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
     vspin._send_nmc = AsyncMock(  # type: ignore[method-assign]
       return_value=_nmc.NMCResponse(status=0, data=b"")
@@ -104,12 +247,14 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
     vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
     vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
     vspin.request_tachometer = AsyncMock(  # type: ignore[method-assign]
-      side_effect=[100000, 0]
+      return_value=100000
     )
     vspin.request_position = AsyncMock(  # type: ignore[method-assign]
       side_effect=[0, 10000000, 20000000]
     )
-    vspin.request_home_position = AsyncMock(side_effect=[0, 1])  # type: ignore[method-assign]
+    vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
+      return_value=_nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0)
+    )
     vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
     vspin._send_nmc = AsyncMock(  # type: ignore[method-assign]
       return_value=_nmc.NMCResponse(status=0, data=b"")
@@ -156,8 +301,23 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
     self.io.write = AsyncMock(return_value=4)
     self.io.read = AsyncMock(return_value=bytes(response))
 
-    with self.assertRaisesRegex(_nmc.NMCProtocolError, "checksum mismatch"):
+    with self.assertRaisesRegex(
+      _nmc.NMCProtocolError,
+      rf"command {_nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS).hex()}.*"
+      rf"response {bytes(response).hex()}.*checksum mismatch",
+    ):
       await self.vspin.request_positions_and_tachometer()
+
+  async def test_send_nmc_timeout_includes_command_and_partial_response(self):
+    command = _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS)
+    self.io.write = AsyncMock(return_value=len(command))
+    self.io.read = AsyncMock(side_effect=[b"\x01", b""])
+
+    with self.assertRaisesRegex(
+      TimeoutError,
+      rf"command {command.hex()} timed out.*1 of 2 expected.*01",
+    ):
+      await self.vspin._send_nmc(command, timeout=0)
 
   async def test_exact_response_times_out_with_partial_bytes(self):
     self.io.read = AsyncMock(side_effect=[b"\x01", b""])
@@ -216,10 +376,27 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(RuntimeError, "imbalance"):
       await self.vspin._raise_for_spin_faults()
 
+  async def test_spin_rejects_long_run_position_overflow_before_servo_motion(self):
+    self.vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_position = AsyncMock(return_value=2**31 - 1)  # type: ignore[method-assign]
+    self.vspin._send_nmc = AsyncMock()  # type: ignore[method-assign]
+
+    with self.assertRaisesRegex(NotImplementedError, "signed 32-bit position"):
+      await self.vspin.spin(g=500, duration=1)
+
+    self.vspin._send_nmc.assert_not_awaited()  # type: ignore[attr-defined]
+
   async def test_stop_spin_commands_deceleration_and_confirms_zero_speed(self):
     self.vspin._spin_active = True
-    self.vspin.request_tachometer = AsyncMock(  # type: ignore[method-assign]
-      side_effect=[1000, 100, 0]
+    self.vspin.request_tachometer = AsyncMock(return_value=1000)  # type: ignore[method-assign]
+    self.vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
+      side_effect=[
+        _nmc.ServoStatus(status=0, velocity=0),
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=-1),
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0),
+      ]
     )
     self.vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
     self.vspin._command_deceleration = AsyncMock()  # type: ignore[method-assign]
@@ -228,6 +405,25 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
 
     self.assertTrue(self.vspin._spin_cancel_requested)
     self.vspin._command_deceleration.assert_awaited_once_with(0.5)  # type: ignore[attr-defined]
+    self.assertEqual(  # type: ignore[attr-defined]
+      self.vspin.request_positions_and_tachometer.await_count,
+      3,
+    )
+
+  async def test_deceleration_timeout_reports_motion_status_and_velocity(self):
+    self.vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
+    self.vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
+      return_value=_nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=-1)
+    )
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin._SPIN_TIMEOUT_MARGIN", 0),
+      self.assertRaisesRegex(
+        TimeoutError,
+        "last status was 0x01 at 14.7 RPM",
+      ),
+    ):
+      await self.vspin._wait_until_stopped(initial_rpm=0, deceleration=0.5)
 
   async def test_bucket_calibration_is_normalized_and_saved_consistently(self):
     self.vspin.request_position = AsyncMock(return_value=12_345)  # type: ignore[method-assign]
@@ -247,6 +443,509 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(await self.vspin.request_bucket_1_position(), 8400)
     self.assertEqual(await self.vspin.request_bucket_2_position(), 4400)
+
+  async def test_bucket_target_uses_saved_home_position_after_spin(self):
+    self.vspin._bucket_1_remainder = 100
+    self.vspin._home_position = 500
+    self.vspin.request_home_position = AsyncMock()  # type: ignore[method-assign]
+    self.vspin.request_position = AsyncMock(return_value=7900)  # type: ignore[method-assign]
+
+    self.assertEqual(await self.vspin.request_bucket_1_position(), 8400)
+    self.vspin.request_home_position.assert_not_awaited()  # type: ignore[attr-defined]
+
+  async def test_bucket_presentation_retries_alignment_one_revolution_later(self):
+    self.vspin.request_bucket_1_position = AsyncMock(return_value=8400)  # type: ignore[method-assign]
+    self.vspin.go_to_position = AsyncMock(  # type: ignore[method-assign]
+      side_effect=[vspin_module._PositionAlignmentError("misaligned"), None]
+    )
+
+    await self.vspin.go_to_bucket1()
+
+    self.vspin.go_to_position.assert_has_awaits([call(8400), call(16400)])  # type: ignore[attr-defined]
+    self.assertIs(self.vspin.at_bucket, self.vspin.bucket1)
+
+
+class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.ftdi_patch = patch("pylabrobot.agilent.vspin.vspin.FTDI", autospec=True)
+    self.ftdi_patch.start()
+    self.addCleanup(self.ftdi_patch.stop)
+
+  def _make_vspin(self, steps: list[_VSpinScriptStep]) -> tuple[VSpin, _ScriptedVSpinFTDI]:
+    vspin = VSpin(name="centrifuge")
+    io = _ScriptedVSpinFTDI(steps)
+    vspin.io = io  # type: ignore[assignment]
+    vspin._servo_status_mask = _SERVO_STATUS_MASK
+    vspin._io_status_mask = _IO_STATUS_MASK
+    return vspin, io
+
+  @staticmethod
+  def _bucket_presentation_steps(
+    current_position: int, target_position: int
+  ) -> list[_VSpinScriptStep]:
+    io_status = _nmc.build_no_op(_nmc.PIC_IO_ADDRESS)
+    servo_status = _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS)
+    closed_locked_bucket_unlocked = 1 << _nmc.INPUT_BUCKET_LOCKED
+    position_trajectory = _nmc.build_load_trajectory(
+      _nmc.PIC_SERVO_ADDRESS,
+      vspin_module._POSITION_TRAJECTORY_MODE,
+      position=target_position,
+      velocity=0x28F5C3,
+      acceleration=0x1AD7,
+    )
+    return [
+      _servo_step(servo_status, position=current_position),
+      _io_step(io_status, inputs=closed_locked_bucket_unlocked),
+      _io_step(io_status, inputs=closed_locked_bucket_unlocked),
+      _io_step(io_status, inputs=closed_locked_bucket_unlocked),
+      _io_step(io_status, inputs=closed_locked_bucket_unlocked),
+      _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)),
+      _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._POSITION_GAINS)),
+      _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT)),
+      _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE)),
+      _servo_step(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS)),
+      _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._POSITION_GAINS)),
+      _servo_step(position_trajectory, status=0, position=current_position),
+      _servo_step(servo_status, position=target_position),
+      _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)),
+      _io_step(io_status, inputs=closed_locked_bucket_unlocked),
+      _io_step(_nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0x0100), inputs=0),
+      _io_step(io_status, inputs=0),
+      _io_step(io_status, inputs=0),
+      _io_step(
+        _nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0x0500),
+        inputs=1 << _nmc.INPUT_DOOR_LOCKED,
+      ),
+      _io_step(io_status, inputs=1 << _nmc.INPUT_DOOR_LOCKED),
+      _io_step(io_status, inputs=1 << _nmc.INPUT_DOOR_LOCKED),
+      _io_step(
+        _nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0x0700),
+        inputs=(1 << _nmc.INPUT_DOOR_LOCKED) | (1 << _nmc.INPUT_DOOR_OPEN),
+      ),
+      _io_step(
+        io_status,
+        inputs=(1 << _nmc.INPUT_DOOR_LOCKED) | (1 << _nmc.INPUT_DOOR_OPEN),
+      ),
+    ]
+
+  @staticmethod
+  def _network_reset_steps() -> list[_VSpinScriptStep]:
+    steps = [_VSpinScriptStep(b"\x00" * 20, None)]
+    steps.extend(
+      _VSpinScriptStep(
+        _nmc.build_no_op(address) + b"\x00" * 8,
+        None,
+      )
+      for address in range(33)
+    )
+    steps.append(_VSpinScriptStep(_nmc.build_hard_reset(), None))
+    return steps
+
+  @classmethod
+  def _setup_steps(cls) -> list[_VSpinScriptStep]:
+    steps = cls._network_reset_steps()
+    steps.extend(cls._network_reset_steps())
+    steps.extend(
+      [
+        _empty_step(_nmc.build_set_address(_nmc.PIC_SERVO_ADDRESS)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(_nmc.PIC_SERVO_ADDRESS, _nmc.SEND_MODULE_ID),
+          _nmc_response(
+            _nmc.STATUS_MOVE_DONE,
+            bytes([_nmc.PIC_SERVO_MODULE_TYPE, 1]),
+          ),
+        ),
+        _empty_step(_nmc.build_set_address(_nmc.PIC_IO_ADDRESS)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(_nmc.PIC_IO_ADDRESS, _nmc.SEND_MODULE_ID),
+          _nmc_response(
+            _nmc.STATUS_MOVE_DONE,
+            bytes([_nmc.PIC_IO_MODULE_TYPE, 1]),
+          ),
+        ),
+        _VSpinScriptStep(_nmc.build_set_address(3), None),
+        _VSpinScriptStep(_nmc.build_set_baud(57600), None),
+        _servo_step(_nmc.build_define_status(_nmc.PIC_SERVO_ADDRESS, _SERVO_STATUS_MASK)),
+      ]
+    )
+    steps.extend(
+      _empty_step(_nmc.build_set_io_direction(_nmc.PIC_IO_ADDRESS, 0x0FFF)) for _ in range(8)
+    )
+    steps.extend(
+      _empty_step(_nmc.build_set_io_direction(_nmc.PIC_IO_ADDRESS, direction))
+      for direction in (0x0FDF, 0x0EDF, 0x0CDF, 0x08DF)
+    )
+    steps.extend(_empty_step(_nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0)) for _ in range(4))
+    safe_inputs = 1 << _nmc.INPUT_BUCKET_LOCKED
+    steps.append(
+      _io_step(
+        _nmc.build_define_status(_nmc.PIC_IO_ADDRESS, _IO_STATUS_MASK),
+        inputs=safe_inputs,
+      )
+    )
+    for _ in range(5):
+      steps.extend(
+        [
+          _io_step(
+            _nmc.build_set_output(
+              _nmc.PIC_IO_ADDRESS,
+              1 << _nmc.OUTPUT_VERSION_TOGGLE,
+            ),
+            inputs=safe_inputs,
+          ),
+          _io_step(
+            _nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0),
+            inputs=safe_inputs,
+          ),
+        ]
+      )
+    io_status = _nmc.build_no_op(_nmc.PIC_IO_ADDRESS)
+    steps.extend(
+      [
+        _io_step(io_status, inputs=safe_inputs),
+        _io_step(io_status, inputs=safe_inputs),
+        _io_step(
+          _nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0),
+          inputs=safe_inputs,
+        ),
+        _io_step(io_status, inputs=safe_inputs),
+        _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)),
+        _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._POSITION_GAINS)),
+        _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT)),
+        _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE)),
+        _servo_step(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS)),
+        _servo_step(_nmc.build_reset_position(_nmc.PIC_SERVO_ADDRESS)),
+        _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._HOMING_GAINS)),
+        _servo_step(
+          _nmc.build_load_trajectory(
+            _nmc.PIC_SERVO_ADDRESS,
+            vspin_module._VELOCITY_TRAJECTORY_MODE,
+            velocity=0x8312,
+            acceleration=0x0112,
+          ),
+          status=_nmc.STATUS_HOMING_IN_PROGRESS,
+        ),
+        _servo_step(
+          _nmc.build_set_homing(_nmc.PIC_SERVO_ADDRESS, 0x28),
+          status=_nmc.STATUS_HOMING_IN_PROGRESS,
+        ),
+        _servo_step(
+          _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS),
+          status=_nmc.STATUS_HOMING_IN_PROGRESS,
+          position=100,
+        ),
+        _servo_step(
+          _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS),
+          position=200,
+          home_position=200,
+        ),
+        _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)),
+        _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._POSITION_GAINS)),
+        _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT)),
+        _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE)),
+        _servo_step(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS)),
+        _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._POSITION_GAINS)),
+        _servo_step(
+          _nmc.build_load_trajectory(
+            _nmc.PIC_SERVO_ADDRESS,
+            vspin_module._POSITION_TRAJECTORY_MODE,
+            position=0,
+            velocity=0x28F5C3,
+            acceleration=0x1AD7,
+          ),
+          status=0,
+          position=200,
+          home_position=200,
+        ),
+        _servo_step(
+          _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS),
+          status=0,
+          position=50,
+          home_position=200,
+        ),
+        _servo_step(
+          _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS),
+          position=0,
+          home_position=200,
+        ),
+        _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)),
+        _io_step(io_status, inputs=safe_inputs),
+        _io_step(io_status, inputs=safe_inputs),
+      ]
+    )
+    return steps
+
+  async def test_complete_setup_and_homing_ftdi_transcript(self):
+    vspin, io = self._make_vspin(self._setup_steps())
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()),
+      patch("pylabrobot.agilent.vspin.vspin._NETWORK_PROBE_TIMEOUT", 0),
+    ):
+      await vspin.setup()
+
+    io.assert_complete(self)
+    self.assertTrue(io.setup_called)
+    self.assertEqual(io.latency_timers, [16])
+    self.assertEqual(io.line_properties, [(8, 1, 0)])
+    self.assertEqual(io.flow_controls, [0])
+    self.assertEqual(io.baudrates, [19200, 19200, 19200, 57600])
+    self.assertEqual(io.rx_purge_count, 2)
+    self.assertEqual(io.rts_levels, [True])
+    self.assertEqual(io.dtr_levels, [True])
+    self.assertEqual(vspin._home_position, 200)
+
+  async def test_network_initialization_probes_the_next_baudrate(self):
+    steps = self._network_reset_steps()
+    steps.extend(self._network_reset_steps())
+    steps.append(_VSpinScriptStep(_nmc.build_set_address(_nmc.PIC_SERVO_ADDRESS), None))
+    steps.extend(self._network_reset_steps())
+    steps.extend(self._network_reset_steps())
+    steps.extend(
+      [
+        _empty_step(_nmc.build_set_address(_nmc.PIC_SERVO_ADDRESS)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(_nmc.PIC_SERVO_ADDRESS, _nmc.SEND_MODULE_ID),
+          _nmc_response(1, bytes([_nmc.PIC_SERVO_MODULE_TYPE, 1])),
+        ),
+        _empty_step(_nmc.build_set_address(_nmc.PIC_IO_ADDRESS)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(_nmc.PIC_IO_ADDRESS, _nmc.SEND_MODULE_ID),
+          _nmc_response(1, bytes([_nmc.PIC_IO_MODULE_TYPE, 1])),
+        ),
+        _VSpinScriptStep(_nmc.build_set_address(3), None),
+        _VSpinScriptStep(_nmc.build_set_baud(57600), None),
+      ]
+    )
+    vspin, io = self._make_vspin(steps)
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()),
+      patch("pylabrobot.agilent.vspin.vspin._NETWORK_PROBE_TIMEOUT", 0),
+    ):
+      await vspin._initialize_nmc_network()
+
+    io.assert_complete(self)
+    self.assertEqual(io.baudrates, [19200, 19200, 115200, 19200, 57600])
+    self.assertEqual(io.rx_purge_count, 4)
+
+  async def test_network_initialization_rejects_a_third_module(self):
+    steps = self._network_reset_steps()
+    steps.extend(self._network_reset_steps())
+    steps.extend(
+      [
+        _empty_step(_nmc.build_set_address(_nmc.PIC_SERVO_ADDRESS)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(_nmc.PIC_SERVO_ADDRESS, _nmc.SEND_MODULE_ID),
+          _nmc_response(1, bytes([_nmc.PIC_SERVO_MODULE_TYPE, 1])),
+        ),
+        _empty_step(_nmc.build_set_address(_nmc.PIC_IO_ADDRESS)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(_nmc.PIC_IO_ADDRESS, _nmc.SEND_MODULE_ID),
+          _nmc_response(1, bytes([_nmc.PIC_IO_MODULE_TYPE, 1])),
+        ),
+        _empty_step(_nmc.build_set_address(3)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(3, _nmc.SEND_MODULE_ID),
+          _nmc_response(1, bytes([_nmc.PIC_SERVO_MODULE_TYPE, 2])),
+        ),
+      ]
+    )
+    vspin, io = self._make_vspin(steps)
+
+    with self.assertRaisesRegex(RuntimeError, "unexpected third NMC module"):
+      await vspin._initialize_nmc_network()
+
+    io.assert_complete(self)
+
+  async def test_complete_spin_ftdi_transcript(self):
+    g = 500
+    duration = 1
+    acceleration = 0.5
+    deceleration = 0.6
+    rpm = VSpin.g_to_rpm(g)
+    spin_start_position = 0
+    cruise_start_position = 100_000
+    deceleration_position = int(
+      cruise_start_position + rpm / 60 * _nmc.COUNTS_PER_REVOLUTION * duration
+    )
+    spin_target = spin_start_position + _nmc.spin_target_distance(
+      rpm,
+      duration,
+      acceleration,
+    )
+    measured_velocity = -int(rpm / abs(vspin_module._TACHOMETER_TO_RPM))
+    safe_inputs = 1 << _nmc.INPUT_BUCKET_LOCKED
+    io_status = _nmc.build_no_op(_nmc.PIC_IO_ADDRESS)
+    servo_status = _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS)
+    spin_trajectory = _nmc.build_load_trajectory(
+      _nmc.PIC_SERVO_ADDRESS,
+      vspin_module._POSITION_TRAJECTORY_MODE,
+      position=spin_target,
+      velocity=_nmc.rpm_to_nmc_velocity(rpm),
+      acceleration=_nmc.acceleration_to_nmc(acceleration),
+    )
+    deceleration_trajectory = _nmc.build_load_trajectory(
+      _nmc.PIC_SERVO_ADDRESS,
+      vspin_module._VELOCITY_TRAJECTORY_MODE,
+      velocity=0,
+      acceleration=_nmc.acceleration_to_nmc(deceleration),
+    )
+    steps = [
+      _io_step(io_status, inputs=safe_inputs),
+      _io_step(io_status, inputs=safe_inputs),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(servo_status, position=spin_start_position),
+      _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)),
+      _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._POSITION_GAINS)),
+      _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT)),
+      _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE)),
+      _servo_step(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS)),
+      _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._VELOCITY_GAINS)),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(spin_trajectory, status=0, position=spin_start_position),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(
+        servo_status,
+        status=0,
+        position=50_000,
+        velocity=measured_velocity,
+      ),
+      _servo_step(
+        servo_status,
+        status=0,
+        position=cruise_start_position,
+        velocity=measured_velocity,
+      ),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(
+        servo_status,
+        status=0,
+        position=deceleration_position,
+        velocity=measured_velocity,
+      ),
+      _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._VELOCITY_GAINS)),
+      _servo_step(deceleration_trajectory, status=0, position=deceleration_position),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(
+        servo_status,
+        position=deceleration_position,
+        velocity=0,
+      ),
+    ]
+    vspin, io = self._make_vspin(steps)
+    vspin._at_bucket = vspin.bucket1
+
+    await vspin.spin(g, duration, acceleration, deceleration)
+
+    io.assert_complete(self)
+    self.assertIsNone(vspin.at_bucket)
+    self.assertNotIn(_nmc.build_reset_position(_nmc.PIC_SERVO_ADDRESS), io.writes)
+    self.assertNotIn(
+      _nmc.build_set_homing(_nmc.PIC_SERVO_ADDRESS, 0x28),
+      io.writes,
+    )
+
+  async def test_complete_abort_ftdi_transcript(self):
+    initial_velocity = -100
+    deceleration = 0.5
+    io_status = _nmc.build_no_op(_nmc.PIC_IO_ADDRESS)
+    servo_status = _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS)
+    safe_inputs = 1 << _nmc.INPUT_BUCKET_LOCKED
+    steps = [
+      _servo_step(servo_status, status=0, velocity=initial_velocity),
+      _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._VELOCITY_GAINS)),
+      _servo_step(
+        _nmc.build_load_trajectory(
+          _nmc.PIC_SERVO_ADDRESS,
+          vspin_module._VELOCITY_TRAJECTORY_MODE,
+          velocity=0,
+          acceleration=_nmc.acceleration_to_nmc(deceleration),
+        ),
+        status=0,
+        velocity=initial_velocity,
+      ),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(servo_status, status=0, velocity=-10),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(servo_status, velocity=0),
+    ]
+    vspin, io = self._make_vspin(steps)
+    vspin._spin_active = True
+
+    with patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()):
+      await vspin.stop_spin(deceleration)
+
+    io.assert_complete(self)
+    self.assertTrue(vspin._spin_cancel_requested)
+
+  async def test_complete_bucket_presentation_ftdi_transcripts(self):
+    current_position = 7900
+    cases = (
+      ("go_to_bucket1", 8400, "bucket1"),
+      ("go_to_bucket2", 4400, "bucket2"),
+    )
+    for method_name, target_position, bucket_name in cases:
+      with self.subTest(bucket=bucket_name):
+        steps = self._bucket_presentation_steps(current_position, target_position)
+        vspin, io = self._make_vspin(steps)
+        vspin._home_position = 500
+        vspin._bucket_1_remainder = 100
+
+        await getattr(vspin, method_name)()
+
+        io.assert_complete(self)
+        self.assertIs(vspin.at_bucket, getattr(vspin, bucket_name))
+        self.assertTrue(vspin.door_open)
+
+  async def test_bucket_motion_fault_prevents_lock_and_door_commands(self):
+    position = 8400
+    steps = self._bucket_presentation_steps(7900, position)[1:13]
+    steps[-1] = _servo_step(
+      _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS),
+      status=_nmc.STATUS_POSITION_ERROR,
+      position=7900,
+    )
+    steps.append(_servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)))
+    vspin, io = self._make_vspin(steps)
+
+    with self.assertRaisesRegex(RuntimeError, "position error.*move to position 8400"):
+      await vspin.go_to_position(position)
+
+    io.assert_complete(self)
+    self.assertFalse(vspin.door_open)
+
+  async def test_door_and_lock_operations_are_idempotent(self):
+    io_status = _nmc.build_no_op(_nmc.PIC_IO_ADDRESS)
+    steps = [
+      _io_step(io_status, inputs=1 << _nmc.INPUT_DOOR_OPEN),
+      _io_step(io_status, inputs=0),
+      _io_step(io_status, inputs=0),
+      _io_step(io_status, inputs=0),
+      _io_step(io_status, inputs=1 << _nmc.INPUT_DOOR_LOCKED),
+      _io_step(io_status, inputs=0),
+      _io_step(io_status, inputs=0),
+    ]
+    vspin, io = self._make_vspin(steps)
+
+    await vspin.open_door()
+    await vspin.close_door()
+    await vspin.lock_door()
+    await vspin.unlock_door()
+    await vspin.lock_bucket()
+    await vspin.unlock_bucket()
+
+    io.assert_complete(self)
+    self.assertTrue(all(write == io_status for write in io.writes))
+
+  async def test_stop_closes_ftdi_without_resetting_the_nmc_network(self):
+    vspin, io = self._make_vspin([])
+
+    await vspin.stop()
+
+    io.assert_complete(self)
+    self.assertTrue(io.stopped)
+    self.assertEqual(io.writes, [])
 
 
 class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
