@@ -454,7 +454,8 @@ class Resource(SerializableMixin):
 
     # Check for unsupported resource assignment operations
     self._check_assignment(resource=resource, reassign=reassign)
-    self.get_root()._check_naming_conflicts(resource=resource)
+    root = self.get_root()
+    arriving = root._check_naming_conflicts(resource=resource)
 
     # Call "will assign" callbacks
     for callback in self._will_assign_resource_callbacks:
@@ -468,10 +469,9 @@ class Resource(SerializableMixin):
     self.children.append(resource)
 
     # What arrived belongs to this tree's root now, and the subtree stops heading a tree of its
-    # own, so it gives up the map it was keeping. Read from the subtree rather than from its map,
-    # which is only kept current for a root.
-    arriving = {r.name: r for r in [resource] + resource.get_all_children()}
-    self.get_root()._subtree_resources.update(arriving)
+    # own, so it gives up the map it was keeping. Collected by the check above, which had to walk
+    # the same subtree to do its job.
+    root._subtree_resources.update(arriving)
     resource._subtree_resources = {}
 
     # Register callbacks on the new child resource so that they can be propagated up the tree.
@@ -616,15 +616,27 @@ class Resource(SerializableMixin):
       current = current.parent
     return False
 
-  def _check_naming_conflicts(self, resource: Resource):
+  def _check_naming_conflicts(self, resource: Resource) -> Dict[str, Resource]:
     """Raise if anything in `resource`'s subtree is already named in this one.
 
     Names identify a resource across the whole tree - `get_resource` finds one by name, and
     `serialize_all_state` keys state by it - so two resources may not share one.
+
+    Args:
+      resource: The resource arriving, with everything beneath it.
+
+    Returns:
+      What arrived, by name, so the caller does not walk the same subtree again to record it.
+
+    Raises:
+      ValueError: If any name in that subtree is already in this tree.
     """
-    for arriving in [resource] + resource.get_all_children():
-      if arriving.name in self._subtree_resources:
-        raise ValueError(f"Resource with name '{arriving.name}' already exists in the tree.")
+    arriving: Dict[str, Resource] = {}
+    for res in [resource] + resource.get_all_children():
+      if res.name in self._subtree_resources:
+        raise ValueError(f"Resource with name '{res.name}' already exists in the tree.")
+      arriving[res.name] = res
+    return arriving
 
   def unassign_child_resource(self, resource: Resource):
     """Unassign a child resource from this resource.

@@ -50,10 +50,11 @@ class Deck(Resource):
     super_serialized.pop("model", None)  # deck's don't typically have a model
     return super_serialized
 
-  def _check_naming_conflicts(self, resource: Resource):
+  def _check_naming_conflicts(self, resource: Resource) -> Dict[str, Resource]:
     """overwrite for speed"""
     if self.has_resource(resource.name):
       raise ValueError(f"Resource '{resource.name}' already assigned to deck")
+    return {res.name: res for res in [resource] + resource.get_all_children()}
 
   def _register_resource(self, resource: Resource):
     """Recursively assign the given resource and all child resources to the `self._resources`
