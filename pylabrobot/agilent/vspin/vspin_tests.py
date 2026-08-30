@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 from pylabrobot.agilent.vspin import _nmc
 from pylabrobot.agilent.vspin.access2 import Access2
+from pylabrobot.agilent.vspin.errors import CentrifugeDoorError
 from pylabrobot.agilent.vspin.vspin import VSpin
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.resources import Coordinate, Resource
@@ -261,6 +262,9 @@ class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
     self.vspin = VSpin(name="centrifuge", device_id="test")
     self.vspin._door_open = True
     self.vspin._at_bucket = self.vspin.bucket1
+    self.vspin.request_door_open = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin.request_bucket_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin.request_spinning = AsyncMock(return_value=False)  # type: ignore[method-assign]
     self.loader = Access2(name="loader", device_id="test", vspin=self.vspin)
     self.loader.driver.load = AsyncMock()  # type: ignore[method-assign]
     self.loader.driver.unload = AsyncMock()  # type: ignore[method-assign]
@@ -321,3 +325,37 @@ class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(started.data["source"]["name"], "centrifuge_bucket1")
     self.assertEqual(started.data["destination"]["name"], "loader")
     self.assertEqual(failed.data["error_type"], "RuntimeError")
+
+  async def test_load_requires_physical_bucket_lock_before_driver_motion(self):
+    plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
+    self.loader.assign_child_resource(plate, location=Coordinate.zero())
+    self.vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    with self.assertRaisesRegex(RuntimeError, "physically locked"):
+      await self.loader.load()
+
+    self.loader.driver.load.assert_not_awaited()  # type: ignore[attr-defined]
+    self.assertIs(self.loader.resource, plate)
+    self.assertIsNone(self.vspin.bucket1.resource)
+
+  async def test_unload_requires_stopped_vspin_before_driver_motion(self):
+    plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
+    self.vspin.bucket1.assign_child_resource(plate, location=Coordinate.zero())
+    self.vspin.request_spinning = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    with self.assertRaisesRegex(RuntimeError, "must be stopped"):
+      await self.loader.unload()
+
+    self.loader.driver.unload.assert_not_awaited()  # type: ignore[attr-defined]
+    self.assertIs(self.vspin.bucket1.resource, plate)
+    self.assertIsNone(self.loader.resource)
+
+  async def test_load_requires_physical_door_open_before_driver_motion(self):
+    plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
+    self.loader.assign_child_resource(plate, location=Coordinate.zero())
+    self.vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    with self.assertRaisesRegex(CentrifugeDoorError, "door-open sensor"):
+      await self.loader.load()
+
+    self.loader.driver.load.assert_not_awaited()  # type: ignore[attr-defined]

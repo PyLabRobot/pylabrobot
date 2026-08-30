@@ -16,7 +16,7 @@ from pylabrobot.io.binary import Reader, Writer
 VELOCITY11_HEADER = 0x11
 VELOCITY11_PACKET_TYPE = 0x05
 VELOCITY11_CHANNEL = 0x00
-MAX_COMMAND_LENGTH = 4096
+MAX_INNER_FRAME_LENGTH = 4096
 
 # Access2 command identifiers.
 GET_FIRMWARE_VERSION = 0x00
@@ -45,11 +45,11 @@ AXIS_Y = 2
 AXIS_Z = 3
 
 # Stored teachpoint indices.
-LOCATION_PARK = 0
-LOCATION_PICK = 1
-LOCATION_BUCKET_1 = 2
-LOCATION_BUCKET_2 = 3
-LOCATION_HOVER = 4
+TEACHPOINT_PARK = 0
+TEACHPOINT_PICK = 1
+TEACHPOINT_BUCKET_1 = 2
+TEACHPOINT_BUCKET_2 = 3
+TEACHPOINT_HOVER = 4
 
 # Motion profile indices.
 PROFILE_STATIC = 0
@@ -71,6 +71,15 @@ STATUS_ESTOP_SET = 0x04
 STATUS_ESTOP_ACTIVE = 0x08
 STATUS_MOTOR_POWER_FAULT = 0x10
 STATUS_OPTICAL_PLATE_SENSOR = 0x20
+
+# Per-axis PIC-SERVO status bits returned in the full Access2 status response.
+AXIS_STATUS_MOVE_DONE = 0x01
+AXIS_STATUS_CHECKSUM_ERROR = 0x02
+AXIS_STATUS_OVERCURRENT = 0x04
+AXIS_STATUS_POSITION_ERROR = 0x10
+AXIS_STATUS_FAULT_MASK = (
+  AXIS_STATUS_CHECKSUM_ERROR | AXIS_STATUS_OVERCURRENT | AXIS_STATUS_POSITION_ERROR
+)
 
 # Captured sensor word returned when no plate is present at the queried handoff.
 SENSOR_NO_PLATE = 0x00000003
@@ -95,11 +104,11 @@ class Access2Status:
   access2_status: int
   vspin_status: int
   gripper_status: int | None = None
-  gripper_position_mm: float | None = None
+  gripper_position: float | None = None
   y_status: int | None = None
-  y_position_mm: float | None = None
+  y_position: float | None = None
   z_status: int | None = None
-  z_position_mm: float | None = None
+  z_position: float | None = None
 
   @property
   def initialized(self) -> bool:
@@ -125,6 +134,26 @@ class Access2Status:
   def optical_plate_sensor(self) -> bool:
     return bool(self.access2_status & STATUS_OPTICAL_PLATE_SENSOR)
 
+  def axis_status(self, axis: int) -> int | None:
+    """Return the PIC-SERVO status byte for ``axis`` when full status is available."""
+    if axis == AXIS_GRIPPER:
+      return self.gripper_status
+    if axis == AXIS_Y:
+      return self.y_status
+    if axis == AXIS_Z:
+      return self.z_status
+    raise ValueError(f"Unknown Access2 axis: {axis}")
+
+  def axis_position(self, axis: int) -> float | None:
+    """Return the position for ``axis`` when full status is available."""
+    if axis == AXIS_GRIPPER:
+      return self.gripper_position
+    if axis == AXIS_Y:
+      return self.y_position
+    if axis == AXIS_Z:
+      return self.z_position
+    raise ValueError(f"Unknown Access2 axis: {axis}")
+
 
 def crc16_xmodem(data: bytes) -> int:
   """Return CRC-16/CCITT-XMODEM for ``data``."""
@@ -149,9 +178,10 @@ def build_command(command_id: int, data: bytes = b"") -> bytes:
 
 def build_ftdi_frame(command: bytes) -> bytes:
   """Wrap one Access2 command in the current PLR FTDI envelope."""
-  if not 3 <= len(command) <= MAX_COMMAND_LENGTH:
+  if not 3 <= len(command) <= MAX_INNER_FRAME_LENGTH:
     raise ValueError(
-      f"Access2 command must contain from 3 through {MAX_COMMAND_LENGTH} bytes, got {len(command)}"
+      f"Access2 command must contain from 3 through {MAX_INNER_FRAME_LENGTH} bytes, "
+      f"got {len(command)}"
     )
   body = (
     Writer(little_endian=False)
@@ -180,9 +210,9 @@ def parse_ftdi_header(header: bytes) -> int:
     )
   if channel != VELOCITY11_CHANNEL:
     raise Access2ProtocolError(f"Unexpected Access2 FTDI channel 0x{channel:02x}")
-  if inner_length > MAX_COMMAND_LENGTH:
+  if inner_length > MAX_INNER_FRAME_LENGTH:
     raise Access2ProtocolError(
-      f"Access2 FTDI inner frame exceeds {MAX_COMMAND_LENGTH} bytes: {inner_length}"
+      f"Access2 FTDI inner frame exceeds {MAX_INNER_FRAME_LENGTH} bytes: {inner_length}"
     )
   return inner_length
 
@@ -248,17 +278,21 @@ def decode_status(data: bytes) -> Access2Status:
   reader = Reader(data)
   access2_status = reader.u8()
   vspin_status = reader.u8()
-  if len(data) < 17:
+  if len(data) == 4:
     return Access2Status(access2_status=access2_status, vspin_status=vspin_status)
+  if len(data) < 17:
+    raise Access2ProtocolError(
+      f"Access2 status has {len(data)} bytes, expected either 4 or at least 17"
+    )
   return Access2Status(
     access2_status=access2_status,
     vspin_status=vspin_status,
     gripper_status=reader.u8(),
-    gripper_position_mm=reader.f32(),
+    gripper_position=reader.f32(),
     y_status=reader.u8(),
-    y_position_mm=reader.f32(),
+    y_position=reader.f32(),
     z_status=reader.u8(),
-    z_position_mm=reader.f32(),
+    z_position=reader.f32(),
   )
 
 
@@ -269,8 +303,30 @@ def decode_sensor_values(data: bytes) -> int:
   return Reader(data).u32()
 
 
+def decode_firmware_version(data: bytes) -> str:
+  """Decode the controller's null-padded ASCII firmware version."""
+  return data.rstrip(b"\x00").decode("ascii", errors="replace")
+
+
+def decode_hardware_version(data: bytes) -> int:
+  """Decode the controller's signed 16-bit hardware version."""
+  if len(data) < 2:
+    raise Access2ProtocolError(
+      f"Access2 hardware version has {len(data)} bytes, expected at least 2"
+    )
+  return Reader(data).i16()
+
+
 def build_ping(data: bytes = b"") -> bytes:
   return build_command(PING, data)
+
+
+def build_get_firmware_version() -> bytes:
+  return build_command(GET_FIRMWARE_VERSION)
+
+
+def build_get_hardware_version() -> bytes:
+  return build_command(GET_HARDWARE_VERSION)
 
 
 def build_initialize() -> bytes:
@@ -299,40 +355,40 @@ def build_read_flash(address: int, length: int) -> bytes:
   return build_command(READ_FLASH, Writer().u16(address).u16(length).finish())
 
 
-def build_move_to_location(
-  location: int,
-  z_offset_mm: float,
-  plate_height_mm: float,
+def build_move_to_teachpoint(
+  teachpoint: int,
+  z_offset: float,
+  plate_height: float,
   profile: int = PROFILE_DYNAMIC_EMPTY,
   speed: int = SPEED_SLOW,
 ) -> bytes:
-  for value, name in ((location, "location"), (profile, "profile"), (speed, "speed")):
+  for value, name in ((teachpoint, "teachpoint"), (profile, "profile"), (speed, "speed")):
     _validate_u8(value, name)
-  data = Writer().u8(location).f32(z_offset_mm).f32(plate_height_mm).u8(profile).u8(speed).finish()
+  data = Writer().u8(teachpoint).f32(z_offset).f32(plate_height).u8(profile).u8(speed).finish()
   return build_command(MOVE_TO_LOCATION, data)
 
 
-def build_move_to_position(
+def build_move_axis_to_position(
   axis: int,
-  position_mm: float,
+  position: float,
   profile: int = PROFILE_DYNAMIC_EMPTY,
   speed: int = SPEED_SLOW,
 ) -> bytes:
   for value, name in ((axis, "axis"), (profile, "profile"), (speed, "speed")):
     _validate_u8(value, name)
-  data = Writer().u8(axis).f32(position_mm).u8(profile).u8(speed).finish()
+  data = Writer().u8(axis).f32(position).u8(profile).u8(speed).finish()
   return build_command(MOVE_TO_POSITION, data)
 
 
 def build_jog_axis(
   axis: int,
-  displacement_mm: float,
+  displacement: float,
   profile: int = PROFILE_DYNAMIC_EMPTY,
   speed: int = SPEED_SLOW,
 ) -> bytes:
   for value, name in ((axis, "axis"), (profile, "profile"), (speed, "speed")):
     _validate_u8(value, name)
-  data = Writer().u8(axis).f32(displacement_mm).u8(profile).u8(speed).finish()
+  data = Writer().u8(axis).f32(displacement).u8(profile).u8(speed).finish()
   return build_command(JOG_AXIS, data)
 
 

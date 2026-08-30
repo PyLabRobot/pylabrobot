@@ -16,6 +16,16 @@ from pylabrobot.resources import Coordinate, ResourceHolder
 
 logger = logging.getLogger(__name__)
 
+_MOTION_POLL_INTERVAL = 0.1
+_AXIS_POSITION_TOLERANCE = 0.1
+_GRIPPER_OPEN_POSITION = 0.0
+_GRIPPER_CLOSED_POSITION = 5.68
+_AXIS_NAMES: dict[int, str] = {
+  protocol.AXIS_GRIPPER: "gripper",
+  protocol.AXIS_Y: "Y",
+  protocol.AXIS_Z: "Z",
+}
+
 
 def _loader_load_event_context(self: "Access2") -> dict:
   plate = self.resource
@@ -51,6 +61,7 @@ class Access2Driver:
     self.io = FTDI(human_readable_device_name="Agilent Access2 Loader", device_id=device_id)
     self.timeout = timeout
     self._command_lock = asyncio.Lock()
+    self._operation_lock = asyncio.Lock()
 
   async def _read_exact(self, length: int) -> bytes:
     loop = asyncio.get_running_loop()
@@ -88,31 +99,31 @@ class Access2Driver:
 
   async def setup(self):
     logger.debug("[loader] setup")
+    async with self._operation_lock:
+      await self.io.setup()
+      await self.io.set_baudrate(115384)
 
-    await self.io.setup()
-    await self.io.set_baudrate(115384)
+      self._raise_on_fault(await self.request_status(), operation="setup precondition")
 
-    self._raise_on_fault(await self.request_status())
-
-    await self.send_command(protocol.build_ping())
-    await self.send_command(protocol.build_initialize())
-    for address, length in ((0, 128), (128, 128), (256, 128), (384, 128), (512, 64)):
-      await self.send_command(protocol.build_read_flash(address, length))
-    await self.home()
-    await self._wait_until_homed()
-    await self._move_to_position(
-      protocol.AXIS_GRIPPER,
-      0,
-      profile=protocol.PROFILE_DYNAMIC_EMPTY,
-      speed=protocol.SPEED_FAST,
-    )
-    await self._move_to_location(
-      protocol.LOCATION_PARK,
-      0,
-      15,
-      profile=protocol.PROFILE_DYNAMIC_EMPTY,
-      speed=protocol.SPEED_FAST,
-    )
+      await self.send_command(protocol.build_ping())
+      await self.send_command(protocol.build_initialize())
+      for address, length in ((0, 128), (128, 128), (256, 128), (384, 128), (512, 64)):
+        await self.send_command(protocol.build_read_flash(address, length))
+      await self._home()
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        0,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        speed=protocol.SPEED_FAST,
+      )
+      await self._move_to_teachpoint(
+        protocol.TEACHPOINT_PARK,
+        0,
+        15,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        speed=protocol.SPEED_FAST,
+      )
+      await self._require_ready(operation="setup postcondition")
 
   async def stop(self):
     logger.debug("[loader] stop")
@@ -123,34 +134,54 @@ class Access2Driver:
     response = await self.send_command(protocol.build_get_status())
     return protocol.decode_status(response.data)
 
+  async def request_firmware_version(self) -> str:
+    """Return the Access2 controller firmware version."""
+    response = await self.send_command(protocol.build_get_firmware_version())
+    return protocol.decode_firmware_version(response.data)
+
+  async def request_hardware_version(self) -> int:
+    """Return the Access2 controller hardware version."""
+    response = await self.send_command(protocol.build_get_hardware_version())
+    return protocol.decode_hardware_version(response.data)
+
   @staticmethod
-  def _raise_on_fault(status: protocol.Access2Status) -> None:
+  def _raise_on_fault(status: protocol.Access2Status, *, operation: str | None = None) -> None:
+    context = "" if operation is None else f" during {operation}"
     if status.estop_active or status.estop_set:
-      raise RuntimeError(f"Access2 emergency stop is active (status 0x{status.access2_status:02x})")
+      raise RuntimeError(
+        f"Access2 emergency stop is active{context} (status 0x{status.access2_status:02x})"
+      )
     if status.motor_power_fault:
       raise RuntimeError(
-        f"Access2 motor power fault is active (status 0x{status.access2_status:02x})"
+        f"Access2 motor power fault is active{context} (status 0x{status.access2_status:02x})"
       )
 
-  async def _require_ready(self) -> protocol.Access2Status:
+  async def _require_ready(self, operation: str = "readiness check") -> protocol.Access2Status:
     status = await self.request_status()
-    self._raise_on_fault(status)
+    self._raise_on_fault(status, operation=operation)
     if not status.initialized or not status.homed:
       raise RuntimeError(
-        f"Access2 is not initialized and homed: status 0x{status.access2_status:02x}"
+        f"Access2 is not initialized and homed during {operation}: "
+        f"status 0x{status.access2_status:02x}"
       )
     return status
 
-  async def home(self) -> None:
+  async def _home(self) -> protocol.Access2Status:
     logger.debug("[loader] home")
     await self.send_command(protocol.build_home())
+    return await self._wait_until_homed()
+
+  async def home(self) -> None:
+    """Home all Access2 axes and wait for the controller to confirm completion."""
+    async with self._operation_lock:
+      await self._home()
 
   async def _wait_until_homed(self) -> protocol.Access2Status:
     loop = asyncio.get_running_loop()
     deadline = loop.time() + self.timeout
     status = await self.request_status()
     while True:
-      self._raise_on_fault(status)
+      self._raise_on_fault(status, operation="homing")
       if status.homed:
         return status
       if loop.time() >= deadline:
@@ -161,32 +192,150 @@ class Access2Driver:
       await asyncio.sleep(0.1)
       status = await self.request_status()
 
-  async def _move_to_location(
+  @staticmethod
+  def _axis_name(axis: int) -> str:
+    try:
+      return _AXIS_NAMES[axis]
+    except KeyError as error:
+      raise ValueError(f"Unknown Access2 axis: {axis}") from error
+
+  @classmethod
+  def _raise_on_axis_fault(cls, axis: int, axis_status: int, operation: str) -> None:
+    faults = axis_status & protocol.AXIS_STATUS_FAULT_MASK
+    if faults:
+      raise RuntimeError(
+        f"Access2 {operation} failed on {cls._axis_name(axis)} axis with status 0x{axis_status:02x}"
+      )
+
+  @staticmethod
+  def _gripper_is_at_position(status: protocol.Access2Status, position: float) -> bool:
+    return (
+      status.gripper_status is not None
+      and bool(status.gripper_status & protocol.AXIS_STATUS_MOVE_DONE)
+      and status.gripper_position is not None
+      and abs(status.gripper_position - position) <= _AXIS_POSITION_TOLERANCE
+    )
+
+  async def _wait_until_motion_complete(
     self,
-    location: int,
-    z_offset_mm: float,
-    plate_height_mm: float,
+    axes: tuple[int, ...],
+    operation: str,
+    *,
+    target_axis: int | None = None,
+    target_position: float | None = None,
+  ) -> protocol.Access2Status:
+    """Wait for full status to confirm that the selected axes finished moving."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + self.timeout
+    status = await self.request_status()
+    while True:
+      self._raise_on_fault(status, operation=operation)
+      if not status.initialized or not status.homed:
+        raise RuntimeError(
+          f"Access2 lost initialized/homed state during {operation}: "
+          f"status 0x{status.access2_status:02x}"
+        )
+
+      axis_details: list[str] = []
+      motion_done = True
+      for axis in axes:
+        axis_status = status.axis_status(axis)
+        if axis_status is None:
+          raise RuntimeError(
+            f"Access2 cannot confirm {operation}: full axis status was not returned"
+          )
+        self._raise_on_axis_fault(axis, axis_status, operation)
+        axis_details.append(f"{self._axis_name(axis)}=0x{axis_status:02x}")
+        motion_done = motion_done and bool(axis_status & protocol.AXIS_STATUS_MOVE_DONE)
+
+      position_matches = True
+      if target_axis is not None and target_position is not None:
+        position = status.axis_position(target_axis)
+        if position is None:
+          raise RuntimeError(
+            f"Access2 cannot confirm {operation}: full axis position was not returned"
+          )
+        axis_details.append(f"{self._axis_name(target_axis)}={position:.3f} mm")
+        position_matches = abs(position - target_position) <= _AXIS_POSITION_TOLERANCE
+
+      if motion_done and position_matches:
+        return status
+      if loop.time() >= deadline:
+        details = ", ".join(axis_details)
+        raise TimeoutError(
+          f"Access2 did not complete {operation} within {self.timeout} seconds; "
+          f"last status: {details}"
+        )
+      await asyncio.sleep(_MOTION_POLL_INTERVAL)
+      status = await self.request_status()
+
+  async def _move_to_teachpoint(
+    self,
+    teachpoint: int,
+    z_offset: float,
+    plate_height: float,
     profile: int = protocol.PROFILE_DYNAMIC_EMPTY,
     speed: int = protocol.SPEED_SLOW,
   ) -> None:
     await self.send_command(
-      protocol.build_move_to_location(
-        location,
-        z_offset_mm,
-        plate_height_mm,
+      protocol.build_move_to_teachpoint(
+        teachpoint,
+        z_offset,
+        plate_height,
         profile,
         speed,
       )
     )
+    await self._wait_until_motion_complete(
+      (protocol.AXIS_Y, protocol.AXIS_Z),
+      operation=f"move to teachpoint {teachpoint}",
+    )
 
-  async def _move_to_position(
+  async def _move_axis_to_position(
     self,
     axis: int,
-    position_mm: float,
+    position: float,
     profile: int = protocol.PROFILE_DYNAMIC_EMPTY,
     speed: int = protocol.SPEED_SLOW,
   ) -> None:
-    await self.send_command(protocol.build_move_to_position(axis, position_mm, profile, speed))
+    await self.send_command(protocol.build_move_axis_to_position(axis, position, profile, speed))
+    await self._wait_until_motion_complete(
+      (axis,),
+      operation=f"{self._axis_name(axis)} move to {position:.3f} mm",
+      target_axis=axis,
+      target_position=position,
+    )
+
+  async def _jog_axis(
+    self,
+    axis: int,
+    displacement: float,
+    profile: int = protocol.PROFILE_DYNAMIC_EMPTY,
+    speed: int = protocol.SPEED_SLOW,
+  ) -> None:
+    await self.send_command(protocol.build_jog_axis(axis, displacement, profile, speed))
+    await self._wait_until_motion_complete(
+      (axis,),
+      operation=f"{self._axis_name(axis)} jog by {displacement:.3f} mm",
+    )
+
+  async def _tighten_grip(self) -> None:
+    """Move the gripper one relative step toward a tighter grip."""
+    await self._jog_axis(
+      protocol.AXIS_GRIPPER,
+      1,
+      protocol.PROFILE_DYNAMIC_EMPTY,
+      protocol.SPEED_SLOW,
+    )
+
+  async def _loosen_grip(self) -> None:
+    """Move the gripper one relative step toward a looser grip."""
+    await self._jog_axis(
+      protocol.AXIS_GRIPPER,
+      -1,
+      protocol.PROFILE_DYNAMIC_EMPTY,
+      protocol.SPEED_SLOW,
+    )
 
   async def request_sensor_values(self) -> int:
     response = await self.send_command(protocol.build_get_sensor_values())
@@ -194,89 +343,98 @@ class Access2Driver:
 
   async def park(self):
     logger.debug("[loader] park")
-    await self._move_to_location(
-      protocol.LOCATION_PARK,
-      8,
-      15,
-      profile=protocol.PROFILE_DYNAMIC_FULL,
-      speed=protocol.SPEED_SLOW,
-    )
-
-  async def close(self):
-    logger.debug("[loader] close")
-    await self.send_command(
-      protocol.build_jog_axis(
-        protocol.AXIS_GRIPPER,
-        1,
-        protocol.PROFILE_DYNAMIC_EMPTY,
-        protocol.SPEED_SLOW,
+    async with self._operation_lock:
+      await self._require_ready(operation="park precondition")
+      await self._move_to_teachpoint(
+        protocol.TEACHPOINT_PARK,
+        8,
+        15,
+        profile=protocol.PROFILE_DYNAMIC_FULL,
+        speed=protocol.SPEED_SLOW,
       )
-    )
+      await self._require_ready(operation="park postcondition")
 
-  async def open(self):
-    logger.debug("[loader] open")
-    await self.send_command(
-      protocol.build_jog_axis(
+  async def close_gripper(self) -> None:
+    """Move the gripper to its normal closed position."""
+    logger.debug("[loader] close gripper")
+    async with self._operation_lock:
+      status = await self._require_ready(operation="gripper-close precondition")
+      if self._gripper_is_at_position(status, _GRIPPER_CLOSED_POSITION):
+        return
+      await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        -1,
-        protocol.PROFILE_DYNAMIC_EMPTY,
-        protocol.SPEED_SLOW,
+        _GRIPPER_CLOSED_POSITION,
       )
-    )
+      await self._require_ready(operation="gripper-close postcondition")
+
+  async def open_gripper(self) -> None:
+    """Move the gripper to its open position."""
+    logger.debug("[loader] open gripper")
+    async with self._operation_lock:
+      status = await self._require_ready(operation="gripper-open precondition")
+      if self._gripper_is_at_position(status, _GRIPPER_OPEN_POSITION):
+        return
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        _GRIPPER_OPEN_POSITION,
+      )
+      await self._require_ready(operation="gripper-open postcondition")
 
   async def load(self):
     """Only tested for 1cm plate, 3mm pickup height."""
     logger.debug("[loader] load")
-    await self._require_ready()
+    async with self._operation_lock:
+      await self._require_ready(operation="load precondition")
 
-    await self._move_to_position(
-      protocol.AXIS_GRIPPER,
-      0,
-      profile=protocol.PROFILE_DYNAMIC_EMPTY,
-      speed=protocol.SPEED_FAST,
-    )
-    await self._move_to_location(protocol.LOCATION_PICK, 3, 10)
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        0,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        speed=protocol.SPEED_FAST,
+      )
+      await self._move_to_teachpoint(protocol.TEACHPOINT_PICK, 3, 10)
 
-    if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
-      raise RuntimeError("no plate found on stage")
+      if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
+        raise RuntimeError("no plate found on stage")
 
-    await self._move_to_position(protocol.AXIS_GRIPPER, 5.68)
-    await self._move_to_location(
-      protocol.LOCATION_BUCKET_1,
-      3,
-      10,
-      profile=protocol.PROFILE_DYNAMIC_FULL,
-    )
-    await self._move_to_position(protocol.AXIS_GRIPPER, 0)
-    await self._move_to_location(protocol.LOCATION_PARK, 3, 10)
-    await self._require_ready()
+      await self._move_axis_to_position(protocol.AXIS_GRIPPER, 5.68)
+      await self._move_to_teachpoint(
+        protocol.TEACHPOINT_BUCKET_1,
+        3,
+        10,
+        profile=protocol.PROFILE_DYNAMIC_FULL,
+      )
+      await self._move_axis_to_position(protocol.AXIS_GRIPPER, 0)
+      await self._move_to_teachpoint(protocol.TEACHPOINT_PARK, 3, 10)
+      await self._require_ready(operation="load postcondition")
 
   async def unload(self):
     """Only tested for 1cm plate, 3mm pickup height."""
     logger.debug("[loader] unload")
-    await self._require_ready()
+    async with self._operation_lock:
+      await self._require_ready(operation="unload precondition")
 
-    await self._move_to_position(
-      protocol.AXIS_GRIPPER,
-      0,
-      profile=protocol.PROFILE_DYNAMIC_EMPTY,
-      speed=protocol.SPEED_FAST,
-    )
-    await self._move_to_location(protocol.LOCATION_BUCKET_1, 3, 10)
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        0,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        speed=protocol.SPEED_FAST,
+      )
+      await self._move_to_teachpoint(protocol.TEACHPOINT_BUCKET_1, 3, 10)
 
-    if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
-      raise RuntimeError("no plate found in centrifuge")
+      if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
+        raise RuntimeError("no plate found in centrifuge")
 
-    await self._move_to_position(protocol.AXIS_GRIPPER, 5.69)
-    await self._move_to_location(
-      protocol.LOCATION_PICK,
-      3,
-      10,
-      profile=protocol.PROFILE_DYNAMIC_FULL,
-    )
-    await self._move_to_position(protocol.AXIS_GRIPPER, 0)
-    await self._move_to_location(protocol.LOCATION_PARK, 0, 10)
-    await self._require_ready()
+      await self._move_axis_to_position(protocol.AXIS_GRIPPER, 5.69)
+      await self._move_to_teachpoint(
+        protocol.TEACHPOINT_PICK,
+        3,
+        10,
+        profile=protocol.PROFILE_DYNAMIC_FULL,
+      )
+      await self._move_axis_to_position(protocol.AXIS_GRIPPER, 0)
+      await self._move_to_teachpoint(protocol.TEACHPOINT_PARK, 0, 10)
+      await self._require_ready(operation="unload postcondition")
 
 
 class Access2(ResourceHolder):
@@ -305,6 +463,15 @@ class Access2(ResourceHolder):
     self.driver: Access2Driver = driver
     self._vspin = vspin
 
+  async def _require_vspin_ready_for_transfer(self) -> None:
+    """Confirm the paired VSpin is physically safe for loader motion."""
+    if not await self._vspin.request_door_open():
+      raise CentrifugeDoorError("Centrifuge door-open sensor must be active for plate transfer.")
+    if not await self._vspin.request_bucket_locked():
+      raise RuntimeError("Centrifuge bucket must be physically locked for plate transfer.")
+    if await self._vspin.request_spinning():
+      raise RuntimeError("Centrifuge must be stopped for plate transfer.")
+
   @evented_operation("centrifuge_loader.load", _loader_load_event_context)
   async def load(self) -> None:
     if not self._vspin.door_open:
@@ -318,6 +485,8 @@ class Access2(ResourceHolder):
       raise LoaderNoPlateError("Loader must have a plate to load.")
     if self._vspin.at_bucket.resource is not None:
       raise BucketHasPlateError("Bucket must be empty to load a plate.")
+
+    await self._require_vspin_ready_for_transfer()
 
     await self.driver.load()
 
@@ -334,6 +503,8 @@ class Access2(ResourceHolder):
       )
     if self._vspin.at_bucket.resource is None:
       raise BucketNoPlateError("Bucket must have a plate to unload.")
+
+    await self._require_vspin_ready_for_transfer()
 
     await self.driver.unload()
 
