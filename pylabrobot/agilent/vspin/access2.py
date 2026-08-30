@@ -1,7 +1,7 @@
 import asyncio
 import logging
-import time
 
+from pylabrobot.agilent.vspin import _access2_protocol as protocol
 from pylabrobot.agilent.vspin.errors import (
   BucketHasPlateError,
   BucketNoPlateError,
@@ -50,24 +50,41 @@ class Access2Driver:
     super().__init__()
     self.io = FTDI(human_readable_device_name="Agilent Access2 Loader", device_id=device_id)
     self.timeout = timeout
+    self._command_lock = asyncio.Lock()
 
-  async def _read(self) -> bytes:
-    x = b""
-    r = None
-    start = time.time()
-    while r != b"" or x == b"":
-      r = await self.io.read(1)
-      x += r
-      if r == b"":
-        await asyncio.sleep(0.1)
-      if x == b"" and (time.time() - start) > self.timeout:
-        raise TimeoutError("No data received within the specified timeout period")
-    return x
+  async def _read_exact(self, length: int) -> bytes:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + self.timeout
+    response = bytearray()
+    while len(response) < length:
+      chunk = await self.io.read(length - len(response))
+      if chunk:
+        response.extend(chunk)
+        continue
+      if loop.time() >= deadline:
+        raise TimeoutError(
+          f"Access2 sent {len(response)} of {length} expected bytes within "
+          f"{self.timeout} seconds: {bytes(response).hex()}"
+        )
+      await asyncio.sleep(0)
+    return bytes(response)
 
-  async def send_command(self, command: bytes) -> bytes:
-    logger.debug("[loader] Sending %s", command.hex())
-    await self.io.write(command)
-    return await self._read()
+  async def _read_frame(self) -> bytes:
+    header = await self._read_exact(5)
+    inner_length = protocol.parse_ftdi_header(header)
+    return header + await self._read_exact(inner_length + 2)
+
+  async def send_command(self, command: bytes) -> protocol.Access2Reply:
+    """Send one transport-independent command through the FTDI envelope."""
+    frame = protocol.build_ftdi_frame(command)
+    logger.debug("[loader] Sending %s", frame.hex())
+    async with self._command_lock:
+      written = await self.io.write(frame)
+      if written != len(frame):
+        raise RuntimeError(f"Access2 wrote {written} of {len(frame)} command bytes")
+      response_frame = await self._read_frame()
+    logger.debug("[loader] Received %s", response_frame.hex())
+    return protocol.parse_ftdi_reply(response_frame, request_id=command[0])
 
   async def setup(self):
     logger.debug("[loader] setup")
@@ -75,72 +92,191 @@ class Access2Driver:
     await self.io.setup()
     await self.io.set_baudrate(115384)
 
-    status = await self.request_status()
-    if not status.startswith(bytes.fromhex("1105")):
-      raise RuntimeError("Failed to get status")
+    self._raise_on_fault(await self.request_status())
 
-    await self.send_command(bytes.fromhex("110500030014000072b1"))
-    await self.send_command(bytes.fromhex("1105000300100000ae71"))
-    await self.send_command(bytes.fromhex("110500070024040000008000be89"))
-    await self.send_command(bytes.fromhex("11050007002404008000800063b1"))
-    await self.send_command(bytes.fromhex("11050007002404000001800089b9"))
-    await self.send_command(bytes.fromhex("1105000700240400800180005481"))
-    await self.send_command(bytes.fromhex("110500070024040000024000c6bd"))
-    await self.send_command(bytes.fromhex("1105000300400000f0bf"))
-    await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
-    await self.send_command(bytes.fromhex("1105000e00440b00000000000000007041020203c7"))
+    await self.send_command(protocol.build_ping())
+    await self.send_command(protocol.build_initialize())
+    for address, length in ((0, 128), (128, 128), (256, 128), (384, 128), (512, 64)):
+      await self.send_command(protocol.build_read_flash(address, length))
+    await self.home()
+    await self._wait_until_homed()
+    await self._move_to_position(
+      protocol.AXIS_GRIPPER,
+      0,
+      profile=protocol.PROFILE_DYNAMIC_EMPTY,
+      speed=protocol.SPEED_FAST,
+    )
+    await self._move_to_location(
+      protocol.LOCATION_PARK,
+      0,
+      15,
+      profile=protocol.PROFILE_DYNAMIC_EMPTY,
+      speed=protocol.SPEED_FAST,
+    )
 
   async def stop(self):
     logger.debug("[loader] stop")
     await self.io.stop()
 
-  async def request_status(self) -> bytes:
+  async def request_status(self) -> protocol.Access2Status:
     logger.debug("[loader] request_status")
-    return await self.send_command(bytes.fromhex("11050003002000006bd4"))
+    response = await self.send_command(protocol.build_get_status())
+    return protocol.decode_status(response.data)
+
+  @staticmethod
+  def _raise_on_fault(status: protocol.Access2Status) -> None:
+    if status.estop_active or status.estop_set:
+      raise RuntimeError(f"Access2 emergency stop is active (status 0x{status.access2_status:02x})")
+    if status.motor_power_fault:
+      raise RuntimeError(
+        f"Access2 motor power fault is active (status 0x{status.access2_status:02x})"
+      )
+
+  async def _require_ready(self) -> protocol.Access2Status:
+    status = await self.request_status()
+    self._raise_on_fault(status)
+    if not status.initialized or not status.homed:
+      raise RuntimeError(
+        f"Access2 is not initialized and homed: status 0x{status.access2_status:02x}"
+      )
+    return status
+
+  async def home(self) -> None:
+    logger.debug("[loader] home")
+    await self.send_command(protocol.build_home())
+
+  async def _wait_until_homed(self) -> protocol.Access2Status:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + self.timeout
+    status = await self.request_status()
+    while True:
+      self._raise_on_fault(status)
+      if status.homed:
+        return status
+      if loop.time() >= deadline:
+        raise TimeoutError(
+          f"Access2 did not report homed within {self.timeout} seconds; "
+          f"last status was 0x{status.access2_status:02x}"
+        )
+      await asyncio.sleep(0.1)
+      status = await self.request_status()
+
+  async def _move_to_location(
+    self,
+    location: int,
+    z_offset_mm: float,
+    plate_height_mm: float,
+    profile: int = protocol.PROFILE_DYNAMIC_EMPTY,
+    speed: int = protocol.SPEED_SLOW,
+  ) -> None:
+    await self.send_command(
+      protocol.build_move_to_location(
+        location,
+        z_offset_mm,
+        plate_height_mm,
+        profile,
+        speed,
+      )
+    )
+
+  async def _move_to_position(
+    self,
+    axis: int,
+    position_mm: float,
+    profile: int = protocol.PROFILE_DYNAMIC_EMPTY,
+    speed: int = protocol.SPEED_SLOW,
+  ) -> None:
+    await self.send_command(protocol.build_move_to_position(axis, position_mm, profile, speed))
+
+  async def request_sensor_values(self) -> int:
+    response = await self.send_command(protocol.build_get_sensor_values())
+    return protocol.decode_sensor_values(response.data)
 
   async def park(self):
     logger.debug("[loader] park")
-    await self.send_command(bytes.fromhex("1105000e00440b0000000000410000704103007539"))
+    await self._move_to_location(
+      protocol.LOCATION_PARK,
+      8,
+      15,
+      profile=protocol.PROFILE_DYNAMIC_FULL,
+      speed=protocol.SPEED_SLOW,
+    )
 
   async def close(self):
     logger.debug("[loader] close")
-    await self.send_command(bytes.fromhex("1105000a00420700010000803f02008c64"))
+    await self.send_command(
+      protocol.build_jog_axis(
+        protocol.AXIS_GRIPPER,
+        1,
+        protocol.PROFILE_DYNAMIC_EMPTY,
+        protocol.SPEED_SLOW,
+      )
+    )
 
   async def open(self):
     logger.debug("[loader] open")
-    await self.send_command(bytes.fromhex("1105000a0042070001000080bf0200b73e"))
+    await self.send_command(
+      protocol.build_jog_axis(
+        protocol.AXIS_GRIPPER,
+        -1,
+        protocol.PROFILE_DYNAMIC_EMPTY,
+        protocol.SPEED_SLOW,
+      )
+    )
 
   async def load(self):
     """Only tested for 1cm plate, 3mm pickup height."""
     logger.debug("[loader] load")
+    await self._require_ready()
 
-    await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
-    await self.send_command(bytes.fromhex("1105000e00440b000100004040000020410200a5cb"))
+    await self._move_to_position(
+      protocol.AXIS_GRIPPER,
+      0,
+      profile=protocol.PROFILE_DYNAMIC_EMPTY,
+      speed=protocol.SPEED_FAST,
+    )
+    await self._move_to_location(protocol.LOCATION_PICK, 3, 10)
 
-    r = await self.send_command(bytes.fromhex("1105000300500000b3dc"))
-    if r == bytes.fromhex("1105000800510500000300000079f1"):
+    if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
       raise RuntimeError("no plate found on stage")
 
-    await self.send_command(bytes.fromhex("1105000a00460700018fc2b540020023dc"))
-    await self.send_command(bytes.fromhex("1105000e00440b000200004040000020410300ee00"))
-    await self.send_command(bytes.fromhex("1105000a004607000100000000020015fd"))
-    await self.send_command(bytes.fromhex("1105000e00440b0000000040400000204102007d82"))
+    await self._move_to_position(protocol.AXIS_GRIPPER, 5.68)
+    await self._move_to_location(
+      protocol.LOCATION_BUCKET_1,
+      3,
+      10,
+      profile=protocol.PROFILE_DYNAMIC_FULL,
+    )
+    await self._move_to_position(protocol.AXIS_GRIPPER, 0)
+    await self._move_to_location(protocol.LOCATION_PARK, 3, 10)
+    await self._require_ready()
 
   async def unload(self):
     """Only tested for 1cm plate, 3mm pickup height."""
     logger.debug("[loader] unload")
+    await self._require_ready()
 
-    await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
-    await self.send_command(bytes.fromhex("1105000e00440b000200004040000020410200dd31"))
+    await self._move_to_position(
+      protocol.AXIS_GRIPPER,
+      0,
+      profile=protocol.PROFILE_DYNAMIC_EMPTY,
+      speed=protocol.SPEED_FAST,
+    )
+    await self._move_to_location(protocol.LOCATION_BUCKET_1, 3, 10)
 
-    r = await self.send_command(bytes.fromhex("1105000300500000b3dc"))
-    if r == bytes.fromhex("1105000800510500000300000079f1"):
+    if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
       raise RuntimeError("no plate found in centrifuge")
 
-    await self.send_command(bytes.fromhex("1105000a00460700017b14b6400200d57a"))
-    await self.send_command(bytes.fromhex("1105000e00440b00010000404000002041030096fa"))
-    await self.send_command(bytes.fromhex("1105000a004607000100000000020015fd"))
-    await self.send_command(bytes.fromhex("1105000e00440b00000000000000002041020056be"))
+    await self._move_to_position(protocol.AXIS_GRIPPER, 5.69)
+    await self._move_to_location(
+      protocol.LOCATION_PICK,
+      3,
+      10,
+      profile=protocol.PROFILE_DYNAMIC_FULL,
+    )
+    await self._move_to_position(protocol.AXIS_GRIPPER, 0)
+    await self._move_to_location(protocol.LOCATION_PARK, 0, 10)
+    await self._require_ready()
 
 
 class Access2(ResourceHolder):

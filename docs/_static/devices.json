@@ -57,6 +57,7 @@
     "api": "pylabrobot.agilent.vspin.Access2",
     "api_version": "v1",
     "code_slug": "agilent/vspin",
+    "doc_slug": "agilent/vspin/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge"
   },
