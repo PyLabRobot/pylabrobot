@@ -28,5 +28,6 @@ def alpaqua_12_tuberack_5mL_eppis(name: str) -> ContainerRack:
       size_x=16.7,  # Holder width
       size_y=16.7,  # Holder depth
       size_z=0.0,  # Holder height
+      name_prefix=name,
     ),
   )

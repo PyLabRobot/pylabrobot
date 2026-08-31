@@ -419,6 +419,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
             size_x=10,
             size_y=10,
             size_z=10,
+            name_prefix="plate",
           ),
         )
         plate.rotate(z=rotation)

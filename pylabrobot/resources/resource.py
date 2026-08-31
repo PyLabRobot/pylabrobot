@@ -833,7 +833,8 @@ class Resource(SerializableMixin):
   def named(self, name: str) -> Self:
     """Return a copy of this resource with the given name."""
     new_resource = self.copy()
-    new_resource.name = name
+    # The copy is new and in no tree, so this finishes building it rather than renaming anything.
+    new_resource._name = name
     return new_resource
 
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:

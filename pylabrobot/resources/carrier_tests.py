@@ -331,6 +331,7 @@ class CarrierTests(unittest.TestCase):
         size_x=1,
         size_y=1,
         size_z=1,
+        name_prefix="plate1",
       ),
     )
     plate2 = Plate(
@@ -350,6 +351,7 @@ class CarrierTests(unittest.TestCase):
         size_x=1,
         size_y=1,
         size_z=1,
+        name_prefix="plate2",
       ),
     )
     carrier = PlateCarrier(
