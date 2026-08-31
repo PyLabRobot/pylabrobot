@@ -105,7 +105,7 @@ async def _golden_ratio_search(
 ):
   """Golden ratio search to maximize a unimodal function `func` over the interval [a, b]."""
   # thanks chat
-  phi = (1 + np.sqrt(5)) / 2  # Golden ratio
+  phi = (1 + math.sqrt(5)) / 2  # Golden ratio
 
   c = b - (b - a) / phi
   d = a + (b - a) / phi
