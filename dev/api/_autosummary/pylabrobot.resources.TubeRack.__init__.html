@@ -621,6 +621,7 @@ identifiers.</p></li>
 </div>
 <p>Creating a plate with 1 Well in a dict:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Plate</span>
+<span class="go">  name_prefix=name,</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">plate</span> <span class="o">=</span> <span class="n">Plate</span><span class="p">(</span><span class="s2">"plate"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
 <span class="gp">... </span>  <span class="n">ordered_items</span><span class="o">=</span><span class="p">{</span><span class="s2">"A1"</span><span class="p">:</span> <span class="n">Well</span><span class="p">(</span><span class="s2">"well"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">1</span><span class="p">)})</span>
 </pre></div>
