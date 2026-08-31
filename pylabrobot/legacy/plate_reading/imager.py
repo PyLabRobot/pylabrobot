@@ -3,6 +3,7 @@ import math
 import time
 from typing import Any, Awaitable, Callable, Coroutine, Dict, Literal, Optional, Tuple, Union, cast
 
+from pylabrobot.events import event_operation, is_event_bus_active, resource_reference
 from pylabrobot.legacy.machines import Machine, need_setup_finished
 from pylabrobot.legacy.plate_reading.backend import ImagerBackend
 from pylabrobot.legacy.plate_reading.standard import (
@@ -35,6 +36,68 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _exposure_event_data(exposure_time: Union[Exposure, AutoExposure]) -> dict[str, Any]:
+  if isinstance(exposure_time, AutoExposure):
+    data: dict[str, Any] = {
+      "mode": "software_auto",
+      "minimum_time_ms": exposure_time.low,
+      "maximum_time_ms": exposure_time.high,
+    }
+    if exposure_time.max_rounds is not None:
+      data["max_rounds"] = exposure_time.max_rounds
+    return data
+  if exposure_time == "machine-auto":
+    return {"mode": "machine_auto"}
+  return {"mode": "fixed", "time_ms": exposure_time}
+
+
+def _focus_event_data(focal_height: Union[FocalPosition, AutoFocus]) -> dict[str, Any]:
+  if isinstance(focal_height, AutoFocus):
+    return {
+      "mode": "software_auto",
+      "minimum_height": focal_height.low,
+      "maximum_height": focal_height.high,
+      "tolerance": focal_height.tolerance,
+      "timeout": focal_height.timeout,
+    }
+  if focal_height == "machine-auto":
+    return {"mode": "machine_auto"}
+  return {"mode": "fixed", "height": focal_height}
+
+
+def _gain_event_data(gain: Gain) -> dict[str, Any]:
+  if gain == "machine-auto":
+    return {"mode": "machine_auto"}
+  return {"mode": "fixed", "value": gain}
+
+
+def _capture_event_data(
+  imager: "Imager",
+  well: Union[Well, Tuple[int, int]],
+  row: int,
+  column: int,
+  mode: ImagingMode,
+  objective: Objective,
+  exposure_time: Union[Exposure, AutoExposure],
+  focal_height: Union[FocalPosition, AutoFocus],
+  gain: Gain,
+) -> dict[str, Any]:
+  data: dict[str, Any] = {
+    "device": resource_reference(imager),
+    "resources": [resource_reference(well)] if isinstance(well, Well) else [],
+    "target": {"row": row, "column": column},
+    "mode": mode.name,
+    "objective": objective.name,
+    "exposure": _exposure_event_data(exposure_time),
+    "focus": _focus_event_data(focal_height),
+    "gain": _gain_event_data(gain),
+  }
+  plate = next((child for child in imager.children if isinstance(child, Plate)), None)
+  if plate is not None:
+    data["plate"] = resource_reference(plate)
+  return data
 
 
 async def _golden_ratio_search(
@@ -118,7 +181,7 @@ class Imager(Resource, Machine):
     mode: ImagingMode,
     objective: Objective,
     auto_exposure: AutoExposure,
-    focal_height: float,
+    focal_height: Union[float, AutoFocus],
     gain: float,
     **backend_kwargs,
   ) -> ImagingResult:
@@ -152,7 +215,7 @@ class Imager(Resource, Machine):
       rounds += 1
 
       p = _rms_split(low, high)
-      res = await self.capture(
+      res = await self._capture(
         well=well,
         mode=mode,
         objective=objective,
@@ -187,7 +250,7 @@ class Imager(Resource, Machine):
     **backend_kwargs,
   ) -> ImagingResult:
     async def local_capture(focal_height: float) -> ImagingResult:
-      return await self.capture(
+      return await self._capture(
         well=well,
         mode=mode,
         objective=objective,
@@ -211,17 +274,15 @@ class Imager(Resource, Machine):
     )
     return await local_capture(best_focal_height)
 
-  @need_setup_finished
-  async def capture(
+  def _validate_capture_request(
     self,
     well: Union[Well, Tuple[int, int]],
     mode: ImagingMode,
     objective: Objective,
     exposure_time: Union[Exposure, AutoExposure] = "machine-auto",
-    focal_height: FocalPosition = "machine-auto",
+    focal_height: Union[FocalPosition, AutoFocus] = "machine-auto",
     gain: Gain = "machine-auto",
-    **backend_kwargs,
-  ) -> ImagingResult:
+  ) -> Tuple[int, int]:
     if exposure_time != "machine-auto" and not isinstance(
       exposure_time, (int, float, AutoExposure)
     ):
@@ -243,28 +304,52 @@ class Imager(Resource, Machine):
     if isinstance(exposure_time, AutoExposure):
       assert focal_height != "machine-auto", "Focal height must be specified for auto exposure"
       assert gain != "machine-auto", "Gain must be specified for auto exposure"
+    elif isinstance(focal_height, AutoFocus):
+      assert isinstance(exposure_time, (int, float)), (
+        "Exposure time must be specified for auto focus"
+      )
+      assert gain != "machine-auto", "Gain must be specified for auto focus"
+    return row, column
+
+  @need_setup_finished
+  async def _capture(
+    self,
+    well: Union[Well, Tuple[int, int]],
+    mode: ImagingMode,
+    objective: Objective,
+    exposure_time: Union[Exposure, AutoExposure] = "machine-auto",
+    focal_height: Union[FocalPosition, AutoFocus] = "machine-auto",
+    gain: Gain = "machine-auto",
+    **backend_kwargs,
+  ) -> ImagingResult:
+    row, column = self._validate_capture_request(
+      well,
+      mode,
+      objective,
+      exposure_time,
+      focal_height,
+      gain,
+    )
+
+    if isinstance(exposure_time, AutoExposure):
       return await self._capture_auto_exposure(
         well=well,
         mode=mode,
         objective=objective,
         auto_exposure=exposure_time,
-        focal_height=focal_height,
-        gain=gain,
+        focal_height=cast(Union[float, AutoFocus], focal_height),
+        gain=cast(float, gain),
         **backend_kwargs,
       )
 
     if isinstance(focal_height, AutoFocus):
-      assert isinstance(exposure_time, (int, float)), (
-        "Exposure time must be specified for auto focus"
-      )
-      assert gain != "machine-auto", "Gain must be specified for auto focus"
       return await self._capture_auto_focus(
         well=well,
         mode=mode,
         objective=objective,
-        exposure_time=exposure_time,
+        exposure_time=cast(float, exposure_time),
         auto_focus=focal_height,
-        gain=gain,
+        gain=cast(float, gain),
         **backend_kwargs,
       )
 
@@ -279,6 +364,65 @@ class Imager(Resource, Machine):
       plate=self.get_plate(),
       **backend_kwargs,
     )
+
+  @need_setup_finished
+  async def capture(
+    self,
+    well: Union[Well, Tuple[int, int]],
+    mode: ImagingMode,
+    objective: Objective,
+    exposure_time: Union[Exposure, AutoExposure] = "machine-auto",
+    focal_height: Union[FocalPosition, AutoFocus] = "machine-auto",
+    gain: Gain = "machine-auto",
+    **backend_kwargs,
+  ) -> ImagingResult:
+    """Capture one user-requested image result with one semantic EventBus lifecycle."""
+
+    row, column = self._validate_capture_request(
+      well,
+      mode,
+      objective,
+      exposure_time,
+      focal_height,
+      gain,
+    )
+    operation_data = (
+      _capture_event_data(
+        self,
+        well,
+        row,
+        column,
+        mode,
+        objective,
+        exposure_time,
+        focal_height,
+        gain,
+      )
+      if is_event_bus_active()
+      else {}
+    )
+    completion_data: dict[str, Any] = {}
+    with event_operation(
+      "imager.capture",
+      **operation_data,
+      completed_data_factory=lambda: {**operation_data, **completion_data},
+    ):
+      result = await self._capture(
+        well=well,
+        mode=mode,
+        objective=objective,
+        exposure_time=exposure_time,
+        focal_height=focal_height,
+        gain=gain,
+        **backend_kwargs,
+      )
+      if operation_data:
+        completion_data.update(
+          image_count=len(result.images),
+          reported_exposure_time_ms=result.exposure_time,
+          reported_focal_height=result.focal_height,
+        )
+      return result
 
 
 def max_pixel_at_fraction(
