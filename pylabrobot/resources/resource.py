@@ -181,16 +181,18 @@ class Resource(SerializableMixin):
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
-    # Everything in this tree, by name, held by whatever is currently its root - which a resource
-    # is until something takes it. A name is looked up by it and two resources may not share one,
-    # so this answers both without walking. `assign_child_resource` hands it to the new root and
-    # `unassign_child_resource` hands it back, which are the only two moments a root changes.
+    # Everything at or beneath this resource, by name. A resource is looked up by name and two may
+    # not share one, so this answers both questions without walking the tree. Kept in step by the
+    # assign and unassign callbacks registered below, which every ancestor receives in turn.
     self._subtree_resources: Dict[str, Resource] = {name: self}
 
     self._will_assign_resource_callbacks: List[WillAssignResourceCallback] = []
     self._did_assign_resource_callbacks: List[DidAssignResourceCallback] = []
     self._will_unassign_resource_callbacks: List[WillUnassignResourceCallback] = []
     self._did_unassign_resource_callbacks: List[DidUnassignResourceCallback] = []
+
+    self.register_did_assign_resource_callback(self._subtree_gained)
+    self.register_did_unassign_resource_callback(self._subtree_lost)
     self._resource_state_updated_callbacks: List[ResourceDidUpdateState] = []
 
   def get_size_x(self) -> float:
@@ -247,8 +249,8 @@ class Resource(SerializableMixin):
 
     if self.parent is not None:
       raise RuntimeError("Cannot change the name of a resource that is assigned.")
-    # Only a resource with no parent reaches here, so it is a root and holds the map its old
-    # name is in. Nothing above it has to be told.
+    # Only a resource with no parent can be renamed, so nothing above holds the old name; its own
+    # map does, and is the one thing that has to follow.
     self._subtree_resources.pop(self._name, None)
     self._name = name
     self._subtree_resources[name] = self
@@ -454,8 +456,7 @@ class Resource(SerializableMixin):
 
     # Check for unsupported resource assignment operations
     self._check_assignment(resource=resource, reassign=reassign)
-    root = self.get_root()
-    arriving = root._check_naming_conflicts(resource=resource)
+    self.get_root()._check_naming_conflicts(resource=resource)
 
     # Call "will assign" callbacks
     for callback in self._will_assign_resource_callbacks:
@@ -467,12 +468,6 @@ class Resource(SerializableMixin):
     resource.parent = self
     resource.location = location
     self.children.append(resource)
-
-    # What arrived belongs to this tree's root now, and the subtree stops heading a tree of its
-    # own, so it gives up the map it was keeping. Collected by the check above, which had to walk
-    # the same subtree to do its job.
-    root._subtree_resources.update(arriving)
-    resource._subtree_resources = {}
 
     # Register callbacks on the new child resource so that they can be propagated up the tree.
     resource.register_will_assign_resource_callback(self._call_will_assign_resource_callbacks)
@@ -616,27 +611,28 @@ class Resource(SerializableMixin):
       current = current.parent
     return False
 
-  def _check_naming_conflicts(self, resource: Resource) -> Dict[str, Resource]:
+  def _subtree_gained(self, resource: Resource) -> None:
+    """Take on everything a resource brought with it.
+
+    Registered as a did-assign callback, which every ancestor of the new parent receives in turn,
+    so each one takes on the arriving names without anybody walking the tree.
+    """
+    self._subtree_resources.update(resource._subtree_resources)
+
+  def _subtree_lost(self, resource: Resource) -> None:
+    """Give up everything a resource took with it, the mirror of `_subtree_gained`."""
+    for name in resource._subtree_resources:
+      self._subtree_resources.pop(name, None)
+
+  def _check_naming_conflicts(self, resource: Resource):
     """Raise if anything in `resource`'s subtree is already named in this one.
 
     Names identify a resource across the whole tree - `get_resource` finds one by name, and
     `serialize_all_state` keys state by it - so two resources may not share one.
-
-    Args:
-      resource: The resource arriving, with everything beneath it.
-
-    Returns:
-      What arrived, by name, so the caller does not walk the same subtree again to record it.
-
-    Raises:
-      ValueError: If any name in that subtree is already in this tree.
     """
-    arriving: Dict[str, Resource] = {}
-    for res in [resource] + resource.get_all_children():
-      if res.name in self._subtree_resources:
-        raise ValueError(f"Resource with name '{res.name}' already exists in the tree.")
-      arriving[res.name] = res
-    return arriving
+    for name in resource._subtree_resources:
+      if name in self._subtree_resources:
+        raise ValueError(f"Resource with name '{name}' already exists in the tree.")
 
   def unassign_child_resource(self, resource: Resource):
     """Unassign a child resource from this resource.
@@ -660,16 +656,10 @@ class Resource(SerializableMixin):
     # Preserve the pose for the event before unassignment clears it.
     previous_location = coordinate_reference(resource.location)
 
-    # The map goes with it: this tree gives up those names, and the subtree heads a tree of its
-    # own again, so it takes them back. Read once, before the tree changes shape.
-    departing = {r.name: r for r in [resource] + resource.get_all_children()}
-    root = self.get_root()
-    for name in departing:
-      root._subtree_resources.pop(name, None)
+    # Update the tree structure
     resource.parent = None
     resource.location = None
     self.children.remove(resource)
-    resource._subtree_resources = departing
 
     # Delete callbacks on the child resource so that they are not propagated up the tree.
     resource.deregister_will_assign_resource_callback(self._call_will_assign_resource_callbacks)
@@ -713,16 +703,21 @@ class Resource(SerializableMixin):
       ValueError: If no resource with the given name exists.
     """
 
-    if self.name == name:
-      return self
+    resource = self._subtree_resources.get(name)
+    if resource is None:
+      raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
+    return resource
 
-    for child in self.children:
-      try:
-        return child.get_resource(name)
-      except ResourceNotFoundError:
-        pass
+  def has_resource(self, name: str) -> bool:
+    """Whether anything at or beneath this resource carries the given name.
 
-    raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
+    Args:
+      name: The name to look for.
+
+    Returns:
+      True when a resource with that name is in this subtree.
+    """
+    return name in self._subtree_resources
 
   def find_resources(
     self,
