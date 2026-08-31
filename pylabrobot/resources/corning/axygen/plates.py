@@ -47,6 +47,7 @@ def cor_axy_24_wellplate_10mL_Vb(name: str) -> Plate:
       bottom_type=WellBottomType.V,
       compute_volume_from_height=_compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb,
       cross_section_type=CrossSectionType.RECTANGLE,
+      name_prefix=name,
     ),
   )
 
@@ -94,6 +95,7 @@ def cor_axy_96_wellplate_500uL_Ub(name: str) -> Plate:
       bottom_type=WellBottomType.U,
       material_z_thickness=1.18,  # measured
       cross_section_type=CrossSectionType.CIRCLE,
+      name_prefix=name,
     ),
   )
 

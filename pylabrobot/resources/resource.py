@@ -242,18 +242,18 @@ class Resource(SerializableMixin):
 
   @name.setter
   def name(self, name: str):
-    """Set the name of this resource.
+    """Refuse the change: a resource's name is how it is identified.
 
-    Will raise a `RuntimeError` if the resource is assigned to another resource.
+    Raises:
+      AttributeError: Always. The name is the resource's identifier - it is unique across the tree,
+        it is what `get_resource` finds a resource by, and it is the key state is serialized under.
+        Anything built from it, such as the wells of a plate, takes it at construction, so a name
+        that changed afterwards would leave those disagreeing with it.
     """
-
-    if self.parent is not None:
-      raise RuntimeError("Cannot change the name of a resource that is assigned.")
-    # Only a resource with no parent can be renamed, so nothing above holds the old name; its own
-    # map does, and is the one thing that has to follow.
-    self._subtree_resources.pop(self._name, None)
-    self._name = name
-    self._subtree_resources[name] = self
+    raise AttributeError(
+      f"cannot rename {self._name!r} to {name!r}: a resource's name is its identifier and is fixed "
+      "when it is created. Create the resource with the name you want instead."
+    )
 
   def __eq__(self, other):
     return (
@@ -856,7 +856,8 @@ class Resource(SerializableMixin):
   def named(self, name: str) -> Self:
     """Return a copy of this resource with the given name."""
     new_resource = self.copy()
-    new_resource.name = name
+    # The copy is new and in no tree, so this finishes building it rather than renaming anything.
+    new_resource._name = name
     return new_resource
 
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:

@@ -74,6 +74,7 @@ def _make_test_plate():
       size_x=4,
       size_y=4,
       size_z=5,
+      name_prefix="plate",
     ),
   )
   plate.location = Coordinate.zero()
