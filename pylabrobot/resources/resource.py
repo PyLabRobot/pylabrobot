@@ -235,14 +235,18 @@ class Resource(SerializableMixin):
 
   @name.setter
   def name(self, name: str):
-    """Set the name of this resource.
+    """Refuse the change: a resource's name is how it is identified.
 
-    Will raise a `RuntimeError` if the resource is assigned to another resource.
+    Raises:
+      AttributeError: Always. The name is the resource's identifier - it is unique across the tree,
+        it is what `get_resource` finds a resource by, and it is the key state is serialized under.
+        Anything built from it, such as the wells of a plate, takes it at construction, so a name
+        that changed afterwards would leave those disagreeing with it.
     """
-
-    if self.parent is not None:
-      raise RuntimeError("Cannot change the name of a resource that is assigned.")
-    self._name = name
+    raise AttributeError(
+      f"cannot rename {self._name!r} to {name!r}: a resource's name is its identifier and is fixed "
+      "when it is created. Create the resource with the name you want instead."
+    )
 
   def __eq__(self, other):
     return (
