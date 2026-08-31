@@ -90,6 +90,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       Creating a plate with 1 Well in a dict:
 
         >>> from pylabrobot.resources import Plate
+          name_prefix=name,
         >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1,
         ...   ordered_items={"A1": Well("well", size_x=1, size_y=1, size_z=1)})
     """
@@ -104,7 +105,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       for item in ordered_items.values():
         if item.location is None:
           raise ValueError("Item location must be specified if supplied at initialization.")
-        item.name = f"{self.name}_{item.name}"  # prefix item name with resource name
         self.assign_child_resource(item, location=item.location)
       self._ordering = OrderedDict(
         (identifier, item.name) for identifier, item in ordered_items.items()

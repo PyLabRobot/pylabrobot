@@ -38,6 +38,7 @@ def VWR_1_troughplate_195000uL_Ub(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       bottom_type=WellBottomType.U,
       max_volume=195000,  # from spec 195 mL
+      name_prefix=name,
     ),
   )
 
@@ -72,5 +73,6 @@ def VWR_96_wellplate_2mL_Vb(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       bottom_type=WellBottomType.V,
       max_volume=2200,  # from spec 2.2 ml
+      name_prefix=name,
     ),
   )

@@ -90,6 +90,7 @@ def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
           size_x=9.0,
           size_y=9.0,
           size_z=22.6,
+          name_prefix=name,
         ),
       )
   """
@@ -117,6 +118,7 @@ def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=9.0,
       size_y=9.0,
       size_z=22.6,
+      name_prefix=name,
     ),
   )
 
@@ -158,6 +160,7 @@ def Microplate_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate
       size_x=9.0,
       size_y=9.0,
       size_z=11.0,
+      name_prefix=name,
     ),
   )
 
@@ -199,6 +202,7 @@ def DeepWell_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=9.0,
       size_y=9.0,
       size_z=39.0,
+      name_prefix=name,
     ),
   )
 
@@ -240,6 +244,7 @@ def HalfDeepWell_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=4.5,
       size_y=4.5,
       size_z=18.8,
+      name_prefix=name,
     ),
   )
 
@@ -281,6 +286,7 @@ def DeepWell_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=9.0,
       size_y=9.0,
       size_z=38.0,
+      name_prefix=name,
     ),
   )
 
@@ -322,6 +328,7 @@ def Plate_portrait_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=4.5,
       size_y=4.5,
       size_z=11.0,
+      name_prefix=name,
     ),
   )
 
@@ -363,6 +370,7 @@ def Macherey_Nagel_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlat
       size_x=8.9,
       size_y=8.9,
       size_z=29.9,
+      name_prefix=name,
     ),
   )
 
@@ -404,6 +412,7 @@ def Qiagen_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=8.9,
       size_y=8.9,
       size_z=26.6,
+      name_prefix=name,
     ),
   )
 
@@ -445,6 +454,7 @@ def AB_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=9.0,
       size_y=9.0,
       size_z=19.5,
+      name_prefix=name,
     ),
   )
 
@@ -486,6 +496,7 @@ def PCR_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=9.0,
       size_y=9.0,
       size_z=19.5,
+      name_prefix=name,
     ),
   )
 
@@ -527,6 +538,7 @@ def DeepWell_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=2.3,
       size_y=2.3,
       size_z=8.6,
+      name_prefix=name,
     ),
   )
 
@@ -568,6 +580,7 @@ def Hibase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=2.3,
       size_y=2.3,
       size_z=5.4,
+      name_prefix=name,
     ),
   )
 
@@ -609,6 +622,7 @@ def Lowbase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=2.3,
       size_y=2.3,
       size_z=6.2,
+      name_prefix=name,
     ),
   )
 
@@ -650,6 +664,7 @@ def Separation_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=8.9,
       size_y=8.9,
       size_z=26.6,
+      name_prefix=name,
     ),
   )
 
@@ -691,6 +706,7 @@ def DeepWell_square_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=9.0,
       size_y=9.0,
       size_z=39.0,
+      name_prefix=name,
     ),
   )
 
@@ -732,6 +748,7 @@ def CaCo2_Plate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=19.3,
       size_y=19.3,
       size_z=6.5,
+      name_prefix=name,
     ),
   )
 
@@ -774,6 +791,7 @@ def Plate_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=4.5,
       size_y=4.5,
       size_z=12.1,
+      name_prefix=name,
     ),
   )
 
@@ -816,6 +834,7 @@ def Microplate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=19.6,
       size_y=19.6,
       size_z=17.6,
+      name_prefix=name,
     ),
   )
 
@@ -857,6 +876,7 @@ def TecanExtractionPlate_96_Well(name: str, with_lid: bool = False) -> TecanPlat
       size_x=9.0,
       size_y=9.0,
       size_z=23.0,
+      name_prefix=name,
     ),
   )
 
@@ -899,5 +919,6 @@ def Microplate_48_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_x=13.0,
       size_y=13.0,
       size_z=17.3,
+      name_prefix=name,
     ),
   )
