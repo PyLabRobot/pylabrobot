@@ -1,6 +1,7 @@
 from abc import ABCMeta
 from typing import Dict, Optional, Type
 
+from pylabrobot.hamilton.protocol.text.framing import find_error_fields
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
@@ -529,6 +530,11 @@ _MODULE_NAME_BY_ID = {
 }
 
 
+def _module_ids():
+  """The module identifiers the machine can report, in the order the master lists them."""
+  return tuple(_MODULE_NAME_BY_ID)
+
+
 def _module_id_to_module_name(id_):
   """Convert a module ID to a module name."""
   return _MODULE_NAME_BY_ID.get(id_, "Unknown Module")
@@ -932,3 +938,41 @@ def convert_star_module_error_to_plr_error(
     return TooLittleVolumeError(error.message)
 
   return None
+
+
+# Every module the master may report alongside itself, in the order it lists them in a reply.
+STAR_MODULE_ID_LENGTH = 2
+STAR_MASTER_MODULE_ID = "C0"
+STAR_OTHER_MODULE_IDS = tuple(m for m in _module_ids() if m != STAR_MASTER_MODULE_ID)
+
+
+def check_fw_string_error(resp: str):
+  """Raise an error if the firmware response is an error response.
+
+  Raises:
+    ValueError: if the format string is incompatible with the response.
+    HamiltonException: if the response contains an error.
+  """
+
+  errors_dict = find_error_fields(
+    resp,
+    module_id_length=STAR_MODULE_ID_LENGTH,
+    master_module_id=STAR_MASTER_MODULE_ID,
+    other_module_ids=STAR_OTHER_MODULE_IDS,
+  )
+  if len(errors_dict) == 0:
+    return
+
+  he = star_firmware_string_to_error(error_code_dict=errors_dict, raw_response=resp)
+
+  # If there is a faulty parameter error, request which parameter that is.
+  for module_name, error in he.errors.items():
+    if error.message == "Unknown parameter":
+      # temp. disabled until we figure out how to handle async in parse response (the
+      # background thread does not have an event loop, and I'm not sure if it should.)
+      # vp = await self.send_command(module=error.raw_module, command="VP", fmt="vp&&")["vp"]
+      # he[module_name].message += f" ({vp})"
+
+      he.errors[module_name].message += " (call lh.backend.request_name_of_last_faulty_parameter)"
+
+  raise he
