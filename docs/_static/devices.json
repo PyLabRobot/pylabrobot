@@ -362,6 +362,14 @@
     "id": "cole-parmer-masterflex",
     "vendor": "Cole Parmer",
     "name": "Masterflex L/S",
+    "models": [
+      "07522-20",
+      "07522-30",
+      "07551-20",
+      "07551-30",
+      "07575-30",
+      "07575-40"
+    ],
     "kind": "pump",
     "capabilities": [
       "pumping"
@@ -371,7 +379,6 @@
     "api_version": "v1",
     "code_slug": "cole_parmer",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "Models 07522-20, 07522-30, 07551-20, 07551-30, 07575-30 and 07575-40.",
     "oem": "https://corporate.avantorsciences.com/us/en/bioprocess-solutions/fluid-management/masterflex-peristaltic-pumps/ls-series"
   },
   {
@@ -709,6 +716,11 @@
     "id": "inheco-thermoshake",
     "vendor": "Inheco",
     "name": "Thermoshake",
+    "models": [
+      "Thermoshake",
+      "Thermoshake AC",
+      "Thermoshake RM"
+    ],
     "kind": "heater shaker",
     "capabilities": [
       "heating",
@@ -721,43 +733,7 @@
     "code_slug": "inheco",
     "doc_slug": "inheco/thermoshake/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.inheco.com/thermoshake-classic.html"
-  },
-  {
-    "id": "inheco-thermoshake-ac",
-    "vendor": "Inheco",
-    "name": "Thermoshake AC",
-    "kind": "heater shaker",
-    "capabilities": [
-      "heating",
-      "active cooling",
-      "shaking"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.inheco.inheco_thermoshake_ac",
-    "api_version": "v1",
-    "code_slug": "inheco",
-    "doc_slug": "inheco/thermoshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "Resource definition incomplete, so the model cannot be instantiated yet.",
-    "oem": "https://www.inheco.com/thermoshake-ac.html"
-  },
-  {
-    "id": "inheco-thermoshake-rm",
-    "vendor": "Inheco",
-    "name": "Thermoshake RM",
-    "kind": "heater shaker",
-    "capabilities": [
-      "heating",
-      "shaking"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.inheco.inheco_thermoshake_rm",
-    "api_version": "v1",
-    "code_slug": "inheco",
-    "doc_slug": "inheco/thermoshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "Resource definition incomplete, so the model cannot be instantiated yet.",
+    "notes": "The ThermoShake resource is available; the AC and RM resource definitions are incomplete and cannot yet be instantiated.",
     "oem": "https://www.inheco.com/thermoshake-classic.html"
   },
   {
@@ -1321,49 +1297,25 @@
     "oem": "https://lifesciences.tecan.com/multimode-plate-reader"
   },
   {
-    "id": "thermo-fisher-alps-300",
+    "id": "thermo-fisher-alps",
     "vendor": "Thermo Fisher",
-    "name": "ALPS 300",
+    "name": "ALPS",
+    "models": [
+      "ALPS 300",
+      "ALPS 3000",
+      "ALPS 5000"
+    ],
     "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
     "status": "mostly",
-    "api": "pylabrobot.thermo_fisher.alps.ThermoScientificALPS300",
+    "api": "pylabrobot.thermo_fisher.alps",
     "api_version": "v1",
     "code_slug": "thermo_fisher/alps",
-    "doc_slug": "thermo_fisher/alps/alps300/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
-  },
-  {
-    "id": "thermo-fisher-alps-3000",
-    "vendor": "Thermo Fisher",
-    "name": "ALPS 3000",
-    "kind": "sealer",
-    "capabilities": [
-      "sealing"
-    ],
-    "status": "mostly",
-    "api": "pylabrobot.thermo_fisher.alps.ThermoScientificALPS3000",
-    "api_version": "v1",
-    "code_slug": "thermo_fisher/alps",
-    "doc_slug": "thermo_fisher/alps/alps3000/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
-  },
-  {
-    "id": "thermo-fisher-alps-5000",
-    "vendor": "Thermo Fisher",
-    "name": "ALPS 5000",
-    "kind": "sealer",
-    "capabilities": [
-      "sealing"
-    ],
-    "status": "mostly",
-    "api": "pylabrobot.thermo_fisher.alps.ThermoScientificALPS5000",
-    "api_version": "v1",
-    "code_slug": "thermo_fisher/alps",
-    "doc_slug": "thermo_fisher/alps/alps5000/hello-world",
+    "doc_slug": "thermo_fisher/alps/index",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "Each model has its own driver class and hello-world guide.",
     "oem": "https://www.thermofisher.com/order/catalog/product/AB-5000"
   },
   {
@@ -1382,30 +1334,22 @@
     "oem": "https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html"
   },
   {
-    "id": "thermo-fisher-cytomat-2-c425",
+    "id": "thermo-fisher-cytomat",
     "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C425",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating",
-      "active cooling"
+    "name": "Cytomat",
+    "models": [
+      "Cytomat 2 C425",
+      "Cytomat 2 C450 SHAKE",
+      "Cytomat 2 C_50",
+      "Cytomat 5C",
+      "Cytomat 6000",
+      "Cytomat 6002"
     ],
-    "status": "full",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51033032"
-  },
-  {
-    "id": "thermo-fisher-cytomat-2-c450-shake",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C450 SHAKE",
     "kind": "storage",
     "capabilities": [
       "storage",
       "heating",
+      "active cooling",
       "shaking"
     ],
     "status": "full",
@@ -1413,72 +1357,8 @@
     "api_version": "v0",
     "code_slug": "legacy/storage/cytomat",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51033035"
-  },
-  {
-    "id": "thermo-fisher-cytomat-2-c50",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C_50",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "The driver lists this model but rejects it: constructing one raises NotImplementedError.",
+    "notes": "Capabilities vary by model. The driver lists Cytomat 2 C_50 but rejects it with NotImplementedError.",
     "oem": "https://www.thermofisher.com/us/en/home/life-science/lab-equipment/lab-automation/lab-automation-incubators.html"
-  },
-  {
-    "id": "thermo-fisher-cytomat-5c",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 5C",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating"
-    ],
-    "status": "full",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51031526"
-  },
-  {
-    "id": "thermo-fisher-cytomat-6000",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 6000",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating"
-    ],
-    "status": "full",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/us/en/home/life-science/lab-equipment/lab-automation/lab-automation-incubators.html"
-  },
-  {
-    "id": "thermo-fisher-cytomat-6002",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 6002",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating"
-    ],
-    "status": "full",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/order/catalog/product/50075279"
   },
   {
     "id": "thermo-fisher-heraeus-cytomat",

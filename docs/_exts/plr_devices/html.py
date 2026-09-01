@@ -193,18 +193,26 @@ def _link_slots(device: Device, doc_uri: DocURI, code_uri: CodeURI) -> str:
   return "".join(rendered)
 
 
-def _search_index(device: Device) -> str:
-  """Everything the search box matches against, lowercased."""
-  parts = [
-    device["vendor"],
-    device["name"],
-    device["kind"],
-    STATUS_LABELS.get(str(device["status"]), str(device["status"])),
-    device.get("api", ""),
-    device.get("notes", ""),
-    str(device.get("manager", "")).rstrip("/").rsplit("/", 1)[-1],
-    *device.get("capabilities", []),
-  ]
+def _search_index(device: Device, model: Optional[str] = None) -> str:
+  """Everything the search box matches against, lowercased.
+
+  A device row indexes every model. A model sub-row indexes only itself, so a specific model
+  search can hide its potentially hundreds of siblings.
+  """
+  parts = [device["vendor"], device["name"], device["kind"]]
+  if model is None:
+    parts.extend(
+      [
+        STATUS_LABELS.get(str(device["status"]), str(device["status"])),
+        device.get("api", ""),
+        device.get("notes", ""),
+        str(device.get("manager", "")).rstrip("/").rsplit("/", 1)[-1],
+        *device.get("capabilities", []),
+        *device.get("models", []),
+      ]
+    )
+  else:
+    parts.extend([*device.get("capabilities", []), model])
   return " ".join(str(p) for p in parts if p).lower()
 
 
@@ -222,6 +230,8 @@ def render_card(
   links = _links(device, doc_uri, code_uri, styles)
 
   rows = []
+  if device.get("models"):
+    rows.append(("Models", ", ".join(escape(str(model)) for model in device["models"])))
   if device.get("api"):
     api = escape(str(device["api"]))
     rows.append(("API", f'<code class="plr-device-api"{_style(styles, "api")}>{api}</code>'))
@@ -266,6 +276,8 @@ def render_card_markdown(device: Device, doc_uri: DocURI, code_uri: CodeURI) -> 
     head += f" ({device['api_version']})"
 
   lines = [head]
+  if device.get("models"):
+    lines.append(f"Models: {', '.join(device['models'])}")
   if device.get("capabilities"):
     lines.append(f"Capabilities: {', '.join(device['capabilities'])}")
 
@@ -329,6 +341,7 @@ def render_table(
   rows = []
   for device in devices:
     capabilities = "".join(_capability_badge(c) for c in device.get("capabilities", []))
+    device_id = str(device["id"])
 
     name_cell = _cell_link(
       str(device["name"]),
@@ -339,7 +352,8 @@ def render_table(
         '<span class="plr-device-note">*</span>', str(device["notes"])
       )
     rows.append(
-      f'<tr class="plr-device-row" id="device-{escape(str(device["id"]))}"'
+      f'<tr class="plr-device-row" id="device-{escape(device_id)}"'
+      f' data-device-id="{escape(device_id)}"'
       f' data-search="{escape(_search_index(device))}"'
       f' data-vendor="{escape(str(device["vendor"]))}"'
       f' data-status="{escape(str(device["status"]))}"'
@@ -352,16 +366,36 @@ def render_table(
       f"<td>{_manager(device)}</td>"
       "</tr>"
     )
+    for model in device.get("models", []):
+      model = str(model)
+      rows.append(
+        f'<tr class="plr-device-model-row" data-device-id="{escape(device_id)}"'
+        f' data-search="{escape(_search_index(device, model))}" hidden>'
+        '<td aria-hidden="true"></td>'
+        '<td class="plr-device-model-name"><span class="plr-device-model">'
+        '<span class="plr-device-model__arrow" aria-hidden="true">↳</span>'
+        f'<span class="plr-device-model__label">{escape(model)}</span></span></td>'
+        '<td colspan="4"></td>'
+        "</tr>"
+      )
 
   controls = ""
-  if search:
-    controls += (
-      f'<div class="plr-device-search">'
-      f'<input type="search" id="{escape(table_id)}-search" class="plr-device-search__input" '
-      f'placeholder="Search {len(devices)} devices by vendor, model, type or capability…" '
-      f'aria-label="Search devices" autocomplete="off">'
-      f"</div>"
-    )
+  has_models = any(device.get("models") for device in devices)
+  model_count = sum(max(1, len(device.get("models", []))) for device in devices)
+  if search or has_models:
+    controls = '<div class="plr-device-search">'
+    if search:
+      controls += (
+        f'<input type="search" id="{escape(table_id)}-search" class="plr-device-search__input" '
+        f'placeholder="Search {model_count} models by vendor, model, type or capability…" '
+        f'aria-label="Search models" autocomplete="off">'
+      )
+    if has_models:
+      controls += (
+        f'<button type="button" class="plr-device-model-toggle" aria-pressed="false" '
+        f'aria-controls="{escape(table_id)}-table">Show models</button>'
+      )
+    controls += "</div>"
   if filters:
     capabilities_all = [
       (c, c) for c in sorted({c for d in devices for c in d.get("capabilities", [])})
@@ -375,7 +409,7 @@ def render_table(
   return f"""<div class="plr-devices" id="{escape(table_id)}" data-plr-devices>
 {controls}
 <div class="plr-device-table-wrapper">
-<table class="plr-device-table">
+<table class="plr-device-table" id="{escape(table_id)}-table">
   <thead><tr>
     <th>Vendor</th><th>Device</th><th>Capabilities</th><th>Support</th>
     <th>Links</th><th>Manager</th>

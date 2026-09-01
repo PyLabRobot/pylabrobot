@@ -100,6 +100,7 @@ REQUIRED_FIELDS = ("id", "vendor", "name", "kind", "status")
 
 OPTIONAL_FIELDS = (
   "capabilities",
+  "models",
   "api",
   "api_version",
   "code_slug",
@@ -188,6 +189,10 @@ def _validate(device: Any, index: int, seen_ids: Dict[str, int], path: Path) -> 
       f"{where} ({device_id}): unknown capability/capabilities: {', '.join(unknown_capabilities)}. "
       f"Add to CAPABILITIES in {Path(__file__).name} if genuinely new."
     )
+
+  models = device.get("models", [])
+  if not isinstance(models, list) or not all(isinstance(model, str) for model in models):
+    raise DeviceRegistryError(f"{where} ({device_id}): models must be a list of strings")
 
   return Device(device)
 
