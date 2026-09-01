@@ -34,6 +34,7 @@ pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
       ~HamiltonDeck.centers
       ~HamiltonDeck.check_can_drop_resource_here
       ~HamiltonDeck.clear
+      ~HamiltonDeck.compute_right_track_of_carrier
       ~HamiltonDeck.copy
       ~HamiltonDeck.deregister_did_assign_resource_callback
       ~HamiltonDeck.deregister_did_unassign_resource_callback
@@ -53,6 +54,9 @@ pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
       ~HamiltonDeck.get_anchor
       ~HamiltonDeck.get_highest_known_point
       ~HamiltonDeck.get_location_wrt
+      ~HamiltonDeck.get_or_create_autoload_loading_tray
+      ~HamiltonDeck.get_or_create_autoload_sled
+      ~HamiltonDeck.get_or_create_x_arm
       ~HamiltonDeck.get_resource
       ~HamiltonDeck.get_root
       ~HamiltonDeck.get_size_x
