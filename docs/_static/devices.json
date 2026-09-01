@@ -1246,6 +1246,22 @@
     "oem": "https://www.qinstruments.com/automation/heatplate/"
   },
   {
+    "id": "revvity-celigo",
+    "vendor": "Revvity",
+    "name": "Celigo",
+    "kind": "microscope",
+    "capabilities": [
+      "fluorescence",
+      "microscopy"
+    ],
+    "status": "basic",
+    "api": "pylabrobot.revvity.Celigo",
+    "api_version": "v1",
+    "code_slug": "revvity/celigo",
+    "doc_slug": "revvity/celigo/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
+  },
+  {
     "id": "sartorius-entris2",
     "vendor": "Sartorius",
     "name": "Entris II",
