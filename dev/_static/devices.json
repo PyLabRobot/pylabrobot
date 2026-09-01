@@ -66,9 +66,6 @@
     "name": "Cytation 1",
     "kind": "plate reader",
     "capabilities": [
-      "absorbance",
-      "fluorescence",
-      "luminescence",
       "microscopy"
     ],
     "status": "full",
@@ -262,9 +259,13 @@
     "oem": "https://www.bmglabtech.com/en/clariostar-plus/"
   },
   {
-    "id": "brooks-preciseflex-pf3400",
+    "id": "brooks-preciseflex",
     "vendor": "Brooks",
-    "name": "PreciseFlex PF3400",
+    "name": "PreciseFlex",
+    "models": [
+      {"name": "PreciseFlex PF3400", "status": "full"},
+      {"name": "PreciseFlex PF400", "status": "full"}
+    ],
     "kind": "arm",
     "capabilities": [
       "arm"
@@ -275,23 +276,7 @@
     "code_slug": "brooks/precise_flex",
     "doc_slug": "brooks/precise_flex/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.preciseflexrobots.com/lab-automation-applicable-products#preciseflex3400-labproducts"
-  },
-  {
-    "id": "brooks-preciseflex-pf400",
-    "vendor": "Brooks",
-    "name": "PreciseFlex PF400",
-    "kind": "arm",
-    "capabilities": [
-      "arm"
-    ],
-    "status": "full",
-    "api": "pylabrobot.brooks.precise_flex.PreciseFlex",
-    "api_version": "v1",
-    "code_slug": "brooks/precise_flex",
-    "doc_slug": "brooks/precise_flex/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.preciseflexrobots.com/lab-automation-applicable-products#preciseflex400_labproducts"
+    "oem": "https://www.preciseflexrobots.com/lab-automation-applicable-products"
   },
   {
     "id": "byonoy-absorbance-96",
@@ -362,6 +347,14 @@
     "id": "cole-parmer-masterflex",
     "vendor": "Cole Parmer",
     "name": "Masterflex L/S",
+    "models": [
+      {"name": "07522-20", "status": "full"},
+      {"name": "07522-30", "status": "full"},
+      {"name": "07551-20", "status": "full"},
+      {"name": "07551-30", "status": "full"},
+      {"name": "07575-30", "status": "full"},
+      {"name": "07575-40", "status": "full"}
+    ],
     "kind": "pump",
     "capabilities": [
       "pumping"
@@ -371,7 +364,6 @@
     "api_version": "v1",
     "code_slug": "cole_parmer",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "Models 07522-20, 07522-30, 07551-20, 07551-30, 07575-30 and 07575-40.",
     "oem": "https://corporate.avantorsciences.com/us/en/bioprocess-solutions/fluid-management/masterflex-peristaltic-pumps/ls-series"
   },
   {
@@ -474,23 +466,10 @@
     "id": "hamilton-star",
     "vendor": "Hamilton",
     "name": "STAR",
-    "kind": "liquid handler",
-    "capabilities": [
-      "liquid handling",
-      "arm"
+    "models": [
+      {"name": "STAR", "status": "full"},
+      {"name": "STARlet", "status": "full"}
     ],
-    "status": "full",
-    "api": "pylabrobot.legacy.liquid_handling.backends.STARBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/liquid_handling/backends/hamilton/STAR_backend",
-    "doc_slug": "hamilton/star/index",
-    "manager": "https://discuss.pylabrobot.org/u/camillomoschner",
-    "oem": "https://www.hamiltoncompany.com/microlab-star"
-  },
-  {
-    "id": "hamilton-starlet",
-    "vendor": "Hamilton",
-    "name": "STARlet",
     "kind": "liquid handler",
     "capabilities": [
       "liquid handling",
@@ -709,6 +688,11 @@
     "id": "inheco-thermoshake",
     "vendor": "Inheco",
     "name": "Thermoshake",
+    "models": [
+      {"name": "Thermoshake", "status": "full"},
+      {"name": "Thermoshake AC", "status": "wip"},
+      {"name": "Thermoshake RM", "status": "wip"}
+    ],
     "kind": "heater shaker",
     "capabilities": [
       "heating",
@@ -721,43 +705,7 @@
     "code_slug": "inheco",
     "doc_slug": "inheco/thermoshake/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.inheco.com/thermoshake-classic.html"
-  },
-  {
-    "id": "inheco-thermoshake-ac",
-    "vendor": "Inheco",
-    "name": "Thermoshake AC",
-    "kind": "heater shaker",
-    "capabilities": [
-      "heating",
-      "active cooling",
-      "shaking"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.inheco.inheco_thermoshake_ac",
-    "api_version": "v1",
-    "code_slug": "inheco",
-    "doc_slug": "inheco/thermoshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "Resource definition incomplete, so the model cannot be instantiated yet.",
-    "oem": "https://www.inheco.com/thermoshake-ac.html"
-  },
-  {
-    "id": "inheco-thermoshake-rm",
-    "vendor": "Inheco",
-    "name": "Thermoshake RM",
-    "kind": "heater shaker",
-    "capabilities": [
-      "heating",
-      "shaking"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.inheco.inheco_thermoshake_rm",
-    "api_version": "v1",
-    "code_slug": "inheco",
-    "doc_slug": "inheco/thermoshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "Resource definition incomplete, so the model cannot be instantiated yet.",
+    "notes": "The ThermoShake resource is available; the AC and RM resource definitions are incomplete and cannot yet be instantiated.",
     "oem": "https://www.inheco.com/thermoshake-classic.html"
   },
   {
@@ -777,52 +725,26 @@
     "oem": "https://www.biosearchtech.com/products/pcr-reagents-kits-and-instruments/pcr-instruments-and-software/snpline-genotyping-automation/kube-plate-sealer"
   },
   {
-    "id": "kbiosystems-ultraseal-epro",
+    "id": "kbiosystems-ultraseal",
     "vendor": "KBiosystems",
-    "name": "Ultraseal ePRO",
+    "name": "Ultraseal",
+    "models": [
+      {"name": "Ultraseal ePRO", "status": "mostly"},
+      {"name": "Ultraseal PRO", "status": "mostly"},
+      {"name": "Ultraseal XT PRO", "status": "mostly"}
+    ],
     "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
     "status": "mostly",
-    "api": "pylabrobot.kbiosystems.KBiosystemsUltrasealEPRO",
+    "api": "pylabrobot.kbiosystems",
     "api_version": "v1",
     "code_slug": "kbiosystems",
-    "doc_slug": "kbiosystems/ultraseal-epro/hello-world",
+    "doc_slug": "kbiosystems/index",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://kbiosystems.com/product/ultraseal-epro"
-  },
-  {
-    "id": "kbiosystems-ultraseal-pro",
-    "vendor": "KBiosystems",
-    "name": "Ultraseal PRO",
-    "kind": "sealer",
-    "capabilities": [
-      "sealing"
-    ],
-    "status": "mostly",
-    "api": "pylabrobot.kbiosystems.KBiosystemsUltrasealPRO",
-    "api_version": "v1",
-    "code_slug": "kbiosystems",
-    "doc_slug": "kbiosystems/ultraseal-pro/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://kbiosystems.com/product/ultraseal-pro"
-  },
-  {
-    "id": "kbiosystems-ultraseal-xt-pro",
-    "vendor": "KBiosystems",
-    "name": "Ultraseal XT PRO",
-    "kind": "sealer",
-    "capabilities": [
-      "sealing"
-    ],
-    "status": "mostly",
-    "api": "pylabrobot.kbiosystems.KBiosystemsUltrasealXTPro",
-    "api_version": "v1",
-    "code_slug": "kbiosystems",
-    "doc_slug": "kbiosystems/ultraseal-xt-pro/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://kbiosystems.com/product/ultraseal-xt-pro"
+    "notes": "Each model has its own driver class and hello-world guide.",
+    "oem": "https://kbiosystems.com/"
   },
   {
     "id": "keyence-barcode-scanner",
@@ -1046,140 +968,21 @@
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
   },
   {
-    "id": "qinstruments-bioshake-3000",
+    "id": "qinstruments-bioshake",
     "vendor": "QInstruments",
-    "name": "BioShake 3000",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
+    "name": "BioShake",
+    "models": [
+      {"name": "BioShake 3000", "status": "full"},
+      {"name": "BioShake 3000 elm", "status": "full"},
+      {"name": "BioShake 3000 elm DWP", "status": "full"},
+      {"name": "BioShake 3000-T", "status": "wip"},
+      {"name": "BioShake 3000-T elm", "status": "wip"},
+      {"name": "BioShake 5000 elm", "status": "wip"},
+      {"name": "BioShake D30 elm", "status": "wip"},
+      {"name": "BioShake D30-T elm", "status": "wip"},
+      {"name": "BioShake Q1", "status": "full"},
+      {"name": "BioShake Q2", "status": "wip"}
     ],
-    "status": "full",
-    "api": "pylabrobot.qinstruments.BioShake3000",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000/"
-  },
-  {
-    "id": "qinstruments-bioshake-3000-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake 3000 elm",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "full",
-    "api": "pylabrobot.qinstruments.BioShake3000Elm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-3000-elm-dwp",
-    "vendor": "QInstruments",
-    "name": "BioShake 3000 elm DWP",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "full",
-    "api": "pylabrobot.qinstruments.BioShake3000ElmDWP",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000-elm-dwp/"
-  },
-  {
-    "id": "qinstruments-bioshake-3000-t",
-    "vendor": "QInstruments",
-    "name": "BioShake 3000-T",
-    "kind": "heater shaker",
-    "capabilities": [
-      "shaking",
-      "heating"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShake3000T",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000-t/"
-  },
-  {
-    "id": "qinstruments-bioshake-3000-t-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake 3000-T elm",
-    "kind": "heater shaker",
-    "capabilities": [
-      "shaking",
-      "heating"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShake3000TElm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000-t-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-5000-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake 5000 elm",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShake5000Elm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-5000-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-d30-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake D30 elm",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShakeD30Elm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-d30-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-d30-t-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake D30-T elm",
-    "kind": "heater shaker",
-    "capabilities": [
-      "shaking",
-      "heating"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShakeD30TElm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-d30-t-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-q1",
-    "vendor": "QInstruments",
-    "name": "BioShake Q1",
     "kind": "heater shaker",
     "capabilities": [
       "shaking",
@@ -1187,30 +990,13 @@
       "active cooling"
     ],
     "status": "full",
-    "api": "pylabrobot.qinstruments.BioShakeQ1",
+    "api": "pylabrobot.qinstruments.BioShake",
     "api_version": "v1",
     "code_slug": "qinstruments",
     "doc_slug": "qinstruments/bioshake/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-q1/"
-  },
-  {
-    "id": "qinstruments-bioshake-q2",
-    "vendor": "QInstruments",
-    "name": "BioShake Q2",
-    "kind": "heater shaker",
-    "capabilities": [
-      "shaking",
-      "heating",
-      "active cooling"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShakeQ2",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-q2/"
+    "notes": "Capabilities vary by model; use a model-specific factory function.",
+    "oem": "https://www.qinstruments.com/"
   },
   {
     "id": "qinstruments-coldplate",
@@ -1321,49 +1107,25 @@
     "oem": "https://lifesciences.tecan.com/multimode-plate-reader"
   },
   {
-    "id": "thermo-fisher-alps-300",
+    "id": "thermo-fisher-alps",
     "vendor": "Thermo Fisher",
-    "name": "ALPS 300",
+    "name": "ALPS",
+    "models": [
+      {"name": "ALPS 300", "status": "mostly"},
+      {"name": "ALPS 3000", "status": "mostly"},
+      {"name": "ALPS 5000", "status": "mostly"}
+    ],
     "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
     "status": "mostly",
-    "api": "pylabrobot.thermo_fisher.alps.ThermoScientificALPS300",
+    "api": "pylabrobot.thermo_fisher.alps",
     "api_version": "v1",
     "code_slug": "thermo_fisher/alps",
-    "doc_slug": "thermo_fisher/alps/alps300/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
-  },
-  {
-    "id": "thermo-fisher-alps-3000",
-    "vendor": "Thermo Fisher",
-    "name": "ALPS 3000",
-    "kind": "sealer",
-    "capabilities": [
-      "sealing"
-    ],
-    "status": "mostly",
-    "api": "pylabrobot.thermo_fisher.alps.ThermoScientificALPS3000",
-    "api_version": "v1",
-    "code_slug": "thermo_fisher/alps",
-    "doc_slug": "thermo_fisher/alps/alps3000/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
-  },
-  {
-    "id": "thermo-fisher-alps-5000",
-    "vendor": "Thermo Fisher",
-    "name": "ALPS 5000",
-    "kind": "sealer",
-    "capabilities": [
-      "sealing"
-    ],
-    "status": "mostly",
-    "api": "pylabrobot.thermo_fisher.alps.ThermoScientificALPS5000",
-    "api_version": "v1",
-    "code_slug": "thermo_fisher/alps",
-    "doc_slug": "thermo_fisher/alps/alps5000/hello-world",
+    "doc_slug": "thermo_fisher/alps/index",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "Each model has its own driver class and hello-world guide.",
     "oem": "https://www.thermofisher.com/order/catalog/product/AB-5000"
   },
   {
@@ -1382,30 +1144,22 @@
     "oem": "https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html"
   },
   {
-    "id": "thermo-fisher-cytomat-2-c425",
+    "id": "thermo-fisher-cytomat",
     "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C425",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating",
-      "active cooling"
+    "name": "Cytomat",
+    "models": [
+      {"name": "Cytomat 2 C425", "status": "full"},
+      {"name": "Cytomat 2 C450 SHAKE", "status": "full"},
+      {"name": "Cytomat 2 C_50", "status": "wip"},
+      {"name": "Cytomat 5C", "status": "full"},
+      {"name": "Cytomat 6000", "status": "full"},
+      {"name": "Cytomat 6002", "status": "full"}
     ],
-    "status": "full",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51033032"
-  },
-  {
-    "id": "thermo-fisher-cytomat-2-c450-shake",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C450 SHAKE",
     "kind": "storage",
     "capabilities": [
       "storage",
       "heating",
+      "active cooling",
       "shaking"
     ],
     "status": "full",
@@ -1413,72 +1167,8 @@
     "api_version": "v0",
     "code_slug": "legacy/storage/cytomat",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51033035"
-  },
-  {
-    "id": "thermo-fisher-cytomat-2-c50",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C_50",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "The driver lists this model but rejects it: constructing one raises NotImplementedError.",
+    "notes": "Capabilities vary by model. The driver lists Cytomat 2 C_50 but rejects it with NotImplementedError.",
     "oem": "https://www.thermofisher.com/us/en/home/life-science/lab-equipment/lab-automation/lab-automation-incubators.html"
-  },
-  {
-    "id": "thermo-fisher-cytomat-5c",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 5C",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating"
-    ],
-    "status": "full",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51031526"
-  },
-  {
-    "id": "thermo-fisher-cytomat-6000",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 6000",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating"
-    ],
-    "status": "full",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/us/en/home/life-science/lab-equipment/lab-automation/lab-automation-incubators.html"
-  },
-  {
-    "id": "thermo-fisher-cytomat-6002",
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 6002",
-    "kind": "storage",
-    "capabilities": [
-      "storage",
-      "heating"
-    ],
-    "status": "full",
-    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/storage/cytomat",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.thermofisher.com/order/catalog/product/50075279"
   },
   {
     "id": "thermo-fisher-heraeus-cytomat",

@@ -33,7 +33,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=b0ac04d7" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=16de1b4f" />
     <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
@@ -47,7 +47,7 @@
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
-    <script src="../_static/plr_devices.js?v=2dde28f2"></script>
+    <script src="../_static/plr_devices.js?v=ba1a2da2"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'contributor_guide/device-registry';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
@@ -610,18 +610,25 @@ one object to that file.</p>
 <h2>Adding a device<a class="headerlink" href="#adding-a-device" title="Link to this heading">#</a></h2>
 <p>Append an object to <code class="docutils literal notranslate"><span class="pre">docs/_static/devices.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"curiox-ht2000"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"vendor"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Curiox"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"HT2000"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"plate washer"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"plate washing"</span><span class="p">],</span>
-<span class="w">  </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"mostly"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"api"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pylabrobot.curiox.CurioxHT2000"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cole-parmer-masterflex"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"vendor"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Cole Parmer"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Masterflex L/S"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"models"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"07522-20"</span><span class="p">,</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"full"</span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"07522-30"</span><span class="p">,</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"full"</span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"07551-20"</span><span class="p">,</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"full"</span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"07551-30"</span><span class="p">,</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"full"</span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"07575-30"</span><span class="p">,</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"full"</span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"07575-40"</span><span class="p">,</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"full"</span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pump"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"pumping"</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"full"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"api"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pylabrobot.cole_parmer.Masterflex"</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">"api_version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v1"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"code_slug"</span><span class="p">:</span><span class="w"> </span><span class="s2">"curiox"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"doc_slug"</span><span class="p">:</span><span class="w"> </span><span class="s2">"curiox/curiox-ht2000/hello-world"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"code_slug"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cole_parmer"</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">"manager"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://discuss.pylabrobot.org/u/rickwierenga"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"oem"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://curiox.com/"</span>
+<span class="w">  </span><span class="nt">"oem"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://corporate.avantorsciences.com/us/en/bioprocess-solutions/fluid-management/masterflex-peristaltic-pumps/ls-series"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -643,47 +650,51 @@ one object to that file.</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
 <td><p>yes</p></td>
-<td><p>Model name, without the vendor.</p></td>
+<td><p>Display name for the device or device family, without the vendor.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">kind</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models</span></code></p></td>
+<td><p>no</p></td>
+<td><p>Model objects when one entry covers several models. <code class="docutils literal notranslate"><span class="pre">name</span></code> is required; <code class="docutils literal notranslate"><span class="pre">status</span></code> may be <code class="docutils literal notranslate"><span class="pre">wip</span></code>, <code class="docutils literal notranslate"><span class="pre">basic</span></code>, <code class="docutils literal notranslate"><span class="pre">mostly</span></code>, or <code class="docutils literal notranslate"><span class="pre">full</span></code> and defaults to the device status when omitted. Models render as searchable sub-rows with their support status beneath the device.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">kind</span></code></p></td>
 <td><p>yes</p></td>
 <td><p>Device type, e.g. <code class="docutils literal notranslate"><span class="pre">plate</span> <span class="pre">reader</span></code>, <code class="docutils literal notranslate"><span class="pre">sealer</span></code>, <code class="docutils literal notranslate"><span class="pre">arm</span></code>. Must be one of <code class="docutils literal notranslate"><span class="pre">KINDS</span></code> in <code class="docutils literal notranslate"><span class="pre">docs/_exts/plr_devices/data.py</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">status</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">status</span></code></p></td>
 <td><p>yes</p></td>
 <td><p>One of <code class="docutils literal notranslate"><span class="pre">wip</span></code>, <code class="docutils literal notranslate"><span class="pre">basic</span></code>, <code class="docutils literal notranslate"><span class="pre">mostly</span></code>, <code class="docutils literal notranslate"><span class="pre">full</span></code>. See <a class="reference internal" href="../user_guide/machines.html"><span class="doc">Supported Machines</span></a> for what each level means.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code></p></td>
 <td><p>no</p></td>
 <td><p>Core functions, e.g. <code class="docutils literal notranslate"><span class="pre">[&quot;heating&quot;,</span> <span class="pre">&quot;shaking&quot;]</span></code>. Must come from <code class="docutils literal notranslate"><span class="pre">CAPABILITIES</span></code> in <code class="docutils literal notranslate"><span class="pre">docs/_exts/plr_devices/data.py</span></code>. These drive the badges and the capability filter.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">api</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">api</span></code></p></td>
 <td><p>no</p></td>
 <td><p>Import path of the driver class, e.g. <code class="docutils literal notranslate"><span class="pre">pylabrobot.curiox.CurioxHT2000</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">api_version</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">api_version</span></code></p></td>
 <td><p>no</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">v1</span></code>, or <code class="docutils literal notranslate"><span class="pre">v0</span></code> for drivers still under <code class="docutils literal notranslate"><span class="pre">pylabrobot.legacy</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">doc_slug</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">doc_slug</span></code></p></td>
 <td><p>no</p></td>
 <td><p>The machine’s own page, relative to <code class="docutils literal notranslate"><span class="pre">docs/user_guide/</span></code> and without the extension. Links the device name and builds the <strong>docs</strong> link; verified at build time.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">code_slug</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">code_slug</span></code></p></td>
 <td><p>no</p></td>
 <td><p>The driver’s module or package, relative to <code class="docutils literal notranslate"><span class="pre">pylabrobot/</span></code>. Builds the <strong>code</strong> link to the source on GitHub; verified at build time.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">manager</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">manager</span></code></p></td>
 <td><p>no</p></td>
 <td><p>Forum profile of whoever looks after this driver, e.g. <code class="docutils literal notranslate"><span class="pre">https://discuss.pylabrobot.org/u/rickwierenga</span></code>. Shown as their handle, and who to ask about the device.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">oem</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">oem</span></code></p></td>
 <td><p>no</p></td>
 <td><p>Manufacturer product page.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">notes</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">notes</span></code></p></td>
 <td><p>no</p></td>
-<td><p>One line about which models the entry covers, or what is missing.</p></td>
+<td><p>One line of additional context about the entry, such as functionality that is missing. Use <code class="docutils literal notranslate"><span class="pre">models</span></code> for the hardware models an entry covers.</p></td>
 </tr>
 </tbody>
 </table>
@@ -723,7 +734,11 @@ repository and branch in <code class="docutils literal notranslate"><span class=
 </section>
 <section id="rendering-a-table">
 <h2>Rendering a table<a class="headerlink" href="#rendering-a-table" title="Link to this heading">#</a></h2>
-<p>A bare <code class="docutils literal notranslate"><span class="pre">device-table</span></code> renders every device, with a search box and filter chips:</p>
+<p>A bare <code class="docutils literal notranslate"><span class="pre">device-table</span></code> renders every device, with a search box, a <strong>Show models</strong> toggle and filter
+chips. Models render as sub-rows beneath their device. A device row can reveal its own models, and
+the toggle reveals them all. Each model’s support badge is aligned beneath the device support
+column. Models are initially hidden, but a text search
+always matches them and automatically reveals matching model rows when 10 or fewer devices remain:</p>
 <div class="highlight-md notranslate"><div class="highlight"><pre><span></span>```{device-table}
 ```
 </pre></div>
@@ -744,7 +759,7 @@ pre-filtered list on a vendor page.</p>
 <h2>Rendering a card<a class="headerlink" href="#rendering-a-card" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">device-card</span></code> renders one device. It works anywhere MyST is parsed, including markdown cells in the
 notebooks under <code class="docutils literal notranslate"><span class="pre">docs/user_guide</span></code> — put one at the top of a machine’s hello-world notebook so the
-page carries the same vendor, support level, capabilities and links as the table.</p>
+page carries the same vendor, models, support level, capabilities and links as the table.</p>
 <div class="highlight-md notranslate"><div class="highlight"><pre><span></span>```{device-card} curiox-ht2000
 ```
 </pre></div>

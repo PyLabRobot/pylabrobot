@@ -10,7 +10,7 @@
    "cell_type": "markdown",
    "metadata": {},
    "source": [
-    "```{device-card} kbiosystems-ultraseal-epro\n",
+    "```{device-card} kbiosystems-ultraseal\n",
     "```"
    ],
    "id": "device-card"
