@@ -3,13 +3,13 @@
 pylabrobot.mettler_toledo package
 =================================
 
-.. currentmodule:: pylabrobot.mettler_toledo.mettler_toledo
+.. currentmodule:: pylabrobot.mettler_toledo
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    MettlerToledoWXS205SDU
+    MTSICSDriver
     MettlerToledoResponse
     MettlerToledoError

@@ -3,5 +3,5 @@
 ```{toctree}
 :maxdepth: 1
 
-wxs205sdu/hello-world
+scales/hello-world
 ```
