@@ -93,7 +93,8 @@ python -m pytest docs/_exts/plr_devices/registry_tests.py
 ## Rendering a table
 
 A bare `device-table` renders every device, with a search box, a **Show models** toggle and filter
-chips. Models render as sub-rows beneath their device. They are initially hidden, but a text search
+chips. Models render as sub-rows beneath their device. A device row can reveal its own models, and
+the toggle reveals them all. Models are initially hidden, but a text search
 always matches them and automatically reveals matching model rows when 10 or fewer devices remain:
 
 ````md

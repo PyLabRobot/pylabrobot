@@ -153,6 +153,37 @@ td.plr-device-name {
   font-weight: 600;
 }
 
+tr.plr-device-row[data-has-models="true"] {
+  cursor: pointer;
+}
+
+.plr-device-row-toggle {
+  display: inline-grid;
+  width: 1rem;
+  height: 1rem;
+  margin: 0 0.2rem 0 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--pst-color-text-muted, #666);
+  cursor: pointer;
+  vertical-align: -0.08rem;
+}
+
+.plr-device-row-toggle:hover,
+.plr-device-row-toggle:focus-visible {
+  color: var(--pst-color-primary, #1a4ed8);
+}
+
+.plr-device-row-toggle span {
+  transition: transform 120ms ease;
+}
+
+.plr-device-row-toggle[aria-expanded="true"] span {
+  transform: rotate(90deg);
+}
+
 table.plr-device-table tr.plr-device-model-row td {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;

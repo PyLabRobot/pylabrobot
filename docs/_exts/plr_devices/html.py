@@ -342,18 +342,29 @@ def render_table(
   for device in devices:
     capabilities = "".join(_capability_badge(c) for c in device.get("capabilities", []))
     device_id = str(device["id"])
+    models = [str(model) for model in device.get("models", [])]
 
     name_cell = _cell_link(
       str(device["name"]),
       doc_uri(str(device["doc_slug"])) if device.get("doc_slug") else None,
     )
+    if models:
+      device_label = f'{device["vendor"]} {device["name"]}'
+      name_cell = (
+        '<button type="button" class="plr-device-row-toggle" aria-expanded="false"'
+        f' data-device-label="{escape(device_label)}"'
+        f' aria-label="Show models for {escape(device_label)}">'
+        '<span aria-hidden="true">›</span></button>' + name_cell
+      )
     if device.get("notes"):
       name_cell += _tooltip(
         '<span class="plr-device-note">*</span>', str(device["notes"])
       )
+    models_attr = ' data-has-models="true"' if models else ""
     rows.append(
       f'<tr class="plr-device-row" id="device-{escape(device_id)}"'
       f' data-device-id="{escape(device_id)}"'
+      f"{models_attr}"
       f' data-search="{escape(_search_index(device))}"'
       f' data-vendor="{escape(str(device["vendor"]))}"'
       f' data-status="{escape(str(device["status"]))}"'
@@ -366,8 +377,7 @@ def render_table(
       f"<td>{_manager(device)}</td>"
       "</tr>"
     )
-    for model in device.get("models", []):
-      model = str(model)
+    for model in models:
       rows.append(
         f'<tr class="plr-device-model-row" data-device-id="{escape(device_id)}"'
         f' data-search="{escape(_search_index(device, model))}" hidden>'

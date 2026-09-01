@@ -35,6 +35,11 @@
 
   function applyModels(container, terms, visibleDeviceIds, visibleDeviceCount) {
     var rowsByDevice = Object.create(null);
+    var deviceRowsById = Object.create(null);
+
+    all(".plr-device-row", container).forEach(function (row) {
+      deviceRowsById[row.getAttribute("data-device-id")] = row;
+    });
 
     all(".plr-device-model-row", container).forEach(function (row) {
       var deviceId = row.getAttribute("data-device-id");
@@ -54,6 +59,9 @@
 
     Object.keys(rowsByDevice).forEach(function (deviceId) {
       var modelRows = rowsByDevice[deviceId];
+      var deviceOverride = container._plrModelDeviceOverrides[deviceId];
+      var showDeviceModels =
+        typeof deviceOverride === "boolean" ? deviceOverride : showModels;
       var matchingRows = terms.length
         ? modelRows.filter(function (row) {
             return textMatches(row, terms);
@@ -63,8 +71,23 @@
 
       modelRows.forEach(function (row) {
         var matchesSearch = !onlyMatchingModels || matchingRows.indexOf(row) !== -1;
-        row.hidden = !(showModels && visibleDeviceIds[deviceId] && matchesSearch);
+        row.hidden = !(showDeviceModels && visibleDeviceIds[deviceId] && matchesSearch);
       });
+
+      var deviceRow = deviceRowsById[deviceId];
+      if (deviceRow) {
+        deviceRow._plrModelsVisible = showDeviceModels;
+        var disclosure = deviceRow.querySelector(".plr-device-row-toggle");
+        if (disclosure) {
+          disclosure.setAttribute("aria-expanded", showDeviceModels ? "true" : "false");
+          disclosure.setAttribute(
+            "aria-label",
+            (showDeviceModels ? "Hide" : "Show") +
+              " models for " +
+              disclosure.getAttribute("data-device-label"),
+          );
+        }
+      }
     });
 
     container._plrModelsVisible = showModels;
@@ -106,6 +129,7 @@
   function init(container) {
     container._plrModelsOverride = null;
     container._plrModelsVisible = false;
+    container._plrModelDeviceOverrides = Object.create(null);
 
     var input = container.querySelector(".plr-device-search__input");
     if (input) {
@@ -120,10 +144,20 @@
     var modelToggle = container.querySelector(".plr-device-model-toggle");
     if (modelToggle) {
       modelToggle.addEventListener("click", function () {
+        container._plrModelDeviceOverrides = Object.create(null);
         container._plrModelsOverride = !container._plrModelsVisible;
         apply(container);
       });
     }
+
+    all(".plr-device-row[data-has-models='true']", container).forEach(function (row) {
+      row.addEventListener("click", function (event) {
+        if (event.target.closest("a, .plr-tip")) return;
+        var deviceId = row.getAttribute("data-device-id");
+        container._plrModelDeviceOverrides[deviceId] = !row._plrModelsVisible;
+        apply(container);
+      });
+    });
 
     all(".plr-device-chip", container).forEach(function (chip) {
       chip.addEventListener("click", function () {

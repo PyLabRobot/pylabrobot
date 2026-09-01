@@ -229,6 +229,9 @@ class TestRendering(unittest.TestCase):
     model_count = sum(max(1, len(device.get("models", []))) for device in self.devices)
     self.assertIn(f"Search {model_count} models", html)
     self.assertIn("Show models", html)
+    self.assertIn('class="plr-device-row-toggle"', html)
+    self.assertIn('aria-expanded="false"', html)
+    self.assertIn('data-has-models="true"', html)
     self.assertIn('<tr class="plr-device-model-row" data-device-id="cole-parmer-masterflex"', html)
     self.assertIn(
       '<td class="plr-device-model-name" colspan="6"><span class="plr-device-model">'
