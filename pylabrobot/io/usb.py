@@ -228,7 +228,12 @@ class USB(IOBase):
       # No data available (yet), this will give a timeout error. Don't reraise.
       return None
 
-  async def read(self, timeout: Optional[int] = None, size: Optional[int] = None) -> bytes:
+  async def read(
+    self,
+    timeout: Optional[int] = None,
+    size: Optional[int] = None,
+    endpoint: Optional[int] = None,
+  ) -> bytes:
     """Read a response from the device.
 
     Args:
@@ -236,6 +241,7 @@ class USB(IOBase):
         timeout (specified by the `read_timeout` attribute).
       size: The maximum number of bytes to read. If `None`, read all available data until no
         more packets arrive.
+      endpoint: The endpoint address to read from. If `None`, use the configured read endpoint.
     """
 
     if self.dev is None or self.read_endpoint is None:
@@ -255,7 +261,7 @@ class USB(IOBase):
         last_packet: Optional[bytearray] = None
         while True:  # read while we have data, and while the last packet is the max size.
           remaining = size - len(resp) if size is not None else None
-          last_packet = self._read_packet(size=remaining)
+          last_packet = self._read_packet(size=remaining, endpoint=endpoint)
           if last_packet is not None:
             resp += last_packet
           if self.read_endpoint is None:
@@ -295,6 +301,29 @@ class USB(IOBase):
       data=response.decode("utf-8", errors="backslashreplace"),
     )
     return response
+
+  async def drain(
+    self,
+    endpoint: Optional[int] = None,
+    timeout: float = 0.05,
+    size: int = 512,
+    max_duration: float = 1,
+  ) -> None:
+    """Discard queued input from an endpoint until no packet arrives before the timeout."""
+    if self.dev is None or self.read_endpoint is None:
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
+
+    deadline = time.monotonic() + max_duration
+    loop = asyncio.get_running_loop()
+    while time.monotonic() < deadline:
+      packet = await loop.run_in_executor(
+        self.read_executor,
+        lambda: self._read_packet(size=size, timeout=timeout, endpoint=endpoint),
+      )
+      if packet is None:
+        return
+
+    raise TimeoutError(f"Timed out draining USB device '{self.human_readable_device_name}'.")
 
   def get_available_devices(self) -> List["usb.core.Device"]:
     """Get a list of available devices that match the specified vendor and product IDs, and serial
@@ -593,7 +622,12 @@ class USBValidator(USB):
       align_sequences(expected=next_command.data, actual=decoded)
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  async def read(self, timeout: Optional[float] = None, size: Optional[int] = None) -> bytes:
+  async def read(
+    self,
+    timeout: Optional[float] = None,
+    size: Optional[int] = None,
+    endpoint: Optional[int] = None,
+  ) -> bytes:
     next_command = USBCommand(**self.cr.next_command())
     if not (
       next_command.module == "usb"
@@ -605,6 +639,15 @@ class USBValidator(USB):
     if size is not None:
       data = data[:size]
     return data
+
+  async def drain(
+    self,
+    endpoint: Optional[int] = None,
+    timeout: float = 0.05,
+    size: int = 512,
+    max_duration: float = 1,
+  ) -> None:
+    pass
 
   def ctrl_transfer(
     self,
