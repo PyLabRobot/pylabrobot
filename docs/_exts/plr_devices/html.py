@@ -371,11 +371,9 @@ def render_table(
       rows.append(
         f'<tr class="plr-device-model-row" data-device-id="{escape(device_id)}"'
         f' data-search="{escape(_search_index(device, model))}" hidden>'
-        '<td aria-hidden="true"></td>'
-        '<td class="plr-device-model-name"><span class="plr-device-model">'
+        '<td class="plr-device-model-name" colspan="6"><span class="plr-device-model">'
         '<span class="plr-device-model__arrow" aria-hidden="true">↳</span>'
         f'<span class="plr-device-model__label">{escape(model)}</span></span></td>'
-        '<td colspan="4"></td>'
         "</tr>"
       )
 

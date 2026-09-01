@@ -145,8 +145,7 @@ table.plr-device-table tbody tr[hidden] {
 
 /* Vendor and device names wrap within the same width rather than stretching the table. */
 table.plr-device-table td:first-child,
-td.plr-device-name,
-td.plr-device-model-name {
+td.plr-device-name {
   max-width: 11rem;
 }
 
@@ -163,7 +162,7 @@ table.plr-device-table tr.plr-device-model-row td {
 }
 
 td.plr-device-model-name {
-  padding-left: 0.6rem;
+  padding-left: 1rem;
 }
 
 .plr-device-model {

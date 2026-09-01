@@ -262,9 +262,13 @@
     "oem": "https://www.bmglabtech.com/en/clariostar-plus/"
   },
   {
-    "id": "brooks-preciseflex-pf3400",
+    "id": "brooks-preciseflex",
     "vendor": "Brooks",
-    "name": "PreciseFlex PF3400",
+    "name": "PreciseFlex",
+    "models": [
+      "PreciseFlex PF3400",
+      "PreciseFlex PF400"
+    ],
     "kind": "arm",
     "capabilities": [
       "arm"
@@ -275,23 +279,7 @@
     "code_slug": "brooks/precise_flex",
     "doc_slug": "brooks/precise_flex/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.preciseflexrobots.com/lab-automation-applicable-products#preciseflex3400-labproducts"
-  },
-  {
-    "id": "brooks-preciseflex-pf400",
-    "vendor": "Brooks",
-    "name": "PreciseFlex PF400",
-    "kind": "arm",
-    "capabilities": [
-      "arm"
-    ],
-    "status": "full",
-    "api": "pylabrobot.brooks.precise_flex.PreciseFlex",
-    "api_version": "v1",
-    "code_slug": "brooks/precise_flex",
-    "doc_slug": "brooks/precise_flex/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.preciseflexrobots.com/lab-automation-applicable-products#preciseflex400_labproducts"
+    "oem": "https://www.preciseflexrobots.com/lab-automation-applicable-products"
   },
   {
     "id": "byonoy-absorbance-96",
@@ -481,23 +469,10 @@
     "id": "hamilton-star",
     "vendor": "Hamilton",
     "name": "STAR",
-    "kind": "liquid handler",
-    "capabilities": [
-      "liquid handling",
-      "arm"
+    "models": [
+      "STAR",
+      "STARlet"
     ],
-    "status": "full",
-    "api": "pylabrobot.legacy.liquid_handling.backends.STARBackend",
-    "api_version": "v0",
-    "code_slug": "legacy/liquid_handling/backends/hamilton/STAR_backend",
-    "doc_slug": "hamilton/star/index",
-    "manager": "https://discuss.pylabrobot.org/u/camillomoschner",
-    "oem": "https://www.hamiltoncompany.com/microlab-star"
-  },
-  {
-    "id": "hamilton-starlet",
-    "vendor": "Hamilton",
-    "name": "STARlet",
     "kind": "liquid handler",
     "capabilities": [
       "liquid handling",
@@ -753,52 +728,26 @@
     "oem": "https://www.biosearchtech.com/products/pcr-reagents-kits-and-instruments/pcr-instruments-and-software/snpline-genotyping-automation/kube-plate-sealer"
   },
   {
-    "id": "kbiosystems-ultraseal-epro",
+    "id": "kbiosystems-ultraseal",
     "vendor": "KBiosystems",
-    "name": "Ultraseal ePRO",
+    "name": "Ultraseal",
+    "models": [
+      "Ultraseal ePRO",
+      "Ultraseal PRO",
+      "Ultraseal XT PRO"
+    ],
     "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
     "status": "mostly",
-    "api": "pylabrobot.kbiosystems.KBiosystemsUltrasealEPRO",
+    "api": "pylabrobot.kbiosystems",
     "api_version": "v1",
     "code_slug": "kbiosystems",
-    "doc_slug": "kbiosystems/ultraseal-epro/hello-world",
+    "doc_slug": "kbiosystems/index",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://kbiosystems.com/product/ultraseal-epro"
-  },
-  {
-    "id": "kbiosystems-ultraseal-pro",
-    "vendor": "KBiosystems",
-    "name": "Ultraseal PRO",
-    "kind": "sealer",
-    "capabilities": [
-      "sealing"
-    ],
-    "status": "mostly",
-    "api": "pylabrobot.kbiosystems.KBiosystemsUltrasealPRO",
-    "api_version": "v1",
-    "code_slug": "kbiosystems",
-    "doc_slug": "kbiosystems/ultraseal-pro/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://kbiosystems.com/product/ultraseal-pro"
-  },
-  {
-    "id": "kbiosystems-ultraseal-xt-pro",
-    "vendor": "KBiosystems",
-    "name": "Ultraseal XT PRO",
-    "kind": "sealer",
-    "capabilities": [
-      "sealing"
-    ],
-    "status": "mostly",
-    "api": "pylabrobot.kbiosystems.KBiosystemsUltrasealXTPro",
-    "api_version": "v1",
-    "code_slug": "kbiosystems",
-    "doc_slug": "kbiosystems/ultraseal-xt-pro/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://kbiosystems.com/product/ultraseal-xt-pro"
+    "notes": "Each model has its own driver class and hello-world guide.",
+    "oem": "https://kbiosystems.com/"
   },
   {
     "id": "keyence-barcode-scanner",
@@ -1022,140 +971,21 @@
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
   },
   {
-    "id": "qinstruments-bioshake-3000",
+    "id": "qinstruments-bioshake",
     "vendor": "QInstruments",
-    "name": "BioShake 3000",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
+    "name": "BioShake",
+    "models": [
+      "BioShake 3000",
+      "BioShake 3000 elm",
+      "BioShake 3000 elm DWP",
+      "BioShake 3000-T",
+      "BioShake 3000-T elm",
+      "BioShake 5000 elm",
+      "BioShake D30 elm",
+      "BioShake D30-T elm",
+      "BioShake Q1",
+      "BioShake Q2"
     ],
-    "status": "full",
-    "api": "pylabrobot.qinstruments.BioShake3000",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000/"
-  },
-  {
-    "id": "qinstruments-bioshake-3000-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake 3000 elm",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "full",
-    "api": "pylabrobot.qinstruments.BioShake3000Elm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-3000-elm-dwp",
-    "vendor": "QInstruments",
-    "name": "BioShake 3000 elm DWP",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "full",
-    "api": "pylabrobot.qinstruments.BioShake3000ElmDWP",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000-elm-dwp/"
-  },
-  {
-    "id": "qinstruments-bioshake-3000-t",
-    "vendor": "QInstruments",
-    "name": "BioShake 3000-T",
-    "kind": "heater shaker",
-    "capabilities": [
-      "shaking",
-      "heating"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShake3000T",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000-t/"
-  },
-  {
-    "id": "qinstruments-bioshake-3000-t-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake 3000-T elm",
-    "kind": "heater shaker",
-    "capabilities": [
-      "shaking",
-      "heating"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShake3000TElm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-3000-t-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-5000-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake 5000 elm",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShake5000Elm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-5000-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-d30-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake D30 elm",
-    "kind": "shaker",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShakeD30Elm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-d30-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-d30-t-elm",
-    "vendor": "QInstruments",
-    "name": "BioShake D30-T elm",
-    "kind": "heater shaker",
-    "capabilities": [
-      "shaking",
-      "heating"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShakeD30TElm",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-d30-t-elm/"
-  },
-  {
-    "id": "qinstruments-bioshake-q1",
-    "vendor": "QInstruments",
-    "name": "BioShake Q1",
     "kind": "heater shaker",
     "capabilities": [
       "shaking",
@@ -1163,30 +993,13 @@
       "active cooling"
     ],
     "status": "full",
-    "api": "pylabrobot.qinstruments.BioShakeQ1",
+    "api": "pylabrobot.qinstruments.BioShake",
     "api_version": "v1",
     "code_slug": "qinstruments",
     "doc_slug": "qinstruments/bioshake/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-q1/"
-  },
-  {
-    "id": "qinstruments-bioshake-q2",
-    "vendor": "QInstruments",
-    "name": "BioShake Q2",
-    "kind": "heater shaker",
-    "capabilities": [
-      "shaking",
-      "heating",
-      "active cooling"
-    ],
-    "status": "wip",
-    "api": "pylabrobot.qinstruments.BioShakeQ2",
-    "api_version": "v1",
-    "code_slug": "qinstruments",
-    "doc_slug": "qinstruments/bioshake/hello-world",
-    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.qinstruments.com/automation/bioshake-q2/"
+    "notes": "Capabilities and support completeness vary by model; use a model-specific factory function.",
+    "oem": "https://www.qinstruments.com/"
   },
   {
     "id": "qinstruments-coldplate",
