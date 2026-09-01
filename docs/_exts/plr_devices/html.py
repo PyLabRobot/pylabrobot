@@ -105,13 +105,31 @@ def _capability_badge(capability: str, styles: Optional[Dict[str, str]] = None) 
 
 
 def _status_badge(device: Device, styles: Optional[Dict[str, str]] = None) -> str:
-  status = str(device["status"])
+  return _status_badge_for_status(str(device["status"]), styles)
+
+
+def _status_badge_for_status(
+  status: str, styles: Optional[Dict[str, str]] = None
+) -> str:
   label = STATUS_LABELS.get(status, status)
   extra = _tint(STATUS_HUES.get(status)) if styles else ""
   return (
     f'<span class="plr-device-status plr-device-status--{escape(status)}"'
     f"{_style(styles, 'status', extra)}>{escape(label)}</span>"
   )
+
+
+def _model_name(model: Dict[str, str]) -> str:
+  return str(model["name"])
+
+
+def _model_status(device: Device, model: Dict[str, str]) -> str:
+  return str(model.get("status", device["status"]))
+
+
+def _model_status_label(device: Device, model: Dict[str, str]) -> str:
+  status = _model_status(device, model)
+  return STATUS_LABELS.get(status, status)
 
 
 def _api_version_badge(device: Device, styles: Optional[Dict[str, str]] = None) -> str:
@@ -193,7 +211,7 @@ def _link_slots(device: Device, doc_uri: DocURI, code_uri: CodeURI) -> str:
   return "".join(rendered)
 
 
-def _search_index(device: Device, model: Optional[str] = None) -> str:
+def _search_index(device: Device, model: Optional[Dict[str, str]] = None) -> str:
   """Everything the search box matches against, lowercased.
 
   A device row indexes every model. A model sub-row indexes only itself, so a specific model
@@ -208,11 +226,19 @@ def _search_index(device: Device, model: Optional[str] = None) -> str:
         device.get("notes", ""),
         str(device.get("manager", "")).rstrip("/").rsplit("/", 1)[-1],
         *device.get("capabilities", []),
-        *device.get("models", []),
+        *(_model_name(entry) for entry in device.get("models", [])),
+        *(_model_status_label(device, entry) for entry in device.get("models", [])),
       ]
     )
   else:
-    parts.extend([*device.get("capabilities", []), model])
+    status = _model_status(device, model)
+    parts.extend(
+      [
+        *device.get("capabilities", []),
+        _model_name(model),
+        STATUS_LABELS.get(status, status),
+      ]
+    )
   return " ".join(str(p) for p in parts if p).lower()
 
 
@@ -231,7 +257,16 @@ def render_card(
 
   rows = []
   if device.get("models"):
-    rows.append(("Models", ", ".join(escape(str(model)) for model in device["models"])))
+    rows.append(
+      (
+        "Models",
+        ", ".join(
+          f"{escape(_model_name(model))} "
+          f"({escape(_model_status_label(device, model))})"
+          for model in device["models"]
+        ),
+      )
+    )
   if device.get("api"):
     api = escape(str(device["api"]))
     rows.append(("API", f'<code class="plr-device-api"{_style(styles, "api")}>{api}</code>'))
@@ -277,7 +312,13 @@ def render_card_markdown(device: Device, doc_uri: DocURI, code_uri: CodeURI) -> 
 
   lines = [head]
   if device.get("models"):
-    lines.append(f"Models: {', '.join(device['models'])}")
+    lines.append(
+      "Models: "
+      + ", ".join(
+        f"{_model_name(model)} ({_model_status_label(device, model)})"
+        for model in device["models"]
+      )
+    )
   if device.get("capabilities"):
     lines.append(f"Capabilities: {', '.join(device['capabilities'])}")
 
@@ -342,7 +383,7 @@ def render_table(
   for device in devices:
     capabilities = "".join(_capability_badge(c) for c in device.get("capabilities", []))
     device_id = str(device["id"])
-    models = [str(model) for model in device.get("models", [])]
+    models = list(device.get("models", []))
 
     name_cell = _cell_link(
       str(device["name"]),
@@ -378,12 +419,17 @@ def render_table(
       "</tr>"
     )
     for model in models:
+      model_name = _model_name(model)
+      model_status = _model_status(device, model)
       rows.append(
         f'<tr class="plr-device-model-row" data-device-id="{escape(device_id)}"'
         f' data-search="{escape(_search_index(device, model))}" hidden>'
-        '<td class="plr-device-model-name" colspan="6"><span class="plr-device-model">'
+        '<td class="plr-device-model-name" colspan="3"><span class="plr-device-model">'
         '<span class="plr-device-model__arrow" aria-hidden="true">↳</span>'
-        f'<span class="plr-device-model__label">{escape(model)}</span></span></td>'
+        f'<span class="plr-device-model__label">{escape(model_name)}</span></span></td>'
+        f'<td class="plr-device-model-status">'
+        f'{_tooltip(_status_badge_for_status(model_status), STATUS_DESCRIPTIONS.get(model_status, ""))}'
+        '</td><td colspan="2"></td>'
         "</tr>"
       )
 

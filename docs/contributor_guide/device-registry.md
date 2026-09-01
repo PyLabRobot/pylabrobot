@@ -15,12 +15,12 @@ Append an object to `docs/_static/devices.json`:
   "vendor": "Cole Parmer",
   "name": "Masterflex L/S",
   "models": [
-    "07522-20",
-    "07522-30",
-    "07551-20",
-    "07551-30",
-    "07575-30",
-    "07575-40"
+    {"name": "07522-20", "status": "full"},
+    {"name": "07522-30", "status": "full"},
+    {"name": "07551-20", "status": "full"},
+    {"name": "07551-30", "status": "full"},
+    {"name": "07575-30", "status": "full"},
+    {"name": "07575-40", "status": "full"}
   ],
   "kind": "pump",
   "capabilities": ["pumping"],
@@ -38,7 +38,7 @@ Append an object to `docs/_static/devices.json`:
 | `id` | yes | Unique kebab-case identifier. Used by `device-card` and as the HTML anchor (`#device-<id>`). |
 | `vendor` | yes | Manufacturer, as users would search for it. |
 | `name` | yes | Display name for the device or device family, without the vendor. |
-| `models` | no | Exact model names or numbers when one entry covers several models, e.g. `["07522-20", "07522-30"]`. They render as searchable sub-rows beneath the device. |
+| `models` | no | Model objects when one entry covers several models. `name` is required; `status` may be `wip`, `basic`, `mostly`, or `full` and defaults to the device status when omitted. Models render as searchable sub-rows with their support status beneath the device. |
 | `kind` | yes | Device type, e.g. `plate reader`, `sealer`, `arm`. Must be one of `KINDS` in `docs/_exts/plr_devices/data.py`. |
 | `status` | yes | One of `wip`, `basic`, `mostly`, `full`. See {doc}`/user_guide/machines` for what each level means. |
 | `capabilities` | no | Core functions, e.g. `["heating", "shaking"]`. Must come from `CAPABILITIES` in `docs/_exts/plr_devices/data.py`. These drive the badges and the capability filter. |
@@ -94,7 +94,8 @@ python -m pytest docs/_exts/plr_devices/registry_tests.py
 
 A bare `device-table` renders every device, with a search box, a **Show models** toggle and filter
 chips. Models render as sub-rows beneath their device. A device row can reveal its own models, and
-the toggle reveals them all. Models are initially hidden, but a text search
+the toggle reveals them all. Each model's support badge is aligned beneath the device support
+column. Models are initially hidden, but a text search
 always matches them and automatically reveals matching model rows when 10 or fewer devices remain:
 
 ````md

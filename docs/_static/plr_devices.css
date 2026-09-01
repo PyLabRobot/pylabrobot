@@ -196,6 +196,10 @@ td.plr-device-model-name {
   padding-left: 1rem;
 }
 
+td.plr-device-model-status {
+  white-space: nowrap;
+}
+
 .plr-device-model {
   display: grid;
   grid-template-columns: 1rem minmax(0, 1fr);

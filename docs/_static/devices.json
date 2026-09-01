@@ -263,8 +263,8 @@
     "vendor": "Brooks",
     "name": "PreciseFlex",
     "models": [
-      "PreciseFlex PF3400",
-      "PreciseFlex PF400"
+      {"name": "PreciseFlex PF3400", "status": "full"},
+      {"name": "PreciseFlex PF400", "status": "full"}
     ],
     "kind": "arm",
     "capabilities": [
@@ -348,12 +348,12 @@
     "vendor": "Cole Parmer",
     "name": "Masterflex L/S",
     "models": [
-      "07522-20",
-      "07522-30",
-      "07551-20",
-      "07551-30",
-      "07575-30",
-      "07575-40"
+      {"name": "07522-20", "status": "full"},
+      {"name": "07522-30", "status": "full"},
+      {"name": "07551-20", "status": "full"},
+      {"name": "07551-30", "status": "full"},
+      {"name": "07575-30", "status": "full"},
+      {"name": "07575-40", "status": "full"}
     ],
     "kind": "pump",
     "capabilities": [
@@ -467,8 +467,8 @@
     "vendor": "Hamilton",
     "name": "STAR",
     "models": [
-      "STAR",
-      "STARlet"
+      {"name": "STAR", "status": "full"},
+      {"name": "STARlet", "status": "full"}
     ],
     "kind": "liquid handler",
     "capabilities": [
@@ -689,9 +689,9 @@
     "vendor": "Inheco",
     "name": "Thermoshake",
     "models": [
-      "Thermoshake",
-      "Thermoshake AC",
-      "Thermoshake RM"
+      {"name": "Thermoshake", "status": "full"},
+      {"name": "Thermoshake AC", "status": "wip"},
+      {"name": "Thermoshake RM", "status": "wip"}
     ],
     "kind": "heater shaker",
     "capabilities": [
@@ -729,9 +729,9 @@
     "vendor": "KBiosystems",
     "name": "Ultraseal",
     "models": [
-      "Ultraseal ePRO",
-      "Ultraseal PRO",
-      "Ultraseal XT PRO"
+      {"name": "Ultraseal ePRO", "status": "mostly"},
+      {"name": "Ultraseal PRO", "status": "mostly"},
+      {"name": "Ultraseal XT PRO", "status": "mostly"}
     ],
     "kind": "sealer",
     "capabilities": [
@@ -972,16 +972,16 @@
     "vendor": "QInstruments",
     "name": "BioShake",
     "models": [
-      "BioShake 3000",
-      "BioShake 3000 elm",
-      "BioShake 3000 elm DWP",
-      "BioShake 3000-T",
-      "BioShake 3000-T elm",
-      "BioShake 5000 elm",
-      "BioShake D30 elm",
-      "BioShake D30-T elm",
-      "BioShake Q1",
-      "BioShake Q2"
+      {"name": "BioShake 3000", "status": "full"},
+      {"name": "BioShake 3000 elm", "status": "full"},
+      {"name": "BioShake 3000 elm DWP", "status": "full"},
+      {"name": "BioShake 3000-T", "status": "wip"},
+      {"name": "BioShake 3000-T elm", "status": "wip"},
+      {"name": "BioShake 5000 elm", "status": "wip"},
+      {"name": "BioShake D30 elm", "status": "wip"},
+      {"name": "BioShake D30-T elm", "status": "wip"},
+      {"name": "BioShake Q1", "status": "full"},
+      {"name": "BioShake Q2", "status": "wip"}
     ],
     "kind": "heater shaker",
     "capabilities": [
@@ -995,7 +995,7 @@
     "code_slug": "qinstruments",
     "doc_slug": "qinstruments/bioshake/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "notes": "Capabilities and support completeness vary by model; use a model-specific factory function.",
+    "notes": "Capabilities vary by model; use a model-specific factory function.",
     "oem": "https://www.qinstruments.com/"
   },
   {
@@ -1111,9 +1111,9 @@
     "vendor": "Thermo Fisher",
     "name": "ALPS",
     "models": [
-      "ALPS 300",
-      "ALPS 3000",
-      "ALPS 5000"
+      {"name": "ALPS 300", "status": "mostly"},
+      {"name": "ALPS 3000", "status": "mostly"},
+      {"name": "ALPS 5000", "status": "mostly"}
     ],
     "kind": "sealer",
     "capabilities": [
@@ -1148,12 +1148,12 @@
     "vendor": "Thermo Fisher",
     "name": "Cytomat",
     "models": [
-      "Cytomat 2 C425",
-      "Cytomat 2 C450 SHAKE",
-      "Cytomat 2 C_50",
-      "Cytomat 5C",
-      "Cytomat 6000",
-      "Cytomat 6002"
+      {"name": "Cytomat 2 C425", "status": "full"},
+      {"name": "Cytomat 2 C450 SHAKE", "status": "full"},
+      {"name": "Cytomat 2 C_50", "status": "wip"},
+      {"name": "Cytomat 5C", "status": "full"},
+      {"name": "Cytomat 6000", "status": "full"},
+      {"name": "Cytomat 6002", "status": "full"}
     ],
     "kind": "storage",
     "capabilities": [
