@@ -731,8 +731,15 @@ class Resource(SerializableMixin):
     """
 
     resource = self._resources().get(name)
-    if resource is None or not (resource is self or resource.is_in_subtree_of(self)):
+    if resource is None:
       raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
+    if not (resource is self or resource.is_in_subtree_of(self)):
+      where = (
+        f"assigned to '{resource.parent.name}'" if resource.parent else "the root of this tree"
+      )
+      raise ResourceNotFoundError(
+        f"'{name}' is not at or beneath '{self.name}'. It is in the same tree, {where}."
+      )
     return resource
 
   def has_resource(self, name: str) -> bool:
