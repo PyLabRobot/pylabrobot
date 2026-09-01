@@ -7,7 +7,7 @@ Source: MT-SICS Interface Command Set for Automated Precision Weigh Modules (spe
 
 **Important:** I1 reports which standardized level sets are fully implemented, but
 individual commands may exist outside those levels. I0 is the definitive source of
-command support. During setup(), the backend queries I0 to discover all available
+command support. During setup(), the driver queries I0 to discover all available
 commands. `send_command` checks the command against this list and raises if unsupported.
 
 **Hardware-validated on WXS205SDU WXA-Bridge (S/N: B207696838, firmware: 1.10):**
@@ -15,7 +15,7 @@ I1 reports levels [0, 1] but I0 discovers 62 commands across levels 0-3.
 Commands not in I0 (C, D, DW, SC, ZC, TC, I50) return ES (syntax error).
 
 Status key:
-- DONE = implemented in backend.py (read active; set active or commented out per write safety)
+- DONE = implemented in driver.py (read active; set active or commented out per write safety)
 - STUB = commented out entirely (requires physical interaction)
 - HIGH = high priority for implementation
 - MED  = medium priority
@@ -275,8 +275,8 @@ The MT-SICS spec defines **194 commands** (counting F01-F16 as 16 individual com
 
 | Category | Count | Description |
 |----------|-------|-------------|
-| Backend (active) | 54 | Implemented and callable |
-| Backend (commented out) | 27 | Set/write counterparts and physical interaction commands |
+| Driver (active) | 54 | Implemented and callable |
+| Driver (commented out) | 27 | Set/write counterparts and physical interaction commands |
 | Not implemented | 113 | Not available on WXS205SDU or not applicable |
 
 ### WXS205SDU coverage
@@ -285,7 +285,7 @@ The WXS205SDU reports **62 commands** via I0. Of these:
 
 | State | Count |
 |-------|-------|
-| Active in backend | 49 |
+| Active in driver | 49 |
 | Commented out (physical/write) | 7 |
 | Not implemented (streaming) | 2 (SIR, SR) |
 | Undocumented (not in spec) | 4 (I22-I25) |
@@ -299,8 +299,8 @@ to validate the response format. The pattern is:
 
 1. Confirm the command appears in the device's I0 list
 2. Send the command and observe the raw response
-3. Add a method to `backend.py` (the command check happens in `send_command`)
-4. Add a test to `backend_tests.py`
+3. Add a method to `driver.py` (the command check happens in `send_command`)
+4. Add a test to `driver_tests.py`
 
 ### Remaining priorities
 

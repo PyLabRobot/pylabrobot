@@ -138,7 +138,7 @@ can have individual commands from levels it does not fully support. The WXS205SD
 reports I1 levels [0, 1] but I0 discovers 62 commands across levels 0-3, including
 M21, M28, and many other Level 2 commands.
 
-During `setup()`, the backend queries I0 to discover all available commands.
+During `setup()`, the driver queries I0 to discover all available commands.
 `send_command` checks the command against this list and raises if unsupported.
 
 ## Command levels
@@ -170,7 +170,7 @@ TIM set also persists; only reset via MT-SICS, FSET, or terminal menu, not @.
 Commands that modify device settings (M01 set, M02 set, M03 set, etc.) persist
 to memory and survive power cycles. They cannot be undone with @ reset - only
 via FSET (factory reset) or the terminal menu. Write methods are commented out
-in the backend to prevent accidental modification.
+in the driver to prevent accidental modification.
 
 Exceptions: `set_date()`, `set_time()`, and `set_device_id()` are active (not
 commented out) since they do not change weighing behaviour.

@@ -127,14 +127,12 @@ await p.run_for_duration(speed=100, duration=30)
 Taking a measurement from a Mettler Toledo scale:
 
 ```python
-from pylabrobot.scales import Scale
-from pylabrobot.scales.mettler_toledo import MettlerToledoWXS205SDU
+from pylabrobot.mettler_toledo import MTSICSDriver
 
-backend = MettlerToledoWXS205SDU(port="/dev/cu.usbserial-110")
-scale = Scale(backend=backend, size_x=0, size_y=0, size_z=0)
+scale = MTSICSDriver(port="/dev/cu.usbserial-110")
 await scale.setup()
 
-weight = await scale.get_weight()
+weight = await scale.read_weight()
 ```
 
 ### Heater shakers ([docs](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/heating_shaking/heating_shaking.html))

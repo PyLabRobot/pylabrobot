@@ -1,4 +1,4 @@
-"""Mettler Toledo scale backend using the MT-SICS (Mettler Toledo Standard Interface Command Set) serial protocol."""
+"""Mettler Toledo scale driver using the MT-SICS serial protocol."""
 
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
@@ -11,11 +11,10 @@ from typing import List, Literal, Optional, Set, Union
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
-from pylabrobot.scales.mettler_toledo.confirmed_firmware_versions import CONFIRMED_FIRMWARE_VERSIONS
-from pylabrobot.scales.mettler_toledo.errors import MettlerToledoError
-from pylabrobot.scales.scale_backend import ScaleBackend
+from .confirmed_firmware_versions import CONFIRMED_FIRMWARE_VERSIONS
+from .errors import MettlerToledoError
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -31,16 +30,15 @@ class MettlerToledoResponse:
   data: List[str] = field(default_factory=list)
 
 
-# TODO: rename to MTSICSDriver in v1.0.0-beta
-class MettlerToledoWXS205SDUBackend(ScaleBackend):
-  """Backend for Mettler Toledo scales using the MT-SICS protocol.
+class MTSICSDriver:
+  """Driver for Mettler Toledo scales using the MT-SICS protocol.
 
   MT-SICS (Mettler Toledo Standard Interface Command Set) is the serial communication
-  protocol used by Mettler Toledo's Automated Precision Weigh Modules. This backend is
+  protocol used by Mettler Toledo's Automated Precision Weigh Modules. This driver is
   compatible with any MT-SICS device, including the WXS, WMS, and WX series.
 
-  During setup(), the backend queries I0 to discover which commands the connected device
-  supports, then queries I1/I2/I4 for device identity. ``send_command`` will raise
+  During setup(), the driver queries I0 to discover which commands the connected device
+  supports, then queries the device identity and firmware. ``send_command`` will raise
   ``MettlerToledoError`` if the command is not in the device's I0 command list.
 
   Tested on the WXS205SDU (used by Hamilton in the Liquid Verification Kit).
@@ -57,14 +55,13 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   # === Constructor ===
 
   def __init__(self, port: Optional[str] = None, vid: int = 0x0403, pid: int = 0x6001):
-    """Create a new MT-SICS backend.
+    """Create a new MT-SICS driver.
 
     Args:
       port: Serial port path. If None, auto-detected by VID:PID.
       vid: USB vendor ID (default 0x0403 = FTDI).
       pid: USB product ID (default 0x6001 = FT232R).
     """
-    super().__init__()
     self._supported_commands: Set[str] = set()
 
     self.io = Serial(
@@ -106,7 +103,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       "Firmware: %s\n"
       "Capacity: %.1f g\n"
       "Supported commands (%d): %s",
-      self.io._human_readable_device_name,
+      self.io.human_readable_device_name,
       self.io.port,
       self.device_type,
       self.configuration,
@@ -125,7 +122,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         "Confirmed versions: %s. "
         "If this version works correctly, please contribute it to "
         "confirmed_firmware_versions.py so others can benefit.",
-        self.io._human_readable_device_name,
+        self.io.human_readable_device_name,
         self.firmware_version,
         ", ".join(sorted(CONFIRMED_FIRMWARE_VERSIONS)),
       )
@@ -145,13 +142,10 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       await self.reset()
     except (OSError, TimeoutError, MettlerToledoError):
       logger.warning(
-        "[%s] Could not reset device before disconnecting", self.io._human_readable_device_name
+        "[%s] Could not reset device before disconnecting", self.io.human_readable_device_name
       )
-    logger.info("[%s] Disconnected from %s", self.io._human_readable_device_name, self.io.port)
+    logger.info("[%s] Disconnected from %s", self.io.human_readable_device_name, self.io.port)
     await self.io.stop()
-
-  def serialize(self) -> dict:
-    return {**super().serialize(), "port": self.io.port}
 
   # === Device discovery ===
 
@@ -288,7 +282,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         message=f"MT-SICS command '{cmd}' is not supported by this device.",
       )
 
-    logger.log(LOG_LEVEL_IO, "[%s] Sent command: %s", self.io._human_readable_device_name, command)
+    logger.log(LOG_LEVEL_IO, "[%s] Sent command: %s", self.io.human_readable_device_name, command)
     await self.io.write(command.encode() + b"\r\n")
 
     try:
@@ -306,7 +300,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
         logger.log(
           LOG_LEVEL_IO,
           "[%s] Received response: %s",
-          self.io._human_readable_device_name,
+          self.io.human_readable_device_name,
           raw_response,
         )
         fields = shlex.split(raw_response.decode("utf-8").strip())
@@ -332,12 +326,12 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       if "C" in self._supported_commands:
         logger.warning(
           "[%s] Command interrupted, sending C to cancel pending commands",
-          self.io._human_readable_device_name,
+          self.io.human_readable_device_name,
         )
         await self.io.write(b"C\r\n")
       logger.warning(
         "[%s] Command interrupted, flushing serial buffer",
-        self.io._human_readable_device_name,
+        self.io.human_readable_device_name,
       )
       await self.io.reset_input_buffer()
       raise

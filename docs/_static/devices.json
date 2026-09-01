@@ -863,10 +863,10 @@
       "weighing"
     ],
     "status": "full",
-    "api": "pylabrobot.mettler_toledo.MettlerToledoWXS205SDU",
+    "api": "pylabrobot.mettler_toledo.MTSICSDriver",
     "api_version": "v1",
-    "code_slug": "mettler_toledo",
-    "doc_slug": "mettler_toledo/wxs205sdu/hello-world",
+    "code_slug": "mettler_toledo/scales",
+    "doc_slug": "mettler_toledo/scales/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html"
   },
