@@ -1,8 +1,9 @@
 import textwrap
 import unittest
 
+from pylabrobot.resources import Deck, TipRack
 from pylabrobot.resources.corning import (
-  Cor_96_wellplate_360ul_Fb,
+  cor_96_wellplate_360uL_Fb,
 )
 from pylabrobot.resources.hamilton import (
   PLT_CAR_L5AC_A00,
@@ -29,8 +30,8 @@ class HamiltonDeckTests(unittest.TestCase):
     tip_car[3] = hamilton_96_tiprack_1000uL_filter(name="tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-    plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
+    plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
+    plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
 
     deck.assign_child_resource(tip_car, rails=1)
     deck.assign_child_resource(plt_car, rails=21)
@@ -71,6 +72,52 @@ class HamiltonDeckTests(unittest.TestCase):
       ),
     )
 
+  def test_teaching_rack_excluded_by_nominal_volume_search(self):
+    """The built-in teaching rack holds teaching needles (nominal_volume 0), so searching
+    the deck's tipracks by tip nominal_volume excludes it: the five added 300 uL racks
+    match, the teaching rack does not."""
+    deck = STARLetDeck()
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
+    for i in range(5):
+      tip_car[i] = hamilton_96_tiprack_300uL_filter(name=f"tip_rack_0{i}")
+    deck.assign_child_resource(tip_car, rails=1)
+
+    tip_racks = [r for r in deck.get_all_children() if isinstance(r, TipRack)]
+    matches = [
+      tr
+      for tr in tip_racks
+      if (tip := next((ts.get_tip() for ts in tr.get_all_items() if ts.has_tip()), None))
+      and tip.nominal_volume == 300
+    ]
+
+    self.assertEqual(len(tip_racks), 6)  # 5 added 300 uL racks + the built-in teaching rack
+    self.assertEqual(len(matches), 5)
+    self.assertNotIn("teaching_tip_rack", {tr.name for tr in matches})
+
+  def test_get_trash_area96_survives_serialization_round_trip(self):
+    """`serialize()` encodes the 96 trash as a child and sets `with_trash96=False`, so the
+    rebuilt deck never runs the `with_trash96` branch in `__init__`. `get_trash_area96()` must
+    still resolve it from the child tree rather than raising."""
+    deck = self.build_layout()
+    original_location = deck.get_trash_area96().get_location_wrt(deck)
+
+    deck2 = Deck.deserialize(deck.serialize())
+
+    self.assertIn("trash_core96", [child.name for child in deck2.children])
+    self.assertEqual(deck2.get_trash_area96().get_location_wrt(deck2), original_location)
+
+  def test_get_trash_area96_raises_after_clear_include_trash(self):
+    """`clear(include_trash=True)` unassigns the 96 trash, so `get_trash_area96()` must raise
+    rather than hand back the now-orphaned resource."""
+    deck = self.build_layout()
+    deck.get_trash_area96()  # resolves while still assigned
+
+    deck.clear(include_trash=True)
+
+    self.assertNotIn("trash_core96", [child.name for child in deck.children])
+    with self.assertRaises(RuntimeError):
+      deck.get_trash_area96()
+
   def test_assign_gigantic_resource(self):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
     deck = STARLetDeck()
@@ -79,9 +126,9 @@ class HamiltonDeckTests(unittest.TestCase):
     self.assertEqual(
       log.output,
       [
-        "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+        "WARNING:pylabrobot.resources.hamilton.hamilton_decks:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
         "careful when traversing the deck.",
-        "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+        "WARNING:pylabrobot.resources.hamilton.hamilton_decks:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
         "careful when grabbing this resource.",
       ],
     )

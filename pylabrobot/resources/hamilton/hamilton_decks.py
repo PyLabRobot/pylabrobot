@@ -8,12 +8,12 @@ from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError
-from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_300uL_filter
+from pylabrobot.resources.hamilton.tip_creators import hamilton_teaching_needle_300uL
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.trash import Trash
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 _RAILS_WIDTH = 22.5  # space between rails (mm)
@@ -458,12 +458,11 @@ class HamiltonSTARDeck(HamiltonDeck):
       origin=origin,
     )
 
-    self._trash96: Optional[Trash] = None
     if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
-      self._trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
+      trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
       self.assign_child_resource(
-        resource=self._trash96,
+        resource=trash96,
         location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=216.4),
       )
 
@@ -493,11 +492,11 @@ class HamiltonSTARDeck(HamiltonDeck):
       if with_teaching_rack:
         tip_spots = [
           TipSpot(
-            name=f"tip_spot_{i}",
+            name=f"teaching_tip_rack_tip_spot_{i}",
             size_x=9.0,
             size_y=9.0,
             size_z=0,
-            make_tip=hamilton_tip_300uL_filter,
+            make_tip=hamilton_teaching_needle_300uL,
           )
           for i in range(8)
         ]
@@ -548,11 +547,11 @@ class HamiltonSTARDeck(HamiltonDeck):
     return Coordinate(x=x, y=63, z=100)
 
   def get_trash_area96(self) -> Trash:
-    if self._trash96 is None:
+    if not self.has_resource("trash_core96"):
       raise RuntimeError(
         "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
       )
-    return self._trash96
+    return cast(Trash, self.get_resource("trash_core96"))
 
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""

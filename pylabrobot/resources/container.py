@@ -1,15 +1,19 @@
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from pylabrobot.serializer import serialize
 from pylabrobot.utils.interpolation import interpolate_1d
 
 from .coordinate import Coordinate
+from .lid import Liddable
 from .resource import Resource
 from .volume_tracker import VolumeTracker
 
 
-class Container(Resource):
-  """A container is an abstract base class for a resource that can hold liquid."""
+class Container(Liddable, Resource):
+  """A container is an abstract base class for a resource that can hold liquid.
+
+  Via the :class:`Liddable` mixin, a container (trough, tube, petri dish, well) can host a lid.
+  """
 
   def __init__(
     self,
@@ -25,6 +29,7 @@ class Container(Resource):
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones: Optional[List[Tuple[Coordinate, Coordinate]]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Create a new container.
 
@@ -48,6 +53,7 @@ class Container(Resource):
       size_z=size_z,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self._material_z_thickness = material_z_thickness
     self.height_volume_data = (
@@ -79,6 +85,9 @@ class Container(Resource):
 
     self.max_volume = max_volume or (size_x * size_y * size_z)
     self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
+    # Notify state-update subscribers (e.g. the Visualizer) on volume changes; without this
+    # a bare Container like a Trough updates its volume internally but never broadcasts it.
+    self.tracker.register_callback(self._state_updated)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
     self.no_go_zones: List[Tuple[Coordinate, Coordinate]] = self._validate_no_go_zones(
@@ -147,10 +156,14 @@ class Container(Resource):
     }
 
   def serialize_state(self) -> Dict[str, Any]:
-    return self.tracker.serialize()
+    return {**super().serialize_state(), **self.tracker.serialize()}
 
   def load_state(self, state: Dict[str, Any]):
-    self.tracker.load_state(state)
+    super().load_state(state)
+    # The tracker only consumes its own keys; extras (e.g. "rotation") are
+    # already handled by ``super().load_state``.
+    tracker_state = {k: v for k, v in state.items() if k != "rotation"}
+    self.tracker.load_state(tracker_state)
 
   def supports_compute_height_volume_functions(self) -> bool:
     return (

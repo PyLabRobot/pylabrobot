@@ -17,14 +17,14 @@ usb = ["pyusb", "libusb-package"]
 ftdi = ["pylibftdi", "pyusb"]
 hid = ["hid"]
 modbus = ["pymodbus>=3.0.0,<3.7.0"]
-opentrons = ["opentrons-http-api-client==0.2.0"]
+opentrons = ["opentrons-http-api-client==0.2.1"]
 sila = ["zeroconf>=0.131.0", "grpcio"]
-microscopy = ["numpy>=1.26", "opencv-python"]
-pico = ["PyLabRobot[microscopy,sila]"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,sila]"]
+cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
+pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
+xarm = ["xarm-python-sdk"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,modbus,opentrons,sila,pico,xarm]"]
 test = [
   "pytest",
-  "pytest-timeout",
 ]
 dev = [
   "PyLabRobot[all,test]",
@@ -53,7 +53,7 @@ namespaces = false
 exclude = ["tools*", "docs*"]
 
 [tool.setuptools.package-data]
-pylabrobot = ["visualizer/*", "version.txt"]
+pylabrobot = ["visualizer/*", "visualizer/img/*", "version.txt"]
 
 [tool.ruff]
 line-length = 100

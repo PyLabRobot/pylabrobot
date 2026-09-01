@@ -63,7 +63,7 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
   - Cleanliness: 390015: Free of detectable DNase, RNase
   - ANSI/SLAS-format for compatibility with automated systems
   - Tolerances: "Uniform external dimensions and tolerances"
-  - Each well is segmented into four V bottom wells similar to Cor_Axy_24_wellplate_10mL_Vb.
+  - Each well is segmented into four V bottom wells similar to cor_axy_24_wellplate_10mL_Vb.
   - The bottom can only be reached when using 2 or 4 channels.
   """
   return Plate(
@@ -90,6 +90,7 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=_compute_volume_from_height_Porvair_6_reservoir_47ml_Vb,
       compute_height_from_volume=_compute_height_from_volume_Porvair_6_reservoir_47ml_Vb,
+      name_prefix=name,
     ),
   )
 
@@ -150,6 +151,7 @@ def Porvair_24_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
       dz=5.8,  # measured and calibrated manually
       item_dx=9.05,
       item_dy=36,
+      name_prefix=name,
       **well_kwargs,
     ),
   )

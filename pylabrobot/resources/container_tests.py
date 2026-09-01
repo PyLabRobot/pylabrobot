@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from pylabrobot.liquid_handling.errors import ChannelsDoNotFitError
+from pylabrobot.legacy.liquid_handling.errors import ChannelsDoNotFitError
 from pylabrobot.serializer import serialize
 
 from .container import Container
@@ -34,21 +34,13 @@ class TestContainer(unittest.TestCase):
         "size_x": 10,
         "size_y": 10,
         "size_z": 10,
+        "type": "Container",
         "material_z_thickness": 1,
-        "category": None,
-        "model": None,
-        "barcode": None,
-        "preferred_pickup_location": None,
         "max_volume": 1000,
         "compute_volume_from_height": serialize(compute_volume_from_height),
         "compute_height_from_volume": serialize(compute_height_from_volume),
         "height_volume_data": None,
         "no_go_zones": [],
-        "parent_name": None,
-        "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
-        "type": "Container",
-        "children": [],
-        "location": None,
       },
     )
 
@@ -203,13 +195,26 @@ class TestContainer(unittest.TestCase):
     c = Container(name="c", size_x=10, size_y=142, size_z=10, no_go_zones=zones)
     self.assertEqual(len(c.no_go_zones), 3)
 
+  def test_tracker_change_notifies_state_update_callbacks(self):
+    """A bare Container (e.g. a Trough) must forward volume-tracker changes to its
+    state-update callbacks, so subscribers like the Visualizer see the level change and do
+    not show a frozen volume."""
+    c = Container(name="c", size_x=10, size_y=10, size_z=10, max_volume=1000)
+    received: list = []
+    c.register_state_update_callback(received.append)
+    c.tracker.set_volume(500)
+    c.tracker.remove_liquid(100)
+    c.tracker.commit()
+    self.assertGreaterEqual(len(received), 2)  # at least set_volume and remove_liquid fired
+    self.assertEqual(c.tracker.get_used_volume(), 400)
+
 
 class TestNoGoZoneCollision(unittest.TestCase):
   def _make_container(self, size_y, no_go_zones=None):
     return Container(name="c", size_x=10, size_y=size_y, size_z=10, no_go_zones=no_go_zones)
 
   def test_no_zones_uses_standard_spread(self):
-    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+    from pylabrobot.legacy.liquid_handling.channel_positioning import compute_channel_offsets
 
     c = self._make_container(90)
     result = compute_channel_offsets(c, num_channels=1)
@@ -218,7 +223,7 @@ class TestNoGoZoneCollision(unittest.TestCase):
     self.assertAlmostEqual(result[0].y, 0.0)
 
   def test_1_channel_in_2_compartments(self):
-    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+    from pylabrobot.legacy.liquid_handling.channel_positioning import compute_channel_offsets
 
     # 90mm container, divider at Y=44-46 -> 2 compartments [0,44] and [46,90]
     # edge_clearance = 2.0
@@ -235,7 +240,7 @@ class TestNoGoZoneCollision(unittest.TestCase):
     self.assertAlmostEqual(result[0].y, 23.0)
 
   def test_2_channels_across_2_compartments(self):
-    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+    from pylabrobot.legacy.liquid_handling.channel_positioning import compute_channel_offsets
 
     c = self._make_container(
       90,
@@ -247,7 +252,7 @@ class TestNoGoZoneCollision(unittest.TestCase):
     self.assertGreater(result[0].y, result[1].y)
 
   def test_4_channels_across_2_compartments(self):
-    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+    from pylabrobot.legacy.liquid_handling.channel_positioning import compute_channel_offsets
 
     c = self._make_container(
       90,
@@ -257,7 +262,7 @@ class TestNoGoZoneCollision(unittest.TestCase):
     self.assertEqual(len(result), 4)
 
   def test_raises_when_impossible(self):
-    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+    from pylabrobot.legacy.liquid_handling.channel_positioning import compute_channel_offsets
 
     # Entire container is no-go
     c = self._make_container(
@@ -268,7 +273,7 @@ class TestNoGoZoneCollision(unittest.TestCase):
       compute_channel_offsets(c, num_channels=1)
 
   def test_3_compartments_6_channels(self):
-    from pylabrobot.liquid_handling.channel_positioning import compute_channel_offsets
+    from pylabrobot.legacy.liquid_handling.channel_positioning import compute_channel_offsets
 
     # 150mm container, 2 dividers -> 3 compartments, 6 channels -> 2 per compartment
     c = self._make_container(

@@ -1,4 +1,6 @@
 import asyncio
+import concurrent.futures
+import errno
 import functools
 import http.server
 import inspect
@@ -8,7 +10,6 @@ import math
 import os
 import re
 import threading
-import time
 import webbrowser
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -25,7 +26,15 @@ except ImportError as e:
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import Resource
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
+
+_SERVER_PORT_ATTEMPTS = 100
+_SERVER_STARTUP_TIMEOUT = 10.0
+
+
+def _is_address_in_use(error: OSError) -> bool:
+  """Return whether a server failed because its requested address is already in use."""
+  return error.errno == errno.EADDRINUSE
 
 
 @functools.lru_cache(maxsize=None)
@@ -50,12 +59,32 @@ def _get_public_methods(cls: type) -> list:
   return sorted(methods)
 
 
-def _serialize_with_methods(resource: Resource) -> dict:
-  """Serialize a resource and enrich with Python method signatures for the visualizer."""
+def _serialize_resource_tree(resource: Resource) -> dict:
+  """Serialize a resource and its children for the visualizer.
+
+  Method signatures are not embedded per node; identical for every instance of a class,
+  they are sent once per class via :func:`_build_method_registry` and attached by type in
+  the browser. On a full deck this avoids repeating the same signature list on every well.
+  """
   data = resource.serialize()
-  data["methods"] = _get_public_methods(type(resource))  # type: ignore[arg-type]
-  data["children"] = [_serialize_with_methods(child) for child in resource.children]
+  data["children"] = [_serialize_resource_tree(child) for child in resource.children]
   return data
+
+
+def _build_method_registry(resource: Resource, registry: Optional[dict] = None) -> dict:
+  """Map each resource class name in the tree to its public method signatures.
+
+  The serialized ``type`` of a resource is its class name, so the browser can look up a
+  node's methods by ``type`` instead of receiving the same list on every node.
+  """
+  if registry is None:
+    registry = {}
+  type_name = type(resource).__name__
+  if type_name not in registry:
+    registry[type_name] = _get_public_methods(type(resource))  # type: ignore[arg-type]
+  for child in resource.children:
+    _build_method_registry(child, registry)
+  return registry
 
 
 def _sanitize_floats(obj):
@@ -107,9 +136,9 @@ class Visualizer:
     Args:
       host: The hostname of the file and websocket server.
       ws_port: The port of the websocket server. If this port is in use, the port will be
-        incremented until a free port is found.
+        incremented until a free port is found. Use `0` to let the operating system choose a port.
       fs_port: The port of the file server. If this port is in use, the port will be incremented
-        until a free port is found.
+        until a free port is found. Use `0` to let the operating system choose a port.
       open_browser: If `True`, the visualizer will open a browser window when it is started.
       name: A custom name to display in the browser header. If ``None``, the filename of the
         calling script or notebook is detected automatically.
@@ -188,6 +217,11 @@ class Visualizer:
     self._flush_scheduled = False
 
     self.received: List[dict] = []
+    # Ids of commands whose responses a caller is actively awaiting. Only these
+    # responses are retained in ``self.received``; responses to fire-and-forget
+    # commands (every state update) are dropped so the list cannot grow without
+    # bound over a long-running session.
+    self._pending_response_ids: set = set()
 
   @property
   def websocket(
@@ -242,33 +276,38 @@ class Visualizer:
     """Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`."""
 
-    while True:
-      try:
+    try:
+      while True:
         message = await websocket.recv()
-      except websockets.exceptions.ConnectionClosed:
-        return
-      except asyncio.CancelledError:
-        return
+        data = json.loads(message)
+        if data.get("id") in self._pending_response_ids:
+          self.received.append(data)
 
-      data = json.loads(message)
-      self.received.append(data)
+        # If the event is "ready", then we can save the connection and send the saved messages.
+        if data.get("event") == "ready":
+          self._websocket = websocket
+          await self._send_resources_and_state()
 
-      # If the event is "ready", then we can save the connection and send the saved messages.
-      if data.get("event") == "ready":
-        self._websocket = websocket
-        await self._send_resources_and_state()
-
-      if "event" in data:
-        await self.handle_event(data.get("event"), data)
-      else:
-        logger.warning("Unhandled message: %s", message)
+        if "event" in data:
+          await self.handle_event(data.get("event"), data)
+        else:
+          logger.warning("Unhandled message: %s", message)
+    except (websockets.exceptions.ConnectionClosed, asyncio.CancelledError):
+      return
+    finally:
+      if self._websocket is websocket:
+        self._websocket = None
 
   def _assemble_command(
     self,
     event: str,
     data: Dict[str, Any],
   ) -> Tuple[str, str]:
-    """Assemble a command into standard JSON form."""
+    """Assemble a command into standard JSON form.
+
+    Will fall-back to stringifying non-JSON-serializable types.
+    These can potentially exist in resource metadata.
+    """
     id_ = self._generate_id()
     command_data = {
       "id": id_,
@@ -276,7 +315,10 @@ class Visualizer:
       "data": data,
       "event": event,
     }
-    return json.dumps(_sanitize_floats(command_data)), id_
+    return json.dumps(
+      _sanitize_floats(command_data),
+      default=str,
+    ), id_
 
   def has_connection(self) -> bool:
     """Return `True` if a websocket connection has been established."""
@@ -320,12 +362,16 @@ class Visualizer:
       await self.websocket.send(serialized_data)
 
       if wait_for_response:
-        while True:
-          if len(self.received) > 0:
-            message = self.received.pop()
-            if "id" in message and message["id"] == id_:
-              break
-          await asyncio.sleep(0.1)
+        self._pending_response_ids.add(id_)
+        try:
+          while True:
+            if len(self.received) > 0:
+              message = self.received.pop()
+              if "id" in message and message["id"] == id_:
+                break
+            await asyncio.sleep(0.1)
+        finally:
+          self._pending_response_ids.discard(id_)
 
         if not message["success"]:
           error = message.get("error", "unknown error")
@@ -355,7 +401,7 @@ class Visualizer:
 
     # 1. VS Code sets __vsc_ipynb_file__ in the IPython user namespace.
     try:
-      ipython = get_ipython()  # type: ignore[name-defined]  # noqa: F821
+      ipython = get_ipython()  # type: ignore[name-defined]
       vsc_file = getattr(ipython, "user_ns", {}).get("__vsc_ipynb_file__")
       if vsc_file:
         return str(os.path.basename(vsc_file))
@@ -448,7 +494,11 @@ class Visualizer:
       raise RuntimeError("The visualizer has already been started.")
 
     await self._run_ws_server()
-    self._run_file_server()
+    try:
+      await self._run_file_server()
+    except BaseException:
+      await self._stop_ws_server(send_stop_event=False)
+      raise
     self.setup_finished = True
 
   async def _run_ws_server(self):
@@ -459,33 +509,39 @@ class Visualizer:
 
     async def run_server():
       self._stop_ = self.loop.create_future()
-      while True:
+      for attempt in range(_SERVER_PORT_ATTEMPTS):
         try:
-          async with websockets.asyncio.server.serve(self._socket_handler, self.host, self.ws_port):
+          async with websockets.asyncio.server.serve(
+            self._socket_handler, self.host, self.ws_port
+          ) as server:
+            if self.ws_port == 0:
+              self.ws_port = next(iter(server.sockets)).getsockname()[1]
             print(f"Websocket server started at http://{self.host}:{self.ws_port}")
-            lock.release()
+            startup.set_result(None)
             await self.stop_
-            break
+            return
         except asyncio.CancelledError:
-          pass
-        except OSError:
-          # If the port is in use, try the next port.
+          raise
+        except OSError as error:
+          if not _is_address_in_use(error) or attempt == _SERVER_PORT_ATTEMPTS - 1:
+            raise
           self.ws_port += 1
 
     def start_loop():
-      self.loop.run_until_complete(run_server())
+      try:
+        self.loop.run_until_complete(run_server())
+      except BaseException as error:
+        if not startup.done():
+          startup.set_exception(error)
 
-    # Acquire a lock to prevent setup from returning until the server is running.
-    lock = threading.Lock()
-    lock.acquire()
+    startup: concurrent.futures.Future[None] = concurrent.futures.Future()
     self._loop = asyncio.new_event_loop()
     self._t = threading.Thread(target=start_loop, daemon=True)
     self.t.start()
 
-    while lock.locked():
-      time.sleep(0.001)
+    await asyncio.wait_for(asyncio.wrap_future(startup), timeout=_SERVER_STARTUP_TIMEOUT)
 
-  def _run_file_server(self):
+  async def _run_file_server(self):
     """Start a simple webserver to serve static files."""
 
     dirname = os.path.dirname(__file__)
@@ -495,7 +551,7 @@ class Visualizer:
         "Could not find Visualizer files. Please run from the root of the repository."
       )
 
-    def start_server(lock):
+    def run_server():
       ws_port, fs_port, source_filename = self.ws_port, self.fs_port, self._source_filename
       favicon_path = self._favicon_path
       liquid_color = self._liquid_color
@@ -542,45 +598,82 @@ class Visualizer:
           else:
             return super().do_GET()
 
-      while True:
+      for attempt in range(_SERVER_PORT_ATTEMPTS):
         try:
           self._httpd = http.server.HTTPServer(
             (self.host, self.fs_port),
             QuietSimpleHTTPRequestHandler,
           )
+          if self.fs_port == 0:
+            self.fs_port = self._httpd.server_port
           print(
             f"File server started at http://{self.host}:{self.fs_port} . "
             "Open this URL in your browser."
           )
-          lock.release()
+          startup.set_result(None)
           break
-        except OSError:
+        except OSError as error:
+          if not _is_address_in_use(error) or attempt == _SERVER_PORT_ATTEMPTS - 1:
+            raise
           self.fs_port += 1
 
       self.httpd.serve_forever()
 
-    lock = threading.Lock()
-    lock.acquire()
+    def start_server():
+      try:
+        run_server()
+      except BaseException as error:
+        if not startup.done():
+          startup.set_exception(error)
+
+    startup: concurrent.futures.Future[None] = concurrent.futures.Future()
     self._fst = threading.Thread(
       name="visualizer_fs",
       target=start_server,
-      args=(lock,),
       daemon=True,
     )
     self.fst.start()
 
     # Wait for the server to start before opening the browser so that we can get the correct port.
-    while lock.locked():
-      time.sleep(0.001)
+    await asyncio.wait_for(asyncio.wrap_future(startup), timeout=_SERVER_STARTUP_TIMEOUT)
 
     if self.open_browser:
       webbrowser.open(f"http://{self.host}:{self.fs_port}")
+
+  async def _stop_ws_server(self, send_stop_event: bool) -> None:
+    """Stop the WebSocket server and wait for its thread to exit.
+
+    Args:
+      send_stop_event: Whether to notify a connected browser before stopping the server.
+    """
+
+    server_loop = self.loop
+    server_thread = self.t
+    stop_future = self.stop_
+
+    try:
+      if send_stop_event and self.has_connection():
+        await self.send_command("stop", wait_for_response=False)
+    finally:
+      if not stop_future.done():
+        server_loop.call_soon_threadsafe(stop_future.set_result, "done")
+      await asyncio.to_thread(server_thread.join, _SERVER_STARTUP_TIMEOUT)
+      if server_thread.is_alive():
+        raise TimeoutError("Timed out waiting for the WebSocket server to stop.")
+
+      self.received.clear()
+      self._pending_response_ids.clear()
+      self._websocket = None
+      self._loop = None
+      self._t = None
+      self._stop_ = None
 
   async def stop(self):
     """Stop the visualizer.
 
     Raises:
       RuntimeError: If the visualizer has not been started.
+      TimeoutError: If the WebSocket server does not stop within the timeout.
     """
 
     # -- file server --
@@ -593,19 +686,7 @@ class Visualizer:
     self._fst = None
 
     # -- websocket --
-    if self.has_connection():
-      # send stop event to the browser
-      await self.send_command("stop", wait_for_response=False)
-
-      # must be thread safe, because event loop is running in a separate thread
-      self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
-
-    # Clear all relevant attributes.
-    self.received.clear()
-    self._websocket = None
-    self._loop = None
-    self._t = None
-    self._stop_ = None
+    await self._stop_ws_server(send_stop_event=True)
 
     self.setup_finished = False
 
@@ -616,7 +697,10 @@ class Visualizer:
     # send the serialized root resource (including all children) to the browser
     await self.send_command(
       "set_root_resource",
-      {"resource": _serialize_with_methods(self._root_resource)},
+      {
+        "resource": _serialize_resource_tree(self._root_resource),
+        "method_registry": _build_method_registry(self._root_resource),
+      },
       wait_for_response=False,
     )
 
@@ -655,7 +739,8 @@ class Visualizer:
 
     # Send a `resource_assigned` event to the browser.
     data = {
-      "resource": _serialize_with_methods(resource),
+      "resource": _serialize_resource_tree(resource),
+      "method_registry": _build_method_registry(resource),
       "state": resource.serialize_all_state(),
       "parent_name": (resource.parent.name if resource.parent else None),
     }

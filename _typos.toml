@@ -1,23 +1,11 @@
-[default]
-extend-ignore-identifiers-re = [
-    "AttributeID.*Supress.*",
-]
-
-[default.extend-identifiers]
-AttributeIDSupressMenu = "AttributeIDSupressMenu"
-
 [default.extend-words]
 # words that should not be corrected
-dot_acn = ".acn"
-dot_fot = ".fot"
-dot_ist = ".ist"
 OT = "OT"
 ot = "ot"
 ser = "ser"
 ba = "ba"
 nd = "nd"
 PN = "PN"
-tro = "tro"
 FO = "FO"
 UE = "UE"
 commutated = "commutated"
@@ -28,6 +16,28 @@ mis = "mis"
 RHE = "RHE"
 "ASEND" = "ASEND"
 caf = "caf"
+
+# Sartorius Entris II, a product name.
+Entris = "Entris"
+
+# FluidX IntelliXcap firmware vocabulary. `*WasNotSuccesful` are fault tokens
+# keyed in ERROR_MESSAGES and passed to _wait_for_idle as the expected error
+# frame; `onnOK` and `LOK` are reply frames. Renaming them breaks the driver.
+Succesful = "Succesful"
+onn = "onn"
+LOK = "LOK"
+
+# HighRes LidValet settings keys. HighResLidValetSettings.from_lines matches
+# each dataclass field name uppercased against the device's `settings` output,
+# so these spellings are the device's, not ours.
+ouput = "ouput"
+hegiht = "hegiht"
+
+# Celigo vendor XML schema identifiers. These spellings appear in instrument
+# configuration files and must remain exact for configuration loading.
+Accleration = "Accleration"
+Tranformation = "Tranformation"
+tranformation = "tranformation"
 
 [files]
 extend-exclude = [

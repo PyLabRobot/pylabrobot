@@ -3,11 +3,28 @@ import ctypes
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from io import IOBase
-from typing import Optional, cast
+from typing import Optional, Tuple, cast
+
+from pylabrobot.events import emit_event
 
 try:
   import pylibftdi.driver
   from pylibftdi import Device, FtdiError
+
+  class _USBAddressDevice(Device):
+    """pylibftdi device opened by libusb bus and device address."""
+
+    def __init__(self, usb_bus: int, usb_device_address: int, **kwargs):
+      self._usb_bus = usb_bus
+      self._usb_device_address = usb_device_address
+      super().__init__(**kwargs)
+
+    def _open_device(self) -> int:
+      return int(
+        self.fdll.ftdi_usb_open_bus_addr(
+          ctypes.byref(self.ctx), self._usb_bus, self._usb_device_address
+        )
+      )
 
   HAS_PYLIBFTDI = True
 except ImportError as e:
@@ -30,11 +47,25 @@ from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 logger = logging.getLogger(__name__)
 
 
+def _parse_usb_address(address: str) -> Tuple[int, Tuple[int, ...]]:
+  """Parse a USB topology path '<bus>-<port>[.<port>...]' into its bus and ports."""
+  bus_str, sep, port_str = address.partition("-")
+  if not sep:
+    raise ValueError(f"USB address must be '<bus>-<port>[.<port>...]', got {address!r}")
+  try:
+    bus = int(bus_str)
+    ports = tuple(int(port) for port in port_str.split(".")) if port_str else ()
+  except ValueError as exc:
+    raise ValueError(f"Invalid USB address {address!r}: {exc}") from exc
+  return bus, ports
+
+
 class FTDICommand(Command):
   data: str
 
-  def __init__(self, device_id: str, action: str, data: str):
-    super().__init__(module="ftdi", device_id=device_id, action=action)
+  def __init__(self, device_id: str, action: str, data: str, module: str = "ftdi"):
+    super().__init__(module=module, device_id=device_id, action=action)
+    self.data = data
 
 
 class FTDI(IOBase):
@@ -60,6 +91,7 @@ class FTDI(IOBase):
     vid: Optional[int] = None,
     pid: Optional[int] = None,
     interface_select: Optional[int] = None,
+    usb_address: Optional[str] = None,
   ):
     if not HAS_PYLIBFTDI:
       global _FTDI_ERROR
@@ -74,19 +106,24 @@ class FTDI(IOBase):
         f"Import error: {_PYUSB_ERROR}"
       )
 
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
     self._device_id = device_id
     self._vid = vid
     self._pid = pid
     self._interface_select = interface_select
+    self._usb_address = usb_address
 
     # Will be resolved in setup()
     self._dev: Optional[Device] = None
     self._executor: Optional[ThreadPoolExecutor] = None
+    # Bytes off the wire that no read has taken yet, and the read still in flight, if any.
+    self._unread = bytearray()
+    self._pending_read: Optional["asyncio.Future"] = None
+    self._detached_kernel_driver: Optional[Tuple[int, int, int]] = None
 
     if get_capture_or_validation_active():
       raise RuntimeError(
-        f"Cannot create a new FTDI object for '{self._human_readable_device_name}' while capture or validation is active"
+        f"Cannot create a new FTDI object for '{self.human_readable_device_name}' while capture or validation is active"
       )
 
   @property
@@ -178,32 +215,155 @@ class FTDI(IOBase):
     device_serial_number = cast(str, usb.util.get_string(device, device.iSerialNumber))
     return device_serial_number
 
-  async def setup(self):
-    """Initialize the FTDI device connection with device resolution."""
+  def _resolve_device_location(self) -> Tuple[int, int]:
+    """Resolve a topology path to the exact libusb bus/device-address pair."""
+    if self._vid is None or self._pid is None:
+      raise RuntimeError("usb_address requires both vid and pid to be specified.")
+    assert self._usb_address is not None
+    bus, ports = _parse_usb_address(self._usb_address)
+    for device in usb.core.find(find_all=True, idVendor=self._vid, idProduct=self._pid):
+      try:
+        device_ports = tuple(device.port_numbers) if device.port_numbers else ()
+      except (ValueError, NotImplementedError):
+        continue
+      if device.bus == bus and device_ports == ports:
+        if device.address is None:
+          raise RuntimeError(f"USB device at {self._usb_address!r} has no device address")
+        return int(device.bus), int(device.address)
+    raise RuntimeError(
+      f"No device with VID:PID {self._vid:04x}:{self._pid:04x} found at USB path "
+      f"{self._usb_address!r}."
+    )
+
+  @staticmethod
+  def _usb_device_at(bus: int, address: int):
+    return next(
+      (
+        device
+        for device in usb.core.find(find_all=True)
+        if device.bus == bus and device.address == address
+      ),
+      None,
+    )
+
+  def _detach_kernel_driver(self, bus: int, address: int) -> None:
+    """Release a topology-selected FTDI before pylibftdi tries to claim it."""
+    interface = max(0, (self._interface_select or 1) - 1)
+    device = self._usb_device_at(bus, address)
+    if device is None:
+      raise RuntimeError(f"USB device at bus {bus}, address {address} disappeared before open")
+    try:
+      try:
+        kernel_driver_active = device.is_kernel_driver_active(interface)
+      except NotImplementedError:
+        logger.debug("USB backend does not support inspecting kernel-driver state")
+        return
+      if kernel_driver_active:
+        try:
+          device.detach_kernel_driver(interface)
+        except NotImplementedError:
+          logger.debug("USB backend does not support detaching kernel drivers")
+          return
+        self._detached_kernel_driver = (bus, address, interface)
+    finally:
+      usb.util.dispose_resources(device)
+
+  def _reattach_kernel_driver(self) -> None:
+    detached = getattr(self, "_detached_kernel_driver", None)
+    self._detached_kernel_driver = None
+    if detached is None:
+      return
+    bus, address, interface = detached
+    device = self._usb_device_at(bus, address)
+    if device is None:
+      logger.warning(
+        "Could not reattach the kernel driver: USB device at bus %s, address %s disappeared",
+        bus,
+        address,
+      )
+      return
+    try:
+      if not device.is_kernel_driver_active(interface):
+        device.attach_kernel_driver(interface)
+    except (NotImplementedError, usb.core.USBError) as exc:
+      logger.warning("Could not reattach the FTDI kernel driver: %s", exc)
+    finally:
+      usb.util.dispose_resources(device)
+
+  def _setup_sync(self) -> None:
+    """Resolve and open the device. Runs on the executor that owns all device calls."""
     if self._dev is not None and not self._dev.closed:
       self._dev.close()
-    try:
-      # Resolve which device to connect to
-      self._device_id = self._resolve_device_serial()
+    self._dev = None
 
-      # Create and open device
-      self._dev = Device(
+    if self._usb_address is not None:
+      usb_bus, usb_device_address = self._resolve_device_location()
+      self._detach_kernel_driver(usb_bus, usb_device_address)
+      self._device_id = self._usb_address
+      dev = _USBAddressDevice(
+        lazy_open=True,
+        usb_bus=usb_bus,
+        usb_device_address=usb_device_address,
+        pid=self._pid,
+        vid=self._vid,
+        interface_select=self._interface_select,
+      )
+    else:
+      self._device_id = self._resolve_device_serial()
+      dev = Device(
         lazy_open=True,
         device_id=self.device_id,
         pid=self._pid,
         vid=self._vid,
         interface_select=self._interface_select,
       )
-      self._dev.open()
-      logger.info(f"Successfully opened FTDI device: {self.device_id}")
-    except FtdiError as e:
-      raise RuntimeError(
-        f"Failed to open FTDI device for '{self._human_readable_device_name}': {e}. "
-        "Is the device connected? Is it in use by another process? "
-        "Try restarting the kernel."
-      ) from e
+    try:
+      dev.open()
+    except BaseException:
+      try:
+        dev.close()
+      except Exception:
+        logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
+      self._reattach_kernel_driver()
+      raise
+    self._dev = dev
 
-    self._executor = ThreadPoolExecutor(max_workers=1)
+  async def setup(self):
+    """Initialize the FTDI device connection with device resolution."""
+    if self._executor is None:
+      self._executor = ThreadPoolExecutor(max_workers=1)
+    loop = asyncio.get_running_loop()
+    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    try:
+      await asyncio.shield(setup_future)
+    except BaseException as exc:
+      if isinstance(exc, asyncio.CancelledError):
+        try:
+          await setup_future
+        except BaseException:
+          pass
+      if self._dev is not None:
+        try:
+          await loop.run_in_executor(self._executor, self._dev.close)
+        except Exception:
+          logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
+        self._dev = None
+      await loop.run_in_executor(self._executor, self._reattach_kernel_driver)
+      self._shutdown_executor()
+      if isinstance(exc, FtdiError):
+        raise RuntimeError(
+          f"Failed to open FTDI device for '{self.human_readable_device_name}': {exc}. "
+          "Is the device connected? Is it in use by another process? "
+          "Try restarting the kernel."
+        ) from exc
+      raise
+    logger.info(f"Successfully opened FTDI device: {self.device_id}")
+
+  def _shutdown_executor(self) -> None:
+    if self._executor is not None:
+      # the worker is idle here, so this does not block the event loop
+      self._executor.shutdown(wait=False, cancel_futures=True)
+      self._executor = None
 
   @property
   def device_id(self) -> str:
@@ -234,6 +394,7 @@ class FTDI(IOBase):
   async def usb_reset(self):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_reset())
+    self._discard_reads()
     logger.log(LOG_LEVEL_IO, "[%s] usb_reset", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_reset", data=""))
 
@@ -272,6 +433,7 @@ class FTDI(IOBase):
   async def usb_purge_rx_buffer(self):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer())
+    self._discard_reads()
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_rx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_purge_rx_buffer", data=""))
 
@@ -293,46 +455,167 @@ class FTDI(IOBase):
     )
     return stat.value
 
-  async def get_serial(self) -> str:
+  async def request_serial(self) -> str:
     return self.device_id
 
   async def stop(self):
-    if self._dev is not None:
-      self.dev.close()
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+    loop = asyncio.get_running_loop()
+    executor = self._executor
+    first_error: Optional[BaseException] = None
+
+    async def attempt(operation) -> None:
+      nonlocal first_error
+      future = loop.run_in_executor(executor, operation)
+      try:
+        await asyncio.shield(future)
+      except asyncio.CancelledError as exc:
+        try:
+          await future
+        except Exception:
+          logger.warning("FTDI shutdown operation failed after cancellation", exc_info=True)
+        if first_error is None:
+          first_error = exc
+      except BaseException as exc:
+        if first_error is None:
+          first_error = exc
+        else:
+          logger.warning("Additional FTDI shutdown operation failed", exc_info=True)
+
+    try:
+      if self._dev is not None:
+        await attempt(self.dev.close)
+        self._dev = None
+      if getattr(self, "_detached_kernel_driver", None) is not None:
+        await attempt(self._reattach_kernel_driver)
+    finally:
+      try:
+        self._shutdown_executor()
+      except BaseException as exc:
+        if first_error is None:
+          first_error = exc
+        else:
+          logger.warning("FTDI executor shutdown failed", exc_info=True)
+      finally:
+        self._discard_reads()
+    if first_error is not None:
+      raise first_error
+
+  def _discard_reads(self) -> None:
+    """Drop read data buffered here and in flight, once the caller has declared it stale."""
+    self._unread.clear()
+    self._pending_read = None
+
+  def _keep(self, chunk) -> None:
+    """Add what came off the wire to the buffer that read() serves from.
+
+    pylibftdi returns str, decoded with latin-1, when the device was opened in text mode. setup()
+    opens it in byte mode, but latin-1 round-trips every byte value, so encoding back gives
+    exactly what was on the wire either way.
+    """
+    self._unread.extend(chunk if isinstance(chunk, bytes) else chunk.encode("latin-1"))
+
+  def _buffer_read(self, future: "asyncio.Future") -> None:
+    """Keep the bytes of a read whose caller was cancelled, for the next read to take."""
+    if future is not self._pending_read:
+      return  # a purge, reset or close has since declared everything in flight stale
+    self._pending_read = None
+    if future.cancelled() or future.exception() is not None:
+      return
+    self._keep(future.result())
 
   async def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self.device_id, action="write", data=data.hex()))
-    return cast(int, self.dev.write(data))
+    loop = asyncio.get_running_loop()
+    # shield: a call handed to the worker cannot be recalled, so cancelling the caller would
+    # otherwise leave the device holding a partial command, or none, with no way to tell which.
+    bytes_written = cast(
+      int, await asyncio.shield(loop.run_in_executor(self._executor, self.dev.write, data))
+    )
+    emit_event(
+      "io.write",
+      transport="ftdi",
+      device=self.human_readable_device_name,
+      device_id=self.device_id,
+      data=data.hex(),
+    )
+    return bytes_written
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    data = self.dev.read(num_bytes)
-    logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
-    capturer.record(
-      FTDICommand(
+    if not self._unread:
+      pending = self._pending_read
+      if pending is None or pending.done():
+        loop = asyncio.get_running_loop()
+        pending = loop.run_in_executor(self._executor, self.dev.read, num_bytes)
+        self._pending_read = pending
+      try:
+        # shield: the worker keeps going after the caller is gone, so its bytes are held for the
+        # next read instead of being dropped part-way through a response.
+        chunk = await asyncio.shield(pending)
+      except asyncio.CancelledError:
+        pending.add_done_callback(self._buffer_read)
+        raise
+      if pending is self._pending_read:
+        self._pending_read = None
+        self._keep(chunk)
+    data = bytes(self._unread[:num_bytes])
+    del self._unread[:num_bytes]
+    if len(data) != 0:
+      logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
+      capturer.record(FTDICommand(device_id=self.device_id, action="read", data=data.hex()))
+      emit_event(
+        "io.read",
+        transport="ftdi",
+        device=self.human_readable_device_name,
         device_id=self.device_id,
-        action="read",
-        data=data if isinstance(data, str) else data.hex(),
+        data=data.hex(),
       )
-    )
-    return cast(bytes, data)
+    return data
 
-  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    data = self.dev.readline()
-    logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
-    capturer.record(FTDICommand(device_id=self.device_id, action="readline", data=data.hex()))
-    return cast(bytes, data)
+  async def readline(  # type: ignore # very dumb it's reading from pyserial
+    self, terminator: bytes = b"\n", timeout: Optional[float] = None
+  ) -> bytes:
+    """Read until `terminator`, returning the line with the terminator still on it.
+
+    Assembled from single-byte reads: pylibftdi's own `readline` raises `TypeError` unless the
+    device was opened in text mode, and `setup` opens it in byte mode.
+
+    Args:
+      terminator: byte sequence that ends the line.
+      timeout: seconds to wait for a complete line. None waits indefinitely.
+
+    Raises:
+      ValueError: if `terminator` is empty.
+      TimeoutError: if no complete line arrives within `timeout`.
+    """
+    if not terminator:
+      raise ValueError("terminator must be at least one byte")
+    loop = asyncio.get_running_loop()
+    deadline = None if timeout is None else loop.time() + timeout
+    line = bytearray()
+    while not line.endswith(terminator):
+      chunk = await self.read(1)
+      if chunk:
+        line.extend(chunk)
+        continue
+      if deadline is not None and loop.time() >= deadline:
+        raise TimeoutError(
+          f"'{self.human_readable_device_name}' sent no complete line within {timeout} s; "
+          f"received {bytes(line)!r} so far."
+        )
+      # An empty read already cost a latency-timer period, so yield without adding delay.
+      await asyncio.sleep(0)
+    logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, bytes(line))
+    return bytes(line)
 
   def serialize(self):
     return {
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "device_id": self._device_id,
       "vid": self._vid,
       "pid": self._pid,
+      "usb_address": self._usb_address,
     }
 
 
@@ -472,19 +755,11 @@ class FTDIValidator(FTDI):
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
       and next_command.action == "read"
-      and len(next_command.data) == num_bytes
+      # data is hex, so two characters per byte, and a short read is normal.
+      and len(next_command.data) <= num_bytes * 2
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI read {self._device_id}")
     return bytes.fromhex(next_command.data)
 
-  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    next_command = FTDICommand(**self.cr.next_command())
-    if not (
-      next_command.module == "ftdi"
-      and next_command.device_id == self._device_id
-      and next_command.action == "readline"
-    ):
-      raise ValidationError(
-        f"Next line is {next_command}, expected FTDI readline {self._device_id}"
-      )
-    return bytes.fromhex(next_command.data)
+  # readline is inherited: it assembles the line from read(), so a replay goes through the
+  # recorded reads rather than a "readline" command that is no longer recorded.

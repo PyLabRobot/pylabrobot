@@ -115,6 +115,7 @@ def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate
       cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=(_compute_volume_from_height_Thermo_TS_96_wellplate_1200ul_Rb),
       compute_height_from_volume=(_compute_height_from_volume_Thermo_TS_96_wellplate_1200ul_Rb),
+      name_prefix=name,
     ),
   )
 
@@ -180,7 +181,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
   - Thermal resistance: ?
   - Cleanliness: 'Certified DNA-, RNAse-, and PCR inhibitor-free with in-process sampling tests'.
   - ANSI/SLAS-format for compatibility with automated systems.
-  - optimal pickup_distance_from_top=4 mm.
+  - optimal pickup_distance_from_top=4 mm (i.e. pickup_distance_from_bottom=size_z-4).
   - total_volume = 300 ul.
   - working_volume = 200 ul (recommended by manufacturer).
   """
@@ -213,6 +214,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
       compute_height_from_volume=(
         _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate
       ),
+      name_prefix=name,
     ),
   )
 
@@ -252,6 +254,7 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       compute_height_from_volume=lambda liquid_volume: (
         liquid_volume / (math.pi * ((well_diameter / 2) ** 2))
       ),
+      name_prefix=name,
     ),
   )
 
@@ -310,7 +313,7 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
   - Thermal resistance: ?
   - Cleanliness: 'Certified DNA/RNase Free'.
   - Warning: NOT ANSI/SLAS-format!
-  - optimal pickup_distance_from_top = 6 mm.
+  - optimal pickup_distance_from_top = 6 mm (i.e. pickup_distance_from_bottom=size_z-6).
   - total_volume = 300 ul.
   - working_volume = 200 ul (recommended by manufacturer).
 
@@ -345,6 +348,7 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
       compute_height_from_volume=(
         _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp
       ),
+      name_prefix=name,
     ),
   )
 
@@ -378,6 +382,7 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
       bottom_type=WellBottomType.V,
       material_z_thickness=0.61,
       cross_section_type=CrossSectionType.CIRCLE,
+      name_prefix=name,
     ),
   )
 
@@ -417,6 +422,7 @@ def thermo_nunc_1_troughplate_90000uL_Fb_omnitray(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       # compute_volume_from_height=None,
       # compute_height_from_volume=None,
+      name_prefix=name,
     ),
   )
 
@@ -453,6 +459,7 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> P
       size_z=12.1,  # from spec
       bottom_type=WellBottomType.FLAT,  # flat bottom wells
       material_z_thickness=2.2,  # from spec
+      name_prefix=name,
     ),
   )
 
@@ -500,5 +507,6 @@ def thermo_TS_nalgene_1_troughplate_300mL_Fb(name: str) -> Plate:
       bottom_type=WellBottomType.FLAT,  # from spec
       cross_section_type=CrossSectionType.RECTANGLE,  # rectangle wells
       material_z_thickness=1.15,  # measured.
+      name_prefix=name,
     ),
   )

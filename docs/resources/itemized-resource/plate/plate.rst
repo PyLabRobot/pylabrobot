@@ -49,3 +49,21 @@ The ``nesting_z_height`` is the overlap between the lid and the plate when the l
 
 .. image:: /resources/img/plate/lid_nesting_z_height.jpeg
    :alt: nesting_z_height measurement
+
+----
+
+``stacking_z_height``
+---------------------
+:class:`~pylabrobot.resources.plate.Plate` accepts an optional ``stacking_z_height`` argument: the vertical pitch (in mm) that one plate adds to a stack when an identical plate is placed directly on top of it. Equivalently, it is ``size_z`` minus the amount two identical plates nest into one another.
+
+It defaults to ``None`` (unknown) and is only required by devices that physically stack plates, such as the Agilent BenchCel microplate handler. It mirrors the ``stacking_z_height`` of a nested tip rack (:class:`~pylabrobot.resources.tip_rack.NestedTipRack`).
+
+To measure it, stack two identical plates and measure the total height with a caliper; then::
+
+   stacking_z_height = height_of_two_stacked_plates - size_z
+
+More generally, a stack of ``N`` identical plates is ``size_z + (N - 1) * stacking_z_height`` tall.
+
+When set, :class:`~pylabrobot.resources.resource_stack.ResourceStack` uses this value so that bare plates stacked in the z direction nest into one another (a plate placed on another bare plate sinks in by ``size_z - stacking_z_height``). Plates without a ``stacking_z_height``, and plates wearing a lid, do not nest.
+
+Because ``stacking_z_height`` is a physical dimension, two plates that differ in it are treated as different labware and do not compare equal.

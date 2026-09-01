@@ -70,6 +70,11 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://www.preciseflexrobots.com/
 ```
 
+```{image} /img/supported_by/logo_q.png
+:alt: QINSTRUMENTS
+:class: company
+:target: https://www.qinstruments.com
+```
 
 ## Used by
 
@@ -136,6 +141,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :alt: Bio-Techne
 :class: company
 :target: https://www.bio-techne.com/
+```
+
+```{image} /img/used_by/logo_adaptyv.svg
+:alt: Adaptyv Bio
+:class: company
+:target: https://www.adaptyvbio.com/
 ```
 
 ```{raw} html
@@ -230,19 +241,3 @@ Wierenga, R., Golas, S., Ho, W., Coley, C., & Esvelt, K. (2023). PyLabRobot: An 
 ```
 
 [Cited by](https://scholar.google.com/scholar?cites=4498189371108132583):
-
-- Tom, Gary, et al. "Self-driving laboratories for chemistry and materials science." Chemical Reviews (2024).
-- Anhel, Ana-Mariya, Lorea Alejaldre, and Ángel Goñi-Moreno. "The Laboratory Automation Protocol (LAP) Format and Repository: a platform for enhancing workflow efficiency in synthetic biology." ACS synthetic biology 12.12 (2023): 3514-3520.
-- Bultelle, Matthieu, Alexis Casas, and Richard Kitney. "Engineering biology and automation–Replicability as a design principle." Engineering Biology (2024).
-- Pleiss, Jürgen. "FAIR Data and Software: Improving Efficiency and Quality of Biocatalytic Science." ACS Catalysis 14.4 (2024): 2709-2718.
-- Gopal, Anjali, et al. "Will releasing the weights of large language models grant widespread access to pandemic agents?." arXiv preprint arXiv:2310.18233 (2023).
-- Padhy, Shakti P., and Sergei V. Kalinin. "Domain hyper-languages bring robots together and enable the machine learning community." Device 1.4 (2023).
-- Beaucage, Peter A., Duncan R. Sutherland, and Tyler B. Martin. "Automation and Machine Learning for Accelerated Polymer Characterization and Development: Past, Potential, and a Path Forward." Macromolecules (2024).
-- Bultelle, Matthieu, Alexis Casas, and Richard Kitney. "Construction of a Calibration Curve for Lycopene on a Liquid-Handling Platform─ Wider Lessons for the Development of Automated Dilution Protocols." ACS Synthetic Biology (2024).
-- Hysmith, Holland, et al. "The future of self-driving laboratories: from human in the loop interactive AI to gamification." Digital Discovery 3.4 (2024): 621-636.
-- Casas, Alexis, Matthieu Bultelle, and Richard Kitney. "An engineering biology approach to automated workflow and biodesign." (2024).
-- Jiang, Shuo, et al. "ProtoCode: Leveraging Large Language Models for Automated Generation of Machine-Readable Protocols from Scientific Publications." arXiv preprint arXiv:2312.06241 (2023).
-- Jiang, Shuo, et al. "ProtoCode: Leveraging large language models (LLMs) for automated generation of machine-readable PCR protocols from scientific publications." SLAS technology 29.3 (2024): 100134.
-- Thieme, Anton, et al. "Deep integration of low-cost liquid handling robots in an industrial pharmaceutical development environment." SLAS technology (2024): 100180.
-- Daniel, Čech. Adaptace algoritmů pro navigaci robota na základě apriorních informací. BS thesis. České vysoké učení technické v Praze. Vypočetní a informační centrum., 2024.
-- Tenna Alexiadis Møller, Thom Booth, Simon Shaw, Vilhelm Krarup Møller, Rasmus J.N. Frandsen, Tilmann Weber. ActinoMation: a literate programming approach for medium-throughput robotic conjugation of Streptomyces spp. bioRxiv 2024.12.05.622625; doi: https://doi.org/10.1101/2024.12.05.622625
