@@ -66,9 +66,6 @@
     "name": "Cytation 1",
     "kind": "plate reader",
     "capabilities": [
-      "absorbance",
-      "fluorescence",
-      "luminescence",
       "microscopy"
     ],
     "status": "full",
