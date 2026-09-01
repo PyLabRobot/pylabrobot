@@ -138,8 +138,6 @@ Detailed operation references:
 - [Machine lifecycle](event-bus/machine-lifecycle.md)
 - [Incubator](event-bus/incubator.md)
 - [LiquidHandler](event-bus/liquid-handler.md)
-- [PlateReader, Imager, and ImageReader](event-bus/plate-reading-and-imaging.md)
-- [Thermocycler](event-bus/thermocycling.md)
 - [Shaker and environmental controllers](event-bus/thermal-and-shaking.md)
 - [HighRes sample storage](../high_res/sample-storage/events.md)
 - [VSpin centrifuge and Access2 loader](../agilent/vspin/events.md)
@@ -153,8 +151,6 @@ Detailed operation references:
 event-bus/machine-lifecycle
 event-bus/incubator
 event-bus/liquid-handler
-event-bus/plate-reading-and-imaging
-event-bus/thermocycling
 event-bus/thermal-and-shaking
 event-bus/diagnostic-transports
 ```
