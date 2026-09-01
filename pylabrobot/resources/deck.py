@@ -10,13 +10,7 @@ from .trash import Trash
 
 
 class Deck(Resource):
-  """Base class for liquid handler decks.
-
-  This class maintains a dictionary of all resources on the deck. The dictionary is keyed by the
-  resource name and is updated when resources are assigned and unassigned from the deck. The point
-  of this dictionary is to allow O(1) naming collision checks as well as the quick lookup of
-  resources by name.
-  """
+  """Base class for liquid handler decks."""
 
   def __init__(
     self,
