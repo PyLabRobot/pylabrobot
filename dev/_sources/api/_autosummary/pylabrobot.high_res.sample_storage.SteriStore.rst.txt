@@ -15,6 +15,7 @@ pylabrobot.high\_res.sample\_storage.SteriStore
    .. autosummary::
       :toctree: .
    
+      ~SteriStore.location
       ~SteriStore.model_info
       ~SteriStore.motion_timeout
       ~SteriStore.name

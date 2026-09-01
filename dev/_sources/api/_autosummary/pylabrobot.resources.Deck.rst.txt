@@ -15,6 +15,7 @@ pylabrobot.resources.Deck
    .. autosummary::
       :toctree: .
    
+      ~Deck.location
       ~Deck.name
    
    

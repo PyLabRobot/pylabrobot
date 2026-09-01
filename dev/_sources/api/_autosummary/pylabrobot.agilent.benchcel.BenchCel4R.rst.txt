@@ -15,6 +15,7 @@ pylabrobot.agilent.benchcel.BenchCel4R
    .. autosummary::
       :toctree: .
    
+      ~BenchCel4R.location
       ~BenchCel4R.name
       ~BenchCel4R.stacks
    

@@ -15,6 +15,7 @@ pylabrobot.high\_res.sample\_storage.AmbiStore
    .. autosummary::
       :toctree: .
    
+      ~AmbiStore.location
       ~AmbiStore.model_info
       ~AmbiStore.motion_timeout
       ~AmbiStore.name

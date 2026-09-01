@@ -16,6 +16,7 @@ pylabrobot.resources.Carrier
       :toctree: .
    
       ~Carrier.capacity
+      ~Carrier.location
       ~Carrier.name
    
    

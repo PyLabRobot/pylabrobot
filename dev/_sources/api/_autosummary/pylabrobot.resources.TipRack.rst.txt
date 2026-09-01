@@ -18,6 +18,7 @@ pylabrobot.resources.TipRack
       ~TipRack.item_dx
       ~TipRack.item_dy
       ~TipRack.items
+      ~TipRack.location
       ~TipRack.name
       ~TipRack.num_items
       ~TipRack.num_items_x

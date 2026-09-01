@@ -15,6 +15,7 @@ pylabrobot.qinstruments.bioshake.BioShake
    .. autosummary::
       :toctree: .
    
+      ~BioShake.location
       ~BioShake.name
       ~BioShake.resource
    

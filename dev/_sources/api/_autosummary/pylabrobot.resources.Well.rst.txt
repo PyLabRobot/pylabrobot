@@ -16,6 +16,7 @@ pylabrobot.resources.Well
       :toctree: .
    
       ~Well.lid
+      ~Well.location
       ~Well.material_z_thickness
       ~Well.name
    

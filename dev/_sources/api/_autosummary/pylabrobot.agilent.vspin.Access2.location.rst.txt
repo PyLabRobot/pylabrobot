@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2.location
+=========================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoproperty:: Access2.location

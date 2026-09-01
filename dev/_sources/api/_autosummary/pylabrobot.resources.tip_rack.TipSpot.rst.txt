@@ -15,6 +15,7 @@ pylabrobot.resources.tip\_rack.TipSpot
    .. autosummary::
       :toctree: .
    
+      ~TipSpot.location
       ~TipSpot.name
    
    

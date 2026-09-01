@@ -591,8 +591,8 @@
 <dd><p>Serialize the state of this resource only.</p>
 <p>Use <code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.serialize_all_state()</span></code> to serialize the state of
 this resource and all children.</p>
-<p>The base implementation includes <code class="docutils literal notranslate"><span class="pre">&quot;rotation&quot;</span></code> so that subscribers
-(e.g. the Visualizer) are notified of orientation changes through the
+<p>The base implementation includes <code class="docutils literal notranslate"><span class="pre">&quot;rotation&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;location&quot;</span></code> so that subscribers
+(e.g. the Visualizer) are notified of orientation and position changes through the
 standard state channel. Subclasses overriding this method should merge
 in <code class="docutils literal notranslate"><span class="pre">super().serialize_state()</span></code>.</p>
 <dl class="field-list simple">

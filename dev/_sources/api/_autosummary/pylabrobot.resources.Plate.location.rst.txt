@@ -1,0 +1,6 @@
+pylabrobot.resources.Plate.location
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Plate.location

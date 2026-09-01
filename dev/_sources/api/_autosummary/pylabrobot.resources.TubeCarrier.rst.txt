@@ -16,6 +16,7 @@ pylabrobot.resources.TubeCarrier
       :toctree: .
    
       ~TubeCarrier.capacity
+      ~TubeCarrier.location
       ~TubeCarrier.name
    
    

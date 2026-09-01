@@ -16,6 +16,7 @@ pylabrobot.resources.Trash
       :toctree: .
    
       ~Trash.lid
+      ~Trash.location
       ~Trash.material_z_thickness
       ~Trash.name
    

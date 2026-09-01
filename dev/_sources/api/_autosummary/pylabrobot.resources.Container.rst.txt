@@ -16,6 +16,7 @@ pylabrobot.resources.Container
       :toctree: .
    
       ~Container.lid
+      ~Container.location
       ~Container.material_z_thickness
       ~Container.name
    

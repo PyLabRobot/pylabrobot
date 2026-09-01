@@ -15,6 +15,7 @@ pylabrobot.resources.ResourceHolder
    .. autosummary::
       :toctree: .
    
+      ~ResourceHolder.location
       ~ResourceHolder.name
       ~ResourceHolder.resource
    

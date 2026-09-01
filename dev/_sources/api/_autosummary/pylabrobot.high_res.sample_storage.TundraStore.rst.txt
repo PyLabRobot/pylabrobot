@@ -15,6 +15,7 @@ pylabrobot.high\_res.sample\_storage.TundraStore
    .. autosummary::
       :toctree: .
    
+      ~TundraStore.location
       ~TundraStore.model_info
       ~TundraStore.motion_timeout
       ~TundraStore.name

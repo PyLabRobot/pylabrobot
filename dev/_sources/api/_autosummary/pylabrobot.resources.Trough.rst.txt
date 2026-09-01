@@ -16,6 +16,7 @@ pylabrobot.resources.Trough
       :toctree: .
    
       ~Trough.lid
+      ~Trough.location
       ~Trough.material_z_thickness
       ~Trough.name
    

@@ -15,6 +15,7 @@ pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbance96
    .. autosummary::
       :toctree: .
    
+      ~ByonoyAbsorbance96.location
       ~ByonoyAbsorbance96.name
    
    

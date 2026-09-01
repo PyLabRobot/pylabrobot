@@ -16,6 +16,7 @@ pylabrobot.resources.TipCarrier
       :toctree: .
    
       ~TipCarrier.capacity
+      ~TipCarrier.location
       ~TipCarrier.name
    
    

@@ -15,6 +15,7 @@ pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
    .. autosummary::
       :toctree: .
    
+      ~HamiltonDeck.location
       ~HamiltonDeck.name
    
    

@@ -18,6 +18,7 @@ pylabrobot.resources.TubeRack
       ~TubeRack.item_dx
       ~TubeRack.item_dy
       ~TubeRack.items
+      ~TubeRack.location
       ~TubeRack.name
       ~TubeRack.num_items
       ~TubeRack.num_items_x

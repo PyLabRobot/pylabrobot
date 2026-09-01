@@ -15,6 +15,7 @@ pylabrobot.resources.ResourceStack
    .. autosummary::
       :toctree: .
    
+      ~ResourceStack.location
       ~ResourceStack.name
    
    

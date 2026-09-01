@@ -16,6 +16,7 @@ pylabrobot.resources.PlateCarrier
       :toctree: .
    
       ~PlateCarrier.capacity
+      ~PlateCarrier.location
       ~PlateCarrier.name
    
    

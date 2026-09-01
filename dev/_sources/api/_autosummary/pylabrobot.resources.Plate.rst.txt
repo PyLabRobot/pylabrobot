@@ -19,6 +19,7 @@ pylabrobot.resources.Plate
       ~Plate.item_dy
       ~Plate.items
       ~Plate.lid
+      ~Plate.location
       ~Plate.name
       ~Plate.num_items
       ~Plate.num_items_x

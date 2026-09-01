@@ -1,0 +1,6 @@
+pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit.location
+======================================================================
+
+.. currentmodule:: pylabrobot.byonoy.luminescence_96
+
+.. autoproperty:: ByonoyLuminescenceBaseUnit.location

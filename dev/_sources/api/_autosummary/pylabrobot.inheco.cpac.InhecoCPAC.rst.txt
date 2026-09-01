@@ -15,6 +15,7 @@ pylabrobot.inheco.cpac.InhecoCPAC
    .. autosummary::
       :toctree: .
    
+      ~InhecoCPAC.location
       ~InhecoCPAC.name
       ~InhecoCPAC.resource
       ~InhecoCPAC.supports_active_cooling

@@ -15,6 +15,7 @@ pylabrobot.agilent.vspin.Access2
    .. autosummary::
       :toctree: .
    
+      ~Access2.location
       ~Access2.name
       ~Access2.resource
    

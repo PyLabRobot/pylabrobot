@@ -16,6 +16,7 @@ pylabrobot.resources.Tube
       :toctree: .
    
       ~Tube.lid
+      ~Tube.location
       ~Tube.material_z_thickness
       ~Tube.name
    

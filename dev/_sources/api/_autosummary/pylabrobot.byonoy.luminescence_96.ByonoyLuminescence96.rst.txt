@@ -15,6 +15,7 @@ pylabrobot.byonoy.luminescence\_96.ByonoyLuminescence96
    .. autosummary::
       :toctree: .
    
+      ~ByonoyLuminescence96.location
       ~ByonoyLuminescence96.name
    
    

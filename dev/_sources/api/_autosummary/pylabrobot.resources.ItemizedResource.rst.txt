@@ -18,6 +18,7 @@ pylabrobot.resources.ItemizedResource
       ~ItemizedResource.item_dx
       ~ItemizedResource.item_dy
       ~ItemizedResource.items
+      ~ItemizedResource.location
       ~ItemizedResource.name
       ~ItemizedResource.num_items
       ~ItemizedResource.num_items_x

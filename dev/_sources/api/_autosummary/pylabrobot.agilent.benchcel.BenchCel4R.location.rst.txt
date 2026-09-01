@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.location
+===============================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autoproperty:: BenchCel4R.location

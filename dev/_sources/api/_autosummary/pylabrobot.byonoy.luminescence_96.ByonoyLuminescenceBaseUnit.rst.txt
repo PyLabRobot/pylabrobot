@@ -15,6 +15,7 @@ pylabrobot.byonoy.luminescence\_96.ByonoyLuminescenceBaseUnit
    .. autosummary::
       :toctree: .
    
+      ~ByonoyLuminescenceBaseUnit.location
       ~ByonoyLuminescenceBaseUnit.name
    
    

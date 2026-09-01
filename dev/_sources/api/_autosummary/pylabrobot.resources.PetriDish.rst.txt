@@ -16,6 +16,7 @@ pylabrobot.resources.PetriDish
       :toctree: .
    
       ~PetriDish.lid
+      ~PetriDish.location
       ~PetriDish.material_z_thickness
       ~PetriDish.name
    
