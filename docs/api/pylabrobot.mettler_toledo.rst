@@ -11,6 +11,5 @@ pylabrobot.mettler_toledo package
   :recursive:
 
     MTSICSDriver
-    MettlerToledoWXS205SDU
     MettlerToledoResponse
     MettlerToledoError

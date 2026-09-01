@@ -1,8 +1,8 @@
 from .scales import (
-  MTSICSDriver,
   MettlerToledoError,
   MettlerToledoResponse,
   MettlerToledoWXS205SDU,
+  MTSICSDriver,
 )
 
 __all__ = [

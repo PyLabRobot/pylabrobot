@@ -1,6 +1,6 @@
 """Mettler Toledo scale drivers using the MT-SICS protocol."""
 
-from .driver import MTSICSDriver, MettlerToledoResponse
+from .driver import MettlerToledoResponse, MTSICSDriver
 from .errors import MettlerToledoError
 
 MettlerToledoWXS205SDU = MTSICSDriver

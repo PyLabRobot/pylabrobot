@@ -3,9 +3,9 @@
 import unittest
 
 from pylabrobot.mettler_toledo.scales import (
-  MTSICSDriver,
   MettlerToledoError,
   MettlerToledoResponse,
+  MTSICSDriver,
 )
 
 R = MettlerToledoResponse

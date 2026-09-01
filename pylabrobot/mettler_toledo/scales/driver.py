@@ -11,6 +11,7 @@ from typing import List, Literal, Optional, Set, Union
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
+
 from .confirmed_firmware_versions import CONFIRMED_FIRMWARE_VERSIONS
 from .errors import MettlerToledoError
 
