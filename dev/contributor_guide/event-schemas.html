@@ -1093,6 +1093,154 @@ record per channel with <code class="docutils literal notranslate"><span class="
 </div>
 </section>
 </section>
+<section id="plate-reading-and-imaging">
+<h2>Plate reading and imaging<a class="headerlink" href="#plate-reading-and-imaging" title="Link to this heading">#</a></h2>
+<section id="plate-reader-lifecycle-and-measurements">
+<h3>Plate-reader lifecycle and measurements<a class="headerlink" href="#plate-reader-lifecycle-and-measurements" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plate_reader.open</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Opens the reader. <code class="docutils literal notranslate"><span class="pre">resources</span></code> contains the directly loaded plate when one is assigned.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">plate_reader.close</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Closes the reader. <code class="docutils literal notranslate"><span class="pre">resources</span></code> contains the directly loaded plate when one is assigned.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plate_reader.read_luminescence</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">well_count</span></code>, <code class="docutils literal notranslate"><span class="pre">return_format</span></code>, <code class="docutils literal notranslate"><span class="pre">focal_height</span></code>; <strong>completed only:</strong> <code class="docutils literal notranslate"><span class="pre">record_count</span></code></p></td>
+<td><p>Reads luminescence from the selected wells.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">plate_reader.read_absorbance</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">well_count</span></code>, <code class="docutils literal notranslate"><span class="pre">return_format</span></code>, <code class="docutils literal notranslate"><span class="pre">wavelength_nm</span></code>; <strong>completed only:</strong> <code class="docutils literal notranslate"><span class="pre">record_count</span></code></p></td>
+<td><p>Reads absorbance at the requested wavelength.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plate_reader.read_fluorescence</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">well_count</span></code>, <code class="docutils literal notranslate"><span class="pre">return_format</span></code>, <code class="docutils literal notranslate"><span class="pre">excitation_wavelength_nm</span></code>, <code class="docutils literal notranslate"><span class="pre">emission_wavelength_nm</span></code>, <code class="docutils literal notranslate"><span class="pre">focal_height</span></code>; <strong>completed only:</strong> <code class="docutils literal notranslate"><span class="pre">record_count</span></code></p></td>
+<td><p>Reads fluorescence at the requested wavelengths.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>For measurement operations, <code class="docutils literal notranslate"><span class="pre">resources</span></code> contains the direct selected <code class="docutils literal notranslate"><span class="pre">Well</span></code> references. Their
+<code class="docutils literal notranslate"><span class="pre">ancestors</span></code> retain the owning plate; do not replace the wells with that plate. <code class="docutils literal notranslate"><span class="pre">well_count</span></code> is the
+number of selected wells, while <code class="docutils literal notranslate"><span class="pre">record_count</span></code> is the number of records returned by the backend.
+<code class="docutils literal notranslate"><span class="pre">return_format</span></code> is <code class="docutils literal notranslate"><span class="pre">&quot;records&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;legacy_matrix&quot;</span></code> and describes the public return projection.
+Measurement values are not copied into events.</p>
+<p><code class="docutils literal notranslate"><span class="pre">focal_height</span></code> uses PLR’s default length unit (millimeters). Wavelengths are deliberately expressed
+in nanometers and therefore use the <code class="docutils literal notranslate"><span class="pre">_nm</span></code> suffix.</p>
+</section>
+<section id="imaging">
+<h3>Imaging<a class="headerlink" href="#imaging" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">imager.capture</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, optional <code class="docutils literal notranslate"><span class="pre">plate</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code>, <code class="docutils literal notranslate"><span class="pre">mode</span></code>, <code class="docutils literal notranslate"><span class="pre">objective</span></code>, <code class="docutils literal notranslate"><span class="pre">exposure</span></code>, <code class="docutils literal notranslate"><span class="pre">focus</span></code>, <code class="docutils literal notranslate"><span class="pre">gain</span></code>; <strong>completed only:</strong> <code class="docutils literal notranslate"><span class="pre">image_count</span></code>, <code class="docutils literal notranslate"><span class="pre">reported_exposure_time_ms</span></code>, <code class="docutils literal notranslate"><span class="pre">reported_focal_height</span></code></p></td>
+<td><p>Captures one user-requested imaging result. Software auto-exposure or autofocus retries remain inside this single lifecycle.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">target</span></code> contains integer <code class="docutils literal notranslate"><span class="pre">row</span></code> and <code class="docutils literal notranslate"><span class="pre">column</span></code> indices. <code class="docutils literal notranslate"><span class="pre">mode</span></code> and <code class="docutils literal notranslate"><span class="pre">objective</span></code> are stable enum member
+names. When the caller supplies a <code class="docutils literal notranslate"><span class="pre">Well</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code> contains that direct well reference; a
+row/column tuple has no direct resource and uses an empty list. <code class="docutils literal notranslate"><span class="pre">plate</span></code>, when known, identifies the
+loaded plate that provides target context.</p>
+<p>The three requested setting objects are JSON-ready and use these shapes:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Setting</p></th>
+<th class="head"><p>Modes and fields</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">exposure</span></code></p></td>
+<td><p>Fixed: <code class="docutils literal notranslate"><span class="pre">mode=&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">time_ms</span></code>; machine auto: <code class="docutils literal notranslate"><span class="pre">mode=&quot;machine_auto&quot;</span></code>; software auto: <code class="docutils literal notranslate"><span class="pre">mode=&quot;software_auto&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">minimum_time_ms</span></code>, <code class="docutils literal notranslate"><span class="pre">maximum_time_ms</span></code>, optional <code class="docutils literal notranslate"><span class="pre">max_rounds</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">focus</span></code></p></td>
+<td><p>Fixed: <code class="docutils literal notranslate"><span class="pre">mode=&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">height</span></code>; machine auto: <code class="docutils literal notranslate"><span class="pre">mode=&quot;machine_auto&quot;</span></code>; software auto: <code class="docutils literal notranslate"><span class="pre">mode=&quot;software_auto&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">minimum_height</span></code>, <code class="docutils literal notranslate"><span class="pre">maximum_height</span></code>, <code class="docutils literal notranslate"><span class="pre">tolerance</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gain</span></code></p></td>
+<td><p>Fixed: <code class="docutils literal notranslate"><span class="pre">mode=&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>; machine auto: <code class="docutils literal notranslate"><span class="pre">mode=&quot;machine_auto&quot;</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Exposure values use milliseconds, as made explicit by <code class="docutils literal notranslate"><span class="pre">_ms</span></code>. Focus heights and focus tolerance use
+PLR’s default length unit; autofocus <code class="docutils literal notranslate"><span class="pre">timeout</span></code> uses the default time unit. The completed event
+contains only bounded result metadata. Pixel arrays and other image data are never included.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ImageReader</span></code> inherits the PlateReader and Imager public operations. It emits the inherited
+canonical lifecycle directly and must not add a second wrapper lifecycle.</p>
+<p>Backend-only keyword arguments are forwarded to the backend but are not part of these canonical
+payloads.</p>
+</section>
+</section>
+<section id="thermocycling">
+<h2>Thermocycling<a class="headerlink" href="#thermocycling" title="Link to this heading">#</a></h2>
+<p>Controllers that are <code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code>s include their directly loaded resource in <code class="docutils literal notranslate"><span class="pre">resources</span></code> when
+one is assigned at operation start.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.open_lid</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Opens the thermocycler lid.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.close_lid</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Closes the thermocycler lid.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.set_block_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperatures</span></code></p></td>
+<td><p>Sets one temperature per block zone.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.set_lid_temperature</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">target_temperatures</span></code></p></td>
+<td><p>Sets one temperature per lid zone.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.deactivate_block</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Turns off block temperature control.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.deactivate_lid</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Turns off lid temperature control.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.run_protocol</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, optional <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">block_max_volume</span></code>, <code class="docutils literal notranslate"><span class="pre">stage_count</span></code>, <code class="docutils literal notranslate"><span class="pre">step_definition_count</span></code>, <code class="docutils literal notranslate"><span class="pre">step_execution_count</span></code>, optional <code class="docutils literal notranslate"><span class="pre">temperature_zone_count</span></code></p></td>
+<td><p>Submits a bounded summary of the requested protocol. Completion means the backend coroutine returned successfully, not that the physical temperature profile finished.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">target_temperatures</span></code> is an ordered list in PLR’s default temperature unit (degrees Celsius); it is
+plural because the public API supports multiple thermal zones. <code class="docutils literal notranslate"><span class="pre">block_max_volume</span></code> uses PLR’s
+default volume unit (microliters). <code class="docutils literal notranslate"><span class="pre">step_definition_count</span></code> counts the distinct step definitions in
+all stages, and <code class="docutils literal notranslate"><span class="pre">step_execution_count</span></code> includes stage repetition. <code class="docutils literal notranslate"><span class="pre">temperature_zone_count</span></code> is
+included when it can be derived from the protocol.</p>
+<p>The complete <code class="docutils literal notranslate"><span class="pre">Protocol</span></code>, individual temperatures and hold times, backend return value, and backend
+keyword arguments are deliberately excluded from the event payload.</p>
+<p><code class="docutils literal notranslate"><span class="pre">run_pcr_profile</span></code> is a composite convenience method and has no separate parent lifecycle; its
+instrumented primitive calls emit their normal events. Thermocycler status queries and wait helpers
+are not yet instrumented because their polling and completion semantics need to be stabilized
+before they can define canonical EventBus operations.</p>
+</section>
 <section id="shaking-and-environmental-control">
 <h2>Shaking and environmental control<a class="headerlink" href="#shaking-and-environmental-control" title="Link to this heading">#</a></h2>
 <p>Controllers that are <code class="docutils literal notranslate"><span class="pre">ResourceHolder</span></code>s include their directly loaded resource in <code class="docutils literal notranslate"><span class="pre">resources</span></code> when
@@ -1469,6 +1617,12 @@ canonical operation name, lifecycle, and payload fields.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#head-tip-operations">96-head tip operations</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-reading-and-imaging">Plate reading and imaging</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-reader-lifecycle-and-measurements">Plate-reader lifecycle and measurements</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#imaging">Imaging</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#thermocycling">Thermocycling</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shaking-and-environmental-control">Shaking and environmental control</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#centrifugation">Centrifugation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#brooks-preciseflex">Brooks PreciseFlex</a><ul class="nav section-nav flex-column">
