@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxis.request\_is\_positive\_limit\_active
+=========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: LinearAxis.request_is_positive_limit_active

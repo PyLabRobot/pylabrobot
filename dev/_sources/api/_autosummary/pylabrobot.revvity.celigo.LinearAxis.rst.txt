@@ -1,0 +1,47 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.LinearAxis
+====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: LinearAxis
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LinearAxis.axis_index
+      ~LinearAxis.has_position_reference
+      ~LinearAxis.is_initialized
+      ~LinearAxis.config
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LinearAxis.__init__
+      ~LinearAxis.assume_homed
+      ~LinearAxis.encoder_bounds
+      ~LinearAxis.encoder_ticks_to_mm
+      ~LinearAxis.home
+      ~LinearAxis.mm_to_encoder_ticks
+      ~LinearAxis.move_to
+      ~LinearAxis.move_to_ticks
+      ~LinearAxis.request_encoder_ratio
+      ~LinearAxis.request_encoder_ticks
+      ~LinearAxis.request_is_negative_limit_active
+      ~LinearAxis.request_is_positive_limit_active
+      ~LinearAxis.request_limit_flags
+      ~LinearAxis.request_position
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.reset\_controller
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.reset_controller

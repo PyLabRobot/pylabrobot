@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.moving\_current\_percentage
+=======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.moving_current_percentage

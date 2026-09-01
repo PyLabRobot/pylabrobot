@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.unrecognized\_fields
+==========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoConfig.unrecognized_fields

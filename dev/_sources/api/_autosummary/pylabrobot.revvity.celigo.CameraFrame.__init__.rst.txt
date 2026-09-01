@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.\_\_init\_\_
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CameraFrame.__init__

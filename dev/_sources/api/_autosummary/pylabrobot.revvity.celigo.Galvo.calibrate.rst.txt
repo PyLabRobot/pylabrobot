@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Galvo.calibrate
+=========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Galvo.calibrate

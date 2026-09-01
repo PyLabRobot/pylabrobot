@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.limit\_polarity
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.limit_polarity

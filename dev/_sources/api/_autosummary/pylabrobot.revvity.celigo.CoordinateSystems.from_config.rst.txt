@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CoordinateSystems.from\_config
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CoordinateSystems.from_config

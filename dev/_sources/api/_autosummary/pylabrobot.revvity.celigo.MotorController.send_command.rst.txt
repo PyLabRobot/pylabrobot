@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MotorController.send\_command
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: MotorController.send_command

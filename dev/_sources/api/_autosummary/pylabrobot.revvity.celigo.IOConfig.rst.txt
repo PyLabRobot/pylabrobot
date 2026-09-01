@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.IOConfig
+==================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: IOConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~IOConfig.analog_ins
+      ~IOConfig.digital_ios
+      ~IOConfig.lighting_ios
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~IOConfig.__init__
+      ~IOConfig.from_element
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AnalogInputConfig.from\_element
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: AnalogInputConfig.from_element

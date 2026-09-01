@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoControllerStatus.points\_loaded
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoControllerStatus.points_loaded

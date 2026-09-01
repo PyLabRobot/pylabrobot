@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.plan
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.plan

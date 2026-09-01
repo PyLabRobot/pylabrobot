@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.encoder\_ticks\_per\_revolution
+===========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.encoder_ticks_per_revolution

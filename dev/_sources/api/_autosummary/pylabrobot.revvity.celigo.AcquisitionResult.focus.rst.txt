@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AcquisitionResult.focus
+=================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AcquisitionResult.focus

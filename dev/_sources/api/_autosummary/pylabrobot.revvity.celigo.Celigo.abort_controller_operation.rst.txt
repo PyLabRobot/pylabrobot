@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.abort\_controller\_operation
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.abort_controller_operation

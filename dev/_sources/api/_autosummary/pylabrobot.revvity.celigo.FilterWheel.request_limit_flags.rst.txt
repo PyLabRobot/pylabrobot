@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheel.request\_limit\_flags
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterWheel.request_limit_flags

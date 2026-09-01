@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.IlluminationChannelConfig.mm\_per\_pixel\_y\_correction\_to\_brightfield
+==================================================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: IlluminationChannelConfig.mm_per_pixel_y_correction_to_brightfield

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LightingIOConfig.unrecognized\_fields
+===============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LightingIOConfig.unrecognized_fields

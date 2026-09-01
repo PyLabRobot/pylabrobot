@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.motor\_response\_time
+=================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.motor_response_time

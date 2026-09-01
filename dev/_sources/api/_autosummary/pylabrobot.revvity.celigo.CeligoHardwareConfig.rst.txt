@@ -1,0 +1,48 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.CeligoHardwareConfig
+==============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: CeligoHardwareConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CeligoHardwareConfig.beam_expander
+      ~CeligoHardwareConfig.camera_filter_wheel
+      ~CeligoHardwareConfig.dichroic_filter_wheel
+      ~CeligoHardwareConfig.door
+      ~CeligoHardwareConfig.excitation_filter_wheel
+      ~CeligoHardwareConfig.excitation_nd_filter_wheel
+      ~CeligoHardwareConfig.external_camera_control
+      ~CeligoHardwareConfig.io
+      ~CeligoHardwareConfig.laser_attenuator
+      ~CeligoHardwareConfig.laser_nd_filter_wheel
+      ~CeligoHardwareConfig.magnification_changer
+      ~CeligoHardwareConfig.source_path
+      ~CeligoHardwareConfig.x_axis
+      ~CeligoHardwareConfig.x_galvo
+      ~CeligoHardwareConfig.y_axis
+      ~CeligoHardwareConfig.y_galvo
+      ~CeligoHardwareConfig.z_axis
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CeligoHardwareConfig.__init__
+      ~CeligoHardwareConfig.from_xml
+   
+   

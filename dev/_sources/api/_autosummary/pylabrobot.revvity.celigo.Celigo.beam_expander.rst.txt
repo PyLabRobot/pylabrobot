@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.beam\_expander
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Celigo.beam_expander

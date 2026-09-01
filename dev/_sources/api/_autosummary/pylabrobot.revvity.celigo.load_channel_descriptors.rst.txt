@@ -1,0 +1,6 @@
+﻿pylabrobot.revvity.celigo.load\_channel\_descriptors
+====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autofunction:: load_channel_descriptors

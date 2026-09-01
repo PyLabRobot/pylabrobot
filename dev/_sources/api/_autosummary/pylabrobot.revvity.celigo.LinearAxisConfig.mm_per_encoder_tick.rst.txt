@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.mm\_per\_encoder\_tick
+=================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.mm_per_encoder_tick

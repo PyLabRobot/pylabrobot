@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoCamera.gain
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoCamera.gain

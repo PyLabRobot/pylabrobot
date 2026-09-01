@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoCamera.set\_exposure
+====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CeligoCamera.set_exposure

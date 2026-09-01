@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.home\_offset
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.home_offset

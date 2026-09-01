@@ -1,0 +1,75 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.FilterWheelConfig
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: FilterWheelConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FilterWheelConfig.encoder_ticks_per_revolution
+      ~FilterWheelConfig.number_of_filters
+      ~FilterWheelConfig.filter_map
+      ~FilterWheelConfig.motion_name
+      ~FilterWheelConfig.config_version
+      ~FilterWheelConfig.motor_type
+      ~FilterWheelConfig.comm_index
+      ~FilterWheelConfig.controller_index
+      ~FilterWheelConfig.axis_index
+      ~FilterWheelConfig.enabled
+      ~FilterWheelConfig.max_velocity
+      ~FilterWheelConfig.max_acceleration
+      ~FilterWheelConfig.max_deceleration
+      ~FilterWheelConfig.max_s_acceleration
+      ~FilterWheelConfig.moderate_acceleration
+      ~FilterWheelConfig.minimum_acceleration
+      ~FilterWheelConfig.moderate_s_acceleration
+      ~FilterWheelConfig.minimum_s_acceleration
+      ~FilterWheelConfig.s_curve_support
+      ~FilterWheelConfig.home_type
+      ~FilterWheelConfig.homing_velocity
+      ~FilterWheelConfig.index_velocity
+      ~FilterWheelConfig.homing_short_move
+      ~FilterWheelConfig.home_offset
+      ~FilterWheelConfig.positive_limit
+      ~FilterWheelConfig.negative_limit
+      ~FilterWheelConfig.limit_polarity
+      ~FilterWheelConfig.invert_axis_direction
+      ~FilterWheelConfig.default_positive_direction
+      ~FilterWheelConfig.moving_current_percentage
+      ~FilterWheelConfig.holding_current_percentage
+      ~FilterWheelConfig.loading_current_percentage
+      ~FilterWheelConfig.moving_overload_limit
+      ~FilterWheelConfig.mode_enable_limits
+      ~FilterWheelConfig.mode_enable_step_and_direction
+      ~FilterWheelConfig.mode_enable_position_correction
+      ~FilterWheelConfig.mode_enable_motor_slave_to_encoder
+      ~FilterWheelConfig.coarse_position_error_window
+      ~FilterWheelConfig.fine_position_error_window
+      ~FilterWheelConfig.gain
+      ~FilterWheelConfig.encoder_to_motor_tick_ratio
+      ~FilterWheelConfig.backlash_compensation
+      ~FilterWheelConfig.motor_response_time
+      ~FilterWheelConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FilterWheelConfig.__init__
+      ~FilterWheelConfig.from_element
+   
+   

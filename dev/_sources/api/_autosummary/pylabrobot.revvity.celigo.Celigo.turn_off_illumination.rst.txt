@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.turn\_off\_illumination
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.turn_off_illumination

@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.ControllerStatus
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: ControllerStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ControllerStatus.busy
+      ~ControllerStatus.controller_failed
+      ~ControllerStatus.error
+      ~ControllerStatus.has_controller_fault
+      ~ControllerStatus.has_laser_safety_fault
+      ~ControllerStatus.interlock_open
+      ~ControllerStatus.raw_flags
+      ~ControllerStatus.extended_status
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ControllerStatus.__init__
+   
+   

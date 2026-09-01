@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LightingIOConfig.delay
+================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LightingIOConfig.delay

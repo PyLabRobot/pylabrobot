@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoCamera.width
+============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoCamera.width

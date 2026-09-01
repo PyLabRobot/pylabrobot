@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.NavigationConfig.frame\_overlap\_y\_mm
+================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: NavigationConfig.frame_overlap_y_mm

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.NavigationConfig.source\_path
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: NavigationConfig.source_path

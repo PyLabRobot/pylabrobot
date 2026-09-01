@@ -1,0 +1,94 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.Celigo
+================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: Celigo
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Celigo.beam_expander
+      ~Celigo.camera_filter
+      ~Celigo.can_change_fluorescence_power
+      ~Celigo.controller_firmware_version
+      ~Celigo.dichroic_filter
+      ~Celigo.excitation_filter
+      ~Celigo.excitation_nd_filter
+      ~Celigo.fluorescence_lamp_ready
+      ~Celigo.fluorescence_warmup_remaining
+      ~Celigo.magnification_changer
+      ~Celigo.x_axis
+      ~Celigo.y_axis
+      ~Celigo.z_axis
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Celigo.__init__
+      ~Celigo.abort_controller_operation
+      ~Celigo.acquire
+      ~Celigo.auto_exposure
+      ~Celigo.autofocus
+      ~Celigo.capture_frame
+      ~Celigo.close_drawer
+      ~Celigo.close_drawer_to_sample_mm
+      ~Celigo.execute
+      ~Celigo.home_imaging_axes
+      ~Celigo.move_to_well
+      ~Celigo.open_drawer
+      ~Celigo.plan
+      ~Celigo.pulse_camera_trigger
+      ~Celigo.request_analog_input_count
+      ~Celigo.request_analog_input_voltage
+      ~Celigo.request_analog_output_count
+      ~Celigo.request_analog_output_voltage
+      ~Celigo.request_barcode
+      ~Celigo.request_camera_trigger_encoder_ticks
+      ~Celigo.request_controller_info
+      ~Celigo.request_controller_status
+      ~Celigo.request_detected_motor_addresses
+      ~Celigo.request_digital_input
+      ~Celigo.request_digital_input_bitmask
+      ~Celigo.request_digital_output
+      ~Celigo.request_digital_output_bitmask
+      ~Celigo.request_is_busy
+      ~Celigo.request_is_camera_busy
+      ~Celigo.request_is_camera_integrating
+      ~Celigo.request_is_safety_interlock_open
+      ~Celigo.reset_controller
+      ~Celigo.run_self_test
+      ~Celigo.scan
+      ~Celigo.scan_wells
+      ~Celigo.select_channel
+      ~Celigo.send_barcode_command
+      ~Celigo.send_command
+      ~Celigo.set_analog_output_count
+      ~Celigo.set_analog_output_voltage
+      ~Celigo.set_brightfield_enabled
+      ~Celigo.set_camera_exposure_and_gain
+      ~Celigo.set_camera_trigger_line
+      ~Celigo.set_digital_output
+      ~Celigo.set_fluorescence_lamp_power
+      ~Celigo.set_illumination_enabled
+      ~Celigo.set_plate
+      ~Celigo.setup
+      ~Celigo.stop
+      ~Celigo.turn_off_illumination
+      ~Celigo.wait_for_controller_ready
+      ~Celigo.well_position_mm
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.magnification\_changer
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Celigo.magnification_changer

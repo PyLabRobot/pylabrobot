@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AcquisitionResult.z\_mm
+=================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AcquisitionResult.z_mm

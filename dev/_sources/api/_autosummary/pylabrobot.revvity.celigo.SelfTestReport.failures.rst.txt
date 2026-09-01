@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.SelfTestReport.failures
+=================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: SelfTestReport.failures

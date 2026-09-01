@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.captured\_at
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CameraFrame.captured_at

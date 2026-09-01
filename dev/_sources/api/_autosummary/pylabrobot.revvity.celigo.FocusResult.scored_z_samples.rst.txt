@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FocusResult.scored\_z\_samples
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FocusResult.scored_z_samples

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LightingIOConfig.from\_element
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: LightingIOConfig.from_element

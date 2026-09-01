@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.set\_illumination\_enabled
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.set_illumination_enabled

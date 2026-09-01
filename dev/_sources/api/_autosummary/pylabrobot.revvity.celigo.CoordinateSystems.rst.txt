@@ -1,0 +1,30 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.CoordinateSystems
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: CoordinateSystems
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CoordinateSystems.__init__
+      ~CoordinateSystems.from_config
+      ~CoordinateSystems.image_pixel_to_sample_mm
+      ~CoordinateSystems.image_pixel_to_stage_mm
+      ~CoordinateSystems.sample_mm_to_image_pixel
+      ~CoordinateSystems.sample_mm_to_stage_mm
+      ~CoordinateSystems.stage_mm_to_sample_mm
+   
+   

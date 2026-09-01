@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoConfig.hardware\_defaults
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoConfig.hardware_defaults

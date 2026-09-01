@@ -1,0 +1,6 @@
+﻿pylabrobot.revvity.celigo.CameraError
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoexception:: CameraError

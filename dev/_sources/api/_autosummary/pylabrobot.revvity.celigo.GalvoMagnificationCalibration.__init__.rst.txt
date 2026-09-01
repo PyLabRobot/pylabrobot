@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoMagnificationCalibration.\_\_init\_\_
+====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: GalvoMagnificationCalibration.__init__

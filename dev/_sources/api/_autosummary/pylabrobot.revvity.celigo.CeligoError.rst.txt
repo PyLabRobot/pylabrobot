@@ -1,0 +1,6 @@
+﻿pylabrobot.revvity.celigo.CeligoError
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoexception:: CeligoError

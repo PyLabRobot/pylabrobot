@@ -1,0 +1,42 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.FilterWheel
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: FilterWheel
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FilterWheel.axis_index
+      ~FilterWheel.has_position_reference
+      ~FilterWheel.is_initialized
+      ~FilterWheel.config
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FilterWheel.__init__
+      ~FilterWheel.home
+      ~FilterWheel.move_to
+      ~FilterWheel.move_to_ticks
+      ~FilterWheel.request_encoder_ratio
+      ~FilterWheel.request_encoder_ticks
+      ~FilterWheel.request_is_negative_limit_active
+      ~FilterWheel.request_is_positive_limit_active
+      ~FilterWheel.request_limit_flags
+   
+   

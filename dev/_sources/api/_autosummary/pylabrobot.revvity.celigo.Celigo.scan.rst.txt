@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.scan
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.scan

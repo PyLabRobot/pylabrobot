@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Laser.attenuator
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Laser.attenuator

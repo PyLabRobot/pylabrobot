@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ExternalCameraControlConfig.enabled
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ExternalCameraControlConfig.enabled

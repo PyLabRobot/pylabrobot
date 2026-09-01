@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoControllerStatus.firing\_status
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoControllerStatus.firing_status

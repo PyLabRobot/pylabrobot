@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.from\_xml
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CalibrationConfig.from_xml

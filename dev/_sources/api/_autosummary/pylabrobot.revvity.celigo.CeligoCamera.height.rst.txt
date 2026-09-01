@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoCamera.height
+=============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoCamera.height

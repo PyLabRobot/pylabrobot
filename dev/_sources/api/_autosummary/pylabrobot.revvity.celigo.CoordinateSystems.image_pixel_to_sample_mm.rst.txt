@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CoordinateSystems.image\_pixel\_to\_sample\_mm
+========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CoordinateSystems.image_pixel_to_sample_mm

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AnalogInputConfig.enabled
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AnalogInputConfig.enabled

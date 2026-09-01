@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.unrecognized\_fields
+================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.unrecognized_fields

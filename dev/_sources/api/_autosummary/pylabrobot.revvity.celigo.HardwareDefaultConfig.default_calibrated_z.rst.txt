@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.HardwareDefaultConfig.default\_calibrated\_z
+======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: HardwareDefaultConfig.default_calibrated_z

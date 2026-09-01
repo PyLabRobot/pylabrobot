@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.save\_pgm
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CameraFrame.save_pgm

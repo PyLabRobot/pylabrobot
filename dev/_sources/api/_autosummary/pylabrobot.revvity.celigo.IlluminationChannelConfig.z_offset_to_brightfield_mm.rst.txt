@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.IlluminationChannelConfig.z\_offset\_to\_brightfield\_mm
+==================================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: IlluminationChannelConfig.z_offset_to_brightfield_mm

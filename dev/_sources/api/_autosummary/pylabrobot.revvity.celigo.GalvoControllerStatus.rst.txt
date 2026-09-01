@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.GalvoControllerStatus
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: GalvoControllerStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoControllerStatus.x_busy
+      ~GalvoControllerStatus.y_busy
+      ~GalvoControllerStatus.x_hardware_voltage
+      ~GalvoControllerStatus.y_hardware_voltage
+      ~GalvoControllerStatus.fire_table_size
+      ~GalvoControllerStatus.points_loaded
+      ~GalvoControllerStatus.fire_table_index
+      ~GalvoControllerStatus.firing_status
+      ~GalvoControllerStatus.capture_armed
+      ~GalvoControllerStatus.capture_table_size
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoControllerStatus.__init__
+   
+   

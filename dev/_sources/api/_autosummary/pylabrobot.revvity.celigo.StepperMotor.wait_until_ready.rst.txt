@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.StepperMotor.wait\_until\_ready
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: StepperMotor.wait_until_ready

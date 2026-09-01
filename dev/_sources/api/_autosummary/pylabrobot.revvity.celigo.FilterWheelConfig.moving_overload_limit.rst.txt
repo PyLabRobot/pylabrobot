@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.moving\_overload\_limit
+===================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.moving_overload_limit

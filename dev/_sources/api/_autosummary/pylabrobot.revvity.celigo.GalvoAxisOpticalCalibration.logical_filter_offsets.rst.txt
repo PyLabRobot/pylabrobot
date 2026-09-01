@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoAxisOpticalCalibration.logical\_filter\_offsets
+==============================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoAxisOpticalCalibration.logical_filter_offsets

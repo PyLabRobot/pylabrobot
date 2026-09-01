@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.from\_element
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: GalvoConfig.from_element

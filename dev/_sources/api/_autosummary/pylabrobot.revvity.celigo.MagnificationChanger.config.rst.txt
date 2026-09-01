@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MagnificationChanger.config
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: MagnificationChanger.config

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Calibrated2DPolynomialTransform.successful
+====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: Calibrated2DPolynomialTransform.successful

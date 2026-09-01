@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LightingIOConfig.min\_voltage
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LightingIOConfig.min_voltage

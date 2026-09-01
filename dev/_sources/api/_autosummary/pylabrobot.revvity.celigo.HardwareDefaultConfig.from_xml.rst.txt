@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.HardwareDefaultConfig.from\_xml
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: HardwareDefaultConfig.from_xml

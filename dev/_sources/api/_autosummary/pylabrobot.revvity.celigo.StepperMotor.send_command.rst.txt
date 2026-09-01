@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.StepperMotor.send\_command
+====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: StepperMotor.send_command

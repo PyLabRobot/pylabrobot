@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.loading\_current\_percentage
+========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.loading_current_percentage

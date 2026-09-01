@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MagnificationChanger.move\_to\_ticks
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: MagnificationChanger.move_to_ticks

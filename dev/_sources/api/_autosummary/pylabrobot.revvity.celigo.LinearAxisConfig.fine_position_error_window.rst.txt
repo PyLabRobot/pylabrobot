@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.fine\_position\_error\_window
+========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.fine_position_error_window

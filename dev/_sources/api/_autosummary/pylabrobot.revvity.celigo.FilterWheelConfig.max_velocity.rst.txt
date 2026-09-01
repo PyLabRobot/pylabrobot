@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.max\_velocity
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.max_velocity

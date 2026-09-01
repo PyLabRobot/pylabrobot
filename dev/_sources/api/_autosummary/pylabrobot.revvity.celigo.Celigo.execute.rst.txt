@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.execute
+========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.execute

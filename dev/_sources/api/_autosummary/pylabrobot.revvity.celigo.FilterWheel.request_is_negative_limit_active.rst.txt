@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheel.request\_is\_negative\_limit\_active
+==========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterWheel.request_is_negative_limit_active

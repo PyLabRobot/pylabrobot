@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.bit\_depth
+================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CameraFrame.bit_depth

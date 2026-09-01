@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.s\_curve\_support
+=============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.s_curve_support

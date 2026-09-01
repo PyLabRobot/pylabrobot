@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ControllerInfo.device\_index
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ControllerInfo.device_index

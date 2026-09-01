@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheel.home
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterWheel.home

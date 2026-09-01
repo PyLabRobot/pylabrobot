@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.max\_deceleration
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.max_deceleration

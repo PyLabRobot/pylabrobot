@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.request\_detected\_motor\_addresses
+====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.request_detected_motor_addresses

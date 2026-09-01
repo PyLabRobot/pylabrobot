@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.mode\_enable\_limits
+===============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.mode_enable_limits

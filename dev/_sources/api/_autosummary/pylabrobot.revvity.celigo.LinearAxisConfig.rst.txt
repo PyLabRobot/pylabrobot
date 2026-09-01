@@ -1,0 +1,75 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.LinearAxisConfig
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: LinearAxisConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LinearAxisConfig.min_position
+      ~LinearAxisConfig.max_position
+      ~LinearAxisConfig.mm_per_encoder_tick
+      ~LinearAxisConfig.motion_name
+      ~LinearAxisConfig.config_version
+      ~LinearAxisConfig.motor_type
+      ~LinearAxisConfig.comm_index
+      ~LinearAxisConfig.controller_index
+      ~LinearAxisConfig.axis_index
+      ~LinearAxisConfig.enabled
+      ~LinearAxisConfig.max_velocity
+      ~LinearAxisConfig.max_acceleration
+      ~LinearAxisConfig.max_deceleration
+      ~LinearAxisConfig.max_s_acceleration
+      ~LinearAxisConfig.moderate_acceleration
+      ~LinearAxisConfig.minimum_acceleration
+      ~LinearAxisConfig.moderate_s_acceleration
+      ~LinearAxisConfig.minimum_s_acceleration
+      ~LinearAxisConfig.s_curve_support
+      ~LinearAxisConfig.home_type
+      ~LinearAxisConfig.homing_velocity
+      ~LinearAxisConfig.index_velocity
+      ~LinearAxisConfig.homing_short_move
+      ~LinearAxisConfig.home_offset
+      ~LinearAxisConfig.positive_limit
+      ~LinearAxisConfig.negative_limit
+      ~LinearAxisConfig.limit_polarity
+      ~LinearAxisConfig.invert_axis_direction
+      ~LinearAxisConfig.default_positive_direction
+      ~LinearAxisConfig.moving_current_percentage
+      ~LinearAxisConfig.holding_current_percentage
+      ~LinearAxisConfig.loading_current_percentage
+      ~LinearAxisConfig.moving_overload_limit
+      ~LinearAxisConfig.mode_enable_limits
+      ~LinearAxisConfig.mode_enable_step_and_direction
+      ~LinearAxisConfig.mode_enable_position_correction
+      ~LinearAxisConfig.mode_enable_motor_slave_to_encoder
+      ~LinearAxisConfig.coarse_position_error_window
+      ~LinearAxisConfig.fine_position_error_window
+      ~LinearAxisConfig.gain
+      ~LinearAxisConfig.encoder_to_motor_tick_ratio
+      ~LinearAxisConfig.backlash_compensation
+      ~LinearAxisConfig.motor_response_time
+      ~LinearAxisConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LinearAxisConfig.__init__
+      ~LinearAxisConfig.from_element
+   
+   

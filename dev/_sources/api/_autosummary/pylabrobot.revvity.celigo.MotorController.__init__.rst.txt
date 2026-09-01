@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MotorController.\_\_init\_\_
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: MotorController.__init__

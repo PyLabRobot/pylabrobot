@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.SelfTestReport.passed
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: SelfTestReport.passed

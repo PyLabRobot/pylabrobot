@@ -1,0 +1,72 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.AxisConfig
+====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: AxisConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AxisConfig.motion_name
+      ~AxisConfig.config_version
+      ~AxisConfig.motor_type
+      ~AxisConfig.comm_index
+      ~AxisConfig.controller_index
+      ~AxisConfig.axis_index
+      ~AxisConfig.enabled
+      ~AxisConfig.max_velocity
+      ~AxisConfig.max_acceleration
+      ~AxisConfig.max_deceleration
+      ~AxisConfig.max_s_acceleration
+      ~AxisConfig.moderate_acceleration
+      ~AxisConfig.minimum_acceleration
+      ~AxisConfig.moderate_s_acceleration
+      ~AxisConfig.minimum_s_acceleration
+      ~AxisConfig.s_curve_support
+      ~AxisConfig.home_type
+      ~AxisConfig.homing_velocity
+      ~AxisConfig.index_velocity
+      ~AxisConfig.homing_short_move
+      ~AxisConfig.home_offset
+      ~AxisConfig.positive_limit
+      ~AxisConfig.negative_limit
+      ~AxisConfig.limit_polarity
+      ~AxisConfig.invert_axis_direction
+      ~AxisConfig.default_positive_direction
+      ~AxisConfig.moving_current_percentage
+      ~AxisConfig.holding_current_percentage
+      ~AxisConfig.loading_current_percentage
+      ~AxisConfig.moving_overload_limit
+      ~AxisConfig.mode_enable_limits
+      ~AxisConfig.mode_enable_step_and_direction
+      ~AxisConfig.mode_enable_position_correction
+      ~AxisConfig.mode_enable_motor_slave_to_encoder
+      ~AxisConfig.coarse_position_error_window
+      ~AxisConfig.fine_position_error_window
+      ~AxisConfig.gain
+      ~AxisConfig.encoder_to_motor_tick_ratio
+      ~AxisConfig.backlash_compensation
+      ~AxisConfig.motor_response_time
+      ~AxisConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~AxisConfig.__init__
+      ~AxisConfig.from_element
+   
+   

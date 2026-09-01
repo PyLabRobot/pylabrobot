@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.big\_move\_delay
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoConfig.big_move_delay

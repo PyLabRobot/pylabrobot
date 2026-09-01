@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.mode\_enable\_step\_and\_direction
+=============================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.mode_enable_step_and_direction

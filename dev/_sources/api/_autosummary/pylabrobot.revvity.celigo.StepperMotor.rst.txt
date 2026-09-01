@@ -1,0 +1,29 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.StepperMotor
+======================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: StepperMotor
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~StepperMotor.__init__
+      ~StepperMotor.request_encoder_ratio
+      ~StepperMotor.request_encoder_ticks
+      ~StepperMotor.request_motor_controller_firmware_version
+      ~StepperMotor.send_command
+      ~StepperMotor.wait_until_ready
+   
+   

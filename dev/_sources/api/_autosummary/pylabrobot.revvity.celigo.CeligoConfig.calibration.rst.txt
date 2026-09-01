@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoConfig.calibration
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CeligoConfig.calibration

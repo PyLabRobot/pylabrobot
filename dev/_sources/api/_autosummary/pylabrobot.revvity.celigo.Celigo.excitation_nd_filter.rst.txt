@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.excitation\_nd\_filter
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Celigo.excitation_nd_filter

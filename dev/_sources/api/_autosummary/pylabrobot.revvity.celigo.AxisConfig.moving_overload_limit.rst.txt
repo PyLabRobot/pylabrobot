@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AxisConfig.moving\_overload\_limit
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AxisConfig.moving_overload_limit

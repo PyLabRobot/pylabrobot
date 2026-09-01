@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.Calibrated2DPolynomialTransform
+=========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: Calibrated2DPolynomialTransform
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Calibrated2DPolynomialTransform.source_path
+      ~Calibrated2DPolynomialTransform.successful
+      ~Calibrated2DPolynomialTransform.forward
+      ~Calibrated2DPolynomialTransform.reverse
+      ~Calibrated2DPolynomialTransform.order
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Calibrated2DPolynomialTransform.__init__
+      ~Calibrated2DPolynomialTransform.from_element
+      ~Calibrated2DPolynomialTransform.from_xml
+   
+   

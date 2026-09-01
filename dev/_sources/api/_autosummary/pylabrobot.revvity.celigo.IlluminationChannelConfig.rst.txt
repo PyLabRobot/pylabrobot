@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.IlluminationChannelConfig
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: IlluminationChannelConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~IlluminationChannelConfig.name
+      ~IlluminationChannelConfig.display_name
+      ~IlluminationChannelConfig.logical_filter
+      ~IlluminationChannelConfig.bit_value
+      ~IlluminationChannelConfig.intensity_percent
+      ~IlluminationChannelConfig.lighting_io_name
+      ~IlluminationChannelConfig.strobe
+      ~IlluminationChannelConfig.z_offset_to_brightfield_mm
+      ~IlluminationChannelConfig.mm_per_pixel_x_correction_to_brightfield
+      ~IlluminationChannelConfig.mm_per_pixel_y_correction_to_brightfield
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~IlluminationChannelConfig.__init__
+   
+   

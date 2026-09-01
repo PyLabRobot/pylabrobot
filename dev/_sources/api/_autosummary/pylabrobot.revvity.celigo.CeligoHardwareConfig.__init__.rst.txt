@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoHardwareConfig.\_\_init\_\_
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: CeligoHardwareConfig.__init__

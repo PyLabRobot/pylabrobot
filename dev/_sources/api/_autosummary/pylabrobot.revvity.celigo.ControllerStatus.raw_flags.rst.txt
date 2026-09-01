@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ControllerStatus.raw\_flags
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ControllerStatus.raw_flags

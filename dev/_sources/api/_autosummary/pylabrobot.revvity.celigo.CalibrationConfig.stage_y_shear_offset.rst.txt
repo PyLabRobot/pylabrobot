@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.stage\_y\_shear\_offset
+===================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.stage_y_shear_offset

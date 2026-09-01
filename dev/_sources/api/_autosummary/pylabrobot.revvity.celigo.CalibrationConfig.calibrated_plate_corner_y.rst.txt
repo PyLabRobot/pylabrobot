@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.calibrated\_plate\_corner\_y
+========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.calibrated_plate_corner_y

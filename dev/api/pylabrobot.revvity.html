@@ -1,0 +1,930 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pylabrobot.revvity package &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=b0ac04d7" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=cb8930eaaf36d9849b67"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67" />
+
+    <script src="../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/plr_devices.js?v=2dde28f2"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/pylabrobot.revvity';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/pylabrobot.revvity.html" />
+    <link rel="icon" href="../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="pylabrobot.revvity.celigo.Celigo" href="_autosummary/pylabrobot.revvity.celigo.Celigo.html" />
+    <link rel="prev" title="pylabrobot.qinstruments.bioshake.ColdPlate" href="_autosummary/pylabrobot.qinstruments.bioshake.ColdPlate.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.2" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" current active">
+  <a class="nav-link dropdown-item nav-internal" href="pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="pylabrobot.html" class="nav-link">API</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.revvity package</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="pylabrobot-revvity-package">
+<h1>pylabrobot.revvity package<a class="headerlink" href="#pylabrobot-revvity-package" title="Link to this heading">#</a></h1>
+<section id="celigo">
+<h2>Celigo<a class="headerlink" href="#celigo" title="Link to this heading">#</a></h2>
+<p>Load the vendor configuration explicitly, construct the instrument, then assign the
+PyLabRobot plate used for well navigation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.revvity</span><span class="w"> </span><span class="kn">import</span> <span class="n">Celigo</span><span class="p">,</span> <span class="n">CeligoConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.corning.plates</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cor_96_wellplate_360ul_Fb</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">CeligoConfig</span><span class="o">.</span><span class="n">from_install</span><span class="p">(</span><span class="s2">"/path/to/Celigo/ConfigFiles"</span><span class="p">)</span>
+<span class="n">celigo</span> <span class="o">=</span> <span class="n">Celigo</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+<span class="n">celigo</span><span class="o">.</span><span class="n">set_plate</span><span class="p">(</span><span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"imaging_plate"</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.Celigo.html#pylabrobot.revvity.celigo.Celigo" title="pylabrobot.revvity.celigo.Celigo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Celigo</span></code></a></p></td>
+<td><p>Celigo image cytometer motion/illumination controller.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.AcquisitionResult.html#pylabrobot.revvity.celigo.AcquisitionResult" title="pylabrobot.revvity.celigo.AcquisitionResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AcquisitionResult</span></code></a></p></td>
+<td><p>A captured frame plus motion/optical metadata used for the acquisition.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.FocusResult.html#pylabrobot.revvity.celigo.FocusResult" title="pylabrobot.revvity.celigo.FocusResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FocusResult</span></code></a></p></td>
+<td><p>Best Z position, scored Z samples, and verified final autofocus frame.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.ControllerInfo.html#pylabrobot.revvity.celigo.ControllerInfo" title="pylabrobot.revvity.celigo.ControllerInfo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ControllerInfo</span></code></a></p></td>
+<td><p>Board identity from SEND_CONFIG: device index, firmware version, UART buffer size.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.ControllerStatus.html#pylabrobot.revvity.celigo.ControllerStatus" title="pylabrobot.revvity.celigo.ControllerStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ControllerStatus</span></code></a></p></td>
+<td><p>Decoded controller status returned by <a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.Celigo.request_controller_status.html#pylabrobot.revvity.celigo.Celigo.request_controller_status" title="pylabrobot.revvity.celigo.Celigo.request_controller_status"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Celigo.request_controller_status()</span></code></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.DetectedMotorAddress.html#pylabrobot.revvity.celigo.DetectedMotorAddress" title="pylabrobot.revvity.celigo.DetectedMotorAddress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DetectedMotorAddress</span></code></a></p></td>
+<td><p>One EZStepper address reported by a controller UART.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.SelfTestReport.html#pylabrobot.revvity.celigo.SelfTestReport" title="pylabrobot.revvity.celigo.SelfTestReport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SelfTestReport</span></code></a></p></td>
+<td><p>Read-only or active controller self-test results.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="camera">
+<h2>Camera<a class="headerlink" href="#camera" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.CeligoCamera.html#pylabrobot.revvity.celigo.CeligoCamera" title="pylabrobot.revvity.celigo.CeligoCamera"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CeligoCamera</span></code></a></p></td>
+<td><p>Camera interface consumed by <a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.Celigo.html#pylabrobot.revvity.celigo.Celigo" title="pylabrobot.revvity.celigo.Celigo"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.revvity.celigo.Celigo</span></code></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.CameraFrame.html#pylabrobot.revvity.celigo.CameraFrame" title="pylabrobot.revvity.celigo.CameraFrame"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CameraFrame</span></code></a></p></td>
+<td><p>One raw monochrome camera frame and its acquisition metadata.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.CameraError.html#pylabrobot.revvity.celigo.CameraError" title="pylabrobot.revvity.celigo.CameraError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CameraError</span></code></a></p></td>
+<td><p>A Lumenera SDK operation failed.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="motion-and-optics">
+<h2>Motion and optics<a class="headerlink" href="#motion-and-optics" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.Axis.html#pylabrobot.revvity.celigo.Axis" title="pylabrobot.revvity.celigo.Axis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Axis</span></code></a></p></td>
+<td><p>One configured motorized Celigo mechanism.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.LinearAxis.html#pylabrobot.revvity.celigo.LinearAxis" title="pylabrobot.revvity.celigo.LinearAxis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LinearAxis</span></code></a></p></td>
+<td><p>A configured X, Y, or Z axis with millimeter movement and homing.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.StepperMotor.html#pylabrobot.revvity.celigo.StepperMotor" title="pylabrobot.revvity.celigo.StepperMotor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StepperMotor</span></code></a></p></td>
+<td><p>One addressed EZStepper motor on the Celigo controller.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.MotorController.html#pylabrobot.revvity.celigo.MotorController" title="pylabrobot.revvity.celigo.MotorController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MotorController</span></code></a></p></td>
+<td><p>EZStepper command transport tunneled through the Celigo controller board.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.FilterWheel.html#pylabrobot.revvity.celigo.FilterWheel" title="pylabrobot.revvity.celigo.FilterWheel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FilterWheel</span></code></a></p></td>
+<td><p>A configured rotary wheel with a learned physical-position-one datum.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.MagnificationChanger.html#pylabrobot.revvity.celigo.MagnificationChanger" title="pylabrobot.revvity.celigo.MagnificationChanger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MagnificationChanger</span></code></a></p></td>
+<td><p>Objective wheel that also owns the active magnification calibration state.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.Galvo.html#pylabrobot.revvity.celigo.Galvo" title="pylabrobot.revvity.celigo.Galvo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Galvo</span></code></a></p></td>
+<td><p>Galvo positioning, calibration, and status operations owned by a Celigo.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.GalvoControllerStatus.html#pylabrobot.revvity.celigo.GalvoControllerStatus" title="pylabrobot.revvity.celigo.GalvoControllerStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GalvoControllerStatus</span></code></a></p></td>
+<td><p>Complete galvo/laser state returned by <code class="docutils literal notranslate"><span class="pre">SEND_GALVO_INFO</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.Laser.html#pylabrobot.revvity.celigo.Laser" title="pylabrobot.revvity.celigo.Laser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Laser</span></code></a></p></td>
+<td><p>Laser UART, firing, targeting, and optical controls owned by a Celigo.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.CeligoConfig.html#pylabrobot.revvity.celigo.CeligoConfig" title="pylabrobot.revvity.celigo.CeligoConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CeligoConfig</span></code></a></p></td>
+<td><p>All parsed configuration for one Celigo instrument.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.CeligoHardwareConfig.html#pylabrobot.revvity.celigo.CeligoHardwareConfig" title="pylabrobot.revvity.celigo.CeligoHardwareConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CeligoHardwareConfig</span></code></a></p></td>
+<td><p>Root hardware config, parsed from <code class="docutils literal notranslate"><span class="pre">USBIOHardwareConfig.config</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.AxisConfig.html#pylabrobot.revvity.celigo.AxisConfig" title="pylabrobot.revvity.celigo.AxisConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AxisConfig</span></code></a></p></td>
+<td><p>Configuration shared by encoder-controlled motors.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.LinearAxisConfig.html#pylabrobot.revvity.celigo.LinearAxisConfig" title="pylabrobot.revvity.celigo.LinearAxisConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LinearAxisConfig</span></code></a></p></td>
+<td><p>A linear X, Y, or Z motor with millimeter position bounds.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.FilterWheelConfig.html#pylabrobot.revvity.celigo.FilterWheelConfig" title="pylabrobot.revvity.celigo.FilterWheelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FilterWheelConfig</span></code></a></p></td>
+<td><p>A discrete rotary filter wheel (<code class="docutils literal notranslate"><span class="pre">DichroicFilterWheel</span></code> and friends).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.FilterMapEntry.html#pylabrobot.revvity.celigo.FilterMapEntry" title="pylabrobot.revvity.celigo.FilterMapEntry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FilterMapEntry</span></code></a></p></td>
+<td><p>One physical&lt;-&gt;logical filter position mapping (<code class="docutils literal notranslate"><span class="pre">FilterMap</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.IOConfig.html#pylabrobot.revvity.celigo.IOConfig" title="pylabrobot.revvity.celigo.IOConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IOConfig</span></code></a></p></td>
+<td><p>The board IO map: analog ins, digital IOs and lighting IOs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.AnalogInputConfig.html#pylabrobot.revvity.celigo.AnalogInputConfig" title="pylabrobot.revvity.celigo.AnalogInputConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AnalogInputConfig</span></code></a></p></td>
+<td><p>One analog input from <code class="docutils literal notranslate"><span class="pre">IOConfiguration</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.DigitalIOConfig.html#pylabrobot.revvity.celigo.DigitalIOConfig" title="pylabrobot.revvity.celigo.DigitalIOConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DigitalIOConfig</span></code></a></p></td>
+<td><p>One digital input or output from <code class="docutils literal notranslate"><span class="pre">IOConfiguration</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.LightingIOConfig.html#pylabrobot.revvity.celigo.LightingIOConfig" title="pylabrobot.revvity.celigo.LightingIOConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LightingIOConfig</span></code></a></p></td>
+<td><p>One analog lighting output from <code class="docutils literal notranslate"><span class="pre">IOConfiguration</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.HardwareDefaultConfig.html#pylabrobot.revvity.celigo.HardwareDefaultConfig" title="pylabrobot.revvity.celigo.HardwareDefaultConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HardwareDefaultConfig</span></code></a></p></td>
+<td><p>Instrument defaults (<code class="docutils literal notranslate"><span class="pre">HardwareDefaultConfig.xml</span></code>): plate corner, FOV, galvo MM/V.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.NavigationConfig.html#pylabrobot.revvity.celigo.NavigationConfig" title="pylabrobot.revvity.celigo.NavigationConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NavigationConfig</span></code></a></p></td>
+<td><p>Galvo reach and frame overlap from <code class="docutils literal notranslate"><span class="pre">NavigationConfig.xml</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.CalibrationConfig.html#pylabrobot.revvity.celigo.CalibrationConfig" title="pylabrobot.revvity.celigo.CalibrationConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CalibrationConfig</span></code></a></p></td>
+<td><p>Per-machine optical/stage calibration (<code class="docutils literal notranslate"><span class="pre">CalibrationConfig.xml</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.Calibrated2DPolynomialTransform.html#pylabrobot.revvity.celigo.Calibrated2DPolynomialTransform" title="pylabrobot.revvity.celigo.Calibrated2DPolynomialTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Calibrated2DPolynomialTransform</span></code></a></p></td>
+<td><p>A 2D quadratic or cubic coordinate transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.ChannelDescriptor.html#pylabrobot.revvity.celigo.ChannelDescriptor" title="pylabrobot.revvity.celigo.ChannelDescriptor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChannelDescriptor</span></code></a></p></td>
+<td><p>An imaging channel from <code class="docutils literal notranslate"><span class="pre">ChannelConfig.xml</span></code> (Default / HWAF / fluorescence).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.ExternalCameraControlConfig.html#pylabrobot.revvity.celigo.ExternalCameraControlConfig" title="pylabrobot.revvity.celigo.ExternalCameraControlConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExternalCameraControlConfig</span></code></a></p></td>
+<td><p>Camera trigger/status-line configuration from <code class="docutils literal notranslate"><span class="pre">ExternalCameraControl</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.GalvoAxisOpticalCalibration.html#pylabrobot.revvity.celigo.GalvoAxisOpticalCalibration" title="pylabrobot.revvity.celigo.GalvoAxisOpticalCalibration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GalvoAxisOpticalCalibration</span></code></a></p></td>
+<td><p>Optical-center calibration for one galvo axis from LEAP calibration XML.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.GalvoConfig.html#pylabrobot.revvity.celigo.GalvoConfig" title="pylabrobot.revvity.celigo.GalvoConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GalvoConfig</span></code></a></p></td>
+<td><p>A galvanometer scan axis (<code class="docutils literal notranslate"><span class="pre">XGalvo</span></code> / <code class="docutils literal notranslate"><span class="pre">YGalvo</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.GalvoMagnificationCalibration.html#pylabrobot.revvity.celigo.GalvoMagnificationCalibration" title="pylabrobot.revvity.celigo.GalvoMagnificationCalibration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GalvoMagnificationCalibration</span></code></a></p></td>
+<td><p>Imaging center and frame span for one objective magnification.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.GalvoOpticalCalibration.html#pylabrobot.revvity.celigo.GalvoOpticalCalibration" title="pylabrobot.revvity.celigo.GalvoOpticalCalibration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GalvoOpticalCalibration</span></code></a></p></td>
+<td><p>X/Y imaging-center calibration from <code class="docutils literal notranslate"><span class="pre">leaphardwarecalibration.config</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.IlluminationChannelConfig.html#pylabrobot.revvity.celigo.IlluminationChannelConfig" title="pylabrobot.revvity.celigo.IlluminationChannelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IlluminationChannelConfig</span></code></a></p></td>
+<td><p>Hardware recipe for one image channel from <code class="docutils literal notranslate"><span class="pre">leaphardwarecalibration.config</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="coordinates-and-navigation">
+<h2>Coordinates and navigation<a class="headerlink" href="#coordinates-and-navigation" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.CoordinateSystems.html#pylabrobot.revvity.celigo.CoordinateSystems" title="pylabrobot.revvity.celigo.CoordinateSystems"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CoordinateSystems</span></code></a></p></td>
+<td><p>Affine coordinate frames and conversion methods.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.well_to_stage_mm.html#pylabrobot.revvity.celigo.well_to_stage_mm" title="pylabrobot.revvity.celigo.well_to_stage_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">well_to_stage_mm</span></code></a></p></td>
+<td><p>Stage mm for the center of a named well (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;A1&quot;</span></code>).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="configuration-loaders">
+<h2>Configuration loaders<a class="headerlink" href="#configuration-loaders" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.load_channel_descriptors.html#pylabrobot.revvity.celigo.load_channel_descriptors" title="pylabrobot.revvity.celigo.load_channel_descriptors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_channel_descriptors</span></code></a></p></td>
+<td><p>Parse <code class="docutils literal notranslate"><span class="pre">ChannelConfig.xml</span></code> into a list of <a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.ChannelDescriptor.html#pylabrobot.revvity.celigo.ChannelDescriptor" title="pylabrobot.revvity.celigo.ChannelDescriptor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChannelDescriptor</span></code></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.load_galvo_calibrations.html#pylabrobot.revvity.celigo.load_galvo_calibrations" title="pylabrobot.revvity.celigo.load_galvo_calibrations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_galvo_calibrations</span></code></a></p></td>
+<td><p>Load every per-logical-filter galvo transform in a calibration file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.load_galvo_optical_calibration.html#pylabrobot.revvity.celigo.load_galvo_optical_calibration" title="pylabrobot.revvity.celigo.load_galvo_optical_calibration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_galvo_optical_calibration</span></code></a></p></td>
+<td><p>Load galvo centers, frame spans, and filter offsets from LEAP calibration XML.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.load_illumination_channels.html#pylabrobot.revvity.celigo.load_illumination_channels" title="pylabrobot.revvity.celigo.load_illumination_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_illumination_channels</span></code></a></p></td>
+<td><p>Load one magnification's illumination recipes from LEAP calibration XML.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="errors">
+<h2>Errors<a class="headerlink" href="#errors" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.revvity.celigo.CeligoError.html#pylabrobot.revvity.celigo.CeligoError" title="pylabrobot.revvity.celigo.CeligoError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CeligoError</span></code></a></p></td>
+<td><p>Raised when the Celigo rejects a command or returns a malformed response.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="_autosummary/pylabrobot.qinstruments.bioshake.ColdPlate.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">pylabrobot.qinstruments.bioshake.ColdPlate</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="_autosummary/pylabrobot.revvity.celigo.Celigo.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pylabrobot.revvity.celigo.Celigo</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#celigo">Celigo</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#camera">Camera</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#motion-and-optics">Motion and optics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coordinates-and-navigation">Coordinates and navigation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-loaders">Configuration loaders</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#errors">Errors</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/pylabrobot.revvity.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/api/pylabrobot.revvity.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=cb8930eaaf36d9849b67"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=cb8930eaaf36d9849b67"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.21.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

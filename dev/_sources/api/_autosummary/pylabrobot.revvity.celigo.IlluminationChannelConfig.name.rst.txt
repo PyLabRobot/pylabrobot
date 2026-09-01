@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.IlluminationChannelConfig.name
+========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: IlluminationChannelConfig.name

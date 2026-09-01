@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.calibrated\_z\_glass\_plate\_delta
+==============================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.calibrated_z_glass_plate_delta

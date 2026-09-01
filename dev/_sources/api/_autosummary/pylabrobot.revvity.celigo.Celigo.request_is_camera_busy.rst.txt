@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.request\_is\_camera\_busy
+==========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.request_is_camera_busy

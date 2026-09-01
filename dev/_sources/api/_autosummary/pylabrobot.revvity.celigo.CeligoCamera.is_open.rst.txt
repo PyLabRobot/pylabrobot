@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CeligoCamera.is\_open
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: CeligoCamera.is_open

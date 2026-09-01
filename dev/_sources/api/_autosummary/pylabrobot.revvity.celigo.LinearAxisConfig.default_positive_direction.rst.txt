@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.default\_positive\_direction
+=======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.default_positive_direction

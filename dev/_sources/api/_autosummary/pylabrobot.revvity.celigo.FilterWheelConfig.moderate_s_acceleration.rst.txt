@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.moderate\_s\_acceleration
+=====================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.moderate_s_acceleration

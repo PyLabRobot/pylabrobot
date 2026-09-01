@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.GalvoOpticalCalibration
+=================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: GalvoOpticalCalibration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoOpticalCalibration.source_path
+      ~GalvoOpticalCalibration.x
+      ~GalvoOpticalCalibration.y
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GalvoOpticalCalibration.__init__
+   
+   

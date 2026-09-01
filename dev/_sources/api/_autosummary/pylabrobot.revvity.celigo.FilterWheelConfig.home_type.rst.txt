@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.home\_type
+======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.home_type

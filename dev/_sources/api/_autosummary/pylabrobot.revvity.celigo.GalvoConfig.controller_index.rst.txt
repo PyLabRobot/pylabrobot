@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.controller\_index
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoConfig.controller_index

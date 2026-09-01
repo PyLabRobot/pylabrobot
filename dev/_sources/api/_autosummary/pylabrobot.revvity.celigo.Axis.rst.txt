@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.Axis
+==============================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: Axis
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Axis.axis_index
+      ~Axis.is_initialized
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Axis.__init__
+      ~Axis.move_to_ticks
+      ~Axis.request_encoder_ratio
+      ~Axis.request_encoder_ticks
+      ~Axis.request_is_negative_limit_active
+      ~Axis.request_is_positive_limit_active
+      ~Axis.request_limit_flags
+   
+   

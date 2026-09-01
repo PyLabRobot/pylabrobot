@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.ExternalCameraControlConfig.invert\_integration
+=========================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: ExternalCameraControlConfig.invert_integration

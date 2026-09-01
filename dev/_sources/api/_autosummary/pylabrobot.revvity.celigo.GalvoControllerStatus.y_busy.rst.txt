@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoControllerStatus.y\_busy
+=======================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoControllerStatus.y_busy

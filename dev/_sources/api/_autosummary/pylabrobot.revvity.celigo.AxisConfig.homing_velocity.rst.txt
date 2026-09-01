@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AxisConfig.homing\_velocity
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AxisConfig.homing_velocity

@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.NavigationConfig
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: NavigationConfig
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~NavigationConfig.source_path
+      ~NavigationConfig.frame_overlap_x_mm
+      ~NavigationConfig.frame_overlap_y_mm
+      ~NavigationConfig.max_galvo_deflection_x_mm
+      ~NavigationConfig.max_galvo_deflection_y_mm
+      ~NavigationConfig.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~NavigationConfig.__init__
+      ~NavigationConfig.from_xml
+   
+   

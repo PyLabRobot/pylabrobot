@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.LinearAxisConfig.max\_acceleration
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: LinearAxisConfig.max_acceleration

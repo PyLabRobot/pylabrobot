@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.FocusResult
+=====================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: FocusResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FocusResult.z_ticks
+      ~FocusResult.z_mm
+      ~FocusResult.score
+      ~FocusResult.scored_z_samples
+      ~FocusResult.frame
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FocusResult.__init__
+   
+   

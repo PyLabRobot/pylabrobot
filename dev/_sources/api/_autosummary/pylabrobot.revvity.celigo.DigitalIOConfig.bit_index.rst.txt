@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.DigitalIOConfig.bit\_index
+====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: DigitalIOConfig.bit_index

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.IOConfig.digital\_ios
+===============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: IOConfig.digital_ios

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.data
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CameraFrame.data

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FocusResult.frame
+===========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FocusResult.frame

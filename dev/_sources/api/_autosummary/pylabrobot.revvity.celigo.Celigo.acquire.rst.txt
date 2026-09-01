@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.acquire
+========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.acquire

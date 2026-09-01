@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.AnalogInputConfig.invert
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: AnalogInputConfig.invert

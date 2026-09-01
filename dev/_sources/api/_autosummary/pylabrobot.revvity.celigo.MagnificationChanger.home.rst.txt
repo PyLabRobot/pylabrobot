@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MagnificationChanger.home
+===================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: MagnificationChanger.home

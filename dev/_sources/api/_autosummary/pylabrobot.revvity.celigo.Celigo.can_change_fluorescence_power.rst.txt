@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.can\_change\_fluorescence\_power
+=================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Celigo.can_change_fluorescence_power

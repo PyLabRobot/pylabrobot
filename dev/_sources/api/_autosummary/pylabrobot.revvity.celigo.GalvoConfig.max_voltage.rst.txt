@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.GalvoConfig.max\_voltage
+==================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: GalvoConfig.max_voltage

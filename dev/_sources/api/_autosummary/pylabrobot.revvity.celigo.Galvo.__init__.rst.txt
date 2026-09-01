@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Galvo.\_\_init\_\_
+============================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Galvo.__init__

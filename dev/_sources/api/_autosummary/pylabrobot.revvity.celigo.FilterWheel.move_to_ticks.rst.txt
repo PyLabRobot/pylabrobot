@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheel.move\_to\_ticks
+=====================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: FilterWheel.move_to_ticks

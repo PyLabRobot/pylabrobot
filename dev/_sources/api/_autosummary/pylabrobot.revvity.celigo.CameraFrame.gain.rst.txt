@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CameraFrame.gain
+==========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CameraFrame.gain

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.request\_barcode
+=================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.request_barcode

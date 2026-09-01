@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.controller\_firmware\_version
+==============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: Celigo.controller_firmware_version

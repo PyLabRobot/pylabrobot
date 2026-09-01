@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.Celigo.request\_controller\_status
+============================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. automethod:: Celigo.request_controller_status

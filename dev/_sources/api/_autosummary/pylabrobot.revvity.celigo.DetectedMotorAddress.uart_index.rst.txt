@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.DetectedMotorAddress.uart\_index
+==========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: DetectedMotorAddress.uart_index

@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.MagnificationChanger.has\_position\_reference
+=======================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoproperty:: MagnificationChanger.has_position_reference

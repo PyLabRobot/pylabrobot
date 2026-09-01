@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.FilterWheelConfig.backlash\_compensation
+==================================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: FilterWheelConfig.backlash_compensation

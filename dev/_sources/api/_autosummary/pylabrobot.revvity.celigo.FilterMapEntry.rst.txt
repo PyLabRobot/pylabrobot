@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.revvity.celigo.FilterMapEntry
+========================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoclass:: FilterMapEntry
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FilterMapEntry.logical_number
+      ~FilterMapEntry.physical_number
+      ~FilterMapEntry.unrecognized_fields
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FilterMapEntry.__init__
+      ~FilterMapEntry.from_element
+   
+   

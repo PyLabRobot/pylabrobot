@@ -1,0 +1,6 @@
+pylabrobot.revvity.celigo.CalibrationConfig.stage\_x\_scale
+===========================================================
+
+.. currentmodule:: pylabrobot.revvity.celigo
+
+.. autoattribute:: CalibrationConfig.stage_x_scale
