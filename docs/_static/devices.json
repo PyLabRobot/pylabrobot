@@ -217,6 +217,23 @@
     "oem": "https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel"
   },
   {
+    "id": "azure-biosystems-cielo-6",
+    "vendor": "Azure BioSystems",
+    "name": "Cielo 6",
+    "kind": "qPCR machine",
+    "capabilities": [
+      "qPCR",
+      "thermocycling",
+      "fluorescence"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.azure_biosystems.Cielo6",
+    "api_version": "v1",
+    "code_slug": "azure_biosystems",
+    "doc_slug": "azure_biosystems/cielo6/hello-world",
+    "notes": "USB identity, status, workspace operations, program retrieval, qPCR execution, live progress, and verified result transfer were tested on hardware. Pause, resume, and program deletion are implemented from the vendor USB API but still need hardware verification."
+  },
+  {
     "id": "beckman-cytoflex-s",
     "vendor": "Beckman Coulter",
     "name": "CytoFLEX S",

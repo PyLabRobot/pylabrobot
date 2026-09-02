@@ -21,6 +21,7 @@ Manufacturers
     :maxdepth: 1
 
     pylabrobot.agilent
+    pylabrobot.azure_biosystems
     pylabrobot.azenta
     pylabrobot.big_bear
     pylabrobot.brooks
