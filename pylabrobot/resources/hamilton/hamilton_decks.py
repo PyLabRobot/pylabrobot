@@ -18,6 +18,54 @@ logger = logging.getLogger(__name__)
 
 _RAILS_WIDTH = 22.5  # space between rails (mm)
 
+# Where a deck-owned X-arm sits and how tall it is (mm). The arm rides at the channel stop-disk
+# safety height, level with the raised stop discs so it clears them as it travels.
+_X_ARM_Z = 334.7
+_X_ARM_SIZE_Z = 140.0
+# The arm is deeper than the deck it rides over, so it overhangs the deck's front edge. Measured
+# front face to back face.
+_X_ARM_SIZE_Y = 712.0
+
+# How big the autoload's sled is (mm). Standing on the deck's own zero it reaches exactly the height
+# a carrier seats at, which is where the machine's coordinates put the deck surface: the drive that
+# has to pass under the deck plate is as tall as the offset between the two.
+# The sled - the transport and the barcode reader it carries - measured on the manufacturer's own
+# model. The box wraps the whole part, so a model declared on this resource is drawn from its own
+# front-left-bottom corner and the box describes what is actually there.
+#
+# What this replaces: 235.0 x 116.0 x 100.0, a figure taken before the part was modelled. The reader
+# stands 115 mm above that, so a model of the fitted sled reached half again as high as the box that
+# positioned it.
+#
+# The left edge is set by a thin tab, 1.5 mm thick, reaching 40 mm further left than anything else
+# on the part. A distance measured INTO this box - where the drive's reported x lands on the sled is
+# the one that matters - therefore starts at that tab, not at the body.
+_AUTOLOAD_SLED_SIZE_X = 316.2
+_AUTOLOAD_SLED_SIZE_Y = 109.5
+_AUTOLOAD_SLED_SIZE_Z = 215.3
+# Where it sits across the deck and how high it stands, against a carrier's own front edge and the
+# deck's work surface.
+_AUTOLOAD_SLED_AHEAD_OF_CARRIER_Y = 92.7
+_AUTOLOAD_SLED_ABOVE_DECK_Z = 0.5
+# Where the loading tray sits, measured against the two things on the deck it lines up with: its
+# left edge is 104 mm left of where the first carrier starts, and it spans from 380 mm in front of a
+# carrier's front edge to 132 mm in front of it - so 248 mm deep, against the 250 it was called when
+# measured on its own. It reaches 104 mm short of the deck's right edge, which makes it 1445 mm wide
+# on a STAR, and it is 92 mm tall.
+_LOADING_TRAY_FROM_FIRST_CARRIER_X = 104.0
+_LOADING_TRAY_FRONT_AHEAD_OF_CARRIER_Y = 380.0
+_LOADING_TRAY_BACK_AHEAD_OF_CARRIER_Y = 132.0
+_LOADING_TRAY_SIZE_Z = 92.0
+# Where a carrier's own front edge sits on any Hamilton deck, in mm.
+_CARRIER_Y = 63.0
+
+# Parts of the MACHINE that happen to hang off the deck, as opposed to things placed ON it. They are
+# fitted where the instrument puts them, not assigned to rails, so they cannot occupy a rail and
+# must not be treated as though they do - a fitted autoload otherwise makes rail 1 unassignable,
+# because the sled's box reaches over the deck's front edge and up past a carrier's height.
+_MACHINE_PARTS = frozenset({"autoload_sled", "autoload_loading_tray"})
+
+
 STARLET_NUM_RAILS = 32
 STARLET_SIZE_X = 1005
 STARLET_SIZE_Y = 653.5
@@ -27,6 +75,17 @@ STAR_NUM_RAILS = 56
 STAR_SIZE_X = 1545
 STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
+
+# The STARplus deck. Derived rather than read off a config file, because we have no STARplus to read
+# one from - but the two decks above fix it between them. They differ by 24 rails and 540.0 mm,
+# which is exactly the 22.5 mm track pitch, so a deck's width and its rail count are the same fact.
+# The manufacturer's own models measure the three machines at 1130.0, 1667.0 and 2163.5 mm wide, and
+# a deck sits 125.0 and 122.0 mm inside the first two. Taking the same margin for the third gives
+# 2040.0 mm, which is 78.00 rails - a whole number, which the neighbouring margins are not.
+STARPLUS_NUM_RAILS = 78
+STARPLUS_SIZE_X = 2040.0
+STARPLUS_SIZE_Y = 653.5
+STARPLUS_SIZE_Z = 900
 
 
 def rails_for_x_coordinate(x: float) -> int:
@@ -62,6 +121,138 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
   def rails_to_location(self, rails: int) -> Coordinate:
     """Convert a rail identifier to an absolute (x, y, z) coordinate."""
 
+  def compute_right_track_of_carrier(self, carrier: Resource) -> int:
+    """The last track a carrier covers, from where it sits on this deck.
+
+    Args:
+      carrier: the carrier, which must be on this deck.
+
+    Returns:
+      The track, counted from 1.
+    """
+    end_x = carrier.get_location_wrt(self).x + carrier.get_absolute_size_x()
+    return rails_for_x_coordinate(end_x) - 1
+
+  def get_or_create_x_arm(
+    self,
+    name: str,
+    x: float,
+    width: float,
+    model: str,
+    reference_anchor: Literal["l", "c", "r"],
+  ) -> Resource:
+    """Get, or create once, the deck-owned X-arm resource called `name`.
+
+    The deck owns it: created as a child the first time and reused thereafter, so repeated setups
+    do not duplicate it. It is placed so its reference point sits at the arm's current x.
+
+    Args:
+      name: what to call it, e.g. "left_x_arm".
+      x: where the arm is now, in mm, at its reference point.
+      width: how wide the arm is, in mm, as the machine reports it.
+      model: which arm this is.
+      reference_anchor: where along the width `x` refers to, as an anchor: `"c"` for a dual-rail
+        arm, `"r"` for a single-rail one.
+
+    Returns:
+      The arm resource, whether it was just created or already there.
+    """
+    if self.has_resource(name):
+      return self.get_resource(name)
+    x_arm = Resource(
+      name=name,
+      size_x=width,
+      size_y=_X_ARM_SIZE_Y,
+      size_z=_X_ARM_SIZE_Z,
+      category="x_arm",
+      model=model,
+    )
+    # Place it so its reference point lands at the arm's current x, and so its back edge lines up
+    # with the back of the deck. Being deeper than the deck, it reaches in front of the deck's front
+    # edge, which is why y is negative. The arm sits above the deck plane, so it does not count as
+    # occupying the footprint of the carriers beneath it.
+    anchor = x_arm.get_anchor(x=reference_anchor)
+    y = self.get_absolute_size_y() - _X_ARM_SIZE_Y
+    self.assign_child_resource(x_arm, location=Coordinate(x - anchor.x, y, _X_ARM_Z))
+    return x_arm
+
+  def get_or_create_autoload_sled(
+    self, name: str, x: float, reference_point_from_left: float
+  ) -> Resource:
+    """Get, or create once, the deck-owned autoload sled.
+
+    The deck owns it: created as a child the first time and reused thereafter, so repeated setups
+    do not duplicate it.
+
+    Args:
+      name: where the carrier-handling wheel is, in mm, on this deck. The wheel is the point the
+        drive reports, so the sled is placed around it.
+      x: where the wheel is, in mm, on this deck.
+      reference_point_from_left: how far the point the drive reports - the carrier-handling
+        wheel - sits from the sled's left edge, in mm.
+
+    Returns:
+      The sled resource, whether it was just created or already there.
+    """
+    if self.has_resource(name):
+      return self.get_resource(name)
+    sled = Resource(
+      name=name,
+      size_x=_AUTOLOAD_SLED_SIZE_X,
+      size_y=_AUTOLOAD_SLED_SIZE_Y,
+      size_z=_AUTOLOAD_SLED_SIZE_Z,
+      category="autoload_sled",
+      model="hamilton_star_autoload_sled",
+    )
+    # What the drive's x actually refers to. The sled is placed around the carrier-handling wheel,
+    # so its own origin is not what the machine reports - saying where the wheel sits within it is
+    # what lets anything reading this resource put the two together, a viewer included.
+    sled.reference_point = {  # type: ignore[attr-defined]
+      "x": reference_point_from_left
+    }
+    self.assign_child_resource(
+      sled,
+      location=Coordinate(
+        x - reference_point_from_left,
+        _CARRIER_Y - _AUTOLOAD_SLED_AHEAD_OF_CARRIER_Y,
+        _AUTOLOAD_SLED_ABOVE_DECK_Z,
+      ),
+    )
+    return sled
+
+  def get_or_create_autoload_loading_tray(self, name: str) -> Resource:
+    """Get, or create once, the deck-owned loading tray the autoload draws carriers from.
+
+    It is placed against the deck features it lines up with: its left edge sits 104 mm left of the
+    first carrier, and its front edge 380 mm in front of a carrier's. It reaches the same 104 mm
+    short of the deck's right edge, so its width follows from the deck. Created as a child the
+    first time and reused thereafter, so repeated setups do not duplicate it.
+
+    Its own track markings line up with the deck's, so a carrier put on the tray at a track goes to
+    that same track on the deck.
+
+    Args:
+      name: what to call it.
+
+    Returns:
+      The tray resource, whether it was just created or already there.
+    """
+    if self.has_resource(name):
+      return self.get_resource(name)
+    left = self.rails_to_location(1).x - _LOADING_TRAY_FROM_FIRST_CARRIER_X
+    tray = Resource(
+      name=name,
+      size_x=self.get_absolute_size_x() - _LOADING_TRAY_FROM_FIRST_CARRIER_X - left,
+      size_y=_LOADING_TRAY_FRONT_AHEAD_OF_CARRIER_Y - _LOADING_TRAY_BACK_AHEAD_OF_CARRIER_Y,
+      size_z=_LOADING_TRAY_SIZE_Z,
+      category="autoload_loading_tray",
+      model="hamilton_star_autoload_loading_tray",
+    )
+    self.assign_child_resource(
+      tray, location=Coordinate(left, _CARRIER_Y - _LOADING_TRAY_FRONT_AHEAD_OF_CARRIER_Y, 0.0)
+    )
+    return tray
+
   def serialize(self) -> dict:
     """Serialize this deck."""
     return {
@@ -80,6 +271,11 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
+      # What the machine carries belongs up there: it rides above the deck by design, and nothing
+      # traverses or grabs it, so the warnings below say nothing about it.
+      if resource.category in ("x_arm", "head96"):
+        return
+
       try:
         z_top = resource.get_location_wrt(self, z="top").z
       except NoLocationError:
@@ -186,26 +382,36 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
         # Check if there is space for this new resource.
         for og_resource in self.children:
+          if og_resource.category in _MACHINE_PARTS:
+            continue
           og_x = cast(Coordinate, og_resource.location).x
           og_y = cast(Coordinate, og_resource.location).y
+          og_z = cast(Coordinate, og_resource.location).z
 
-          # A resource is not allowed to overlap with another resource. Resources overlap when a
-          # corner of one resource is inside the boundaries of another resource.
-          if any(
+          # A resource is not allowed to overlap with another resource. Resources overlap when
+          # their bounding boxes intersect on all three axes. The z axis is included so a resource
+          # above the deck plane does not block placement beneath it.
+          x_overlap = any(
             [
               og_x <= resource_location.x < og_x + og_resource.get_absolute_size_x(),
               og_x
               < resource_location.x + resource.get_absolute_size_x()
               < og_x + og_resource.get_absolute_size_x(),
             ]
-          ) and any(
+          )
+          y_overlap = any(
             [
               og_y <= resource_location.y < og_y + og_resource.get_absolute_size_y(),
               og_y
               < resource_location.y + resource.get_absolute_size_y()
               < og_y + og_resource.get_absolute_size_y(),
             ]
-          ):
+          )
+          z_overlap = (
+            og_z < resource_location.z + resource.get_absolute_size_z()
+            and resource_location.z < og_z + og_resource.get_absolute_size_z()
+          )
+          if x_overlap and y_overlap and z_overlap:
             raise ValueError(
               f"Location {resource_location} is already occupied by resource '{og_resource.name}'."
             )
@@ -611,6 +817,34 @@ def STARDeck(
     size_x=STAR_SIZE_X,
     size_y=STAR_SIZE_Y,
     size_z=STAR_SIZE_Z,
+    origin=origin,
+    with_trash=with_trash,
+    with_trash96=with_trash96,
+    with_teaching_rack=with_teaching_rack,
+    core_grippers=core_grippers,
+  )
+
+
+def STARPlusDeck(
+  origin: Coordinate = Coordinate.zero(),
+  with_trash: bool = True,
+  with_trash96: bool = True,
+  with_teaching_rack: bool = True,
+  core_grippers: Optional[
+    Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
+  ] = "1000uL-5mL-on-waste",
+) -> HamiltonSTARDeck:
+  """Create a new STARplus deck.
+
+  Sizes derived from the STARlet and STAR decks and the manufacturer's machine widths - see
+  `STARPLUS_NUM_RAILS`. There is no `ML_StarPlus.dck` to read them from.
+  """
+
+  return HamiltonSTARDeck(
+    num_rails=STARPLUS_NUM_RAILS,
+    size_x=STARPLUS_SIZE_X,
+    size_y=STARPLUS_SIZE_Y,
+    size_z=STARPLUS_SIZE_Z,
     origin=origin,
     with_trash=with_trash,
     with_trash96=with_trash96,

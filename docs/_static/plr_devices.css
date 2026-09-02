@@ -31,6 +31,30 @@
   box-shadow: 0 0 0 2px rgba(26, 78, 216, 0.18);
 }
 
+.plr-device-model-toggle {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--pst-color-border, #ccc);
+  border-radius: var(--plr-device-radius);
+  background: transparent;
+  color: var(--pst-color-text-base, #222);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.plr-device-model-toggle:hover,
+.plr-device-model-toggle:focus-visible {
+  border-color: var(--pst-color-primary, #1a4ed8);
+  color: var(--pst-color-primary, #1a4ed8);
+}
+
+.plr-device-model-toggle[aria-pressed="true"] {
+  background: var(--pst-color-primary, #1a4ed8);
+  border-color: var(--pst-color-primary, #1a4ed8);
+  color: #fff;
+}
+
 /* ---- Filter chips ---- */
 
 .plr-device-filters {
@@ -127,6 +151,70 @@ td.plr-device-name {
 
 td.plr-device-name {
   font-weight: 600;
+}
+
+tr.plr-device-row[data-has-models="true"] {
+  cursor: pointer;
+}
+
+.plr-device-row-toggle {
+  display: inline-grid;
+  width: 1rem;
+  height: 1rem;
+  margin: 0 0.2rem 0 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--pst-color-text-muted, #666);
+  cursor: pointer;
+  vertical-align: -0.08rem;
+}
+
+.plr-device-row-toggle:hover,
+.plr-device-row-toggle:focus-visible {
+  color: var(--pst-color-primary, #1a4ed8);
+}
+
+.plr-device-row-toggle span {
+  transition: transform 120ms ease;
+}
+
+.plr-device-row-toggle[aria-expanded="true"] span {
+  transform: rotate(90deg);
+}
+
+table.plr-device-table tr.plr-device-model-row td {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  border-bottom-style: dotted;
+  color: var(--pst-color-text-muted, #666);
+  font-size: 0.82rem;
+}
+
+td.plr-device-model-name {
+  padding-left: 1rem;
+}
+
+td.plr-device-model-status {
+  white-space: nowrap;
+}
+
+.plr-device-model {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.25rem;
+  padding-left: 0.25rem;
+}
+
+.plr-device-model__arrow {
+  text-align: center;
+}
+
+.plr-device-model__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 td.plr-device-capabilities {

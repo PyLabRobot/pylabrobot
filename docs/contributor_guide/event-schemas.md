@@ -223,6 +223,85 @@ record per channel with `channel` and direct `resource` fields.
 | `liquid_handler.tip_pickup_96` | `device`, `resources` | Direct resource is the operated `TipRack`. |
 | `liquid_handler.tip_drop_96` | `device`, `resources` | Direct resource is the destination `TipRack` or `Trash`. |
 
+## Plate reading and imaging
+
+### Plate-reader lifecycle and measurements
+
+| Operation | Fields | Notes |
+| --- | --- | --- |
+| `plate_reader.open` | `device`, `resources` | Opens the reader. `resources` contains the directly loaded plate when one is assigned. |
+| `plate_reader.close` | `device`, `resources` | Closes the reader. `resources` contains the directly loaded plate when one is assigned. |
+| `plate_reader.read_luminescence` | `device`, `resources`, `well_count`, `return_format`, `focal_height`; **completed only:** `record_count` | Reads luminescence from the selected wells. |
+| `plate_reader.read_absorbance` | `device`, `resources`, `well_count`, `return_format`, `wavelength_nm`; **completed only:** `record_count` | Reads absorbance at the requested wavelength. |
+| `plate_reader.read_fluorescence` | `device`, `resources`, `well_count`, `return_format`, `excitation_wavelength_nm`, `emission_wavelength_nm`, `focal_height`; **completed only:** `record_count` | Reads fluorescence at the requested wavelengths. |
+
+For measurement operations, `resources` contains the direct selected `Well` references. Their
+`ancestors` retain the owning plate; do not replace the wells with that plate. `well_count` is the
+number of selected wells, while `record_count` is the number of records returned by the backend.
+`return_format` is `"records"` or `"legacy_matrix"` and describes the public return projection.
+Measurement values are not copied into events.
+
+`focal_height` uses PLR's default length unit (millimeters). Wavelengths are deliberately expressed
+in nanometers and therefore use the `_nm` suffix.
+
+### Imaging
+
+| Operation | Fields | Notes |
+| --- | --- | --- |
+| `imager.capture` | `device`, `resources`, optional `plate`, `target`, `mode`, `objective`, `exposure`, `focus`, `gain`; **completed only:** `image_count`, `reported_exposure_time_ms`, `reported_focal_height` | Captures one user-requested imaging result. Software auto-exposure or autofocus retries remain inside this single lifecycle. |
+
+`target` contains integer `row` and `column` indices. `mode` and `objective` are stable enum member
+names. When the caller supplies a `Well`, `resources` contains that direct well reference; a
+row/column tuple has no direct resource and uses an empty list. `plate`, when known, identifies the
+loaded plate that provides target context.
+
+The three requested setting objects are JSON-ready and use these shapes:
+
+| Setting | Modes and fields |
+| --- | --- |
+| `exposure` | Fixed: `mode="fixed"`, `time_ms`; machine auto: `mode="machine_auto"`; software auto: `mode="software_auto"`, `minimum_time_ms`, `maximum_time_ms`, optional `max_rounds`. |
+| `focus` | Fixed: `mode="fixed"`, `height`; machine auto: `mode="machine_auto"`; software auto: `mode="software_auto"`, `minimum_height`, `maximum_height`, `tolerance`, `timeout`. |
+| `gain` | Fixed: `mode="fixed"`, `value`; machine auto: `mode="machine_auto"`. |
+
+Exposure values use milliseconds, as made explicit by `_ms`. Focus heights and focus tolerance use
+PLR's default length unit; autofocus `timeout` uses the default time unit. The completed event
+contains only bounded result metadata. Pixel arrays and other image data are never included.
+
+`ImageReader` inherits the PlateReader and Imager public operations. It emits the inherited
+canonical lifecycle directly and must not add a second wrapper lifecycle.
+
+Backend-only keyword arguments are forwarded to the backend but are not part of these canonical
+payloads.
+
+## Thermocycling
+
+Controllers that are `ResourceHolder`s include their directly loaded resource in `resources` when
+one is assigned at operation start.
+
+| Operation | Fields | Notes |
+| --- | --- | --- |
+| `thermocycler.open_lid` | `device`, optional `resources` | Opens the thermocycler lid. |
+| `thermocycler.close_lid` | `device`, optional `resources` | Closes the thermocycler lid. |
+| `thermocycler.set_block_temperature` | `device`, optional `resources`, `target_temperatures` | Sets one temperature per block zone. |
+| `thermocycler.set_lid_temperature` | `device`, optional `resources`, `target_temperatures` | Sets one temperature per lid zone. |
+| `thermocycler.deactivate_block` | `device`, optional `resources` | Turns off block temperature control. |
+| `thermocycler.deactivate_lid` | `device`, optional `resources` | Turns off lid temperature control. |
+| `thermocycler.run_protocol` | `device`, optional `resources`, `block_max_volume`, `stage_count`, `step_definition_count`, `step_execution_count`, optional `temperature_zone_count` | Submits a bounded summary of the requested protocol. Completion means the backend coroutine returned successfully, not that the physical temperature profile finished. |
+
+`target_temperatures` is an ordered list in PLR's default temperature unit (degrees Celsius); it is
+plural because the public API supports multiple thermal zones. `block_max_volume` uses PLR's
+default volume unit (microliters). `step_definition_count` counts the distinct step definitions in
+all stages, and `step_execution_count` includes stage repetition. `temperature_zone_count` is
+included when it can be derived from the protocol.
+
+The complete `Protocol`, individual temperatures and hold times, backend return value, and backend
+keyword arguments are deliberately excluded from the event payload.
+
+`run_pcr_profile` is a composite convenience method and has no separate parent lifecycle; its
+instrumented primitive calls emit their normal events. Thermocycler status queries and wait helpers
+are not yet instrumented because their polling and completion semantics need to be stabilized
+before they can define canonical EventBus operations.
+
 ## Shaking and environmental control
 
 Controllers that are `ResourceHolder`s include their directly loaded resource in `resources` when
