@@ -29,6 +29,7 @@ generic/index
 :hidden:
 
 agilent/index
+azure_biosystems/index
 azenta/index
 big_bear/index
 brooks/index
