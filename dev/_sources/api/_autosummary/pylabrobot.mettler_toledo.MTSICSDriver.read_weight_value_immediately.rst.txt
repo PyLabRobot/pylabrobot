@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.read\_weight\_value\_immediately
+========================================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.read_weight_value_immediately

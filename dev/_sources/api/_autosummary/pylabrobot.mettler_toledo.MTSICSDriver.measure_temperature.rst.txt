@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.measure\_temperature
+============================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.measure_temperature

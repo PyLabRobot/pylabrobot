@@ -1,0 +1,6 @@
+pylabrobot.mettler\_toledo.MTSICSDriver.clear\_tare
+===================================================
+
+.. currentmodule:: pylabrobot.mettler_toledo
+
+.. automethod:: MTSICSDriver.clear_tare
