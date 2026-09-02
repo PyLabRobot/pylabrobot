@@ -109,6 +109,8 @@ _IO_TRANSITION_TIMEOUT = 5.0
 _TACHOMETER_TO_RPM = -14.69320388
 _NETWORK_PROBE_TIMEOUT = 0.2
 _INITIAL_BAUD_RATES = (19200, 115200, 57600, 9600)
+_NMC_RESET_SETTLE_TIME = 0.1
+_NMC_BAUD_SETTLE_TIME = 0.1
 _BUCKET_POSITION_TOLERANCE = 10
 _BUCKET_PRESENT_RETRIES = 1
 
@@ -430,8 +432,12 @@ class VSpin:
     for initial_baudrate in _INITIAL_BAUD_RATES:
       await self.io.set_baudrate(initial_baudrate)
       await self._reset_nmc_network()
-      await self.io.set_baudrate(19200)
+      await self._reopen_ftdi(19200)
       await self._reset_nmc_network()
+      # Closing the transport is intentional. Some reset/NOP replies have already crossed the
+      # USB boundary when the FTDI receive buffer is purged, and can otherwise become the reply
+      # to SET_ADDRESS. Reopening discards those host-side bytes as well.
+      await self._reopen_ftdi(19200)
       await self.io.usb_purge_rx_buffer()
 
       try:
@@ -501,7 +507,10 @@ class VSpin:
         )
 
       await self._send_nmc(_nmc.build_set_baud(57600), expect_response=False)
-      await self.io.set_baudrate(57600)
+      await asyncio.sleep(_NMC_BAUD_SETTLE_TIME)
+      await self._reopen_ftdi(57600)
+      await asyncio.sleep(_NMC_BAUD_SETTLE_TIME)
+      await self.io.usb_purge_rx_buffer()
       return
 
     context = "" if last_error is None else f": {last_error}"
@@ -509,12 +518,18 @@ class VSpin:
       f"VSpin NMC initialization found no modules at supported baud rates{context}"
     )
 
-  async def _configure_ftdi(self) -> None:
+  async def _configure_ftdi(self, baudrate: int = 19200) -> None:
     """Configure the FTDI UART before probing the NMC network."""
     await self.io.set_latency_timer(16)
     await self.io.set_line_property(bits=8, stopbits=1, parity=0)
     await self.io.set_flowctrl(0)
-    await self.io.set_baudrate(19200)
+    await self.io.set_baudrate(baudrate)
+
+  async def _reopen_ftdi(self, baudrate: int) -> None:
+    """Reopen the FTDI transport and restore all UART settings."""
+    await self.io.stop()
+    await self.io.setup()
+    await self._configure_ftdi(baudrate)
 
   async def _reset_nmc_network(self) -> None:
     """Send the vendor hard-reset sequence at the currently selected baud rate."""
@@ -525,6 +540,7 @@ class VSpin:
     for address in range(33):
       await self.io.write(_nmc.build_no_op(address) + b"\x00" * 8)
     await self._send_nmc(_nmc.build_hard_reset(), expect_response=False)
+    await asyncio.sleep(_NMC_RESET_SETTLE_TIME)
 
   # -- hardware status queries --
 

@@ -87,7 +87,9 @@ class _ScriptedVSpinFTDI:
     self._response = bytearray()
     self._max_read_size = max_read_size
     self.setup_called = False
+    self.setup_call_count = 0
     self.stopped = False
+    self.stop_call_count = 0
     self.writes: list[bytes] = []
     self.latency_timers: list[int] = []
     self.line_properties: list[tuple[int, int, int]] = []
@@ -99,9 +101,14 @@ class _ScriptedVSpinFTDI:
 
   async def setup(self) -> None:
     self.setup_called = True
+    self.setup_call_count += 1
+    self.stopped = False
 
   async def stop(self) -> None:
     self.stopped = True
+    self.stop_call_count += 1
+    # Reopening the real FTDI connection discards replies already buffered on the host side.
+    self._response.clear()
 
   async def set_latency_timer(self, latency: int) -> None:
     self.latency_timers.append(latency)
@@ -529,7 +536,7 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
     ]
 
   @staticmethod
-  def _network_reset_steps() -> list[_VSpinScriptStep]:
+  def _network_reset_steps(stale_response: bytes | None = None) -> list[_VSpinScriptStep]:
     steps = [_VSpinScriptStep(b"\x00" * 20, None)]
     steps.extend(
       _VSpinScriptStep(
@@ -538,7 +545,7 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
       )
       for address in range(33)
     )
-    steps.append(_VSpinScriptStep(_nmc.build_hard_reset(), None))
+    steps.append(_VSpinScriptStep(_nmc.build_hard_reset(), stale_response))
     return steps
 
   @classmethod
@@ -686,11 +693,13 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
 
     io.assert_complete(self)
     self.assertTrue(io.setup_called)
-    self.assertEqual(io.latency_timers, [16])
-    self.assertEqual(io.line_properties, [(8, 1, 0)])
-    self.assertEqual(io.flow_controls, [0])
-    self.assertEqual(io.baudrates, [19200, 19200, 19200, 57600])
-    self.assertEqual(io.rx_purge_count, 2)
+    self.assertEqual(io.setup_call_count, 4)
+    self.assertEqual(io.stop_call_count, 3)
+    self.assertEqual(io.latency_timers, [16, 16, 16, 16])
+    self.assertEqual(io.line_properties, [(8, 1, 0)] * 4)
+    self.assertEqual(io.flow_controls, [0, 0, 0, 0])
+    self.assertEqual(io.baudrates, [19200, 19200, 19200, 19200, 57600])
+    self.assertEqual(io.rx_purge_count, 3)
     self.assertEqual(io.rts_levels, [True])
     self.assertEqual(io.dtr_levels, [True])
     self.assertEqual(vspin._home_position, 200)
@@ -726,8 +735,41 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
       await vspin._initialize_nmc_network()
 
     io.assert_complete(self)
-    self.assertEqual(io.baudrates, [19200, 19200, 115200, 19200, 57600])
-    self.assertEqual(io.rx_purge_count, 4)
+    self.assertEqual(io.setup_call_count, 5)
+    self.assertEqual(io.stop_call_count, 5)
+    self.assertEqual(io.baudrates, [19200, 19200, 19200, 115200, 19200, 19200, 57600])
+    self.assertEqual(io.rx_purge_count, 5)
+
+  async def test_network_reopens_to_discard_stale_reset_responses(self):
+    steps = self._network_reset_steps(stale_response=b"\xfa")
+    steps.extend(self._network_reset_steps(stale_response=b"\xfb"))
+    steps.extend(
+      [
+        _empty_step(_nmc.build_set_address(_nmc.PIC_SERVO_ADDRESS)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(_nmc.PIC_SERVO_ADDRESS, _nmc.SEND_MODULE_ID),
+          _nmc_response(1, bytes([_nmc.PIC_SERVO_MODULE_TYPE, 1])),
+        ),
+        _empty_step(_nmc.build_set_address(_nmc.PIC_IO_ADDRESS)),
+        _VSpinScriptStep(
+          _nmc.build_read_status(_nmc.PIC_IO_ADDRESS, _nmc.SEND_MODULE_ID),
+          _nmc_response(1, bytes([_nmc.PIC_IO_MODULE_TYPE, 1])),
+        ),
+        _VSpinScriptStep(_nmc.build_set_address(3), None),
+        _VSpinScriptStep(_nmc.build_set_baud(57600), None),
+      ]
+    )
+    vspin, io = self._make_vspin(steps)
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()),
+      patch("pylabrobot.agilent.vspin.vspin._NETWORK_PROBE_TIMEOUT", 0),
+    ):
+      await vspin._initialize_nmc_network()
+
+    io.assert_complete(self)
+    self.assertEqual(io.setup_call_count, 3)
+    self.assertEqual(io.stop_call_count, 3)
 
   async def test_network_initialization_rejects_a_third_module(self):
     steps = self._network_reset_steps()
