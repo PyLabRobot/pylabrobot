@@ -24,6 +24,16 @@ from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 logger = logging.getLogger(__name__)
 
 
+def _bytes_to_capture_text(data: bytes) -> str:
+  """Represent arbitrary serial bytes losslessly in capture JSON strings."""
+  return data.decode("latin-1")
+
+
+def _capture_text_to_bytes(data: str) -> bytes:
+  """Restore bytes written by :func:`_bytes_to_capture_text`."""
+  return data.encode("latin-1")
+
+
 @dataclass
 class SerialCommand(Command):
   data: str
@@ -261,7 +271,7 @@ class Serial(IOBase):
 
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
-      SerialCommand(device_id=self.port, action="write", data=data.decode("unicode_escape"))
+      SerialCommand(device_id=self.port, action="write", data=_bytes_to_capture_text(data))
     )
     emit_event(
       "io.write",
@@ -283,7 +293,7 @@ class Serial(IOBase):
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
       capturer.record(
-        SerialCommand(device_id=self.port, action="read", data=data.decode("unicode_escape"))
+        SerialCommand(device_id=self.port, action="read", data=_bytes_to_capture_text(data))
       )
       emit_event(
         "io.read",
@@ -307,7 +317,7 @@ class Serial(IOBase):
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
       capturer.record(
-        SerialCommand(device_id=self.port, action="readline", data=data.decode("unicode_escape"))
+        SerialCommand(device_id=self.port, action="readline", data=_bytes_to_capture_text(data))
       )
       emit_event(
         "io.read",
@@ -438,8 +448,9 @@ class SerialValidator(Serial):
       and next_command.action == "write"
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial write")
-    if next_command.data != data.decode("unicode_escape"):
-      align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
+    actual = _bytes_to_capture_text(data)
+    if next_command.data != actual:
+      align_sequences(expected=next_command.data, actual=actual)
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   async def read(self, num_bytes: int = 1) -> bytes:
@@ -451,7 +462,7 @@ class SerialValidator(Serial):
       and len(next_command.data) == num_bytes
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial read {num_bytes}")
-    return next_command.data.encode()
+    return _capture_text_to_bytes(next_command.data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     next_command = SerialCommand(**self.cr.next_command())
@@ -461,7 +472,7 @@ class SerialValidator(Serial):
       and next_command.action == "readline"
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial readline")
-    return next_command.data.encode()
+    return _capture_text_to_bytes(next_command.data)
 
   async def send_break(self, duration: float):
     next_command = SerialCommand(**self.cr.next_command())
