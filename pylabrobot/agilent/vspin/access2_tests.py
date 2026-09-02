@@ -159,10 +159,6 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
       _ScriptStep(protocol.build_initialize()),
     ]
     steps.extend(
-      _ScriptStep(protocol.build_read_flash(address, length), bytes(length))
-      for address, length in ((0, 128), (128, 128), (256, 128), (384, 128), (512, 64))
-    )
-    steps.extend(
       [
         _ScriptStep(protocol.build_home()),
         _ScriptStep(protocol.build_get_status(), _full_status_data()),
@@ -170,7 +166,7 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
           protocol.build_move_axis_to_position(
             protocol.AXIS_GRIPPER,
             0,
-            protocol.PROFILE_DYNAMIC_EMPTY,
+            protocol.PROFILE_GRIP_NORMALLY,
             protocol.SPEED_FAST,
           )
         ),
@@ -250,7 +246,7 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
         protocol.build_move_axis_to_position(
           protocol.AXIS_GRIPPER,
           0,
-          protocol.PROFILE_DYNAMIC_EMPTY,
+          protocol.PROFILE_GRIP_NORMALLY,
           protocol.SPEED_FAST,
         )
       ),
@@ -258,7 +254,13 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
       _ScriptStep(protocol.build_move_to_teachpoint(protocol.TEACHPOINT_PICK, 3, 10)),
       _ScriptStep(protocol.build_get_status(), _full_status_data()),
       _ScriptStep(protocol.build_get_sensor_values(), Writer().u32(0).finish()),
-      _ScriptStep(protocol.build_move_axis_to_position(protocol.AXIS_GRIPPER, 5.68)),
+      _ScriptStep(
+        protocol.build_move_axis_to_position(
+          protocol.AXIS_GRIPPER,
+          5.68,
+          protocol.PROFILE_GRIP_NORMALLY,
+        )
+      ),
       _ScriptStep(protocol.build_get_status(), _full_status_data(gripper_position=5.68)),
       _ScriptStep(
         protocol.build_move_to_teachpoint(
@@ -269,7 +271,13 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
         )
       ),
       _ScriptStep(protocol.build_get_status(), _full_status_data()),
-      _ScriptStep(protocol.build_move_axis_to_position(protocol.AXIS_GRIPPER, 0)),
+      _ScriptStep(
+        protocol.build_move_axis_to_position(
+          protocol.AXIS_GRIPPER,
+          0,
+          protocol.PROFILE_GRIP_NORMALLY,
+        )
+      ),
       _ScriptStep(protocol.build_get_status(), _full_status_data(gripper_position=0)),
       _ScriptStep(protocol.build_move_to_teachpoint(protocol.TEACHPOINT_PARK, 3, 10)),
       _ScriptStep(protocol.build_get_status(), _full_status_data()),
@@ -288,7 +296,7 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
         protocol.build_move_axis_to_position(
           protocol.AXIS_GRIPPER,
           0,
-          protocol.PROFILE_DYNAMIC_EMPTY,
+          protocol.PROFILE_GRIP_NORMALLY,
           protocol.SPEED_FAST,
         )
       ),
@@ -296,8 +304,14 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
       _ScriptStep(protocol.build_move_to_teachpoint(protocol.TEACHPOINT_BUCKET_1, 3, 10)),
       _ScriptStep(protocol.build_get_status(), _full_status_data()),
       _ScriptStep(protocol.build_get_sensor_values(), Writer().u32(0).finish()),
-      _ScriptStep(protocol.build_move_axis_to_position(protocol.AXIS_GRIPPER, 5.69)),
-      _ScriptStep(protocol.build_get_status(), _full_status_data(gripper_position=5.69)),
+      _ScriptStep(
+        protocol.build_move_axis_to_position(
+          protocol.AXIS_GRIPPER,
+          5.68,
+          protocol.PROFILE_GRIP_NORMALLY,
+        )
+      ),
+      _ScriptStep(protocol.build_get_status(), _full_status_data(gripper_position=5.68)),
       _ScriptStep(
         protocol.build_move_to_teachpoint(
           protocol.TEACHPOINT_PICK,
@@ -307,7 +321,13 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
         )
       ),
       _ScriptStep(protocol.build_get_status(), _full_status_data()),
-      _ScriptStep(protocol.build_move_axis_to_position(protocol.AXIS_GRIPPER, 0)),
+      _ScriptStep(
+        protocol.build_move_axis_to_position(
+          protocol.AXIS_GRIPPER,
+          0,
+          protocol.PROFILE_GRIP_NORMALLY,
+        )
+      ),
       _ScriptStep(protocol.build_get_status(), _full_status_data(gripper_position=0)),
       _ScriptStep(protocol.build_move_to_teachpoint(protocol.TEACHPOINT_PARK, 0, 10)),
       _ScriptStep(protocol.build_get_status(), _full_status_data()),
@@ -326,7 +346,7 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
         protocol.build_move_axis_to_position(
           protocol.AXIS_GRIPPER,
           0,
-          protocol.PROFILE_DYNAMIC_EMPTY,
+          protocol.PROFILE_GRIP_NORMALLY,
           protocol.SPEED_FAST,
         )
       ),
@@ -409,19 +429,18 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
 
     io.assert_complete(self)
 
-  async def test_axis_fault_prevents_follow_up_commands(self):
+  async def test_unverified_axis_status_bits_are_not_treated_as_faults(self):
     command = protocol.build_move_to_teachpoint(protocol.TEACHPOINT_PICK, 3, 10)
     steps = [
       _ScriptStep(command),
       _ScriptStep(
         protocol.build_get_status(),
-        _full_status_data(y_status=protocol.AXIS_STATUS_POSITION_ERROR),
+        _full_status_data(y_status=0x13),
       ),
     ]
     driver, io = self._make_driver(steps)
 
-    with self.assertRaisesRegex(RuntimeError, "failed on Y axis with status 0x10"):
-      await driver._move_to_teachpoint(protocol.TEACHPOINT_PICK, 3, 10)
+    await driver._move_to_teachpoint(protocol.TEACHPOINT_PICK, 3, 10)
 
     io.assert_complete(self)
 
@@ -471,9 +490,67 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
 
     self.driver._move_axis_to_position.assert_has_awaits(  # type: ignore[attr-defined]
       [
-        call(protocol.AXIS_GRIPPER, 5.68),
-        call(protocol.AXIS_GRIPPER, 0.0),
+        call(
+          protocol.AXIS_GRIPPER,
+          5.68,
+          profile=protocol.PROFILE_GRIP_NORMALLY,
+        ),
+        call(
+          protocol.AXIS_GRIPPER,
+          0.0,
+          profile=protocol.PROFILE_GRIP_NORMALLY,
+        ),
       ]
+    )
+
+  async def test_gripper_positions_are_configurable(self):
+    driver = Access2Driver(
+      device_id="test",
+      gripper_open_position=0.25,
+      gripper_closed_position=4.75,
+    )
+    driver._move_axis_to_position = AsyncMock()  # type: ignore[method-assign]
+    driver.request_status = AsyncMock(  # type: ignore[method-assign]
+      return_value=_status(flags=_READY_FLAGS)
+    )
+
+    await driver.close_gripper()
+    await driver.open_gripper()
+
+    driver._move_axis_to_position.assert_has_awaits(  # type: ignore[attr-defined]
+      [
+        call(
+          protocol.AXIS_GRIPPER,
+          4.75,
+          profile=protocol.PROFILE_GRIP_NORMALLY,
+        ),
+        call(
+          protocol.AXIS_GRIPPER,
+          0.25,
+          profile=protocol.PROFILE_GRIP_NORMALLY,
+        ),
+      ]
+    )
+
+  async def test_setup_opens_gripper_with_configured_position_and_profile(self):
+    driver = Access2Driver(device_id="test", gripper_open_position=0.25)
+    driver.io.setup = AsyncMock()  # type: ignore[method-assign]
+    driver.io.set_baudrate = AsyncMock()  # type: ignore[method-assign]
+    driver.request_status = AsyncMock(  # type: ignore[method-assign]
+      return_value=_status(flags=_READY_FLAGS)
+    )
+    driver.send_command = AsyncMock()  # type: ignore[method-assign]
+    driver._home = AsyncMock()  # type: ignore[method-assign]
+    driver._move_axis_to_position = AsyncMock()  # type: ignore[method-assign]
+    driver._move_to_teachpoint = AsyncMock()  # type: ignore[method-assign]
+
+    await driver.setup()
+
+    driver._move_axis_to_position.assert_awaited_once_with(  # type: ignore[attr-defined]
+      protocol.AXIS_GRIPPER,
+      0.25,
+      profile=protocol.PROFILE_GRIP_NORMALLY,
+      speed=protocol.SPEED_FAST,
     )
 
   async def test_close_gripper_is_idempotent_at_closed_position(self):
@@ -501,11 +578,19 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
         call(
           protocol.AXIS_GRIPPER,
           0,
-          profile=protocol.PROFILE_DYNAMIC_EMPTY,
+          profile=protocol.PROFILE_GRIP_NORMALLY,
           speed=protocol.SPEED_FAST,
         ),
-        call(protocol.AXIS_GRIPPER, 5.68),
-        call(protocol.AXIS_GRIPPER, 0),
+        call(
+          protocol.AXIS_GRIPPER,
+          5.68,
+          profile=protocol.PROFILE_GRIP_NORMALLY,
+        ),
+        call(
+          protocol.AXIS_GRIPPER,
+          0,
+          profile=protocol.PROFILE_GRIP_NORMALLY,
+        ),
       ]
     )
     self.driver._move_to_teachpoint.assert_has_awaits(  # type: ignore[attr-defined]

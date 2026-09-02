@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 _MOTION_POLL_INTERVAL = 0.1
 _AXIS_POSITION_TOLERANCE = 0.1
-_GRIPPER_OPEN_POSITION = 0.0
-_GRIPPER_CLOSED_POSITION = 5.68
+_DEFAULT_GRIPPER_OPEN_POSITION = 0.0
+_DEFAULT_GRIPPER_CLOSED_POSITION = 5.68
 _AXIS_NAMES: dict[int, str] = {
   protocol.AXIS_GRIPPER: "gripper",
   protocol.AXIS_Y: "Y",
@@ -51,15 +51,26 @@ def _loader_unload_event_context(self: "Access2") -> dict:
 class Access2Driver:
   """FTDI driver for the Agilent Access2 centrifuge loader."""
 
-  def __init__(self, device_id: str, timeout: int = 60):
+  def __init__(
+    self,
+    device_id: str,
+    timeout: int = 60,
+    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
+    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+  ):
     """
     Args:
       device_id: The libftdi id for the loader. Find using
         `python3 -m pylibftdi.examples.list_devices`
+      timeout: Communication and operation timeout in seconds.
+      gripper_open_position: Absolute gripper-axis position used when opening.
+      gripper_closed_position: Absolute gripper-axis position used when closing.
     """
     super().__init__()
     self.io = FTDI(human_readable_device_name="Agilent Access2 Loader", device_id=device_id)
     self.timeout = timeout
+    self.gripper_open_position = gripper_open_position
+    self.gripper_closed_position = gripper_closed_position
     self._command_lock = asyncio.Lock()
     self._operation_lock = asyncio.Lock()
 
@@ -107,13 +118,11 @@ class Access2Driver:
 
       await self.send_command(protocol.build_ping())
       await self.send_command(protocol.build_initialize())
-      for address, length in ((0, 128), (128, 128), (256, 128), (384, 128), (512, 64)):
-        await self.send_command(protocol.build_read_flash(address, length))
       await self._home()
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        0,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        self.gripper_open_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
         speed=protocol.SPEED_FAST,
       )
       await self._move_to_teachpoint(
@@ -199,14 +208,6 @@ class Access2Driver:
     except KeyError as error:
       raise ValueError(f"Unknown Access2 axis: {axis}") from error
 
-  @classmethod
-  def _raise_on_axis_fault(cls, axis: int, axis_status: int, operation: str) -> None:
-    faults = axis_status & protocol.AXIS_STATUS_FAULT_MASK
-    if faults:
-      raise RuntimeError(
-        f"Access2 {operation} failed on {cls._axis_name(axis)} axis with status 0x{axis_status:02x}"
-      )
-
   @staticmethod
   def _gripper_is_at_position(status: protocol.Access2Status, position: float) -> bool:
     return (
@@ -244,7 +245,6 @@ class Access2Driver:
           raise RuntimeError(
             f"Access2 cannot confirm {operation}: full axis status was not returned"
           )
-        self._raise_on_axis_fault(axis, axis_status, operation)
         axis_details.append(f"{self._axis_name(axis)}=0x{axis_status:02x}")
         motion_done = motion_done and bool(axis_status & protocol.AXIS_STATUS_MOVE_DONE)
 
@@ -359,11 +359,12 @@ class Access2Driver:
     logger.debug("[loader] close gripper")
     async with self._operation_lock:
       status = await self._require_ready(operation="gripper-close precondition")
-      if self._gripper_is_at_position(status, _GRIPPER_CLOSED_POSITION):
+      if self._gripper_is_at_position(status, self.gripper_closed_position):
         return
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        _GRIPPER_CLOSED_POSITION,
+        self.gripper_closed_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
       )
       await self._require_ready(operation="gripper-close postcondition")
 
@@ -372,11 +373,12 @@ class Access2Driver:
     logger.debug("[loader] open gripper")
     async with self._operation_lock:
       status = await self._require_ready(operation="gripper-open precondition")
-      if self._gripper_is_at_position(status, _GRIPPER_OPEN_POSITION):
+      if self._gripper_is_at_position(status, self.gripper_open_position):
         return
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        _GRIPPER_OPEN_POSITION,
+        self.gripper_open_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
       )
       await self._require_ready(operation="gripper-open postcondition")
 
@@ -388,8 +390,8 @@ class Access2Driver:
 
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        0,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        self.gripper_open_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
         speed=protocol.SPEED_FAST,
       )
       await self._move_to_teachpoint(protocol.TEACHPOINT_PICK, 3, 10)
@@ -397,14 +399,22 @@ class Access2Driver:
       if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
         raise RuntimeError("no plate found on stage")
 
-      await self._move_axis_to_position(protocol.AXIS_GRIPPER, 5.68)
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        self.gripper_closed_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
+      )
       await self._move_to_teachpoint(
         protocol.TEACHPOINT_BUCKET_1,
         3,
         10,
         profile=protocol.PROFILE_DYNAMIC_FULL,
       )
-      await self._move_axis_to_position(protocol.AXIS_GRIPPER, 0)
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        self.gripper_open_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
+      )
       await self._move_to_teachpoint(protocol.TEACHPOINT_PARK, 3, 10)
       await self._require_ready(operation="load postcondition")
 
@@ -416,8 +426,8 @@ class Access2Driver:
 
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        0,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        self.gripper_open_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
         speed=protocol.SPEED_FAST,
       )
       await self._move_to_teachpoint(protocol.TEACHPOINT_BUCKET_1, 3, 10)
@@ -425,14 +435,22 @@ class Access2Driver:
       if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
         raise RuntimeError("no plate found in centrifuge")
 
-      await self._move_axis_to_position(protocol.AXIS_GRIPPER, 5.69)
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        self.gripper_closed_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
+      )
       await self._move_to_teachpoint(
         protocol.TEACHPOINT_PICK,
         3,
         10,
         profile=protocol.PROFILE_DYNAMIC_FULL,
       )
-      await self._move_axis_to_position(protocol.AXIS_GRIPPER, 0)
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        self.gripper_open_position,
+        profile=protocol.PROFILE_GRIP_NORMALLY,
+      )
       await self._move_to_teachpoint(protocol.TEACHPOINT_PARK, 0, 10)
       await self._require_ready(operation="unload postcondition")
 
@@ -448,8 +466,26 @@ class Access2(ResourceHolder):
     size_x: float = 0.0,
     size_y: float = 0.0,
     size_z: float = 0.0,
+    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
+    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
   ):
-    driver = Access2Driver(device_id=device_id)
+    """Create an Access2 loader with configurable absolute gripper positions.
+
+    Args:
+      name: Resource name.
+      device_id: The libftdi identifier for the loader.
+      vspin: Paired VSpin centrifuge.
+      size_x: Resource width in millimeters.
+      size_y: Resource depth in millimeters.
+      size_z: Resource height in millimeters.
+      gripper_open_position: Absolute gripper-axis position used when opening.
+      gripper_closed_position: Absolute gripper-axis position used when closing.
+    """
+    driver = Access2Driver(
+      device_id=device_id,
+      gripper_open_position=gripper_open_position,
+      gripper_closed_position=gripper_closed_position,
+    )
     ResourceHolder.__init__(
       self,
       name=name,

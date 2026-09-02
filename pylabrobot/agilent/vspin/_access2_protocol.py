@@ -72,14 +72,10 @@ STATUS_ESTOP_ACTIVE = 0x08
 STATUS_MOTOR_POWER_FAULT = 0x10
 STATUS_OPTICAL_PLATE_SENSOR = 0x20
 
-# Per-axis PIC-SERVO status bits returned in the full Access2 status response.
+# Access2 exposes a status byte for each axis. Bit 0 is used as the motion-complete
+# indicator. The remaining bits are intentionally left opaque: Access2-specific
+# meanings have not been verified and cannot safely be inferred from raw PIC-SERVO.
 AXIS_STATUS_MOVE_DONE = 0x01
-AXIS_STATUS_CHECKSUM_ERROR = 0x02
-AXIS_STATUS_OVERCURRENT = 0x04
-AXIS_STATUS_POSITION_ERROR = 0x10
-AXIS_STATUS_FAULT_MASK = (
-  AXIS_STATUS_CHECKSUM_ERROR | AXIS_STATUS_OVERCURRENT | AXIS_STATUS_POSITION_ERROR
-)
 
 # Captured sensor word returned when no plate is present at the queried handoff.
 SENSOR_NO_PLATE = 0x00000003
