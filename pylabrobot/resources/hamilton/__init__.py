@@ -3,7 +3,6 @@ from .hamilton_decks import (
   HamiltonSTARDeck,
   STARDeck,
   STARLetDeck,
-  STARPlusDeck,
 )
 from .mfx_carriers import *
 from .mfx_modules import *
