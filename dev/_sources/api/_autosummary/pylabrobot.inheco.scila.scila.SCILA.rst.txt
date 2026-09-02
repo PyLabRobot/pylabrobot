@@ -59,6 +59,7 @@ pylabrobot.inheco.scila.scila.SCILA
       ~SCILA.get_size_x
       ~SCILA.get_size_y
       ~SCILA.get_size_z
+      ~SCILA.has_resource
       ~SCILA.is_in_subtree_of
       ~SCILA.is_temperature_control_enabled
       ~SCILA.load_all_state

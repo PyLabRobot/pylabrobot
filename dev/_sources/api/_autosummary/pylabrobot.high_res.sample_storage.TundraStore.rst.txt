@@ -69,6 +69,7 @@ pylabrobot.high\_res.sample\_storage.TundraStore
       ~TundraStore.get_size_x
       ~TundraStore.get_size_y
       ~TundraStore.get_size_z
+      ~TundraStore.has_resource
       ~TundraStore.home
       ~TundraStore.is_in_subtree_of
       ~TundraStore.load_all_state

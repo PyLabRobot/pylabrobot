@@ -66,6 +66,7 @@ pylabrobot.resources.Well
       ~Well.get_size_y
       ~Well.get_size_z
       ~Well.has_lid
+      ~Well.has_resource
       ~Well.is_in_subtree_of
       ~Well.load_all_state
       ~Well.load_from_json_file

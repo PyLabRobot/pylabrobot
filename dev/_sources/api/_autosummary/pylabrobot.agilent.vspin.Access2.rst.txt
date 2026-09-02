@@ -59,6 +59,7 @@ pylabrobot.agilent.vspin.Access2
       ~Access2.get_size_x
       ~Access2.get_size_y
       ~Access2.get_size_z
+      ~Access2.has_resource
       ~Access2.is_in_subtree_of
       ~Access2.load
       ~Access2.load_all_state

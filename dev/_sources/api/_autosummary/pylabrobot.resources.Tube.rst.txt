@@ -63,6 +63,7 @@ pylabrobot.resources.Tube
       ~Tube.get_size_y
       ~Tube.get_size_z
       ~Tube.has_lid
+      ~Tube.has_resource
       ~Tube.is_in_subtree_of
       ~Tube.load_all_state
       ~Tube.load_from_json_file

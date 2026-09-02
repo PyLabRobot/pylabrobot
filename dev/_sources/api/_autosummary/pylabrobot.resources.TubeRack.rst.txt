@@ -78,6 +78,7 @@ pylabrobot.resources.TubeRack
       ~TubeRack.get_size_z
       ~TubeRack.get_tube
       ~TubeRack.has_container
+      ~TubeRack.has_resource
       ~TubeRack.index_of_item
       ~TubeRack.is_in_subtree_of
       ~TubeRack.load_all_state

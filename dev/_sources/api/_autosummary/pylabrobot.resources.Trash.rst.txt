@@ -63,6 +63,7 @@ pylabrobot.resources.Trash
       ~Trash.get_size_y
       ~Trash.get_size_z
       ~Trash.has_lid
+      ~Trash.has_resource
       ~Trash.is_in_subtree_of
       ~Trash.load_all_state
       ~Trash.load_from_json_file

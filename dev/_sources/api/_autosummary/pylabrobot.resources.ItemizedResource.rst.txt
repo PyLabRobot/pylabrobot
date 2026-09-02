@@ -70,6 +70,7 @@ pylabrobot.resources.ItemizedResource
       ~ItemizedResource.get_size_x
       ~ItemizedResource.get_size_y
       ~ItemizedResource.get_size_z
+      ~ItemizedResource.has_resource
       ~ItemizedResource.index_of_item
       ~ItemizedResource.is_in_subtree_of
       ~ItemizedResource.load_all_state

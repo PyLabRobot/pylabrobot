@@ -60,6 +60,7 @@ pylabrobot.inheco.scila.scila.SCILADrawerLoadingTray
       ~SCILADrawerLoadingTray.get_size_x
       ~SCILADrawerLoadingTray.get_size_y
       ~SCILADrawerLoadingTray.get_size_z
+      ~SCILADrawerLoadingTray.has_resource
       ~SCILADrawerLoadingTray.is_in_subtree_of
       ~SCILADrawerLoadingTray.load_all_state
       ~SCILADrawerLoadingTray.load_from_json_file

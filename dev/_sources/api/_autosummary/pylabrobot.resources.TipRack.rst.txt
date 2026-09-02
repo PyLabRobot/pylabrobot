@@ -77,6 +77,7 @@ pylabrobot.resources.TipRack
       ~TipRack.get_size_z
       ~TipRack.get_tip
       ~TipRack.get_tips
+      ~TipRack.has_resource
       ~TipRack.index_of_item
       ~TipRack.is_in_subtree_of
       ~TipRack.load_all_state

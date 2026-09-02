@@ -1,0 +1,6 @@
+pylabrobot.resources.PetriDish.has\_resource
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PetriDish.has_resource

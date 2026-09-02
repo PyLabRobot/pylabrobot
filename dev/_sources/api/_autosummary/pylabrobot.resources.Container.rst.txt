@@ -63,6 +63,7 @@ pylabrobot.resources.Container
       ~Container.get_size_y
       ~Container.get_size_z
       ~Container.has_lid
+      ~Container.has_resource
       ~Container.is_in_subtree_of
       ~Container.load_all_state
       ~Container.load_from_json_file

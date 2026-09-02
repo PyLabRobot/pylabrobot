@@ -61,6 +61,7 @@ pylabrobot.resources.PlateCarrier
       ~PlateCarrier.get_size_x
       ~PlateCarrier.get_size_y
       ~PlateCarrier.get_size_z
+      ~PlateCarrier.has_resource
       ~PlateCarrier.is_in_subtree_of
       ~PlateCarrier.load_all_state
       ~PlateCarrier.load_from_json_file

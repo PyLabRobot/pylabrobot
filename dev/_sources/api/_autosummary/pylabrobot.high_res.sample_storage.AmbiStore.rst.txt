@@ -69,6 +69,7 @@ pylabrobot.high\_res.sample\_storage.AmbiStore
       ~AmbiStore.get_size_x
       ~AmbiStore.get_size_y
       ~AmbiStore.get_size_z
+      ~AmbiStore.has_resource
       ~AmbiStore.home
       ~AmbiStore.is_in_subtree_of
       ~AmbiStore.load_all_state

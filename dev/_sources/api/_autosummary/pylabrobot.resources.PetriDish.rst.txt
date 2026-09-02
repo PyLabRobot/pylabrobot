@@ -63,6 +63,7 @@ pylabrobot.resources.PetriDish
       ~PetriDish.get_size_y
       ~PetriDish.get_size_z
       ~PetriDish.has_lid
+      ~PetriDish.has_resource
       ~PetriDish.is_in_subtree_of
       ~PetriDish.load_all_state
       ~PetriDish.load_from_json_file

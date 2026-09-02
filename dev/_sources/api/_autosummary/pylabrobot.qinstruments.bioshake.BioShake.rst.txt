@@ -60,6 +60,7 @@ pylabrobot.qinstruments.bioshake.BioShake
       ~BioShake.get_size_x
       ~BioShake.get_size_y
       ~BioShake.get_size_z
+      ~BioShake.has_resource
       ~BioShake.home
       ~BioShake.is_in_subtree_of
       ~BioShake.load_all_state

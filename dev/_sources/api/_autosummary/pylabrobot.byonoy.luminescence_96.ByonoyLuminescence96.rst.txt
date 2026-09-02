@@ -59,6 +59,7 @@ pylabrobot.byonoy.luminescence\_96.ByonoyLuminescence96
       ~ByonoyLuminescence96.get_size_x
       ~ByonoyLuminescence96.get_size_y
       ~ByonoyLuminescence96.get_size_z
+      ~ByonoyLuminescence96.has_resource
       ~ByonoyLuminescence96.is_in_subtree_of
       ~ByonoyLuminescence96.load_all_state
       ~ByonoyLuminescence96.load_from_json_file

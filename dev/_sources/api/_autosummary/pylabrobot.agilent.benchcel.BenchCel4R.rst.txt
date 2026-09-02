@@ -61,6 +61,7 @@ pylabrobot.agilent.benchcel.BenchCel4R
       ~BenchCel4R.get_size_x
       ~BenchCel4R.get_size_y
       ~BenchCel4R.get_size_z
+      ~BenchCel4R.has_resource
       ~BenchCel4R.home
       ~BenchCel4R.is_in_subtree_of
       ~BenchCel4R.load_all_state

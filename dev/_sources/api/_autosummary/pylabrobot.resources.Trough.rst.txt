@@ -63,6 +63,7 @@ pylabrobot.resources.Trough
       ~Trough.get_size_y
       ~Trough.get_size_z
       ~Trough.has_lid
+      ~Trough.has_resource
       ~Trough.is_in_subtree_of
       ~Trough.load_all_state
       ~Trough.load_from_json_file

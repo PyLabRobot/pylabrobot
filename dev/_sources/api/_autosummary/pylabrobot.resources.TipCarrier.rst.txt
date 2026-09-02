@@ -61,6 +61,7 @@ pylabrobot.resources.TipCarrier
       ~TipCarrier.get_size_x
       ~TipCarrier.get_size_y
       ~TipCarrier.get_size_z
+      ~TipCarrier.has_resource
       ~TipCarrier.is_in_subtree_of
       ~TipCarrier.load_all_state
       ~TipCarrier.load_from_json_file

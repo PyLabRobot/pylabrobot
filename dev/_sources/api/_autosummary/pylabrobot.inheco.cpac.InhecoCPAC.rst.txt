@@ -60,6 +60,7 @@ pylabrobot.inheco.cpac.InhecoCPAC
       ~InhecoCPAC.get_size_x
       ~InhecoCPAC.get_size_y
       ~InhecoCPAC.get_size_z
+      ~InhecoCPAC.has_resource
       ~InhecoCPAC.is_in_subtree_of
       ~InhecoCPAC.load_all_state
       ~InhecoCPAC.load_from_json_file

@@ -59,6 +59,7 @@ pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbance96
       ~ByonoyAbsorbance96.get_size_x
       ~ByonoyAbsorbance96.get_size_y
       ~ByonoyAbsorbance96.get_size_z
+      ~ByonoyAbsorbance96.has_resource
       ~ByonoyAbsorbance96.initialize_measurements
       ~ByonoyAbsorbance96.is_in_subtree_of
       ~ByonoyAbsorbance96.load_all_state

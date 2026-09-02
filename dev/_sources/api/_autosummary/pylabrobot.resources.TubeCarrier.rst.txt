@@ -61,6 +61,7 @@ pylabrobot.resources.TubeCarrier
       ~TubeCarrier.get_size_x
       ~TubeCarrier.get_size_y
       ~TubeCarrier.get_size_z
+      ~TubeCarrier.has_resource
       ~TubeCarrier.is_in_subtree_of
       ~TubeCarrier.load_all_state
       ~TubeCarrier.load_from_json_file

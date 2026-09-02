@@ -69,6 +69,7 @@ pylabrobot.high\_res.sample\_storage.SteriStore
       ~SteriStore.get_size_x
       ~SteriStore.get_size_y
       ~SteriStore.get_size_z
+      ~SteriStore.has_resource
       ~SteriStore.home
       ~SteriStore.is_in_subtree_of
       ~SteriStore.load_all_state

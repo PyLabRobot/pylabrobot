@@ -59,6 +59,7 @@ pylabrobot.resources.ResourceHolder
       ~ResourceHolder.get_size_x
       ~ResourceHolder.get_size_y
       ~ResourceHolder.get_size_z
+      ~ResourceHolder.has_resource
       ~ResourceHolder.is_in_subtree_of
       ~ResourceHolder.load_all_state
       ~ResourceHolder.load_from_json_file

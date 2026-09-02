@@ -61,6 +61,7 @@ pylabrobot.resources.Carrier
       ~Carrier.get_size_x
       ~Carrier.get_size_y
       ~Carrier.get_size_z
+      ~Carrier.has_resource
       ~Carrier.is_in_subtree_of
       ~Carrier.load_all_state
       ~Carrier.load_from_json_file

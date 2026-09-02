@@ -57,6 +57,7 @@ pylabrobot.resources.Resource
       ~Resource.get_size_x
       ~Resource.get_size_y
       ~Resource.get_size_z
+      ~Resource.has_resource
       ~Resource.is_in_subtree_of
       ~Resource.load_all_state
       ~Resource.load_from_json_file

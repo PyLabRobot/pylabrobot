@@ -1,0 +1,6 @@
+pylabrobot.resources.TipRack.has\_resource
+==========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TipRack.has_resource

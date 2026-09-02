@@ -60,6 +60,7 @@ pylabrobot.resources.tip\_rack.TipSpot
       ~TipSpot.get_size_y
       ~TipSpot.get_size_z
       ~TipSpot.get_tip
+      ~TipSpot.has_resource
       ~TipSpot.has_tip
       ~TipSpot.is_in_subtree_of
       ~TipSpot.load_all_state

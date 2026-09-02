@@ -78,6 +78,7 @@ pylabrobot.resources.Plate
       ~Plate.get_well
       ~Plate.get_wells
       ~Plate.has_lid
+      ~Plate.has_resource
       ~Plate.index_of_item
       ~Plate.is_in_subtree_of
       ~Plate.load_all_state

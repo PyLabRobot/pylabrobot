@@ -60,6 +60,7 @@ pylabrobot.inheco.thermoshake.InhecoThermoShake
       ~InhecoThermoShake.get_size_x
       ~InhecoThermoShake.get_size_y
       ~InhecoThermoShake.get_size_z
+      ~InhecoThermoShake.has_resource
       ~InhecoThermoShake.is_in_subtree_of
       ~InhecoThermoShake.load_all_state
       ~InhecoThermoShake.load_from_json_file
