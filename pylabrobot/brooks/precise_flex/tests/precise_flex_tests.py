@@ -521,3 +521,140 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
         await self.arm.move_to_location(Coordinate(400.0, 0.0, 200.0), 0.0)
     self.assertIn(Axis.SHOULDER, ctx.exception.axes)
     self.assertEqual(self._cmds("moveJ"), [])
+
+
+def _make_linked_arm() -> PreciseFlex:
+  """An arm whose socket is stubbed too, for asserting on the bring-up sequence."""
+  arm = _make_arm()
+  arm.io = MagicMock()
+  arm.io.setup = AsyncMock()
+  arm.io.stop = AsyncMock()
+  arm.io.write = AsyncMock()
+  arm.io._host = "localhost"
+  arm.io._port = 10100
+  return arm
+
+
+class TestPreciseFlexLifecycle(unittest.IsolatedAsyncioTestCase):
+  """Opening the link, taking control, and homing are three separate verbs.
+
+  A caller that only wants to read a position can connect and initialize without
+  the arm ever moving; only ``home`` sweeps it.
+  """
+
+  def setUp(self):
+    self.arm = _make_linked_arm()
+
+  def _sent(self) -> list[str]:
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+
+  def _assert_moved_nothing(self):
+    for command in self._sent():
+      verb = command.split()[0].lower()
+      self.assertNotIn(
+        verb,
+        ("home", "homeall", "movej", "movec", "moveoneaxis", "gripper"),
+        f"bring-up must not move the arm, but it sent {command!r}",
+      )
+
+  async def test_connect_opens_the_link_and_agrees_the_protocol(self):
+    await self.arm.connect()
+    mocked(self.arm.io.setup).assert_awaited_once()
+    self.assertEqual(self._sent(), ["mode 0"])
+
+  async def test_connect_does_not_raise_power(self):
+    await self.arm.connect()
+    self.assertNotIn("hp 1", self._sent())
+    self._assert_moved_nothing()
+
+  async def test_an_arm_whose_discovery_failed_says_it_has_no_configuration(self):
+    """Discovery is best-effort, so bring-up succeeding is not proof the arm knows its
+    own limits, and a caller above has no other way to tell the two apart."""
+    self.arm._request_configuration = AsyncMock(side_effect=RuntimeError("no controller"))
+
+    await self.arm.initialize()
+
+    self.assertFalse(self.arm.has_configuration)
+    with self.assertRaises(RuntimeError):
+      self.arm.configuration
+
+  async def test_initialize_takes_control_without_moving(self):
+    self.arm._request_configuration = AsyncMock(side_effect=RuntimeError("no controller"))
+    await self.arm.initialize()
+    sent = self._sent()
+    self.assertIn("attach 1", sent)
+    self.assertIn("freemode -1", sent)
+    self.assertTrue(any(c.startswith("hp 1") for c in sent), sent)
+    self._assert_moved_nothing()
+
+  async def test_initialize_adopts_what_the_controller_reports(self):
+    # The link lengths ride on this: without it the arm solves IK for a different machine.
+    discovered = MagicMock()
+    discovered.soft_limits = {
+      Axis.SHOULDER: (-93.0, 93.0),
+      Axis.ELBOW: (12.0, 348.0),
+      Axis.WRIST: (-960.0, 960.0),
+    }
+    self.arm._request_configuration = AsyncMock(return_value=discovered)
+    self.arm._adopt_configuration = MagicMock()
+    self.arm._log_configuration_summary = MagicMock()
+    self.arm._assess_configuration = MagicMock()
+
+    await self.arm.initialize()
+
+    self.arm._adopt_configuration.assert_called_once_with(discovered)
+    self.assertTrue(self.arm.has_configuration)
+
+  async def test_initialize_falls_back_to_defaults_when_discovery_fails(self):
+    self.arm._request_configuration = AsyncMock(side_effect=RuntimeError("no controller"))
+    self.arm._adopt_configuration = MagicMock()
+
+    await self.arm.initialize()
+
+    self.arm._adopt_configuration.assert_not_called()
+
+  async def test_disconnect_hands_the_arm_back_and_closes_the_link(self):
+    await self.arm.disconnect()
+    sent = self._sent()
+    self.assertIn("attach 0", sent)
+    self.assertIn("hp 0", sent)
+    mocked(self.arm.io.write).assert_awaited_once_with(b"exit\n")
+    mocked(self.arm.io.stop).assert_awaited_once()
+
+  async def test_setup_connects_then_initializes_then_homes_in_that_order(self):
+    calls: list[str] = []
+    self.arm.connect = AsyncMock(side_effect=lambda: calls.append("connect"))
+    self.arm.initialize = AsyncMock(side_effect=lambda: calls.append("initialize"))
+    self.arm.home = AsyncMock(side_effect=lambda: calls.append("home"))
+    self.arm._handle_out_of_range_axes = AsyncMock()
+
+    await self.arm.setup()
+
+    self.assertEqual(calls, ["connect", "initialize", "home"])
+
+  async def test_setup_skip_home_brings_the_arm_up_without_sweeping_it(self):
+    self.arm.connect = AsyncMock()
+    self.arm.initialize = AsyncMock()
+    self.arm.home = AsyncMock()
+    self.arm._handle_out_of_range_axes = AsyncMock()
+
+    await self.arm.setup(skip_home=True)
+
+    mocked(self.arm.home).assert_not_awaited()
+
+  async def test_setup_still_checks_soft_limits_when_discovery_fails(self):
+    # Discovery is best-effort, but losing it must not silently skip the
+    # out-of-range recovery that makes an unusable arm usable again.
+    self.arm.connect = AsyncMock()
+    self.arm.home = AsyncMock()
+    self.arm._request_configuration = AsyncMock(side_effect=RuntimeError("no controller"))
+    self.arm._handle_out_of_range_axes = AsyncMock()
+
+    await self.arm.setup()
+
+    mocked(self.arm._handle_out_of_range_axes).assert_awaited_once()
+
+  async def test_stop_is_disconnect(self):
+    self.arm.disconnect = AsyncMock()
+    await self.arm.stop()
+    mocked(self.arm.disconnect).assert_awaited_once()
