@@ -1,7 +1,10 @@
+import asyncio
 import inspect
 import logging
+import threading
+import time
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot import utils
 from pylabrobot.io import LOG_LEVEL_IO
@@ -46,6 +49,79 @@ _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 
 logger = logging.getLogger(__name__)
 
+# One request/response with the robot-server. A read of robot state, not a motion.
+DEFAULT_REQUEST_TIMEOUT = 30.0
+
+# One command, including the motion it performs. The OT-2's slowest single move is a
+# full-stroke aspirate or dispense at a viscous-liquid flow rate.
+DEFAULT_COMMAND_TIMEOUT = 120.0
+
+# Delay between two reads of a running command's status.
+DEFAULT_STATUS_POLL_INTERVAL = 0.05
+
+
+def _seconds_left(deadline: float) -> float:
+  return max(deadline - time.monotonic(), 0.0)
+
+
+def _well_location(x: float, y: float, z: float, origin: str = "bottom") -> Dict[str, Any]:
+  """The ``wellLocation`` shape every well-addressed command takes."""
+  return {"origin": origin, "offset": {"x": x, "y": y, "z": z}}
+
+
+def _in_place(
+  volume: float,
+  flow_rate: float,
+  pipette_id: str,
+  push_out: Optional[bool] = None,
+) -> Dict[str, Any]:
+  """Params for an ``aspirateInPlace``/``dispenseInPlace`` command."""
+  params: Dict[str, Any] = {"flowRate": flow_rate, "volume": volume, "pipetteId": pipette_id}
+  if push_out is not None:
+    params["pushOut"] = push_out
+  return params
+
+
+async def _call_off_loop(call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+  """Run a blocking call on a thread of its own and await its result.
+
+  Not ``asyncio.to_thread``: that borrows the loop's shared executor, whose threads
+  ``asyncio.run()`` joins on the way out, so one request nobody ever answers would
+  hang the process at shutdown and burn a pool slot every other backend shares. A
+  daemon thread holds neither.
+
+  A thread per call, not a queue of one, and that is deliberate. ``ot_api`` gives
+  ``urlopen`` no socket timeout, so a request the robot never answers leaks its
+  thread for the life of the process. Queueing behind it would mean the stop that
+  contains a timed-out move could never reach the robot either, which is the worse
+  failure: the robot would keep executing what we stopped waiting for. The cost is
+  that after a timeout a second call can be in flight against the same robot while
+  the first is still stuck.
+  """
+  loop = asyncio.get_running_loop()
+  future: "asyncio.Future[Any]" = loop.create_future()
+
+  def _settle(setter: Callable[[Any], None], value: Any) -> None:
+    if not future.done():
+      setter(value)
+
+  def _deliver(setter: Callable[[Any], None], value: Any) -> None:
+    try:
+      loop.call_soon_threadsafe(_settle, setter, value)
+    except RuntimeError:
+      pass  # the loop is gone, so nobody is waiting for this answer any more
+
+  def _run() -> None:
+    try:
+      result = call(*args, **kwargs)
+    except BaseException as exc:
+      _deliver(future.set_exception, exc)
+    else:
+      _deliver(future.set_result, result)
+
+  threading.Thread(target=_run, name="opentrons-request", daemon=True).start()
+  return await future
+
 
 class _IOLogger:
   """Transparent proxy over the ``ot_api`` module that logs every call at
@@ -73,6 +149,9 @@ class _IOLogger:
         logger.log(LOG_LEVEL_IO, "%s(%s)", qualified, ", ".join(parts))
         return attr(*args, **kwargs)
 
+      # Without this every wrapped call answers to "_logged", and anything that
+      # names the call it is reporting on (a timeout message) names the proxy.
+      _logged.__name__ = _logged.__qualname__ = qualified
       return _logged
     return attr
 
@@ -97,8 +176,26 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     "p1000_single_gen3": 1000,
   }
 
-  def __init__(self, host: str, port: int = 31950):
+  def __init__(
+    self,
+    host: str,
+    port: int = 31950,
+    request_timeout: float = DEFAULT_REQUEST_TIMEOUT,
+    command_timeout: float = DEFAULT_COMMAND_TIMEOUT,
+    status_poll_interval: float = DEFAULT_STATUS_POLL_INTERVAL,
+  ):
+    """Args:
+    host: the robot's address.
+    port: the robot-server's port.
+    request_timeout: how long one request/response with the robot may take, in
+      seconds. Includes the wait for whatever request is already in flight.
+    command_timeout: how long a command that moves the robot may take, in seconds.
+      Covers the motion itself, not just the request that started it.
+    status_poll_interval: delay between two reads of a running command's status.
+    """
     super().__init__()
+
+    self._init_wire_state(request_timeout, command_timeout, status_poll_interval)
 
     if not USE_OT:
       raise RuntimeError(
@@ -125,6 +222,34 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self._tip_racks: Dict[str, int] = {}  # tip_rack.name -> slot index
     self._plr_name_to_load_name: Dict[str, str] = {}
 
+  def _init_wire_state(
+    self,
+    request_timeout: float,
+    command_timeout: float,
+    status_poll_interval: float,
+  ) -> None:
+    """Check and record the three budgets, and the state the wire layer keeps.
+
+    Shared with the chatterbox, which skips this ``__init__`` because it has no
+    ``ot_api`` to talk to and would otherwise drift from what the wire layer expects.
+    """
+    for name, value in (
+      ("request_timeout", request_timeout),
+      ("command_timeout", command_timeout),
+      ("status_poll_interval", status_poll_interval),
+    ):
+      if value <= 0:
+        raise ValueError(f"{name} must be greater than 0, got {value}")
+    self.request_timeout = request_timeout
+    self.command_timeout = command_timeout
+    self.status_poll_interval = status_poll_interval
+    # Built on first use, not here: on 3.9 a Lock binds to whatever loop is current
+    # when it is constructed, and a backend is routinely built before asyncio.run().
+    self._request_lock: Optional[asyncio.Lock] = None
+    # Set by a command timeout: the robot is still holding a command we stopped
+    # waiting for, so its pose is no longer ours to describe.
+    self._robot_state_unknown = False
+
   def serialize(self) -> dict:
     return {
       **super().serialize(),
@@ -132,18 +257,175 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       "port": self.port,
     }
 
+  async def _request(
+    self,
+    call: Callable[..., Any],
+    *args: Any,
+    timeout: Optional[float] = None,
+    **kwargs: Any,
+  ) -> Any:
+    """Issue one ``ot_api`` call off the event loop, and give up after ``timeout``.
+
+    ``ot_api`` reaches the robot with ``urlopen`` and passes it no socket timeout, so
+    an unanswered request blocks its thread for good. Running it off the loop keeps
+    the rest of the process going, and the wait_for ends OUR wait: a thread cannot be
+    cancelled, so the abandoned one finishes on its own.
+
+    The budget covers the wait for the lock as well as the request. A caller told a
+    read is bounded at seven seconds must not sit behind someone else's mix for ten
+    minutes first, so the clock starts before the queue, not after it.
+    """
+
+    budget = self.request_timeout if timeout is None else timeout
+    try:
+      return await asyncio.wait_for(self._locked_call(call, *args, **kwargs), timeout=budget)
+    except asyncio.TimeoutError as exc:
+      # Before 3.11 asyncio.TimeoutError is not builtins.TimeoutError, so re-raising
+      # is what gives this backend one give-up type on every supported version.
+      raise TimeoutError(
+        f"{getattr(call, '__name__', call)} did not answer within {budget:g}s"
+      ) from exc
+
+  async def _locked_call(self, call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """One ``ot_api`` call at a time: the robot runs one queue and ``ot_api`` keeps the
+    run id in a module global.
+
+    Per call, not per command. The blocking calls this replaced held the event loop for
+    a whole command; here the lock is released between an enqueue and its polls, so
+    keeping two commands off one robot is the caller's job.
+    """
+    if self._request_lock is None:
+      self._request_lock = asyncio.Lock()
+    async with self._request_lock:
+      return await _call_off_loop(call, *args, **kwargs)
+
+  async def _command(
+    self,
+    command_type: str,
+    params: Dict[str, Any],
+    timeout: Optional[float] = None,
+    abandon_run_on_timeout: bool = True,
+  ) -> Dict[str, Any]:
+    """Enqueue one run command and wait for the robot to finish it.
+
+    ``ot_api``'s own command wrappers are not used for anything that moves: their
+    decorator hard-codes a 30s ceiling no caller can raise, and polls with no delay
+    between reads. Enqueue-and-poll here honours ``command_timeout`` instead.
+
+    ``timeout`` bounds the waiting, not the whole call: the enqueue and each status
+    read carry a request budget of their own, so one unanswered request can carry the
+    call past its deadline by up to ``request_timeout``. A read that does not answer
+    is retried until the deadline: one lost GET says nothing about the motion, and
+    ending a ten-minute mix at the eight-second mark would take the abort decision
+    away from whoever asked for ten minutes.
+
+    Set ``abandon_run_on_timeout`` False for a command that moves nothing. Giving up
+    on one of those leaves no motion outstanding, so halting the robot and refusing
+    everything after it would cost more than the timeout did.
+    """
+
+    self._refuse_if_state_unknown()
+    budget = self.command_timeout if timeout is None else timeout
+    deadline = time.monotonic() + budget
+    try:
+      command_id = await self._request(
+        self._ot.runs.enqueue_command,
+        command_type,
+        params,
+        intent="setup",
+        timeout=min(self.request_timeout, _seconds_left(deadline)),
+      )
+      while True:
+        # A read is a request, so it gets a request budget. Handing it whatever is
+        # left of the deadline gives it milliseconds it cannot answer in, and then a
+        # command the robot finished reads as a timeout.
+        try:
+          result: Dict[str, Any] = await self._request(self._ot.runs.get_command, command_id)
+        except TimeoutError as exc:
+          remaining = _seconds_left(deadline)
+          if remaining <= 0:
+            raise TimeoutError(f"{command_type} did not finish within {budget:g}s") from exc
+          logger.warning(
+            "status read for %s did not answer; %.0fs of its budget left", command_type, remaining
+          )
+          await asyncio.sleep(min(self.status_poll_interval, remaining))
+          continue
+        data = result["data"]
+        status = data["status"]
+        if status == "failed":
+          error = data["error"]
+          raise RuntimeError(f"{command_type} failed with {error['errorType']}: {error['detail']}")
+        if status not in ("queued", "running"):
+          return result
+        # The deadline is checked after the read, so the read that follows the last
+        # sleep still happens: that is the one that sees a command which finished
+        # while we were asleep.
+        remaining = _seconds_left(deadline)
+        if remaining <= 0:
+          raise TimeoutError(f"{command_type} did not finish within {budget:g}s")
+        await asyncio.sleep(min(self.status_poll_interval, remaining))
+    except TimeoutError:
+      if abandon_run_on_timeout:
+        await self._abandon_run()
+      raise
+
+  def _refuse_if_state_unknown(self) -> None:
+    if self._robot_state_unknown:
+      raise RuntimeError(
+        "A command timed out and the OT-2 was left holding it, so its pose is "
+        "unknown. Recover with setup(), which starts a fresh run the stale command "
+        "cannot execute in, and homes. Check the pipettes by eye first: the OT-2 has "
+        "no tip sensor, ending a run does not drop tips, and setup() records both "
+        "mounts as empty, so a tip left on will be pressed into the rack."
+      )
+
+  async def _abandon_run(self) -> None:
+    """Stop the run a timed-out command is still sitting in, and refuse the next one.
+
+    Giving up on the wait does not take the command out of the robot's queue: it will
+    still execute, so a caller who retries makes the robot aspirate twice from one
+    well. The stop action is what prevents that, but the robot-server only schedules
+    it and answers 201 straight away, so nothing here can confirm the run halted. The
+    refusal is the part that holds: it stands until ``setup()`` builds a new run,
+    which the stale command cannot execute in whatever the old one did.
+    """
+    self._robot_state_unknown = True
+    run_id = getattr(self._ot, "run_id", None)
+    if not run_id:
+      return
+    try:
+      await self._stop_run(run_id)
+    except Exception:
+      logger.warning("could not stop run %s after a command timed out", run_id, exc_info=True)
+
+  async def _stop_run(self, run_id: str) -> None:
+    """Halt a run, so nothing still queued in it executes."""
+    await self._request(
+      self._ot.requestor.post,
+      f"/runs/{run_id}/actions",
+      {"data": {"actionType": "stop"}},
+    )
+
   async def setup(self, skip_home: bool = False):
     # create run
-    run_id = self._ot.runs.create()
+    run_id = await self._request(self._ot.runs.create)
     self._ot.set_run(run_id)
 
-    # get pipettes, then assign them
-    self.left_pipette, self.right_pipette = self._ot.lh.add_mounted_pipettes()
+    # Only now is the unknown-state refusal lifted. Creating the run is what orphans
+    # whatever an earlier timeout left queued, and it is also the step most likely to
+    # fail here: the robot-server answers 409 while it still holds the old run.
+    self._robot_state_unknown = False
+
+    # get pipettes, then assign them. This reads /pipettes and then loads each one,
+    # so it needs the command budget rather than a single request's.
+    self.left_pipette, self.right_pipette = await self._request(
+      self._ot.lh.add_mounted_pipettes, timeout=self.command_timeout
+    )
 
     self.left_pipette_has_tip = self.right_pipette_has_tip = False
 
     # get api version
-    health = self._ot.health.get()
+    health = await self._request(self._ot.health.get)
     self.ot_api_version = health["api_version"]
 
     if not skip_home:
@@ -160,19 +442,18 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.left_pipette = None
     self.right_pipette = None
 
-    # cancel the HTTP-API run if it exists (helpful to make device available again in official Opentrons app)
+    # release the run so the official Opentrons app can drive the robot again. Halt
+    # first: deleting a run the robot is still working through leaves it working.
     run_id = getattr(self._ot, "run_id", None)
     if run_id:
       try:
-        self._ot.requestor.post(f"/runs/{run_id}/cancel")
+        await self._stop_run(run_id)
       except Exception:
-        try:
-          self._ot.requestor.post(f"/runs/{run_id}/actions/cancel")
-        except Exception:
-          try:
-            self._ot.requestor.delete(f"/runs/{run_id}")
-          except Exception:
-            pass
+        logger.warning("could not stop run %s", run_id, exc_info=True)
+      try:
+        await self._request(self._ot.requestor.delete, f"/runs/{run_id}")
+      except Exception:
+        logger.warning("could not delete run %s", run_id, exc_info=True)
 
   def get_ot_name(self, plr_resource_name: str) -> str:
     """Opentrons only allows names in ^[a-z0-9._]+$, but in PLR we are flexible.
@@ -268,7 +549,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       ],
     }
 
-    data = self._ot.labware.define(lw)
+    data = await self._request(self._ot.labware.define, lw)
     namespace, definition, version = data["data"]["definitionUri"].split("/")
 
     # assign labware to robot
@@ -281,13 +562,16 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     slot = deck.get_slot(tip_rack)
     assert slot is not None, "tip rack must be on deck"
 
-    self._ot.labware.add(
-      load_name=definition,
-      namespace=namespace,
-      ot_location=slot,
-      version=version,
-      labware_id=labware_uuid,
-      display_name=self.get_ot_name(tip_rack.name),
+    await self._command(
+      "loadLabware",
+      {
+        "location": {"slotName": str(slot)},
+        "loadName": definition,
+        "namespace": namespace,
+        "version": version,
+        "labwareId": labware_uuid,
+        "displayName": self.get_ot_name(tip_rack.name),
+      },
     )
 
     self._tip_racks[tip_rack.name] = slot
@@ -360,13 +644,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     offset_z += op.tip.total_tip_length
 
-    self._ot.lh.pick_up_tip(
-      labware_id=self.get_ot_name(tip_rack.name),
-      well_name=self.get_ot_name(op.resource.name),
-      pipette_id=pipette_id,
-      offset_x=offset_x,
-      offset_y=offset_y,
-      offset_z=offset_z,
+    await self._command(
+      "pickUpTip",
+      {
+        "labwareId": self.get_ot_name(tip_rack.name),
+        "wellName": self.get_ot_name(op.resource.name),
+        "wellLocation": _well_location(offset_x, offset_y, offset_z),
+        "pipetteId": pipette_id,
+      },
     )
 
     self._set_tip_state(pipette_id, True)
@@ -400,21 +685,26 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     offset_z += 10
 
     if use_fixed_trash:
-      self._ot.lh.move_to_addressable_area_for_drop_tip(
-        pipette_id=pipette_id,
-        offset_x=offset_x,
-        offset_y=offset_y,
-        offset_z=offset_z,
+      await self._command(
+        "moveToAddressableAreaForDropTip",
+        {
+          "pipetteId": pipette_id,
+          "addressableAreaName": "fixedTrash",
+          "wellName": "A1",
+          "wellLocation": _well_location(offset_x, offset_y, offset_z, origin="default"),
+          "alternateDropLocation": False,
+        },
       )
-      self._ot.lh.drop_tip_in_place(pipette_id=pipette_id)
+      await self._command("dropTipInPlace", {"pipetteId": pipette_id})
     else:
-      self._ot.lh.drop_tip(
-        labware_id,
-        well_name=self.get_ot_name(op.resource.name),
-        pipette_id=pipette_id,
-        offset_x=offset_x,
-        offset_y=offset_y,
-        offset_z=offset_z,
+      await self._command(
+        "dropTip",
+        {
+          "labwareId": labware_id,
+          "wellName": self.get_ot_name(op.resource.name),
+          "wellLocation": _well_location(offset_x, offset_y, offset_z),
+          "pipetteId": pipette_id,
+        },
       )
 
     self._set_tip_state(pipette_id, False)
@@ -509,22 +799,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     if op.mix is not None:
       for _ in range(op.mix.repetitions):
-        self._ot.lh.aspirate_in_place(
-          volume=op.mix.volume,
-          flow_rate=op.mix.flow_rate,
-          pipette_id=pipette_id,
+        await self._command(
+          "aspirateInPlace", _in_place(op.mix.volume, op.mix.flow_rate, pipette_id)
         )
-        self._ot.lh.dispense_in_place(
-          volume=op.mix.volume,
-          flow_rate=op.mix.flow_rate,
-          pipette_id=pipette_id,
+        await self._command(
+          "dispenseInPlace", _in_place(op.mix.volume, op.mix.flow_rate, pipette_id, push_out=False)
         )
 
-    self._ot.lh.aspirate_in_place(
-      volume=volume,
-      flow_rate=flow_rate,
-      pipette_id=pipette_id,
-    )
+    await self._command("aspirateInPlace", _in_place(volume, flow_rate, pipette_id))
 
     traversal_location = self._deck_to_robot_frame(
       op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom") + op.offset
@@ -581,23 +863,15 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       pipette_id=pipette_id,
     )
 
-    self._ot.lh.dispense_in_place(
-      volume=volume,
-      flow_rate=flow_rate,
-      pipette_id=pipette_id,
-    )
+    await self._command("dispenseInPlace", _in_place(volume, flow_rate, pipette_id, push_out=False))
 
     if op.mix is not None:
       for _ in range(op.mix.repetitions):
-        self._ot.lh.aspirate_in_place(
-          volume=op.mix.volume,
-          flow_rate=op.mix.flow_rate,
-          pipette_id=pipette_id,
+        await self._command(
+          "aspirateInPlace", _in_place(op.mix.volume, op.mix.flow_rate, pipette_id)
         )
-        self._ot.lh.dispense_in_place(
-          volume=op.mix.volume,
-          flow_rate=op.mix.flow_rate,
-          pipette_id=pipette_id,
+        await self._command(
+          "dispenseInPlace", _in_place(op.mix.volume, op.mix.flow_rate, pipette_id, push_out=False)
         )
 
     traversal_location = self._deck_to_robot_frame(
@@ -611,7 +885,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     )
 
   async def home(self):
-    self._ot.health.home()
+    await self._request(self._ot.health.home, timeout=self.command_timeout)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
@@ -638,7 +912,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
   async def list_connected_modules(self) -> List[dict]:
     """List all connected temperature modules."""
-    return cast(List[dict], self._ot.modules.list_connected_modules())
+    return cast(List[dict], await self._request(self._ot.modules.list_connected_modules))
 
   def _pipette_id_for_channel(self, channel: int) -> str:
     pipettes = []
@@ -650,16 +924,30 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       raise NoChannelError(f"Channel {channel} not available on this OT-2 setup.")
     return pipettes[channel]
 
-  def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
+  async def _save_position(self, pipette_id: str) -> Dict[str, Any]:
+    """Ask the robot where a pipette is, and wait for the answer.
+
+    A read rather than a move, so it gets the request budget rather than the command
+    one: nothing here waits on motion.
+    """
+
+    return await self._command(
+      "savePosition",
+      {"pipetteId": pipette_id},
+      timeout=self.request_timeout,
+      abandon_run_on_timeout=False,
+    )
+
+  async def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     """Return the pipette id and current coordinate for a given channel."""
 
     pipette_id = self._pipette_id_for_channel(channel)
     try:
-      res = self._ot.lh.save_position(pipette_id=pipette_id)
+      res = await self._save_position(pipette_id)
       pos = res["data"]["result"]["position"]
       current = Coordinate(pos["x"], pos["y"], pos["z"])
     except Exception as exc:
-      raise RuntimeError("Failed to query current pipette position") from exc
+      raise RuntimeError(f"Failed to query current pipette position: {exc}") from exc
 
     return pipette_id, current
 
@@ -668,10 +956,41 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
 
     _ = self._pipette_id_for_channel(channel)
 
+  async def get_channel_position(self, channel: int) -> Coordinate:
+    """Where a channel is right now, in the OT-2 robot frame (this file's own name
+    for the frame ``_deck_to_robot_frame`` converts PLR deck coordinates into)."""
+
+    _, current = await self._current_channel_position(channel)
+    return current
+
+  async def move_channel_to(
+    self,
+    channel: int,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+    z: Optional[float] = None,
+  ):
+    """Move a channel to an absolute position, holding the axes left out.
+
+    One coordinated move rather than the per-axis calls chained: the robot lifts to the traversal
+    height and travels once, where three separate moves each descend and can clip labware between
+    them.
+    """
+
+    pipette_id, current = await self._current_channel_position(channel)
+    target = Coordinate(
+      x=current.x if x is None else x,
+      y=current.y if y is None else y,
+      z=current.z if z is None else z,
+    )
+    await self.move_pipette_head(
+      location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
+    )
+
   async def move_channel_x(self, channel: int, x: float):
     """Move a channel to an absolute x coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=x, y=current.y, z=current.z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
@@ -680,7 +999,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def move_channel_y(self, channel: int, y: float):
     """Move a channel to an absolute y coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=current.x, y=y, z=current.z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
@@ -689,7 +1008,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def move_channel_z(self, channel: int, z: float):
     """Move a channel to an absolute z coordinate using savePosition to seed pose."""
 
-    pipette_id, current = self._current_channel_position(channel)
+    pipette_id, current = await self._current_channel_position(channel)
     target = Coordinate(x=current.x, y=current.y, z=z)
     await self.move_pipette_head(
       location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
@@ -724,15 +1043,16 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if pipette_id is None:
       raise ValueError("No pipette id given or left/right pipette not available.")
 
-    self._ot.lh.move_arm(
-      pipette_id=pipette_id,
-      location_x=location.x,
-      location_y=location.y,
-      location_z=location.z,
-      minimum_z_height=minimum_z_height,
-      speed=speed,
-      force_direct=force_direct,
-    )
+    params: Dict[str, Any] = {
+      "pipetteId": pipette_id,
+      "coordinates": {"x": location.x, "y": location.y, "z": location.z},
+      "forceDirect": force_direct,
+    }
+    if minimum_z_height is not None:
+      params["minimumZHeight"] = minimum_z_height
+    if speed is not None:
+      params["speed"] = speed
+    await self._command("moveToCoordinates", params)
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     def supports_tip(channel_vol: float, tip_vol: float) -> bool:

@@ -109,7 +109,7 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
     self.right_pipette_has_tip = False
     logger.info("OpentronsOT2Simulator stopped.")
 
-  def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
+  async def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     pipette_id = self._pipette_id_for_channel(channel)
     return pipette_id, self._positions.get(pipette_id, Coordinate.zero())
 
