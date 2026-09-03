@@ -29,6 +29,11 @@ from .tcs_modules import missing_required_modules
 
 logger = logging.getLogger(__name__)
 
+# Float dust allowed when a converted jaw width is compared with the axis limit it
+# was derived from.
+_GRIPPER_UNIT_EPS = 1e-6
+_GRIPPER_LIMIT_HEADROOM = 0.5
+
 
 # InRange sentinel that lets the controller blend through waypoints instead of stopping at each one.
 BLEND_IN_RANGE = -1
@@ -188,9 +193,11 @@ class PreciseFlex:
         Every recovery is logged.
       closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
         ``GripOpenPos``) at which the jaws are at :attr:`min_gripper_width`.
-        Depends on the mounted gripper. The conversion mm → firmware units is
-        linear with slope 1: ``units = closed_gripper_position + (width_mm -
-        min_gripper_width)``.
+        Depends on the mounted gripper. That pairing is the anchor for the
+        mm → firmware unit conversion, which is linear with slope 1, and it is
+        frozen at construction: setup discovers the axis limits and rewrites
+        :attr:`min_gripper_width`, so reading it later would move what a width
+        means.
       parking_position: initial value for the public, runtime-settable ``parking_position`` that
         ``park()`` moves to. Leave None (the default) and setup fills the generic default RIGHT pose
         (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
@@ -207,6 +214,9 @@ class PreciseFlex:
     self._has_rail = has_rail
     self._is_dual_gripper = is_dual_gripper
     self.closed_gripper_position = closed_gripper_position
+    # closed_gripper_position was calibrated against whatever min_gripper_width read
+    # when it was measured, so that width is the anchor and discovery must not move it.
+    self._anchor_width_mm = self.min_gripper_width
     self._kinematics_params = kinematics.PF400Params(
       gripper_length=gripper_length, gripper_z_offset=gripper_z_offset
     )
@@ -1385,17 +1395,17 @@ class PreciseFlex:
       raise ValueError(f"finger_speed_pct must be between 0 and 100, got {finger_speed_pct}")
     await self.send_command(f"GraspData {plate_width} {finger_speed_pct} {grasp_force}")
 
-  async def _set_grip_detail(self):
+  async def _set_grip_detail(self) -> None:
     """Configure a default vertical station type for pick/place operations."""
     await self.send_command(f"StationType {self.location_index} 1 0 100 0 10")
 
   def _mm_to_firmware_units(self, width_mm: float) -> float:
     """Convert a jaw width (mm) to the firmware's native position unit.
 
-    Anchored at :attr:`closed_gripper_position`, which is the firmware value
-    when the jaws are at :attr:`min_gripper_width`. Slope is 1 (1 mm = 1 unit).
+    Anchored on the construction-time calibration pair, so a given width commands the
+    same jaw travel whether or not setup has discovered the axis limits. Slope is 1.
     """
-    return self.closed_gripper_position + (width_mm - self.min_gripper_width)
+    return self.closed_gripper_position + (width_mm - self._anchor_width_mm)
 
   # -- rail primitives ----------------------------------------------------------------------
 
@@ -1764,7 +1774,10 @@ class PreciseFlex:
     """
     gmin, gmax = config.gripper_width_range
     self._gripper_soft_min, self._gripper_soft_max = gmin, gmax
-    self.min_gripper_width, self.max_gripper_width = gmin, gmax
+    # The limits are gripper-axis units. Both ends convert through the anchor: copying
+    # them in would put units in a millimetre field and change what a width means.
+    self.min_gripper_width = self._anchor_width_mm + (gmin - self.closed_gripper_position)
+    self.max_gripper_width = self._anchor_width_mm + (gmax - self.closed_gripper_position)
     self._kinematics_params = config.kinematics
     self._has_rail = config.has_rail
     self._is_dual_gripper = config.is_dual_gripper
@@ -2351,8 +2364,8 @@ class PreciseFlex:
 
   # -- gripper ------------------------------------------------------------------------------
 
-  # Physical jaw range for the PF400 servoed gripper. Overridden at setup from the
-  # gripper-axis soft limits (DataIDs 16078/16077, Axis.GRIPPER) when discoverable.
+  # Physical jaw range for the PF400 servoed gripper. The minimum doubles as the
+  # calibration anchor for closed_gripper_position; setup converts both ends off it.
   min_gripper_width: float = 60.0
   max_gripper_width: float = 145.0
   # Gripper-axis soft limits (GripOpenPos/GripClosePos units), read at setup; None until then.
@@ -2375,8 +2388,11 @@ class PreciseFlex:
     """Move the PreciseFlex gripper jaws.
 
     ``force_sensing=False`` drives to the open position (``gripper 1``);
-    ``force_sensing=True`` drives to the close position with force feedback
-    (``gripper 2``), which may stop short of ``width`` on contact.
+    ``force_sensing=True`` drives to the close position (``gripper 2``). Both are
+    position moves: ``gripper 2`` limits the force it applies getting there, but it
+    does not stop the jaws where they meet something. Command the width a held
+    object wants, not a tighter one. Commanding past a held object leaves a standing
+    position error the controller reports as an overheating motor (-3104).
 
     Not interruptible: the ``gripper`` firmware command blocks the controller's command interpreter
     until the jaws finish (hardware-verified, like ``waitForEom``), so a user interrupt cannot halt it
@@ -2390,16 +2406,20 @@ class PreciseFlex:
       force_sensing,
     )
     units = self._mm_to_firmware_units(width)
-    if (
-      self._gripper_soft_min is not None
-      and self._gripper_soft_max is not None
-      and not (self._gripper_soft_min <= units <= self._gripper_soft_max)
-    ):
-      raise ValueError(
-        f"gripper width {width} mm maps to firmware units {units:.1f}, outside the gripper "
-        f"axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - check "
-        f"closed_gripper_position (currently {self.closed_gripper_position})."
-      )
+    if self._gripper_soft_min is not None and self._gripper_soft_max is not None:
+      # An advertised end converts back through a subtract and an add, so it can land a
+      # few ulps outside the limit it was derived from. That is dust, not out of range.
+      if not (
+        self._gripper_soft_min - _GRIPPER_UNIT_EPS
+        <= units
+        <= self._gripper_soft_max + _GRIPPER_UNIT_EPS
+      ):
+        raise ValueError(
+          f"gripper width {width} mm maps to firmware units {units:.1f}, outside the gripper "
+          f"axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - check "
+          f"closed_gripper_position (currently {self.closed_gripper_position})."
+        )
+      units = self._within_gripper_limits(units)
     await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(units)
@@ -2425,7 +2445,15 @@ class PreciseFlex:
 
     This is the counterpart to :meth:`move_gripper` for integrations with
     taught joint-space routes. The caller owns the joint calibration.
+
+    A target outside the axis is held to the nearest end rather than refused,
+    which is the opposite of :meth:`move_gripper`. A width in mm that lands
+    out of range means ``closed_gripper_position`` is wrong, which is worth
+    raising on; a taught joint position that does is a route reaching a little
+    past the stop, and holding it there is what the route wanted. Either way
+    the arm never receives a target past the end, which is what strands it.
     """
+    position = self._within_gripper_limits(position)
     await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(position)
@@ -2433,6 +2461,35 @@ class PreciseFlex:
     else:
       await self._set_grip_open_pos(position)
       await self.send_command("gripper 1")
+
+  def _within_gripper_limits(self, units: float) -> float:
+    """A gripper target held a little inside the axis' soft limits.
+
+    Both ends are adopted together off one discovered tuple, so the arm has either
+    read its limits or read neither, and before setup there is nothing to hold to.
+    """
+    if self._gripper_soft_min is None or self._gripper_soft_max is None:
+      return units
+    low = self._gripper_soft_min + _GRIPPER_LIMIT_HEADROOM
+    high = self._gripper_soft_max - _GRIPPER_LIMIT_HEADROOM
+    held = min(max(units, low), high)
+    if held != units:
+      logger.warning(
+        "[PreciseFlex %s] gripper target %s held to %s, inside [%s, %s]",
+        self.io._host,
+        units,
+        held,
+        self._gripper_soft_min,
+        self._gripper_soft_max,
+      )
+    return held
+
+  @property
+  def gripper_joint_range(self) -> tuple[Optional[float], Optional[float]]:
+    """The gripper axis' soft limits in controller units, None at either end the arm
+    has not read. A jaw width in mm reaches these through ``closed_gripper_position``.
+    """
+    return self._gripper_soft_min, self._gripper_soft_max
 
   async def is_gripper_closed(self) -> bool:
     """(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.
