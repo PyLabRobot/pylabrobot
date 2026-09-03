@@ -279,6 +279,21 @@
     "oem": "https://www.preciseflexrobots.com/lab-automation-applicable-products"
   },
   {
+    "id": "btx-gemini-x2",
+    "vendor": "BTX",
+    "name": "Gemini X2",
+    "kind": "electroporator",
+    "capabilities": [
+      "electroporation"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.thermo_fisher.btx.gemini.X2.BTXGeminiX2",
+    "api_version": "v1",
+    "code_slug": "thermo_fisher/btx/gemini/X2",
+    "doc_slug": "thermo_fisher/btx/gemini/X2/hello-world",
+    "oem": "https://support.btxonline.com/hc/en-us/articles/6215664757907-Gemini-Twin-Wave-Electroporators-Manual-and-Quick-Start-guide"
+  },
+  {
     "id": "byonoy-absorbance-96",
     "vendor": "Byonoy",
     "name": "Absorbance 96 Automate",
