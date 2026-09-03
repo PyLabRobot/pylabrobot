@@ -5,7 +5,18 @@ import dataclasses
 import logging
 import time
 import warnings
-from typing import Callable, ClassVar, Dict, List, Literal, NamedTuple, Optional, Sequence
+from contextlib import asynccontextmanager
+from typing import (
+  AsyncIterator,
+  Callable,
+  ClassVar,
+  Dict,
+  List,
+  Literal,
+  NamedTuple,
+  Optional,
+  Sequence,
+)
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.config import Axis, PreciseFlexConfiguration
@@ -1211,6 +1222,34 @@ class PreciseFlex:
     """Get the current speed percentage of the arm's movement."""
     return await self.request_profile_speed(self.profile_index)
 
+  @asynccontextmanager
+  async def at_speed(self, speed_pct: Optional[float]) -> AsyncIterator[None]:
+    """Run a move at its own speed, then put the profile speed back.
+
+    The restore belongs here rather than with the caller: a fault between the move
+    and the restore would otherwise leave the arm slow for everything after it.
+    """
+    if speed_pct is None:
+      yield
+      return
+    prior = await self._request_speed()
+    await self._set_speed(speed_pct)
+    try:
+      yield
+    finally:
+      try:
+        await self._set_speed(prior)
+      except Exception:
+        # Raising here replaces whatever the move was already failing with, so name the
+        # state plainly: the arm is still at the move's speed and nothing else will reset it.
+        logger.error(
+          "[PreciseFlex %s] could not restore profile speed to %s; the arm is still at %s",
+          self.io._host,
+          prior,
+          speed_pct,
+        )
+        raise
+
   # -- brakes, torque & freedrive -----------------------------------------------------------
 
   async def release_brake(self, axis: int) -> None:
@@ -2107,7 +2146,8 @@ class PreciseFlex:
     Args:
       position: Target joint pose. Omitted axes keep their live values.
       speed_pct: Movement speed override as a percentage (0-100). If None, uses the current
-        speed setting.
+        speed setting. This STICKS: it is not restored afterwards. Wrap a call in
+        ``at_speed`` instead to scope a speed to one move.
     """
     if speed_pct is not None:
       await self._set_speed(speed_pct)
@@ -2697,9 +2737,7 @@ class PreciseFlex:
       direction,
       resource_width,
     )
-    if rail_position is not None:
-      await self.move_rail(rail_position)
-    elif self._has_rail:
+    if rail_position is None and self._has_rail:
       raise ValueError(
         "rail_position must be specified for pick_up_at_location when using a rail-equipped arm."
       )
@@ -2709,6 +2747,8 @@ class PreciseFlex:
       orientation=orientation,
       wrist=wrist,
     )
+    if rail_position is not None:
+      await self.move_rail(rail_position)
     await self.set_grasp_data(
       plate_width=resource_width,
       finger_speed_pct=finger_speed_pct,
@@ -2759,9 +2799,7 @@ class PreciseFlex:
       direction,
       resource_width,
     )
-    if rail_position is not None:
-      await self.move_rail(rail_position)
-    elif self._has_rail:
+    if rail_position is None and self._has_rail:
       raise ValueError(
         "rail_position must be specified for drop_at_location when using a rail-equipped arm."
       )
@@ -2771,9 +2809,11 @@ class PreciseFlex:
       orientation=orientation,
       wrist=wrist,
     )
+    if rail_position is not None:
+      await self.move_rail(rail_position)
     await self._place_plate_c(cartesian_position=coords)
 
-  async def _pick_plate_j(self, joint_position: JointPose):
+  async def _pick_plate_j(self, joint_position: JointPose) -> None:
     """Pick a plate from the specified position using joint coordinates."""
     await self._set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail()
