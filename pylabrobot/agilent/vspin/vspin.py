@@ -109,6 +109,8 @@ _IO_TRANSITION_TIMEOUT = 5.0
 _SERVO_TRANSITION_SETTLE_TIME = 0.1
 _TACHOMETER_TO_RPM = -14.69320388
 _NETWORK_PROBE_TIMEOUT = 0.2
+_NETWORK_INPUT_QUIET_TIME = 0.1
+_NETWORK_INPUT_DRAIN_TIMEOUT = 1.0
 _INITIAL_BAUD_RATES = (19200, 115200, 57600, 9600)
 _NMC_RESET_SETTLE_TIME = 0.1
 _NMC_BAUD_SETTLE_TIME = 0.1
@@ -446,6 +448,7 @@ class VSpin:
       # to SET_ADDRESS. Reopening discards those host-side bytes as well.
       await self._reopen_ftdi(19200)
       await self.io.usb_purge_rx_buffer()
+      await self._drain_nmc_input()
 
       try:
         await self._send_nmc(
@@ -518,6 +521,7 @@ class VSpin:
       await self._reopen_ftdi(57600)
       await asyncio.sleep(_NMC_BAUD_SETTLE_TIME)
       await self.io.usb_purge_rx_buffer()
+      await self._drain_nmc_input()
       return
 
     context = "" if last_error is None else f": {last_error}"
@@ -548,6 +552,34 @@ class VSpin:
       await self.io.write(_nmc.build_no_op(address) + b"\x00" * 8)
     await self._send_nmc(_nmc.build_hard_reset(), expect_response=False)
     await asyncio.sleep(_NMC_RESET_SETTLE_TIME)
+
+  async def _drain_nmc_input(self) -> None:
+    """Discard reset-time replies until the FTDI receive path remains quiet."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _NETWORK_INPUT_DRAIN_TIMEOUT
+    quiet_since: float | None = None
+    discarded = bytearray()
+
+    while True:
+      chunk = await self.io.read(64)
+      now = loop.time()
+      if chunk:
+        discarded.extend(chunk)
+        quiet_since = None
+      elif quiet_since is None:
+        quiet_since = now
+      elif now - quiet_since >= _NETWORK_INPUT_QUIET_TIME:
+        break
+
+      if now >= deadline:
+        raise TimeoutError(
+          "VSpin NMC receive path did not become quiet after reset; "
+          f"discarded {len(discarded)} bytes: {bytes(discarded).hex()}"
+        )
+      await asyncio.sleep(0.01)
+
+    if discarded:
+      logger.debug("Discarded reset-time NMC input: %s", bytes(discarded).hex())
 
   # -- hardware status queries --
 

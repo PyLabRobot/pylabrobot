@@ -332,6 +332,23 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(TimeoutError, "1 of 2 expected"):
       await self.vspin._read_exact_response(length=2, timeout=0)
 
+  async def test_nmc_input_drain_discards_bytes_until_quiet(self):
+    self.io.read = AsyncMock(side_effect=[b"\x00\x89", b"", b""])
+
+    with patch("pylabrobot.agilent.vspin.vspin._NETWORK_INPUT_QUIET_TIME", 0):
+      await self.vspin._drain_nmc_input()
+
+    self.assertEqual(self.io.read.await_count, 3)
+
+  async def test_nmc_input_drain_times_out_when_bytes_do_not_stop(self):
+    self.io.read = AsyncMock(return_value=b"\x00\x89")
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin._NETWORK_INPUT_DRAIN_TIMEOUT", 0),
+      self.assertRaisesRegex(TimeoutError, "discarded 2 bytes: 0089"),
+    ):
+      await self.vspin._drain_nmc_input()
+
   async def test_send_nmc_uses_active_status_mask_length(self):
     self.vspin._servo_status_mask = _nmc.SEND_POSITION | _nmc.SEND_VELOCITY
     response = bytes.fromhex("0101000000020004")
@@ -515,6 +532,9 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
     self.ftdi_patch = patch("pylabrobot.agilent.vspin.vspin.FTDI", autospec=True)
     self.ftdi_patch.start()
     self.addCleanup(self.ftdi_patch.stop)
+    self.quiet_time_patch = patch("pylabrobot.agilent.vspin.vspin._NETWORK_INPUT_QUIET_TIME", 0)
+    self.quiet_time_patch.start()
+    self.addCleanup(self.quiet_time_patch.stop)
 
   def _make_vspin(self, steps: list[_VSpinScriptStep]) -> tuple[VSpin, _ScriptedVSpinFTDI]:
     vspin = VSpin(name="centrifuge")
