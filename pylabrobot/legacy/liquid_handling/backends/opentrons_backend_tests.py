@@ -8,6 +8,7 @@ pytest.importorskip("ot_api")
 from pylabrobot.legacy.liquid_handling import LiquidHandler
 from pylabrobot.legacy.liquid_handling.backends.opentrons_backend import (
   _OT_DECK_IS_ADDRESSABLE_AREA_VERSION,
+  _version_is_at_least,
   OpentronsOT2Backend,
 )
 from pylabrobot.legacy.liquid_handling.errors import NoChannelError
@@ -34,6 +35,14 @@ def _mock_health_get():
   return {
     "api_version": "7.0.1",
   }
+
+
+@pytest.mark.parametrize(
+  ("version", "expected"),
+  (("7.0.1", False), ("7.1.0", True), ("26.6.0", True)),
+)
+def test_version_is_at_least(version: str, expected: bool) -> None:
+  assert _version_is_at_least(version, _OT_DECK_IS_ADDRESSABLE_AREA_VERSION) is expected
 
 
 class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
@@ -233,7 +242,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     area (move_to_addressable_area_for_drop_tip + drop_tip_in_place), not drop_tip."""
     mock_define.side_effect = _mock_define
     mock_add.side_effect = _mock_add
-    self.backend.ot_api_version = _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
+    self.backend.ot_api_version = "26.6.0"
 
     await self.lh.pick_up_tips(self.tip_rack["A1"])
     await self.lh.discard_tips()

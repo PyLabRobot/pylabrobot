@@ -47,6 +47,13 @@ _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 logger = logging.getLogger(__name__)
 
 
+def _version_is_at_least(version: str, minimum: str) -> bool:
+  """Compare versions that contain dot-separated integers."""
+  return tuple(int(component) for component in version.split(".")) >= tuple(
+    int(component) for component in minimum.split(".")
+  )
+
+
 class _IOLogger:
   """Transparent proxy over the ``ot_api`` module that logs every call at
   ``LOG_LEVEL_IO``.
@@ -378,7 +385,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     op = ops[0]
 
     use_fixed_trash = (
-      cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
+      _version_is_at_least(cast(str, self.ot_api_version), _OT_DECK_IS_ADDRESSABLE_AREA_VERSION)
       and op.resource.name == "trash"
     )
     if use_fixed_trash:
