@@ -102,6 +102,7 @@ REQUIRED_FIELDS = ("id", "vendor", "name", "kind", "status")
 
 OPTIONAL_FIELDS = (
   "capabilities",
+  "models",
   "api",
   "api_version",
   "code_slug",
@@ -190,6 +191,26 @@ def _validate(device: Any, index: int, seen_ids: Dict[str, int], path: Path) -> 
       f"{where} ({device_id}): unknown capability/capabilities: {', '.join(unknown_capabilities)}. "
       f"Add to CAPABILITIES in {Path(__file__).name} if genuinely new."
     )
+
+  models = device.get("models", [])
+  if not isinstance(models, list):
+    raise DeviceRegistryError(f"{where} ({device_id}): models must be a list of objects")
+  for model_index, model in enumerate(models):
+    model_where = f"{where} ({device_id}) models[{model_index}]"
+    if not isinstance(model, dict):
+      raise DeviceRegistryError(f"{model_where}: model must be an object")
+    unknown_model_fields = sorted(set(model) - {"name", "status"})
+    if unknown_model_fields:
+      raise DeviceRegistryError(
+        f"{model_where}: unknown field(s): {', '.join(unknown_model_fields)}"
+      )
+    if not isinstance(model.get("name"), str) or not model["name"]:
+      raise DeviceRegistryError(f"{model_where}: name must be a non-empty string")
+    model_status = model.get("status")
+    if model_status is not None and model_status not in STATUSES:
+      raise DeviceRegistryError(
+        f"{model_where}: status {model_status!r} is not one of {', '.join(STATUSES)}"
+      )
 
   return Device(device)
 

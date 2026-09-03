@@ -97,6 +97,7 @@ def agilent_96_wellplate_150uL_Vb(name: str) -> Plate:
       dz=15.9 - 14.0 - 0.88,  # spec - spec - measured manually
       item_dx=9.0,  # standard
       item_dy=9.0,  # standard
+      name_prefix=name,
       **well_kwargs,
     ),
     plate_type="skirted",
@@ -139,6 +140,7 @@ def agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.RECTANGLE,
       material_z_thickness=1.15,
+      name_prefix=name,
     ),
   )
 

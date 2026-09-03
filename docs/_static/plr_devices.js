@@ -1,6 +1,8 @@
 /* Search and chip filtering for device tables rendered by the plr_devices extension. */
 
 (function () {
+  var AUTO_SHOW_MODELS_MAX_DEVICES = 10;
+
   function all(selector, root) {
     return Array.prototype.slice.call((root || document).querySelectorAll(selector));
   }
@@ -24,6 +26,78 @@
     return wanted.indexOf(row.getAttribute("data-" + field)) !== -1;
   }
 
+  function textMatches(row, terms) {
+    var haystack = row.getAttribute("data-search") || "";
+    return terms.every(function (term) {
+      return haystack.indexOf(term) !== -1;
+    });
+  }
+
+  function applyModels(container, terms, visibleDeviceIds, visibleDeviceCount) {
+    var rowsByDevice = Object.create(null);
+    var deviceRowsById = Object.create(null);
+
+    all(".plr-device-row", container).forEach(function (row) {
+      deviceRowsById[row.getAttribute("data-device-id")] = row;
+    });
+
+    all(".plr-device-model-row", container).forEach(function (row) {
+      var deviceId = row.getAttribute("data-device-id");
+      (rowsByDevice[deviceId] = rowsByDevice[deviceId] || []).push(row);
+    });
+
+    var hasVisibleModels = Object.keys(rowsByDevice).some(function (deviceId) {
+      return visibleDeviceIds[deviceId];
+    });
+    var autoShow =
+      terms.length > 0 &&
+      visibleDeviceCount > 0 &&
+      visibleDeviceCount <= AUTO_SHOW_MODELS_MAX_DEVICES &&
+      hasVisibleModels;
+    var override = container._plrModelsOverride;
+    var showModels = override === null ? autoShow : override;
+
+    Object.keys(rowsByDevice).forEach(function (deviceId) {
+      var modelRows = rowsByDevice[deviceId];
+      var deviceOverride = container._plrModelDeviceOverrides[deviceId];
+      var showDeviceModels =
+        typeof deviceOverride === "boolean" ? deviceOverride : showModels;
+      var matchingRows = terms.length
+        ? modelRows.filter(function (row) {
+            return textMatches(row, terms);
+          })
+        : [];
+      var onlyMatchingModels = matchingRows.length > 0;
+
+      modelRows.forEach(function (row) {
+        var matchesSearch = !onlyMatchingModels || matchingRows.indexOf(row) !== -1;
+        row.hidden = !(showDeviceModels && visibleDeviceIds[deviceId] && matchesSearch);
+      });
+
+      var deviceRow = deviceRowsById[deviceId];
+      if (deviceRow) {
+        deviceRow._plrModelsVisible = showDeviceModels;
+        var disclosure = deviceRow.querySelector(".plr-device-row-toggle");
+        if (disclosure) {
+          disclosure.setAttribute("aria-expanded", showDeviceModels ? "true" : "false");
+          disclosure.setAttribute(
+            "aria-label",
+            (showDeviceModels ? "Hide" : "Show") +
+              " models for " +
+              disclosure.getAttribute("data-device-label"),
+          );
+        }
+      }
+    });
+
+    container._plrModelsVisible = showModels;
+    var toggle = container.querySelector(".plr-device-model-toggle");
+    if (toggle) {
+      toggle.setAttribute("aria-pressed", showModels ? "true" : "false");
+      toggle.textContent = showModels ? "Hide models" : "Show models";
+    }
+  }
+
   function apply(container) {
     var input = container.querySelector(".plr-device-search__input");
     var query = (input ? input.value : "").trim().toLowerCase();
@@ -31,33 +105,59 @@
     var filters = activeFilters(container);
     var rows = all(".plr-device-row", container);
     var visible = 0;
+    var visibleDeviceIds = Object.create(null);
 
     rows.forEach(function (row) {
-      var haystack = row.getAttribute("data-search") || "";
-      var textOk = terms.every(function (term) {
-        return haystack.indexOf(term) !== -1;
-      });
+      var textOk = textMatches(row, terms);
       var filterOk = Object.keys(filters).every(function (field) {
         return rowMatches(row, field, filters[field]);
       });
       var show = textOk && filterOk;
       row.hidden = !show;
-      if (show) visible++;
+      if (show) {
+        visible++;
+        visibleDeviceIds[row.getAttribute("data-device-id")] = true;
+      }
     });
+
+    applyModels(container, terms, visibleDeviceIds, visible);
 
     var empty = container.querySelector(".plr-device-empty");
     if (empty) empty.hidden = visible !== 0;
   }
 
   function init(container) {
+    container._plrModelsOverride = null;
+    container._plrModelsVisible = false;
+    container._plrModelDeviceOverrides = Object.create(null);
+
     var input = container.querySelector(".plr-device-search__input");
     if (input) {
       input.addEventListener("input", function () {
+        if (container._plrModelsOverride === false) container._plrModelsOverride = null;
         apply(container);
       });
       // A page linked as `...#device-<id>` should not hide that row behind a stale query.
       input.value = "";
     }
+
+    var modelToggle = container.querySelector(".plr-device-model-toggle");
+    if (modelToggle) {
+      modelToggle.addEventListener("click", function () {
+        container._plrModelDeviceOverrides = Object.create(null);
+        container._plrModelsOverride = !container._plrModelsVisible;
+        apply(container);
+      });
+    }
+
+    all(".plr-device-row[data-has-models='true']", container).forEach(function (row) {
+      row.addEventListener("click", function (event) {
+        if (event.target.closest("a, .plr-tip")) return;
+        var deviceId = row.getAttribute("data-device-id");
+        container._plrModelDeviceOverrides[deviceId] = !row._plrModelsVisible;
+        apply(container);
+      });
+    });
 
     all(".plr-device-chip", container).forEach(function (chip) {
       chip.addEventListener("click", function () {

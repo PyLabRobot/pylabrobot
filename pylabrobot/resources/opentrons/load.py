@@ -72,7 +72,7 @@ def load_ot_tip_rack(
         )
 
       tip_spot = TipSpot(
-        name=item,
+        name=f"{plr_resource_name}_{item}",
         size_x=well_size_x,
         size_y=well_size_y,
         make_tip=make_tip,
@@ -127,7 +127,7 @@ def load_ot_tube_rack(
       well_size_z = well_data["depth"]
 
       resource_holder = ResourceHolder(
-        name=item,
+        name=f"{plr_resource_name}_{item}",
         size_x=well_size_x,
         size_y=well_size_y,
         size_z=well_size_z,

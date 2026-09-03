@@ -74,6 +74,7 @@ def _make_test_plate():
       size_x=4,
       size_y=4,
       size_z=5,
+      name_prefix="plate",
     ),
   )
   plate.location = Coordinate.zero()
@@ -640,8 +641,14 @@ class TestTecanInfiniteAscii(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("ST"))
     self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("+"))
     self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("-"))
-    self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("BY#T5000"))
+    self.assertFalse(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("BY#T5000"))
     self.assertFalse(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("OK"))
+
+  def test_timed_busy_timeout(self):
+    self.assertEqual(ExperimentalTecanInfinite200ProBackend._timed_busy_timeout("BY#T5000"), 5)
+    self.assertEqual(ExperimentalTecanInfinite200ProBackend._timed_busy_timeout("BY#T5001"), 6)
+    self.assertEqual(ExperimentalTecanInfinite200ProBackend._timed_busy_timeout("+BY#T0"), 1)
+    self.assertIsNone(ExperimentalTecanInfinite200ProBackend._timed_busy_timeout("BY#A5000"))
 
 
 class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
@@ -671,6 +678,56 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
   def _frame(self, command: str) -> bytes:
     """Helper to frame a command."""
     return ExperimentalTecanInfinite200ProBackend._frame_command(command)
+
+  async def test_timed_command_waits_for_standby_before_next_command(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("BY#T5000"),
+      self._frame("ST"),
+      self._frame("+"),
+    ]
+
+    mode_responses = await self.backend._send_command("MODE FI.TOP")
+    clear_responses = await self.backend._send_command("EXCITATION CLEAR")
+
+    self.assertEqual(mode_responses, ["BY#T5000", "ST"])
+    self.assertEqual(clear_responses, ["+"])
+    self.assertEqual(self.mock_usb.read.await_args_list[1], call(timeout=30, size=128))
+    self.assertEqual(self.mock_usb.read.await_count, 3)
+
+  async def test_timed_command_uses_longer_advertised_timeout(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("BY#T80000"),
+      self._frame("ST"),
+    ]
+
+    responses = await self.backend._send_command("INIT FORCE")
+
+    self.assertEqual(responses, ["BY#T80000", "ST"])
+    self.assertEqual(self.mock_usb.read.await_args_list[1], call(timeout=80, size=128))
+
+  async def test_required_terminal_response_does_not_accept_busy_frame(self):
+    self.mock_usb.read.return_value = self._frame("BY#T5000")
+
+    with self.assertRaisesRegex(TimeoutError, "terminal response frame"):
+      await self.backend._read_command_response(max_iterations=1, recover_on_timeout=False)
+
+  async def test_clear_mode_timeout_does_not_reinitialize_or_continue(self):
+    self.mock_usb.read.side_effect = TimeoutError("clear response timed out")
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "outcome could not be confirmed"):
+      await self.backend._clear_mode_settings(excitation=True)
+
+    self.mock_usb.write.assert_awaited_once_with(self._frame("EXCITATION CLEAR"))
+    self.mock_usb.stop.assert_not_awaited()
+    self.mock_usb.setup.assert_not_awaited()
+
+  async def test_clear_mode_rejects_device_error(self):
+    self.mock_usb.read.return_value = self._frame("-")
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "did not confirm"):
+      await self.backend._clear_mode_settings(excitation=True)
+
+    self.mock_usb.write.assert_awaited_once_with(self._frame("EXCITATION CLEAR"))
 
   async def test_open(self):
     self.backend._ready = True

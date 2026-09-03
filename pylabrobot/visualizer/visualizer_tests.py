@@ -111,6 +111,24 @@ class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
     await setup_stop_single()
     await setup_stop_single()
 
+  async def test_stop_waits_for_websocket_thread_with_connection(self):
+    """Test that stop waits for the WebSocket thread when a browser is connected."""
+
+    resource = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(resource, ws_port=0, fs_port=0, open_browser=False)
+    await vis.setup()
+    client = await websockets.connect(f"ws://localhost:{vis.ws_port}")
+    await client.send('{"event": "ready"}')
+    await client.recv()
+    server_thread = vis.t
+
+    try:
+      await vis.stop()
+      self.assertFalse(server_thread.is_alive())
+    finally:
+      await client.close()
+      await asyncio.to_thread(server_thread.join, 1)
+
 
 class VisualizerServerStartupFailureTests(unittest.IsolatedAsyncioTestCase):
   """Tests for failures while starting the visualizer servers."""
@@ -149,6 +167,31 @@ class VisualizerServerStartupFailureTests(unittest.IsolatedAsyncioTestCase):
     ):
       with self.assertRaises(PermissionError):
         await asyncio.wait_for(self.vis._run_file_server(), timeout=1)
+
+  async def test_file_server_error_stops_websocket_server(self):
+    error = PermissionError(errno.EACCES, "permission denied")
+    websocket_threads = []
+
+    def fail_file_server(*args, **kwargs):
+      websocket_threads.append(self.vis.t)
+      raise error
+
+    self.vis.ws_port = 0
+    self.vis.fs_port = 0
+    with unittest.mock.patch(
+      "pylabrobot.visualizer.visualizer.http.server.HTTPServer",
+      side_effect=fail_file_server,
+    ):
+      with self.assertRaises(PermissionError):
+        await self.vis.setup()
+
+    websocket_thread = websocket_threads[0]
+    try:
+      self.assertFalse(websocket_thread.is_alive())
+    finally:
+      if websocket_thread.is_alive():
+        self.vis.loop.call_soon_threadsafe(self.vis.stop_.set_result, "test cleanup")
+        await asyncio.to_thread(websocket_thread.join, 1)
 
 
 class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):

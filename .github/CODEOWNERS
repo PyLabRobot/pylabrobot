@@ -1,0 +1,19 @@
+# Default owners
+* @PyLabRobot/core-team
+
+# BMG CLARIOstar
+/docs/user_guide/bmg_labtech/clariostar/ @BioCam
+/pylabrobot/legacy/plate_reading/bmg_labtech/ @BioCam
+/pylabrobot/legacy/plate_reading/clario_star_backend.py @BioCam
+
+# Hamilton STAR
+/docs/user_guide/hamilton/star/ @BioCam
+/pylabrobot/hamilton/star/ @BioCam
+/pylabrobot/legacy/liquid_handling/backends/hamilton/STAR* @BioCam
+/pylabrobot/legacy/liquid_handling/liquid_classes/hamilton/star.py @BioCam
+/pylabrobot/liquid_handling/backends/hamilton/STAR* @BioCam
+/pylabrobot/liquid_handling/liquid_classes/hamilton/star.py @BioCam
+
+# Tecan Infinite 200 PRO
+/docs/user_guide/tecan/infinite/ @hazlamshamin
+/pylabrobot/legacy/plate_reading/tecan/infinite_backend* @hazlamshamin

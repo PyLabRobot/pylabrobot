@@ -38,6 +38,7 @@ def _make_plate(name: str, num_wells: int, size_z: float = 14.0) -> Plate:
       size_x=6.0,
       size_y=6.0,
       size_z=10.0,
+      name_prefix=name,
     ),
   )
 
