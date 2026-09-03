@@ -106,6 +106,7 @@ _MOTION_TIMEOUT = 15.0
 _SPIN_TIMEOUT_MARGIN = 5.0
 _TARGET_SPEED_FRACTION = 0.95
 _IO_TRANSITION_TIMEOUT = 5.0
+_SERVO_TRANSITION_SETTLE_TIME = 0.1
 _TACHOMETER_TO_RPM = -14.69320388
 _NETWORK_PROBE_TIMEOUT = 0.2
 _INITIAL_BAUD_RATES = (19200, 115200, 57600, 9600)
@@ -261,12 +262,7 @@ class VSpin:
       name="bucket-unlock sensor",
     )
 
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
-    await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT))
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE))
-
-    await self._send_nmc(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS))
+    await self._enable_amplifier_and_reset_servo_status()
     await self._send_nmc(_nmc.build_reset_position(_nmc.PIC_SERVO_ADDRESS))
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _HOMING_GAINS))
     await self._send_nmc(
@@ -297,12 +293,7 @@ class VSpin:
     self._home_position = homing_status.home_position % FULL_ROTATION
 
     # --- almost the same as go to position ---
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
-    await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT))
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE))
-
-    await self._send_nmc(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS))
+    await self._enable_amplifier_and_reset_servo_status()
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
     await self._send_nmc(
       _nmc.build_load_trajectory(
@@ -333,13 +324,29 @@ class VSpin:
       move_status = await self.request_positions_and_tachometer()
     self._raise_on_servo_fault(move_status, operation="setup positioning")
 
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
+    await self._disable_servo_after_motion()
 
     await self.lock_door()
 
   async def stop(self):
     logger.info("[vSpin %s] disconnected", self.device_id)
     await self.io.stop()
+
+  async def _enable_amplifier_and_reset_servo_status(self) -> None:
+    """Apply the vendor transition delays before clearing status for motion."""
+    await asyncio.sleep(_SERVO_TRANSITION_SETTLE_TIME)
+    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
+    await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
+    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT))
+    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE))
+    await asyncio.sleep(_SERVO_TRANSITION_SETTLE_TIME)
+    await self._send_nmc(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS))
+
+  async def _disable_servo_after_motion(self) -> None:
+    """Allow the completed move to settle around the vendor motor-off transition."""
+    await asyncio.sleep(_SERVO_TRANSITION_SETTLE_TIME)
+    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
+    await asyncio.sleep(_SERVO_TRANSITION_SETTLE_TIME)
 
   # -- low-level protocol --
 
@@ -906,11 +913,7 @@ class VSpin:
     await self.lock_door()
     await self.unlock_bucket()
 
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
-    await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT))
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE))
-    await self._send_nmc(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS))
+    await self._enable_amplifier_and_reset_servo_status()
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
     try:
       trajectory_response = await self._send_nmc(
@@ -948,7 +951,7 @@ class VSpin:
         logger.exception("[vSpin %s] failed to turn off motor after position error", self.device_id)
       raise
 
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
+    await self._disable_servo_after_motion()
     if motion_status.position is None:
       raise RuntimeError("VSpin completed motion without returning an encoder position")
     if abs(motion_status.position - position) > _BUCKET_POSITION_TOLERANCE:
@@ -1032,11 +1035,7 @@ class VSpin:
       acceleration=_nmc.acceleration_to_nmc(acceleration),
     )
 
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
-    await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT))
-    await self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE))
-    await self._send_nmc(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS))
+    await self._enable_amplifier_and_reset_servo_status()
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _VELOCITY_GAINS))
 
     trajectory_started = False

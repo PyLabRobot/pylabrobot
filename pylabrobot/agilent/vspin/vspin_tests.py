@@ -346,6 +346,44 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
       read_timeout=0.2,
     )
 
+  async def test_servo_enable_sequence_uses_vendor_transition_delays(self):
+    self.vspin._send_nmc = AsyncMock()  # type: ignore[method-assign]
+
+    with patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()) as sleep:
+      await self.vspin._enable_amplifier_and_reset_servo_status()
+
+    sleep.assert_has_awaits(
+      [
+        call(vspin_module._SERVO_TRANSITION_SETTLE_TIME),
+        call(vspin_module._SERVO_TRANSITION_SETTLE_TIME),
+      ]
+    )
+    self.vspin._send_nmc.assert_has_awaits(  # type: ignore[attr-defined]
+      [
+        call(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)),
+        call(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._POSITION_GAINS)),
+        call(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.STOP_ABRUPT)),
+        call(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE)),
+        call(_nmc.build_clear_bits(_nmc.PIC_SERVO_ADDRESS)),
+      ]
+    )
+
+  async def test_servo_disable_sequence_uses_vendor_transition_delays(self):
+    self.vspin._send_nmc = AsyncMock()  # type: ignore[method-assign]
+
+    with patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()) as sleep:
+      await self.vspin._disable_servo_after_motion()
+
+    sleep.assert_has_awaits(
+      [
+        call(vspin_module._SERVO_TRANSITION_SETTLE_TIME),
+        call(vspin_module._SERVO_TRANSITION_SETTLE_TIME),
+      ]
+    )
+    self.vspin._send_nmc.assert_awaited_once_with(  # type: ignore[attr-defined]
+      _nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)
+    )
+
   async def test_io_sensor_polarities_match_vspin_wiring(self):
     self.vspin._request_input_flags = AsyncMock(  # type: ignore[method-assign]
       return_value=(1 << _nmc.INPUT_DOOR_OPEN) | (1 << _nmc.INPUT_BUCKET_LOCKED)
