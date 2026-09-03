@@ -6,7 +6,8 @@
 <a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> |
 <a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> |
 <a href="https://docs.pylabrobot.org/stable/user_guide/getting-started/installation.html"><strong>Installation</strong></a> |
-<a href="https://docs.pylabrobot.org/stable/user_guide/index.html"><strong>Getting started</strong></a>
+<a href="https://docs.pylabrobot.org/stable/user_guide/index.html"><strong>Getting started</strong></a> |
+  <a href="https://docs.pylabrobot.org/dev/user_guide/machines.html"><strong>Supported Machines</strong></a>
 </div>
 
 ## What is PyLabRobot?
