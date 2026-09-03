@@ -450,6 +450,53 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
 
     self.vspin._send_nmc.assert_not_awaited()  # type: ignore[attr-defined]
 
+  async def test_command_lock_rejects_state_changing_commands_before_hardware_access(self):
+    self.vspin.request_door_open = AsyncMock()  # type: ignore[method-assign]
+    operations = (
+      ("setup", self.vspin.setup),
+      ("stop", self.vspin.stop),
+      ("set bucket 1 position", self.vspin.set_bucket_1_position_to_current),
+      ("open door", self.vspin.open_door),
+      ("close door", self.vspin.close_door),
+      ("lock door", self.vspin.lock_door),
+      ("unlock door", self.vspin.unlock_door),
+      ("lock bucket", self.vspin.lock_bucket),
+      ("unlock bucket", self.vspin.unlock_bucket),
+      ("go to bucket 1", self.vspin.go_to_bucket1),
+      ("go to bucket 2", self.vspin.go_to_bucket2),
+      ("go to position", lambda: self.vspin.go_to_position(0)),
+      ("spin", lambda: self.vspin.spin(g=500, duration=1)),
+    )
+    await self.vspin._command_lock.acquire()
+    try:
+      for name, operation in operations:
+        with self.subTest(operation=name):
+          with self.assertRaisesRegex(RuntimeError, "another VSpin command is active"):
+            await operation()
+    finally:
+      self.vspin._command_lock.release()
+
+    self.vspin.request_door_open.assert_not_awaited()  # type: ignore[attr-defined]
+
+  async def test_command_lock_is_released_after_preparation_failure(self):
+    self.vspin.request_door_open = AsyncMock(  # type: ignore[method-assign]
+      side_effect=RuntimeError("door status failed")
+    )
+
+    with self.assertRaisesRegex(RuntimeError, "door status failed"):
+      await self.vspin.spin(g=500, duration=1)
+
+    self.assertFalse(self.vspin._command_lock.locked())
+
+  async def test_status_queries_remain_available_during_a_command(self):
+    self.vspin._request_input_flags = AsyncMock(return_value=0)  # type: ignore[method-assign]
+
+    await self.vspin._command_lock.acquire()
+    try:
+      self.assertFalse(await self.vspin.request_door_open())
+    finally:
+      self.vspin._command_lock.release()
+
   async def test_stop_spin_commands_deceleration_and_confirms_zero_speed(self):
     self.vspin._spin_active = True
     self.vspin.request_tachometer = AsyncMock(return_value=1000)  # type: ignore[method-assign]
@@ -463,7 +510,12 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
     self.vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
     self.vspin._command_deceleration = AsyncMock()  # type: ignore[method-assign]
 
-    await self.vspin.stop_spin(deceleration=0.5)
+    # An active spin owns this lock; stop_spin must bypass it so it can interrupt the cycle.
+    await self.vspin._command_lock.acquire()
+    try:
+      await self.vspin.stop_spin(deceleration=0.5)
+    finally:
+      self.vspin._command_lock.release()
 
     self.assertTrue(self.vspin._spin_cancel_requested)
     self.vspin._command_deceleration.assert_awaited_once_with(0.5)  # type: ignore[attr-defined]
@@ -517,13 +569,13 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
 
   async def test_bucket_presentation_retries_alignment_one_revolution_later(self):
     self.vspin.request_bucket_1_position = AsyncMock(return_value=8400)  # type: ignore[method-assign]
-    self.vspin.go_to_position = AsyncMock(  # type: ignore[method-assign]
+    self.vspin._go_to_position = AsyncMock(  # type: ignore[method-assign]
       side_effect=[vspin_module._PositionAlignmentError("misaligned"), None]
     )
 
     await self.vspin.go_to_bucket1()
 
-    self.vspin.go_to_position.assert_has_awaits([call(8400), call(16400)])  # type: ignore[attr-defined]
+    self.vspin._go_to_position.assert_has_awaits([call(8400), call(16400)])  # type: ignore[attr-defined]
     self.assertIs(self.vspin.at_bucket, self.vspin.bucket1)
 
 

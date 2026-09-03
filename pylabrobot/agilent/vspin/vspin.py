@@ -3,7 +3,8 @@ import json
 import logging
 import os
 import warnings
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 
 from pylabrobot.agilent.vspin import _nmc
 from pylabrobot.events import device_reference, evented_operation, resource_reference
@@ -179,6 +180,7 @@ class VSpin:
     self._servo_status_mask = 0
     self._io_status_mask = 0
     self._io_output_word = 0
+    self._nmc_lock = asyncio.Lock()
     self._command_lock = asyncio.Lock()
     self._spin_active = False
     self._spin_cancel_requested = False
@@ -217,7 +219,19 @@ class VSpin:
     """The bucket parked at the load position, or None if the rotor is elsewhere."""
     return self._at_bucket
 
-  async def setup(self):
+  @asynccontextmanager
+  async def _command_scope(self, name: str) -> AsyncIterator[None]:
+    """Prevent state-changing VSpin workflows from interleaving."""
+    if self._command_lock.locked():
+      raise RuntimeError(f"Cannot {name} while another VSpin command is active")
+    async with self._command_lock:
+      yield
+
+  async def setup(self) -> None:
+    async with self._command_scope("set up VSpin"):
+      await self._setup()
+
+  async def _setup(self) -> None:
     logger.info("[vSpin %s] connected", self.device_id)
     await self.io.setup()
     await self._configure_ftdi()
@@ -254,7 +268,7 @@ class VSpin:
     for _ in range(5):
       await self._write_io_output(1 << _nmc.OUTPUT_VERSION_TOGGLE)
       await self._write_io_output(0x0000)
-    await self.lock_door()
+    await self._lock_door()
 
     await self._write_io_output(0x0000)
     await self._wait_for_io_bit(
@@ -328,9 +342,13 @@ class VSpin:
 
     await self._disable_servo_after_motion()
 
-    await self.lock_door()
+    await self._lock_door()
 
-  async def stop(self):
+  async def stop(self) -> None:
+    async with self._command_scope("stop VSpin"):
+      await self._stop()
+
+  async def _stop(self) -> None:
     logger.info("[vSpin %s] disconnected", self.device_id)
     await self.io.stop()
 
@@ -385,7 +403,7 @@ class VSpin:
     read_timeout: float = 0.2,
   ) -> bytes:
     """Send a VSpin command and read its fixed-length response."""
-    async with self._command_lock:
+    async with self._nmc_lock:
       written = await self.io.write(bytes(cmd))
       if written != len(cmd):
         raise RuntimeError(f"VSpin wrote {written} of {len(cmd)} bytes for NMC command {cmd.hex()}")
@@ -403,7 +421,7 @@ class VSpin:
     if len(command) < 4 or command[0] != _nmc.SYNC_BYTE:
       raise ValueError(f"Invalid NMC command: {command.hex()}")
     if not expect_response:
-      async with self._command_lock:
+      async with self._nmc_lock:
         written = await self.io.write(command)
         if written != len(command):
           raise RuntimeError(
@@ -816,6 +834,10 @@ class VSpin:
 
   async def set_bucket_1_position_to_current(self) -> None:
     """Set the current position as bucket 1 position and save calibration."""
+    async with self._command_scope("set the bucket 1 position"):
+      await self._set_bucket_1_position_to_current()
+
+  async def _set_bucket_1_position_to_current(self) -> None:
     current_position = await self.request_position()
     device_id = await self.io.request_serial()
     home_position = await self.request_home_position()
@@ -848,7 +870,11 @@ class VSpin:
 
   # -- CentrifugeBackend interface --
 
-  async def open_door(self):
+  async def open_door(self) -> None:
+    async with self._command_scope("open the door"):
+      await self._open_door()
+
+  async def _open_door(self) -> None:
     if await self.request_door_open():
       self._door_open = True
       return
@@ -861,7 +887,11 @@ class VSpin:
     )
     self._door_open = True
 
-  async def close_door(self):
+  async def close_door(self) -> None:
+    async with self._command_scope("close the door"):
+      await self._close_door()
+
+  async def _close_door(self) -> None:
     if not (await self.request_door_open()):
       self._door_open = False
       return
@@ -874,7 +904,11 @@ class VSpin:
     )
     self._door_open = False
 
-  async def lock_door(self):
+  async def lock_door(self) -> None:
+    async with self._command_scope("lock the door"):
+      await self._lock_door()
+
+  async def _lock_door(self) -> None:
     if await self.request_door_open():
       raise RuntimeError("Cannot lock door while it is open.")
     if await self.request_door_locked():
@@ -888,7 +922,11 @@ class VSpin:
       name="door-lock sensor",
     )
 
-  async def unlock_door(self):
+  async def unlock_door(self) -> None:
+    async with self._command_scope("unlock the door"):
+      await self._unlock_door()
+
+  async def _unlock_door(self) -> None:
     if not await self.request_door_locked():
       return
     await self._set_io_output_bit(_nmc.OUTPUT_DOOR_LOCK_CYLINDER, True)
@@ -899,7 +937,11 @@ class VSpin:
       name="door-lock sensor",
     )
 
-  async def lock_bucket(self):
+  async def lock_bucket(self) -> None:
+    async with self._command_scope("lock the bucket"):
+      await self._lock_bucket()
+
+  async def _lock_bucket(self) -> None:
     if await self.request_bucket_locked():
       return
     await self._set_io_output_bit(_nmc.OUTPUT_BUCKET_LOCK_CYLINDER, True)
@@ -910,7 +952,11 @@ class VSpin:
       name="bucket-lock sensor",
     )
 
-  async def unlock_bucket(self):
+  async def unlock_bucket(self) -> None:
+    async with self._command_scope("unlock the bucket"):
+      await self._unlock_bucket()
+
+  async def _unlock_bucket(self) -> None:
     if await self.request_bucket_unlocked():
       return
     await self._set_io_output_bit(_nmc.OUTPUT_BUCKET_LOCK_CYLINDER, False)
@@ -921,16 +967,18 @@ class VSpin:
       name="bucket-unlock sensor",
     )
 
-  async def go_to_bucket1(self):
-    await self._go_to_bucket(self.bucket1, await self.request_bucket_1_position())
+  async def go_to_bucket1(self) -> None:
+    async with self._command_scope("move to bucket 1"):
+      await self._go_to_bucket(self.bucket1, await self.request_bucket_1_position())
 
-  async def go_to_bucket2(self):
-    await self._go_to_bucket(self.bucket2, await self.request_bucket_2_position())
+  async def go_to_bucket2(self) -> None:
+    async with self._command_scope("move to bucket 2"):
+      await self._go_to_bucket(self.bucket2, await self.request_bucket_2_position())
 
   async def _go_to_bucket(self, bucket: ResourceHolder, position: int) -> None:
     for attempt in range(_BUCKET_PRESENT_RETRIES + 1):
       try:
-        await self.go_to_position(position)
+        await self._go_to_position(position)
       except _PositionAlignmentError:
         if attempt >= _BUCKET_PRESENT_RETRIES:
           raise
@@ -939,11 +987,15 @@ class VSpin:
         self._at_bucket = bucket
         return
 
-  async def go_to_position(self, position: int):
+  async def go_to_position(self, position: int) -> None:
+    async with self._command_scope("move to a position"):
+      await self._go_to_position(position)
+
+  async def _go_to_position(self, position: int) -> None:
     logger.info("[vSpin %s] go_to_position: position=%d", self.device_id, position)
-    await self.close_door()
-    await self.lock_door()
-    await self.unlock_bucket()
+    await self._close_door()
+    await self._lock_door()
+    await self._unlock_bucket()
 
     await self._enable_amplifier_and_reset_servo_status()
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
@@ -992,9 +1044,9 @@ class VSpin:
         f"VSpin completed move to encoder position {position} {transition}, but settled at "
         f"{motion_status.position} (tolerance {_BUCKET_POSITION_TOLERANCE})"
       )
-    await self.lock_bucket()
-    await self.unlock_door()
-    await self.open_door()
+    await self._lock_bucket()
+    await self._unlock_door()
+    await self._open_door()
 
   @staticmethod
   def g_to_rpm(g: float) -> int:
@@ -1025,12 +1077,22 @@ class VSpin:
     if duration < 1:
       raise ValueError("Spin time must be at least 1 second")
 
+    async with self._command_scope("start a spin"):
+      await self._run_spin_cycle(g, duration, acceleration, deceleration)
+
+  async def _run_spin_cycle(
+    self,
+    g: float,
+    duration: float,
+    acceleration: float,
+    deceleration: float,
+  ) -> None:
     if await self.request_door_open():
-      await self.close_door()
+      await self._close_door()
     if not await self.request_door_locked():
-      await self.lock_door()
+      await self._lock_door()
     if await self.request_bucket_locked():
-      await self.unlock_bucket()
+      await self._unlock_bucket()
 
     rpm = VSpin.g_to_rpm(g)
     logger.info(
@@ -1071,8 +1133,6 @@ class VSpin:
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _VELOCITY_GAINS))
 
     trajectory_started = False
-    if self._spin_active:
-      raise RuntimeError("A VSpin spin is already active")
     self._spin_active = True
     self._spin_cancel_requested = False
     try:
