@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.PreparedElectroporationRun
+===========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoclass:: PreparedElectroporationRun
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreparedElectroporationRun.protocol_name
+      ~PreparedElectroporationRun.device_serial_number
+      ~PreparedElectroporationRun.protocol
+      ~PreparedElectroporationRun.plate_columns
+      ~PreparedElectroporationRun.prefix
+      ~PreparedElectroporationRun.prepared_at_utc
+      ~PreparedElectroporationRun.baseline_log_paths
+      ~PreparedElectroporationRun.prepare_result
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreparedElectroporationRun.__init__
+      ~PreparedElectroporationRun.as_dict
+      ~PreparedElectroporationRun.from_dict
+   
+   

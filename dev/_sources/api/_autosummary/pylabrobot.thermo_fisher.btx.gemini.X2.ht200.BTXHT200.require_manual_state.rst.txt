@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.ht200.BTXHT200.require\_manual\_state
+=============================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.ht200
+
+.. automethod:: BTXHT200.require_manual_state

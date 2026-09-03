@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationPreparationDetails
+==================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoclass:: ElectroporationPreparationDetails
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationPreparationDetails.prepared_state
+      ~ElectroporationPreparationDetails.protocol_setup
+      ~ElectroporationPreparationDetails.device_prepare
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationPreparationDetails.__init__
+      ~ElectroporationPreparationDetails.as_dict
+      ~ElectroporationPreparationDetails.from_dict
+   
+   

@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationLogCapture
+==========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoclass:: ElectroporationLogCapture
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationLogCapture.matched_log_path
+      ~ElectroporationLogCapture.summary
+      ~ElectroporationLogCapture.details
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationLogCapture.__init__
+      ~ElectroporationLogCapture.as_dict
+      ~ElectroporationLogCapture.from_dict
+   
+   

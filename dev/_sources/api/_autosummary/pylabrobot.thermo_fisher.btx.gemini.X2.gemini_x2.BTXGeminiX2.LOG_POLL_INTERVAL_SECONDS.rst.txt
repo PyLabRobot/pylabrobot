@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.btx.gemini.X2.gemini\_x2.BTXGeminiX2.LOG\_POLL\_INTERVAL\_SECONDS
+===========================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2
+
+.. autoattribute:: BTXGeminiX2.LOG_POLL_INTERVAL_SECONDS

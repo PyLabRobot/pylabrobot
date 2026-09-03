@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationCancellationDetails
+===================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoclass:: ElectroporationCancellationDetails
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationCancellationDetails.final_state
+      ~ElectroporationCancellationDetails.device_cancel
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationCancellationDetails.__init__
+      ~ElectroporationCancellationDetails.as_dict
+      ~ElectroporationCancellationDetails.from_dict
+   
+   

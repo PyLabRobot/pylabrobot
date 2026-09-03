@@ -1,0 +1,36 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.ht200.BTXHT200
+======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.ht200
+
+.. autoclass:: BTXHT200
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BTXHT200.assumed_column_adjust
+      ~BTXHT200.assumed_pulse_count
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BTXHT200.__init__
+      ~BTXHT200.clear_manual_state
+      ~BTXHT200.configure_manual_state
+      ~BTXHT200.get_device_info
+      ~BTXHT200.require_manual_state
+   
+   

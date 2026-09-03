@@ -46,3 +46,40 @@ ALPS Heat Sealers
     ThermoScientificALPS5000
     ALPS5000Status
 
+BTX Gemini X2
+-------------
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BTXGeminiX2
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    ElectroporationProtocol
+    ElectroporationPreparationDetails
+    ElectroporationExecutionDetails
+    ElectroporationCancellationDetails
+    ElectroporationLogCapture
+    ElectroporationCleanup
+    PreparedElectroporationRun
+    ElectroporationRunResult
+    ElectroporationCancellationResult
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.ht200
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BTXHT200

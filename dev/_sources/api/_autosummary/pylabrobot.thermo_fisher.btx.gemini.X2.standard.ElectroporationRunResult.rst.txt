@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.standard.ElectroporationRunResult
+=========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
+
+.. autoclass:: ElectroporationRunResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationRunResult.prepared_run
+      ~ElectroporationRunResult.started_at_utc
+      ~ElectroporationRunResult.completed_at_utc
+      ~ElectroporationRunResult.rsi_result
+      ~ElectroporationRunResult.log_capture
+      ~ElectroporationRunResult.cleanup
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ElectroporationRunResult.__init__
+      ~ElectroporationRunResult.as_dict
+   
+   

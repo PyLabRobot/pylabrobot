@@ -1,0 +1,55 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.btx.gemini.X2.gemini\_x2.BTXGeminiX2
+==============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2
+
+.. autoclass:: BTXGeminiX2
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BTXGeminiX2.DEFAULT_TEMPORARY_PROTOCOL_PREFIX
+      ~BTXGeminiX2.LOG_POLL_INTERVAL_SECONDS
+      ~BTXGeminiX2.LOG_POLL_TIMEOUT_SECONDS
+      ~BTXGeminiX2.PLATE_HANDLER_RESET_STATES
+      ~BTXGeminiX2.PLATE_HANDLER_RESET_STATE_CONTINUE_CURRENT_POSITION
+      ~BTXGeminiX2.PLATE_HANDLER_RESET_STATE_RESET_CONFIRMED
+      ~BTXGeminiX2.PLATE_HANDLER_RESET_STATE_UNKNOWN
+      ~BTXGeminiX2.UI_PROTOCOL_NAME_BYTES
+      ~BTXGeminiX2.port
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BTXGeminiX2.__init__
+      ~BTXGeminiX2.add_protocol
+      ~BTXGeminiX2.cancel_prepared_run
+      ~BTXGeminiX2.delete_protocol
+      ~BTXGeminiX2.fetch_sd_file
+      ~BTXGeminiX2.list_log_files
+      ~BTXGeminiX2.list_protocols
+      ~BTXGeminiX2.parse_run_log
+      ~BTXGeminiX2.prepare_temporary_protocol
+      ~BTXGeminiX2.request_device_info
+      ~BTXGeminiX2.request_device_time
+      ~BTXGeminiX2.request_protocol
+      ~BTXGeminiX2.request_serial_number
+      ~BTXGeminiX2.request_version
+      ~BTXGeminiX2.setup
+      ~BTXGeminiX2.start_prepared_run
+      ~BTXGeminiX2.stop
+   
+   
