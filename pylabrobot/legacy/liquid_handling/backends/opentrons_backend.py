@@ -1,5 +1,6 @@
 import inspect
 import logging
+import re
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
@@ -45,6 +46,28 @@ except ImportError as e:
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 
 logger = logging.getLogger(__name__)
+
+
+def _opentrons_version_components(version: str) -> Tuple[int, int, int]:
+  """Parse the numeric release components from an Opentrons server version.
+
+  Raises:
+    ValueError: If the version does not start with major, minor, and patch numbers.
+  """
+  match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version)
+  if match is None:
+    raise ValueError(
+      f"Opentrons server version must start with major, minor, and patch numbers: {version!r}."
+    )
+  major, minor, patch = match.groups()
+  return int(major), int(minor), int(patch)
+
+
+def _fixed_trash_is_addressable(api_version: str) -> bool:
+  """Return whether fixed trash uses the addressable-area commands."""
+  return _opentrons_version_components(api_version) >= _opentrons_version_components(
+    _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
+  )
 
 
 class _IOLogger:
@@ -377,9 +400,8 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     pipette_id = self._get_drop_pipette(ops)
     op = ops[0]
 
-    use_fixed_trash = (
-      cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION
-      and op.resource.name == "trash"
+    use_fixed_trash = op.resource.name == "trash" and _fixed_trash_is_addressable(
+      cast(str, self.ot_api_version)
     )
     if use_fixed_trash:
       labware_id = "fixedTrash"
