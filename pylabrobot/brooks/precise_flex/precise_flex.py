@@ -277,25 +277,39 @@ class PreciseFlex:
     },
   )
   async def setup(self, skip_home: bool = False):
-    """Initialize the PreciseFlex driver.
-
-    Opens the socket connection, sets response mode to PC, powers on the
-    robot, attaches it, and (optionally) homes it.
+    """Bring the arm fully up: link, control, and (unless skipped) home.
 
     Args:
       skip_home: If True, skip the homing step during setup.
     """
-    await self.io.setup()
-    await self.set_response_mode("pc")
-    await self.power_on_robot()
-    await self.attach(1)
+    await self.connect()
+    await self.initialize()
     if not skip_home:
       await self.home()
+    await self._handle_out_of_range_axes()
+
+  async def connect(self) -> None:
+    """Open the link and agree the response protocol. Powers nothing, moves nothing."""
+    await self.io.setup()
+    await self.set_response_mode("pc")
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
+  async def initialize(self) -> None:
+    """Raise high power, take control, and adopt the controller's own configuration.
+
+    Moves nothing. Homing is ``home()``, deliberately separate: it sweeps the arm
+    through its whole envelope, which is not something to do just to bring it up.
+    """
+    await self.power_on_robot()
+    await self.attach(1)
     await self.stop_freedrive_mode()
-    # Resolve the device configuration once and adopt it as the source of truth;
-    # without it the class defaults stay in place.
+    await self._discover_configuration()
+
+  async def _discover_configuration(self) -> None:
+    """Adopt what the controller reports, so the class defaults are not used blind.
+
+    The link lengths land here, so skipping this leaves IK solving for the wrong arm.
+    """
     try:
       self._configuration = await self._request_configuration()
     except Exception as exc:  # discovery is best-effort
@@ -310,7 +324,6 @@ class PreciseFlex:
       self.parking_position = self.PARKING_POSITION_RIGHT
     self._log_configuration_summary(self._configuration)
     self._assess_configuration(self._configuration)
-    await self._handle_out_of_range_axes()
 
   @evented_operation(
     "precise_flex.stop",
@@ -318,6 +331,13 @@ class PreciseFlex:
   )
   async def stop(self):
     """Stop the PreciseFlex driver."""
+    await self.disconnect()
+
+  async def disconnect(self) -> None:
+    """Hand the arm back and close the link. Moves nothing.
+
+    Drops high power as well as releasing the link, because ``initialize`` raised it.
+    """
     await self.detach()
     await self.power_off_robot()
     await self._exit()
@@ -1620,6 +1640,15 @@ class PreciseFlex:
     if self._configuration is None:
       raise RuntimeError("Configuration is not available until setup() has run.")
     return self._configuration
+
+  @property
+  def has_configuration(self) -> bool:
+    """Whether the controller's configuration was actually read.
+
+    Discovery is best-effort, so an arm can finish setup and still not know its own
+    limits. A caller that would rather adapt than be raised at asks this first.
+    """
+    return self._configuration is not None
 
   async def _request_configuration(self) -> "PreciseFlexConfiguration":
     """Read the controller's identity, axes, limits, kinematics, and envelope.
