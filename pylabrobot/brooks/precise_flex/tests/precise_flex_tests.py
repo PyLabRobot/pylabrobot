@@ -22,14 +22,24 @@ def mocked(method: object) -> AsyncMock:
 
 
 def _make_arm(closed_gripper_position: float = 500.0) -> PreciseFlex:
-  """An arm whose transport is stubbed out, so tests assert on the commands it would send."""
+  """An arm whose transport is stubbed out, so tests assert on the commands it would send.
+
+  ``wherej`` answers with a steady pose, which is what the settle poll every motion
+  command waits behind reads.
+  """
   arm = PreciseFlex(
     host="localhost",
     gripper_length=162.0,
     gripper_z_offset=0.0,
     closed_gripper_position=closed_gripper_position,
   )
-  arm.send_command = AsyncMock(return_value="")  # type: ignore[method-assign]
+
+  async def reply(command: str) -> str:
+    if command == "wherej":
+      return "40.48 84.76 229.84 -312.57 503.0"
+    return ""
+
+  arm.send_command = AsyncMock(side_effect=reply)  # type: ignore[method-assign]
   return arm
 
 
@@ -44,12 +54,12 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
   async def test_move_gripper_force_sensing_false_opens_with_position(self):
     # 80 mm ⇒ 500 + (80 - 60) = 520 firmware units.
     await self.arm.move_gripper(width=80.0, force_sensing=False)
-    self.assertEqual(self._sent_commands(), ["GripOpenPos 520.0", "gripper 1"])
+    self.assertEqual(self._sent_commands()[-2:], ["GripOpenPos 520.0", "gripper 1"])
 
   async def test_move_gripper_force_sensing_true_closes_with_position(self):
     # 60 mm (the closed reference) ⇒ exactly closed_gripper_position.
     await self.arm.move_gripper(width=60.0, force_sensing=True)
-    self.assertEqual(self._sent_commands(), ["GripClosePos 500.0", "gripper 2"])
+    self.assertEqual(self._sent_commands()[-2:], ["GripClosePos 500.0", "gripper 2"])
 
   async def test_move_gripper_position_command_precedes_move(self):
     await self.arm.move_gripper(width=120.0, force_sensing=False)
@@ -79,7 +89,7 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     await arm.move_gripper(width=80.0, force_sensing=False)
     commands = [c.args[0] for c in mocked(arm.send_command).call_args_list]
     # 80 mm ⇒ 1000 + (80 - 60) = 1020 units.
-    self.assertEqual(commands, ["GripOpenPos 1020.0", "gripper 1"])
+    self.assertEqual(commands[-2:], ["GripOpenPos 1020.0", "gripper 1"])
 
   def test_mm_to_firmware_units_helper(self):
     # Direct check of the linear mapping.
@@ -138,6 +148,8 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       [event.data["command"] for event in firmware_events],
       [
+        "wherej",  # the settle poll the jaws wait behind
+        "wherej",
         "GripOpenPos 520.0",
         "gripper 1",
       ],
@@ -658,3 +670,30 @@ class TestPreciseFlexLifecycle(unittest.IsolatedAsyncioTestCase):
     self.arm.disconnect = AsyncMock()
     await self.arm.stop()
     mocked(self.arm.disconnect).assert_awaited_once()
+
+
+class TestMotionSettlesBeforeTheNextCommand(unittest.IsolatedAsyncioTestCase):
+  """``moveJ`` returns when the controller accepts it, not when the arm arrives.
+
+  Without a settle poll in front of them, the gripper and the rail act while the arm is
+  still travelling: a grip issued after an approach closes the jaws on the way down.
+  """
+
+  def setUp(self):
+    self.arm = _make_arm()
+
+  def _sent(self) -> list[str]:
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+
+  async def test_the_jaws_wait_for_the_arm_to_stop(self):
+    await self.arm.move_gripper(width=80.0, force_sensing=True)
+    self.assertEqual(self._sent()[0], "wherej")
+
+  async def test_a_joint_space_grip_waits_too(self):
+    await self.arm.move_gripper_joint_position(510.0, force_sensing=False)
+    self.assertEqual(self._sent()[0], "wherej")
+
+  async def test_the_rail_waits_too(self):
+    self.arm._has_rail = True
+    await self.arm.move_rail(120.0)
+    self.assertEqual(self._sent()[0], "wherej")

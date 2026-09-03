@@ -539,6 +539,12 @@ class PreciseFlex:
     samples, so a user interrupt can stop the move mid-flight via ``halt`` and other controller
     commands (status, vision, barcode) can run during motion.
 
+    That free connection is also the hazard, so this is the barrier every command that *starts*
+    motion crosses first: the gripper and the rail call it directly, joint and Cartesian moves reach
+    it through ``request_joint_position`` inside ``_guarded_move_j``. ``moveJ`` returns as soon as
+    the controller accepts it, so without the barrier the next command lands mid-travel - a grip
+    issued after the approach closes the jaws while the arm is still descending onto the plate.
+
     Raises:
       TimeoutError: if the arm never settles within ``timeout`` seconds.
       OperationInterrupted: on a user interrupt (the arm is halted and the connection kept).
@@ -2394,6 +2400,7 @@ class PreciseFlex:
         f"axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - check "
         f"closed_gripper_position (currently {self.closed_gripper_position})."
       )
+    await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(units)
       await self.send_command("gripper 2")
@@ -2419,6 +2426,7 @@ class PreciseFlex:
     This is the counterpart to :meth:`move_gripper` for integrations with
     taught joint-space routes. The caller owns the joint calibration.
     """
+    await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(position)
       await self.send_command("gripper 2")
@@ -2467,6 +2475,7 @@ class PreciseFlex:
     """
     if not self._has_rail:
       raise RuntimeError("This arm does not have a rail.")
+    await self._wait_for_eom()
     await self._set_rail_position(self._rail_position_index, rail_position)
     await self._move_rail(station_id=self._rail_position_index)
 
