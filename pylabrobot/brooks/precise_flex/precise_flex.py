@@ -778,7 +778,7 @@ class PreciseFlex:
       )
     await self.send_command(f"moveJ {profile_index} {angles_str}")
 
-  async def _move_one_axis(self, axis: Axis, position: float) -> None:
+  async def _recover_axis(self, axis: Axis, position: float) -> None:
     """Move a single axis to an absolute position (firmware ``MoveOneAxis``).
 
     Used for recovery: the controller blocks a normal move while an axis is out of
@@ -1374,12 +1374,15 @@ class PreciseFlex:
       raise PreciseFlexError(-1, "Unexpected response format from GraspData command.")
     return (float(parts[0]), float(parts[1]), float(parts[2]))
 
-  async def _set_grasp_data(
+  async def set_grasp_data(
     self, plate_width: float, finger_speed_pct: float, grasp_force: float
   ) -> None:
-    """Set the data to be used for the next force-controlled PickPlate command grip operation.
+    """Set the data the next force-controlled PickPlate grip will use.
 
-    This data remains in effect until the next GraspData command or the system is restarted.
+    Stateful, and not sticky: ``pick_up_at_location`` and ``pick_up_at_station``
+    write it themselves on every call, so data set here is lost if one of those
+    runs before the pick that wanted it. Otherwise it stands until the next
+    GraspData command or a controller restart.
 
     Args:
       plate_width: The plate width in mm.
@@ -1915,7 +1918,7 @@ class PreciseFlex:
           hi,
           target,
         )
-        await self._move_one_axis(axis, target)
+        await self._recover_axis(axis, target)
         await self._wait_for_eom()
         recovered[axis] = target
     finally:
@@ -2037,7 +2040,7 @@ class PreciseFlex:
 
     When an axis is out of range the controller blocks the move (-1012). With ``recover_out_of_range``
     set, this drives the offending axes back into range once (``recover_axes_within_limits``) and
-    retries; otherwise the ``OutOfRangeOfMotionError`` propagates. Recovery uses ``_move_one_axis``, a
+    retries; otherwise the ``OutOfRangeOfMotionError`` propagates. Recovery uses ``_recover_axis``, a
     different primitive, so it cannot recurse here.
     """
 
@@ -2109,6 +2112,48 @@ class PreciseFlex:
     if speed_pct is not None:
       await self._set_speed(speed_pct)
     await self._guarded_move_j(lambda current: {**current, **position})
+
+  async def move_one_axis(
+    self,
+    axis: Axis,
+    position: float,
+    speed_pct: Optional[float] = None,
+  ) -> None:
+    """Move one axis to an absolute position, leaving every other axis where it is.
+
+    Guarded like any other commanded move, unlike ``_recover_axis``, which skips
+    the guard on purpose so it can free an axis the controller has already blocked.
+
+    Args:
+      axis: The axis to move.
+      position: Absolute target for that axis.
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+    """
+    await self.move_to_joint_position({axis: position}, speed_pct=speed_pct)
+
+  async def move_one_axis_relative(
+    self,
+    axis: Axis,
+    distance: float,
+    speed_pct: Optional[float] = None,
+  ) -> None:
+    """Shift one axis by ``distance`` from where it is now, leaving the others alone.
+
+    The offset is applied to the pose read inside the guarded move rather than to a
+    position read beforehand, so it cannot act on a stale reading. If the first
+    attempt is blocked and recovery shifts the axis, the retry offsets from the
+    recovered position, which is what a relative move should mean.
+
+    Args:
+      axis: The axis to move.
+      distance: Signed offset to apply to that axis, in the axis's own units.
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+    """
+    if speed_pct is not None:
+      await self._set_speed(speed_pct)
+    await self._guarded_move_j(lambda current: {**current, axis: current[axis] + distance})
 
   async def request_gripper_pose(self) -> PreciseFlexCartesianPose:
     """Get the current pose using our kinematics model (no firmware `wherec`)."""
@@ -2569,7 +2614,7 @@ class PreciseFlex:
       position,
       resource_width,
     )
-    await self._set_grasp_data(
+    await self.set_grasp_data(
       plate_width=resource_width,
       finger_speed_pct=finger_speed_pct,
       grasp_force=grasp_force,
@@ -2664,7 +2709,7 @@ class PreciseFlex:
       orientation=orientation,
       wrist=wrist,
     )
-    await self._set_grasp_data(
+    await self.set_grasp_data(
       plate_width=resource_width,
       finger_speed_pct=finger_speed_pct,
       grasp_force=grasp_force,
@@ -2739,7 +2784,7 @@ class PreciseFlex:
     if ret_code == "0":
       raise PreciseFlexError(-1, "the force-controlled gripper detected no plate present.")
 
-  async def _place_plate_j(self, joint_position: JointPose):
+  async def _place_plate_j(self, joint_position: JointPose) -> None:
     """Place a plate at the specified position using joint coordinates."""
     await self._set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail()
@@ -2748,12 +2793,12 @@ class PreciseFlex:
       f"placeplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
     )
 
-  async def _pick_plate_c(self, cartesian_position: PreciseFlexCartesianPose):
+  async def _pick_plate_c(self, cartesian_position: PreciseFlexCartesianPose) -> None:
     """Pick a plate at a Cartesian position via IK + joint-space pickplate."""
     joints = await self._cart_to_joints(cartesian_position)
     await self._pick_plate_j(joints)
 
-  async def _place_plate_c(self, cartesian_position: PreciseFlexCartesianPose):
+  async def _place_plate_c(self, cartesian_position: PreciseFlexCartesianPose) -> None:
     """Place a plate at a Cartesian position via IK + joint-space placeplate."""
     joints = await self._cart_to_joints(cartesian_position)
     await self._place_plate_j(joints)
@@ -2791,7 +2836,18 @@ class PreciseFlex:
         position=self._parking_pose_with_default_z(self.parking_position)
       )
     else:
-      await self.send_command("movetosafe")
+      await self.move_to_safe()
+
+  async def move_to_safe(self) -> None:
+    """Run the controller's own retraction to its taught safe position.
+
+    This is the firmware ``movetosafe``: a sequence of safe moves the controller plans itself, not a
+    single joint target. The pose and the route live in the controller, so neither can be read back
+    or checked against the soft limits from here. ``park()`` is the counterpart this driver can
+    reason about. No collision checks against 3rd-party obstacles.
+    """
+    await self._wait_for_eom()
+    await self.send_command("movetosafe")
 
   def _validate_parking_position(self, position: JointPose) -> None:
     """Reject anything that is not a JointPose of in-range axes (limits checked once known)."""
