@@ -36,6 +36,7 @@ byonoy/index
 cole_parmer/index
 curiox/index
 hamilton/index
+hettich/index
 high_res/index
 inheco/index
 kbioscience/index

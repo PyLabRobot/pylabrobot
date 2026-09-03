@@ -28,6 +28,7 @@ Manufacturers
     pylabrobot.cole_parmer
     pylabrobot.curiox
     pylabrobot.hamilton
+    pylabrobot.hettich
     pylabrobot.high_res
     pylabrobot.inheco
     pylabrobot.kbioscience

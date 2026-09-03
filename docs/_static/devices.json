@@ -526,6 +526,22 @@
     "oem": "https://www.hamiltoncompany.com/microlab-vantage"
   },
   {
+    "id": "hettich-mikro-220-robotic",
+    "vendor": "Hettich",
+    "name": "MIKRO 220 Robotic",
+    "kind": "centrifuge",
+    "capabilities": [
+      "centrifuging"
+    ],
+    "status": "full",
+    "api": "pylabrobot.hettich.HettichMikro220RoboticCentrifuge",
+    "api_version": "v1",
+    "code_slug": "hettich/centrifuge",
+    "doc_slug": "hettich/mikro-220/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hettichlab.com/products/centrifuges/automated-centrifuges/mikro-220-robotic/"
+  },
+  {
     "id": "hettich-rotanta-460",
     "vendor": "Hettich",
     "name": "ROTANTA 460 Robotic",
