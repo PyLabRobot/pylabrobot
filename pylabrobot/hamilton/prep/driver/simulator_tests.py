@@ -14,9 +14,95 @@ from pylabrobot.hamilton.prep.driver.simulator import (
   RECORDING_PREP_HEAD8,
 )
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
+from pylabrobot.hamilton.transport.tcp.session import SessionState
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
 from pylabrobot.resources.trash import Trash
+from pylabrobot.testing.concurrency import AnyioTestBase
+
+
+class TestScopedPrep(AnyioTestBase):
+  async def test_feature_cleanup_keeps_pipettes_before_head8(self) -> None:
+    """Feature teardown runs in firmware's existing order while the link is active."""
+    driver = PrepSimulationDriver(deck=PrepDeck(), declared_configuration_json=RECORDING_PREP_HEAD8)
+    called: list[str] = []
+    async with driver:
+      assert driver.pipettes is not None and driver.head8 is not None
+      stop_pipettes = driver.pipettes._on_stop
+      stop_head8 = driver.head8._on_stop
+
+      async def record_pipettes() -> None:
+        assert driver.io.is_connected
+        called.append("pipettes")
+        await stop_pipettes()
+
+      async def record_head8() -> None:
+        assert driver.io.is_connected
+        called.append("head8")
+        await stop_head8()
+
+      driver.pipettes._on_stop = record_pipettes  # type: ignore[method-assign]
+      driver.head8._on_stop = record_head8  # type: ignore[method-assign]
+    assert called == ["pipettes", "head8"]
+
+  async def test_uncertain_session_exit_sends_no_safety_commands(self) -> None:
+    """An unknown terminal outcome forbids further diagnostics or Z movement."""
+    driver = PrepSimulationDriver(deck=PrepDeck())
+    sent: list[object] = []
+    send = driver.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    driver.send_command = record  # type: ignore[method-assign]
+    async with driver:
+      driver._core_gripper_arm = driver.x_arm
+      driver.io._session.fail(ConnectionError("unknown terminal outcome"))
+      assert driver.io.connection_info.state is SessionState.UNCERTAIN
+      before_exit = len(sent)
+    assert len(sent) == before_exit
+    assert driver.io.connection_info.state is SessionState.CLOSED
+    assert driver._core_gripper_arm is None
+
+  async def test_failed_resource_entry_reconciles_z_before_closing(self) -> None:
+    """A failed entry after initialization still retracts channels while linked."""
+    driver = PrepSimulationDriver(deck=PrepDeck())
+
+    async def fail_after_lowering() -> None:
+      assert driver.pipettes is not None
+      await driver.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
+      raise RuntimeError("resource modelling failed")
+
+    create_resources = driver._create_capability_resources
+    driver._create_capability_resources = fail_after_lowering  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="resource modelling failed"):
+      async with driver:
+        pass
+    assert driver.io.connection_info.state is SessionState.CLOSED
+    driver._create_capability_resources = create_resources  # type: ignore[method-assign]
+    async with driver.lifespan(skip_raise_to_z_safety=True):
+      assert await driver.features_below_safe_z() == []
+
+  async def test_device_owns_simulated_driver_and_closes_session(self) -> None:
+    """Device exit releases its driver's session without ever opening a real Socket."""
+    device = Prep(simulation=True)
+    async with device:
+      assert device.driver.io.is_connected
+      session = device.driver.io._session
+    assert not device.driver.io.is_connected
+    assert session.state.name == "CLOSED"
+
+  async def test_skip_safety_option_preserves_lowered_channels(self) -> None:
+    """The scoped stop option leaves Z low, and a later entry raises it."""
+    deck = PrepDeck()
+    driver = PrepSimulationDriver(deck=deck)
+    async with driver.lifespan(skip_raise_to_z_safety=True):
+      assert driver.pipettes is not None
+      await driver.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
+    again = PrepSimulationDriver(deck=deck)
+    async with again:
+      assert await again.features_below_safe_z() == []
 
 
 def test_firmware_tree_is_selectable():

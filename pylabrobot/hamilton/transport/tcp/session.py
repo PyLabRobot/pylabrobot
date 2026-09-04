@@ -9,12 +9,14 @@ An uncertain transaction prevents all further writes in that session.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Mapping, Optional, TypeVar, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand, hamilton_error_for_entry
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.events import EventSubscription, OverflowPolicy
@@ -41,14 +43,16 @@ class SessionState(Enum):
   UNCERTAIN = auto()
 
 
-@dataclass(frozen=True)
+@dataclass
 class PendingTransaction:
-  """One request's immutable correlation fields and response handoff."""
+  """One request's correlation fields and response handoff."""
 
   destination: Address
   source: Address
   sequence: int
-  response: asyncio.Future[CommandResponse]
+  response: anyio.Event
+  result: Optional[CommandResponse] = None
+  error: Optional[Exception] = None
 
   def matches(self, message: CommandResponse) -> bool:
     """Require the peer to echo the sequence and reverse both addresses."""
@@ -72,7 +76,7 @@ _TERMINAL_ACTIONS = frozenset(
 )
 
 
-class TCPSession:
+class TCPSession(HasLifespan):
   """Own one connection's I/O, transactions, discovery, and event subscriptions."""
 
   def __init__(
@@ -82,6 +86,7 @@ class TCPSession:
     error_codes: Optional[Mapping[tuple[int, int, int, int, int], str]] = None,
   ):
     """Create an unopened session with independent caches and protocol state."""
+    super().__init__()
     self._io = io
     self._read_timeout = read_timeout
     self._error_codes = dict(error_codes or {})
@@ -92,17 +97,40 @@ class TCPSession:
     self.state = SessionState.CLOSED
     self.client_address: Optional[Address] = None
     self.sequence_numbers: dict[Address, int] = {}
-    self.command_lock = asyncio.Lock()
+    self.command_lock = anyio.Lock()
     self.pending: Optional[PendingTransaction] = None
-    self.reader_task: Optional[asyncio.Task[None]] = None
-    self._write_task: Optional[asyncio.Task[None]] = None
+    self._reader_group: Optional[anyio.abc.TaskGroup] = None
+    self._reader_started = False
+    self._write_finished: Optional[anyio.Event] = None
     self._subscriptions: set[EventSubscription] = set()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the socket, then the reader, for exactly this connection."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self._io.lifespan())
+    self.state = SessionState.CONNECTING
+    group = await stack.enter_task_group()
+    self._reader_group = group
+    stack.callback(group.cancel_scope.cancel)
+    stack.push_shielded_async_callback(self._finish_session)
+
+  async def _finish_session(self) -> None:
+    """Join an in-flight write before failing waiters and closing the socket."""
+    writing = self._write_finished
+    if writing is not None:
+      await writing.wait()
+    for subscription in tuple(self._subscriptions):
+      subscription._finish()
+    self.fail(ConnectionError("Hamilton TCP session stopped - enter a new lifespan"))
+    self.state = SessionState.CLOSED
+    self._reader_group = None
+    self._reader_started = False
 
   def require_active(self) -> None:
     """Reject even cached discovery access on an expired or uncertain session."""
     if self.state not in (SessionState.READY, SessionState.WAITING):
       raise ConnectionError(
-        f"Hamilton TCP session is {self.state.name.lower()} - call stop() then setup()"
+        f"Hamilton TCP session is {self.state.name.lower()} - enter a new lifespan"
       )
 
   def events(self, capacity: int = 64, overflow: OverflowPolicy = "error") -> EventSubscription:
@@ -181,15 +209,24 @@ class TCPSession:
     """Reject commands on closed, connecting, or uncertain sessions."""
     if self.state is not SessionState.READY:
       raise ConnectionError(
-        f"{self._io._unique_id} session is {self.state.name.lower()} - call stop() then setup()"
+        f"{self._io._unique_id} session is {self.state.name.lower()} - enter a new lifespan"
       )
 
   def start_reader(self) -> None:
     """Transfer socket ownership to the background reader after the handshake."""
     if self.state is not SessionState.CONNECTING:
       raise RuntimeError("Reader can only start after connecting")
+    group = self._reader_group
+    if group is None:
+      raise RuntimeError("Session must be entered before starting its reader")
     self.state = SessionState.READY
-    self.reader_task = asyncio.create_task(self._read_loop())
+    self._reader_started = True
+    group.start_soon(self._read_loop)
+
+  @property
+  def reader_started(self) -> bool:
+    """Whether the reader owns handshake reads."""
+    return self._reader_started
 
   async def read_message(
     self, timeout: Optional[float] = None
@@ -223,12 +260,12 @@ class TCPSession:
           continue
         if isinstance(message, CommandResponse):
           self.deliver(message)
-    except asyncio.CancelledError:
-      self.fail(ConnectionError("Hamilton TCP reader cancelled"))
-      raise
     except Exception as exc:
+      if self.state is SessionState.CLOSED:
+        return
       self.fail(exc)
       logger.warning("Hamilton TCP reader stopped: %s", exc)
+      raise
 
   def deliver(self, message: CommandResponse) -> None:
     """Route events and hand only matching terminal responses to the caller."""
@@ -240,7 +277,7 @@ class TCPSession:
         subscription._publish(message)
       return
     pending = self.pending
-    if pending is None or pending.response.done() or not pending.matches(message):
+    if pending is None or pending.response.is_set() or not pending.matches(message):
       logger.warning(
         "Dropping unmatched response from %s to %s seq=%d action=%#x",
         message.harp.src,
@@ -254,7 +291,8 @@ class TCPSession:
     if action not in _TERMINAL_ACTIONS:
       logger.warning("Dropping nonterminal HOI action %#x", action)
       return
-    pending.response.set_result(message)
+    pending.result = message
+    pending.response.set()
 
   def fail(self, exc: Exception) -> None:
     """Make an uncertain connection unusable and wake its waiting caller."""
@@ -265,10 +303,9 @@ class TCPSession:
       subscription._finish(exc)
     pending = self.pending
     self.pending = None
-    if pending is not None and not pending.response.done():
-      pending.response.set_exception(exc)
-    if self._write_task is not None and not self._write_task.done():
-      self._write_task.cancel()
+    if pending is not None and not pending.response.is_set():
+      pending.error = exc
+      pending.response.set()
 
   async def transact(self, command: TCPCommand[object], read_timeout: float) -> CommandResponse:
     """Write once and wait for this request's terminal response under the lock.
@@ -283,41 +320,43 @@ class TCPSession:
         raise RuntimeError("Client address missing after handshake")
       sequence = self.allocate_sequence(command.dest)
       message = command.build(src=self.client_address, seq=sequence)
-      response: asyncio.Future[CommandResponse] = asyncio.get_running_loop().create_future()
-      pending = PendingTransaction(command.dest, self.client_address, sequence, response)
+      pending = PendingTransaction(command.dest, self.client_address, sequence, anyio.Event())
       self.pending = pending
       self.state = SessionState.WAITING
-      deadline: Optional[asyncio.TimerHandle] = None
-      write_task = asyncio.create_task(self._io.write(message))
-      self._write_task = write_task
-
-      def expire() -> None:
-        """End only this transaction's wait without cancelling its caller."""
-        if not response.done():
-          response.set_exception(asyncio.TimeoutError("Timeout waiting for Hamilton TCP response"))
-
+      writing = anyio.Event()
+      self._write_finished = writing
       try:
-        try:
-          await write_task
-        except asyncio.CancelledError:
-          if self.state in (SessionState.CLOSED, SessionState.UNCERTAIN):
-            if response.done() and not response.cancelled():
-              response.result()
-            raise ConnectionError("Hamilton TCP session ended during write") from None
-          raise
-        except Exception as exc:
-          self.fail(exc)
-          raise
+        # The Socket's write has a finite deadline. Cancellation cannot abandon
+        # bytes that may already have been sent or close the transport underneath it.
+        with anyio.CancelScope(shield=True):
+          try:
+            await self._io.write(message)
+          except Exception as exc:
+            self.fail(exc)
+            raise
+          finally:
+            writing.set()
+            if self._write_finished is writing:
+              self._write_finished = None
+        if pending.error is not None:
+          raise pending.error
         if self.state is not SessionState.WAITING:
           raise ConnectionError("Hamilton TCP session ended during write")
-        deadline = asyncio.get_running_loop().call_later(read_timeout, expire)
-        return await asyncio.shield(response)
+        if not pending.response.is_set():
+          with anyio.fail_after(read_timeout):
+            await pending.response.wait()
+        if pending.error is not None:
+          raise pending.error
+        if pending.result is None:
+          raise ConnectionError("Hamilton TCP response missing")
+        result = pending.result
+        # A checkpoint delivers cancellation after a recorded terminal response.
+        await anyio.lowlevel.checkpoint()
+        return result
       finally:
-        if deadline is not None:
-          deadline.cancel()
         # A recorded terminal response establishes completion even if cancellation
         # won the race to wake the caller. Never resurrect a failed/stopped session.
-        completed = response.done() and not response.cancelled() and response.exception() is None
+        completed = pending.result is not None and pending.error is None
         if self.state is SessionState.WAITING:
           self.state = SessionState.READY if completed else SessionState.UNCERTAIN
         if self.state is SessionState.UNCERTAIN:
@@ -325,23 +364,3 @@ class TCPSession:
             subscription._finish(ConnectionError("Hamilton TCP transaction outcome is uncertain"))
         if self.pending is pending:
           self.pending = None
-        if not response.done():
-          response.cancel()
-        if self._write_task is write_task:
-          self._write_task = None
-
-  async def stop(self) -> None:
-    """Fail waiters and finish owned tasks before closing this session's socket.
-
-    Subscriptions end immediately and discard buffered events.
-    """
-    for subscription in tuple(self._subscriptions):
-      subscription._finish()
-    self.fail(ConnectionError("Hamilton TCP session stopped - call setup()"))
-    self.state = SessionState.CLOSED
-    tasks = [task for task in (self.reader_task, self._write_task) if task is not None]
-    for task in tasks:
-      task.cancel()
-    if tasks:
-      await asyncio.gather(*tasks, return_exceptions=True)
-    await self._io.stop()

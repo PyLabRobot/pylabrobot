@@ -317,11 +317,10 @@ def test_setup_raises_a_device_that_was_left_low():
   async def _run() -> None:
     deck = PrepDeck()
     first = PrepSimulationDriver(deck=deck)
-    await first.setup()
-    assert first.pipettes is not None
-    await first.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
-    assert len(await first.features_below_safe_z()) == 1
-    await first.stop(skip_raise_to_z_safety=True)
+    async with first.lifespan(skip_raise_to_z_safety=True):
+      assert first.pipettes is not None
+      await first.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
+      assert len(await first.features_below_safe_z()) == 1
 
     second = PrepSimulationDriver(deck=deck)
     sent: list = []
@@ -345,18 +344,17 @@ def test_stop_can_leave_the_channels_where_they_stand():
 
   async def _run() -> None:
     p = PrepSimulationDriver(deck=PrepDeck())
-    await p.setup()
-    assert p.pipettes is not None
-    await p.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
     sent: list = []
-    send = p.send_command
+    async with p.lifespan(skip_raise_to_z_safety=True):
+      assert p.pipettes is not None
+      await p.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
+      send = p.send_command
 
-    async def record(command, *args, **kwargs):
-      sent.append(command)
-      return await send(command, *args, **kwargs)
+      async def record(command, *args, **kwargs):
+        sent.append(command)
+        return await send(command, *args, **kwargs)
 
-    p.send_command = record  # type: ignore[method-assign]
-    await p.stop(skip_raise_to_z_safety=True)
+      p.send_command = record  # type: ignore[method-assign]
     assert not any(isinstance(c, PrepCmd.PrepMoveZUpToSafe) for c in sent)
     assert p._setup_finished is False
 

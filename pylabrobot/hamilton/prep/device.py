@@ -3,6 +3,7 @@
 import logging
 from typing import Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
 from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.prep.driver.features.head8 import Head8
@@ -26,7 +27,7 @@ PREP_SIZE_Z = 575.0
 PREP_DECK_LOCATION = Coordinate(25.0, 86.5, 50.0)
 
 
-class PrepDevice(Resource):
+class PrepDevice(Resource, HasLifespan):
   """The complete modelling and control interface for a Hamilton Prep.
 
   The device is itself a resource and its deck is its child, so everything on the deck is a
@@ -67,6 +68,7 @@ class PrepDevice(Resource):
       category="device",
       model=model if model is not None else self.__class__.__name__,
     )
+    HasLifespan.__init__(self)
 
     self.deck = deck
     self.driver = driver
@@ -77,14 +79,17 @@ class PrepDevice(Resource):
       deck, location=deck_location if deck_location is not None else Coordinate(0, 0, 0)
     )
 
-  async def setup(
+  async def _enter_lifespan(
     self,
+    stack: AsyncExitStackWithShielding,
+    *,
     smart: bool = True,
     force_initialize: bool = False,
     skip_device_initialization: bool = False,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
-  ):
+    skip_raise_to_z_safety: bool = False,
+  ) -> None:
     """Bring the device up.
 
     Args:
@@ -94,22 +99,17 @@ class PrepDevice(Resource):
       default_traverse_height: as `PrepDriver.setup` takes it.
       use_v1_aspirate_dispense: as `PrepDriver.setup` takes it.
     """
-    await self.driver.setup(
-      smart=smart,
-      force_initialize=force_initialize,
-      skip_device_initialization=skip_device_initialization,
-      default_traverse_height=default_traverse_height,
-      use_v1_aspirate_dispense=use_v1_aspirate_dispense,
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(
+      self.driver.lifespan(
+        smart=smart,
+        force_initialize=force_initialize,
+        skip_device_initialization=skip_device_initialization,
+        default_traverse_height=default_traverse_height,
+        use_v1_aspirate_dispense=use_v1_aspirate_dispense,
+        skip_raise_to_z_safety=skip_raise_to_z_safety,
+      )
     )
-
-  async def stop(self, skip_raise_to_z_safety: bool = False):
-    """Put the device down.
-
-    Args:
-      skip_raise_to_z_safety: leave the channels where they stand, instead of raising them to Z safety first.
-        The next lateral move will crash a channel that is low.
-    """
-    await self.driver.stop(skip_raise_to_z_safety=skip_raise_to_z_safety)
 
   # -- what the device carries ------------------------------------------------------------
   # Read through: they do not exist until setup has run.

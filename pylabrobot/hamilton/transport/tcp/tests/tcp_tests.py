@@ -13,10 +13,14 @@ import asyncio
 import struct
 import unittest
 from dataclasses import dataclass
-from typing import Annotated, Awaitable, Callable, Optional, cast
+from typing import Annotated, Any, Awaitable, Callable, Optional, cast
 from unittest.mock import AsyncMock
 
+import anyio
+import pytest
+
 import pylabrobot.hamilton.transport.tcp.introspection as introspection_mod
+from pylabrobot.concurrency import AsyncExitStackWithShielding, BaseExceptionGroup
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.hoi_error import (
   HoiError,
@@ -80,6 +84,27 @@ from pylabrobot.hamilton.transport.tcp.wire_types import (
 )
 from pylabrobot.io.socket import Socket
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
+from pylabrobot.testing.concurrency import AnyioTestBase
+
+
+class _MemoryStream:
+  def __init__(self) -> None:
+    self.buffer = bytearray()
+    self.changed = anyio.Event()
+    self.error: Optional[Exception] = None
+    self.eof = False
+
+  def feed_data(self, data: bytes) -> None:
+    self.buffer.extend(data)
+    self.changed.set()
+
+  def feed_eof(self) -> None:
+    self.eof = True
+    self.changed.set()
+
+  def set_exception(self, error: Exception) -> None:
+    self.error = error
+    self.changed.set()
 
 
 class _MemorySocket(Socket):
@@ -88,14 +113,19 @@ class _MemorySocket(Socket):
   def __init__(self) -> None:
     """Construct a socket that never opens a network connection."""
     super().__init__("test", "127.0.0.1", 0)
-    self.stream = asyncio.StreamReader()
-    self._reader = self.stream
+    self.stream = _MemoryStream()
     self.writes: list[HarpPacket] = []
     self.on_write: Optional[Callable[[HarpPacket], Awaitable[None]]] = None
     self.closed = False
 
-  async def setup(self) -> None:
-    """Keep setup entirely in memory."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Keep the connection entirely in memory."""
+    stack.callback(self._close)
+
+  def _close(self) -> None:
+    """Record closure and wake any stream reader."""
+    self.closed = True
+    self.stream.feed_eof()
 
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
     """Record a request and let a test decide when its write completes."""
@@ -104,10 +134,20 @@ class _MemorySocket(Socket):
     if self.on_write is not None:
       await self.on_write(request)
 
-  async def stop(self) -> None:
-    """Record closure and wake any stream reader."""
-    self.closed = True
-    self.stream.feed_eof()
+  async def read_exact(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
+    with anyio.fail_after(timeout):
+      while len(self.stream.buffer) < num_bytes:
+        if self.stream.error is not None:
+          raise self.stream.error
+        if self.stream.eof:
+          raise ConnectionError("Connection closed before num_bytes are read")
+        changed = self.stream.changed
+        await changed.wait()
+        if self.stream.changed is changed:
+          self.stream.changed = anyio.Event()
+      result = bytes(self.stream.buffer[:num_bytes])
+      del self.stream.buffer[:num_bytes]
+      return result
 
   def feed(self, response: CommandResponse) -> None:
     """Deliver a frame through the production parser."""
@@ -134,6 +174,164 @@ def _response(
   return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
 
 
+class TestNativeSessionOwnership(AnyioTestBase):
+  async def test_idle_reader_failure_reaches_lifespan_owner(self) -> None:
+    """A peer disconnect while idle cannot silently terminate the owned reader."""
+    io = _MemorySocket()
+    session = TCPSession(io)
+    with pytest.raises(BaseExceptionGroup) as raised:
+      async with session:
+        session.start_reader()
+        io.stream.set_exception(ConnectionResetError("peer gone"))
+        with anyio.fail_after(1):
+          while session.state is not SessionState.UNCERTAIN:
+            await anyio.sleep(0)
+    assert io.closed
+    assert len(raised.value.exceptions) == 1
+    assert isinstance(raised.value.exceptions[0], ConnectionResetError)
+
+  async def test_session_closes_socket_and_subscriptions_after_body_error(self) -> None:
+    """A body failure must unwind the reader before closing its sole Socket owner."""
+    io = _MemorySocket()
+    session = TCPSession(io)
+    with pytest.raises(ValueError, match="body"):
+      async with session:
+        session.start_reader()
+        subscription = session.events()
+        raise ValueError("body")
+    assert io.closed
+    with pytest.raises(StopAsyncIteration):
+      with anyio.fail_after(1):
+        await subscription.__anext__()
+
+  async def test_client_replaces_its_session_after_an_uncertain_transaction(self) -> None:
+    """A new scope must discard the old connection's sequence, caches and subscription."""
+    client = HamiltonTCPClient("memory", 0)
+    sockets: list[_MemorySocket] = []
+
+    def make_session() -> TCPSession:
+      io = _MemorySocket()
+      sockets.append(io)
+      return TCPSession(io)
+
+    client._create_session = make_session  # type: ignore[method-assign]
+    client._initialize_connection = AsyncMock()  # type: ignore[method-assign]
+    client._register_client = AsyncMock()  # type: ignore[method-assign]
+    client._discover_root = AsyncMock()  # type: ignore[method-assign]
+    client._discover_globals = AsyncMock()  # type: ignore[method-assign]
+    async with client:
+      first = client._session
+      subscription = client.events()
+      first.sequence_numbers[Address(1, 1, 257)] = 8
+      first.fail(ConnectionError("unknown"))
+    async with client:
+      assert client._session is not first
+      assert client._session.sequence_numbers == {}
+      assert sockets[0].closed and not sockets[1].closed
+      with pytest.raises(ConnectionError):
+        await subscription.__anext__()
+
+  async def test_client_handshake_failure_closes_new_socket(self) -> None:
+    """A failed discovery phase unwinds the newly opened socket before access is exposed."""
+    client = HamiltonTCPClient("memory", 0)
+    io = _MemorySocket()
+    client._create_session = lambda: TCPSession(io)  # type: ignore[method-assign]
+    client._initialize_connection = AsyncMock()  # type: ignore[method-assign]
+    client._register_client = AsyncMock()  # type: ignore[method-assign]
+    client._discover_root = AsyncMock()  # type: ignore[method-assign]
+    client._discover_globals = AsyncMock(side_effect=ValueError("discovery failed"))  # type: ignore[method-assign]
+    with pytest.raises(ValueError, match="discovery failed"):
+      async with client:
+        pass
+    assert io.closed
+    assert client.connection_info.state is SessionState.CLOSED
+    assert not client.is_connected
+
+  async def test_cancellation_after_write_waits_for_terminal_before_releasing_lock(self) -> None:
+    """The full command remains owned after cancellation until its terminal reply is known."""
+    io = _MemorySocket()
+    session = TCPSession(io)
+    writing = anyio.Event()
+    release = anyio.Event()
+    finished = anyio.Event()
+    scope = anyio.CancelScope()
+
+    async def blocked(request: HarpPacket) -> None:
+      writing.set()
+      await release.wait()
+      io.feed(_response(sequence=request.seq))
+      assert session.pending is not None
+      await session.pending.response.wait()
+
+    async def command() -> None:
+      with scope:
+        try:
+          await session.exchange(TestCommandSerialization._Cmd(Address(1, 1, 257)), read_timeout=1)
+        finally:
+          finished.set()
+
+    io.on_write = blocked
+    async with session:
+      session.client_address = Address(2, 1, 65535)
+      session.start_reader()
+      async with anyio.create_task_group() as tasks:
+        tasks.start_soon(command)
+        with anyio.fail_after(1):
+          await writing.wait()
+        scope.cancel()
+        assert not finished.is_set()
+        release.set()
+        with anyio.fail_after(2):
+          await finished.wait()
+      assert session.state is SessionState.READY
+      assert len(io.writes) == 1
+
+  async def test_cancellation_after_write_without_reply_marks_session_uncertain(self) -> None:
+    """A completed write must not shield an absent terminal reply from cancellation."""
+    io = _MemorySocket()
+    session = TCPSession(io)
+    written = anyio.Event()
+    finished = anyio.Event()
+    scope = anyio.CancelScope()
+
+    async def write(request: HarpPacket) -> None:
+      written.set()
+
+    async def command() -> None:
+      with scope:
+        try:
+          await session.exchange(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+        finally:
+          finished.set()
+
+    io.on_write = write
+    async with session:
+      session.client_address = Address(2, 1, 65535)
+      session.start_reader()
+      async with anyio.create_task_group() as tasks:
+        tasks.start_soon(command)
+        with anyio.fail_after(1):
+          await written.wait()
+          while session._write_finished is not None:
+            await anyio.sleep(0)
+        assert session.pending is not None
+        assert not session.pending.response.is_set()
+        scope.cancel()
+        with anyio.move_on_after(0.1):
+          await finished.wait()
+        cancelled_promptly = finished.is_set()
+        if not cancelled_promptly:
+          io.feed(_response(sequence=io.writes[0].seq))
+          with anyio.fail_after(1):
+            await finished.wait()
+      assert cancelled_promptly, "Cancellation remained shielded during the terminal wait"
+      assert session.state is SessionState.UNCERTAIN
+      assert session.pending is None
+      with pytest.raises(ConnectionError):
+        await session.exchange(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+      assert len(io.writes) == 1
+
+
 class _UnusedExecutor:
   """Discovery-only tests replace all wire-facing methods."""
 
@@ -147,18 +345,75 @@ class _UnusedExecutor:
     raise AssertionError("unexpected exchange")
 
 
-class _SessionTest(unittest.IsolatedAsyncioTestCase):
+class _SessionTest(AnyioTestBase):
   """Provide real sessions with memory-only I/O and deterministic scheduling."""
 
-  def make_client(self) -> tuple[HamiltonTCPClient, _MemorySocket]:
+  _anyio_backends = ["asyncio"]
+
+  @property
+  def assertEqual(self):
+    return self.check.assertEqual
+
+  @property
+  def assertTrue(self):
+    return self.check.assertTrue
+
+  @property
+  def assertFalse(self):
+    return self.check.assertFalse
+
+  @property
+  def assertIs(self):
+    return self.check.assertIs
+
+  @property
+  def assertIsNot(self):
+    return self.check.assertIsNot
+
+  @property
+  def assertIsNone(self):
+    return self.check.assertIsNone
+
+  @property
+  def assertIsNotNone(self):
+    return self.check.assertIsNotNone
+
+  @property
+  def assertIsInstance(self):
+    return self.check.assertIsInstance
+
+  @property
+  def assertIn(self):
+    return self.check.assertIn
+
+  @property
+  def assertRaises(self):
+    return self.check.assertRaises
+
+  @property
+  def assertRaisesRegex(self):
+    return self.check.assertRaisesRegex
+
+  @property
+  def assertLogs(self):
+    return self.check.assertLogs
+
+  @property
+  def subTest(self):
+    return self.check.subTest
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    self.check = unittest.TestCase()
+    self._sessions = await stack.enter_async_context(AsyncExitStackWithShielding())
+
+  async def make_client(self) -> tuple[HamiltonTCPClient, _MemorySocket]:
     """Start the reader without performing a hardware handshake."""
     client = HamiltonTCPClient("127.0.0.1", 0)
     io = _MemorySocket()
     client._session = TCPSession(io)
     client._session.client_address = Address(2, 1, 65535)
-    client._session.state = SessionState.CONNECTING
+    await self._sessions.enter_async_context(client._session.lifespan())
     client._session.start_reader()
-    self.addAsyncCleanup(client.stop)
     return client, io
 
   async def wait_until(self, predicate: Callable[[], bool]) -> None:
@@ -741,7 +996,7 @@ class TestCommandSerialization(_SessionTest):
     dest: Address
 
   async def test_concurrent_commands_do_not_interleave_on_the_wire(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     first = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
     second = self.send(client)
@@ -756,7 +1011,7 @@ class TestCommandSerialization(_SessionTest):
     self.assertEqual(client._session.state, SessionState.READY)
 
   async def test_firmware_error_does_not_issue_diagnostic_queries(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     error = HoiParams().add("0x0001.0x0001.0x0101:0x01,0x0006,0x0F08", Str).build()
 
     async def respond(request: HarpPacket) -> None:
@@ -787,7 +1042,7 @@ class TestConnectionLifecycle(_SessionTest):
   """Uncertain execution never triggers another write or an implicit reconnect."""
 
   async def test_read_failure_does_not_retransmit_the_command(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     with self.assertRaises(asyncio.TimeoutError):
       await self.send(client, timeout=0.01)
     self.assertEqual(len(io.writes), 1)
@@ -799,7 +1054,7 @@ class TestConnectionLifecycle(_SessionTest):
   async def test_connection_errors_do_not_retransmit_either(self):
     for exc in (ConnectionResetError("reset"), BrokenPipeError("pipe"), OSError("io")):
       with self.subTest(exc=type(exc).__name__):
-        client, io = self.make_client()
+        client, io = await self.make_client()
 
         async def fail_write(request: HarpPacket) -> None:
           """Represent a failure after a request may have reached the peer."""
@@ -818,23 +1073,25 @@ class TestConnectionLifecycle(_SessionTest):
     for op in (client._write_handshake(b"x"), client._read_exact_handshake(1)):
       with self.assertRaises(ConnectionError) as ctx:
         await op
-      self.assertIn("setup()", str(ctx.exception))
+      self.assertIn("new lifespan", str(ctx.exception))
 
   async def test_setup_twice_without_stop_is_refused(self):
-    client, _ = self.make_client()
-    with self.assertRaisesRegex(RuntimeError, "stop"):
-      await client.setup()
+    client, _ = await self.make_client()
+    with self.assertRaisesRegex(RuntimeError, "active lifespan"):
+      async with client._session:
+        pass
 
   async def test_setup_on_uncertain_session_requires_stop(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     with self.assertRaises(asyncio.TimeoutError):
       await self.send(client, timeout=0.01)
-    with self.assertRaisesRegex(RuntimeError, "stop"):
-      await client.setup()
+    with self.assertRaisesRegex(RuntimeError, "active lifespan"):
+      async with client._session:
+        pass
     self.assertEqual(len(io.writes), 1)
 
   async def test_fresh_session_drops_all_old_identity_and_discovery_state(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     old = client._session
     old.client_id = 5
     client._session.client_address = Address(2, 5, 65535)
@@ -845,7 +1102,7 @@ class TestConnectionLifecycle(_SessionTest):
       "root", ObjectInfo("root", "", method_count=0, subobject_count=0, address=Address(1, 1, 1))
     )
     previous_introspection = client.introspection
-    await client.stop()
+    await self._sessions.aclose()
     fresh_io = _MemorySocket()
     fresh = TCPSession(fresh_io)
     client._create_session = lambda: fresh  # type: ignore[method-assign]
@@ -853,7 +1110,8 @@ class TestConnectionLifecycle(_SessionTest):
     client._register_client = AsyncMock()  # type: ignore[method-assign]
     client._discover_root = AsyncMock()  # type: ignore[method-assign]
     client._discover_globals = AsyncMock()  # type: ignore[method-assign]
-    await client.setup()
+    async with client:
+      self.assertIs(client._session, fresh)
     self.assertTrue(io.closed)
     self.assertIs(client._session, fresh)
     self.assertIsNone(fresh.client_id)
@@ -862,12 +1120,12 @@ class TestConnectionLifecycle(_SessionTest):
     self.assertEqual(list(client.global_object_addresses), [])
     self.assertIsNone(client.registry.get_root_address())
     self.assertIsNone(client.registry.address_for("root"))
-    self.assertIsNot(client.introspection, previous_introspection)
-    assert old.reader_task is not None
-    self.assertTrue(old.reader_task.done())
+    with self.assertRaises(ConnectionError):
+      await previous_introspection.methods_for_interface(Address(1, 1, 1), 1)
+    self.assertEqual(old.state, SessionState.CLOSED)
 
   async def test_sequence_wraps_only_in_a_usable_session(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     client._session.sequence_numbers[Address(1, 1, 257)] = 254
     for write_count, sequence in enumerate((255, 0, 1), start=1):
       task = self.send(client)
@@ -900,7 +1158,7 @@ class TestBackgroundReader(_SessionTest):
 
   async def test_wrong_sequence_cannot_complete_waiting_command(self):
     """A stale response arriving during another transaction cannot answer it."""
-    client, io = self.make_client()
+    client, io = await self.make_client()
     task = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
     io.feed(_response(sequence=99))
@@ -911,7 +1169,7 @@ class TestBackgroundReader(_SessionTest):
     self.assertEqual((await task).harp.seq, 1)
 
   async def test_wrong_addresses_ack_and_nonterminal_actions_cannot_complete(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     task = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
     for message in (
@@ -930,7 +1188,7 @@ class TestBackgroundReader(_SessionTest):
     await task
 
   async def test_all_terminal_actions_complete_the_matching_transaction(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     for sequence, action in enumerate(
       (
         Hoi2Action.COMMAND_RESPONSE,
@@ -951,7 +1209,7 @@ class TestBackgroundReader(_SessionTest):
         self.assertEqual(client._session.state, SessionState.READY)
 
   async def test_response_before_write_completion_is_retained(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     write_finished = asyncio.Event()
 
     async def write(request: HarpPacket) -> None:
@@ -962,7 +1220,7 @@ class TestBackgroundReader(_SessionTest):
     io.on_write = write
     task = self.send(client)
     await self.wait_until(
-      lambda: client._session.pending is not None and client._session.pending.response.done()
+      lambda: client._session.pending is not None and client._session.pending.response.is_set()
     )
     self.assertFalse(task.done())
     write_finished.set()
@@ -971,7 +1229,7 @@ class TestBackgroundReader(_SessionTest):
 
   async def test_stop_during_write_wakes_the_caller(self):
     """Shutdown must not leave the caller blocked in an unfinished drain."""
-    client, io = self.make_client()
+    client, io = await self.make_client()
     gate = asyncio.Event()
 
     async def write(request: HarpPacket) -> None:
@@ -981,7 +1239,8 @@ class TestBackgroundReader(_SessionTest):
     io.on_write = write
     task = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
-    await client.stop()
+    gate.set()
+    await self._sessions.aclose()
     try:
       await self.wait_until(task.done)
       with self.assertRaises(ConnectionError):
@@ -992,7 +1251,7 @@ class TestBackgroundReader(_SessionTest):
 
   async def test_reader_failure_during_write_wakes_the_caller(self):
     """The reader's failure must also interrupt a blocked write."""
-    client, io = self.make_client()
+    client, io = await self.make_client()
     gate = asyncio.Event()
 
     async def write(request: HarpPacket) -> None:
@@ -1003,14 +1262,18 @@ class TestBackgroundReader(_SessionTest):
     task = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
     io.stream.set_exception(ConnectionResetError("peer disconnected"))
+    gate.set()
     await self.wait_until(task.done)
     with self.assertRaisesRegex(ConnectionResetError, "peer disconnected"):
       await task
     self.assertEqual(client._session.state, SessionState.UNCERTAIN)
+    with pytest.raises(BaseExceptionGroup) as raised:
+      await self._sessions.aclose()
+    assert isinstance(raised.value.exceptions[0], ConnectionResetError)
 
   async def test_matching_response_recorded_before_zero_deadline_wins(self):
     """A deadline cannot overwrite a response already handed to the transaction."""
-    client, io = self.make_client()
+    client, io = await self.make_client()
 
     async def write(request: HarpPacket) -> None:
       """Record the response before drain completes and the deadline is armed."""
@@ -1022,7 +1285,7 @@ class TestBackgroundReader(_SessionTest):
 
   async def test_write_failure_after_response_does_not_resurrect_connection(self):
     """Known completion does not make a failed socket usable again."""
-    client, io = self.make_client()
+    client, io = await self.make_client()
 
     async def write(request: HarpPacket) -> None:
       """Deliver the response before drain reports a broken connection."""
@@ -1038,7 +1301,7 @@ class TestBackgroundReader(_SessionTest):
     self.assertEqual(client._session.state, SessionState.UNCERTAIN)
 
   async def test_ack_does_not_satisfy_response_deadline(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
 
     async def write(request: HarpPacket) -> None:
       """Acknowledge receipt without reporting completion."""
@@ -1050,7 +1313,7 @@ class TestBackgroundReader(_SessionTest):
     self.assertEqual(client._session.state, SessionState.UNCERTAIN)
 
   async def test_build_failure_does_not_poison_session_or_write(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
 
     class BadCommand(TCPCommand[None]):
       interface_id = 1
@@ -1067,14 +1330,14 @@ class TestBackgroundReader(_SessionTest):
     self.assertEqual(client._session.state, SessionState.READY)
 
   async def test_raw_io_cannot_bypass_transaction_owner(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     for op in (client._write_handshake(b"x"), client._read_exact_handshake(1)):
       with self.assertRaises(RuntimeError):
         await op
     self.assertEqual(io.writes, [])
 
   async def test_timeout_rejects_queued_command_and_discards_late_response(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     first = self.send(client, timeout=0.01)
     await self.wait_until(lambda: len(io.writes) == 1)
     second = self.send(client)
@@ -1088,7 +1351,7 @@ class TestBackgroundReader(_SessionTest):
     self.assertIsNone(client._session.pending)
 
   async def test_cancellation_waiting_for_lock_does_not_disturb_owner(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     first = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
     second = self.send(client)
@@ -1104,7 +1367,7 @@ class TestBackgroundReader(_SessionTest):
   async def test_cancellation_during_write_or_response_wait_prevents_further_writes(self):
     for during_write in (True, False):
       with self.subTest(during_write=during_write):
-        client, io = self.make_client()
+        client, io = await self.make_client()
         gate = asyncio.Event()
 
         async def write(request: HarpPacket) -> None:
@@ -1125,7 +1388,7 @@ class TestBackgroundReader(_SessionTest):
         self.assertEqual(client._session.state, SessionState.UNCERTAIN)
 
   async def test_cancellation_after_recorded_response_preserves_known_completion(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     task = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
     # Deliver and cancel in the same loop turn before the owner can resume.
@@ -1139,12 +1402,12 @@ class TestBackgroundReader(_SessionTest):
   async def test_reader_failure_and_stop_fail_waiters_and_queued_callers(self):
     for stop in (False, True):
       with self.subTest(stop=stop):
-        client, io = self.make_client()
+        client, io = await self.make_client()
         first = self.send(client)
         await self.wait_until(lambda: len(io.writes) == 1)
         second = self.send(client)
         if stop:
-          await client.stop()
+          await self._sessions.aclose()
         else:
           io.stream.set_exception(ConnectionResetError("connection reset"))
         for task in (first, second):
@@ -1153,9 +1416,13 @@ class TestBackgroundReader(_SessionTest):
         self.assertEqual(len(io.writes), 1)
         self.assertFalse(client.is_connected)
         self.assertIsNone(client._session.pending)
+        if not stop:
+          with pytest.raises(BaseExceptionGroup) as raised:
+            await self._sessions.aclose()
+          assert isinstance(raised.value.exceptions[0], ConnectionResetError)
 
   async def test_old_session_cannot_complete_or_clear_new_transaction(self):
-    client, old_io = self.make_client()
+    client, old_io = await self.make_client()
     old = client._session
     first = self.send(client)
     await self.wait_until(lambda: len(old_io.writes) == 1)
@@ -1165,10 +1432,9 @@ class TestBackgroundReader(_SessionTest):
     new_io = _MemorySocket()
     fresh = TCPSession(new_io)
     fresh.client_address = Address(2, 1, 65535)
-    fresh.state = SessionState.CONNECTING
+    await self._sessions.enter_async_context(fresh.lifespan())
     fresh.start_reader()
     client._session = fresh
-    self.addAsyncCleanup(old.stop)
     second = self.send(client)
     await self.wait_until(lambda: len(new_io.writes) == 1)
     old.deliver(_response())
@@ -1181,7 +1447,7 @@ class TestBackgroundReader(_SessionTest):
     await second
 
   async def test_duplicate_response_cannot_answer_next_command(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     first = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
     io.feed(_response())
@@ -1196,7 +1462,7 @@ class TestBackgroundReader(_SessionTest):
     await second
 
   async def test_idle_reader_and_partial_frames_survive_request_timeout(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     client._read_timeout = 0.01
     # Feed only the length prefix, leaving the idle reader inside a partial frame.
     data = IpPacket(protocol=6, payload=_response().harp.pack()).pack()
@@ -1210,7 +1476,7 @@ class TestBackgroundReader(_SessionTest):
 
   async def test_captured_prep_response_matches_session_identity(self):
     """A recorded Prep reply echoes the request sequence and reverses its addresses."""
-    client, io = self.make_client()
+    client, io = await self.make_client()
     address = Address(1, 1, 0xC000)
     client._session.client_address = Address(2, 4, 65535)
     client._session.sequence_numbers[address] = 61
@@ -1228,7 +1494,7 @@ class TestBackgroundReader(_SessionTest):
     self.assertEqual(HoiParamsParser(received.hoi.params).parse_next()[1], "PRPBD1394")
 
   async def test_malformed_and_control_frames_do_not_desynchronize_reader(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     task = self.send(client)
     await self.wait_until(lambda: len(io.writes) == 1)
     io.stream.feed_data(bytes.fromhex("010000"))

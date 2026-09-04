@@ -1,44 +1,87 @@
-"""The dialogue with a Hamilton machine: which reply answers which command.
+"""Match asynchronous Hamilton text replies to the commands awaiting them.
 
-Hamilton machines answer asynchronously - several commands can be in flight at once and replies
-come back in completion order - so a command cannot simply write and then read. Every command
-carries an id, a background thread reads continuously, and each reply is handed back to the
-command waiting on it.
+Several commands can be in flight at once, and replies can arrive in completion
+order rather than send order. A reader task owned by the router lifespan continuously reads
+the link and hands each reply to its waiter; commands register before writing so a
+fast reply cannot arrive before its waiter exists. Replies with an ID match that
+ID; replies without one match the module and command prefix in send order.
+Unmatched replies are dropped rather than assigned to another command.
 
-The link itself is any `pylabrobot.io` transport: a STAR and a Vantage are reached over USB, a
-heater shaker box over USB, a STAR V over a socket. Nothing here depends on which.
+The link can be any ``pylabrobot.io`` transport: STAR and Vantage use USB, a
+heater shaker box uses USB, and STAR V uses a socket. The router borrows that
+transport; its owner opens and closes it and enters the router's lifespan.
 
-Assembling a command and understanding what a reply says are not this class's business. It is
-given three things by whoever owns it: how long a module identifier is, how to read the id out of
-a reply, and how to raise when a reply reports an error.
+Command construction and reply interpretation belong to the owner, which supplies
+the module identifier length, a reply ID parser, and a reply error checker.
 """
 
-import asyncio
 import logging
-import threading
-import time
+from collections import deque
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import AsyncIterator, Callable, Deque, Dict, Optional, Protocol
+
+import anyio
 
 from pylabrobot.hamilton.protocol.text.framing import read_id
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.io import IOBase
+from pylabrobot.io.usb import USB
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class HamiltonTask:
-  """A command that has been sent, awaiting a response."""
+  """A command sent to the device and awaiting its response."""
 
   id_: Optional[int]
-  loop: asyncio.AbstractEventLoop
-  fut: asyncio.Future
   cmd: str
-  timeout_time: float
+  completed: anyio.Event
+  response: Optional[str] = None
+  error: Optional[BaseException] = None
+  abandoned: bool = False
+
+
+class ReplyReader(Protocol):
+  """Produce one complete protocol reply from a transport-specific boundary."""
+
+  async def read_reply(self) -> bytes:
+    """Read one framed reply."""
+
+
+class USBReplyReader:
+  """Use an observed USB short packet (including ZLP) as a reply delimiter."""
+
+  def __init__(self, io: USB) -> None:
+    self.io = io
+    self._initial = True
+    self._invalid = False
+
+  async def read_reply(self) -> bytes:
+    """Reject incomplete or unaligned replies rather than routing partial bytes."""
+    if self._invalid:
+      raise ValueError("Incomplete Hamilton USB reply")
+    first = self._initial
+    self._initial = False
+    self._invalid = True
+    if first:
+      start = await self.io.read_to_boundary(boundary="packet", consume_immediate_boundary=False)
+      if start.data or not start.started_at_boundary or not start.ended_at_boundary:
+        raise ValueError("Incomplete Hamilton USB reply")
+    result = await self.io.read_to_boundary(boundary="short_packet_end")
+    if (not first and not result.started_at_boundary) or not result.ended_at_boundary:
+      raise ValueError("Incomplete Hamilton USB reply")
+    self._invalid = False
+    return result.data
+
+
+class WriteNotDispatchedError(RuntimeError):
+  """A transport-confirmed write failure before any command bytes were dispatched."""
 
 
 class ReplyRouter:
-  """Holds the link to a Hamilton machine and matches replies to the commands awaiting them."""
+  """Match replies from one owned reader to commands awaiting them."""
 
   def __init__(
     self,
@@ -46,55 +89,27 @@ class ReplyRouter:
     module_id_length: int,
     parse_id: Callable[[str], Optional[int]],
     raise_for_error: Callable[[str], None],
-    packet_read_timeout: int = 3,
-    read_timeout: int = 30,
+    packet_read_timeout: float = 3,
+    read_timeout: float = 30,
+    reader: Optional[ReplyReader] = None,
   ):
-    """
-    Args:
-      io: The transport handle for the machine.
-      module_id_length: Number of characters in a module identifier.
-      parse_id: Read the command id out of a reply, or None if it carries none.
-      raise_for_error: Raise if a reply reports an error, otherwise return.
-      packet_read_timeout: Timeout in seconds for reading a single packet.
-      read_timeout: Timeout in seconds for reading a full response.
-    """
     self.io = io
     self.module_id_length = module_id_length
     self._parse_id = parse_id
     self._raise_for_error = raise_for_error
-
-    # TODO: not used by the reader yet.
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
-
+    if reader is None:
+      raise ValueError("A framed reply reader is required")
+    self.reader = reader
     self.id_ = 0
-    self._reading_thread: Optional[threading.Thread] = None
-    self._reading_thread_stop = threading.Event()
-    # The reading thread and the event loop both change this, so every change goes through the lock.
-    self._waiting_tasks: List[HamiltonTask] = []
-    self._waiting_tasks_lock = threading.Lock()
-
-  def start(self) -> None:
-    """Begin reading replies. The caller opens the transport first."""
-    self._reading_thread_stop.clear()
-    self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
-    self._reading_thread.start()
-
-  def stop(self) -> None:
-    """Stop reading and fail every command still waiting. The caller closes the transport."""
-    self._reading_thread_stop.set()
-    if self._reading_thread is not None:
-      self._reading_thread.join(timeout=10)
-      self._reading_thread = None
-    with self._waiting_tasks_lock:
-      waiting, self._waiting_tasks = self._waiting_tasks, []
-    for task in waiting:
-      task.loop.call_soon_threadsafe(
-        task.fut.set_exception, RuntimeError("Stopping the reply router.")
-      )
+    self._active = False
+    self._stopping = False
+    self._waiting_tasks_by_id: Dict[int, HamiltonTask] = {}
+    self._waiting_tasks_by_command: Dict[str, Deque[HamiltonTask]] = {}
 
   def next_id(self) -> int:
-    """continuously generate unique ids 0 <= x < 10000."""
+    """Generate a command ID modulo 10000."""
     self.id_ += 1
     return self.id_ % 10000
 
@@ -103,54 +118,63 @@ class ReplyRouter:
     cmd: str,
     id_: Optional[int],
     write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
+    read_timeout: Optional[float] = None,
     wait: bool = True,
   ) -> Optional[str]:
-    """Write an assembled command and return the reply that answers it.
-
-    Args:
-      cmd: The assembled command string.
-      id_: The id the command carries, used to recognise its reply. When None, the reply is
-        matched on the module and command instead.
-      write_timeout: Write timeout in seconds. If None, the io's own timeout is used.
-      read_timeout: Read timeout in seconds. If None, `self.read_timeout` is used.
-      wait: If False, return None immediately after sending.
-
-    Returns:
-      The reply, or None when `wait` is False.
-    """
+    """Write a command and optionally wait for its matching reply."""
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    if not self._active or self._stopping:
+      raise RuntimeError("No active reply router is accepting commands.")
     if not wait:
       await self.io.write(cmd.encode(), timeout=write_timeout)
       return None
-
     if read_timeout is None:
       read_timeout = self.read_timeout
+    task = self._register(id_=id_, cmd=cmd)
+    dispatch_possible = False
 
-    # Wait for the reply before asking for it. The reading thread runs alongside this one, and a
-    # device can answer before a task registered after the write would exist - the reply then
-    # arrives with nothing waiting for it, is dropped, and the command times out with its answer
-    # already gone past. Registering first closes that window; the task is taken back off again if
-    # the write never happens.
-    loop = asyncio.get_event_loop()
-    fut: asyncio.Future[str] = loop.create_future()
-    task = self._start_reading(id_, loop, fut, cmd, read_timeout)
+    def mark_dispatch() -> None:
+      """Record when USB begins the native write, before bytes can be sent."""
+      nonlocal dispatch_possible
+      dispatch_possible = True
+
     try:
-      await self.io.write(cmd.encode(), timeout=write_timeout)
-    except BaseException:
-      with self._waiting_tasks_lock:
-        if task in self._waiting_tasks:
-          self._waiting_tasks.remove(task)
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      if isinstance(self.io, USB):
+        await self.io.write(cmd.encode(), timeout=write_timeout, on_dispatch=mark_dispatch)
+      else:
+        dispatch_possible = True
+        await self.io.write(cmd.encode(), timeout=write_timeout)
+      try:
+        with anyio.fail_after(read_timeout):
+          await task.completed.wait()
+      except TimeoutError:
+        raise TimeoutError(f"Timeout while waiting for response to command {cmd}.") from None
+      if task.error is not None:
+        raise task.error
+      return task.response
+    except WriteNotDispatchedError:
+      dispatch_possible = False
       raise
-    return await fut
+    finally:
+      if (
+        task.id_ is None
+        and dispatch_possible
+        and not task.completed.is_set()
+        and not self._stopping
+      ):
+        task.abandoned = True
+      else:
+        self._remove(task)
 
   async def send_raw(
     self,
     command: str,
     write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
+    read_timeout: Optional[float] = None,
     wait: bool = True,
   ) -> Optional[str]:
-    """Write a command string exactly as given, reading its id back out of it."""
+    """Send exactly the given command, extracting any embedded ID."""
     return await self.send(
       cmd=command,
       id_=read_id(command),
@@ -159,107 +183,111 @@ class ReplyRouter:
       wait=wait,
     )
 
-  def _start_reading(
-    self,
-    id_: Optional[int],
-    loop: asyncio.AbstractEventLoop,
-    fut: asyncio.Future,
-    cmd: str,
-    timeout: int,
-  ) -> HamiltonTask:
-    """Submit a task to the reading thread, and hand it back so a caller can take it off again.
-
-    Returns:
-      The task now waiting for a reply.
-    """
-
-    timeout_time = time.time() + timeout
-    task = HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time)
-    with self._waiting_tasks_lock:
-      self._waiting_tasks.append(task)
-
-    if self._reading_thread is None or not self._reading_thread.is_alive():
-      self._reading_thread_stop.clear()
-      self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
-      self._reading_thread.start()
-
+  def _register(self, id_: Optional[int], cmd: str) -> HamiltonTask:
+    """Register a waiter before a write can make its reply available."""
+    task = HamiltonTask(id_=id_, cmd=cmd, completed=anyio.Event())
+    if id_ is not None:
+      if id_ in self._waiting_tasks_by_id:
+        raise ValueError(f"A command with id {id_} is already pending.")
+      self._waiting_tasks_by_id[id_] = task
+    else:
+      prefix = cmd[: self.module_id_length + 2]
+      self._waiting_tasks_by_command.setdefault(prefix, deque()).append(task)
     return task
 
-  def _reading_thread_main(self) -> None:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(self._continuously_read())
+  def _remove(self, task: HamiltonTask) -> None:
+    """Remove a pending command if it remains registered."""
+    if task.id_ is not None:
+      if self._waiting_tasks_by_id.get(task.id_) is task:
+        del self._waiting_tasks_by_id[task.id_]
+      return
+    prefix = task.cmd[: self.module_id_length + 2]
+    waiting = self._waiting_tasks_by_command.get(prefix)
+    if waiting is None:
+      return
+    try:
+      waiting.remove(task)
+    except ValueError:
+      return
+    if not waiting:
+      del self._waiting_tasks_by_command[prefix]
 
-  async def _continuously_read(self) -> None:
-    """Continuously read from the USB port until stop is requested.
+  def _find_waiter(self, response: str, response_id: Optional[int]) -> Optional[HamiltonTask]:
+    """Take the waiter identified by a reply."""
+    if response_id is not None:
+      return self._waiting_tasks_by_id.pop(response_id, None)
+    prefix = response[: self.module_id_length + 2]
+    waiting = self._waiting_tasks_by_command.get(prefix)
+    if not waiting:
+      return None
+    task = waiting.popleft()
+    if not waiting:
+      del self._waiting_tasks_by_command[prefix]
+    return None if task.abandoned else task
 
-    Tasks are stored in the `self._waiting_tasks` list, and contain a future that will be
-    completed when the task is finished. Tasks are submitted to the list using the
-    `self._start_reading` method.
+  def _fail_waiters(self, error: BaseException) -> None:
+    """Wake every pending command with the same reader failure."""
+    tasks = list(self._waiting_tasks_by_id.values())
+    for waiting in self._waiting_tasks_by_command.values():
+      tasks.extend(waiting)
+    self._waiting_tasks_by_id.clear()
+    self._waiting_tasks_by_command.clear()
+    for task in tasks:
+      task.error = error
+      task.completed.set()
 
-    On each iteration, read the USB port. If a response is received, parse it and check if it is
-    relevant to any of the tasks. If so, complete the future and remove the task from the
-    list. If a task has timed out, complete the future with a `TimeoutError`.
-    """
+  def _stop(self, scope: anyio.CancelScope) -> None:
+    """Stop the reader and wake waiters before its task group joins."""
+    self._stopping = True
+    scope.cancel()
+    self._fail_waiters(RuntimeError("Stopping the reply router."))
 
-    while not self._reading_thread_stop.is_set():
-      with self._waiting_tasks_lock:
-        now = time.time()
-        timed_out = [task for task in self._waiting_tasks if now > task.timeout_time]
-        for task in timed_out:
-          self._waiting_tasks.remove(task)
-        waiting = len(self._waiting_tasks)
-      for task in timed_out:
-        logger.warning("Timeout while waiting for response to command %s.", task.cmd)
-        task.loop.call_soon_threadsafe(
-          task.fut.set_exception,
-          TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
-        )
+  async def _run(self, reader_scope: anyio.CancelScope) -> None:
+    """Route replies until the lifespan ends or a fatal read failure reaches its owner."""
+    failure: BaseException = RuntimeError("Stopping the reply router.")
+    try:
+      with reader_scope:
+        while True:
+          response = (await self.reader.read_reply()).decode("utf-8")
+          try:
+            response_id = self._parse_id(response)
+          except ValueError as error:
+            logger.warning("Could not parse response: %s (%s)", response, error)
+            continue
+          task = self._find_waiter(response, response_id)
+          if task is None:
+            logger.warning("nothing was waiting for this reply, and it was dropped: %s", response)
+            continue
+          try:
+            self._raise_for_error(response)
+          except Exception as error:
+            task.error = error
+          else:
+            task.response = response
+          task.completed.set()
+    except BaseException as error:
+      failure = error
+      raise
+    finally:
+      self._stopping = True
+      self._fail_waiters(failure)
 
-      if waiting == 0:
-        await asyncio.sleep(0.01)
-        continue
-
-      try:
-        resp = (await self.io.read()).decode("utf-8")
-      except TimeoutError:
-        continue
-
-      if resp == "":
-        continue
-
-      # Parse response.
-      try:
-        response_id = self._parse_id(resp)
-      except ValueError as e:
-        logger.warning("Could not parse response: %s (%s)", resp, e)
-        continue
-
-      module_and_command = resp[: self.module_id_length + 2]
-      with self._waiting_tasks_lock:
-        matched = next(
-          (
-            task
-            for task in self._waiting_tasks
-            # if the command has no id, we have to check the command itself
-            if response_id == task.id_
-            or (task.id_ is None and task.cmd.startswith(module_and_command))
-          ),
-          None,
-        )
-        if matched is not None:
-          self._waiting_tasks.remove(matched)
-
-      if matched is None:
-        # Deliberately not guessed at. Handing it to whichever outstanding command shares its
-        # module and code answers that command with something that was never its answer, and a
-        # reply arriving with nothing waiting for it is worth seeing rather than repairing.
-        logger.warning("nothing was waiting for this reply, and it was dropped: %s", resp)
-        continue
-
-      try:
-        self._raise_for_error(resp)
-      except Exception as e:
-        matched.loop.call_soon_threadsafe(matched.fut.set_exception, e)
-      else:
-        matched.loop.call_soon_threadsafe(matched.fut.set_result, resp)
+  @asynccontextmanager
+  async def lifespan(self) -> AsyncIterator["ReplyRouter"]:
+    """Own the reply reader while borrowing an active transport."""
+    if self._active:
+      raise RuntimeError("Reply router already has an active lifespan")
+    if isinstance(self.reader, USBReplyReader):
+      self.reader = USBReplyReader(self.reader.io)
+    self._active = True
+    self._stopping = False
+    try:
+      async with AsyncExitStackWithShielding() as stack:
+        group = await stack.enter_task_group()
+        reader_scope = anyio.CancelScope(shield=True)
+        stack.callback(self._stop, reader_scope)
+        group.start_soon(self._run, reader_scope)
+        yield self
+    finally:
+      self._stopping = True
+      self._active = False

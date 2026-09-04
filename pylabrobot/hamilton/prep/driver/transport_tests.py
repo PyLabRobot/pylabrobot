@@ -17,7 +17,6 @@ from pylabrobot.hamilton.transport.tcp.messages import HoiParams
 from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, HoiPacket
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
-from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.tests.tcp_tests import _MemorySocket, _response, _SessionTest
 from pylabrobot.hamilton.transport.tcp.wire_types import F32, Str
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
@@ -27,29 +26,28 @@ from pylabrobot.resources.hamilton import PrepDeck
 class TestPrepTransport(_SessionTest):
   """Check request binding, typed responses, and failure ownership end to end."""
 
-  def start_session(
+  async def start_session(
     self, driver: PrepDriver, address: Address, session_type: type = TCPSession
   ) -> _MemorySocket:
     """Install a fresh production session without opening a network connection."""
     io = _MemorySocket()
     driver.io._session = session_type(io, error_codes=PREP_ERROR_CODES)
     driver.io._session.client_address = Address(2, 1, 65535)
-    driver.io._session.state = SessionState.CONNECTING
+    await self._sessions.enter_async_context(driver.io._session.lifespan())
     for path in (MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH):
       driver.io.registry.register(path, ObjectInfo(path.rsplit(".", 1)[-1], "", 0, 0, address))
     driver.io._session.start_reader()
     return io
 
-  def make_driver(self) -> tuple[PrepDriver, _MemorySocket]:
+  async def make_driver(self) -> tuple[PrepDriver, _MemorySocket]:
     """Provide a Prep driver using the production reader and transaction code."""
     driver = PrepDriver(deck=PrepDeck(), host="memory-only", port=0)
-    io = self.start_session(driver, Address(1, 1, 257))
-    self.addAsyncCleanup(driver.io.stop)
+    io = await self.start_session(driver, Address(1, 1, 257))
     return driver, io
 
   async def test_tip_presence_uses_each_objects_named_method_and_cached_table(self):
     """Sensor IDs come from discovery; repeated reads reuse the session's method tables."""
-    client, io = self.make_driver()
+    client, io = await self.make_driver()
     channels = Pipettes(client)
     rear, front = Address(1, 236, 514), Address(1, 237, 514)
     tables = {
@@ -112,7 +110,7 @@ class TestPrepTransport(_SessionTest):
       [MethodInfo(1, 0, 15, "GetTipPresent"), MethodInfo(2, 0, 15, "GetTipPresent")],
     ):
       with self.subTest(methods=methods):
-        client, io = self.make_driver()
+        client, io = await self.make_driver()
         channels = Pipettes(client)
         channels.channels = [
           PipetteChannel(index=0, driver=client, sleeve_sensor=Address(1, 236, 514))
@@ -129,8 +127,7 @@ class TestPrepTransport(_SessionTest):
   async def test_prep_session_logs_each_request_and_its_answer(self):
     """The request, the object it went to, and the decoded answer or the firmware error, at DEBUG level."""
     driver = PrepDriver(deck=PrepDeck(), host="memory-only", port=0)
-    io = self.start_session(driver, Address(1, 1, 257), session_type=_PrepTCPSession)
-    self.addAsyncCleanup(driver.io.stop)
+    io = await self.start_session(driver, Address(1, 1, 257), session_type=_PrepTCPSession)
     answers = [
       (Hoi2Action.STATUS_RESPONSE, HoiParams().add(180.0, F32).build()),
       (
@@ -160,8 +157,7 @@ class TestPrepTransport(_SessionTest):
     """A probe by ids decodes nothing itself: its answer is logged as values, structures opened, not as bytes."""
     driver = PrepDriver(deck=PrepDeck(), host="memory-only", port=0)
     address = Address(1, 1, 257)
-    io = self.start_session(driver, address, session_type=_PrepTCPSession)
-    self.addAsyncCleanup(driver.io.stop)
+    io = await self.start_session(driver, address, session_type=_PrepTCPSession)
     inner = HoiParams().add(1.5, F32).build()
     params = HoiParams().add(180.0, F32).build() + bytes([30, 0, len(inner), 0]) + inner
 
@@ -175,12 +171,12 @@ class TestPrepTransport(_SessionTest):
     self.assertIn("read: [180.0, [1.5]]", lines[1])
 
   async def test_reusable_request_rebinds_after_reconnection(self):
-    client, io = self.make_driver()
+    client, io = await self.make_driver()
     command = C.PrepGetDefaultTraverseHeight()
     for address in (Address(1, 1, 257), Address(1, 2, 300)):
       if address.node == 2:
-        await client.io.stop()
-        io = self.start_session(client, address)
+        await self._sessions.aclose()
+        io = await self.start_session(client, address)
 
       async def respond(request: HarpPacket) -> None:
         """Return the requested scalar to the current session."""
@@ -203,7 +199,7 @@ class TestPrepTransport(_SessionTest):
       command.dest = Address(1, 1, 999)  # type: ignore[misc]
 
   async def test_identity_query_uses_runtime_interface_and_method(self):
-    client, io = self.make_driver()
+    client, io = await self.make_driver()
 
     async def respond(request: HarpPacket) -> None:
       """Inspect the real encoded probe and return a string fragment."""
@@ -223,7 +219,7 @@ class TestPrepTransport(_SessionTest):
     self.assertEqual(await client.request_firmware_string(Address(1, 1, 257), 9), "PREP123")
 
   async def test_execute_raises_firmware_error_and_exchange_preserves_frame(self):
-    client, io = self.make_driver()
+    client, io = await self.make_driver()
     payload = HoiParams().add("0x0001.0x0001.0x0101:0x01,0x0006,0x0F08", Str).build()
 
     async def respond(request: HarpPacket) -> None:
@@ -241,7 +237,7 @@ class TestPrepTransport(_SessionTest):
     self.assertEqual(client.io.connection_info.state, SessionState.READY)
 
   async def test_errors_follow_selected_channels_instead_of_firmware_ordinals(self):
-    client, io = self.make_driver()
+    client, io = await self.make_driver()
     command = C.PrepDispenseInitToWaste(
       waste_parameters=[
         C.DispenseInitToWasteParameters(False, C.ChannelIndex.FrontChannel, 12.5, 12.5, 12.5),
@@ -259,7 +255,7 @@ class TestPrepTransport(_SessionTest):
     self.assertEqual(set(caught.exception.errors), {1})
 
   async def test_cancellation_prevents_further_prep_queries(self):
-    client, io = self.make_driver()
+    client, io = await self.make_driver()
     task = asyncio.create_task(client.send_command(C.PrepGetDefaultTraverseHeight()))
     await self.wait_until(lambda: len(io.writes) == 1)
     task.cancel()
@@ -271,30 +267,25 @@ class TestPrepTransport(_SessionTest):
     self.assertEqual(len(io.writes), 1)
 
   async def test_failed_prep_identity_check_closes_the_session(self):
-    client, io = self.make_driver()
-    with (
-      patch.object(HamiltonTCPClient, "setup", new=AsyncMock()),
-      patch.object(client, "request_root_name", new=AsyncMock(return_value="WrongRoot")),
-    ):
+    client = PrepSimulationDriver(deck=PrepDeck())
+    with patch.object(client, "request_root_name", new=AsyncMock(return_value="WrongRoot")):
       with self.assertRaisesRegex(RuntimeError, "Wrong instrument"):
-        await client._open()
-    self.assertTrue(io.closed)
+        async with client:
+          pass
     self.assertEqual(client.io.connection_info.state, SessionState.CLOSED)
 
   async def test_simulation_decodes_queries_and_invalidates_retained_discovery(self):
     client = PrepSimulationDriver(deck=PrepDeck())
-    await client._open()
-    self.addAsyncCleanup(client._close)
-    intro = client.io.introspection
-    address = await client.resolve_path(PIPETTOR_OBJECT_PATH)
-    result = await client.send_command(C.PrepGetIsInitialized(dest=client.mlprep_address))
-    self.assertIsInstance(result, C.PrepGetIsInitialized.Response)
-    frame = await client.exchange(C.PrepPark())
-    self.assertEqual(frame.harp.action_code, 4)
-    await client._close()
-    await client._open()
-    with self.assertRaises(ConnectionError):
-      await intro.methods_for_interface(address, 1)
+    async with client:
+      intro = client.io.introspection
+      address = await client.resolve_path(PIPETTOR_OBJECT_PATH)
+      result = await client.send_command(C.PrepGetIsInitialized(dest=client.mlprep_address))
+      self.assertIsInstance(result, C.PrepGetIsInitialized.Response)
+      frame = await client.exchange(C.PrepPark())
+      self.assertEqual(frame.harp.action_code, 4)
+    async with client:
+      with self.assertRaises(ConnectionError):
+        await intro.methods_for_interface(address, 1)
 
   def test_nested_move_payload_matches_firmware_bytes(self):
     command = C.PrepMoveToPosition(
@@ -313,7 +304,7 @@ class TestPrepTransport(_SessionTest):
     )
 
   async def test_channel_bounds_decode_nested_structures_in_channel_order(self):
-    client, io = self.make_driver()
+    client, io = await self.make_driver()
     client.io.registry.register(
       C.PrepGetChannelBounds.firmware_path,
       ObjectInfo("PipettorService", "", 0, 0, Address(1, 1, 257)),
@@ -362,13 +353,13 @@ class TestPrepTransport(_SessionTest):
 
   async def test_reconnection_during_path_resolution_cannot_send_an_old_address(self):
     for raw in (False, True):
-      client, io = self.make_driver()
+      client, io = await self.make_driver()
       fresh_sockets: list[_MemorySocket] = []
 
       async def resolve(path: str) -> Address:
         """Replace the session while a firmware-path lookup is in flight."""
-        await client.io.stop()
-        fresh = self.start_session(client, Address(1, 2, 300))
+        await self._sessions.aclose()
+        fresh = await self.start_session(client, Address(1, 2, 300))
         fresh.on_write = AsyncMock(side_effect=AssertionError("stale address reached new session"))
         fresh_sockets.append(fresh)
         return Address(1, 1, 257)
