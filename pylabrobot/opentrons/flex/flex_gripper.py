@@ -23,7 +23,8 @@ from pylabrobot.opentrons.flex.flex_wire import (
   _require_robot_commands,
   slot_wire_location,
 )
-from pylabrobot.opentrons.operations import OperationLock, instrument_operation
+from pylabrobot.opentrons.operations import instrument_operation
+from pylabrobot.opentrons.run import RobotOperationLock
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:
@@ -61,7 +62,7 @@ class FlexGripper:
     self.gripper_model = gripper_model
 
   @property
-  def _operation_lock(self) -> OperationLock:
+  def _operation_lock(self) -> RobotOperationLock:
     """Share the device lock across heads, gripper, and lifecycle methods."""
     return self.flex._operation_lock
 

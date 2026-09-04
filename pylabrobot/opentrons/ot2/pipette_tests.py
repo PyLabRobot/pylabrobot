@@ -562,7 +562,7 @@ class OT2SingleChannelTests(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(asyncio.wait_for, movement, timeout=1)
     self.addCleanup(release.set)
     await asyncio.wait_for(entered.wait(), timeout=1)
-    stop = asyncio.create_task(self.robot.stop())
+    stop = asyncio.create_task(self.robot._stop_run())
     try:
       await asyncio.sleep(0)
       self.assertFalse(stop.done())

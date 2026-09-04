@@ -36,6 +36,7 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
     head, gripper = self.flex.right_pipette, self.flex.gripper
     assert head is not None and gripper is not None
     await self.flex.disconnect()
+    await self.flex.stop()
     await self.flex.setup()
     self.api.submit_command.reset_mock()
     with self.assertRaises(RuntimeError):
@@ -99,6 +100,7 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_initialization_failure_releases_created_run(self):
     await self.flex.disconnect()
+    await self.flex.stop()
     with patch.object(
       self.flex, "initialize", AsyncMock(side_effect=RuntimeError("bad instrument"))
     ):
@@ -109,11 +111,12 @@ class FlexLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_health_failure_closes_opened_transport(self):
     await self.flex.disconnect()
-    with patch.object(self.io, "stop", AsyncMock()) as stop:
-      with patch.object(
-        self.flex._api, "get_health", AsyncMock(side_effect=RuntimeError("bad health"))
-      ):
-        with self.assertRaisesRegex(RuntimeError, "bad health"):
-          await self.flex.connect()
-      stop.assert_awaited_once()
+    await self.flex.stop()
+    with patch.object(
+      self.flex._api, "get_health", AsyncMock(side_effect=RuntimeError("bad health"))
+    ):
+      with self.assertRaisesRegex(RuntimeError, "bad health"):
+        async with self.flex.lifespan(query_only=True):
+          pass
+    self.io.stop.assert_not_awaited()
     self.assertFalse(self.flex._connected)
