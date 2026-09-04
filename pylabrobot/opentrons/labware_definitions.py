@@ -118,8 +118,11 @@ def _cavity_floor_z(container: Container) -> float:
   try:
     return container.material_z_thickness
   except NotImplementedError as e:
+    # Name the plate the caller passed, not the individual well, when the
+    # container sits in one; a bare container (a trough) names itself.
+    owner = container.parent if isinstance(container.parent, Plate) else container
     raise ValueError(
-      f"'{container.name}' does not declare material_z_thickness, so the height of its "
+      f"'{owner.name}' does not declare material_z_thickness, so the height of its "
       "cavity floor above its base is unknown. An Opentrons definition anchors liquid "
       "ops at that floor, so building one would aim them at the labware's outer base "
       "instead. Give the resource a material_z_thickness, or an official Opentrons "
