@@ -329,17 +329,11 @@ class PreciseFlex:
   async def _discover_configuration(self) -> None:
     """Adopt what the controller reports, so the class defaults are not used blind.
 
-    The link lengths land here, so skipping this leaves IK solving for the wrong arm.
+    A failed read ends ``initialize()``. The link lengths land here, so carrying on
+    without them leaves IK solving for the wrong arm and the gripper with no limits
+    to hold a target inside.
     """
-    try:
-      self._configuration = await self._request_configuration()
-    except Exception as exc:  # discovery is best-effort
-      logger.warning(
-        "[PreciseFlex %s] could not read configuration, using defaults: %s",
-        self.io._host,
-        exc,
-      )
-      return
+    self._configuration = await self._request_configuration()
     self._adopt_configuration(self._configuration)
     if self.parking_position is None:
       self.parking_position = self.PARKING_POSITION_RIGHT
@@ -1699,15 +1693,6 @@ class PreciseFlex:
       raise RuntimeError("Configuration is not available until setup() has run.")
     return self._configuration
 
-  @property
-  def has_configuration(self) -> bool:
-    """Whether the controller's configuration was actually read.
-
-    Discovery is best-effort, so an arm can finish setup and still not know its own
-    limits. A caller that would rather adapt than be raised at asks this first.
-    """
-    return self._configuration is not None
-
   async def _request_configuration(self) -> "PreciseFlexConfiguration":
     """Read the controller's identity, axes, limits, kinematics, and envelope.
 
@@ -2491,20 +2476,16 @@ class PreciseFlex:
       force_sensing,
     )
     units = self._mm_to_firmware_units(width)
-    if self._gripper_soft_min is not None and self._gripper_soft_max is not None:
-      # An advertised end converts back through a subtract and an add, so it can land a
-      # few ulps outside the limit it was derived from. That is dust, not out of range.
-      if not (
-        self._gripper_soft_min - _GRIPPER_UNIT_EPS
-        <= units
-        <= self._gripper_soft_max + _GRIPPER_UNIT_EPS
-      ):
-        raise ValueError(
-          f"gripper width {width} mm maps to firmware units {units:.1f}, outside the gripper "
-          f"axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - check "
-          f"closed_gripper_position (currently {self.closed_gripper_position})."
-        )
-      units = self._within_gripper_limits(units)
+    soft_min, soft_max = self._gripper_limits()
+    # An advertised end converts back through a subtract and an add, so it can land a
+    # few ulps outside the limit it was derived from. That is dust, not out of range.
+    if not (soft_min - _GRIPPER_UNIT_EPS <= units <= soft_max + _GRIPPER_UNIT_EPS):
+      raise ValueError(
+        f"gripper width {width} mm maps to firmware units {units:.1f}, outside the gripper "
+        f"axis range [{soft_min}, {soft_max}] - check closed_gripper_position "
+        f"(currently {self.closed_gripper_position})."
+      )
+    units = self._within_gripper_limits(units)
     await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(units)
@@ -2547,16 +2528,25 @@ class PreciseFlex:
       await self._set_grip_open_pos(position)
       await self.send_command("gripper 1")
 
-  def _within_gripper_limits(self, units: float) -> float:
-    """A gripper target held a little inside the axis' soft limits.
+  def _gripper_limits(self) -> tuple[float, float]:
+    """The gripper axis' soft limits, refusing if the arm has not read them.
 
-    Both ends are adopted together off one discovered tuple, so the arm has either
-    read its limits or read neither, and before setup there is nothing to hold to.
+    Both ends are adopted together off one discovered tuple, so the arm has read both
+    or neither. A target sent past the end is what strands the axis, so a caller that
+    has not brought the arm up is told rather than obeyed.
     """
     if self._gripper_soft_min is None or self._gripper_soft_max is None:
-      return units
-    low = self._gripper_soft_min + _GRIPPER_LIMIT_HEADROOM
-    high = self._gripper_soft_max - _GRIPPER_LIMIT_HEADROOM
+      raise RuntimeError(
+        "the gripper axis' limits have not been read, so a target cannot be held "
+        "inside them. Run initialize() before moving the gripper."
+      )
+    return self._gripper_soft_min, self._gripper_soft_max
+
+  def _within_gripper_limits(self, units: float) -> float:
+    """A gripper target held a little inside the axis' soft limits."""
+    soft_min, soft_max = self._gripper_limits()
+    low = soft_min + _GRIPPER_LIMIT_HEADROOM
+    high = soft_max - _GRIPPER_LIMIT_HEADROOM
     held = min(max(units, low), high)
     if held != units:
       logger.warning(
@@ -2564,8 +2554,8 @@ class PreciseFlex:
         self.io._host,
         units,
         held,
-        self._gripper_soft_min,
-        self._gripper_soft_max,
+        soft_min,
+        soft_max,
       )
     return held
 

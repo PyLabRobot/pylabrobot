@@ -82,11 +82,6 @@ class PreciseFlexConfiguration:
 
   @property
   def gripper_width_range(self) -> tuple[float, float]:
-    """Travel limits of the gripper axis, in the controller's own units.
-
-    Not millimetres: a jaw width reaches these through
-    ``PreciseFlex.closed_gripper_position``, so callers must convert.
-    """
     return self.soft_limits[Axis.GRIPPER]
 
   @property
