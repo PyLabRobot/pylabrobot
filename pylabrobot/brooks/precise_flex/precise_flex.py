@@ -5,7 +5,18 @@ import dataclasses
 import logging
 import time
 import warnings
-from typing import Callable, ClassVar, Dict, List, Literal, NamedTuple, Optional, Sequence
+from contextlib import asynccontextmanager
+from typing import (
+  AsyncIterator,
+  Callable,
+  ClassVar,
+  Dict,
+  List,
+  Literal,
+  NamedTuple,
+  Optional,
+  Sequence,
+)
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.config import Axis, PreciseFlexConfiguration
@@ -28,6 +39,11 @@ from .kinematics import ElbowOrientation, PreciseFlexCartesianPose, Wrist
 from .tcs_modules import missing_required_modules
 
 logger = logging.getLogger(__name__)
+
+# Float dust allowed when a converted jaw width is compared with the axis limit it
+# was derived from.
+_GRIPPER_UNIT_EPS = 1e-6
+_GRIPPER_LIMIT_HEADROOM = 0.5
 
 
 # InRange sentinel that lets the controller blend through waypoints instead of stopping at each one.
@@ -188,9 +204,11 @@ class PreciseFlex:
         Every recovery is logged.
       closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
         ``GripOpenPos``) at which the jaws are at :attr:`min_gripper_width`.
-        Depends on the mounted gripper. The conversion mm → firmware units is
-        linear with slope 1: ``units = closed_gripper_position + (width_mm -
-        min_gripper_width)``.
+        Depends on the mounted gripper. That pairing is the anchor for the
+        mm → firmware unit conversion, which is linear with slope 1, and it is
+        frozen at construction: setup discovers the axis limits and rewrites
+        :attr:`min_gripper_width`, so reading it later would move what a width
+        means.
       parking_position: initial value for the public, runtime-settable ``parking_position`` that
         ``park()`` moves to. Leave None (the default) and setup fills the generic default RIGHT pose
         (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
@@ -207,6 +225,9 @@ class PreciseFlex:
     self._has_rail = has_rail
     self._is_dual_gripper = is_dual_gripper
     self.closed_gripper_position = closed_gripper_position
+    # closed_gripper_position was calibrated against whatever min_gripper_width read
+    # when it was measured, so that width is the anchor and discovery must not move it.
+    self._anchor_width_mm = self.min_gripper_width
     self._kinematics_params = kinematics.PF400Params(
       gripper_length=gripper_length, gripper_z_offset=gripper_z_offset
     )
@@ -277,40 +298,47 @@ class PreciseFlex:
     },
   )
   async def setup(self, skip_home: bool = False):
-    """Initialize the PreciseFlex driver.
-
-    Opens the socket connection, sets response mode to PC, powers on the
-    robot, attaches it, and (optionally) homes it.
+    """Bring the arm fully up: link, control, and (unless skipped) home.
 
     Args:
       skip_home: If True, skip the homing step during setup.
     """
-    await self.io.setup()
-    await self.set_response_mode("pc")
-    await self.power_on_robot()
-    await self.attach(1)
+    await self.connect()
+    await self.initialize()
     if not skip_home:
       await self.home()
+    await self._handle_out_of_range_axes()
+
+  async def connect(self) -> None:
+    """Open the link and agree the response protocol. Powers nothing, moves nothing."""
+    await self.io.setup()
+    await self.set_response_mode("pc")
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
+  async def initialize(self) -> None:
+    """Raise high power, take control, and adopt the controller's own configuration.
+
+    Moves nothing. Homing is ``home()``, deliberately separate: it sweeps the arm
+    through its whole envelope, which is not something to do just to bring it up.
+    """
+    await self.power_on_robot()
+    await self.attach(1)
     await self.stop_freedrive_mode()
-    # Resolve the device configuration once and adopt it as the source of truth;
-    # without it the class defaults stay in place.
-    try:
-      self._configuration = await self._request_configuration()
-    except Exception as exc:  # discovery is best-effort
-      logger.warning(
-        "[PreciseFlex %s] could not read configuration, using defaults: %s",
-        self.io._host,
-        exc,
-      )
-      return
+    await self._discover_configuration()
+
+  async def _discover_configuration(self) -> None:
+    """Adopt what the controller reports, so the class defaults are not used blind.
+
+    A failed read ends ``initialize()``. The link lengths land here, so carrying on
+    without them leaves IK solving for the wrong arm and the gripper with no limits
+    to hold a target inside.
+    """
+    self._configuration = await self._request_configuration()
     self._adopt_configuration(self._configuration)
     if self.parking_position is None:
       self.parking_position = self.PARKING_POSITION_RIGHT
     self._log_configuration_summary(self._configuration)
     self._assess_configuration(self._configuration)
-    await self._handle_out_of_range_axes()
 
   @evented_operation(
     "precise_flex.stop",
@@ -318,6 +346,13 @@ class PreciseFlex:
   )
   async def stop(self):
     """Stop the PreciseFlex driver."""
+    await self.disconnect()
+
+  async def disconnect(self) -> None:
+    """Hand the arm back and close the link. Moves nothing.
+
+    Drops high power as well as releasing the link, because ``initialize`` raised it.
+    """
     await self.detach()
     await self.power_off_robot()
     await self._exit()
@@ -518,6 +553,12 @@ class PreciseFlex:
     until the move ends (hardware-verified). Polling instead leaves the connection free between
     samples, so a user interrupt can stop the move mid-flight via ``halt`` and other controller
     commands (status, vision, barcode) can run during motion.
+
+    That free connection is also the hazard, so this is the barrier every command that *starts*
+    motion crosses first: the gripper and the rail call it directly, joint and Cartesian moves reach
+    it through ``request_joint_position`` inside ``_guarded_move_j``. ``moveJ`` returns as soon as
+    the controller accepts it, so without the barrier the next command lands mid-travel - a grip
+    issued after the approach closes the jaws while the arm is still descending onto the plate.
 
     Raises:
       TimeoutError: if the arm never settles within ``timeout`` seconds.
@@ -742,7 +783,7 @@ class PreciseFlex:
       )
     await self.send_command(f"moveJ {profile_index} {angles_str}")
 
-  async def _move_one_axis(self, axis: Axis, position: float) -> None:
+  async def _recover_axis(self, axis: Axis, position: float) -> None:
     """Move a single axis to an absolute position (firmware ``MoveOneAxis``).
 
     Used for recovery: the controller blocks a normal move while an axis is out of
@@ -1175,6 +1216,34 @@ class PreciseFlex:
     """Get the current speed percentage of the arm's movement."""
     return await self.request_profile_speed(self.profile_index)
 
+  @asynccontextmanager
+  async def at_speed(self, speed_pct: Optional[float]) -> AsyncIterator[None]:
+    """Run a move at its own speed, then put the profile speed back.
+
+    The restore belongs here rather than with the caller: a fault between the move
+    and the restore would otherwise leave the arm slow for everything after it.
+    """
+    if speed_pct is None:
+      yield
+      return
+    prior = await self._request_speed()
+    await self._set_speed(speed_pct)
+    try:
+      yield
+    finally:
+      try:
+        await self._set_speed(prior)
+      except Exception:
+        # Raising here replaces whatever the move was already failing with, so name the
+        # state plainly: the arm is still at the move's speed and nothing else will reset it.
+        logger.error(
+          "[PreciseFlex %s] could not restore profile speed to %s; the arm is still at %s",
+          self.io._host,
+          prior,
+          speed_pct,
+        )
+        raise
+
   # -- brakes, torque & freedrive -----------------------------------------------------------
 
   async def release_brake(self, axis: int) -> None:
@@ -1338,12 +1407,15 @@ class PreciseFlex:
       raise PreciseFlexError(-1, "Unexpected response format from GraspData command.")
     return (float(parts[0]), float(parts[1]), float(parts[2]))
 
-  async def _set_grasp_data(
+  async def set_grasp_data(
     self, plate_width: float, finger_speed_pct: float, grasp_force: float
   ) -> None:
-    """Set the data to be used for the next force-controlled PickPlate command grip operation.
+    """Set the data the next force-controlled PickPlate grip will use.
 
-    This data remains in effect until the next GraspData command or the system is restarted.
+    Stateful, and not sticky: ``pick_up_at_location`` and ``pick_up_at_station``
+    write it themselves on every call, so data set here is lost if one of those
+    runs before the pick that wanted it. Otherwise it stands until the next
+    GraspData command or a controller restart.
 
     Args:
       plate_width: The plate width in mm.
@@ -1359,17 +1431,17 @@ class PreciseFlex:
       raise ValueError(f"finger_speed_pct must be between 0 and 100, got {finger_speed_pct}")
     await self.send_command(f"GraspData {plate_width} {finger_speed_pct} {grasp_force}")
 
-  async def _set_grip_detail(self):
+  async def _set_grip_detail(self) -> None:
     """Configure a default vertical station type for pick/place operations."""
     await self.send_command(f"StationType {self.location_index} 1 0 100 0 10")
 
   def _mm_to_firmware_units(self, width_mm: float) -> float:
     """Convert a jaw width (mm) to the firmware's native position unit.
 
-    Anchored at :attr:`closed_gripper_position`, which is the firmware value
-    when the jaws are at :attr:`min_gripper_width`. Slope is 1 (1 mm = 1 unit).
+    Anchored on the construction-time calibration pair, so a given width commands the
+    same jaw travel whether or not setup has discovered the axis limits. Slope is 1.
     """
-    return self.closed_gripper_position + (width_mm - self.min_gripper_width)
+    return self.closed_gripper_position + (width_mm - self._anchor_width_mm)
 
   # -- rail primitives ----------------------------------------------------------------------
 
@@ -1729,7 +1801,10 @@ class PreciseFlex:
     """
     gmin, gmax = config.gripper_width_range
     self._gripper_soft_min, self._gripper_soft_max = gmin, gmax
-    self.min_gripper_width, self.max_gripper_width = gmin, gmax
+    # The limits are gripper-axis units. Both ends convert through the anchor: copying
+    # them in would put units in a millimetre field and change what a width means.
+    self.min_gripper_width = self._anchor_width_mm + (gmin - self.closed_gripper_position)
+    self.max_gripper_width = self._anchor_width_mm + (gmax - self.closed_gripper_position)
     self._kinematics_params = config.kinematics
     self._has_rail = config.has_rail
     self._is_dual_gripper = config.is_dual_gripper
@@ -1867,7 +1942,7 @@ class PreciseFlex:
           hi,
           target,
         )
-        await self._move_one_axis(axis, target)
+        await self._recover_axis(axis, target)
         await self._wait_for_eom()
         recovered[axis] = target
     finally:
@@ -1989,7 +2064,7 @@ class PreciseFlex:
 
     When an axis is out of range the controller blocks the move (-1012). With ``recover_out_of_range``
     set, this drives the offending axes back into range once (``recover_axes_within_limits``) and
-    retries; otherwise the ``OutOfRangeOfMotionError`` propagates. Recovery uses ``_move_one_axis``, a
+    retries; otherwise the ``OutOfRangeOfMotionError`` propagates. Recovery uses ``_recover_axis``, a
     different primitive, so it cannot recurse here.
     """
 
@@ -2056,11 +2131,54 @@ class PreciseFlex:
     Args:
       position: Target joint pose. Omitted axes keep their live values.
       speed_pct: Movement speed override as a percentage (0-100). If None, uses the current
-        speed setting.
+        speed setting. This STICKS: it is not restored afterwards. Wrap a call in
+        ``at_speed`` instead to scope a speed to one move.
     """
     if speed_pct is not None:
       await self._set_speed(speed_pct)
     await self._guarded_move_j(lambda current: {**current, **position})
+
+  async def move_one_axis(
+    self,
+    axis: Axis,
+    position: float,
+    speed_pct: Optional[float] = None,
+  ) -> None:
+    """Move one axis to an absolute position, leaving every other axis where it is.
+
+    Guarded like any other commanded move, unlike ``_recover_axis``, which skips
+    the guard on purpose so it can free an axis the controller has already blocked.
+
+    Args:
+      axis: The axis to move.
+      position: Absolute target for that axis.
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+    """
+    await self.move_to_joint_position({axis: position}, speed_pct=speed_pct)
+
+  async def move_one_axis_relative(
+    self,
+    axis: Axis,
+    distance: float,
+    speed_pct: Optional[float] = None,
+  ) -> None:
+    """Shift one axis by ``distance`` from where it is now, leaving the others alone.
+
+    The offset is applied to the pose read inside the guarded move rather than to a
+    position read beforehand, so it cannot act on a stale reading. If the first
+    attempt is blocked and recovery shifts the axis, the retry offsets from the
+    recovered position, which is what a relative move should mean.
+
+    Args:
+      axis: The axis to move.
+      distance: Signed offset to apply to that axis, in the axis's own units.
+      speed_pct: Movement speed override as a percentage (0-100). If None, uses the
+        current speed setting.
+    """
+    if speed_pct is not None:
+      await self._set_speed(speed_pct)
+    await self._guarded_move_j(lambda current: {**current, axis: current[axis] + distance})
 
   async def request_gripper_pose(self) -> PreciseFlexCartesianPose:
     """Get the current pose using our kinematics model (no firmware `wherec`)."""
@@ -2316,8 +2434,8 @@ class PreciseFlex:
 
   # -- gripper ------------------------------------------------------------------------------
 
-  # Physical jaw range for the PF400 servoed gripper. Overridden at setup from the
-  # gripper-axis soft limits (DataIDs 16078/16077, Axis.GRIPPER) when discoverable.
+  # Physical jaw range for the PF400 servoed gripper. The minimum doubles as the
+  # calibration anchor for closed_gripper_position; setup converts both ends off it.
   min_gripper_width: float = 60.0
   max_gripper_width: float = 145.0
   # Gripper-axis soft limits (GripOpenPos/GripClosePos units), read at setup; None until then.
@@ -2340,8 +2458,11 @@ class PreciseFlex:
     """Move the PreciseFlex gripper jaws.
 
     ``force_sensing=False`` drives to the open position (``gripper 1``);
-    ``force_sensing=True`` drives to the close position with force feedback
-    (``gripper 2``), which may stop short of ``width`` on contact.
+    ``force_sensing=True`` drives to the close position (``gripper 2``). Both are
+    position moves: ``gripper 2`` limits the force it applies getting there, but it
+    does not stop the jaws where they meet something. Command the width a held
+    object wants, not a tighter one. Commanding past a held object leaves a standing
+    position error the controller reports as an overheating motor (-3104).
 
     Not interruptible: the ``gripper`` firmware command blocks the controller's command interpreter
     until the jaws finish (hardware-verified, like ``waitForEom``), so a user interrupt cannot halt it
@@ -2355,16 +2476,17 @@ class PreciseFlex:
       force_sensing,
     )
     units = self._mm_to_firmware_units(width)
-    if (
-      self._gripper_soft_min is not None
-      and self._gripper_soft_max is not None
-      and not (self._gripper_soft_min <= units <= self._gripper_soft_max)
-    ):
+    soft_min, soft_max = self._gripper_limits()
+    # An advertised end converts back through a subtract and an add, so it can land a
+    # few ulps outside the limit it was derived from. That is dust, not out of range.
+    if not (soft_min - _GRIPPER_UNIT_EPS <= units <= soft_max + _GRIPPER_UNIT_EPS):
       raise ValueError(
         f"gripper width {width} mm maps to firmware units {units:.1f}, outside the gripper "
-        f"axis range [{self._gripper_soft_min}, {self._gripper_soft_max}] - check "
-        f"closed_gripper_position (currently {self.closed_gripper_position})."
+        f"axis range [{soft_min}, {soft_max}] - check closed_gripper_position "
+        f"(currently {self.closed_gripper_position})."
       )
+    units = self._within_gripper_limits(units)
+    await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(units)
       await self.send_command("gripper 2")
@@ -2389,13 +2511,60 @@ class PreciseFlex:
 
     This is the counterpart to :meth:`move_gripper` for integrations with
     taught joint-space routes. The caller owns the joint calibration.
+
+    A target outside the axis is held to the nearest end rather than refused,
+    which is the opposite of :meth:`move_gripper`. A width in mm that lands
+    out of range means ``closed_gripper_position`` is wrong, which is worth
+    raising on; a taught joint position that does is a route reaching a little
+    past the stop, and holding it there is what the route wanted. Either way
+    the arm never receives a target past the end, which is what strands it.
     """
+    position = self._within_gripper_limits(position)
+    await self._wait_for_eom()
     if force_sensing:
       await self._set_grip_close_pos(position)
       await self.send_command("gripper 2")
     else:
       await self._set_grip_open_pos(position)
       await self.send_command("gripper 1")
+
+  def _gripper_limits(self) -> tuple[float, float]:
+    """The gripper axis' soft limits, refusing if the arm has not read them.
+
+    Both ends are adopted together off one discovered tuple, so the arm has read both
+    or neither. A target sent past the end is what strands the axis, so a caller that
+    has not brought the arm up is told rather than obeyed.
+    """
+    if self._gripper_soft_min is None or self._gripper_soft_max is None:
+      raise RuntimeError(
+        "the gripper axis' limits have not been read, so a target cannot be held "
+        "inside them. Run initialize() before moving the gripper."
+      )
+    return self._gripper_soft_min, self._gripper_soft_max
+
+  def _within_gripper_limits(self, units: float) -> float:
+    """A gripper target held a little inside the axis' soft limits."""
+    soft_min, soft_max = self._gripper_limits()
+    low = soft_min + _GRIPPER_LIMIT_HEADROOM
+    high = soft_max - _GRIPPER_LIMIT_HEADROOM
+    held = min(max(units, low), high)
+    if held != units:
+      logger.warning(
+        "[PreciseFlex %s] gripper target %s held to %s, inside [%s, %s]",
+        self.io._host,
+        units,
+        held,
+        soft_min,
+        soft_max,
+      )
+    return held
+
+  @property
+  def gripper_joint_range(self) -> tuple[Optional[float], Optional[float]]:
+    """The gripper axis' soft limits in controller units, None at either end the arm
+    has not read. A jaw width in mm reaches these through ``closed_gripper_position``.
+    """
+    return self._gripper_soft_min, self._gripper_soft_max
 
   async def is_gripper_closed(self) -> bool:
     """(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.
@@ -2438,6 +2607,7 @@ class PreciseFlex:
     """
     if not self._has_rail:
       raise RuntimeError("This arm does not have a rail.")
+    await self._wait_for_eom()
     await self._set_rail_position(self._rail_position_index, rail_position)
     await self._move_rail(station_id=self._rail_position_index)
 
@@ -2474,7 +2644,7 @@ class PreciseFlex:
       position,
       resource_width,
     )
-    await self._set_grasp_data(
+    await self.set_grasp_data(
       plate_width=resource_width,
       finger_speed_pct=finger_speed_pct,
       grasp_force=grasp_force,
@@ -2557,9 +2727,7 @@ class PreciseFlex:
       direction,
       resource_width,
     )
-    if rail_position is not None:
-      await self.move_rail(rail_position)
-    elif self._has_rail:
+    if rail_position is None and self._has_rail:
       raise ValueError(
         "rail_position must be specified for pick_up_at_location when using a rail-equipped arm."
       )
@@ -2569,7 +2737,9 @@ class PreciseFlex:
       orientation=orientation,
       wrist=wrist,
     )
-    await self._set_grasp_data(
+    if rail_position is not None:
+      await self.move_rail(rail_position)
+    await self.set_grasp_data(
       plate_width=resource_width,
       finger_speed_pct=finger_speed_pct,
       grasp_force=grasp_force,
@@ -2619,9 +2789,7 @@ class PreciseFlex:
       direction,
       resource_width,
     )
-    if rail_position is not None:
-      await self.move_rail(rail_position)
-    elif self._has_rail:
+    if rail_position is None and self._has_rail:
       raise ValueError(
         "rail_position must be specified for drop_at_location when using a rail-equipped arm."
       )
@@ -2631,9 +2799,11 @@ class PreciseFlex:
       orientation=orientation,
       wrist=wrist,
     )
+    if rail_position is not None:
+      await self.move_rail(rail_position)
     await self._place_plate_c(cartesian_position=coords)
 
-  async def _pick_plate_j(self, joint_position: JointPose):
+  async def _pick_plate_j(self, joint_position: JointPose) -> None:
     """Pick a plate from the specified position using joint coordinates."""
     await self._set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail()
@@ -2644,7 +2814,7 @@ class PreciseFlex:
     if ret_code == "0":
       raise PreciseFlexError(-1, "the force-controlled gripper detected no plate present.")
 
-  async def _place_plate_j(self, joint_position: JointPose):
+  async def _place_plate_j(self, joint_position: JointPose) -> None:
     """Place a plate at the specified position using joint coordinates."""
     await self._set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail()
@@ -2653,12 +2823,12 @@ class PreciseFlex:
       f"placeplate {self.location_index} {horizontal_compliance_int} {self.horizontal_compliance_torque}"
     )
 
-  async def _pick_plate_c(self, cartesian_position: PreciseFlexCartesianPose):
+  async def _pick_plate_c(self, cartesian_position: PreciseFlexCartesianPose) -> None:
     """Pick a plate at a Cartesian position via IK + joint-space pickplate."""
     joints = await self._cart_to_joints(cartesian_position)
     await self._pick_plate_j(joints)
 
-  async def _place_plate_c(self, cartesian_position: PreciseFlexCartesianPose):
+  async def _place_plate_c(self, cartesian_position: PreciseFlexCartesianPose) -> None:
     """Place a plate at a Cartesian position via IK + joint-space placeplate."""
     joints = await self._cart_to_joints(cartesian_position)
     await self._place_plate_j(joints)
@@ -2696,7 +2866,18 @@ class PreciseFlex:
         position=self._parking_pose_with_default_z(self.parking_position)
       )
     else:
-      await self.send_command("movetosafe")
+      await self.move_to_safe()
+
+  async def move_to_safe(self) -> None:
+    """Run the controller's own retraction to its taught safe position.
+
+    This is the firmware ``movetosafe``: a sequence of safe moves the controller plans itself, not a
+    single joint target. The pose and the route live in the controller, so neither can be read back
+    or checked against the soft limits from here. ``park()`` is the counterpart this driver can
+    reason about. No collision checks against 3rd-party obstacles.
+    """
+    await self._wait_for_eom()
+    await self.send_command("movetosafe")
 
   def _validate_parking_position(self, position: JointPose) -> None:
     """Reject anything that is not a JointPose of in-range axes (limits checked once known)."""

@@ -7,7 +7,9 @@ from pylabrobot.brooks.precise_flex import (
   OutOfRangeOfMotionError,
   PreciseFlex,
   PreciseFlexCartesianPose,
+  PreciseFlexError,
 )
+from pylabrobot.brooks.precise_flex.precise_flex import _GRIPPER_LIMIT_HEADROOM
 from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -22,21 +24,56 @@ def mocked(method: object) -> AsyncMock:
 
 
 def _make_arm(closed_gripper_position: float = 500.0) -> PreciseFlex:
-  """An arm whose transport is stubbed out, so tests assert on the commands it would send."""
+  """An arm whose transport is stubbed out, so tests assert on the commands it would send.
+
+  ``wherej`` answers with a steady pose, which is what the settle poll every motion
+  command waits behind reads.
+  """
   arm = PreciseFlex(
     host="localhost",
     gripper_length=162.0,
     gripper_z_offset=0.0,
     closed_gripper_position=closed_gripper_position,
   )
-  arm.send_command = AsyncMock(return_value="")  # type: ignore[method-assign]
+
+  async def reply(command: str) -> str:
+    if command == "wherej":
+      return "40.48 84.76 229.84 -312.57 503.0"
+    return ""
+
+  arm.send_command = AsyncMock(side_effect=reply)  # type: ignore[method-assign]
+  return arm
+
+
+def _discovers(arm: PreciseFlex, limits: tuple = (490.0, 560.0)) -> MagicMock:
+  """Let bring-up read a configuration, without asserting on what the summary logs."""
+  discovered = MagicMock()
+  discovered.gripper_width_range = limits
+  discovered.has_rail = False
+  discovered.is_dual_gripper = False
+  # Wide enough that the default parking pose validates against them.
+  discovered.soft_limits = {axis: (-1000.0, 1000.0) for axis in Axis}
+  arm._request_configuration = AsyncMock(return_value=discovered)  # type: ignore[method-assign]
+  arm._log_configuration_summary = MagicMock()  # type: ignore[method-assign]
+  arm._assess_configuration = MagicMock()  # type: ignore[method-assign]
+  return discovered
+
+
+def _with_gripper_limits(arm: PreciseFlex, limits: tuple = ()) -> PreciseFlex:
+  """An arm that has read its gripper axis limits, which a gripper move now requires.
+
+  The default span is wide enough that a test asserting on the commanded units is not
+  also asserting on the headroom held back at each end.
+  """
+  lo, hi = limits or (arm.closed_gripper_position - 100.0, arm.closed_gripper_position + 200.0)
+  arm._gripper_soft_min, arm._gripper_soft_max = lo, hi
   return arm
 
 
 class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     # closed_gripper_position=500 ⇒ min_gripper_width(60mm) maps to 500 units.
-    self.arm = _make_arm(closed_gripper_position=500.0)
+    self.arm = _with_gripper_limits(_make_arm(closed_gripper_position=500.0))
 
   def _sent_commands(self) -> list[str]:
     return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
@@ -44,12 +81,12 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
   async def test_move_gripper_force_sensing_false_opens_with_position(self):
     # 80 mm ⇒ 500 + (80 - 60) = 520 firmware units.
     await self.arm.move_gripper(width=80.0, force_sensing=False)
-    self.assertEqual(self._sent_commands(), ["GripOpenPos 520.0", "gripper 1"])
+    self.assertEqual(self._sent_commands()[-2:], ["GripOpenPos 520.0", "gripper 1"])
 
   async def test_move_gripper_force_sensing_true_closes_with_position(self):
     # 60 mm (the closed reference) ⇒ exactly closed_gripper_position.
     await self.arm.move_gripper(width=60.0, force_sensing=True)
-    self.assertEqual(self._sent_commands(), ["GripClosePos 500.0", "gripper 2"])
+    self.assertEqual(self._sent_commands()[-2:], ["GripClosePos 500.0", "gripper 2"])
 
   async def test_move_gripper_position_command_precedes_move(self):
     await self.arm.move_gripper(width=120.0, force_sensing=False)
@@ -75,11 +112,11 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
 
   async def test_closed_gripper_position_shifts_units(self):
     # Different anchor ⇒ same width yields a different firmware-unit target.
-    arm = _make_arm(closed_gripper_position=1000.0)
+    arm = _with_gripper_limits(_make_arm(closed_gripper_position=1000.0))
     await arm.move_gripper(width=80.0, force_sensing=False)
     commands = [c.args[0] for c in mocked(arm.send_command).call_args_list]
     # 80 mm ⇒ 1000 + (80 - 60) = 1020 units.
-    self.assertEqual(commands, ["GripOpenPos 1020.0", "gripper 1"])
+    self.assertEqual(commands[-2:], ["GripOpenPos 1020.0", "gripper 1"])
 
   def test_mm_to_firmware_units_helper(self):
     # Direct check of the linear mapping.
@@ -90,7 +127,7 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
 
 class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
   async def test_gripper_event_uses_default_length_unit_field(self):
-    arm = _make_arm()
+    arm = _with_gripper_limits(_make_arm())
     events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
@@ -110,6 +147,7 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
     )
     arm.io.write = AsyncMock()  # type: ignore[method-assign]
     arm.io.readline = AsyncMock(return_value=b"0\n")  # type: ignore[method-assign]
+    _with_gripper_limits(arm)
     events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
@@ -138,6 +176,8 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       [event.data["command"] for event in firmware_events],
       [
+        "wherej",  # the settle poll the jaws wait behind
+        "wherej",
         "GripOpenPos 520.0",
         "gripper 1",
       ],
@@ -282,7 +322,7 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
   async def test_park_without_position_falls_back_to_movetosafe(self):
     """While parking_position is unset (no configuration), park() uses the firmware movetosafe."""
     await self.arm.park()
-    mocked(self.arm.send_command).assert_awaited_once_with("movetosafe")
+    mocked(self.arm.send_command).assert_awaited_with("movetosafe")
     self.assertEqual(self._movej_cmds(), [])
 
 
@@ -521,3 +561,462 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
         await self.arm.move_to_location(Coordinate(400.0, 0.0, 200.0), 0.0)
     self.assertIn(Axis.SHOULDER, ctx.exception.axes)
     self.assertEqual(self._cmds("moveJ"), [])
+
+
+def _make_linked_arm() -> PreciseFlex:
+  """An arm whose socket is stubbed too, for asserting on the bring-up sequence."""
+  arm = _make_arm()
+  arm.io = MagicMock()
+  arm.io.setup = AsyncMock()
+  arm.io.stop = AsyncMock()
+  arm.io.write = AsyncMock()
+  arm.io._host = "localhost"
+  arm.io._port = 10100
+  return arm
+
+
+class TestPreciseFlexLifecycle(unittest.IsolatedAsyncioTestCase):
+  """Opening the link, taking control, and homing are three separate verbs.
+
+  A caller that only wants to read a position can connect and initialize without
+  the arm ever moving; only ``home`` sweeps it.
+  """
+
+  def setUp(self):
+    self.arm = _make_linked_arm()
+
+  def _sent(self) -> list[str]:
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+
+  def _assert_moved_nothing(self):
+    for command in self._sent():
+      verb = command.split()[0].lower()
+      self.assertNotIn(
+        verb,
+        ("home", "homeall", "movej", "movec", "moveoneaxis", "gripper"),
+        f"bring-up must not move the arm, but it sent {command!r}",
+      )
+
+  async def test_connect_opens_the_link_and_agrees_the_protocol(self):
+    await self.arm.connect()
+    mocked(self.arm.io.setup).assert_awaited_once()
+    self.assertEqual(self._sent(), ["mode 0"])
+
+  async def test_connect_does_not_raise_power(self):
+    await self.arm.connect()
+    self.assertNotIn("hp 1", self._sent())
+    self._assert_moved_nothing()
+
+  async def test_bring_up_fails_when_the_arm_cannot_read_its_configuration(self):
+    """The link lengths ride on that read, so an arm that finished bring-up without it
+    would solve IK for a different machine and hold gripper targets against nothing."""
+    self.arm._request_configuration = AsyncMock(  # type: ignore[method-assign]
+      side_effect=RuntimeError("no controller")
+    )
+
+    with self.assertRaisesRegex(RuntimeError, "no controller"):
+      await self.arm.initialize()
+
+    with self.assertRaises(RuntimeError):
+      self.arm.configuration
+
+  async def test_initialize_takes_control_without_moving(self):
+    _discovers(self.arm)
+    await self.arm.initialize()
+    sent = self._sent()
+    self.assertIn("attach 1", sent)
+    self.assertIn("freemode -1", sent)
+    self.assertTrue(any(c.startswith("hp 1") for c in sent), sent)
+    self._assert_moved_nothing()
+
+  async def test_initialize_adopts_what_the_controller_reports(self):
+    # The link lengths ride on this: without it the arm solves IK for a different machine.
+    discovered = MagicMock()
+    discovered.soft_limits = {
+      Axis.SHOULDER: (-93.0, 93.0),
+      Axis.ELBOW: (12.0, 348.0),
+      Axis.WRIST: (-960.0, 960.0),
+    }
+    self.arm._request_configuration = AsyncMock(return_value=discovered)  # type: ignore[method-assign]
+    self.arm._adopt_configuration = MagicMock()  # type: ignore[method-assign]
+    self.arm._log_configuration_summary = MagicMock()  # type: ignore[method-assign]
+    self.arm._assess_configuration = MagicMock()  # type: ignore[method-assign]
+
+    await self.arm.initialize()
+
+    mocked(self.arm._adopt_configuration).assert_called_once_with(discovered)
+    self.assertIs(self.arm.configuration, discovered)
+
+  async def test_a_failed_read_is_not_adopted_as_a_configuration(self):
+    self.arm._request_configuration = AsyncMock(  # type: ignore[method-assign]
+      side_effect=RuntimeError("no controller")
+    )
+    self.arm._adopt_configuration = MagicMock()  # type: ignore[method-assign]
+
+    with self.assertRaises(RuntimeError):
+      await self.arm.initialize()
+
+    mocked(self.arm._adopt_configuration).assert_not_called()
+
+  async def test_disconnect_hands_the_arm_back_and_closes_the_link(self):
+    await self.arm.disconnect()
+    sent = self._sent()
+    self.assertIn("attach 0", sent)
+    self.assertIn("hp 0", sent)
+    mocked(self.arm.io.write).assert_awaited_once_with(b"exit\n")
+    mocked(self.arm.io.stop).assert_awaited_once()
+
+  async def test_setup_connects_then_initializes_then_homes_in_that_order(self):
+    calls: list[str] = []
+    self.arm.connect = AsyncMock(side_effect=lambda: calls.append("connect"))  # type: ignore[method-assign]
+    self.arm.initialize = AsyncMock(side_effect=lambda: calls.append("initialize"))  # type: ignore[method-assign]
+    self.arm.home = AsyncMock(side_effect=lambda: calls.append("home"))  # type: ignore[method-assign]
+    self.arm._handle_out_of_range_axes = AsyncMock()  # type: ignore[method-assign]
+
+    await self.arm.setup()
+
+    self.assertEqual(calls, ["connect", "initialize", "home"])
+
+  async def test_setup_skip_home_brings_the_arm_up_without_sweeping_it(self):
+    self.arm.connect = AsyncMock()  # type: ignore[method-assign]
+    self.arm.initialize = AsyncMock()  # type: ignore[method-assign]
+    self.arm.home = AsyncMock()  # type: ignore[method-assign]
+    self.arm._handle_out_of_range_axes = AsyncMock()  # type: ignore[method-assign]
+
+    await self.arm.setup(skip_home=True)
+
+    mocked(self.arm.home).assert_not_awaited()
+
+  async def test_setup_stops_when_the_arm_cannot_read_its_configuration(self):
+    # Bring-up that cannot read the arm must not report success: the caller would get
+    # an arm solving IK for a different machine.
+    self.arm.connect = AsyncMock()  # type: ignore[method-assign]
+    self.arm.home = AsyncMock()  # type: ignore[method-assign]
+    self.arm._request_configuration = AsyncMock(  # type: ignore[method-assign]
+      side_effect=RuntimeError("no controller")
+    )
+    self.arm._handle_out_of_range_axes = AsyncMock()  # type: ignore[method-assign]
+
+    with self.assertRaisesRegex(RuntimeError, "no controller"):
+      await self.arm.setup()
+
+    mocked(self.arm.home).assert_not_awaited()
+    mocked(self.arm._handle_out_of_range_axes).assert_not_awaited()
+
+  async def test_setup_checks_soft_limits_once_the_arm_is_up(self):
+    # The out-of-range recovery is what makes an arm parked outside its limits usable
+    # again, so bring-up has to reach it.
+    self.arm.connect = AsyncMock()  # type: ignore[method-assign]
+    self.arm.home = AsyncMock()  # type: ignore[method-assign]
+    _discovers(self.arm)
+    self.arm._handle_out_of_range_axes = AsyncMock()  # type: ignore[method-assign]
+
+    await self.arm.setup()
+
+    mocked(self.arm._handle_out_of_range_axes).assert_awaited_once()
+
+  async def test_stop_is_disconnect(self):
+    self.arm.disconnect = AsyncMock()  # type: ignore[method-assign]
+    await self.arm.stop()
+    mocked(self.arm.disconnect).assert_awaited_once()
+
+
+class TestMotionSettlesBeforeTheNextCommand(unittest.IsolatedAsyncioTestCase):
+  """``moveJ`` returns when the controller accepts it, not when the arm arrives.
+
+  Without a settle poll in front of them, the gripper and the rail act while the arm is
+  still travelling: a grip issued after an approach closes the jaws on the way down.
+  """
+
+  def setUp(self):
+    self.arm = _with_gripper_limits(_make_arm())
+
+  def _sent(self) -> list[str]:
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+
+  async def test_the_jaws_wait_for_the_arm_to_stop(self):
+    await self.arm.move_gripper(width=80.0, force_sensing=True)
+    self.assertEqual(self._sent()[0], "wherej")
+
+  async def test_a_joint_space_grip_waits_too(self):
+    await self.arm.move_gripper_joint_position(510.0, force_sensing=False)
+    self.assertEqual(self._sent()[0], "wherej")
+
+  async def test_the_rail_waits_too(self):
+    self.arm._has_rail = True
+    await self.arm.move_rail(120.0)
+    self.assertEqual(self._sent()[0], "wherej")
+
+  async def test_the_controller_s_safe_retraction_waits_too(self):
+    await self.arm.move_to_safe()
+    self.assertEqual(self._sent()[0], "wherej")
+
+
+class TestGripperTargetsStayInsideTheirLimits(unittest.IsolatedAsyncioTestCase):
+  """Commanding past the end of the gripper axis strands the arm: the controller then
+  refuses every move, gripper or not, until it is homed. No caller reaches the end."""
+
+  def setUp(self):
+    self.arm = _make_arm(closed_gripper_position=500.0)
+    self.arm._gripper_soft_min, self.arm._gripper_soft_max = 490.0, 560.0
+
+  def _sent_commands(self) -> list[str]:
+    return [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+
+  async def test_the_jaws_never_open_past_the_axis_ceiling(self):
+    """Held short of the stop: the servo overshoots, and a target at the end lands
+    outside it, after which the controller refuses every move until the arm homes."""
+    await self.arm.move_gripper_joint_position(999.0, force_sensing=False)
+    ceiling = 560.0 - _GRIPPER_LIMIT_HEADROOM
+    self.assertEqual(self._sent_commands()[-2:], [f"GripOpenPos {ceiling}", "gripper 1"])
+
+  async def test_the_jaws_never_close_below_the_axis_floor(self):
+    await self.arm.move_gripper_joint_position(0.0, force_sensing=True)
+    floor = 490.0 + _GRIPPER_LIMIT_HEADROOM
+    self.assertEqual(self._sent_commands()[-2:], [f"GripClosePos {floor}", "gripper 2"])
+
+  async def test_a_target_already_inside_the_limits_is_commanded_as_asked(self):
+    await self.arm.move_gripper_joint_position(520.0, force_sensing=True)
+    self.assertEqual(self._sent_commands()[-2:], ["GripClosePos 520.0", "gripper 2"])
+
+  def test_the_axis_limits_are_readable_without_reaching_into_the_arm(self):
+    """A composition above the driver has to be able to see the ceiling it must not
+    compute a target past, and it cannot read private state to find it."""
+    self.assertEqual(self.arm.gripper_joint_range, (490.0, 560.0))
+
+  def test_an_arm_that_has_read_no_limits_reports_neither_end(self):
+    self.assertEqual(_make_arm().gripper_joint_range, (None, None))
+
+  async def test_an_arm_that_has_read_no_limits_refuses_to_move_the_jaws(self):
+    """With no ceiling to hold a target under there is nothing to make it safe, and
+    a target past the end is what strands the axis. The caller is told, not obeyed."""
+    arm = _make_arm(closed_gripper_position=500.0)
+
+    with self.assertRaisesRegex(RuntimeError, "initialize"):
+      await arm.move_gripper_joint_position(999.0, force_sensing=False)
+    with self.assertRaisesRegex(RuntimeError, "initialize"):
+      await arm.move_gripper(80.0, force_sensing=False)
+
+    sent = [c.args[0] for c in mocked(arm.send_command).call_args_list]
+    self.assertEqual([c for c in sent if c.startswith("Grip") or c.startswith("gripper")], [])
+
+
+class TestGripperWidthsAdoptedFromSoftLimits(unittest.IsolatedAsyncioTestCase):
+  """A width has to mean the same jaw travel before and after the axis limits are read.
+
+  Bench numbers: the gripper axis reports [69.0, 134.0] and the fitted gripper closes at
+  75.5. The two differ, which is the case that used to strand the top of the range and
+  shift every width underneath it.
+  """
+
+  AXIS_MIN, AXIS_MAX = 69.0, 134.0
+  CLOSED_AT = 75.5
+
+  def setUp(self):
+    self.arm = _make_arm(closed_gripper_position=self.CLOSED_AT)
+
+  def _discover(self, arm=None, limits=None):
+    discovered = MagicMock()
+    discovered.gripper_width_range = limits or (self.AXIS_MIN, self.AXIS_MAX)
+    discovered.has_rail = False
+    discovered.is_dual_gripper = False
+    (arm or self.arm)._adopt_configuration(discovered)
+
+  def _sent(self, arm=None) -> list[str]:
+    return [c.args[0] for c in mocked((arm or self.arm).send_command).call_args_list]
+
+  async def test_a_width_means_the_same_travel_before_and_after_discovery(self):
+    """The jaws cannot be moved before discovery, so this reads the mapping directly:
+    adopting the axis limits must not shift the anchor a width is measured from."""
+    before = self.arm._mm_to_firmware_units(80.0)
+    self._discover()
+    self.assertEqual(
+      before, self.arm._mm_to_firmware_units(80.0), "discovery moved what 80 mm means"
+    )
+
+  async def test_opening_to_the_advertised_max_stops_short_of_the_axis_ceiling(self):
+    """The servo overshoots, so a target at the stop lands past it and the controller
+    then refuses every move until the arm is homed."""
+    self._discover()
+    await self.arm.move_gripper(self.arm.max_gripper_width, force_sensing=False)
+    self.assertIn(f"GripOpenPos {self.AXIS_MAX - _GRIPPER_LIMIT_HEADROOM}", self._sent())
+
+  async def test_closing_to_the_advertised_min_stops_above_the_axis_floor(self):
+    self._discover()
+    await self.arm.move_gripper(self.arm.min_gripper_width, force_sensing=True)
+    self.assertIn(f"GripClosePos {self.AXIS_MIN + _GRIPPER_LIMIT_HEADROOM}", self._sent())
+
+  async def test_an_advertised_end_survives_its_own_float_round_trip(self):
+    # Limits that are not halves: the reconverted ceiling lands a few ulps out, and the
+    # guard has to read that as float dust rather than as out of range.
+    arm = _make_arm(closed_gripper_position=75.53)
+    self._discover(arm=arm, limits=(70.3, 134.097))
+    await arm.move_gripper(arm.max_gripper_width, force_sensing=False)
+    self.assertIn(f"GripOpenPos {134.097 - _GRIPPER_LIMIT_HEADROOM}", self._sent(arm))
+
+  def test_the_soft_limits_stay_in_firmware_units(self):
+    self._discover()
+    self.assertEqual(
+      (self.arm._gripper_soft_min, self.arm._gripper_soft_max), (self.AXIS_MIN, self.AXIS_MAX)
+    )
+
+
+class TestPreciseFlexSingleAxisMoves(unittest.IsolatedAsyncioTestCase):
+  """One axis moves and the rest hold their live values.
+
+  Both verbs run through the guarded joint path, so a target outside the soft
+  limits is refused here rather than by the controller.
+  """
+
+  def setUp(self):
+    self.arm = _make_arm()
+    self.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
+    self.arm._configuration = MagicMock(
+      z_range=(0.0, 400.0),
+      soft_limits={
+        Axis.BASE: (0.0, 400.0),
+        Axis.SHOULDER: (-93.0, 93.0),
+        Axis.ELBOW: (12.0, 348.0),
+        Axis.WRIST: (-960.0, 960.0),
+      },
+    )
+    # wherej, no rail: base shoulder elbow wrist gripper
+    self.arm.send_command = AsyncMock(return_value="50 10 200 90 0")  # type: ignore[method-assign]
+
+  def _movej_cmds(self) -> list[str]:
+    return [
+      c.args[0]
+      for c in mocked(self.arm.send_command).call_args_list
+      if c.args[0].startswith("moveJ")
+    ]
+
+  async def test_move_one_axis_moves_only_that_axis(self):
+    await self.arm.move_one_axis(Axis.SHOULDER, 42.0)
+    # shoulder becomes 42; base/elbow/wrist/gripper carry from the live pose.
+    self.assertEqual(self._movej_cmds(), ["moveJ 1 50.0 42.0 200.0 90.0 0.0"])
+
+  async def test_move_one_axis_relative_offsets_from_the_live_position(self):
+    await self.arm.move_one_axis_relative(Axis.ELBOW, -20.0)
+    # elbow 200 - 20 = 180; everything else carries from the live pose.
+    self.assertEqual(self._movej_cmds(), ["moveJ 1 50.0 10.0 180.0 90.0 0.0"])
+
+  async def test_move_one_axis_uses_the_guarded_path_not_the_recovery_primitive(self):
+    # MoveOneAxis is the unguarded recovery primitive; a normal move must not use it.
+    await self.arm.move_one_axis(Axis.SHOULDER, 42.0)
+    sent = [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+    self.assertFalse([c for c in sent if c.startswith("MoveOneAxis")], sent)
+
+  async def test_move_one_axis_refuses_a_target_outside_the_soft_limits(self):
+    with self.assertRaises(ValueError):
+      await self.arm.move_one_axis(Axis.SHOULDER, 200.0)
+    self.assertEqual(self._movej_cmds(), [])
+
+  async def test_move_one_axis_relative_refuses_an_offset_that_leaves_the_limits(self):
+    with self.assertRaises(ValueError):
+      await self.arm.move_one_axis_relative(Axis.SHOULDER, 500.0)
+    self.assertEqual(self._movej_cmds(), [])
+
+
+class TestPreciseFlexMoveToSafe(unittest.IsolatedAsyncioTestCase):
+  """The controller's own safe retraction, reachable without going through park()."""
+
+  def setUp(self):
+    self.arm = _make_arm()
+
+  async def test_move_to_safe_hands_the_route_to_the_controller(self):
+    await self.arm.move_to_safe()
+    mocked(self.arm.send_command).assert_awaited_with("movetosafe")
+
+  async def test_move_to_safe_commands_no_joint_target(self):
+    # The controller plans the route, so the driver must not send joints of its own.
+    await self.arm.move_to_safe()
+    sent = [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
+    self.assertFalse([c for c in sent if c.startswith(("moveJ", "moveC"))], sent)
+
+
+class TestAMoveCanRunAtItsOwnSpeed(unittest.IsolatedAsyncioTestCase):
+  """A slow move must not leave the arm slow for everything that follows.
+
+  ``at_speed`` is the primitive; a caller scopes whatever it likes inside it.
+  """
+
+  LOCATION = Coordinate(329.9, 80.29, 40.48)
+
+  def setUp(self):
+    self.arm = _make_arm()
+    for name in ("_pick_plate_c", "_place_plate_c", "set_grasp_data"):
+      patcher = patch.object(self.arm, name, AsyncMock())
+      patcher.start()
+      self.addCleanup(patcher.stop)
+
+    self.speeds: list[float] = []
+
+    async def record_set(pct: float) -> None:
+      self.speeds.append(pct)
+
+    for name, mock in (
+      ("_set_speed", AsyncMock(side_effect=record_set)),
+      ("_request_speed", AsyncMock(return_value=100.0)),
+    ):
+      patcher = patch.object(self.arm, name, mock)
+      patcher.start()
+      self.addCleanup(patcher.stop)
+
+  async def test_a_move_outside_any_scope_leaves_the_profile_untouched(self):
+    await self.arm.pick_up_at_location(self.LOCATION, direction=2.03, resource_width=80.0)
+    self.assertEqual(self.speeds, [], "a move with no speed of its own must not write one")
+
+  async def test_no_speed_asked_for_writes_nothing_and_restores_nothing(self):
+    async with self.arm.at_speed(None):
+      await self.arm.pick_up_at_location(self.LOCATION, direction=2.03, resource_width=80.0)
+    self.assertEqual(self.speeds, [])
+
+  async def test_a_pick_at_its_own_speed_puts_the_prior_speed_back(self):
+    async with self.arm.at_speed(20.0):
+      await self.arm.pick_up_at_location(self.LOCATION, direction=2.03, resource_width=80.0)
+    self.assertEqual(self.speeds, [20.0, 100.0])
+
+  async def test_a_place_at_its_own_speed_puts_the_prior_speed_back(self):
+    async with self.arm.at_speed(15.0):
+      await self.arm.drop_at_location(self.LOCATION, direction=2.03, resource_width=80.0)
+    self.assertEqual(self.speeds, [15.0, 100.0])
+
+  async def test_the_rail_traverse_runs_at_the_move_s_speed_too(self):
+    # On a place the arm is carrying the plate down the rail, which is the whole reason a
+    # move asks to go slowly. The scope has to cover the traverse, not just the place.
+    self.arm._has_rail = True
+    order: list[str] = []
+    mocked(self.arm._set_speed).side_effect = lambda pct: order.append(f"speed={pct}")
+
+    with patch.object(
+      self.arm, "move_rail", AsyncMock(side_effect=lambda mm: order.append("rail"))
+    ):
+      async with self.arm.at_speed(15.0):
+        await self.arm.drop_at_location(
+          self.LOCATION, direction=2.03, resource_width=80.0, rail_position=120.0
+        )
+
+    self.assertEqual(order, ["speed=15.0", "rail", "speed=100.0"])
+
+  async def test_a_speed_the_arm_will_not_accept_is_refused_before_it_moves(self):
+    # Rejecting it after the traverse leaves the arm somewhere it was not asked to be.
+    self.arm._has_rail = True
+    mocked(self.arm._set_speed).side_effect = ValueError("speed_pct must be 0-100")
+
+    with patch.object(self.arm, "move_rail", AsyncMock()) as rail:
+      with self.assertRaises(ValueError):
+        async with self.arm.at_speed(400.0):
+          await self.arm.drop_at_location(
+            self.LOCATION, direction=2.03, resource_width=80.0, rail_position=120.0
+          )
+
+    rail.assert_not_called()
+
+  async def test_a_fault_mid_move_still_puts_the_prior_speed_back(self):
+    mocked(self.arm._pick_plate_c).side_effect = PreciseFlexError(0, "no plate present")
+
+    with self.assertRaises(PreciseFlexError):
+      async with self.arm.at_speed(20.0):
+        await self.arm.pick_up_at_location(self.LOCATION, direction=2.03, resource_width=80.0)
+
+    self.assertEqual(self.speeds, [20.0, 100.0])
