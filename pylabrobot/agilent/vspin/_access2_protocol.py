@@ -72,10 +72,12 @@ STATUS_ESTOP_ACTIVE = 0x08
 STATUS_MOTOR_POWER_FAULT = 0x10
 STATUS_OPTICAL_PLATE_SENSOR = 0x20
 
-# Access2 exposes a status byte for each axis. Bit 0 is used as the motion-complete
-# indicator. The remaining bits are intentionally left opaque: Access2-specific
-# meanings have not been verified and cannot safely be inferred from raw PIC-SERVO.
+# PIC-SERVO bits in each axis-status byte returned by GET_STATUS.
 AXIS_STATUS_MOVE_DONE = 0x01
+AXIS_STATUS_CHECKSUM_ERROR = 0x02
+AXIS_STATUS_OVERCURRENT = 0x04
+AXIS_STATUS_POSITION_ERROR = 0x10
+AXIS_STATUS_HOMING = 0x80
 
 # Captured sensor word returned when no plate is present at the queried handoff.
 SENSOR_NO_PLATE = 0x00000003
@@ -87,9 +89,10 @@ class Access2ProtocolError(ValueError):
 
 @dataclasses.dataclass(frozen=True)
 class Access2Reply:
-  """A validated Access2 response with its command result removed."""
+  """A structurally validated Access2 response."""
 
   response_id: int
+  result: int
   data: bytes
 
 
@@ -235,7 +238,7 @@ def parse_ftdi_frame(frame: bytes) -> bytes:
 
 
 def parse_reply(frame: bytes, request_id: int) -> Access2Reply:
-  """Parse an inner Access2 response and validate its response ID and result."""
+  """Parse an inner Access2 response and validate its response ID."""
   _validate_u8(request_id, "request_id")
   if len(frame) < 4:
     raise Access2ProtocolError(f"Access2 response is too short: {frame.hex()}")
@@ -254,12 +257,9 @@ def parse_reply(frame: bytes, request_id: int) -> Access2Reply:
     raise Access2ProtocolError(
       f"Access2 response ID is 0x{response_id:02x}, expected 0x{expected_response_id:02x}"
     )
-  result = Reader(data).u8()
-  if result != 0:
-    raise Access2ProtocolError(
-      f"Access2 command 0x{request_id:02x} failed with result 0x{result:02x}"
-    )
-  return Access2Reply(response_id=response_id, data=data[1:])
+  result_reader = Reader(data)
+  result = result_reader.u8()
+  return Access2Reply(response_id=response_id, result=result, data=result_reader.remaining())
 
 
 def parse_ftdi_reply(frame: bytes, request_id: int) -> Access2Reply:

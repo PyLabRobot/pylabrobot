@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _MOTION_POLL_INTERVAL = 0.1
 _AXIS_POSITION_TOLERANCE = 0.1
 _DEFAULT_GRIPPER_OPEN_POSITION = 0.0
+_DEFAULT_GRIPPER_CLOSE_THRESHOLD = 1.5
 _DEFAULT_GRIPPER_CLOSED_POSITION = 5.68
 _AXIS_NAMES: dict[int, str] = {
   protocol.AXIS_GRIPPER: "gripper",
@@ -57,6 +58,7 @@ class Access2Driver:
     timeout: int = 60,
     gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
     gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
   ):
     """
     Args:
@@ -65,12 +67,18 @@ class Access2Driver:
       timeout: Communication and operation timeout in seconds.
       gripper_open_position: Absolute gripper-axis position used when opening.
       gripper_closed_position: Absolute gripper-axis position used when closing.
+      gripper_close_threshold: Smallest gripper-axis position considered closed around a plate.
     """
     super().__init__()
+    if not gripper_open_position < gripper_close_threshold <= gripper_closed_position:
+      raise ValueError(
+        "Gripper positions must satisfy open position < close threshold <= closed position"
+      )
     self.io = FTDI(human_readable_device_name="Agilent Access2 Loader", device_id=device_id)
     self.timeout = timeout
     self.gripper_open_position = gripper_open_position
     self.gripper_closed_position = gripper_closed_position
+    self.gripper_close_threshold = gripper_close_threshold
     self._command_lock = asyncio.Lock()
     self._operation_lock = asyncio.Lock()
 
@@ -96,7 +104,9 @@ class Access2Driver:
     inner_length = protocol.parse_ftdi_header(header)
     return header + await self._read_exact(inner_length + 2)
 
-  async def send_command(self, command: bytes) -> protocol.Access2Reply:
+  async def send_command(
+    self, command: bytes, raise_on_error: bool = True
+  ) -> protocol.Access2Reply:
     """Send one transport-independent command through the FTDI envelope."""
     frame = protocol.build_ftdi_frame(command)
     logger.debug("[loader] Sending %s", frame.hex())
@@ -106,7 +116,13 @@ class Access2Driver:
         raise RuntimeError(f"Access2 wrote {written} of {len(frame)} command bytes")
       response_frame = await self._read_frame()
     logger.debug("[loader] Received %s", response_frame.hex())
-    return protocol.parse_ftdi_reply(response_frame, request_id=command[0])
+    response = protocol.parse_ftdi_reply(response_frame, request_id=command[0])
+    if raise_on_error and response.result != 0:
+      raise protocol.Access2ProtocolError(
+        f"Access2 command 0x{command[0]:02x} returned result 0x{response.result:02x}; "
+        f"response data: {response.data.hex()}"
+      )
+    return response
 
   async def setup(self):
     logger.debug("[loader] setup")
@@ -122,7 +138,7 @@ class Access2Driver:
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
         self.gripper_open_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
         speed=protocol.SPEED_FAST,
       )
       await self._move_to_teachpoint(
@@ -215,6 +231,26 @@ class Access2Driver:
       and bool(status.gripper_status & protocol.AXIS_STATUS_MOVE_DONE)
       and status.gripper_position is not None
       and abs(status.gripper_position - position) <= _AXIS_POSITION_TOLERANCE
+    )
+
+  def _gripper_is_closed(self, status: protocol.Access2Status) -> bool:
+    axis_faults = (
+      protocol.AXIS_STATUS_CHECKSUM_ERROR
+      | protocol.AXIS_STATUS_OVERCURRENT
+      | protocol.AXIS_STATUS_POSITION_ERROR
+      | protocol.AXIS_STATUS_HOMING
+    )
+    at_closed_position = (
+      status.gripper_position is not None
+      and abs(status.gripper_position - self.gripper_closed_position) <= _AXIS_POSITION_TOLERANCE
+    )
+    return (
+      status.gripper_status is not None
+      and bool(status.gripper_status & protocol.AXIS_STATUS_MOVE_DONE)
+      and not bool(status.gripper_status & axis_faults)
+      and status.gripper_position is not None
+      and status.gripper_position >= self.gripper_close_threshold
+      and (at_closed_position or status.optical_plate_sensor)
     )
 
   async def _wait_until_motion_complete(
@@ -341,6 +377,50 @@ class Access2Driver:
     response = await self.send_command(protocol.build_get_sensor_values())
     return protocol.decode_sensor_values(response.data)
 
+  async def _close_gripper(self) -> protocol.Access2Status:
+    """Close until the configured threshold, allowing normal plate contact.
+
+    The FTDI controller can return a nonzero result when a plate stops the
+    gripper before its unobstructed target. The result is retained for
+    diagnostics. Full controller status must confirm completion and either the
+    unobstructed close position or plate-sensor-backed contact past the close
+    threshold.
+    """
+    response = await self.send_command(
+      protocol.build_move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        self.gripper_closed_position,
+        protocol.PROFILE_DYNAMIC_EMPTY,
+        protocol.SPEED_SLOW,
+      ),
+      raise_on_error=False,
+    )
+    status = await self._wait_until_motion_complete(
+      (protocol.AXIS_GRIPPER,),
+      operation="close gripper",
+    )
+    if not self._gripper_is_closed(status) or (
+      response.result != 0 and not status.optical_plate_sensor
+    ):
+      assert status.gripper_position is not None
+      assert status.gripper_status is not None
+      error = (
+        "Access2 did not close the gripper: "
+        f"position {status.gripper_position:.3f}, threshold {self.gripper_close_threshold:.3f}, "
+        f"axis status 0x{status.gripper_status:02x}, "
+        f"optical plate sensor {status.optical_plate_sensor}, "
+        f"command result 0x{response.result:02x}"
+      )
+      if response.result != 0:
+        raise protocol.Access2ProtocolError(error)
+      raise RuntimeError(error)
+    if response.result != 0:
+      logger.debug(
+        "[loader] Gripper-close command returned 0x%02x; full status confirmed closed",
+        response.result,
+      )
+    return status
+
   async def park(self):
     logger.debug("[loader] park")
     async with self._operation_lock:
@@ -359,13 +439,9 @@ class Access2Driver:
     logger.debug("[loader] close gripper")
     async with self._operation_lock:
       status = await self._require_ready(operation="gripper-close precondition")
-      if self._gripper_is_at_position(status, self.gripper_closed_position):
+      if self._gripper_is_closed(status):
         return
-      await self._move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        self.gripper_closed_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
-      )
+      await self._close_gripper()
       await self._require_ready(operation="gripper-close postcondition")
 
   async def open_gripper(self) -> None:
@@ -378,7 +454,7 @@ class Access2Driver:
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
         self.gripper_open_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
       )
       await self._require_ready(operation="gripper-open postcondition")
 
@@ -391,19 +467,15 @@ class Access2Driver:
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
         self.gripper_open_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
         speed=protocol.SPEED_FAST,
       )
       await self._move_to_teachpoint(protocol.TEACHPOINT_PICK, 3, 10)
 
-      if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
+      if not (await self.request_sensor_values() & protocol.STATUS_OPTICAL_PLATE_SENSOR):
         raise RuntimeError("no plate found on stage")
 
-      await self._move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        self.gripper_closed_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
-      )
+      await self._close_gripper()
       await self._move_to_teachpoint(
         protocol.TEACHPOINT_BUCKET_1,
         3,
@@ -413,7 +485,7 @@ class Access2Driver:
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
         self.gripper_open_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
       )
       await self._move_to_teachpoint(protocol.TEACHPOINT_PARK, 3, 10)
       await self._require_ready(operation="load postcondition")
@@ -427,19 +499,15 @@ class Access2Driver:
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
         self.gripper_open_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
         speed=protocol.SPEED_FAST,
       )
       await self._move_to_teachpoint(protocol.TEACHPOINT_BUCKET_1, 3, 10)
 
-      if await self.request_sensor_values() == protocol.SENSOR_NO_PLATE:
+      if not (await self.request_sensor_values() & protocol.STATUS_OPTICAL_PLATE_SENSOR):
         raise RuntimeError("no plate found in centrifuge")
 
-      await self._move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        self.gripper_closed_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
-      )
+      await self._close_gripper()
       await self._move_to_teachpoint(
         protocol.TEACHPOINT_PICK,
         3,
@@ -449,7 +517,7 @@ class Access2Driver:
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
         self.gripper_open_position,
-        profile=protocol.PROFILE_GRIP_NORMALLY,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
       )
       await self._move_to_teachpoint(protocol.TEACHPOINT_PARK, 0, 10)
       await self._require_ready(operation="unload postcondition")
@@ -468,6 +536,7 @@ class Access2(ResourceHolder):
     size_z: float = 0.0,
     gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
     gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
   ):
     """Create an Access2 loader with configurable absolute gripper positions.
 
@@ -480,11 +549,13 @@ class Access2(ResourceHolder):
       size_z: Resource height in millimeters.
       gripper_open_position: Absolute gripper-axis position used when opening.
       gripper_closed_position: Absolute gripper-axis position used when closing.
+      gripper_close_threshold: Smallest gripper-axis position considered closed around a plate.
     """
     driver = Access2Driver(
       device_id=device_id,
       gripper_open_position=gripper_open_position,
       gripper_closed_position=gripper_closed_position,
+      gripper_close_threshold=gripper_close_threshold,
     )
     ResourceHolder.__init__(
       self,

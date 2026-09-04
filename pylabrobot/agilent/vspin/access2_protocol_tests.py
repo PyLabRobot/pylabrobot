@@ -143,6 +143,7 @@ class Access2ResponseTests(unittest.TestCase):
     response = protocol.parse_ftdi_reply(frame, protocol.GET_SENSOR_VALUES)
 
     self.assertEqual(response.response_id, 0x51)
+    self.assertEqual(response.result, 0)
     self.assertEqual(protocol.decode_sensor_values(response.data), protocol.SENSOR_NO_PLATE)
 
   def test_rejects_bad_crc(self):
@@ -177,11 +178,13 @@ class Access2ResponseTests(unittest.TestCase):
     with self.assertRaisesRegex(protocol.Access2ProtocolError, "response ID"):
       protocol.parse_reply(inner, protocol.GET_SENSOR_VALUES)
 
-  def test_rejects_command_error(self):
+  def test_preserves_nonzero_command_result(self):
     inner = Writer().u8(0x51).u16(1).u8(7).finish()
 
-    with self.assertRaisesRegex(protocol.Access2ProtocolError, "result 0x07"):
-      protocol.parse_reply(inner, protocol.GET_SENSOR_VALUES)
+    response = protocol.parse_reply(inner, protocol.GET_SENSOR_VALUES)
+
+    self.assertEqual(response.result, 7)
+    self.assertEqual(response.data, b"")
 
   def test_decode_full_status(self):
     data = (
