@@ -1,5 +1,4 @@
 import asyncio
-import concurrent.futures
 import errno
 import functools
 import http.server
@@ -9,9 +8,15 @@ import logging
 import math
 import os
 import re
+import socket
 import threading
 import webbrowser
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+
+import anyio
+import sniffio
+from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
+from typing_extensions import override
 
 try:
   import websockets
@@ -24,17 +29,47 @@ except ImportError as e:
   _WEBSOCKETS_IMPORT_ERROR = e
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.resources import Resource
 
 logger = logging.getLogger(__name__)
 
 _SERVER_PORT_ATTEMPTS = 100
-_SERVER_STARTUP_TIMEOUT = 10.0
+_FILE_SERVER_REQUEST_TIMEOUT_S = 10.0
+_NOTIFY_STOP_TIMEOUT_S = 5.0
+_OUTBOX_MAX_BUFFER = 10_000
+_TRANSIENT_ACCEPT_ERROR_NAMES = frozenset(
+  {
+    "EAGAIN",
+    "EWOULDBLOCK",
+    "EINTR",
+    "ECONNABORTED",
+    "ENETDOWN",
+    "EPROTO",
+    "ENOPROTOOPT",
+    "EHOSTDOWN",
+    "ENONET",
+    "EHOSTUNREACH",
+    "EOPNOTSUPP",
+    "ENOTSUP",
+    "ENETUNREACH",
+  }
+)
+_TRANSIENT_ACCEPT_ERRNOS = frozenset(
+  error_number
+  for error_number, name in errno.errorcode.items()
+  if name in _TRANSIENT_ACCEPT_ERROR_NAMES
+)
 
 
 def _is_address_in_use(error: OSError) -> bool:
   """Return whether a server failed because its requested address is already in use."""
   return error.errno == errno.EADDRINUSE
+
+
+def _is_transient_accept_error(error: OSError) -> bool:
+  """Return whether a nonblocking accept operation should be retried."""
+  return error.errno in _TRANSIENT_ACCEPT_ERRNOS
 
 
 @functools.lru_cache(maxsize=None)
@@ -105,7 +140,104 @@ def _sanitize_floats(obj):
   return obj
 
 
-class Visualizer:
+class _VisualizerHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+  """Serve Visualizer files with cached dynamic assets and bounded request I/O."""
+
+  timeout = _FILE_SERVER_REQUEST_TIMEOUT_S
+
+  @override
+  def log_message(self, format: str, *args: Any) -> None:
+    pass
+
+  @override
+  def end_headers(self) -> None:
+    self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+    self.send_header("Pragma", "no-cache")
+    self.send_header("Expires", "0")
+    super().end_headers()
+
+  @override
+  def do_GET(self) -> None:
+    server = cast("_VisualizerFileServer", self.server)
+    if self.path == "/":
+      self._respond(server.index_html, "text/html")
+    elif self.path == "/favicon.png":
+      self._respond(server.favicon, "image/png")
+    else:
+      super().do_GET()
+
+  def _respond(self, payload: bytes, content_type: str) -> None:
+    """Write one cached response."""
+    self.send_response(200)
+    self.send_header("Content-type", content_type)
+    self.end_headers()
+    self.wfile.write(payload)
+
+
+class _VisualizerFileServer(http.server.HTTPServer):
+  """HTTP server carrying the Visualizer's pre-rendered dynamic assets."""
+
+  def __init__(self, server_address: Tuple[str, int], directory: str):
+    """Create a file server rooted at ``directory``."""
+    self.index_html = b""
+    self.favicon = b""
+    handler = functools.partial(_VisualizerHTTPRequestHandler, directory=directory)
+    super().__init__(server_address, handler)
+
+
+class _AcceptedFileRequest:
+  """Coordinate accepted-socket ownership between the event loop and a worker."""
+
+  def __init__(
+    self,
+    httpd: _VisualizerFileServer,
+    request: socket.socket,
+    client_address: Tuple[str, int],
+  ) -> None:
+    """Keep loop-side ownership until a worker atomically claims the request."""
+    self.httpd = httpd
+    self.request = request
+    self.client_address = client_address
+    self._lock = threading.Lock()
+    self._worker_owns = False
+    self._closed = False
+
+  def claim_for_worker(self) -> bool:
+    """Transfer ownership to the worker unless loop-side cleanup won the race."""
+    with self._lock:
+      if self._closed:
+        return False
+      self._worker_owns = True
+      return True
+
+  def close_if_unclaimed(self) -> None:
+    """Close the request if cancellation prevented worker ownership."""
+    with self._lock:
+      if self._worker_owns or self._closed:
+        return
+      self._closed = True
+    self.httpd.shutdown_request(self.request)
+
+  def close(self) -> None:
+    """Close a worker-owned request exactly once."""
+    with self._lock:
+      if self._closed:
+        return
+      self._closed = True
+    self.httpd.shutdown_request(self.request)
+
+  def interrupt(self) -> None:
+    """Wake a blocked worker without taking its responsibility for closing the socket."""
+    with self._lock:
+      if self._closed:
+        return
+      try:
+        self.request.shutdown(socket.SHUT_RDWR)
+      except OSError:
+        pass
+
+
+class Visualizer(HasLifespan):
   """A class for visualizing resources and their states in a web browser.
 
   This class sets up a websocket server and a file server to serve a web page that visualizes the
@@ -113,10 +245,12 @@ class Visualizer:
   resources or their states change. Note that tip and volume tracking need to be enabled to see
   these in the visualizer.
 
+  The servers are scoped to the caller's asyncio loop and stop before the lifespan exits.
+
   Example:
     >>> from pylabrobot.visualizer import Visualizer
-    >>> visualizer = Visualizer(deck)
-    >>> await visualizer.setup()
+    >>> async with Visualizer(deck) as visualizer:
+    ...   ...
   """
 
   def __init__(
@@ -131,7 +265,7 @@ class Visualizer:
     show_machine_tools_at_start: bool = True,
     liquid_color: str = "F39C12",
   ):
-    """Create a new Visualizer. Use :meth:`.setup` to start the visualization.
+    """Create a new Visualizer for use as an asynchronous context manager.
 
     Args:
       host: The hostname of the file and websocket server.
@@ -150,13 +284,14 @@ class Visualizer:
         indicate liquid volume. Default is ``"F39C12"`` (amber).
     """
 
+    super().__init__()
+
     if not HAS_WEBSOCKETS:
       raise RuntimeError(
         "The visualizer requires websockets to be installed. "
         f"Import error: {_WEBSOCKETS_IMPORT_ERROR}"
       )
 
-    self.setup_finished = False
     self._show_machine_tools_at_start = show_machine_tools_at_start
     color = liquid_color.strip().lstrip("#")
     if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
@@ -179,21 +314,13 @@ class Visualizer:
     else:
       self._favicon_path = os.path.join(os.path.dirname(__file__), "img", "logo.png")
 
-    # Hook into the resource (un)assigned callbacks so we can send the appropriate events to the
-    # browser.
     self._root_resource = resource
-    resource.register_did_assign_resource_callback(self._handle_resource_assigned_callback)
-    resource.register_did_unassign_resource_callback(self._handle_resource_unassigned_callback)
-
-    # register for callbacks
-    def register_state_update(resource):
-      resource.register_state_update_callback(
-        lambda _: self._handle_state_update_callback(resource)
-      )
-      for child in resource.children:
-        register_state_update(child)
-
-    register_state_update(resource)
+    self._callback_lock = threading.RLock()
+    self._callback_generation = 0
+    self._callbacks_active = False
+    self._resource_assigned_callback: Optional[Callable[[Resource], None]] = None
+    self._resource_unassigned_callback: Optional[Callable[[Resource], None]] = None
+    self._state_update_callbacks: Dict[int, tuple[Resource, Callable[[dict], None]]] = {}
 
     self.host = host
 
@@ -201,17 +328,18 @@ class Visualizer:
     self.fs_port = fs_port
     self.open_browser = open_browser
 
-    self._httpd: Optional[http.server.HTTPServer] = None
-    self._fst: Optional[threading.Thread] = None
+    self._httpd: Optional[_VisualizerFileServer] = None
+    self._active_file_requests: set[_AcceptedFileRequest] = set()
 
     # websocket server attributes
     self.ws_port = ws_port
     self._id = 0
 
+    self._ws_server: Optional["websockets.asyncio.server.Server"] = None
     self._websocket: Optional["websockets.asyncio.server.ServerConnection"] = None
     self._loop: Optional[asyncio.AbstractEventLoop] = None
-    self._t: Optional[threading.Thread] = None
-    self._stop_: Optional[asyncio.Future] = None
+    self._task_group: Optional[anyio.abc.TaskGroup] = None
+    self._outbox_send: Optional[MemoryObjectSendStream[Tuple[str, dict]]] = None
 
     self._pending_state_updates: Dict[str, dict] = {}
     self._flush_scheduled = False
@@ -222,6 +350,11 @@ class Visualizer:
     # commands (every state update) are dropped so the list cannot grow without
     # bound over a long-running session.
     self._pending_response_ids: set = set()
+
+  @property
+  def setup_finished(self) -> bool:
+    """Whether the Visualizer is active."""
+    return self.is_active
 
   @property
   def websocket(
@@ -238,20 +371,6 @@ class Visualizer:
     if self._loop is None:
       raise RuntimeError("Event loop has not been started.")
     return self._loop
-
-  @property
-  def t(self) -> threading.Thread:
-    """The thread that runs the event loop."""
-    if self._t is None:
-      raise RuntimeError("Event loop has not been started.")
-    return self._t
-
-  @property
-  def stop_(self) -> asyncio.Future:
-    """The future that is set when the visualizer is stopped."""
-    if self._stop_ is None:
-      raise RuntimeError("Event loop has not been started.")
-    return self._stop_
 
   def _generate_id(self):
     """continuously generate unique ids 0 <= x < 10000."""
@@ -381,20 +500,6 @@ class Visualizer:
 
     return None
 
-  @property
-  def httpd(self) -> http.server.HTTPServer:
-    """The HTTP server."""
-    if self._httpd is None:
-      raise RuntimeError("The HTTP server has not been started yet.")
-    return self._httpd
-
-  @property
-  def fst(self) -> threading.Thread:
-    """The file server thread."""
-    if self._fst is None:
-      raise RuntimeError("The file server thread has not been started yet.")
-    return self._fst
-
   @staticmethod
   def _detect_source_filename() -> str:
     """Detect the filename of the calling script or notebook."""
@@ -484,211 +589,224 @@ class Visualizer:
 
     return ""
 
-  async def setup(self):
-    """Start the visualizer.
+  @override
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Start both servers and bind their work to the resource lifespan."""
+    await super()._enter_lifespan(stack)
+    backend = sniffio.current_async_library()
+    if backend != "asyncio":
+      raise RuntimeError(
+        "The visualizer only supports the asyncio backend, because `websockets` provides an "
+        f"asyncio-only server implementation (running under {backend!r})."
+      )
 
-    Sets up the file and websocket servers. These will run in a separate thread.
-    """
+    with self._callback_lock:
+      self._loop = asyncio.get_running_loop()
+    stack.callback(self._clear_run_state)
 
-    if self.setup_finished:
-      raise RuntimeError("The visualizer has already been started.")
+    await self._start_ws_server(stack)
+    await self._start_file_server(stack)
 
-    await self._run_ws_server()
-    try:
-      await self._run_file_server()
-    except BaseException:
-      await self._stop_ws_server(send_stop_event=False)
-      raise
-    self.setup_finished = True
+    send_stream, receive_stream = anyio.create_memory_object_stream[Tuple[str, dict]](
+      _OUTBOX_MAX_BUFFER
+    )
+    self._outbox_send = send_stream
+    stack.callback(self._close_outbox)
+    assert self._task_group is not None
+    self._task_group.start_soon(self._outbox_worker, receive_stream)
 
-  async def _run_ws_server(self):
-    """Start the websocket server.
+    stack.callback(self._deregister_resource_callbacks)
+    self._register_resource_callbacks()
 
-    Sets up the websocket server. This will run in a separate thread.
-    """
+    if self.open_browser:
+      webbrowser.open(f"http://{self.host}:{self.fs_port}")
 
-    async def run_server():
-      self._stop_ = self.loop.create_future()
-      for attempt in range(_SERVER_PORT_ATTEMPTS):
-        try:
-          async with websockets.asyncio.server.serve(
-            self._socket_handler, self.host, self.ws_port
-          ) as server:
-            if self.ws_port == 0:
-              self.ws_port = next(iter(server.sockets)).getsockname()[1]
-            print(f"Websocket server started at http://{self.host}:{self.ws_port}")
-            startup.set_result(None)
-            await self.stop_
-            return
-        except asyncio.CancelledError:
-          raise
-        except OSError as error:
-          if not _is_address_in_use(error) or attempt == _SERVER_PORT_ATTEMPTS - 1:
-            raise
-          self.ws_port += 1
-
-    def start_loop():
+  async def _start_ws_server(self, stack: AsyncExitStackWithShielding) -> None:
+    """Enter a websocket server context on the caller's asyncio loop."""
+    for attempt in range(_SERVER_PORT_ATTEMPTS):
       try:
-        self.loop.run_until_complete(run_server())
-      except BaseException as error:
-        if not startup.done():
-          startup.set_exception(error)
+        context = websockets.asyncio.server.serve(self._socket_handler, self.host, self.ws_port)
+        ws_server = await stack.enter_async_context(context)
+        self._ws_server = ws_server
+        break
+      except OSError as error:
+        if not _is_address_in_use(error) or attempt == _SERVER_PORT_ATTEMPTS - 1:
+          raise
+        self.ws_port += 1
 
-    startup: concurrent.futures.Future[None] = concurrent.futures.Future()
-    self._loop = asyncio.new_event_loop()
-    self._t = threading.Thread(target=start_loop, daemon=True)
-    self.t.start()
+    if self.ws_port == 0:
+      self.ws_port = next(iter(ws_server.sockets)).getsockname()[1]
 
-    await asyncio.wait_for(asyncio.wrap_future(startup), timeout=_SERVER_STARTUP_TIMEOUT)
+    stack.push_shielded_async_callback(self._notify_browser_stop)
+    print(f"Websocket server started at http://{self.host}:{self.ws_port}")
 
-  async def _run_file_server(self):
-    """Start a simple webserver to serve static files."""
-
-    dirname = os.path.dirname(__file__)
-    path = os.path.join(dirname, ".")
+  async def _start_file_server(self, stack: AsyncExitStackWithShielding) -> None:
+    """Start a nonblocking accept loop for static file requests."""
+    path = os.path.dirname(__file__)
     if not os.path.exists(path):
       raise RuntimeError(
         "Could not find Visualizer files. Please run from the root of the repository."
       )
 
-    def run_server():
-      ws_port, fs_port, source_filename = self.ws_port, self.fs_port, self._source_filename
-      favicon_path = self._favicon_path
-      liquid_color = self._liquid_color
-
-      # try to start the server. If the port is in use, try with another port until it succeeds.
-      class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-        """A simple HTTP request handler that does not log requests."""
-
-        def __init__(self, *args, **kwargs):
-          super().__init__(*args, directory=path, **kwargs)
-
-        def log_message(self, format, *args):
-          pass
-
-        def end_headers(self):
-          self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-          self.send_header("Pragma", "no-cache")
-          self.send_header("Expires", "0")
-          super().end_headers()
-
-        def do_GET(self) -> None:
-          # rewrite some info in the index.html file on the fly,
-          # like a simple template engine
-          if self.path == "/":
-            with open(os.path.join(path, "index.html"), "r", encoding="utf-8") as f:
-              content = f.read()
-
-            content = content.replace("{{ ws_port }}", str(ws_port))
-            content = content.replace("{{ fs_port }}", str(fs_port))
-            content = content.replace("{{ source_filename }}", source_filename)
-            content = content.replace("{{ liquid_color }}", liquid_color)
-
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(content.encode("utf-8"))
-          elif self.path == "/favicon.png":
-            with open(favicon_path, "rb") as f:
-              data = f.read()
-            self.send_response(200)
-            self.send_header("Content-type", "image/png")
-            self.end_headers()
-            self.wfile.write(data)
-          else:
-            return super().do_GET()
-
-      for attempt in range(_SERVER_PORT_ATTEMPTS):
-        try:
-          self._httpd = http.server.HTTPServer(
-            (self.host, self.fs_port),
-            QuietSimpleHTTPRequestHandler,
-          )
-          if self.fs_port == 0:
-            self.fs_port = self._httpd.server_port
-          print(
-            f"File server started at http://{self.host}:{self.fs_port} . "
-            "Open this URL in your browser."
-          )
-          startup.set_result(None)
-          break
-        except OSError as error:
-          if not _is_address_in_use(error) or attempt == _SERVER_PORT_ATTEMPTS - 1:
-            raise
-          self.fs_port += 1
-
-      self.httpd.serve_forever()
-
-    def start_server():
+    httpd: Optional[_VisualizerFileServer] = None
+    for attempt in range(_SERVER_PORT_ATTEMPTS):
       try:
-        run_server()
-      except BaseException as error:
-        if not startup.done():
-          startup.set_exception(error)
+        httpd = _VisualizerFileServer((self.host, self.fs_port), path)
+        self._httpd = httpd
+        break
+      except OSError as error:
+        if not _is_address_in_use(error) or attempt == _SERVER_PORT_ATTEMPTS - 1:
+          raise
+        self.fs_port += 1
 
-    startup: concurrent.futures.Future[None] = concurrent.futures.Future()
-    self._fst = threading.Thread(
-      name="visualizer_fs",
-      target=start_server,
-      daemon=True,
+    if httpd is None:
+      raise RuntimeError("File server did not start")
+    if self.fs_port == 0:
+      self.fs_port = httpd.server_port
+    stack.callback(self._close_file_server)
+
+    httpd.index_html = self._render_index_html(path)
+    with open(self._favicon_path, "rb") as favicon:
+      httpd.favicon = favicon.read()
+    httpd.socket.setblocking(False)
+
+    serving = anyio.Event()
+
+    async def accept_requests() -> None:
+      serving.set()
+      while True:
+        await anyio.wait_readable(httpd.socket)
+        try:
+          request, client_address = httpd.get_request()
+        except OSError as error:
+          if _is_transient_accept_error(error):
+            continue
+          raise
+        if not httpd.verify_request(request, client_address):
+          httpd.shutdown_request(request)
+          continue
+        try:
+          await self._dispatch_file_request(httpd, request, client_address)
+        except Exception:
+          logger.exception("visualizer: error handling a file-server request")
+
+    task_group = await stack.enter_task_group()
+    self._task_group = task_group
+    stack.callback(self._cancel_run_tasks)
+    stack.callback(self._interrupt_file_requests)
+    task_group.start_soon(accept_requests)
+    await serving.wait()
+
+    print(
+      f"File server started at http://{self.host}:{self.fs_port} . Open this URL in your browser."
     )
-    self.fst.start()
 
-    # Wait for the server to start before opening the browser so that we can get the correct port.
-    await asyncio.wait_for(asyncio.wrap_future(startup), timeout=_SERVER_STARTUP_TIMEOUT)
-
-    if self.open_browser:
-      webbrowser.open(f"http://{self.host}:{self.fs_port}")
-
-  async def _stop_ws_server(self, send_stop_event: bool) -> None:
-    """Stop the WebSocket server and wait for its thread to exit.
-
-    Args:
-      send_stop_event: Whether to notify a connected browser before stopping the server.
-    """
-
-    server_loop = self.loop
-    server_thread = self.t
-    stop_future = self.stop_
-
+  async def _dispatch_file_request(
+    self,
+    httpd: _VisualizerFileServer,
+    request: socket.socket,
+    client_address: Tuple[str, int],
+  ) -> None:
+    """Dispatch one accepted request while preserving deterministic socket ownership."""
+    accepted_request = _AcceptedFileRequest(httpd, request, client_address)
+    self._active_file_requests.add(accepted_request)
     try:
-      if send_stop_event and self.has_connection():
-        await self.send_command("stop", wait_for_response=False)
+      await anyio.to_thread.run_sync(
+        self._handle_file_request,
+        accepted_request,
+        abandon_on_cancel=False,
+      )
     finally:
-      if not stop_future.done():
-        server_loop.call_soon_threadsafe(stop_future.set_result, "done")
-      await asyncio.to_thread(server_thread.join, _SERVER_STARTUP_TIMEOUT)
-      if server_thread.is_alive():
-        raise TimeoutError("Timed out waiting for the WebSocket server to stop.")
+      accepted_request.close_if_unclaimed()
+      self._active_file_requests.discard(accepted_request)
 
+  @staticmethod
+  def _handle_file_request(accepted_request: _AcceptedFileRequest) -> None:
+    """Handle and close one socket already accepted by the event-loop task."""
+    if not accepted_request.claim_for_worker():
+      return
+    try:
+      accepted_request.httpd.finish_request(
+        accepted_request.request, accepted_request.client_address
+      )
+    except Exception:
+      accepted_request.httpd.handle_error(accepted_request.request, accepted_request.client_address)
+    finally:
+      accepted_request.close()
+
+  def _cancel_run_tasks(self) -> None:
+    """Cancel all child tasks owned by the active Visualizer run."""
+    if self._task_group is not None:
+      self._task_group.cancel_scope.cancel()
+
+  def _interrupt_file_requests(self) -> None:
+    """Unblock accepted request workers before joining the owning task group."""
+    for request in self._active_file_requests:
+      request.interrupt()
+
+  def _render_index_html(self, directory: str) -> bytes:
+    """Render the Visualizer index with this run's server options."""
+    with open(os.path.join(directory, "index.html"), "r", encoding="utf-8") as index:
+      content = index.read()
+    content = (
+      content.replace("{{ ws_port }}", str(self.ws_port))
+      .replace("{{ fs_port }}", str(self.fs_port))
+      .replace("{{ source_filename }}", self._source_filename)
+      .replace("{{ liquid_color }}", self._liquid_color)
+    )
+    return content.encode("utf-8")
+
+  async def _notify_browser_stop(self) -> None:
+    """Best-effort notify a connected browser before websocket closure."""
+    if self.has_connection():
+      try:
+        with anyio.move_on_after(_NOTIFY_STOP_TIMEOUT_S):
+          await self.send_command("stop", wait_for_response=False)
+      except Exception:
+        pass
+
+  def _close_file_server(self) -> None:
+    """Close the file-server listener acquired for this run."""
+    if self._httpd is not None:
+      self._httpd.server_close()
+      self._httpd = None
+
+  def _clear_run_state(self) -> None:
+    """Clear per-run state after all lifespan-owned work has stopped."""
+    with self._callback_lock:
       self.received.clear()
       self._pending_response_ids.clear()
       self._websocket = None
+      self._ws_server = None
       self._loop = None
-      self._t = None
-      self._stop_ = None
+      self._task_group = None
+      self._active_file_requests.clear()
+      self._outbox_send = None
+      self._state_update_callbacks.clear()
+      self._resource_assigned_callback = None
+      self._resource_unassigned_callback = None
+      self._callbacks_active = False
+      self._pending_state_updates.clear()
+      self._flush_scheduled = False
 
-  async def stop(self):
-    """Stop the visualizer.
+  def _close_outbox(self) -> None:
+    """Close the active outbox send stream."""
+    with self._callback_lock:
+      if self._outbox_send is not None:
+        send_stream = self._outbox_send
+        self._outbox_send = None
+        send_stream.close()
 
-    Raises:
-      RuntimeError: If the visualizer has not been started.
-      TimeoutError: If the WebSocket server does not stop within the timeout.
-    """
-
-    # -- file server --
-    # Stop the file server.
-    self.httpd.shutdown()
-    self.httpd.server_close()
-
-    # Clear all relevant attributes.
-    self._httpd = None
-    self._fst = None
-
-    # -- websocket --
-    await self._stop_ws_server(send_stop_event=True)
-
-    self.setup_finished = False
+  async def _outbox_worker(
+    self, receive_stream: MemoryObjectReceiveStream[Tuple[str, dict]]
+  ) -> None:
+    """Send callback events in order without letting one failed send stop the worker."""
+    async with receive_stream:
+      async for event, data in receive_stream:
+        try:
+          await self.send_command(event=event, data=data, wait_for_response=False)
+        except Exception:
+          logger.exception("visualizer: failed to send %r event to browser", event)
 
   async def _send_resources_and_state(self):
     """Private method for sending the resource and state to the browser. This is called after the
@@ -722,59 +840,162 @@ class Visualizer:
     if self._show_machine_tools_at_start:
       await self.send_command("show_machine_tools", {}, wait_for_response=False)
 
-  def _handle_resource_assigned_callback(self, resource: Resource) -> None:
+  def _emit(self, event: str, data: dict) -> None:
+    """Marshal one synchronous callback event onto the active Visualizer loop."""
+    with self._callback_lock:
+      if not self._callbacks_active or self._loop is None:
+        return
+      generation = self._callback_generation
+      try:
+        self._loop.call_soon_threadsafe(self._enqueue_outbound_for_run, generation, event, data)
+      except RuntimeError:
+        return
+
+  def _enqueue_outbound_for_run(self, generation: int, event: str, data: dict) -> None:
+    """Enqueue only if a loop callback still belongs to the active Visualizer run."""
+    with self._callback_lock:
+      if self._callbacks_active and generation == self._callback_generation:
+        self._enqueue_outbound(event, data)
+
+  def _enqueue_outbound(self, event: str, data: dict) -> None:
+    """Add one event to the bounded outbox without blocking the event loop."""
+    with self._callback_lock:
+      if self._outbox_send is not None:
+        try:
+          self._outbox_send.send_nowait((event, data))
+        except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
+          logger.warning("visualizer: dropping %r event (outbox closed or full)", event)
+
+  def _register_resource_callbacks(self, resource: Optional[Resource] = None) -> None:
+    """Register callback identities for the active resource tree or a new subtree."""
+    with self._callback_lock:
+      if resource is None:
+        resource = self._root_resource
+        self._callback_generation += 1
+        generation = self._callback_generation
+
+        def resource_assigned(assigned_resource: Resource) -> None:
+          self._handle_resource_assigned_callback(assigned_resource, generation)
+
+        resource.register_did_assign_resource_callback(resource_assigned)
+        self._resource_assigned_callback = resource_assigned
+
+        def resource_unassigned(unassigned_resource: Resource) -> None:
+          self._handle_resource_unassigned_callback(unassigned_resource, generation)
+
+        resource.register_did_unassign_resource_callback(resource_unassigned)
+        self._resource_unassigned_callback = resource_unassigned
+        self._register_state_update_callbacks(resource, generation)
+        self._callbacks_active = True
+        return
+      elif not self._callbacks_active:
+        return
+      self._register_state_update_callbacks(resource, self._callback_generation)
+
+  def _register_state_update_callbacks(self, resource: Resource, generation: int) -> None:
+    """Install and record state callbacks for one tree while the callback lock is held."""
+    if id(resource) not in self._state_update_callbacks:
+      observed_resource = resource
+
+      def state_updated(_: dict) -> None:
+        self._handle_state_update_callback(observed_resource, generation)
+
+      resource.register_state_update_callback(state_updated)
+      self._state_update_callbacks[id(resource)] = (resource, state_updated)
+
+    for child in resource.children:
+      self._register_state_update_callbacks(child, generation)
+
+  def _deregister_resource_callbacks(self) -> None:
+    """Deregister every callback identity installed for the active run."""
+    with self._callback_lock:
+      self._callbacks_active = False
+      self._callback_generation += 1
+
+      if self._resource_assigned_callback is not None:
+        self._root_resource.deregister_did_assign_resource_callback(
+          self._resource_assigned_callback
+        )
+        self._resource_assigned_callback = None
+      if self._resource_unassigned_callback is not None:
+        self._root_resource.deregister_did_unassign_resource_callback(
+          self._resource_unassigned_callback
+        )
+        self._resource_unassigned_callback = None
+
+      for resource, callback in list(self._state_update_callbacks.values()):
+        resource.deregister_state_update_callback(callback)
+      self._state_update_callbacks.clear()
+
+  def _handle_resource_assigned_callback(self, resource: Resource, generation: int) -> None:
     """Called when a resource is assigned to a resource already in the tree starting from the
     root resource. This method will send an event about the new resource"""
+    with self._callback_lock:
+      if not self._callbacks_active or generation != self._callback_generation:
+        return
+      self._register_resource_callbacks(resource)
 
-    # TODO: unassign should deregister the callbacks
-    # register for callbacks
-    def register_state_update(resource: Resource):
-      resource.register_state_update_callback(
-        lambda _: self._handle_state_update_callback(resource)
-      )
-      for child in resource.children:
-        register_state_update(child)
+      # Send a `resource_assigned` event to the browser.
+      data = {
+        "resource": _serialize_resource_tree(resource),
+        "method_registry": _build_method_registry(resource),
+        "state": resource.serialize_all_state(),
+        "parent_name": (resource.parent.name if resource.parent else None),
+      }
+      self._emit("resource_assigned", data)
 
-    register_state_update(resource)
+  def _deregister_state_update_callbacks(self, resource: Resource) -> None:
+    """Remove state observers for a detached subtree while holding the callback lock."""
+    for child in resource.children:
+      self._deregister_state_update_callbacks(child)
+    registered = self._state_update_callbacks.pop(id(resource), None)
+    if registered is not None:
+      registered_resource, callback = registered
+      registered_resource.deregister_state_update_callback(callback)
 
-    # Send a `resource_assigned` event to the browser.
-    data = {
-      "resource": _serialize_resource_tree(resource),
-      "method_registry": _build_method_registry(resource),
-      "state": resource.serialize_all_state(),
-      "parent_name": (resource.parent.name if resource.parent else None),
-    }
-    fut = self.send_command(event="resource_assigned", data=data, wait_for_response=False)
-    asyncio.run_coroutine_threadsafe(fut, self.loop)
-
-  def _handle_resource_unassigned_callback(self, resource: Resource) -> None:
+  def _handle_resource_unassigned_callback(self, resource: Resource, generation: int) -> None:
     """Called when a resource is unassigned from a resource already in the tree starting from the
     root resource. This method will send an event about the removed resource"""
+    with self._callback_lock:
+      if not self._callbacks_active or generation != self._callback_generation:
+        return
+      self._deregister_state_update_callbacks(resource)
+      self._emit("resource_unassigned", {"resource_name": resource.name})
 
-    # Send a `resource_unassigned` event to the browser.
-    data = {"resource_name": resource.name}
-    fut = self.send_command(event="resource_unassigned", data=data, wait_for_response=False)
-    asyncio.run_coroutine_threadsafe(fut, self.loop)
-
-  def _handle_state_update_callback(self, resource: Resource) -> None:
+  def _handle_state_update_callback(self, resource: Resource, generation: int) -> None:
     """Called when the state of a resource is updated. Updates are batched so that
     rapid successive changes (e.g. 96-channel pickup) are sent as a single message."""
+    with self._callback_lock:
+      if (
+        self._callbacks_active
+        and generation == self._callback_generation
+        and self._loop is not None
+      ):
+        state = resource.serialize_state()
+        try:
+          self._loop.call_soon_threadsafe(
+            self._enqueue_state_update, generation, resource.name, state
+          )
+        except RuntimeError:
+          return
 
-    state = resource.serialize_state()
-    self.loop.call_soon_threadsafe(self._enqueue_state_update, resource.name, state)
-
-  def _enqueue_state_update(self, name: str, state: dict) -> None:
+  def _enqueue_state_update(self, generation: int, name: str, state: dict) -> None:
     """Enqueue a state update on the event loop thread and schedule a flush if needed."""
-    self._pending_state_updates[name] = state
-    if not self._flush_scheduled:
-      self._flush_scheduled = True
-      self.loop.call_soon(self._flush_state_updates)
+    with self._callback_lock:
+      if not self._callbacks_active or generation != self._callback_generation:
+        return
+      self._pending_state_updates[name] = state
+      if not self._flush_scheduled and self._loop is not None:
+        self._flush_scheduled = True
+        self._loop.call_soon(self._flush_state_updates, generation)
 
-  def _flush_state_updates(self) -> None:
+  def _flush_state_updates(self, generation: int) -> None:
     """Send all pending state updates as a single ``set_state`` event."""
-    data = self._pending_state_updates
-    self._pending_state_updates = {}
-    self._flush_scheduled = False
-    if data:
-      fut = self.send_command(event="set_state", data=data, wait_for_response=False)
-      asyncio.ensure_future(fut)
+    with self._callback_lock:
+      if not self._callbacks_active or generation != self._callback_generation:
+        return
+      data = self._pending_state_updates
+      self._pending_state_updates = {}
+      self._flush_scheduled = False
+      if data:
+        self._enqueue_outbound("set_state", data)
