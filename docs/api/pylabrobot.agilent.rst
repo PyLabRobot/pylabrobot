@@ -99,6 +99,8 @@ VSpin
     VSpin
     Access2
     Access2Driver
+    ServoStatus
+    Access2Status
 
 
 PlateLoc
