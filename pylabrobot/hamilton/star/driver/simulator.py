@@ -9,7 +9,6 @@ Nothing reaches the wire. `send_command` raises, which is how a command that has
 simulated makes itself known: override the method that sends it, on the feature that owns it.
 """
 
-import asyncio
 import copy
 import dataclasses
 import datetime
@@ -17,6 +16,9 @@ import logging
 import math
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.hamilton.protocol.text.framing import (
   assemble_channel_command,
   parse_firmware_version_date,
@@ -93,11 +95,9 @@ SIMULATED_BARCODE: Optional[str] = None
 class _UnusedTransport(IOBase):
   """Stands where the transport would be. Nothing should reach it."""
 
-  async def setup(self, *args, **kwargs):
-    pass
-
-  async def stop(self):
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Keep the simulated transport scoped without acquiring a link."""
+    await super()._enter_lifespan(stack)
 
   async def write(self, data: bytes, *args, **kwargs):
     raise RuntimeError(f"the simulator tried to write to a transport: {data!r}")
@@ -1167,11 +1167,8 @@ class STARSimulationDriver(STARDriver):
 
   # -- the device itself ----------------------------------------------------
 
-  async def _open(self):
-    """There is no link to open, and no replies to read."""
-
-  async def _close(self):
-    pass
+  async def _start_reply_reader(self, stack: AsyncExitStackWithShielding) -> None:
+    """Simulation answers directly; it has no reply worker."""
 
   async def request_device_configuration(self) -> DeviceConfiguration:
     """What the device reports it carries, answered from what it was declared to be.
@@ -1230,7 +1227,7 @@ class STARSimulationDriver(STARDriver):
     waited, so this costs nothing on a device that is not keeping time."""
     owed, self._motion_owed = self._motion_owed, 0.0
     if owed:
-      await asyncio.sleep(owed * self.motion_time_scale)
+      await anyio.sleep(owed * self.motion_time_scale)
 
   def owe_motion_time(self, *seconds: float) -> None:
     """Charge the device for a move, in seconds. The longest one owed stands: the drives move at

@@ -4,20 +4,36 @@
 - orchestrating higher level tasks.
 """
 
-import asyncio
 import dataclasses
 import datetime
 import json
 import logging
-from typing import Any, Dict, FrozenSet, List, Literal, Optional, Tuple, Union, cast, overload
+from typing import (
+  Any,
+  Dict,
+  FrozenSet,
+  List,
+  Literal,
+  Optional,
+  Tuple,
+  Union,
+  cast,
+  overload,
+)
 
+from pylabrobot.concurrency import (
+  AsyncExitStackWithShielding,
+  HasLifespan,
+  SiblingTaskErrors,
+  non_cancelling_task_group,
+)
 from pylabrobot.events import emit_event
 from pylabrobot.hamilton.protocol.text.framing import (
   assemble_channel_command,
   parse_firmware_version_date,
   parse_fw_string,
 )
-from pylabrobot.hamilton.protocol.text.router import ReplyRouter
+from pylabrobot.hamilton.protocol.text.router import ReplyReader, ReplyRouter, USBReplyReader
 from pylabrobot.hamilton.star.driver.configuration import (
   DeviceConfiguration,
   read_configuration,
@@ -84,7 +100,7 @@ def _range(values: Optional[Tuple[float, float]]) -> str:
   return "unresolved" if values is None else f"{values[0]} to {values[1]} mm"
 
 
-class STARDriver:
+class STARDriver(HasLifespan):
   """Interface for the Hamilton STARDriver."""
 
   def _deck_component_name(self, name: str) -> str:
@@ -112,6 +128,7 @@ class STARDriver:
     read_timeout: int = 120,
     left_side_panel_installed: bool = False,
     io: Optional[IOBase] = None,
+    reply_reader: Optional[ReplyReader] = None,
   ):
     """Create a new STAR interface.
 
@@ -134,8 +151,10 @@ class STARDriver:
         read: it comes off in seconds, and the reported travel range does not follow it. With one
         fitted, an arm carrying a head stops while the head is still clear of it.
       io: an already-built USB handle to use instead of opening one from the arguments above.
+      reply_reader: Framed reply source for an injected non-USB link.
     """
 
+    super().__init__()
     self.io: IOBase = io or USB(
       human_readable_device_name=f"Hamilton {'STAR'}",
       id_vendor=ID_VENDOR,
@@ -155,6 +174,7 @@ class STARDriver:
       raise_for_error=check_fw_string_error,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
+      reader=reply_reader if reply_reader is not None else USBReplyReader(cast(USB, self.io)),
     )
 
     # What was declared this device is, read once here: the one place a configuration comes off a
@@ -193,15 +213,29 @@ class STARDriver:
   # Connection and lifecycle
   # ----------------------------------------
 
-  async def setup(
+  async def _start_reply_reader(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the single reply reader until after safety cleanup."""
+    await stack.enter_async_context(self._replies.lifespan())
+
+  async def _finish_session(self) -> None:
+    """Bring the device to safety while the reader and transport remain open."""
+    try:
+      await self._make_safe()
+    finally:
+      self._connected = False
+      self._tip_type_indices.clear()
+
+  async def _enter_lifespan(
     self,
+    stack: AsyncExitStackWithShielding,
+    *,
     skip_device_initialization: bool = False,
     skip_pipettes: bool = False,
     skip_iswap: bool = False,
     skip_head96: bool = False,
     skip_head384: bool = False,
     skip_autoload: bool = False,
-  ):
+  ) -> None:
     """Connect to the device, find out what it is, and bring it up.
 
     This moves the device: everything that can be initialized is. `discover` is the read-only
@@ -225,6 +259,7 @@ class STARDriver:
       skip_head384: do not initialize the 384-head.
       skip_autoload: do not initialize or park the autoload.
     """
+    await super()._enter_lifespan(stack)
     skipped = frozenset(
       name
       for name, skip in (
@@ -236,76 +271,61 @@ class STARDriver:
       if skip
     )
     logger.debug("Setting up STAR on %s ...", self._describe_link())
-    # A repeated setup goes over the link the first one opened: opening it again would start a
-    # second thread reading the same replies.
-    if not self._connected:
-      await self._open()
-      self._connected = True
+    await stack.enter_async_context(self.io.lifespan())
+    await self._start_reply_reader(stack)
+    self._connected = True
+    stack.push_shielded_async_callback(self._finish_session)
 
-    try:
-      # 1. What is on the other end, and what does it carry?
-      logger.debug("[PHASE 1] Discovery")
-      await self.discover()
+    # 1. What is on the other end, and what does it carry?
+    logger.debug("[PHASE 1] Discovery")
+    await self.discover()
 
-      # 2. Bring the device to a known state. The autoload homes alongside it: it is its own
-      #    unit, and the device procedure holds every drive but its. Phase 3 reads its state
-      #    again, so a device that does home it there loses nothing but the overlap.
-      #    It runs alone. The autoload used to be brought up alongside it, to save the time the
-      #    procedure takes, and that put a C0 command and an I0 command in flight together: on
-      #    2026-09-04 the autoload answered one with the id of its own previous command, and the
-      #    caller waited for a reply that had already arrived. Legacy runs the procedure by itself
-      #    and gathers the modules afterwards; so does this.
-      logger.debug("[PHASE 2] Device initialization")
-      autoload = self.autoload if not skip_autoload else None
-      already_initialized = await self.request_initialization_status()
-      if skip_device_initialization and not already_initialized:
-        logger.debug("device reports not initialized, and initializing it was skipped")
-      else:
-        already_initialized = await self.initialize()
+    # 2. Bring the device to a known state. The autoload homes alongside it: it is its own
+    #    unit, and the device procedure holds every drive but its. Phase 3 reads its state
+    #    again, so a device that does home it there loses nothing but the overlap.
+    #    It runs alone. The autoload used to be brought up alongside it, to save the time the
+    #    procedure takes, and that put a C0 command and an I0 command in flight together: on
+    #    2026-09-04 the autoload answered one with the id of its own previous command, and the
+    #    caller waited for a reply that had already arrived. Legacy runs the procedure by itself
+    #    and gathers the modules afterwards; so does this.
+    logger.debug("[PHASE 2] Device initialization")
+    autoload = self.autoload if not skip_autoload else None
+    already_initialized = await self.request_initialization_status()
+    if skip_device_initialization and not already_initialized:
+      logger.debug("device reports not initialized, and initializing it was skipped")
+    else:
+      already_initialized = await self.initialize()
 
-      # 3. Each feature brings itself up. They sit on different modules, so they run together;
-      #    the autoload, iSWAP and 96-head join this gather as they land. The channels only need
-      #    it when the device procedure did not just run, or when something is still mounted.
-      logger.debug("[PHASE 3] Feature initialization")
-      initializing = [self._initialize_arm(arm, already_initialized, skipped) for arm in self.arms]
+    # 3. Each feature brings itself up. They sit on different modules, so they run together;
+    #    the autoload, iSWAP and 96-head join this gather as they land. The channels only need
+    #    it when the device procedure did not just run, or when something is still mounted.
+    logger.debug("[PHASE 3] Feature initialization")
+    async with non_cancelling_task_group() as group:
+      for arm in self.arms:
+        group.start_soon(self._initialize_arm, arm, already_initialized, skipped)
       if autoload is not None:
-        initializing.append(autoload.initialize())
-      await asyncio.gather(*initializing)
+        group.start_soon(autoload.initialize)
 
-      # A command that answered is not a module that came up, so each is asked again. The channels
-      # report no initialization of their own.
-      down = [
-        type(feature).__name__
-        for feature in self.features
-        if not isinstance(feature, Pipettes)
-        and not await self.request_initialization_status(feature.configuration.module)
-      ]
-      if not await self.request_initialization_status():
-        down.insert(0, "device")
-      if down:
-        logger.warning("setup finished with these not initialized: %s", ", ".join(down))
+    # A command that answered is not a module that came up, so each is asked again. The channels
+    # report no initialization of their own.
+    down = [
+      type(feature).__name__
+      for feature in self.features
+      if not isinstance(feature, Pipettes)
+      and not await self.request_initialization_status(feature.configuration.module)
+    ]
+    if not await self.request_initialization_status():
+      down.insert(0, "device")
+    if down:
+      logger.warning("setup finished with these not initialized: %s", ", ".join(down))
 
-      # 4. What was found, as resources on the deck - when the driver was given one to reflect
-      #    into. Each is a child of the deck, so a device with a deck carries one tree.
-      if self.deck is not None:
-        logger.debug("[PHASE 4] Feature resources")
-        await self._create_capability_resources()
-
-    except BaseException:
-      await self.stop()
-      raise
+    # 4. What was found, as resources on the deck - when the driver was given one to reflect
+    #    into. Each is a child of the deck, so a device with a deck carries one tree.
+    if self.deck is not None:
+      logger.debug("[PHASE 4] Feature resources")
+      await self._create_capability_resources()
 
     logger.info("%s", self.format_setup_summary())
-
-  async def _open(self):
-    """Open the link and start reading replies."""
-    await self.io.setup()
-    self._replies.start()
-
-  async def _close(self):
-    """Stop reading replies and close the link."""
-    self._replies.stop()
-    await self.io.stop()
 
   async def features_below_safe_z(self, tolerance: float = 0.5) -> List[str]:
     """Which channels, heads, iSWAP and the autoload wheel report below where they are safe.
@@ -372,7 +392,7 @@ class STARDriver:
           low.append("autoload wheel below its safe Z")
     return low
 
-  async def stop(self):
+  async def _make_safe(self) -> None:
     """Close the link, leaving the device safe to move laterally.
 
     The device keeps its state; only this driver lets go of it. Every channel, head and the
@@ -399,26 +419,27 @@ class STARDriver:
       # different Z axes, so they go up together rather than one after another. The wheel is on
       # its own unit and travels its own rail, but it is the same hazard: left down, it is what
       # the sled carries into whatever the sled next passes.
-      safe_z_moves: List[Any] = []
-      for arm in self.arms:
-        if arm.pipettes is not None:
-          safe_z_moves.append(arm.pipettes.move_to_safe_z())
-        for head in (arm.head96, arm.head384):
-          if head is not None:
-            safe_z_moves.append(head.move_to_safe_z())
-        # The arm is the same hazard as the rest: parking retracts it, and an arm left low is
-        # driven through whatever it is over on the way home.
-        if arm.iswap is not None:
-          safe_z_moves.append(arm.iswap.elbow_move_to_safe_z_height())
-      if self.autoload is not None:
-        safe_z_moves.append(self.autoload.wheel_move_to_safe_z())
-
       # Every subsystem gets its chance to reach safe Z, so one that cannot does not leave the
       # rest of them low.
-      results = await asyncio.gather(*safe_z_moves, return_exceptions=True)
-      failed = [result for result in results if isinstance(result, BaseException)]
-      for failure in failed:
-        logger.warning("could not move a subsystem to Z safety", exc_info=failure)
+      safe_z_failed = False
+      try:
+        async with non_cancelling_task_group() as group:
+          for arm in self.arms:
+            if arm.pipettes is not None:
+              group.start_soon(arm.pipettes.move_to_safe_z)
+            for head in (arm.head96, arm.head384):
+              if head is not None:
+                group.start_soon(head.move_to_safe_z)
+            # The arm is the same hazard as the rest: parking retracts it, and an arm left low is
+            # driven through whatever it is over on the way home.
+            if arm.iswap is not None:
+              group.start_soon(arm.iswap.elbow_move_to_safe_z_height)
+          if self.autoload is not None:
+            group.start_soon(self.autoload.wheel_move_to_safe_z)
+      except SiblingTaskErrors as failures:
+        safe_z_failed = True
+        for failure in failures.exceptions:
+          logger.warning("could not move a subsystem to Z safety", exc_info=failure)
 
       # Asked, not assumed: a move that answers has not said where it stopped, and this is the
       # one moment the answer decides whether anything may travel laterally.
@@ -430,29 +451,30 @@ class STARDriver:
 
       # The iSWAP parks instead: parking retracts it, which is lateral motion, so it waits until
       # everything sharing its arm is up. If anything is still low, it stays where it is.
-      if not failed and not low:
-        parks = []
-        for arm in self.arms:
-          if arm.iswap is None:
-            continue
-          # Asked, not assumed, and asked of the arm rather than the model: parking closes the
-          # gripper and retracts it, so an arm still holding a plate carries it home and leaves it
-          # wherever the fingers next let go. An arm that cannot say counts as holding something.
-          try:
-            holding = await arm.iswap.request_plate_gripped()
-          except Exception:
-            logger.warning(
-              "could not read whether the %s iSWAP is holding a plate, so it stays where it is",
-              arm.side,
-              exc_info=True,
-            )
-            continue
-          if holding:
-            logger.warning("the %s iSWAP is holding a plate, so it stays where it is", arm.side)
-            continue
-          parks.append(arm.iswap.park())
-        for failure in await asyncio.gather(*parks, return_exceptions=True):
-          if isinstance(failure, BaseException):
+      if not safe_z_failed and not low:
+        try:
+          async with non_cancelling_task_group() as group:
+            for arm in self.arms:
+              if arm.iswap is None:
+                continue
+              # Asked, not assumed, and asked of the arm rather than the model: parking closes the
+              # gripper and retracts it, so an arm still holding a plate carries it home and leaves it
+              # wherever the fingers next let go. An arm that cannot say counts as holding something.
+              try:
+                holding = await arm.iswap.request_plate_gripped()
+              except Exception:
+                logger.warning(
+                  "could not read whether the %s iSWAP is holding a plate, so it stays where it is",
+                  arm.side,
+                  exc_info=True,
+                )
+                continue
+              if holding:
+                logger.warning("the %s iSWAP is holding a plate, so it stays where it is", arm.side)
+                continue
+              group.start_soon(arm.iswap.park)
+        except SiblingTaskErrors as failures:
+          for failure in failures.exceptions:
             logger.warning("could not park the iSWAP", exc_info=failure)
 
       # And the deck goes dark. An indicator left lit outlives the session that lit it - it says a
@@ -467,12 +489,6 @@ class STARDriver:
       logger.warning(
         "could not bring the device to a safe state; closing the link anyway", exc_info=True
       )
-    finally:
-      self._connected = False
-      # The device's tip type table is volatile, so what this session wrote to it does not
-      # survive the device going down.
-      self._tip_type_indices.clear()
-      await self._close()
 
   @property
   def connected(self) -> bool:
@@ -544,13 +560,13 @@ class STARDriver:
   ):
     """Assemble a firmware command, send it, and parse the reply if a format is given.
 
-    Modules share one physical link between control PC and the device but due to the STAR's 
+    Modules share one physical link between control PC and the device but due to the STAR's
     architecture containing multiple control boards, for different drives, we can parallelise
     certain subsystems.
-    To prevent collisions, we use a lock system inside this method which ensures that only 
+    To prevent collisions, we use a lock system inside this method which ensures that only
     compatible commands are sent in parallel.
-    
-    A command addressed to C0 can drive a subsystem of its own, e.g. `C0 DI` the channels and 
+
+    A command addressed to C0 can drive a subsystem of its own, e.g. `C0 DI` the channels and
     `C0 II` the autoload, enabling parallelisation of known orthogonal C0 commands.\
     A C0 command naming no subsystem explicitly is assumed to not allow parallelisation and
     runs alone.
@@ -1193,20 +1209,19 @@ class STARDriver:
     arms = [arm for arm in (self.left_x_arm, self.right_x_arm) if arm is not None]
     # Through the arms, not through the accessors above: those refuse on a device with two, and
     # setup has to reach every feature the device has whichever arm holds it.
-    reading = []
-    for arm in arms:
-      reading.append(arm.discover())
-      if arm.pipettes is not None:
-        reading.append(arm.pipettes.discover())
-      if arm.head96 is not None:
-        reading.append(arm.head96.discover())
-      if arm.head384 is not None:
-        reading.append(arm.head384.discover())
-      if arm.iswap is not None:
-        reading.append(arm.iswap.discover())
-    if self.autoload is not None:
-      reading.append(self.autoload.discover())
-    await asyncio.gather(*reading)
+    async with non_cancelling_task_group() as group:
+      for arm in arms:
+        group.start_soon(arm.discover)
+        if arm.pipettes is not None:
+          group.start_soon(arm.pipettes.discover)
+        if arm.head96 is not None:
+          group.start_soon(arm.head96.discover)
+        if arm.head384 is not None:
+          group.start_soon(arm.head384.discover)
+        if arm.iswap is not None:
+          group.start_soon(arm.iswap.discover)
+      if self.autoload is not None:
+        group.start_soon(self.autoload.discover)
     # Once the head has said where it sits, an arm can take a declared side panel out of its own
     # travel: the offset is what decides how much the panel costs.
     for arm in arms:

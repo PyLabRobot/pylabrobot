@@ -2,8 +2,9 @@
 
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
 from pylabrobot.hamilton.star.driver.features.cover import FrontCover
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
@@ -132,7 +133,7 @@ STAR_DECK_LOCATION = Coordinate(110.0 + DECK_ORIGIN_X_CORRECTION, DECK_ORIGIN_Y,
 STARLET_DECK_LOCATION = Coordinate(110.0 + DECK_ORIGIN_X_CORRECTION, DECK_ORIGIN_Y, 80.5)
 
 
-class STARDevice(Resource):
+class STARDevice(Resource, HasLifespan):
   """The complete modelling and control interface for a Hamilton Microlab STAR.
 
   The device is itself a resource and its deck is its child, so everything on the deck is a
@@ -197,7 +198,8 @@ class STARDevice(Resource):
     if driver is not None and simulation:
       logger.warning("both a driver and simulation given; driving the driver")
 
-    super().__init__(
+    Resource.__init__(
+      self,
       name=name,
       size_x=deck.get_absolute_size_x() if size_x is None else size_x,
       size_y=deck.get_absolute_size_y() if size_y is None else size_y,
@@ -207,6 +209,7 @@ class STARDevice(Resource):
     )
     self.extension_housing = extension_housing
     self.left_side_panel_installed = left_side_panel_installed
+    HasLifespan.__init__(self)
 
     self.deck = deck
     if driver is not None:
@@ -320,15 +323,18 @@ class STARDevice(Resource):
 
   # -- session ---------------------------------------------------------------
 
-  async def setup(
+  async def _enter_lifespan(
     self,
+    stack: AsyncExitStackWithShielding,
+    *,
     skip_device_initialization: bool = False,
     skip_pipettes: bool = False,
     skip_iswap: bool = False,
     skip_head96: bool = False,
     skip_head384: bool = False,
     skip_autoload: bool = False,
-  ):
+    **kwargs: Any,
+  ) -> None:
     """Bring the device up.
 
     Args:
@@ -339,18 +345,18 @@ class STARDevice(Resource):
       skip_head384: as `STARDriver.setup` takes it.
       skip_autoload: as `STARDriver.setup` takes it.
     """
-    await self.driver.setup(
-      skip_device_initialization=skip_device_initialization,
-      skip_pipettes=skip_pipettes,
-      skip_iswap=skip_iswap,
-      skip_head96=skip_head96,
-      skip_head384=skip_head384,
-      skip_autoload=skip_autoload,
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(
+      self.driver.lifespan(
+        skip_device_initialization=skip_device_initialization,
+        skip_pipettes=skip_pipettes,
+        skip_iswap=skip_iswap,
+        skip_head96=skip_head96,
+        skip_head384=skip_head384,
+        skip_autoload=skip_autoload,
+        **kwargs,
+      )
     )
-
-  async def stop(self):
-    """Put the device down."""
-    await self.driver.stop()
 
   def __str__(self) -> str:
     return f"{self.name}({self.driver.__class__.__name__}, {self.deck.num_tracks}-track deck)"

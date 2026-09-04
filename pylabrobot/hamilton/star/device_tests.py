@@ -27,10 +27,25 @@ from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_NUM_TRACKS, STARLET_NUM_TRACKS
 from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import serialize
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
 # device to start from, and this is the one they stand in for.
 RECORDED_DEVICE = cast(DeviceConfiguration, read_configuration(RECORDING_STAR)["device"])
+
+
+class TestScopedDevice(AnyioTestBase):
+  """The device owns its simulator rather than leaving a separate driver session."""
+
+  async def test_device_closes_driver_after_body_failure(self):
+    star = STAR(simulation=True)
+    try:
+      async with star:
+        assert star.driver.connected
+        raise ValueError("body failed")
+    except ValueError as error:
+      assert str(error) == "body failed"
+    assert not star.driver.connected
 
 
 def declaring(**parts: object) -> str:

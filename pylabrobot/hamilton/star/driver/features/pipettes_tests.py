@@ -293,6 +293,7 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     pipettes = await simulated_channels()
     await pipettes._set_z_speed(2, 50.0)
     await pipettes._set_y_acceleration_level(2, 1)
+    await pipettes._driver.stop()
     await pipettes._driver.setup()
     self.assertEqual(await pipettes.request_z_speed(2), 125.0)
     self.assertEqual(await pipettes.request_y_acceleration_level(2), 3)
@@ -590,7 +591,10 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
   """
 
   async def asyncSetUp(self):
-    patcher = unittest.mock.patch("asyncio.sleep", new_callable=unittest.mock.AsyncMock)
+    patcher = unittest.mock.patch(
+      "pylabrobot.hamilton.star.driver.simulator.anyio.sleep",
+      new_callable=unittest.mock.AsyncMock,
+    )
     self.sleep = patcher.start()
     self.addCleanup(patcher.stop)
 

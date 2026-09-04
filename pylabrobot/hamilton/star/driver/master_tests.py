@@ -7,8 +7,12 @@ import unittest
 import unittest.mock
 from typing import List, cast
 
+import anyio
+import pytest
+
 import pylabrobot.hamilton.star.driver.master as master
 import pylabrobot.hamilton.star.driver.simulator as simulator
+from pylabrobot.concurrency import AsyncExitStackWithShielding, SiblingTaskErrors
 from pylabrobot.hamilton.star.conftest import BARE_X_ARM
 from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STAR_HEAD384
 from pylabrobot.hamilton.star.driver.configuration import (
@@ -18,13 +22,174 @@ from pylabrobot.hamilton.star.driver.configuration import (
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.io.io import IOBase
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.serializer import serialize
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
 # device to start from, and this is the one they stand in for.
 RECORDED_DEVICE = cast(DeviceConfiguration, read_configuration(RECORDING_STAR)["device"])
+
+
+class TestSimulationLifespan(AnyioTestBase):
+  """A simulated STAR owns its session without opening a physical link."""
+
+  async def test_scoped_entry_and_reuse(self):
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    for _ in range(2):
+      async with driver:
+        assert driver.connected
+        assert driver.configuration is not None
+        assert driver.x_arm is driver.left_x_arm
+      assert not driver.connected
+
+  async def test_failed_discovery_releases_session(self):
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    driver.simulated_configuration = dataclasses.replace(
+      driver.simulated_configuration, autoload_installed=False
+    )
+    with pytest.raises(ValueError, match="autoload_installed"):
+      async with driver:
+        pass
+    assert not driver.connected
+
+  async def test_feature_initialization_reports_all_failures(
+    self, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    """One failed module does not cancel another, and setup reports both failures."""
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    arm_failure = ValueError("arm failed")
+    autoload_failure = RuntimeError("autoload failed")
+
+    async def fail_arm(*args: object) -> None:
+      raise arm_failure
+
+    async def fail_autoload(self: Autoload, park_after: bool = True) -> None:
+      del self, park_after
+      raise autoload_failure
+
+    monkeypatch.setattr(driver, "_initialize_arm", fail_arm)
+    monkeypatch.setattr(Autoload, "initialize", fail_autoload)
+
+    with pytest.raises(SiblingTaskErrors) as raised:
+      async with driver:
+        pytest.fail("failed feature initialization reached the body")
+
+    assert raised.value.exceptions == (arm_failure, autoload_failure)
+    assert not driver.connected
+
+  async def test_teardown_attempts_all_safe_z_moves_after_failures(
+    self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+  ) -> None:
+    """A failed safety move does not cancel an independent subsystem's move."""
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    attempted: List[str] = []
+
+    async def fail_channels() -> None:
+      attempted.append("channels")
+      raise RuntimeError("channels stuck")
+
+    async def fail_wheel() -> None:
+      attempted.append("wheel")
+      raise RuntimeError("wheel stuck")
+
+    async with driver:
+      assert driver.left_x_arm is not None and driver.left_x_arm.pipettes is not None
+      assert driver.autoload is not None
+      monkeypatch.setattr(driver.left_x_arm.pipettes, "move_to_safe_z", fail_channels)
+      monkeypatch.setattr(driver.autoload, "wheel_move_to_safe_z", fail_wheel)
+
+    assert set(attempted) == {"channels", "wheel"}
+    assert (
+      sum(record.message == "could not move a subsystem to Z safety" for record in caplog.records)
+      == 2
+    )
+    assert not driver.connected
+
+
+class _SoftwareLink(IOBase):
+  """Transport recorder that can never contact a device."""
+
+  def __init__(self, events: List[str]):
+    super().__init__()
+    self.events = events
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs):
+    self.events.append("open")
+    stack.callback(self.events.append, "close")
+
+  async def read(self, *args, **kwargs) -> bytes:
+    await anyio.sleep(0.01)
+    raise TimeoutError
+
+  async def write(self, data: bytes, *args, **kwargs) -> None:
+    self.events.append("write")
+
+
+class _SoftwareReplyReader:
+  """Supply the test link's deliberately failing reply source without USB framing."""
+
+  def __init__(self, io: _SoftwareLink) -> None:
+    self.io = io
+
+  async def read_reply(self) -> bytes:
+    """Wait for the test link's read failure."""
+    return await self.io.read(64)
+
+
+class _SoftwareSTAR(master.STARDriver):
+  """Drive the real owner entry sequence without firmware commands."""
+
+  def __init__(self, events: List[str]):
+    io = _SoftwareLink(events)
+    super().__init__(io=io, reply_reader=_SoftwareReplyReader(io))
+    self.events = events
+
+  async def discover(self) -> None:
+    self.events.append("discover")
+
+  async def request_initialization_status(self, module: str = "C0") -> bool:
+    return True
+
+  async def initialize(self, read_timeout: int = 300) -> bool:
+    del read_timeout
+    return True
+
+  async def _make_safe(self) -> None:
+    self.events.append("safe")
+
+  def format_setup_summary(self) -> str:
+    return "software"
+
+
+class TestRealOwnerLifespan(AnyioTestBase):
+  """The real owner joins its reader and makes the machine safe before link closure."""
+
+  async def test_close_after_safety(self):
+    events: List[str] = []
+    driver = _SoftwareSTAR(events)
+    async with driver:
+      assert driver.connected
+      assert driver.io.is_active
+    assert events == ["open", "discover", "safe", "close"]
+    assert not driver.connected
+
+  async def test_failed_entry_still_runs_safety_before_close(self):
+    events: List[str] = []
+    driver = _SoftwareSTAR(events)
+
+    async def fail_discovery() -> None:
+      events.append("discover")
+      raise ValueError("discovery failed")
+
+    driver.discover = fail_discovery  # type: ignore[method-assign]
+    with pytest.raises(ValueError, match="discovery failed"):
+      async with driver:
+        pass
+    assert events == ["open", "discover", "safe", "close"]
+    assert not driver.connected
 
 
 def declaring(**parts: object) -> str:
@@ -254,13 +419,15 @@ class TestDeclaredConfiguration(unittest.IsolatedAsyncioTestCase):
 
 
 class TestRepeatedSetup(unittest.IsolatedAsyncioTestCase):
-  """Setup is repeatable: a second one re-reads the device over the link the first one opened."""
+  """Discovery can re-read a device within one open session."""
 
-  async def test_a_second_setup_does_not_open_the_link_again(self):
+  async def test_a_second_discovery_does_not_open_the_link_again(self):
     star = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
-    with unittest.mock.patch.object(star, "_open", wraps=star._open) as opened:
-      await star.setup()
-      await star.setup()
+    with unittest.mock.patch.object(
+      star.io, "_enter_lifespan", wraps=star.io._enter_lifespan
+    ) as opened:
+      async with star:
+        await star.discover()
     self.assertEqual(opened.call_count, 1)
 
 

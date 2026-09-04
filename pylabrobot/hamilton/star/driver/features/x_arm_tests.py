@@ -149,6 +149,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_does_not_duplicate_the_arm(self):
     driver = await _both_arms()
+    await driver.stop()
     await driver.setup()
     arms = [
       child.name for child in cast(HamiltonDeck, driver.deck).children if child.category == "x_arm"

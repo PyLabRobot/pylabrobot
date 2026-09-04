@@ -1,6 +1,5 @@
 """The pipetting channels: the row of independently driven pipettes on an arm."""
 
-import asyncio
 import datetime
 import logging
 import math
@@ -18,6 +17,8 @@ from typing import (
   Tuple,
   cast,
 )
+
+import anyio
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import NoTeachInSignalError, STARFirmwareError
@@ -448,7 +449,9 @@ class Pipettes:
     Read-only, and asks every channel at once. Fills in `configuration.channels`.
     """
     self.configuration.resolve_channels(self.num_channels)
-    await asyncio.gather(*(self._discover_channel(ch) for ch in range(self.num_channels)))
+    async with anyio.create_task_group() as group:
+      for channel in range(self.num_channels):
+        group.start_soon(self._discover_channel, channel)
     self.configuration.check_channels_agree()
 
   async def _discover_channel(self, channel: int):
