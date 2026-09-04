@@ -346,17 +346,17 @@ class TestFlexHead8ColumnOps(unittest.TestCase):
       rack = flex_96_tiprack_50ul(name="rack")
       flex.deck.assign_child_at_slot(rack, "C1")
 
-      asyncio.run(head.pick_up_single_tip(rack, well="H2"))
+      asyncio.run(head.pick_up_single_tip(rack, well="A2"))
 
       cmd_types = [c["commandType"] for c in transport.commands]
       configure_idx = cmd_types.index("configureNozzleLayout")
       pickup_idx = cmd_types.index("pickUpTip")
       self.assertLess(configure_idx, pickup_idx)
-      self.assertEqual(transport.commands[pickup_idx]["params"]["wellName"], "H2")
+      self.assertEqual(transport.commands[pickup_idx]["params"]["wellName"], "A2")
 
       tips = head.get_mounted_tips()
-      self.assertIsNotNone(tips[0])
-      for i in range(1, 8):
+      self.assertIsNotNone(tips[7])
+      for i in range(7):
         self.assertIsNone(tips[i], msg=f"channel {i}")
     finally:
       asyncio.run(flex.stop())

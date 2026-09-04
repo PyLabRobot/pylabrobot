@@ -875,7 +875,7 @@ class TestSingleNozzleLayout(unittest.TestCase):
     # over nothing. Consuming a rack front-to-back keeps that true every time.
     flex, transport, head, rack = self._bench()
     try:
-      asyncio.run(head.pick_up_single_tip(rack, well="H3"))
+      asyncio.run(head.pick_up_single_tip(rack, well="H3", primary_nozzle="A1"))
       self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "A1")
       pickups = [c for c in transport.commands if c["commandType"] == "pickUpTip"]
       self.assertEqual(pickups[-1]["params"]["wellName"], "H3")
@@ -899,13 +899,13 @@ class TestSingleNozzleLayout(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_a_rear_row_refuses_the_default_anchor_and_names_the_front_one(self):
+  def test_the_rear_anchor_on_a_rear_row_refuses_and_names_the_front_one(self):
     # Ganged nozzles descend together, so the REAR anchor on a rear row puts the
     # idle seven over rows B-H: eight tips. Refused, not silently swapped.
     flex, transport, head, rack = self._bench()
     try:
       with self.assertRaises(ValueError) as caught:
-        asyncio.run(head.pick_up_single_tip(rack, well="A2"))
+        asyncio.run(head.pick_up_single_tip(rack, well="A2", primary_nozzle="A1"))
       self.assertIn("more than one tip", str(caught.exception))
       self.assertIn("Anchor on H1", str(caught.exception))
 
@@ -915,19 +915,20 @@ class TestSingleNozzleLayout(unittest.TestCase):
     finally:
       asyncio.run(flex.stop())
 
-  def test_the_default_anchor_is_the_rear_nozzle_whatever_the_rack_holds(self):
-    # The anchor fixes where the idle seven hang for the tip's whole life, so it
-    # is declared, not derived: same call, same anchor, full rack or nearly bare.
+  def test_the_default_anchor_is_the_front_nozzle_whatever_the_rack_holds(self):
+    # The default anchor is H1, the FRONT nozzle: its idle seven trail off the
+    # REAR edge, so a rear-row well is clean whatever the rack holds -- same call,
+    # same anchor, full rack or nearly bare.
     for empty_the_rest in (False, True):
       flex, transport, head, rack = self._bench()
       try:
         if empty_the_rest:
           for spot in rack.get_all_items():
-            if spot.name != rack.get_item("H3").name and spot.has_tip():
+            if spot.name != rack.get_item("A3").name and spot.has_tip():
               spot.tracker.remove_tip(commit=True)
-        asyncio.run(head.pick_up_single_tip(rack, well="H3"))
-        self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "A1")
-        self.assertIsNotNone(head.get_mounted_tips()[0])
+        asyncio.run(head.pick_up_single_tip(rack, well="A3"))
+        self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "H1")
+        self.assertIsNotNone(head.get_mounted_tips()[7])
       finally:
         asyncio.run(flex.stop())
 
@@ -951,7 +952,34 @@ class TestSingleNozzleLayout(unittest.TestCase):
         if spot.name != rack.get_item("D2").name and spot.has_tip():
           spot.tracker.remove_tip(commit=True)
       asyncio.run(head.pick_up_single_tip(rack, well="D2"))
+      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "H1")
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_an_omitted_well_takes_the_next_tracked_tip_in_the_anchors_order(self):
+    # ot3-style: with no well, the driver walks tip tracking in the anchor's own
+    # consumption order and takes the first clear tip. Default H1 consumes a rack
+    # back-to-front, so a full rack yields the rear-most tip, well A1.
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_single_tip(rack))
+      self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "H1")
+      pickups = [c for c in transport.commands if c["commandType"] == "pickUpTip"]
+      self.assertEqual(pickups[-1]["params"]["wellName"], "A1")
+      self.assertIsNotNone(head.get_mounted_tips()[7])
+    finally:
+      asyncio.run(flex.stop())
+
+  def test_an_omitted_well_on_the_rear_anchor_takes_the_front_most_tip(self):
+    # The A1 anchor consumes front-to-back, so with no well it takes the
+    # front-most tip, well H1 -- the mirror of the H1 default.
+    flex, transport, head, rack = self._bench()
+    try:
+      asyncio.run(head.pick_up_single_tip(rack, primary_nozzle="A1"))
       self.assertEqual(self._nozzle_params(transport)[-1]["primaryNozzle"], "A1")
+      pickups = [c for c in transport.commands if c["commandType"] == "pickUpTip"]
+      self.assertEqual(pickups[-1]["params"]["wellName"], "H1")
+      self.assertIsNotNone(head.get_mounted_tips()[0])
     finally:
       asyncio.run(flex.stop())
 
