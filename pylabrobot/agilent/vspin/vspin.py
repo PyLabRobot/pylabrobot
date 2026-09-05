@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import json
 import logging
 import os
@@ -7,8 +8,17 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
 from pylabrobot.agilent.vspin import _nmc
+from pylabrobot.agilent.vspin._state import (
+  ConnectionState,
+  TransitionToken,
+  VSpinActivity,
+  VSpinHomingState,
+  VSpinInitializationState,
+  VSpinMachineState,
+)
+from pylabrobot.agilent.vspin.errors import CentrifugeDoorError
 from pylabrobot.events import device_reference, evented_operation, resource_reference
-from pylabrobot.io.ftdi import FTDI
+from pylabrobot.io.ftdi import FTDI, is_ftdi_transport_error
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 logger = logging.getLogger(__name__)
@@ -108,6 +118,7 @@ _SPIN_TIMEOUT_MARGIN = 5.0
 _TARGET_SPEED_FRACTION = 0.95
 _IO_TRANSITION_TIMEOUT = 5.0
 _SERVO_TRANSITION_SETTLE_TIME = 0.1
+_SERVO_STOP_CONFIRMATION_SAMPLES = 3
 _TACHOMETER_TO_RPM = -14.69320388
 _NETWORK_PROBE_TIMEOUT = 0.2
 _NETWORK_INPUT_QUIET_TIME = 0.1
@@ -182,8 +193,11 @@ class VSpin:
     self._io_output_word = 0
     self._nmc_lock = asyncio.Lock()
     self._command_lock = asyncio.Lock()
-    self._spin_active = False
+    self._state = VSpinMachineState()
     self._spin_cancel_requested = False
+    self._spin_stop_deceleration: float | None = None
+    self._spin_completion_event = asyncio.Event()
+    self._spin_completion_event.set()
     self._bucket_1_remainder: Optional[int] = None
     self._home_position: Optional[int] = None
     if device_id is not None:
@@ -204,37 +218,116 @@ class VSpin:
       child_location=Coordinate.zero(),
     )
 
-    # Door and rotor state, tracked from the commands we issue: the controller has no query for
-    # which bucket is parked at the load position.
-    self._door_open = False
+    # The controller has no query for which bucket is parked at the load position.
     self._at_bucket: Optional[ResourceHolder] = None
 
   @property
-  def door_open(self) -> bool:
-    """Whether the door was left open by the last door command."""
-    return self._door_open
+  def state(self) -> VSpinMachineState:
+    """Return the current VSpin semantic-state snapshot."""
+    return self._state
 
   @property
   def at_bucket(self) -> Optional[ResourceHolder]:
     """The bucket parked at the load position, or None if the rotor is elsewhere."""
     return self._at_bucket
 
+  def _set_activity(self, activity: VSpinActivity) -> None:
+    """Replace only the VSpin activity dimension."""
+    self._state = dataclasses.replace(self._state, activity=activity)
+
+  def _mark_recovery_required(self, *, position_uncertain: bool) -> None:
+    """Make recovery sticky and invalidate an uncertain rotor presentation."""
+    self._state = dataclasses.replace(self._state, recovery_required=True)
+    if position_uncertain:
+      self._at_bucket = None
+
+  def _record_disconnected(self) -> None:
+    """Record transport closure without guessing retained controller state."""
+    self._state = dataclasses.replace(
+      self._state,
+      connection=ConnectionState.DISCONNECTED,
+      initialization=VSpinInitializationState.UNKNOWN,
+      homing=VSpinHomingState.UNKNOWN,
+    )
+    self._at_bucket = None
+
+  def _require_operational_state(self) -> None:
+    """Reject ordinary motion unless the semantic lifecycle is ready."""
+    if self._state.connection is not ConnectionState.CONNECTED:
+      raise RuntimeError("VSpin is not connected")
+    if self._state.initialization is not VSpinInitializationState.INITIALIZED:
+      raise RuntimeError("VSpin is not initialized")
+    if self._state.homing is not VSpinHomingState.HOMED:
+      raise RuntimeError("VSpin is not homed")
+    if self._state.recovery_required:
+      raise RuntimeError("VSpin requires recovery")
+    if self._state.activity is not VSpinActivity.IDLE:
+      raise RuntimeError("Another VSpin operation is active")
+
   @asynccontextmanager
-  async def _command_scope(self, name: str) -> AsyncIterator[None]:
-    """Prevent state-changing VSpin workflows from interleaving."""
+  async def _command_scope(
+    self,
+    name: str,
+    *,
+    activity: VSpinActivity | None = None,
+    require_ready: bool = True,
+  ) -> AsyncIterator[TransitionToken]:
+    """Own the command lock and apply actuation-aware state changes."""
     if self._command_lock.locked():
       raise RuntimeError(f"Cannot {name} while another VSpin command is active")
     async with self._command_lock:
-      yield
+      previous = self._state
+      transition = TransitionToken()
+      try:
+        if require_ready:
+          self._require_operational_state()
+        if activity is not None:
+          self._set_activity(activity)
+        yield transition
+      except BaseException as error:
+        transport_failed = is_ftdi_transport_error(error)
+        if transport_failed:
+          self._record_disconnected()
+        if transition.actuated:
+          self._mark_recovery_required(position_uncertain=transition.position_uncertain)
+        elif activity is not None:
+          if transport_failed:
+            self._set_activity(previous.activity)
+          else:
+            self._state = previous
+        raise
+      else:
+        if activity is not None:
+          self._set_activity(VSpinActivity.IDLE)
 
   async def setup(self) -> None:
-    async with self._command_scope("set up VSpin"):
-      await self._setup()
+    """Connect, initialize, home, and place the VSpin in its safe setup position."""
+    async with self._command_scope("set up VSpin", require_ready=False) as transition:
+      await self._setup(transition=transition)
 
-  async def _setup(self) -> None:
+  async def _setup(self, *, transition: TransitionToken) -> None:
+    """Run the VSpin setup sequence while recording verified lifecycle checkpoints."""
+    if self._state.recovery_required:
+      raise RuntimeError("VSpin requires recovery during setup")
     logger.info("[vSpin %s] connected", self.device_id)
-    await self.io.setup()
+    self._state = dataclasses.replace(
+      self._state,
+      connection=ConnectionState.CONNECTING,
+      initialization=VSpinInitializationState.UNKNOWN,
+      homing=VSpinHomingState.UNKNOWN,
+    )
+    try:
+      await self.io.setup()
+    except BaseException:
+      self._record_disconnected()
+      raise
+    self._state = dataclasses.replace(self._state, connection=ConnectionState.CONNECTED)
     await self._configure_ftdi()
+    self._state = dataclasses.replace(
+      self._state,
+      initialization=VSpinInitializationState.INITIALIZING,
+    )
+    transition.mark_actuated()
     await self._initialize_nmc_network()
     await self.io.set_rts(True)
     await self.io.set_dtr(True)
@@ -268,7 +361,11 @@ class VSpin:
     for _ in range(5):
       await self._write_io_output(1 << _nmc.OUTPUT_VERSION_TOGGLE)
       await self._write_io_output(0x0000)
-    await self._lock_door()
+    self._state = dataclasses.replace(
+      self._state,
+      initialization=VSpinInitializationState.INITIALIZED,
+    )
+    await self._lock_door(transition=transition)
 
     await self._write_io_output(0x0000)
     await self._wait_for_io_bit(
@@ -278,6 +375,9 @@ class VSpin:
       name="bucket-unlock sensor",
     )
 
+    self._state = dataclasses.replace(self._state, homing=VSpinHomingState.HOMING)
+    transition.mark_actuated(position_uncertain=True)
+    self._at_bucket = None
     await self._enable_amplifier_and_reset_servo_status()
     await self._send_nmc(_nmc.build_reset_position(_nmc.PIC_SERVO_ADDRESS))
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _HOMING_GAINS))
@@ -339,18 +439,26 @@ class VSpin:
       await asyncio.sleep(_STATUS_POLL_INTERVAL)
       move_status = await self.request_positions_and_tachometer()
     self._raise_on_servo_fault(move_status, operation="setup positioning")
+    transition.confirm_position()
+    self._state = dataclasses.replace(self._state, homing=VSpinHomingState.HOMED)
 
     await self._disable_servo_after_motion()
 
-    await self._lock_door()
+    await self._lock_door(transition=transition)
 
   async def stop(self) -> None:
-    async with self._command_scope("stop VSpin"):
+    """Close the VSpin transport and invalidate session-scoped state."""
+    async with self._command_scope("stop VSpin", require_ready=False):
       await self._stop()
 
   async def _stop(self) -> None:
+    """Close the VSpin transport and always record it as disconnected."""
     logger.info("[vSpin %s] disconnected", self.device_id)
-    await self.io.stop()
+    self._state = dataclasses.replace(self._state, connection=ConnectionState.DISCONNECTING)
+    try:
+      await self.io.stop()
+    finally:
+      self._record_disconnected()
 
   async def _enable_amplifier_and_reset_servo_status(self) -> None:
     """Apply the vendor transition delays before clearing status for motion."""
@@ -403,11 +511,18 @@ class VSpin:
     read_timeout: float = 0.2,
   ) -> bytes:
     """Send a VSpin command and read its fixed-length response."""
-    async with self._nmc_lock:
-      written = await self.io.write(bytes(cmd))
-      if written != len(cmd):
-        raise RuntimeError(f"VSpin wrote {written} of {len(cmd)} bytes for NMC command {cmd.hex()}")
-      return await self._read_exact_response(expected_response_length, timeout=read_timeout)
+    try:
+      async with self._nmc_lock:
+        written = await self.io.write(bytes(cmd))
+        if written != len(cmd):
+          raise RuntimeError(
+            f"VSpin wrote {written} of {len(cmd)} bytes for NMC command {cmd.hex()}"
+          )
+        return await self._read_exact_response(expected_response_length, timeout=read_timeout)
+    except BaseException as error:
+      if is_ftdi_transport_error(error):
+        self._record_disconnected()
+      raise
 
   async def _send_nmc(
     self,
@@ -713,12 +828,13 @@ class VSpin:
     )
 
   async def _wait_until_stopped(self, initial_rpm: float, deceleration: float) -> None:
-    """Wait until the controller reports motion complete and zero measured velocity."""
+    """Wait for servo motion to finish and both rotor-stop signals to agree."""
     timeout = _nmc.predicted_ramp_time(initial_rpm, deceleration) + _SPIN_TIMEOUT_MARGIN
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     await self._raise_for_spin_faults()
     status = await self.request_positions_and_tachometer()
+    stopped_samples = 0
     while True:
       self._raise_on_servo_fault(status, operation="deceleration")
       if status.velocity is None:
@@ -726,7 +842,11 @@ class VSpin:
       measured_rpm = abs(status.velocity * _TACHOMETER_TO_RPM)
       motion_complete = bool(status.status & _nmc.STATUS_MOVE_DONE)
       if motion_complete and status.velocity == 0:
-        return
+        stopped_samples += 1
+        if stopped_samples >= _SERVO_STOP_CONFIRMATION_SAMPLES:
+          break
+      else:
+        stopped_samples = 0
       await self._raise_for_spin_faults()
       if loop.time() >= deadline:
         raise TimeoutError(
@@ -735,17 +855,25 @@ class VSpin:
         )
       await asyncio.sleep(_STATUS_POLL_INTERVAL)
       status = await self.request_positions_and_tachometer()
+    await self._wait_until_rotor_safe_to_access()
 
   async def stop_spin(self, deceleration: float = 0.8) -> None:
-    """Safely abort an active spin and wait for measured speed to reach zero."""
+    """Ask the active spin owner to decelerate, then wait for its completion."""
     if deceleration <= 0 or deceleration > 1:
       raise ValueError("Deceleration must be within 0-1.")
-    if not self._spin_active:
+    activity = self._state.activity
+    if activity not in (
+      VSpinActivity.ACCELERATING,
+      VSpinActivity.AT_SPEED,
+      VSpinActivity.DECELERATING,
+    ):
       return
+    if not self._spin_cancel_requested and activity is not VSpinActivity.DECELERATING:
+      self._spin_stop_deceleration = deceleration
     self._spin_cancel_requested = True
-    measured_rpm = abs(await self.request_tachometer())
-    await self._command_deceleration(deceleration)
-    await self._wait_until_stopped(measured_rpm, deceleration)
+    await self._spin_completion_event.wait()
+    if self._state.recovery_required:
+      raise RuntimeError("VSpin failed while stopping and requires recovery")
 
   async def request_home_position(self) -> int:
     """Changes during a run, but the bucket 1 position relative to it does not."""
@@ -824,6 +952,45 @@ class VSpin:
   async def request_spinning(self) -> bool:
     return await self._request_io_bit(_nmc.INPUT_SPINNING)
 
+  async def _request_rotor_safe_to_access(self) -> bool:
+    """Return whether the servo and spinning input both confirm a stopped rotor."""
+    status = await self.request_positions_and_tachometer()
+    if status.velocity is None:
+      raise RuntimeError("VSpin velocity was absent while checking whether the rotor is stopped")
+    servo_stopped = bool(status.status & _nmc.STATUS_MOVE_DONE) and status.velocity == 0
+    return servo_stopped and not await self.request_spinning()
+
+  async def _wait_until_rotor_safe_to_access(self) -> None:
+    """Wait for independent servo and spinning-input stop confirmation."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _IO_TRANSITION_TIMEOUT
+    while not await self._request_rotor_safe_to_access():
+      if loop.time() >= deadline:
+        raise TimeoutError(
+          f"VSpin rotor did not become safe to access within {_IO_TRANSITION_TIMEOUT} seconds"
+        )
+      await asyncio.sleep(_STATUS_POLL_INTERVAL)
+
+  @asynccontextmanager
+  async def reserve_transfer(
+    self,
+    bucket: ResourceHolder,
+  ) -> AsyncIterator[TransitionToken]:
+    """Reserve the load opening while a paired loader may enter the rotor."""
+    async with self._command_scope(
+      "transfer a plate",
+      activity=VSpinActivity.TRANSFERRING,
+    ) as transition:
+      if self._at_bucket is not bucket:
+        raise RuntimeError("Requested bucket is not confirmed at the load opening")
+      if not await self.request_door_open():
+        raise CentrifugeDoorError("Centrifuge door-open sensor must be active")
+      if not await self.request_bucket_locked():
+        raise RuntimeError("Centrifuge bucket must be physically locked")
+      if not await self._request_rotor_safe_to_access():
+        raise RuntimeError("Centrifuge rotor must be stopped")
+      yield transition
+
   # -- bucket calibration --
 
   @property
@@ -871,49 +1038,64 @@ class VSpin:
   # -- CentrifugeBackend interface --
 
   async def open_door(self) -> None:
-    async with self._command_scope("open the door"):
-      await self._open_door()
+    """Open the centrifuge door and wait for its physical sensor."""
+    async with self._command_scope(
+      "open the door",
+      activity=VSpinActivity.CHANGING_INTERLOCKS,
+    ) as transition:
+      await self._open_door(transition=transition)
 
-  async def _open_door(self) -> None:
+  async def _open_door(self, *, transition: TransitionToken) -> None:
+    """Open the door within an existing VSpin command scope."""
     if await self.request_door_open():
-      self._door_open = True
       return
+    await self._wait_until_rotor_safe_to_access()
     logger.info("[vSpin %s] open door", self.device_id)
+    transition.mark_actuated()
     await self._set_io_output_bit(_nmc.OUTPUT_DOOR_CYLINDER, True)
     await self._wait_for_io_bit(
       _nmc.INPUT_DOOR_OPEN,
       True,
       name="door-open sensor",
     )
-    self._door_open = True
 
   async def close_door(self) -> None:
-    async with self._command_scope("close the door"):
-      await self._close_door()
+    """Close the centrifuge door and wait for its physical sensor."""
+    async with self._command_scope(
+      "close the door",
+      activity=VSpinActivity.CHANGING_INTERLOCKS,
+    ) as transition:
+      await self._close_door(transition=transition)
 
-  async def _close_door(self) -> None:
+  async def _close_door(self, *, transition: TransitionToken) -> None:
+    """Close the door within an existing VSpin command scope."""
     if not (await self.request_door_open()):
-      self._door_open = False
       return
     logger.info("[vSpin %s] close door", self.device_id)
+    transition.mark_actuated()
     await self._set_io_output_bit(_nmc.OUTPUT_DOOR_CYLINDER, False)
     await self._wait_for_io_bit(
       _nmc.INPUT_DOOR_OPEN,
       False,
       name="door-open sensor",
     )
-    self._door_open = False
 
   async def lock_door(self) -> None:
-    async with self._command_scope("lock the door"):
-      await self._lock_door()
+    """Lock the centrifuge door and wait for its physical sensor."""
+    async with self._command_scope(
+      "lock the door",
+      activity=VSpinActivity.CHANGING_INTERLOCKS,
+    ) as transition:
+      await self._lock_door(transition=transition)
 
-  async def _lock_door(self) -> None:
+  async def _lock_door(self, *, transition: TransitionToken) -> None:
+    """Lock the door within an existing VSpin command scope."""
     if await self.request_door_open():
       raise RuntimeError("Cannot lock door while it is open.")
     if await self.request_door_locked():
       return
     logger.info("[vSpin %s] lock door", self.device_id)
+    transition.mark_actuated()
     await self._set_io_output_bit(_nmc.OUTPUT_DOOR_LOCK_CYLINDER, False)
     await self._wait_for_io_bit(
       _nmc.INPUT_DOOR_LOCKED,
@@ -923,12 +1105,19 @@ class VSpin:
     )
 
   async def unlock_door(self) -> None:
-    async with self._command_scope("unlock the door"):
-      await self._unlock_door()
+    """Unlock the centrifuge door and wait for its physical sensor."""
+    async with self._command_scope(
+      "unlock the door",
+      activity=VSpinActivity.CHANGING_INTERLOCKS,
+    ) as transition:
+      await self._unlock_door(transition=transition)
 
-  async def _unlock_door(self) -> None:
+  async def _unlock_door(self, *, transition: TransitionToken) -> None:
+    """Unlock the door within an existing VSpin command scope."""
     if not await self.request_door_locked():
       return
+    await self._wait_until_rotor_safe_to_access()
+    transition.mark_actuated()
     await self._set_io_output_bit(_nmc.OUTPUT_DOOR_LOCK_CYLINDER, True)
     await self._wait_for_io_bit(
       _nmc.INPUT_DOOR_LOCKED,
@@ -938,12 +1127,19 @@ class VSpin:
     )
 
   async def lock_bucket(self) -> None:
-    async with self._command_scope("lock the bucket"):
-      await self._lock_bucket()
+    """Lock the presented bucket and wait for its physical sensor."""
+    async with self._command_scope(
+      "lock the bucket",
+      activity=VSpinActivity.CHANGING_INTERLOCKS,
+    ) as transition:
+      await self._lock_bucket(transition=transition)
 
-  async def _lock_bucket(self) -> None:
+  async def _lock_bucket(self, *, transition: TransitionToken) -> None:
+    """Lock the bucket within an existing VSpin command scope."""
     if await self.request_bucket_locked():
       return
+    await self._wait_until_rotor_safe_to_access()
+    transition.mark_actuated()
     await self._set_io_output_bit(_nmc.OUTPUT_BUCKET_LOCK_CYLINDER, True)
     await self._wait_for_io_bit(
       _nmc.INPUT_BUCKET_LOCKED,
@@ -953,12 +1149,18 @@ class VSpin:
     )
 
   async def unlock_bucket(self) -> None:
-    async with self._command_scope("unlock the bucket"):
-      await self._unlock_bucket()
+    """Unlock the presented bucket and wait for its physical sensor."""
+    async with self._command_scope(
+      "unlock the bucket",
+      activity=VSpinActivity.CHANGING_INTERLOCKS,
+    ) as transition:
+      await self._unlock_bucket(transition=transition)
 
-  async def _unlock_bucket(self) -> None:
+  async def _unlock_bucket(self, *, transition: TransitionToken) -> None:
+    """Unlock the bucket within an existing VSpin command scope."""
     if await self.request_bucket_unlocked():
       return
+    transition.mark_actuated()
     await self._set_io_output_bit(_nmc.OUTPUT_BUCKET_LOCK_CYLINDER, False)
     await self._wait_for_io_bit(
       _nmc.INPUT_BUCKET_UNLOCKED,
@@ -968,17 +1170,40 @@ class VSpin:
     )
 
   async def go_to_bucket1(self) -> None:
-    async with self._command_scope("move to bucket 1"):
-      await self._go_to_bucket(self.bucket1, await self.request_bucket_1_position())
+    """Present bucket 1 at the load opening."""
+    async with self._command_scope(
+      "move to bucket 1",
+      activity=VSpinActivity.POSITIONING,
+    ) as transition:
+      await self._go_to_bucket(
+        self.bucket1,
+        await self.request_bucket_1_position(),
+        transition=transition,
+      )
 
   async def go_to_bucket2(self) -> None:
-    async with self._command_scope("move to bucket 2"):
-      await self._go_to_bucket(self.bucket2, await self.request_bucket_2_position())
+    """Present bucket 2 at the load opening."""
+    async with self._command_scope(
+      "move to bucket 2",
+      activity=VSpinActivity.POSITIONING,
+    ) as transition:
+      await self._go_to_bucket(
+        self.bucket2,
+        await self.request_bucket_2_position(),
+        transition=transition,
+      )
 
-  async def _go_to_bucket(self, bucket: ResourceHolder, position: int) -> None:
+  async def _go_to_bucket(
+    self,
+    bucket: ResourceHolder,
+    position: int,
+    *,
+    transition: TransitionToken,
+  ) -> None:
+    """Run the existing positioning retry and record the confirmed bucket."""
     for attempt in range(_BUCKET_PRESENT_RETRIES + 1):
       try:
-        await self._go_to_position(position)
+        await self._go_to_position(position, transition=transition)
       except _PositionAlignmentError:
         if attempt >= _BUCKET_PRESENT_RETRIES:
           raise
@@ -988,18 +1213,25 @@ class VSpin:
         return
 
   async def go_to_position(self, position: int) -> None:
-    async with self._command_scope("move to a position"):
-      await self._go_to_position(position)
+    """Move to an absolute encoder position without claiming a presented bucket."""
+    async with self._command_scope(
+      "move to a position",
+      activity=VSpinActivity.POSITIONING,
+    ) as transition:
+      await self._go_to_position(position, transition=transition)
 
-  async def _go_to_position(self, position: int) -> None:
+  async def _go_to_position(self, position: int, *, transition: TransitionToken) -> None:
+    """Move the rotor within an existing VSpin command scope."""
     logger.info("[vSpin %s] go_to_position: position=%d", self.device_id, position)
-    await self._close_door()
-    await self._lock_door()
-    await self._unlock_bucket()
+    await self._close_door(transition=transition)
+    await self._lock_door(transition=transition)
+    await self._unlock_bucket(transition=transition)
 
     await self._enable_amplifier_and_reset_servo_status()
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _POSITION_GAINS))
     try:
+      self._at_bucket = None
+      transition.mark_actuated(position_uncertain=True)
       trajectory_response = await self._send_nmc(
         _nmc.build_load_trajectory(
           _nmc.PIC_SERVO_ADDRESS,
@@ -1039,14 +1271,17 @@ class VSpin:
     if motion_status.position is None:
       raise RuntimeError("VSpin completed motion without returning an encoder position")
     if abs(motion_status.position - position) > _BUCKET_POSITION_TOLERANCE:
-      transition = "after motion started" if motion_started else "without reporting motion start"
+      motion_context = (
+        "after motion started" if motion_started else "without reporting motion start"
+      )
       raise _PositionAlignmentError(
-        f"VSpin completed move to encoder position {position} {transition}, but settled at "
+        f"VSpin completed move to encoder position {position} {motion_context}, but settled at "
         f"{motion_status.position} (tolerance {_BUCKET_POSITION_TOLERANCE})"
       )
-    await self._lock_bucket()
-    await self._unlock_door()
-    await self._open_door()
+    transition.confirm_position()
+    await self._lock_bucket(transition=transition)
+    await self._unlock_door(transition=transition)
+    await self._open_door(transition=transition)
 
   @staticmethod
   def g_to_rpm(g: float) -> int:
@@ -1077,8 +1312,24 @@ class VSpin:
     if duration < 1:
       raise ValueError("Spin time must be at least 1 second")
 
-    async with self._command_scope("start a spin"):
-      await self._run_spin_cycle(g, duration, acceleration, deceleration)
+    owns_completion_event = False
+    try:
+      async with self._command_scope(
+        "start a spin",
+        activity=VSpinActivity.PREPARING_TO_SPIN,
+      ) as transition:
+        self._spin_completion_event.clear()
+        owns_completion_event = True
+        await self._run_spin_cycle(
+          g,
+          duration,
+          acceleration,
+          deceleration,
+          transition=transition,
+        )
+    finally:
+      if owns_completion_event:
+        self._spin_completion_event.set()
 
   async def _run_spin_cycle(
     self,
@@ -1086,13 +1337,16 @@ class VSpin:
     duration: float,
     acceleration: float,
     deceleration: float,
+    *,
+    transition: TransitionToken,
   ) -> None:
+    """Run the spin algorithm while recording its confirmed phase boundaries."""
     if await self.request_door_open():
-      await self._close_door()
+      await self._close_door(transition=transition)
     if not await self.request_door_locked():
-      await self._lock_door()
+      await self._lock_door(transition=transition)
     if await self.request_bucket_locked():
-      await self._unlock_bucket()
+      await self._unlock_bucket(transition=transition)
 
     rpm = VSpin.g_to_rpm(g)
     logger.info(
@@ -1133,15 +1387,19 @@ class VSpin:
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _VELOCITY_GAINS))
 
     trajectory_started = False
-    self._spin_active = True
     self._spin_cancel_requested = False
+    self._spin_stop_deceleration = None
     try:
       await self._raise_for_spin_faults()
+      self._at_bucket = None
+      self._set_activity(VSpinActivity.ACCELERATING)
+      transition.mark_actuated(position_uncertain=True)
       await self._send_nmc(spin_trajectory)
       trajectory_started = True
 
       await self._wait_for_target_speed(rpm, acceleration)
       if not self._spin_cancel_requested:
+        self._set_activity(VSpinActivity.AT_SPEED)
         cruise_start_position = await self.request_position()
         decel_start_position = int(cruise_start_position + distance_at_speed)
         cruise_timeout = duration / _TARGET_SPEED_FRACTION + _SPIN_TIMEOUT_MARGIN
@@ -1152,20 +1410,22 @@ class VSpin:
           cancel_on_spin_abort=True,
         )
 
-      if not self._spin_cancel_requested:
-        await self._command_deceleration(deceleration)
-      await self._wait_until_stopped(rpm, deceleration)
+      self._set_activity(VSpinActivity.DECELERATING)
+      active_deceleration = self._spin_stop_deceleration or deceleration
+      await self._command_deceleration(active_deceleration)
+      await self._wait_until_stopped(rpm, active_deceleration)
       trajectory_started = False
+      transition.confirm_position()
     except BaseException:
       if trajectory_started:
+        self._set_activity(VSpinActivity.DECELERATING)
+        active_deceleration = self._spin_stop_deceleration or deceleration
         try:
-          await asyncio.shield(self._command_deceleration(deceleration))
-          await asyncio.shield(self._wait_until_stopped(rpm, deceleration))
+          await asyncio.shield(self._command_deceleration(active_deceleration))
+          await asyncio.shield(self._wait_until_stopped(rpm, active_deceleration))
         except Exception:
           logger.exception("[vSpin %s] emergency deceleration failed", self.device_id)
       raise
-    finally:
-      self._spin_active = False
 
     # The rotor has moved off whichever bucket was parked at the load position.
     self._at_bucket = None

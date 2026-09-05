@@ -4,11 +4,27 @@ from collections import deque
 from unittest.mock import AsyncMock, call, patch
 
 from pylabrobot.agilent.vspin import _access2_protocol as protocol
+from pylabrobot.agilent.vspin._state import (
+  Access2Activity,
+  ConnectionState,
+  TransferDirection,
+  TransferPhase,
+  TransferProgress,
+)
 from pylabrobot.agilent.vspin.access2 import Access2Driver
 from pylabrobot.io.binary import Writer
 
 
 _READY_FLAGS = protocol.STATUS_INITIALIZED | protocol.STATUS_HOMED
+
+
+def _mark_driver_ready(driver: Access2Driver) -> None:
+  """Put a mock-backed driver at the verified lifecycle boundary under test."""
+  driver._state = dataclasses.replace(
+    driver.state,
+    connection=ConnectionState.CONNECTED,
+    last_teachpoint=protocol.TEACHPOINT_PARK,
+  )
 
 
 def _status(*, flags: int) -> protocol.Access2Status:
@@ -137,6 +153,32 @@ class Access2TransportTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(TimeoutError, "2 of 5 expected bytes"):
       await self.driver._read_frame()
 
+  async def test_connected_transport_does_not_imply_controller_readiness(self):
+    self.driver._state = dataclasses.replace(
+      self.driver.state,
+      connection=ConnectionState.CONNECTED,
+    )
+    self.driver.request_status = AsyncMock(  # type: ignore[method-assign]
+      return_value=_status(flags=0)
+    )
+
+    with self.assertRaisesRegex(RuntimeError, "not initialized and homed"):
+      await self.driver._require_ready()
+
+  async def test_ftdi_error_invalidates_connection_state(self):
+    _mark_driver_ready(self.driver)
+    self.driver.io.write = AsyncMock(side_effect=RuntimeError("transport lost"))  # type: ignore[method-assign]
+
+    with (
+      patch("pylabrobot.agilent.vspin.access2.is_ftdi_transport_error", return_value=True),
+      self.assertRaisesRegex(RuntimeError, "transport lost"),
+    ):
+      await self.driver.open_gripper()
+
+    self.assertEqual(self.driver.state.connection, ConnectionState.DISCONNECTED)
+    self.assertEqual(self.driver.state.operation, Access2Activity.IDLE)
+    self.assertIsNone(self.driver.state.last_teachpoint)
+
 
 class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
@@ -150,6 +192,7 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
     driver = Access2Driver(device_id="test", timeout=timeout)
     io = _ScriptedFTDI(steps)
     driver.io = io  # type: ignore[assignment]
+    _mark_driver_ready(driver)
     return driver, io
 
   async def test_complete_setup_ftdi_transcript(self):
@@ -191,6 +234,9 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
     io.assert_complete(self)
     self.assertTrue(io.setup_called)
     self.assertEqual(io.baudrate, 115384)
+    self.assertEqual(driver.state.connection, ConnectionState.CONNECTED)
+    self.assertEqual(driver.state.operation, Access2Activity.IDLE)
+    self.assertEqual(driver.state.last_teachpoint, protocol.TEACHPOINT_PARK)
 
   async def test_complete_home_ftdi_transcript(self):
     steps = [
@@ -537,6 +583,7 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
     self.ftdi_patch.start()
     self.addCleanup(self.ftdi_patch.stop)
     self.driver = Access2Driver(device_id="test")
+    _mark_driver_ready(self.driver)
     self.driver._move_axis_to_position = AsyncMock()  # type: ignore[method-assign]
     self.driver._move_to_teachpoint = AsyncMock()  # type: ignore[method-assign]
     self.driver._close_gripper = AsyncMock()  # type: ignore[method-assign]
@@ -555,6 +602,44 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
       0.0,
       profile=protocol.PROFILE_DYNAMIC_EMPTY,
     )
+
+  async def test_failure_before_actuation_restores_operation(self):
+    before = self.driver.state
+
+    with self.assertRaisesRegex(RuntimeError, "precondition failed"):
+      async with self.driver._operation_scope(Access2Activity.MOVING):
+        raise RuntimeError("precondition failed")
+
+    self.assertEqual(self.driver.state, before)
+
+  async def test_actuated_failure_retains_transfer_phase_and_requires_recovery(self):
+    progress = TransferProgress(
+      direction=TransferDirection.INTO_CENTRIFUGE,
+      bucket_teachpoint=protocol.TEACHPOINT_BUCKET_1,
+    )
+
+    with self.assertRaisesRegex(RuntimeError, "motion failed"):
+      async with self.driver._operation_scope(progress) as transition:
+        self.driver._set_transfer_phase(TransferPhase.MOVING_TO_DESTINATION)
+        transition.mark_actuated(position_uncertain=True)
+        raise RuntimeError("motion failed")
+
+    self.assertTrue(self.driver.state.recovery_required)
+    self.assertIsNone(self.driver.state.last_teachpoint)
+    self.assertIsInstance(self.driver.state.operation, TransferProgress)
+    assert isinstance(self.driver.state.operation, TransferProgress)
+    self.assertEqual(
+      self.driver.state.operation.phase,
+      TransferPhase.MOVING_TO_DESTINATION,
+    )
+
+  async def test_stop_invalidates_connection_and_teachpoint(self):
+    self.driver.io.stop = AsyncMock()  # type: ignore[method-assign]
+
+    await self.driver.stop()
+
+    self.assertEqual(self.driver.state.connection, ConnectionState.DISCONNECTED)
+    self.assertIsNone(self.driver.state.last_teachpoint)
 
   def test_gripper_positions_are_configurable(self):
     driver = Access2Driver(
@@ -658,6 +743,70 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
         ),
         call(protocol.TEACHPOINT_PARK, 3, 10),
       ]
+    )
+    self.assertEqual(self.driver.state.operation, Access2Activity.IDLE)
+    self.assertEqual(self.driver.state.last_teachpoint, protocol.TEACHPOINT_PARK)
+
+  async def test_load_uses_selected_bucket_teachpoint(self):
+    ready = _status(flags=_READY_FLAGS)
+    self.driver.request_status = AsyncMock(side_effect=[ready, ready])  # type: ignore[method-assign]
+    self.driver.request_sensor_values = AsyncMock(  # type: ignore[method-assign]
+      return_value=protocol.STATUS_OPTICAL_PLATE_SENSOR
+    )
+
+    await self.driver.load(protocol.TEACHPOINT_BUCKET_2)
+
+    self.driver._move_to_teachpoint.assert_any_await(  # type: ignore[attr-defined]
+      protocol.TEACHPOINT_BUCKET_2,
+      3,
+      10,
+      profile=protocol.PROFILE_DYNAMIC_FULL,
+    )
+
+  async def test_load_reports_each_transfer_phase_at_its_actuation_boundary(self):
+    ready = _status(flags=_READY_FLAGS)
+    observed: list[TransferPhase] = []
+
+    def record_phase() -> None:
+      operation = self.driver.state.operation
+      assert isinstance(operation, TransferProgress)
+      observed.append(operation.phase)
+
+    async def move_axis(*args: object, **kwargs: object) -> None:
+      del args, kwargs
+      record_phase()
+
+    async def move_to_teachpoint(*args: object, **kwargs: object) -> None:
+      del args, kwargs
+      record_phase()
+
+    async def sense_plate() -> int:
+      record_phase()
+      return protocol.STATUS_OPTICAL_PLATE_SENSOR
+
+    async def close_gripper() -> protocol.Access2Status:
+      record_phase()
+      return ready
+
+    self.driver.request_status = AsyncMock(side_effect=[ready, ready])  # type: ignore[method-assign]
+    self.driver.request_sensor_values = AsyncMock(side_effect=sense_plate)  # type: ignore[method-assign]
+    self.driver._move_axis_to_position = AsyncMock(side_effect=move_axis)  # type: ignore[method-assign]
+    self.driver._move_to_teachpoint = AsyncMock(side_effect=move_to_teachpoint)  # type: ignore[method-assign]
+    self.driver._close_gripper = AsyncMock(side_effect=close_gripper)  # type: ignore[method-assign]
+
+    await self.driver.load()
+
+    self.assertEqual(
+      observed,
+      [
+        TransferPhase.APPROACHING_SOURCE,
+        TransferPhase.APPROACHING_SOURCE,
+        TransferPhase.AT_SOURCE,
+        TransferPhase.GRIPPING,
+        TransferPhase.MOVING_TO_DESTINATION,
+        TransferPhase.RELEASING,
+        TransferPhase.RETURNING_TO_PARK,
+      ],
     )
 
   async def test_load_stops_before_gripping_when_plate_is_absent(self):

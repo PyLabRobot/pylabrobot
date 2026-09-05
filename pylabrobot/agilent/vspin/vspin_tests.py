@@ -1,9 +1,19 @@
+import asyncio
 import dataclasses
 import unittest
 from collections import deque
-from unittest.mock import AsyncMock, call, patch
+from typing import Awaitable, Callable
+from unittest.mock import ANY, AsyncMock, call, patch
 
+from pylabrobot.agilent.vspin import _access2_protocol as protocol
 from pylabrobot.agilent.vspin import _nmc, vspin as vspin_module
+from pylabrobot.agilent.vspin._state import (
+  ConnectionState,
+  TransitionToken,
+  VSpinActivity,
+  VSpinHomingState,
+  VSpinInitializationState,
+)
 from pylabrobot.agilent.vspin.access2 import Access2
 from pylabrobot.agilent.vspin.errors import CentrifugeDoorError
 from pylabrobot.agilent.vspin.vspin import VSpin
@@ -16,6 +26,16 @@ _SERVO_STATUS_MASK = (
   _nmc.SEND_POSITION | _nmc.SEND_ANALOG | _nmc.SEND_VELOCITY | _nmc.SEND_AUXILIARY | _nmc.SEND_HOME
 )
 _IO_STATUS_MASK = _nmc.SEND_INPUTS | _nmc.SEND_ANALOG_1
+
+
+def _mark_vspin_ready(vspin: VSpin) -> None:
+  """Put a mock-backed VSpin at the verified lifecycle boundary under test."""
+  vspin._state = dataclasses.replace(
+    vspin.state,
+    connection=ConnectionState.CONNECTED,
+    initialization=VSpinInitializationState.INITIALIZED,
+    homing=VSpinHomingState.HOMED,
+  )
 
 
 def _nmc_response(status: int, data: bytes = b"") -> bytes:
@@ -165,6 +185,7 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
 
   async def test_spin_emits_loaded_bucket_resources_and_parameters(self):
     vspin = VSpin(name="centrifuge", device_id="test")
+    _mark_vspin_ready(vspin)
     plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
     vspin.bucket1.assign_child_resource(plate, location=Coordinate.zero())
     vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
@@ -179,6 +200,7 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
     vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
       return_value=_nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0)
     )
+    vspin.request_spinning = AsyncMock(return_value=False)  # type: ignore[method-assign]
     vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
     vspin._send_nmc = AsyncMock(  # type: ignore[method-assign]
       return_value=_nmc.NMCResponse(status=0, data=b"")
@@ -230,6 +252,7 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
 
   async def test_spin_failure_emits_requested_parameters(self):
     vspin = VSpin(name="centrifuge", device_id="test")
+    _mark_vspin_ready(vspin)
     events: list[PLREvent] = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
@@ -250,6 +273,7 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
 
   async def test_spin_accepts_positional_parameters_with_event_bus(self):
     vspin = VSpin(name="centrifuge", device_id="test")
+    _mark_vspin_ready(vspin)
     vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
     vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
     vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
@@ -262,6 +286,7 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
     vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
       return_value=_nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0)
     )
+    vspin.request_spinning = AsyncMock(return_value=False)  # type: ignore[method-assign]
     vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
     vspin._send_nmc = AsyncMock(  # type: ignore[method-assign]
       return_value=_nmc.NMCResponse(status=0, data=b"")
@@ -287,6 +312,138 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
     self.addCleanup(self.ftdi_patch.stop)
     self.io = ftdi_class.return_value
     self.vspin = VSpin(name="centrifuge")
+    _mark_vspin_ready(self.vspin)
+
+  async def test_connection_does_not_imply_initialization_or_homing(self):
+    vspin = VSpin(name="fresh centrifuge")
+    vspin._state = dataclasses.replace(
+      vspin.state,
+      connection=ConnectionState.CONNECTED,
+    )
+
+    with self.assertRaisesRegex(RuntimeError, "not initialized"):
+      await vspin.open_door()
+
+  async def test_failure_before_actuation_restores_activity(self):
+    before = self.vspin.state
+
+    with self.assertRaisesRegex(RuntimeError, "precondition failed"):
+      async with self.vspin._command_scope(
+        "test transition",
+        activity=VSpinActivity.POSITIONING,
+      ):
+        raise RuntimeError("precondition failed")
+
+    self.assertEqual(self.vspin.state, before)
+
+  async def test_actuated_position_failure_invalidates_presentation(self):
+    self.vspin._at_bucket = self.vspin.bucket1
+
+    with self.assertRaisesRegex(RuntimeError, "motion failed"):
+      async with self.vspin._command_scope(
+        "test transition",
+        activity=VSpinActivity.POSITIONING,
+      ) as transition:
+        transition.mark_actuated(position_uncertain=True)
+        raise RuntimeError("motion failed")
+
+    self.assertTrue(self.vspin.state.recovery_required)
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.POSITIONING)
+    self.assertIsNone(self.vspin.at_bucket)
+
+  async def test_transfer_reservation_owns_vspin_command_state(self):
+    self.vspin._at_bucket = self.vspin.bucket2
+    self.vspin.request_door_open = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin.request_bucket_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin._request_rotor_safe_to_access = AsyncMock(  # type: ignore[method-assign]
+      return_value=True
+    )
+
+    async with self.vspin.reserve_transfer(self.vspin.bucket2):
+      self.assertTrue(self.vspin._command_lock.locked())
+      self.assertEqual(self.vspin.state.activity, VSpinActivity.TRANSFERRING)
+
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
+
+  async def test_spin_reports_acceleration_cruise_and_deceleration_phases(self):
+    observed: list[tuple[str, VSpinActivity]] = []
+    self.vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_position = AsyncMock(side_effect=[0, 100])  # type: ignore[method-assign]
+    self.vspin._enable_amplifier_and_reset_servo_status = AsyncMock()  # type: ignore[method-assign]
+    self.vspin._send_nmc = AsyncMock(  # type: ignore[method-assign]
+      return_value=_nmc.NMCResponse(status=0, data=b"")
+    )
+    self.vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
+
+    async def wait_for_target_speed(rpm: float, acceleration: float) -> None:
+      del rpm, acceleration
+      observed.append(("acceleration", self.vspin.state.activity))
+
+    async def wait_for_position(
+      position: int,
+      timeout: float,
+      operation: str,
+      *,
+      cancel_on_spin_abort: bool = False,
+    ) -> int:
+      del timeout, operation, cancel_on_spin_abort
+      observed.append(("cruise", self.vspin.state.activity))
+      return position
+
+    async def command_deceleration(deceleration: float) -> None:
+      del deceleration
+      observed.append(("deceleration command", self.vspin.state.activity))
+
+    async def wait_until_stopped(initial_rpm: float, deceleration: float) -> None:
+      del initial_rpm, deceleration
+      observed.append(("stopped waiter", self.vspin.state.activity))
+
+    self.vspin._wait_for_target_speed = AsyncMock(side_effect=wait_for_target_speed)  # type: ignore[method-assign]
+    self.vspin._wait_for_position = AsyncMock(side_effect=wait_for_position)  # type: ignore[method-assign]
+    self.vspin._command_deceleration = AsyncMock(side_effect=command_deceleration)  # type: ignore[method-assign]
+    self.vspin._wait_until_stopped = AsyncMock(side_effect=wait_until_stopped)  # type: ignore[method-assign]
+
+    await self.vspin.spin(g=500, duration=1, acceleration=0.5, deceleration=0.5)
+
+    self.assertEqual(
+      observed,
+      [
+        ("acceleration", VSpinActivity.ACCELERATING),
+        ("cruise", VSpinActivity.AT_SPEED),
+        ("deceleration command", VSpinActivity.DECELERATING),
+        ("stopped waiter", VSpinActivity.DECELERATING),
+      ],
+    )
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
+
+  async def test_stop_invalidates_session_state_and_bucket_presentation(self):
+    self.vspin._at_bucket = self.vspin.bucket1
+    self.io.stop = AsyncMock()
+
+    await self.vspin.stop()
+
+    self.assertEqual(self.vspin.state.connection, ConnectionState.DISCONNECTED)
+    self.assertEqual(self.vspin.state.initialization, VSpinInitializationState.UNKNOWN)
+    self.assertEqual(self.vspin.state.homing, VSpinHomingState.UNKNOWN)
+    self.assertIsNone(self.vspin.at_bucket)
+
+  async def test_ftdi_error_invalidates_lifecycle_and_bucket_presentation(self):
+    self.vspin._at_bucket = self.vspin.bucket1
+    self.io.write = AsyncMock(side_effect=RuntimeError("transport lost"))
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin.is_ftdi_transport_error", return_value=True),
+      self.assertRaisesRegex(RuntimeError, "transport lost"),
+    ):
+      await self.vspin.open_door()
+
+    self.assertEqual(self.vspin.state.connection, ConnectionState.DISCONNECTED)
+    self.assertEqual(self.vspin.state.initialization, VSpinInitializationState.UNKNOWN)
+    self.assertEqual(self.vspin.state.homing, VSpinHomingState.UNKNOWN)
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
+    self.assertIsNone(self.vspin.at_bucket)
 
   async def test_position_status_uses_fixed_length_and_checksum(self):
     response = bytes.fromhex("11222500004f000018e0050000a4")
@@ -497,32 +654,87 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
     finally:
       self.vspin._command_lock.release()
 
-  async def test_stop_spin_commands_deceleration_and_confirms_zero_speed(self):
-    self.vspin._spin_active = True
-    self.vspin.request_tachometer = AsyncMock(return_value=1000)  # type: ignore[method-assign]
-    self.vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
-      side_effect=[
-        _nmc.ServoStatus(status=0, velocity=0),
-        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=-1),
-        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0),
-      ]
-    )
-    self.vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
-    self.vspin._command_deceleration = AsyncMock()  # type: ignore[method-assign]
+  async def test_stop_spin_requests_owner_deceleration_and_waits_for_completion(self):
+    owner_started = asyncio.Event()
+    allow_completion = asyncio.Event()
+    requested_decelerations: list[float | None] = []
 
-    # An active spin owns this lock; stop_spin must bypass it so it can interrupt the cycle.
-    await self.vspin._command_lock.acquire()
-    try:
-      await self.vspin.stop_spin(deceleration=0.5)
-    finally:
-      self.vspin._command_lock.release()
+    async def run_spin_cycle(
+      g: float,
+      duration: float,
+      acceleration: float,
+      deceleration: float,
+      *,
+      transition: TransitionToken,
+    ) -> None:
+      del g, duration, acceleration, deceleration
+      transition.mark_actuated(position_uncertain=True)
+      self.vspin._set_activity(VSpinActivity.AT_SPEED)
+      owner_started.set()
+      while not self.vspin._spin_cancel_requested:
+        await asyncio.sleep(0)
+      requested_decelerations.append(self.vspin._spin_stop_deceleration)
+      self.vspin._set_activity(VSpinActivity.DECELERATING)
+      await allow_completion.wait()
+      transition.confirm_position()
 
-    self.assertTrue(self.vspin._spin_cancel_requested)
-    self.vspin._command_deceleration.assert_awaited_once_with(0.5)  # type: ignore[attr-defined]
-    self.assertEqual(  # type: ignore[attr-defined]
-      self.vspin.request_positions_and_tachometer.await_count,
-      3,
+    self.vspin._run_spin_cycle = AsyncMock(  # type: ignore[method-assign]
+      side_effect=run_spin_cycle
     )
+    spin_task: asyncio.Future[None] = asyncio.ensure_future(self.vspin.spin(g=500, duration=1))
+    await owner_started.wait()
+
+    stop_task = asyncio.create_task(self.vspin.stop_spin(deceleration=0.5))
+    while not self.vspin._spin_cancel_requested:
+      await asyncio.sleep(0)
+    while not requested_decelerations:
+      await asyncio.sleep(0)
+
+    self.assertFalse(stop_task.done())
+    self.assertEqual(requested_decelerations, [0.5])
+    self.assertTrue(self.vspin._command_lock.locked())
+
+    allow_completion.set()
+    await asyncio.gather(spin_task, stop_task)
+
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
+    self.assertFalse(self.vspin.state.recovery_required)
+    self.assertTrue(self.vspin._spin_completion_event.is_set())
+
+  async def test_stop_spin_reports_owner_failure_after_recovery_is_recorded(self):
+    owner_started = asyncio.Event()
+
+    async def fail_spin_cycle(
+      g: float,
+      duration: float,
+      acceleration: float,
+      deceleration: float,
+      *,
+      transition: TransitionToken,
+    ) -> None:
+      del g, duration, acceleration, deceleration
+      transition.mark_actuated(position_uncertain=True)
+      self.vspin._set_activity(VSpinActivity.AT_SPEED)
+      owner_started.set()
+      while not self.vspin._spin_cancel_requested:
+        await asyncio.sleep(0)
+      self.vspin._set_activity(VSpinActivity.DECELERATING)
+      raise RuntimeError("owner stop failed")
+
+    self.vspin._run_spin_cycle = AsyncMock(  # type: ignore[method-assign]
+      side_effect=fail_spin_cycle
+    )
+    spin_task: asyncio.Future[None] = asyncio.ensure_future(self.vspin.spin(g=500, duration=1))
+    await owner_started.wait()
+    stop_task = asyncio.create_task(self.vspin.stop_spin())
+
+    with self.assertRaisesRegex(RuntimeError, "owner stop failed"):
+      await spin_task
+    with self.assertRaisesRegex(RuntimeError, "requires recovery"):
+      await stop_task
+
+    self.assertTrue(self.vspin.state.recovery_required)
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.DECELERATING)
 
   async def test_deceleration_timeout_reports_motion_status_and_velocity(self):
     self.vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
@@ -538,6 +750,83 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
       ),
     ):
       await self.vspin._wait_until_stopped(initial_rpm=0, deceleration=0.5)
+
+  async def test_deceleration_ignores_transient_stopped_status_before_motion_starts(self):
+    self.vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
+    self.vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
+      side_effect=[
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0),
+        _nmc.ServoStatus(status=0, velocity=-1),
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0),
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0),
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0),
+      ]
+    )
+    self.vspin._wait_until_rotor_safe_to_access = AsyncMock()  # type: ignore[method-assign]
+
+    with patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()):
+      await self.vspin._wait_until_stopped(initial_rpm=100, deceleration=0.5)
+
+    self.assertEqual(  # type: ignore[attr-defined]
+      self.vspin.request_positions_and_tachometer.await_count,
+      5,
+    )
+    self.vspin._wait_until_rotor_safe_to_access.assert_awaited_once()  # type: ignore[attr-defined]
+
+  async def test_rotor_access_requires_servo_stop_and_cleared_spinning_input(self):
+    self.vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
+      side_effect=[
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0),
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0),
+        _nmc.ServoStatus(status=0, velocity=0),
+        _nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=-1),
+      ]
+    )
+    self.vspin.request_spinning = AsyncMock(  # type: ignore[method-assign]
+      side_effect=[False, True]
+    )
+
+    self.assertTrue(await self.vspin._request_rotor_safe_to_access())
+    self.assertFalse(await self.vspin._request_rotor_safe_to_access())
+    self.assertFalse(await self.vspin._request_rotor_safe_to_access())
+    self.assertFalse(await self.vspin._request_rotor_safe_to_access())
+    self.assertEqual(self.vspin.request_spinning.await_count, 2)  # type: ignore[attr-defined]
+
+  async def test_rotor_access_confirmation_has_a_bounded_wait(self):
+    self.vspin.request_positions_and_tachometer = AsyncMock(  # type: ignore[method-assign]
+      return_value=_nmc.ServoStatus(status=_nmc.STATUS_MOVE_DONE, velocity=0)
+    )
+    self.vspin.request_spinning = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin._IO_TRANSITION_TIMEOUT", 0),
+      self.assertRaisesRegex(TimeoutError, "did not become safe to access"),
+    ):
+      await self.vspin._wait_until_rotor_safe_to_access()
+
+  async def test_rotor_access_actuators_wait_for_stop_confirmation(self):
+    async def assert_guarded(operation: Callable[[], Awaitable[None]]) -> None:
+      self.vspin._wait_until_rotor_safe_to_access = AsyncMock(  # type: ignore[method-assign]
+        side_effect=TimeoutError("rotor not stopped")
+      )
+      self.vspin._set_io_output_bit = AsyncMock()  # type: ignore[method-assign]
+
+      with self.assertRaisesRegex(TimeoutError, "rotor not stopped"):
+        await operation()
+
+      self.vspin._wait_until_rotor_safe_to_access.assert_awaited_once()  # type: ignore[attr-defined]
+      self.vspin._set_io_output_bit.assert_not_awaited()  # type: ignore[attr-defined]
+      self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
+      self.assertFalse(self.vspin.state.recovery_required)
+
+    self.vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    await assert_guarded(self.vspin.open_door)
+
+    self.vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    await assert_guarded(self.vspin.unlock_door)
+
+    self.vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    await assert_guarded(self.vspin.lock_bucket)
 
   async def test_bucket_calibration_is_normalized_and_saved_consistently(self):
     self.vspin.request_position = AsyncMock(return_value=12_345)  # type: ignore[method-assign]
@@ -575,7 +864,9 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
 
     await self.vspin.go_to_bucket1()
 
-    self.vspin._go_to_position.assert_has_awaits([call(8400), call(16400)])  # type: ignore[attr-defined]
+    self.vspin._go_to_position.assert_has_awaits(  # type: ignore[attr-defined]
+      [call(8400, transition=ANY), call(16400, transition=ANY)]
+    )
     self.assertIs(self.vspin.at_bucket, self.vspin.bucket1)
 
 
@@ -594,6 +885,7 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
     vspin.io = io  # type: ignore[assignment]
     vspin._servo_status_mask = _SERVO_STATUS_MASK
     vspin._io_status_mask = _IO_STATUS_MASK
+    _mark_vspin_ready(vspin)
     return vspin, io
 
   @staticmethod
@@ -626,14 +918,20 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
       _servo_step(servo_status, position=target_position),
       _servo_step(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)),
       _io_step(io_status, inputs=closed_locked_bucket_unlocked),
+      _servo_step(servo_status, position=target_position),
+      _io_step(io_status, inputs=closed_locked_bucket_unlocked),
       _io_step(_nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0x0100), inputs=0),
       _io_step(io_status, inputs=0),
+      _io_step(io_status, inputs=0),
+      _servo_step(servo_status, position=target_position),
       _io_step(io_status, inputs=0),
       _io_step(
         _nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0x0500),
         inputs=1 << _nmc.INPUT_DOOR_LOCKED,
       ),
       _io_step(io_status, inputs=1 << _nmc.INPUT_DOOR_LOCKED),
+      _io_step(io_status, inputs=1 << _nmc.INPUT_DOOR_LOCKED),
+      _servo_step(servo_status, position=target_position),
       _io_step(io_status, inputs=1 << _nmc.INPUT_DOOR_LOCKED),
       _io_step(
         _nmc.build_set_output(_nmc.PIC_IO_ADDRESS, 0x0700),
@@ -813,6 +1111,9 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(io.rts_levels, [True])
     self.assertEqual(io.dtr_levels, [True])
     self.assertEqual(vspin._home_position, 200)
+    self.assertEqual(vspin.state.connection, ConnectionState.CONNECTED)
+    self.assertEqual(vspin.state.initialization, VSpinInitializationState.INITIALIZED)
+    self.assertEqual(vspin.state.homing, VSpinHomingState.HOMED)
 
   async def test_network_initialization_probes_the_next_baudrate(self):
     steps = self._network_reset_steps()
@@ -984,6 +1285,24 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
         position=deceleration_position,
         velocity=0,
       ),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(
+        servo_status,
+        position=deceleration_position,
+        velocity=0,
+      ),
+      _io_step(io_status, inputs=safe_inputs),
+      _servo_step(
+        servo_status,
+        position=deceleration_position,
+        velocity=0,
+      ),
+      _servo_step(
+        servo_status,
+        position=deceleration_position,
+        velocity=0,
+      ),
+      _io_step(io_status, inputs=safe_inputs),
     ]
     vspin, io = self._make_vspin(steps)
     vspin._at_bucket = vspin.bucket1
@@ -998,38 +1317,24 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
       io.writes,
     )
 
-  async def test_complete_abort_ftdi_transcript(self):
-    initial_velocity = -100
-    deceleration = 0.5
-    io_status = _nmc.build_no_op(_nmc.PIC_IO_ADDRESS)
-    servo_status = _nmc.build_no_op(_nmc.PIC_SERVO_ADDRESS)
-    safe_inputs = 1 << _nmc.INPUT_BUCKET_LOCKED
-    steps = [
-      _servo_step(servo_status, status=0, velocity=initial_velocity),
-      _servo_step(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._VELOCITY_GAINS)),
-      _servo_step(
-        _nmc.build_load_trajectory(
-          _nmc.PIC_SERVO_ADDRESS,
-          vspin_module._VELOCITY_TRAJECTORY_MODE,
-          velocity=0,
-          acceleration=_nmc.acceleration_to_nmc(deceleration),
-        ),
-        status=0,
-        velocity=initial_velocity,
-      ),
-      _io_step(io_status, inputs=safe_inputs),
-      _servo_step(servo_status, status=0, velocity=-10),
-      _io_step(io_status, inputs=safe_inputs),
-      _servo_step(servo_status, velocity=0),
-    ]
-    vspin, io = self._make_vspin(steps)
-    vspin._spin_active = True
+  async def test_stop_spin_does_not_send_commands_in_parallel_with_spin_owner(self):
+    vspin, io = self._make_vspin([])
+    vspin._set_activity(VSpinActivity.AT_SPEED)
+    vspin._spin_completion_event.clear()
 
-    with patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()):
-      await vspin.stop_spin(deceleration)
+    stop_task = asyncio.create_task(vspin.stop_spin(deceleration=0.5))
+    while not vspin._spin_cancel_requested:
+      await asyncio.sleep(0)
+
+    self.assertFalse(stop_task.done())
+    self.assertEqual(vspin._spin_stop_deceleration, 0.5)
+    io.assert_complete(self)
+
+    vspin._set_activity(VSpinActivity.IDLE)
+    vspin._spin_completion_event.set()
+    await stop_task
 
     io.assert_complete(self)
-    self.assertTrue(vspin._spin_cancel_requested)
 
   async def test_complete_bucket_presentation_ftdi_transcripts(self):
     current_position = 7900
@@ -1048,7 +1353,7 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
 
         io.assert_complete(self)
         self.assertIs(vspin.at_bucket, getattr(vspin, bucket_name))
-        self.assertTrue(vspin.door_open)
+        self.assertEqual(vspin.state.activity, VSpinActivity.IDLE)
 
   async def test_bucket_motion_fault_prevents_lock_and_door_commands(self):
     position = 8400
@@ -1065,7 +1370,8 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
       await vspin.go_to_position(position)
 
     io.assert_complete(self)
-    self.assertFalse(vspin.door_open)
+    self.assertTrue(vspin.state.recovery_required)
+    self.assertIsNone(vspin.at_bucket)
 
   async def test_door_and_lock_operations_are_idempotent(self):
     io_status = _nmc.build_no_op(_nmc.PIC_IO_ADDRESS)
@@ -1111,11 +1417,13 @@ class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.vspin = VSpin(name="centrifuge", device_id="test")
-    self.vspin._door_open = True
+    _mark_vspin_ready(self.vspin)
     self.vspin._at_bucket = self.vspin.bucket1
     self.vspin.request_door_open = AsyncMock(return_value=True)  # type: ignore[method-assign]
     self.vspin.request_bucket_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
-    self.vspin.request_spinning = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin._request_rotor_safe_to_access = AsyncMock(  # type: ignore[method-assign]
+      return_value=True
+    )
     self.loader = Access2(name="loader", device_id="test", vspin=self.vspin)
     self.loader.driver.load = AsyncMock()  # type: ignore[method-assign]
     self.loader.driver.unload = AsyncMock()  # type: ignore[method-assign]
@@ -1146,6 +1454,40 @@ class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(started.data["source"]["name"], "loader")
     self.assertEqual(started.data["destination"]["name"], "centrifuge_bucket1")
     self.assertIs(self.vspin.bucket1.resource, plate)
+    self.loader.driver.load.assert_awaited_once_with(  # type: ignore[attr-defined]
+      protocol.TEACHPOINT_BUCKET_1
+    )
+
+  async def test_load_maps_presented_bucket_2_to_its_teachpoint(self):
+    plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
+    self.loader.assign_child_resource(plate, location=Coordinate.zero())
+    self.vspin._at_bucket = self.vspin.bucket2
+
+    await self.loader.load()
+
+    self.loader.driver.load.assert_awaited_once_with(  # type: ignore[attr-defined]
+      protocol.TEACHPOINT_BUCKET_2
+    )
+    self.assertIs(self.vspin.bucket2.resource, plate)
+
+  async def test_actuated_loader_failure_blocks_vspin_motion(self):
+    plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
+    self.loader.assign_child_resource(plate, location=Coordinate.zero())
+
+    async def fail_after_actuation(bucket_teachpoint: int) -> None:
+      self.assertEqual(bucket_teachpoint, protocol.TEACHPOINT_BUCKET_1)
+      self.loader.driver._mark_recovery_required(position_uncertain=False)
+      raise RuntimeError("loader motion failed")
+
+    self.loader.driver.load = AsyncMock(side_effect=fail_after_actuation)  # type: ignore[method-assign]
+
+    with self.assertRaisesRegex(RuntimeError, "loader motion failed"):
+      await self.loader.load()
+
+    self.assertTrue(self.vspin.state.recovery_required)
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.TRANSFERRING)
+    self.assertIs(self.loader.resource, plate)
+    self.assertIsNone(self.vspin.bucket1.resource)
 
   async def test_unload_failure_emits_bucket_to_loader_transfer(self):
     plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
@@ -1192,7 +1534,9 @@ class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
   async def test_unload_requires_stopped_vspin_before_driver_motion(self):
     plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
     self.vspin.bucket1.assign_child_resource(plate, location=Coordinate.zero())
-    self.vspin.request_spinning = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin._request_rotor_safe_to_access = AsyncMock(  # type: ignore[method-assign]
+      return_value=False
+    )
 
     with self.assertRaisesRegex(RuntimeError, "must be stopped"):
       await self.loader.unload()

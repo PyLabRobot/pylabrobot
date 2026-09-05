@@ -1,17 +1,29 @@
 import asyncio
+import dataclasses
 import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from pylabrobot.agilent.vspin import _access2_protocol as protocol
+from pylabrobot.agilent.vspin._state import (
+  Access2Activity,
+  Access2MachineState,
+  Access2Operation,
+  ConnectionState,
+  TransferDirection,
+  TransferPhase,
+  TransferProgress,
+  TransitionToken,
+)
 from pylabrobot.agilent.vspin.errors import (
   BucketHasPlateError,
   BucketNoPlateError,
-  CentrifugeDoorError,
   LoaderNoPlateError,
   NotAtBucketError,
 )
 from pylabrobot.agilent.vspin.vspin import VSpin
 from pylabrobot.events import evented_operation, resource_reference
-from pylabrobot.io.ftdi import FTDI
+from pylabrobot.io.ftdi import FTDI, is_ftdi_transport_error
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 logger = logging.getLogger(__name__)
@@ -26,6 +38,44 @@ _AXIS_NAMES: dict[int, str] = {
   protocol.AXIS_Y: "Y",
   protocol.AXIS_Z: "Z",
 }
+
+
+@dataclasses.dataclass(frozen=True)
+class TransferRoute:
+  """Teachpoints and park offset for one transfer direction."""
+
+  source_teachpoint: int
+  destination_teachpoint: int
+  park_z_offset: float
+  source_name: str
+
+
+def _transfer_route(
+  direction: TransferDirection,
+  bucket_teachpoint: int,
+) -> TransferRoute:
+  """Build one transfer route from existing Access2 protocol constants."""
+  if bucket_teachpoint not in (
+    protocol.TEACHPOINT_BUCKET_1,
+    protocol.TEACHPOINT_BUCKET_2,
+  ):
+    raise ValueError(f"Invalid bucket teachpoint: {bucket_teachpoint}")
+
+  if direction is TransferDirection.INTO_CENTRIFUGE:
+    return TransferRoute(
+      source_teachpoint=protocol.TEACHPOINT_PICK,
+      destination_teachpoint=bucket_teachpoint,
+      park_z_offset=3,
+      source_name="stage",
+    )
+  if direction is TransferDirection.OUT_OF_CENTRIFUGE:
+    return TransferRoute(
+      source_teachpoint=bucket_teachpoint,
+      destination_teachpoint=protocol.TEACHPOINT_PICK,
+      park_z_offset=0,
+      source_name="centrifuge",
+    )
+  raise ValueError(f"Invalid transfer direction: {direction}")
 
 
 def _loader_load_event_context(self: "Access2") -> dict:
@@ -81,6 +131,61 @@ class Access2Driver:
     self.gripper_close_threshold = gripper_close_threshold
     self._command_lock = asyncio.Lock()
     self._operation_lock = asyncio.Lock()
+    self._state = Access2MachineState()
+
+  @property
+  def state(self) -> Access2MachineState:
+    """Return the current Access2 semantic-state snapshot."""
+    return self._state
+
+  def _mark_recovery_required(self, *, position_uncertain: bool) -> None:
+    """Make recovery sticky and invalidate only an uncertain arm teachpoint."""
+    self._state = dataclasses.replace(
+      self._state,
+      recovery_required=True,
+      last_teachpoint=None if position_uncertain else self._state.last_teachpoint,
+    )
+
+  def _record_disconnected(self) -> None:
+    """Record transport closure without copying controller status facts."""
+    self._state = dataclasses.replace(
+      self._state,
+      connection=ConnectionState.DISCONNECTED,
+      last_teachpoint=None,
+    )
+
+  @asynccontextmanager
+  async def _operation_scope(
+    self,
+    operation: Access2Operation,
+  ) -> AsyncIterator[TransitionToken]:
+    """Own the operation lock and apply actuation-aware state changes."""
+    async with self._operation_lock:
+      previous_operation = self._state.operation
+      transition = TransitionToken()
+      self._state = dataclasses.replace(self._state, operation=operation)
+      try:
+        yield transition
+      except BaseException as error:
+        if is_ftdi_transport_error(error):
+          self._record_disconnected()
+        if transition.actuated:
+          self._mark_recovery_required(position_uncertain=transition.position_uncertain)
+        else:
+          self._state = dataclasses.replace(self._state, operation=previous_operation)
+        raise
+      else:
+        self._state = dataclasses.replace(self._state, operation=Access2Activity.IDLE)
+
+  def _set_transfer_phase(self, phase: TransferPhase) -> None:
+    """Advance the active transfer while retaining its direction and bucket."""
+    transfer = self._state.operation
+    if not isinstance(transfer, TransferProgress):
+      raise RuntimeError("No Access2 transfer is active")
+    self._state = dataclasses.replace(
+      self._state,
+      operation=dataclasses.replace(transfer, phase=phase),
+    )
 
   async def _read_exact(self, length: int) -> bytes:
     loop = asyncio.get_running_loop()
@@ -110,11 +215,16 @@ class Access2Driver:
     """Send one transport-independent command through the FTDI envelope."""
     frame = protocol.build_ftdi_frame(command)
     logger.debug("[loader] Sending %s", frame.hex())
-    async with self._command_lock:
-      written = await self.io.write(frame)
-      if written != len(frame):
-        raise RuntimeError(f"Access2 wrote {written} of {len(frame)} command bytes")
-      response_frame = await self._read_frame()
+    try:
+      async with self._command_lock:
+        written = await self.io.write(frame)
+        if written != len(frame):
+          raise RuntimeError(f"Access2 wrote {written} of {len(frame)} command bytes")
+        response_frame = await self._read_frame()
+    except BaseException as error:
+      if is_ftdi_transport_error(error):
+        self._record_disconnected()
+      raise
     logger.debug("[loader] Received %s", response_frame.hex())
     response = protocol.parse_ftdi_reply(response_frame, request_id=command[0])
     if raise_on_error and response.result != 0:
@@ -124,23 +234,44 @@ class Access2Driver:
       )
     return response
 
-  async def setup(self):
+  async def setup(self) -> None:
+    """Connect, initialize, home, open, and park the Access2 loader."""
     logger.debug("[loader] setup")
-    async with self._operation_lock:
-      await self.io.setup()
+    async with self._operation_scope(Access2Activity.INITIALIZING) as transition:
+      if self._state.recovery_required:
+        raise RuntimeError("Access2 requires recovery during setup")
+      self._state = dataclasses.replace(self._state, connection=ConnectionState.CONNECTING)
+      try:
+        await self.io.setup()
+      except BaseException:
+        self._record_disconnected()
+        raise
+      self._state = dataclasses.replace(self._state, connection=ConnectionState.CONNECTED)
       await self.io.set_baudrate(115384)
 
       self._raise_on_fault(await self.request_status(), operation="setup precondition")
 
       await self.send_command(protocol.build_ping())
+      transition.mark_actuated()
       await self.send_command(protocol.build_initialize())
+      self._state = dataclasses.replace(
+        self._state,
+        operation=Access2Activity.HOMING,
+        last_teachpoint=None,
+      )
+      transition.mark_actuated(position_uncertain=True)
       await self._home()
+      transition.confirm_position()
+      self._state = dataclasses.replace(self._state, operation=Access2Activity.MOVING)
+      transition.mark_actuated()
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
         self.gripper_open_position,
         profile=protocol.PROFILE_DYNAMIC_EMPTY,
         speed=protocol.SPEED_FAST,
       )
+      self._state = dataclasses.replace(self._state, last_teachpoint=None)
+      transition.mark_actuated(position_uncertain=True)
       await self._move_to_teachpoint(
         protocol.TEACHPOINT_PARK,
         0,
@@ -148,11 +279,22 @@ class Access2Driver:
         profile=protocol.PROFILE_DYNAMIC_EMPTY,
         speed=protocol.SPEED_FAST,
       )
+      self._state = dataclasses.replace(
+        self._state,
+        last_teachpoint=protocol.TEACHPOINT_PARK,
+      )
+      transition.confirm_position()
       await self._require_ready(operation="setup postcondition")
 
-  async def stop(self):
+  async def stop(self) -> None:
+    """Close the Access2 transport and invalidate session-scoped state."""
     logger.debug("[loader] stop")
-    await self.io.stop()
+    async with self._operation_lock:
+      self._state = dataclasses.replace(self._state, connection=ConnectionState.DISCONNECTING)
+      try:
+        await self.io.stop()
+      finally:
+        self._record_disconnected()
 
   async def request_status(self) -> protocol.Access2Status:
     logger.debug("[loader] request_status")
@@ -181,7 +323,15 @@ class Access2Driver:
         f"Access2 motor power fault is active{context} (status 0x{status.access2_status:02x})"
       )
 
-  async def _require_ready(self, operation: str = "readiness check") -> protocol.Access2Status:
+  async def _require_ready(
+    self,
+    operation: str = "readiness check",
+  ) -> protocol.Access2Status:
+    """Return fresh ready status after semantic and controller checks."""
+    if self._state.connection is not ConnectionState.CONNECTED:
+      raise RuntimeError(f"Access2 is not connected during {operation}")
+    if self._state.recovery_required:
+      raise RuntimeError(f"Access2 requires recovery during {operation}")
     status = await self.request_status()
     self._raise_on_fault(status, operation=operation)
     if not status.initialized or not status.homed:
@@ -198,8 +348,19 @@ class Access2Driver:
 
   async def home(self) -> None:
     """Home all Access2 axes and wait for the controller to confirm completion."""
-    async with self._operation_lock:
-      await self._home()
+    async with self._operation_scope(Access2Activity.HOMING) as transition:
+      if self._state.connection is not ConnectionState.CONNECTED:
+        raise RuntimeError("Access2 is not connected during home")
+      if self._state.recovery_required:
+        raise RuntimeError("Access2 requires recovery during home")
+      self._state = dataclasses.replace(self._state, last_teachpoint=None)
+      transition.mark_actuated(position_uncertain=True)
+      status = await self._home()
+      if not status.initialized:
+        raise RuntimeError(
+          f"Access2 lost initialized state during home: status 0x{status.access2_status:02x}"
+        )
+      transition.confirm_position()
 
   async def _wait_until_homed(self) -> protocol.Access2Status:
     loop = asyncio.get_running_loop()
@@ -421,10 +582,13 @@ class Access2Driver:
       )
     return status
 
-  async def park(self):
+  async def park(self) -> None:
+    """Move the Access2 arm to its park teachpoint."""
     logger.debug("[loader] park")
-    async with self._operation_lock:
+    async with self._operation_scope(Access2Activity.MOVING) as transition:
       await self._require_ready(operation="park precondition")
+      self._state = dataclasses.replace(self._state, last_teachpoint=None)
+      transition.mark_actuated(position_uncertain=True)
       await self._move_to_teachpoint(
         protocol.TEACHPOINT_PARK,
         8,
@@ -432,25 +596,32 @@ class Access2Driver:
         profile=protocol.PROFILE_DYNAMIC_FULL,
         speed=protocol.SPEED_SLOW,
       )
+      self._state = dataclasses.replace(
+        self._state,
+        last_teachpoint=protocol.TEACHPOINT_PARK,
+      )
+      transition.confirm_position()
       await self._require_ready(operation="park postcondition")
 
   async def close_gripper(self) -> None:
     """Move the gripper to its normal closed position."""
     logger.debug("[loader] close gripper")
-    async with self._operation_lock:
+    async with self._operation_scope(Access2Activity.MOVING) as transition:
       status = await self._require_ready(operation="gripper-close precondition")
       if self._gripper_is_closed(status):
         return
+      transition.mark_actuated()
       await self._close_gripper()
       await self._require_ready(operation="gripper-close postcondition")
 
   async def open_gripper(self) -> None:
     """Move the gripper to its open position."""
     logger.debug("[loader] open gripper")
-    async with self._operation_lock:
+    async with self._operation_scope(Access2Activity.MOVING) as transition:
       status = await self._require_ready(operation="gripper-open precondition")
       if self._gripper_is_at_position(status, self.gripper_open_position):
         return
+      transition.mark_actuated()
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
         self.gripper_open_position,
@@ -458,69 +629,103 @@ class Access2Driver:
       )
       await self._require_ready(operation="gripper-open postcondition")
 
-  async def load(self):
-    """Only tested for 1cm plate, 3mm pickup height."""
+  async def _transfer(
+    self,
+    direction: TransferDirection,
+    bucket_teachpoint: int,
+  ) -> None:
+    """Run the load/unload hardware sequence through one stateful path."""
+    route = _transfer_route(direction, bucket_teachpoint)
+    progress = TransferProgress(
+      direction=direction,
+      bucket_teachpoint=bucket_teachpoint,
+    )
+    async with self._operation_scope(progress) as transition:
+      await self._require_ready(operation="transfer precondition")
+      if self._state.last_teachpoint != protocol.TEACHPOINT_PARK:
+        raise RuntimeError("Access2 must be confirmed parked before a transfer")
+
+      transition.mark_actuated()
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        self.gripper_open_position,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        speed=protocol.SPEED_FAST,
+      )
+
+      self._state = dataclasses.replace(self._state, last_teachpoint=None)
+      transition.mark_actuated(position_uncertain=True)
+      await self._move_to_teachpoint(route.source_teachpoint, 3, 10)
+      self._state = dataclasses.replace(
+        self._state,
+        last_teachpoint=route.source_teachpoint,
+      )
+      transition.confirm_position()
+      self._set_transfer_phase(TransferPhase.AT_SOURCE)
+
+      sensor_values = await self.request_sensor_values()
+      if not sensor_values & protocol.STATUS_OPTICAL_PLATE_SENSOR:
+        raise RuntimeError(f"no plate found on {route.source_name}")
+
+      self._set_transfer_phase(TransferPhase.GRIPPING)
+      transition.mark_actuated()
+      await self._close_gripper()
+      self._set_transfer_phase(TransferPhase.HOLDING)
+
+      self._set_transfer_phase(TransferPhase.MOVING_TO_DESTINATION)
+      self._state = dataclasses.replace(self._state, last_teachpoint=None)
+      transition.mark_actuated(position_uncertain=True)
+      await self._move_to_teachpoint(
+        route.destination_teachpoint,
+        3,
+        10,
+        profile=protocol.PROFILE_DYNAMIC_FULL,
+      )
+      self._state = dataclasses.replace(
+        self._state,
+        last_teachpoint=route.destination_teachpoint,
+      )
+      transition.confirm_position()
+      self._set_transfer_phase(TransferPhase.AT_DESTINATION)
+
+      self._set_transfer_phase(TransferPhase.RELEASING)
+      transition.mark_actuated()
+      await self._move_axis_to_position(
+        protocol.AXIS_GRIPPER,
+        self.gripper_open_position,
+        profile=protocol.PROFILE_DYNAMIC_EMPTY,
+      )
+
+      self._set_transfer_phase(TransferPhase.RETURNING_TO_PARK)
+      self._state = dataclasses.replace(self._state, last_teachpoint=None)
+      transition.mark_actuated(position_uncertain=True)
+      await self._move_to_teachpoint(
+        protocol.TEACHPOINT_PARK,
+        route.park_z_offset,
+        10,
+      )
+      self._state = dataclasses.replace(
+        self._state,
+        last_teachpoint=protocol.TEACHPOINT_PARK,
+      )
+      transition.confirm_position()
+      await self._require_ready(operation="transfer postcondition")
+
+  async def load(
+    self,
+    bucket_teachpoint: int = protocol.TEACHPOINT_BUCKET_1,
+  ) -> None:
+    """Move a plate from the stage into the selected bucket."""
     logger.debug("[loader] load")
-    async with self._operation_lock:
-      await self._require_ready(operation="load precondition")
+    await self._transfer(TransferDirection.INTO_CENTRIFUGE, bucket_teachpoint)
 
-      await self._move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        self.gripper_open_position,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
-        speed=protocol.SPEED_FAST,
-      )
-      await self._move_to_teachpoint(protocol.TEACHPOINT_PICK, 3, 10)
-
-      if not (await self.request_sensor_values() & protocol.STATUS_OPTICAL_PLATE_SENSOR):
-        raise RuntimeError("no plate found on stage")
-
-      await self._close_gripper()
-      await self._move_to_teachpoint(
-        protocol.TEACHPOINT_BUCKET_1,
-        3,
-        10,
-        profile=protocol.PROFILE_DYNAMIC_FULL,
-      )
-      await self._move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        self.gripper_open_position,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
-      )
-      await self._move_to_teachpoint(protocol.TEACHPOINT_PARK, 3, 10)
-      await self._require_ready(operation="load postcondition")
-
-  async def unload(self):
-    """Only tested for 1cm plate, 3mm pickup height."""
+  async def unload(
+    self,
+    bucket_teachpoint: int = protocol.TEACHPOINT_BUCKET_1,
+  ) -> None:
+    """Move a plate from the selected bucket onto the stage."""
     logger.debug("[loader] unload")
-    async with self._operation_lock:
-      await self._require_ready(operation="unload precondition")
-
-      await self._move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        self.gripper_open_position,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
-        speed=protocol.SPEED_FAST,
-      )
-      await self._move_to_teachpoint(protocol.TEACHPOINT_BUCKET_1, 3, 10)
-
-      if not (await self.request_sensor_values() & protocol.STATUS_OPTICAL_PLATE_SENSOR):
-        raise RuntimeError("no plate found in centrifuge")
-
-      await self._close_gripper()
-      await self._move_to_teachpoint(
-        protocol.TEACHPOINT_PICK,
-        3,
-        10,
-        profile=protocol.PROFILE_DYNAMIC_FULL,
-      )
-      await self._move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        self.gripper_open_position,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
-      )
-      await self._move_to_teachpoint(protocol.TEACHPOINT_PARK, 0, 10)
-      await self._require_ready(operation="unload postcondition")
+    await self._transfer(TransferDirection.OUT_OF_CENTRIFUGE, bucket_teachpoint)
 
 
 class Access2(ResourceHolder):
@@ -570,49 +775,64 @@ class Access2(ResourceHolder):
     self.driver: Access2Driver = driver
     self._vspin = vspin
 
-  async def _require_vspin_ready_for_transfer(self) -> None:
-    """Confirm the paired VSpin is physically safe for loader motion."""
-    if not await self._vspin.request_door_open():
-      raise CentrifugeDoorError("Centrifuge door-open sensor must be active for plate transfer.")
-    if not await self._vspin.request_bucket_locked():
-      raise RuntimeError("Centrifuge bucket must be physically locked for plate transfer.")
-    if await self._vspin.request_spinning():
-      raise RuntimeError("Centrifuge must be stopped for plate transfer.")
+  def _teachpoint_for_bucket(self, bucket: ResourceHolder) -> int:
+    """Map a VSpin bucket resource to its Access2 protocol teachpoint."""
+    if bucket is self._vspin.bucket1:
+      return protocol.TEACHPOINT_BUCKET_1
+    if bucket is self._vspin.bucket2:
+      return protocol.TEACHPOINT_BUCKET_2
+    raise NotAtBucketError("Unknown VSpin bucket")
+
+  async def _run_driver_transfer(
+    self,
+    direction: TransferDirection,
+    bucket: ResourceHolder,
+  ) -> None:
+    """Reserve VSpin and ask Access2Driver to perform one physical transfer."""
+    if self.driver.state.recovery_required:
+      raise RuntimeError("Access2 requires recovery")
+    bucket_teachpoint = self._teachpoint_for_bucket(bucket)
+    async with self._vspin.reserve_transfer(bucket) as vspin_transition:
+      try:
+        if direction is TransferDirection.INTO_CENTRIFUGE:
+          await self.driver.load(bucket_teachpoint)
+        else:
+          await self.driver.unload(bucket_teachpoint)
+      except BaseException:
+        if self.driver.state.recovery_required:
+          vspin_transition.mark_actuated()
+        raise
 
   @evented_operation("centrifuge_loader.load", _loader_load_event_context)
   async def load(self) -> None:
-    if not self._vspin.door_open:
-      raise CentrifugeDoorError("Centrifuge door must be open to load a plate.")
-    if self._vspin.at_bucket is None:
+    """Move the loader's plate into the currently presented VSpin bucket."""
+    bucket = self._vspin.at_bucket
+    if bucket is None:
       raise NotAtBucketError(
         "Centrifuge must be at a bucket to load a plate. "
         "Use vspin.go_to_bucket1() or vspin.go_to_bucket2()."
       )
     if self.resource is None:
       raise LoaderNoPlateError("Loader must have a plate to load.")
-    if self._vspin.at_bucket.resource is not None:
+    if bucket.resource is not None:
       raise BucketHasPlateError("Bucket must be empty to load a plate.")
 
-    await self._require_vspin_ready_for_transfer()
+    await self._run_driver_transfer(TransferDirection.INTO_CENTRIFUGE, bucket)
 
-    await self.driver.load()
-
-    self._vspin.at_bucket.assign_child_resource(self.resource, location=Coordinate.zero())
+    bucket.assign_child_resource(self.resource, location=Coordinate.zero())
 
   @evented_operation("centrifuge_loader.unload", _loader_unload_event_context)
   async def unload(self) -> None:
-    if not self._vspin.door_open:
-      raise CentrifugeDoorError("Centrifuge door must be open to unload a plate.")
-    if self._vspin.at_bucket is None:
+    """Move the presented VSpin bucket's plate onto the loader."""
+    bucket = self._vspin.at_bucket
+    if bucket is None:
       raise NotAtBucketError(
         "Centrifuge must be at a bucket to unload a plate. "
         "Use vspin.go_to_bucket1() or vspin.go_to_bucket2()."
       )
-    if self._vspin.at_bucket.resource is None:
+    if bucket.resource is None:
       raise BucketNoPlateError("Bucket must have a plate to unload.")
 
-    await self._require_vspin_ready_for_transfer()
+    await self._run_driver_transfer(TransferDirection.OUT_OF_CENTRIFUGE, bucket)
 
-    await self.driver.unload()
-
-    self.assign_child_resource(self._vspin.at_bucket.resource)
+    self.assign_child_resource(bucket.resource)

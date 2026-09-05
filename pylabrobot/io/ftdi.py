@@ -32,6 +32,13 @@ from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 logger = logging.getLogger(__name__)
 
 
+def is_ftdi_transport_error(error: BaseException) -> bool:
+  """Return whether an exception was raised by the optional pylibftdi transport."""
+  if not HAS_PYLIBFTDI:
+    return False
+  return isinstance(error, FtdiError)
+
+
 class FTDICommand(Command):
   data: str
 
