@@ -43,3 +43,17 @@ class TestTipTracker(unittest.TestCase):
 
     with self.assertRaises(NoTipError):
       tracker.get_tip()
+
+  def test_get_tip_includes_pending_add(self):
+    tracker = TipTracker(thing="tester")
+    tracker.add_tip(self.tip, commit=False)
+    self.assertEqual(tracker.has_tip, True)
+    self.assertEqual(tracker.get_tip(), self.tip)
+
+  def test_get_tip_includes_pending_remove(self):
+    tracker = TipTracker(thing="tester")
+    tracker.add_tip(self.tip)
+    tracker.remove_tip(commit=False)
+    self.assertEqual(tracker.has_tip, False)
+    with self.assertRaises(NoTipError):
+      tracker.get_tip()
