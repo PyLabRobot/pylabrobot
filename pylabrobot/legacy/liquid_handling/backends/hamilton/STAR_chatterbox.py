@@ -291,13 +291,16 @@ class STARChatterboxBackend(STARBackend):
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
-    """Return mock tip presence based on the tip tracker state.
+    """Return mock sleeve-sensor tip presence from committed tracker state.
+
+    Pending pickup/drop operations are excluded so error recovery can distinguish
+    intended state from the last committed (simulated physical) state.
 
     Returns:
       A list of length `num_channels` where each element is `True` if a tip is mounted,
       `False` if not, or `None` if unknown.
     """
-    return [self.head[ch].has_tip for ch in range(self.num_channels)]
+    return [self.head[ch].has_committed_tip for ch in range(self.num_channels)]
 
   async def request_z_pos_channel_n(self, channel: int) -> float:
     return 285.0
@@ -406,7 +409,7 @@ class STARChatterboxBackend(STARBackend):
     return 400.0
 
   async def head96_request_tip_presence(self) -> int:
-    """Mock 96-head tip presence from the tip tracker: 1 if any channel holds a tip, else 0.
+    """Mock 96-head tip presence from committed tracker state: 1 if any channel holds a tip.
 
     Raises if tip tracking is disabled, since the tracker is then not updated and has no state to report.
     """
@@ -415,7 +418,7 @@ class STARChatterboxBackend(STARBackend):
         "cannot report 96-head tip presence with tip tracking disabled in simulation; "
         "enable it with set_tip_tracking(True) or call with requires_tip=False"
       )
-    return int(any(tracker.has_tip for tracker in self.head96.values()))
+    return int(any(tracker.has_committed_tip for tracker in self.head96.values()))
 
   # # # # # # # # Extension: iSWAP # # # # # # # #
 
@@ -470,18 +473,21 @@ class STARChatterboxBackend(STARBackend):
   # # # # # # # # Liquid Level Detection (LLD) # # # # # # # #
 
   async def request_tip_len_on_channel(self, channel_idx: int) -> float:
-    """Return tip length from the tip tracker.
+    """Return simulated measured tip length from committed tracker state.
+
+    Pending pickup/drop operations are excluded so the query matches the last
+    committed (simulated physical) tip.
 
     Args:
       channel_idx: Index of the pipetting channel (0-indexed).
 
     Returns:
-      The tip length in mm from the tip tracker.
+      The tip length in mm from the committed tip tracker state.
 
     Raises:
-      NoTipError: If no tip is present on the channel (via tip tracker).
+      NoTipError: If no committed tip is present on the channel.
     """
-    tip = self.head[channel_idx].get_tip()
+    tip = self.head[channel_idx].get_committed_tip()
     return tip.total_tip_length
 
   async def position_channels_in_y_direction(self, ys, make_space=True):
