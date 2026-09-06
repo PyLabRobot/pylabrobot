@@ -23,6 +23,7 @@ from pylabrobot.resources.well import Well
 
 logger = logging.getLogger(__name__)
 BIN_RE = re.compile(r"^(\d+),BIN:$")
+TIMED_BUSY_RE = re.compile(r"^\+?BY#T(?P<milliseconds>\d+)$")
 
 TecanInfinitePlatePosition = Literal[
   "UNKNOWN", "INIT", "HOME", "IN", "OUT", "HEATING", "SHAKING", "FLOATING"
@@ -456,6 +457,7 @@ class _MeasurementDecoder(ABC):
 class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
   """Backend shell for the Infinite 200 PRO."""
 
+  _DEFAULT_READ_TIMEOUT_S = 30
   _PLATE_POSITIONS = {"UNKNOWN", "INIT", "HOME", "IN", "OUT", "HEATING", "SHAKING", "FLOATING"}
   _STATUS_STATES: Dict[str, TecanInfiniteInstrumentState] = {
     "ST": "standby",
@@ -549,7 +551,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       id_product=self.PRODUCT_ID,
       human_readable_device_name="Tecan Infinite 200 PRO",
       packet_read_timeout=3,
-      read_timeout=30,
+      read_timeout=self._DEFAULT_READ_TIMEOUT_S,
     )
     self.counts_per_mm_x = counts_per_mm_x
     self.counts_per_mm_y = counts_per_mm_y
@@ -1104,16 +1106,16 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       await self._end_run()
 
   async def _clear_mode_settings(self, excitation: bool = False, emission: bool = False) -> None:
-    """Clear mode settings before configuring a new scan."""
+    """Clear the mode settings before a new scan. Confirm each change."""
     if excitation:
-      await self._send_command("EXCITATION CLEAR", allow_timeout=True)
+      await self._send_control_command("EXCITATION CLEAR")
     if emission:
-      await self._send_command("EMISSION CLEAR", allow_timeout=True)
-    await self._send_command("TIME CLEAR", allow_timeout=True)
-    await self._send_command("GAIN CLEAR", allow_timeout=True)
-    await self._send_command("READS CLEAR", allow_timeout=True)
-    await self._send_command("POSITION CLEAR", allow_timeout=True)
-    await self._send_command("MIRROR CLEAR", allow_timeout=True)
+      await self._send_control_command("EMISSION CLEAR")
+    await self._send_control_command("TIME CLEAR")
+    await self._send_control_command("GAIN CLEAR")
+    await self._send_control_command("READS CLEAR")
+    await self._send_control_command("POSITION CLEAR")
+    await self._send_control_command("MIRROR CLEAR")
 
   async def _configure_absorbance(
     self,
@@ -1250,7 +1252,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
 
     # UI issues the entire FI configuration twice before PREPARE REF.
     for _ in range(2):
-      await self._send_command("MODE FI.TOP", allow_timeout=True)
+      await self._send_command("MODE FI.TOP")
       await self._clear_mode_settings(excitation=True, emission=True)
       await self._send_command(
         f"EXCITATION 0,FI,{ex_decitenth},{excitation_bandwidth},0", allow_timeout=True
@@ -1621,16 +1623,26 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     *,
     recover_on_timeout: bool = True,
   ) -> List[str]:
-    """Read response frames and cache any binary payloads that arrive."""
+    """Read response frames and cache binary payloads.
+
+    Raise ``TimeoutError`` if a required terminal frame does not arrive.
+    """
     frames: List[str] = []
     saw_terminal = False
+    default_timeout = self._DEFAULT_READ_TIMEOUT_S if timeout is None else timeout
+    next_read_timeout = timeout
     for _ in range(max_iterations):
-      chunk = await self._read_packet(128, timeout=timeout, recover_on_timeout=recover_on_timeout)
+      chunk = await self._read_packet(
+        128, timeout=next_read_timeout, recover_on_timeout=recover_on_timeout
+      )
       if not chunk:
         break
       for event in self._parser.feed(chunk):
         if event.text is not None:
           frames.append(event.text)
+          busy_timeout = self._timed_busy_timeout(event.text)
+          if busy_timeout is not None:
+            next_read_timeout = max(default_timeout, busy_timeout)
           if self._is_terminal_frame(event.text):
             saw_terminal = True
         elif event.payload_len is not None and event.blob is not None:
@@ -1642,12 +1654,24 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     if require_terminal and not saw_terminal and recover_on_timeout:
       # best effort: drain once more so pending ST doesn't leak into next command
       await self._drain(1)
+    if require_terminal and not saw_terminal:
+      raise TimeoutError("Timed out waiting for a terminal response frame.")
     return frames
 
   @staticmethod
   def _is_terminal_frame(text: str) -> bool:
     """Return True if the ASCII frame is a terminal marker."""
-    return text in {"ST", "+", "-"} or text.startswith("BY#T")
+    return text in {"ST", "+", "-"}
+
+  @staticmethod
+  def _timed_busy_timeout(text: str) -> Optional[int]:
+    """Return the advertised timed-busy timeout in seconds, rounded up."""
+
+    match = TIMED_BUSY_RE.fullmatch(text)
+    if match is None:
+      return None
+    milliseconds = int(match.group("milliseconds"))
+    return max(1, math.ceil(milliseconds / 1000))
 
 
 @dataclass

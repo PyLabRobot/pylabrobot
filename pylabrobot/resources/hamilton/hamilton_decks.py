@@ -492,7 +492,7 @@ class HamiltonSTARDeck(HamiltonDeck):
       if with_teaching_rack:
         tip_spots = [
           TipSpot(
-            name=f"tip_spot_{i}",
+            name=f"teaching_tip_rack_tip_spot_{i}",
             size_x=9.0,
             size_y=9.0,
             size_z=0,

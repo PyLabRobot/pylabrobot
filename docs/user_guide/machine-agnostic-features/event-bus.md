@@ -120,6 +120,10 @@ events.
 | `legacy.storage.Incubator` | `incubator.fetch_plate`, `incubator.take_in_plate` |
 | `high_res.sample_storage.HighResSampleStorage` | incubator fetch/take-in/nest transfer; temperature, humidity, CO2, and O2 control when supported |
 | `legacy.liquid_handling.LiquidHandler` | resource pickup/move/drop; tip pickup/drop; 96-head tip pickup/drop; aspirate; dispense |
+| `legacy.plate_reading.PlateReader` | open/close; luminescence, absorbance, and fluorescence reads |
+| `legacy.plate_reading.Imager` | `imager.capture` |
+| `legacy.plate_reading.ImageReader` | inherited PlateReader and Imager operations, without duplicate lifecycle records |
+| `legacy.thermocycling.Thermocycler` | lid open/close; block/lid temperature set/deactivate; protocol submission |
 | `legacy.shaking.Shaker` | `shaker.shake`, `shaker.stop_shaking` |
 | `legacy.temperature_controlling.TemperatureController` | set temperature, wait for temperature, deactivate |
 | `legacy.centrifuge.Centrifuge` | `centrifuge.spin` |
@@ -165,6 +169,21 @@ time; resource-drop events include their destination. Aspirate and dispense even
 operated resources plus `liquid_operations`, one record per channel, with `channel`,
 `resource`, optional owning `plate`, and `volume`. Tip events similarly include direct tip
 locations and per-channel `tip_operations`.
+
+### PlateReader and Imager
+
+Plate-reader measurement events identify the directly selected wells, the requested modality
+settings, and bounded record counts without including returned measurement data. `imager.capture`
+records the resolved target and JSON-ready exposure, focus, and gain settings; software-auto
+retries remain inside one lifecycle and image data is excluded. `ImageReader` inherits both event
+families without double instrumentation.
+
+### Thermocycler
+
+Thermocycler events cover the seven primitive lid, thermal-control, and protocol-submission
+operations. Zoned setpoints use `target_temperatures`. Protocol events contain counts and volume
+metadata rather than the full profile, and completion means backend submission returned rather
+than physical execution finished.
 
 ### Shaker and environmental controllers
 
