@@ -395,12 +395,6 @@ class Access2Driver:
     )
 
   def _gripper_is_closed(self, status: protocol.Access2Status) -> bool:
-    axis_faults = (
-      protocol.AXIS_STATUS_CHECKSUM_ERROR
-      | protocol.AXIS_STATUS_OVERCURRENT
-      | protocol.AXIS_STATUS_POSITION_ERROR
-      | protocol.AXIS_STATUS_HOMING
-    )
     at_closed_position = (
       status.gripper_position is not None
       and abs(status.gripper_position - self.gripper_closed_position) <= _AXIS_POSITION_TOLERANCE
@@ -408,7 +402,6 @@ class Access2Driver:
     return (
       status.gripper_status is not None
       and bool(status.gripper_status & protocol.AXIS_STATUS_MOVE_DONE)
-      and not bool(status.gripper_status & axis_faults)
       and status.gripper_position is not None
       and status.gripper_position >= self.gripper_close_threshold
       and (at_closed_position or status.optical_plate_sensor)

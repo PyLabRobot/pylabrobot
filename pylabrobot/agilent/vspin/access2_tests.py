@@ -685,8 +685,8 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
     closed = protocol.Access2Status(
       access2_status=_READY_FLAGS,
       vspin_status=0,
-      gripper_status=protocol.AXIS_STATUS_MOVE_DONE,
-      gripper_position=5.68,
+      gripper_status=0x03,
+      gripper_position=5.671,
     )
     self.driver.request_status = AsyncMock(return_value=closed)  # type: ignore[method-assign]
 

@@ -72,12 +72,8 @@ STATUS_ESTOP_ACTIVE = 0x08
 STATUS_MOTOR_POWER_FAULT = 0x10
 STATUS_OPTICAL_PLATE_SENSOR = 0x20
 
-# PIC-SERVO bits in each axis-status byte returned by GET_STATUS.
+# Verified bit in each axis-status byte returned by GET_STATUS.
 AXIS_STATUS_MOVE_DONE = 0x01
-AXIS_STATUS_CHECKSUM_ERROR = 0x02
-AXIS_STATUS_OVERCURRENT = 0x04
-AXIS_STATUS_POSITION_ERROR = 0x10
-AXIS_STATUS_HOMING = 0x80
 
 # Captured sensor word returned when no plate is present at the queried handoff.
 SENSOR_NO_PLATE = 0x00000003
