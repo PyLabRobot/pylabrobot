@@ -4,7 +4,7 @@ import logging
 import warnings
 from contextlib import asynccontextmanager
 from dataclasses import replace
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.legacy.liquid_handling.backends import LiquidHandlerBackend
@@ -40,6 +40,136 @@ _DEFAULT_EXTENDED_CONFIGURATION = ExtendedConfiguration(
   max_iswap_collision_free_position=600.0,
 )
 
+# Unconfigured chatterbox query values for channel Z (mm) and dispensing-drive position.
+_DEFAULT_SIMULATED_CHANNEL_Z = 285.0
+_DEFAULT_SIMULATED_DISPENSING_DRIVE_POSITION = 0.0
+
+
+def _copy_channel_vector(
+  values: Optional[Sequence[float]],
+  num_channels: int,
+  name: str,
+  default: float,
+) -> Tuple[float, ...]:
+  """Copy a per-channel vector, filling the unconfigured default when omitted."""
+  if values is None or len(values) == 0:
+    return (default,) * num_channels
+  copied = tuple(float(v) for v in values)
+  if len(copied) != num_channels:
+    raise ValueError(f"{name} has {len(copied)} entries, expected {num_channels}.")
+  return copied
+
+
+class STARChatterboxState:
+  """Simulated STAR query readings for one chatterbox instance.
+
+  This is not physical verification, a motion model, or a fault-injection
+  framework. Values are the replies returned by the corresponding
+  ``STARChatterboxBackend`` query methods.
+
+  Channel vectors are copied into tuples at construction. Change readings by
+  constructing a ``STARChatterboxState`` and assigning ``backend.chatterbox_state``;
+  that assignment replaces the whole object, re-validates lengths against
+  ``num_channels``, and refills omitted vectors with unconfigured defaults.
+  In-place mutation of bound vectors is not supported.
+
+  Tip presence, 96-head tip presence, and tip length stay on ``TipTracker``.
+  Last-LLD heights stay latched by simulated LLD. Machine geometry stays on
+  ``MachineConfiguration`` / ``ExtendedConfiguration`` / ``iSWAPInformation``.
+
+  ``STARChatterboxState`` is in-process test configuration. It is not written
+  by ``serialize()`` or restored by ``deserialize()``.
+
+  Unconfigured defaults: iSWAP reported initialized, channel Z 285 mm,
+  dispensing-drive position 0.
+
+  Example:
+    backend = STARChatterboxBackend(
+      chatterbox_state=STARChatterboxState(
+        iswap_initialization_status=False,
+        channel_z_positions=[100.0] * 8,
+      )
+    )
+  """
+
+  def __init__(
+    self,
+    iswap_initialization_status: bool = True,
+    channel_z_positions: Optional[Sequence[float]] = None,
+    dispensing_drive_positions: Optional[Sequence[float]] = None,
+  ):
+    """Store copies of the given simulated query readings.
+
+    Args:
+      iswap_initialization_status: Value for ``request_iswap_initialization_status``.
+      channel_z_positions: Per-channel Z query values (mm). ``None`` or empty
+        means fill the unconfigured default when the state is bound to a backend.
+      dispensing_drive_positions: Per-channel dispensing-drive query values.
+        ``None`` or empty means fill the unconfigured default when bound.
+    """
+    self._iswap_initialization_status = bool(iswap_initialization_status)
+    self._channel_z_positions = (
+      tuple(float(v) for v in channel_z_positions) if channel_z_positions is not None else ()
+    )
+    self._dispensing_drive_positions = (
+      tuple(float(v) for v in dispensing_drive_positions)
+      if dispensing_drive_positions is not None
+      else ()
+    )
+
+  @property
+  def iswap_initialization_status(self) -> bool:
+    """Simulated iSWAP initialization query value."""
+    return self._iswap_initialization_status
+
+  @property
+  def channel_z_positions(self) -> Tuple[float, ...]:
+    """Simulated per-channel Z query values (mm)."""
+    return self._channel_z_positions
+
+  @property
+  def dispensing_drive_positions(self) -> Tuple[float, ...]:
+    """Simulated per-channel dispensing-drive query values."""
+    return self._dispensing_drive_positions
+
+  def resolved(self, num_channels: int) -> "STARChatterboxState":
+    """Return a copy filled and checked against ``num_channels``."""
+    if num_channels < 0:
+      raise ValueError(f"num_channels must be >= 0, got {num_channels}.")
+    return STARChatterboxState(
+      iswap_initialization_status=self.iswap_initialization_status,
+      channel_z_positions=_copy_channel_vector(
+        self.channel_z_positions,
+        num_channels,
+        "channel_z_positions",
+        _DEFAULT_SIMULATED_CHANNEL_Z,
+      ),
+      dispensing_drive_positions=_copy_channel_vector(
+        self.dispensing_drive_positions,
+        num_channels,
+        "dispensing_drive_positions",
+        _DEFAULT_SIMULATED_DISPENSING_DRIVE_POSITION,
+      ),
+    )
+
+  def __eq__(self, other: object) -> bool:
+    if not isinstance(other, STARChatterboxState):
+      return NotImplemented
+    return (
+      self.iswap_initialization_status == other.iswap_initialization_status
+      and self.channel_z_positions == other.channel_z_positions
+      and self.dispensing_drive_positions == other.dispensing_drive_positions
+    )
+
+  def __repr__(self) -> str:
+    return (
+      "STARChatterboxState("
+      f"iswap_initialization_status={self.iswap_initialization_status!r}, "
+      f"channel_z_positions={self.channel_z_positions!r}, "
+      f"dispensing_drive_positions={self.dispensing_drive_positions!r})"
+    )
+
+
 # Minimal left-drive X position of a dual-rail arm. Validated against real hardware;
 # the single-rail minimum is not yet known (#822). Only the chatterbox needs this
 # literal - a physical STAR reports its own value from the drive-range query.
@@ -71,7 +201,26 @@ _DEFAULT_ISWAP_INFORMATION = iSWAPInformation(
 
 
 class STARChatterboxBackend(STARBackend):
-  """Chatterbox backend for 'STAR'"""
+  """Device-free STAR backend with optional per-instance query state.
+
+  Constructing ``STARChatterboxBackend()`` with no extra arguments uses the
+  unconfigured query defaults. Pass ``chatterbox_state=STARChatterboxState(...)``
+  to configure simulated device/environment readings for deterministic tests.
+
+  This is not a physics simulator. Channel Z and dispensing-drive queries do
+  not follow motion commands; assign ``backend.chatterbox_state`` when a
+  protocol needs a specific reading. Tip sensors stay on the tip tracker.
+
+  Example:
+    from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_chatterbox import (
+      STARChatterboxBackend,
+      STARChatterboxState,
+    )
+
+    backend = STARChatterboxBackend(
+      chatterbox_state=STARChatterboxState(iswap_initialization_status=False)
+    )
+  """
 
   def __init__(
     self,
@@ -80,6 +229,7 @@ class STARChatterboxBackend(STARBackend):
     extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONFIGURATION,
     iswap_information: Optional[iSWAPInformation] = None,
     channels_minimum_y_spacing: Optional[List[float]] = None,
+    chatterbox_state: Optional[STARChatterboxState] = None,
     # deprecated parameters
     core96_head_installed: Optional[bool] = None,
     iswap_installed: Optional[bool] = None,
@@ -96,6 +246,10 @@ class STARChatterboxBackend(STARBackend):
         when the extended configuration reports iSWAP as installed.
       channels_minimum_y_spacing: Per-channel minimum Y spacing in mm. If None, defaults to
         `extended_configuration.min_raster_pitch_pip_channels` for all channels.
+      chatterbox_state: Optional simulated query readings. None uses the
+        unconfigured defaults (initialized iSWAP, channel Z 285 mm,
+        dispensing-drive position 0). Bound state is a copy; replace
+        ``backend.chatterbox_state`` to change readings after construction.
       core96_head_installed: Deprecated. Set `extended_configuration.left_x_drive
         .core_96_head_installed` instead.
       iswap_installed: Deprecated. Set `extended_configuration.left_x_drive
@@ -108,6 +262,15 @@ class STARChatterboxBackend(STARBackend):
     # Absolute heights latched by simulated LLD, one per channel. See
     # `request_pip_height_last_lld`; `_run_lld_on_channel_batch` writes them.
     self._last_lld_absolute_heights = [0.0] * num_channels
+    if chatterbox_state is None:
+      bound_state = STARChatterboxState()
+    elif isinstance(chatterbox_state, STARChatterboxState):
+      bound_state = chatterbox_state
+    else:
+      raise TypeError(
+        f"chatterbox_state must be STARChatterboxState, got {type(chatterbox_state).__name__}."
+      )
+    self._chatterbox_state = bound_state.resolved(num_channels)
 
     if core96_head_installed is not None or iswap_installed is not None:
       extended_configuration = copy.deepcopy(extended_configuration)
@@ -144,6 +307,34 @@ class STARChatterboxBackend(STARBackend):
       self._channels_minimum_y_spacing = [
         extended_configuration.min_raster_pitch_pip_channels
       ] * num_channels
+
+  @property
+  def chatterbox_state(self) -> STARChatterboxState:
+    """Simulated query readings for this instance.
+
+    Vectors are tuples. Assign a ``STARChatterboxState`` to replace the whole
+    object; omitted vectors refill unconfigured defaults. The setter copies and
+    validates lengths against ``num_channels``. ``setup()`` does not reset this
+    state.
+    """
+    return self._chatterbox_state
+
+  @chatterbox_state.setter
+  def chatterbox_state(self, state: STARChatterboxState) -> None:
+    if not isinstance(state, STARChatterboxState):
+      raise TypeError(f"chatterbox_state must be STARChatterboxState, got {type(state).__name__}.")
+    self._chatterbox_state = state.resolved(self.num_channels)
+
+  def _require_channel_index(self, channel_idx: int, name: str = "channel") -> None:
+    """Raise if ``channel_idx`` is outside ``[0, num_channels)``."""
+    if not 0 <= channel_idx < self.num_channels:
+      raise ValueError(f"{name} must be between 0 and {self.num_channels - 1}, got {channel_idx}.")
+
+  def _channel_state_vector(self, values: Sequence[float], name: str) -> Sequence[float]:
+    """Return ``values`` after checking it has one entry per channel."""
+    if len(values) != self.num_channels:
+      raise ValueError(f"{name} has {len(values)} entries, expected {self.num_channels}.")
+    return values
 
   async def setup(
     self,
@@ -300,22 +491,37 @@ class STARChatterboxBackend(STARBackend):
     return [self.head[ch].has_tip for ch in range(self.num_channels)]
 
   async def request_z_pos_channel_n(self, channel: int) -> float:
-    return 285.0
+    """Return the configured simulated channel Z query value.
+
+    This is not a measured stop-disk or tip-bottom position. Motion commands
+    do not update it; assign ``backend.chatterbox_state`` when a test needs a
+    specific reading.
+    """
+    self._require_channel_index(channel, "channel")
+    positions = self._channel_state_vector(
+      self._chatterbox_state.channel_z_positions, "channel_z_positions"
+    )
+    return positions[channel]
 
   async def channel_dispensing_drive_request_position(
-    self, channel_idx: int, simulated_value: float = 0.0
+    self, channel_idx: int, simulated_value: Optional[float] = None
   ) -> float:
-    """Override to return mock dispensing drive position.
+    """Return the simulated dispensing-drive position for ``channel_idx``.
 
-    This method is called when the system needs to know the current position
-    of a channel's dispensing drive (e.g., before emptying tips).
-
-    Returns a mock position with a default value of 0.0 for all channels.
+    Args:
+      channel_idx: 0-based channel index.
+      simulated_value: Optional per-call override. ``None`` (the default) uses
+        the instance ``chatterbox_state.dispensing_drive_positions`` value
+        (0.0 when unconfigured). An explicit ``0.0`` is an override, not an
+        omitted argument, and does not write back to instance state.
     """
-    if not (0 <= channel_idx < self.num_channels):
-      raise ValueError(f"channel_idx must be between 0 and {self.num_channels - 1}")
-
-    return simulated_value
+    self._require_channel_index(channel_idx, "channel_idx")
+    if simulated_value is not None:
+      return simulated_value
+    positions = self._channel_state_vector(
+      self._chatterbox_state.dispensing_drive_positions, "dispensing_drive_positions"
+    )
+    return positions[channel_idx]
 
   async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
     """Return mock minimum Y spacing for the given channel.
@@ -420,8 +626,12 @@ class STARChatterboxBackend(STARBackend):
   # # # # # # # # Extension: iSWAP # # # # # # # #
 
   async def request_iswap_initialization_status(self) -> bool:
-    """Return mock iSWAP initialization status."""
-    return True
+    """Return the configured simulated iSWAP initialization reading.
+
+    This is not a firmware QW result. Unconfigured default is ``True``.
+    ``setup()`` does not change this field.
+    """
+    return self._chatterbox_state.iswap_initialization_status
 
   @property
   def iswap_parked(self) -> bool:
