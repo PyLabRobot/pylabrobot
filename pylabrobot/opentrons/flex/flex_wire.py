@@ -1,8 +1,8 @@
 """Wire-level facts shared by the Flex device, its heads and its gripper.
 
-Small pieces that more than one of :mod:`~pylabrobot.opentrons.flex`,
-:mod:`~pylabrobot.opentrons.flex_head` and
-:mod:`~pylabrobot.opentrons.flex_gripper` needs, and that belong to none of
+Small pieces that more than one of :mod:`~pylabrobot.opentrons.flex.flex`,
+:mod:`~pylabrobot.opentrons.flex.flex_head` and
+:mod:`~pylabrobot.opentrons.flex.flex_gripper` needs, and that belong to none of
 them: how a deck slot is spelled on the wire, which axes the robot addresses by
 name, the software-version gate on the robot/* command family, and the notice
 every not-yet-hardware-verified op logs. They live here so the always-present

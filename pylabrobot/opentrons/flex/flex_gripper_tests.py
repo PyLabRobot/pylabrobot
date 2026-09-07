@@ -2,7 +2,7 @@
 
 Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxTransport``
 advertising a gripper on the extension mount, and asserts discovery attaches
-a :class:`~pylabrobot.opentrons.flex_gripper.FlexGripper`; ``move_labware``
+a :class:`~pylabrobot.opentrons.flex.flex_gripper.FlexGripper`; ``move_labware``
 follows the stage -> wire -> commit idiom (PLR-side validation before any
 wire command, deck re-parent only on wire success); and
 ``labware_moved_off_deck`` releases a slot both server-side and PLR-side.
@@ -12,8 +12,8 @@ import asyncio
 import unittest
 from typing import Any, Dict, Optional, Tuple
 
-from pylabrobot.opentrons.flex import OpentronsFlex
-from pylabrobot.opentrons.flex_gripper import FlexGripper
+from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import Resource, cor_96_wellplate_360uL_Fb
@@ -213,7 +213,7 @@ class TestGripDistanceDiscarded(unittest.TestCase):
       gripper = flex.gripper
       assert gripper is not None
 
-      with self.assertLogs("pylabrobot.opentrons.flex", level="WARNING") as logs:
+      with self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING") as logs:
         asyncio.run(gripper.move_labware(plate, "C2", grip_distance_from_top=5.0))
 
       # Nothing is uploaded, so there is nowhere to put the requested height:
@@ -239,7 +239,7 @@ class TestGripDistanceDiscarded(unittest.TestCase):
       assert gripper is not None
       asyncio.run(gripper.move_labware(lid, "C2", grip_distance_from_top=5.0))
 
-      with self.assertLogs("pylabrobot.opentrons.flex", level="WARNING") as logs:
+      with self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING") as logs:
         asyncio.run(gripper.move_labware(lid, "C3", grip_distance_from_top=9.0))
 
       self.assertEqual(len(transport.labware_definitions), 1)

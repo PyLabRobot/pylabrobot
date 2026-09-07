@@ -11,7 +11,7 @@ import pytest
 
 import pylabrobot
 from pylabrobot.io.errors import ValidationError
-from pylabrobot.opentrons.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex import OpentronsFlex
 from pylabrobot.opentrons.robot import OpentronsRobot
 from pylabrobot.opentrons.transport import (
   ChatterboxTransport,

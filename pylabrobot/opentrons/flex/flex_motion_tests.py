@@ -13,10 +13,10 @@ import asyncio
 import unittest
 from typing import Any, Dict, List, Tuple
 
-from pylabrobot.opentrons.checks import traversal_z
-from pylabrobot.opentrons.flex import OpentronsFlex
-from pylabrobot.opentrons.flex_gripper import FlexGripper, _require_robot_commands
-from pylabrobot.opentrons.flex_head import FlexHead8, _FlexHead
+from pylabrobot.opentrons.flex.checks import traversal_z
+from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex_gripper import FlexGripper, _require_robot_commands
+from pylabrobot.opentrons.flex.flex_head import FlexHead8, _FlexHead
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import set_tip_tracking
@@ -419,7 +419,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
       rack = flex_96_tiprack_50ul(name="rack")
       flex.deck.assign_child_at_slot(rack, "C1")
       with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+        with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
           asyncio.run(head.pick_up_tips(rack, column=0))
     finally:
       asyncio.run(flex.stop())
@@ -434,7 +434,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     flex, _transport = _flex_with_gripper()
     gripper = FlexGripper(flex, gripper_model="gripperV1")
 
-    with self.assertLogs("pylabrobot.opentrons.flex_gripper", level="WARNING") as logged:
+    with self.assertLogs("pylabrobot.opentrons.flex.flex_gripper", level="WARNING") as logged:
       gripper._warn_untested_hardware("an_op_added_later")
 
     self.assertIn("an_op_added_later", logged.output[0])
@@ -444,7 +444,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     # instance made a whole run's worth of unverified ops look like a single op.
     flex, head = self._flex_head8()
     try:
-      with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
+      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING") as log_ctx:
         asyncio.run(head.position())
         asyncio.run(head.move_relative("z", -1.0))
         asyncio.run(head.position())  # repeat stays quiet
@@ -463,7 +463,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     """
     flex, head = self._flex_head8()
     try:
-      with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
+      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING") as log_ctx:
         asyncio.run(head.position())
       self.assertTrue(any("FlexHead8.position" in msg for msg in log_ctx.output))
     finally:
@@ -477,7 +477,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
       flex.deck.assign_child_at_slot(rack, "C1")
       asyncio.run(head.pick_up_tips(rack, column=0))
       with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+        with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
           asyncio.run(head.blow_out())
     finally:
       asyncio.run(flex.stop())
@@ -491,7 +491,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
       head = flex.left
       assert head is not None
       with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+        with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
           asyncio.run(head.position())
     finally:
       asyncio.run(flex.stop())
@@ -501,7 +501,7 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     flex, head = self._flex_head8()
     try:
       with self.assertRaises(AssertionError):
-        with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING"):
+        with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING"):
           asyncio.run(head.get_tip_presence())
     finally:
       asyncio.run(flex.stop())

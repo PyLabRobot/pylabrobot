@@ -15,8 +15,8 @@ import asyncio
 import unittest
 from typing import List, Tuple
 
-from pylabrobot.opentrons.flex import OpentronsFlex
-from pylabrobot.opentrons.flex_head import FlexHead8
+from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex_head import FlexHead8
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import (

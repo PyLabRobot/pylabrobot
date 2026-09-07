@@ -9,9 +9,13 @@ from pylabrobot.opentrons.errors import (
   OpentronsError,
   OpentronsProtocolError,
 )
-from pylabrobot.opentrons.flex import OpentronsFlex
-from pylabrobot.opentrons.flex_gripper import FlexGripper
-from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96
+from pylabrobot.opentrons.flex import (
+  FlexGripper,
+  FlexHead1,
+  FlexHead8,
+  FlexHead96,
+  OpentronsFlex,
+)
 from pylabrobot.opentrons.ot2 import OT2, OT2Pipette
 from pylabrobot.opentrons.robot import OpentronsRobot, PipetteInfo
 from pylabrobot.opentrons.run import OpentronsRun

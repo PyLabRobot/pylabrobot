@@ -112,7 +112,7 @@ def _rates_by_tip(pipette_model: str) -> Dict[str, FlowRates]:
   if rates is None:
     raise ValueError(
       f"No default flow rates are recorded for pipette '{pipette_model}'. Pass an explicit "
-      "flow_rate, or add the model to pylabrobot.opentrons.pipette_defaults. Rates change "
+      "flow_rate, or add the model to pylabrobot.opentrons.flex.pipette_defaults. Rates change "
       "between versions of the same pipette, so the nearest version is not a safe stand-in."
     )
   return rates

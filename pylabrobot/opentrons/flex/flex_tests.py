@@ -10,8 +10,8 @@ import asyncio
 import unittest
 from typing import List, Tuple
 
-from pylabrobot.opentrons.flex import OpentronsFlex
-from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96
+from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
 from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.opentrons.transport import ChatterboxTransport
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking
@@ -886,7 +886,7 @@ class TestFlexHead8HardwareTipPresence(unittest.TestCase):
       flex.deck.assign_child_at_slot(rack, "C1")
 
       asyncio.run(head.pick_up_tips(rack, column=0))
-      with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
+      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING") as log_ctx:
         asyncio.run(head.drop_tips(rack, column=0))
 
       self.assertTrue(
@@ -1061,7 +1061,7 @@ class TestFlexHead96Ops(unittest.TestCase):
       rack = flex_96_tiprack_50ul(name="rack96")
       flex.deck.assign_child_at_slot(rack, "C1")
 
-      with self.assertLogs("pylabrobot.opentrons.flex_head", level="WARNING") as log_ctx:
+      with self.assertLogs("pylabrobot.opentrons.flex.flex_head", level="WARNING") as log_ctx:
         asyncio.run(head.pick_up_tips(rack))
       self.assertTrue(any("not yet verified" in msg.lower() for msg in log_ctx.output))
 

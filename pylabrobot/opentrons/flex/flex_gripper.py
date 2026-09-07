@@ -1,7 +1,7 @@
-"""Gripper sub-object for :class:`~pylabrobot.opentrons.flex.OpentronsFlex`.
+"""Gripper sub-object for :class:`~pylabrobot.opentrons.flex.flex.OpentronsFlex`.
 
 The Flex gripper rides the extension mount and moves labware between deck
-slots. Like the heads (:mod:`pylabrobot.opentrons.flex_head`), it is a
+slots. Like the heads (:mod:`pylabrobot.opentrons.flex.flex_head`), it is a
 plain-class sub-object: it holds a back-reference to the owning
 ``OpentronsFlex`` and issues commands through the shared transport via
 ``self.flex._execute_command``. It is composed by ``OpentronsFlex.setup()``
@@ -18,7 +18,7 @@ the robot's own for official load names, or the uploaded custom definition
 import logging
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Optional, Set
 
-from pylabrobot.opentrons.flex_wire import (
+from pylabrobot.opentrons.flex.flex_wire import (
   UNTESTED_HARDWARE_WARNING,
   _require_robot_commands,
   slot_wire_location,
@@ -27,7 +27,7 @@ from pylabrobot.opentrons.robot import OpentronsError
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:
-  from pylabrobot.opentrons.flex import OpentronsFlex
+  from pylabrobot.opentrons.flex.flex import OpentronsFlex
 
 logger = logging.getLogger(__name__)
 

@@ -1,10 +1,10 @@
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
 
-from pylabrobot.opentrons.flex_gripper import FlexGripper
-from pylabrobot.opentrons.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
-from pylabrobot.opentrons.flex_wire import ROBOT_AXES, _require_robot_commands, slot_wire_location
-from pylabrobot.opentrons.labware_definitions import (
+from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
+from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
+from pylabrobot.opentrons.flex.flex_wire import ROBOT_AXES, _require_robot_commands, slot_wire_location
+from pylabrobot.opentrons.flex.labware_definitions import (
   build_container_definition,
   build_movable_labware_definition,
   build_plate_definition,
@@ -95,7 +95,7 @@ class OpentronsFlex(OpentronsRobot):
   A device shell: it owns the deck, deck-scoped labware loading, and the
   discover-then-compose lifecycle that builds mount-addressed head
   sub-objects (``left``/``right``/``head96``). Liquid-handling ops live on
-  the heads, not here — see :mod:`pylabrobot.opentrons.flex_head`.
+  the heads, not here — see :mod:`pylabrobot.opentrons.flex.flex_head`.
   """
 
   def __init__(

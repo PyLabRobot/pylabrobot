@@ -13,9 +13,9 @@ import asyncio
 import unittest
 from typing import Any, Dict, Optional, Tuple
 
-from pylabrobot.opentrons.flex import OpentronsFlex
-from pylabrobot.opentrons.flex_head import FlexHead8
-from pylabrobot.opentrons.labware_definitions import (
+from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex_head import FlexHead8
+from pylabrobot.opentrons.flex.labware_definitions import (
   build_container_definition,
   build_movable_labware_definition,
   build_plate_definition,
@@ -822,7 +822,7 @@ class TestCustomLabwareLoadFlow(unittest.TestCase):
       with self.assertRaises(RuntimeError):
         asyncio.run(flex._ensure_labware_loaded(plate, grip_distance_from_top=4.0))
 
-      with self.assertLogs("pylabrobot.opentrons.flex", level="WARNING") as logs:
+      with self.assertLogs("pylabrobot.opentrons.flex.flex", level="WARNING") as logs:
         asyncio.run(flex._ensure_labware_loaded(plate, grip_distance_from_top=8.0))
 
       self.assertEqual(len(transport.labware_definitions), 1)

@@ -1,4 +1,4 @@
-"""Head sub-objects for :class:`~pylabrobot.opentrons.flex.OpentronsFlex`.
+"""Head sub-objects for :class:`~pylabrobot.opentrons.flex.flex.OpentronsFlex`.
 
 Each head is a plain-class sub-object (EL406/Cytation5 idiom), not a
 Capability/CapabilityBackend split: it holds a back-reference to the owning
@@ -38,10 +38,10 @@ from typing import (
   cast,
 )
 
-from pylabrobot.opentrons.checks import traversal_z
-from pylabrobot.opentrons.flex_wire import UNTESTED_HARDWARE_WARNING
-from pylabrobot.opentrons.labware_definitions import container_footprint
-from pylabrobot.opentrons.pipette_defaults import FlowRates, flow_rates
+from pylabrobot.opentrons.flex.checks import traversal_z
+from pylabrobot.opentrons.flex.flex_wire import UNTESTED_HARDWARE_WARNING
+from pylabrobot.opentrons.flex.labware_definitions import container_footprint
+from pylabrobot.opentrons.flex.pipette_defaults import FlowRates, flow_rates
 from pylabrobot.opentrons.robot import OpentronsCommandError, OpentronsError
 from pylabrobot.resources import (
   Container,
@@ -60,7 +60,7 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 
 if TYPE_CHECKING:
-  from pylabrobot.opentrons.flex import OpentronsFlex
+  from pylabrobot.opentrons.flex.flex import OpentronsFlex
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ import unittest
 
 import pytest
 
-from pylabrobot.opentrons.pipette_defaults import (
+from pylabrobot.opentrons.flex.pipette_defaults import (
   _DEFAULTS,
   flow_rates,
   supported_tip_volumes,
