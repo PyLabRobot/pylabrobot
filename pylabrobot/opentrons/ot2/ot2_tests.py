@@ -2,8 +2,9 @@ import asyncio
 import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
-from pylabrobot.io.http import HTTP
-from pylabrobot.opentrons.ot2.ot2 import OpentronsOT2, OpentronsOT2Error, _version_at_least
+from pylabrobot.io.http import HTTP, HTTPError
+from pylabrobot.opentrons import OT2, OpentronsError
+from pylabrobot.opentrons.types import ModuleInfo
 from pylabrobot.resources import Coordinate, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.celltreat import celltreat_96_wellplate_350uL_Fb
 from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
@@ -46,19 +47,19 @@ class FakeHTTP(HTTP):
   ) -> Dict[str, Any]:
     await asyncio.sleep(0)
     self.calls.append((method, path, data))
-    if self.stop_requests_fail and (
-      path.endswith(("/actions", "/cancel")) or method == "DELETE"
-    ):
+    if self.stop_requests_fail and (path.endswith(("/actions", "/cancel")) or method == "DELETE"):
       raise RuntimeError("stop request rejected")
     if method == "POST" and path == "/runs":
       return {"data": {"id": "run-id"}}
+    if method == "GET" and path == "/runs":
+      return {"data": [{"id": "run-id", "status": "idle"}]}
     if method == "GET" and path == "/pipettes":
       return {
         "left": {"name": self.left_pipette_name},
         "right": {"name": self.right_pipette_name},
       }
     if method == "GET" and path == "/health":
-      return {"api_version": self.api_version}
+      return {"name": "test-ot2", "robot_model": "OT-2 Standard", "api_version": self.api_version}
     if method == "POST" and path == "/robot/home":
       return {"data": {}}
     if method == "GET" and path == "/modules":
@@ -67,7 +68,7 @@ class FakeHTTP(HTTP):
       if data != {"data": {"actionType": "stop"}}:
         raise AssertionError(f"Unexpected stop action: {data}")
       if not self.stop_action_supported:
-        raise RuntimeError("stop action is unsupported")
+        raise HTTPError(method, path, 404, "stop action is unsupported")
       return {"data": {}}
     if method == "POST" and path == "/runs/run-id/cancel":
       return {"data": {}}
@@ -108,13 +109,13 @@ class FakeHTTP(HTTP):
     raise AssertionError(f"Unexpected HTTP request: {method} {path} {data}")
 
 
-class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
+class OT2Tests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self) -> None:
     set_tip_tracking(True)
     set_volume_tracking(True)
     self.io = FakeHTTP()
     self.deck = OTDeck()
-    self.robot = OpentronsOT2(
+    self.robot = OT2(
       host="ot2.local",
       deck=self.deck,
       command_poll_interval=0,
@@ -128,7 +129,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_at_slot(self.plate, slot=2)
 
   async def asyncTearDown(self) -> None:
-    if self.robot._run_id is not None:
+    if self.robot._run is not None:
       await self.robot.stop()
     set_tip_tracking(False)
     set_volume_tracking(False)
@@ -142,7 +143,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.robot.left_pipette.num_channels, 1)
     self.assertIsNone(self.robot.right_pipette)
     self.assertIn(("POST", "/robot/home", {"target": "robot"}), self.io.calls)
-    self.assertEqual(await self.robot.list_connected_modules(), [{"id": "temperature-module"}])
+    self.assertEqual(await self.robot.list_connected_modules(), (ModuleInfo("temperature-module"),))
 
   async def test_full_single_channel_protocol_updates_trackers_and_commands(self) -> None:
     pipette = self.robot.left_pipette
@@ -255,7 +256,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
         self.io.fail_command_type = failed_command
         tip = origin.get_tip()
 
-        with self.assertRaisesRegex(OpentronsOT2Error, failed_command):
+        with self.assertRaisesRegex(OpentronsError, failed_command):
           await pipette.pick_up_tip(origin)
 
         self.assertIs(pipette.tip, tip)
@@ -312,7 +313,11 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     assert pipette is not None
     for tip_index, version in enumerate(("6.3.0", "7.1.0")):
       with self.subTest(version=version):
-        self.robot.api_version = version
+        await self.robot.stop()
+        self.io.api_version = version
+        await self.robot.setup(skip_home=True)
+        pipette = self.robot.left_pipette
+        assert pipette is not None
         await pipette.pick_up_tip(self.tips.get_item(tip_index))
 
         await pipette.discard_tip()
@@ -322,9 +327,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(drop["commandType"], expected_drop)
         self.assertEqual(save["commandType"], "savePosition")
         self.assertEqual(retract["commandType"], "moveToCoordinates")
-        self.assertEqual(
-          retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 120}
-        )
+        self.assertEqual(retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 120})
         self.assertTrue(retract["params"]["forceDirect"])
         self.assertFalse(pipette.has_tip)
 
@@ -351,7 +354,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.io.fail_command_type = "dropTip"
     command_count = len(self.io.commands)
 
-    with self.assertRaisesRegex(OpentronsOT2Error, "dropTip"):
+    with self.assertRaisesRegex(OpentronsError, "dropTip"):
       await pipette.return_tip()
 
     self.assertIs(pipette.tip, tip)
@@ -377,7 +380,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
         await pipette.pick_up_tip(origin)
         self.io.fail_command_type = failed_command
 
-        with self.assertRaisesRegex(OpentronsOT2Error, failed_command):
+        with self.assertRaisesRegex(OpentronsError, failed_command):
           await operation()
 
         self.assertFalse(pipette.has_tip)
@@ -429,7 +432,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     self.io.fail_command_type = "aspirateInPlace"
 
-    with self.assertRaisesRegex(OpentronsOT2Error, "simulated failure"):
+    with self.assertRaisesRegex(OpentronsError, "simulated failure"):
       await pipette.aspirate(source, volume=10)
 
     self.assertAlmostEqual(source.tracker.get_used_volume(), 15)
@@ -453,9 +456,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(save["commandType"], "savePosition")
         self.assertEqual(save["params"], {"pipetteId": pipette.pipette_id})
         self.assertEqual(retract["commandType"], "moveToCoordinates")
-        self.assertEqual(
-          retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 120}
-        )
+        self.assertEqual(retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 120})
         self.assertTrue(retract["params"]["forceDirect"])
 
   async def test_rejected_aspiration_preserves_both_volume_trackers(self) -> None:
@@ -516,7 +517,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
         )
         self.io.fail_command_occurrence = move_count + 2
 
-        with self.assertRaisesRegex(OpentronsOT2Error, "moveToCoordinates"):
+        with self.assertRaisesRegex(OpentronsError, "moveToCoordinates"):
           await operation(well, volume=10)
 
         self.assertEqual(well.tracker.get_used_volume(), expected_well)
@@ -572,9 +573,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(results[0])
     self.assertIsInstance(results[1], RuntimeError)
     self.assertIn("already has a tip", str(results[1]))
-    self.assertEqual(
-      sum(command["commandType"] == "pickUpTip" for command in self.io.commands), 1
-    )
+    self.assertEqual(sum(command["commandType"] == "pickUpTip" for command in self.io.commands), 1)
     self.assertTrue(pipette.has_tip)
     self.assertFalse(self.tips.get_item("A1").has_tip())
     self.assertTrue(self.tips.get_item("A2").has_tip())
@@ -615,10 +614,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(pipette.has_tip)
     self.assertTrue(self.tips.get_item("A1").has_tip())
     self.assertEqual(
-      sum(
-        command["commandType"] in {"dropTip", "dropTipInPlace"}
-        for command in self.io.commands
-      ),
+      sum(command["commandType"] in {"dropTip", "dropTipInPlace"} for command in self.io.commands),
       1,
     )
 
@@ -651,7 +647,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.io.fail_command_type = "dispenseInPlace"
     self.io.fail_command_occurrence = 2
 
-    with self.assertRaisesRegex(OpentronsOT2Error, "dispenseInPlace"):
+    with self.assertRaisesRegex(OpentronsError, "dispenseInPlace"):
       await pipette.mix(source, volume=10, repetitions=3)
 
     self.assertEqual(source.tracker.get_used_volume(), 5)
@@ -714,7 +710,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     await self.robot.stop()
     self.assertFalse(self.io.started)
     self.assertIsNone(self.robot.left_pipette)
-    self.assertIsNone(self.robot.api_version)
+    self.assertIsNone(self.robot.software_version)
     self.assertIn(
       ("POST", "/runs/run-id/actions", {"data": {"actionType": "stop"}}),
       self.io.calls,
@@ -729,19 +725,19 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_failed_stop_retains_state_and_transport_for_retry(self) -> None:
     pipette = self.robot.left_pipette
-    run_id = self.robot._run_id
+    run_id = self.robot._run
     self.io.stop_requests_fail = True
 
-    with self.assertRaisesRegex(OpentronsOT2Error, "Could not cancel") as error:
+    with self.assertRaisesRegex(OpentronsError, "Could not cancel") as error:
       await self.robot.stop()
 
     self.assertIsInstance(error.exception.__cause__, RuntimeError)
-    self.assertEqual(self.robot._run_id, run_id)
+    self.assertEqual(self.robot._run, run_id)
     self.assertIs(self.robot.left_pipette, pipette)
     self.assertTrue(self.io.started)
     self.io.stop_requests_fail = False
     await self.robot.stop()
-    self.assertIsNone(self.robot._run_id)
+    self.assertIsNone(self.robot._run)
     self.assertIsNone(self.robot.left_pipette)
     self.assertFalse(self.io.started)
 
@@ -750,22 +746,23 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.io.fail_command_type = "loadPipette"
     self.io.stop_requests_fail = True
 
-    with self.assertRaisesRegex(OpentronsOT2Error, "Could not cancel"):
+    with self.assertRaisesRegex(OpentronsError, "Could not cancel"):
       await self.robot.setup()
 
-    self.assertEqual(self.robot._run_id, "run-id")
+    assert self.robot._run is not None
+    self.assertEqual(self.robot._run.id, "run-id")
     self.assertTrue(self.io.started)
     self.io.stop_requests_fail = False
     await self.robot.stop()
-    self.assertIsNone(self.robot._run_id)
+    self.assertIsNone(self.robot._run)
     self.assertFalse(self.io.started)
 
 
-class OpentronsOT2MultiChannelTests(unittest.IsolatedAsyncioTestCase):
+class OT2MultiChannelTests(unittest.IsolatedAsyncioTestCase):
   async def test_multi_channel_is_modeled_but_not_mistracked_as_one_tip(self) -> None:
     io = FakeHTTP(left_pipette_name="p20_multi_gen2")
     deck = OTDeck()
-    robot = OpentronsOT2(host="ot2.local", deck=deck, command_poll_interval=0, io=io)
+    robot = OT2(host="ot2.local", deck=deck, command_poll_interval=0, io=io)
     await robot.setup(skip_home=True)
     tips = opentrons_96_filtertiprack_20ul(name="tips")
     deck.assign_child_at_slot(tips, slot=1)
@@ -778,11 +775,118 @@ class OpentronsOT2MultiChannelTests(unittest.IsolatedAsyncioTestCase):
     await robot.stop()
 
 
-class OpentronsVersionTests(unittest.TestCase):
-  def test_version_comparison_is_numeric(self) -> None:
-    self.assertTrue(_version_at_least("7.10.0", "7.1.0"))
-    self.assertTrue(_version_at_least("10.0.0", "7.1.0"))
-    self.assertFalse(_version_at_least("7.0.9", "7.1.0"))
+class OT2ArchitectureTests(unittest.IsolatedAsyncioTestCase):
+  async def test_connection_allows_queries_without_creating_a_run(self) -> None:
+    io = FakeHTTP()
+    robot = OT2("ot2.local", io=io)
+    await robot.connect()
+    try:
+      self.assertEqual((await robot.get_health()).software_version, "7.1.0")
+      self.assertEqual((await robot.get_mounted_pipettes())[0].name, "p20_single_gen2")
+      self.assertEqual((await robot.get_runs())[0].id, "run-id")
+      self.assertEqual(await robot.list_connected_modules(), (ModuleInfo("temperature-module"),))
+      self.assertIsNone(robot._run)
+      self.assertIsNone(robot.software_version)
+      self.assertEqual(robot.pipettes, [])
+    finally:
+      await robot.stop()
+    self.assertTrue(all(method == "GET" for method, _, _ in io.calls))
+    self.assertFalse(io.started)
+
+  async def test_queries_do_not_reconfigure_an_active_session(self) -> None:
+    io = FakeHTTP()
+    robot = OT2("ot2.local", io=io)
+    await robot.setup(skip_home=True)
+    try:
+      state = vars(robot).copy()
+      io.api_version = "8.7.0"
+      io.left_pipette_name = "p300_single_gen2"
+      command_count = len(io.commands)
+      self.assertEqual((await robot.get_health()).software_version, "8.7.0")
+      self.assertEqual((await robot.get_mounted_pipettes())[0].name, "p300_single_gen2")
+      self.assertEqual(robot.software_version, "7.1.0")
+      self.assertEqual(vars(robot), state)
+      self.assertEqual(len(io.commands), command_count)
+    finally:
+      await robot.stop()
+
+  async def test_reconnect_invalidates_old_pipette_and_labware_bindings(self) -> None:
+    io = FakeHTTP()
+    robot = OT2("ot2.local", io=io)
+    await robot.setup(skip_home=True)
+    old_pipette, old_registry = robot.left_pipette, robot._labware
+    assert old_pipette is not None
+    await robot.stop()
+    await robot.setup(skip_home=True)
+    try:
+      self.assertIsNot(robot._labware, old_registry)
+      command_count = len(io.commands)
+      with self.assertRaisesRegex(RuntimeError, "earlier OT-2 run"):
+        await old_pipette.move_to(Coordinate(100, 100, 120))
+      self.assertEqual(len(io.commands), command_count)
+      assert robot.left_pipette is not None
+      await robot.left_pipette.move_to(Coordinate(100, 100, 120))
+    finally:
+      await robot.stop()
+
+  async def test_two_robots_own_independent_sessions_and_connections(self) -> None:
+    left_io = FakeHTTP(api_version="6.3.0")
+    right_io = FakeHTTP(api_version="8.7.0")
+    left = OT2("first.local", io=left_io)
+    right = OT2("second.local", io=right_io)
+    await asyncio.gather(left.setup(skip_home=True), right.setup(skip_home=True))
+    try:
+      self.assertIsNot(left._run, right._run)
+      self.assertIsNot(left._labware, right._labware)
+      self.assertEqual((left.software_version, right.software_version), ("6.3.0", "8.7.0"))
+      await left.stop()
+      self.assertTrue(right_io.started)
+      assert right.left_pipette is not None
+      await right.left_pipette.move_to(Coordinate(100, 100, 120))
+      self.assertEqual([c["commandType"] for c in left_io.commands], ["loadPipette"])
+    finally:
+      await asyncio.gather(left.stop(), right.stop())
+
+  async def test_unsupported_pipette_does_not_create_a_run_or_home(self) -> None:
+    io = FakeHTTP(left_pipette_name="unsupported")
+    robot = OT2("ot2.local", io=io)
+    with self.assertRaisesRegex(ValueError, "Unsupported OT-2 pipette"):
+      await robot.setup()
+    self.assertIsNone(robot._run)
+    self.assertFalse(io.started)
+    self.assertTrue(all(method == "GET" for method, _, _ in io.calls))
+
+  async def test_stop_waits_for_the_complete_pipette_operation(self) -> None:
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    class PausingHTTP(FakeHTTP):
+      async def request(
+        self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+      ) -> Dict[str, Any]:
+        if data is not None and data.get("data", {}).get("commandType") == "moveToCoordinates":
+          entered.set()
+          await release.wait()
+        return await super().request(method, path, data)
+
+    io = PausingHTTP()
+    robot = OT2("ot2.local", io=io)
+    await robot.setup(skip_home=True)
+    assert robot.left_pipette is not None
+    movement = asyncio.create_task(robot.left_pipette.move_to(Coordinate(100, 100, 100)))
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    stop = asyncio.create_task(robot.stop())
+    try:
+      await asyncio.sleep(0)
+      self.assertFalse(stop.done())
+      self.assertTrue(io.started)
+    finally:
+      release.set()
+      await asyncio.wait_for(asyncio.gather(movement, stop), timeout=1)
+    self.assertFalse(io.started)
+    self.assertEqual(
+      [command["commandType"] for command in io.commands[-3:]],
+      ["moveToCoordinates", "savePosition", "moveToCoordinates"],
+    )
 
 
 if __name__ == "__main__":

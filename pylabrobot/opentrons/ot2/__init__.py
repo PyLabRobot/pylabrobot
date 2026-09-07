@@ -1,1 +1,2 @@
-from .ot2 import OpentronsOT2, OpentronsOT2Error, OT2Pipette
+from .ot2 import OT2
+from .pipette import OT2Pipette
