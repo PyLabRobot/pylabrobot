@@ -2,6 +2,8 @@
 
 import asyncio
 from dataclasses import FrozenInstanceError, dataclass
+from functools import partial
+from unittest.mock import Mock
 
 from pylabrobot.hamilton.nimbus.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
@@ -14,6 +16,7 @@ from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tests.tcp_tests import _MemorySocket, _response, _SessionTest
 from pylabrobot.hamilton.transport.tcp.wire_types import I32, Str
+from pylabrobot.io.socket import Socket
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,43 @@ class _Query(TCPCommand[int]):
 
 
 class TestRequestAPI(_SessionTest):
+  async def test_cancel_during_completed_socket_drain_preserves_uncertainty(self):
+    """Replay the real writer's drain race through the full request API."""
+    client, io = self.make_client()
+    writer = Mock(spec=asyncio.StreamWriter)
+    written = asyncio.Event()
+    drained = asyncio.Event()
+
+    def write(data: bytes) -> None:
+      """Observe the write without delivering a response yet."""
+      written.set()
+
+    async def drain() -> None:
+      """Complete before cancellation reaches the socket's timeout wait."""
+      drained.set()
+
+    writer.write.side_effect = write
+    writer.drain.side_effect = drain
+    io._writer = writer
+    io.write = partial(Socket.write, io)  # type: ignore[method-assign]
+    task = asyncio.create_task(client.execute(_Query(Address(1, 1, 257))))
+    await asyncio.wait_for(written.wait(), timeout=1)
+    self.assertTrue(drained.is_set())
+    self.assertFalse(task.done())
+    self.assertTrue(task.cancel())
+    # A delayed real response must not turn accepted cancellation into success.
+    reply = asyncio.get_running_loop().call_later(0.01, io.feed, _response())
+    try:
+      with self.assertRaises(asyncio.CancelledError):
+        await task
+      self.assertEqual(client.connection_info.state, SessionState.UNCERTAIN)
+      with self.assertRaises(ConnectionError):
+        await client.execute(_Query(Address(1, 1, 257)))
+      self.assertEqual(writer.write.call_count, 1)
+      self.assertIsNone(client._session._write_task)
+    finally:
+      reply.cancel()
+
   async def test_execute_decodes_and_exchange_preserves_frame(self):
     client, io = self.make_client()
 
