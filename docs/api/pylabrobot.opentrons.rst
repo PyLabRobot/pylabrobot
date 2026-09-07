@@ -13,6 +13,13 @@ from the discovered model. Both share motion, command execution, and transaction
 tracking. Single-channel pipettes take one tip spot or container; eight-channel
 pipettes take a complete column in nozzle order, with a shared volume per nozzle.
 
+Tip pickup and return/drop validate the nominal PLR target against the mount's
+reach before sending commands. Eight-channel pickup also checks other deck
+labware against the full nozzle span, padded by 5 mm in XY and 10 mm below the
+nozzle engagement height. Rotated resources and overhanging child resources
+are included. This conservative destination check does not validate the travel
+path or model the complete pipette body. Partial pickup remains unsupported.
+
 ``OpentronsAPI`` contains the named HTTP endpoints and response parsing.
 ``OpentronsRun`` provides command primitives and waits for their completion.
 Both use the device's ``pylabrobot.io.HTTP`` transport. Pipette operations own

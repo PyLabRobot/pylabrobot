@@ -158,6 +158,8 @@ class _OT2Pipette(ABC):
     rack = tip_spots[0].parent
     if not isinstance(rack, TipRack):
       raise ValueError("tip spots must be assigned to a tip rack")
+    if self.robot.deck.get_slot(rack) is None:
+      raise ValueError("tip rack must be assigned directly to an OT-2 deck slot")
     return rack
 
   def _validate_volume(self, volume: float) -> float:
@@ -173,13 +175,8 @@ class _OT2Pipette(ABC):
     """Whether the tip capacity is supported by this pipette."""
     return tip.maximal_volume in _COMPATIBLE_TIP_CAPACITIES[self.maximum_volume]
 
-  async def _move_to(
-    self,
-    location: Coordinate,
-    speed: Optional[float] = None,
-    minimum_z_height: Optional[float] = None,
-    force_direct: bool = False,
-  ) -> None:
+  def _validate_position(self, location: Coordinate) -> None:
+    """Check the reference nozzle target in the robot frame before staging an operation."""
     _require_finite_coordinate("location", location)
     if location.z < 0:
       raise ValueError("location.z must be non-negative")
@@ -188,6 +185,15 @@ class _OT2Pipette(ABC):
       raise ValueError(
         f"{location} is outside the {self.mount} mount's reachable x/y region {bounds}"
       )
+
+  async def _move_to(
+    self,
+    location: Coordinate,
+    speed: Optional[float] = None,
+    minimum_z_height: Optional[float] = None,
+    force_direct: bool = False,
+  ) -> None:
+    self._validate_position(location)
     if speed is not None and (not math.isfinite(speed) or speed <= 0):
       raise ValueError("speed must be finite and greater than zero")
     if minimum_z_height is not None and (
@@ -221,6 +227,18 @@ class _OT2Pipette(ABC):
       )
       await self._retract_to_traversal_height()
 
+  def _tip_command_location(self, tip_spot: TipSpot, offset: Coordinate) -> Coordinate:
+    """Convert a tip command's well-bottom offset to the reference nozzle's robot position."""
+    return self.robot._deck_to_robot_frame(
+      tip_spot.get_location_wrt(self.robot.deck, "c", "c", "b") + offset
+    )
+
+  def _check_tip_pickup(self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate) -> None:
+    """Check the pickup target before loading labware or changing tip trackers."""
+    self._validate_position(
+      self._tip_command_location(tip_spots[0], offset + Coordinate(z=tip.total_tip_length))
+    )
+
   async def _pick_up_tips(
     self,
     tip_spots: Sequence[TipSpot],
@@ -241,6 +259,7 @@ class _OT2Pipette(ABC):
         raise ValueError("All nozzles must use the same tip type")
       offset = offset or Coordinate.zero()
       _require_finite_coordinate("offset", offset)
+      self._check_tip_pickup(tip_spots, tip, offset)
       tracked = [
         spot.tracker for spot in tip_spots if does_tip_tracking() and not spot.tracker.is_disabled
       ]
@@ -296,6 +315,7 @@ class _OT2Pipette(ABC):
     tip = self._tips[0]
     offset = offset or Coordinate.zero()
     _require_finite_coordinate("offset", offset)
+    self._validate_position(self._tip_command_location(tip_spots[0], offset + Coordinate(z=10)))
     tracked = [
       spot.tracker for spot in tip_spots if does_tip_tracking() and not spot.tracker.is_disabled
     ]
@@ -387,6 +407,7 @@ class _OT2Pipette(ABC):
     self._validate_targets(containers)
     locations = [self._liquid_location(c, offset, liquid_height) for c in containers]
     self._validate_nozzle_positions(locations)
+    self._validate_position(locations[0])
     return tuple(c.tracker for c in containers), locations[0]
 
   async def _aspirate(
@@ -629,6 +650,38 @@ class OT2_8ChannelPipette(_OT2Pipette):
       [spot.get_location_wrt(self.robot.deck, "c", "c", "b") for spot in tip_spots]
     )
     return rack
+
+  def _check_tip_pickup(self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate) -> None:
+    """Reject labware overlapping the pickup footprint near the bare nozzle height.
+
+    The full nozzle span is padded by 5 mm in XY and 10 mm vertically. This is a
+    conservative destination check, not a swept-path or complete pipette-body model.
+    """
+    super()._check_tip_pickup(tip_spots, tip, offset)
+    primary = tip_spots[0].get_location_wrt(self.robot.deck, "c", "c", "b") + offset
+    nozzle_z = primary.z + tip.total_tip_length - tip.fitting_depth
+    x_min, x_max = primary.x - 5, primary.x + 5
+    y_min, y_max = primary.y - 9 * (self.num_channels - 1) - 5, primary.y + 5
+    for labware in self.robot.deck.slots:
+      if labware is None or labware is tip_spots[0].parent:
+        continue
+      for resource in [labware, *labware.get_all_children()]:
+        corners = [
+          resource.get_location_wrt(self.robot.deck, x, y, z)
+          for x in ("l", "r")
+          for y in ("f", "b")
+          for z in ("b", "t")
+        ]
+        for corner in corners:
+          _require_finite_coordinate("surrounding resource", corner)
+        if (
+          max(c.x for c in corners) >= x_min
+          and min(c.x for c in corners) <= x_max
+          and max(c.y for c in corners) >= y_min
+          and min(c.y for c in corners) <= y_max
+          and max(c.z for c in corners) >= nozzle_z - 10
+        ):
+          raise ValueError(f"Eight-channel pickup footprint overlaps resource {resource.name!r}")
 
   async def pick_up_tips(
     self,
