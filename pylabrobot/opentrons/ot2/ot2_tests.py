@@ -870,7 +870,7 @@ class OT2MultiChannelTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([p["pipetteId"] for p in pickups], ["left-pipette-id", "right-pipette-id"])
 
   async def test_incomplete_or_misaligned_pickups_send_nothing(self) -> None:
-    """Reject partial, repeated, mixed-column, and reversed targets before loading labware."""
+    """Reject undeclared extra tips, repeated, mixed-column, and reversed targets before I/O."""
     before = len(self.io.calls)
     for spots in (
       [],

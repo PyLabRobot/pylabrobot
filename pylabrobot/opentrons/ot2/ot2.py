@@ -48,6 +48,7 @@ class OT2:
     command_timeout: float = 30,
     command_poll_interval: float = 0.05,
     io: Optional[HTTP] = None,
+    allow_undeclared_tip_pickup: bool = False,
   ) -> None:
     if "://" in host:
       raise ValueError("host must be a hostname or IP address without a URL scheme")
@@ -64,6 +65,7 @@ class OT2:
     self.port = port
     self.deck = deck or OTDeck()
     self.geometry = OT2RobotGeometry()
+    self.allow_undeclared_tip_pickup = allow_undeclared_tip_pickup
     self.traversal_height = traversal_height
     self.command_timeout = command_timeout
     self.command_poll_interval = command_poll_interval
