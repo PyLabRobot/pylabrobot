@@ -97,6 +97,23 @@ class HettichAsyncTestCase(unittest.IsolatedAsyncioTestCase):
     self.addCleanup(self.monotonic.stop)
     self.addCleanup(self.sleep.stop)
 
+  def schedule_spin_states(self, device: HettichRoboticCentrifuge, times: list[float]) -> None:
+    """Schedule status replies relative to the elapsed-time query at target speed."""
+    original_write = writes(device).side_effect
+    pending = list(times)
+    timer_requested_at = None
+
+    async def write(data: bytes) -> None:
+      """Advance virtual time when a scheduled phase is observed."""
+      nonlocal timer_requested_at
+      if data == device._build_enquiry("00602"):
+        timer_requested_at = self.now
+      elif data == device._build_enquiry("00634") and timer_requested_at is not None and pending:
+        self.now = max(self.now, timer_requested_at + pending.pop(0))
+      await original_write(data)
+
+    writes(device).side_effect = write
+
 
 class HettichEnquiryTimingTests(HettichAsyncTestCase):
   """Verify protocol timing with a virtual clock and a mocked serial transport."""
@@ -631,6 +648,7 @@ class HettichProtocolTests(HettichAsyncTestCase):
       ]
     )
 
+    self.schedule_spin_states(device, [30, 40])
     await device.spin(duration=30, speed=2000, timeout=60)
 
     frames = telegrams(device)
@@ -765,6 +783,73 @@ class HettichProtocolTests(HettichAsyncTestCase):
     self.assertEqual(telegrams(device)[2], device._build_select("00521", 0x0001))
 
 
+class HettichSpinCompletionTests(HettichAsyncTestCase):
+  """Distinguish completed timed runs from early stops without operating hardware."""
+
+  async def check_cycle(self, phases: list[tuple[int, float]], interrupted: bool) -> None:
+    """Run a complete mocked spin and check its result and lifecycle events."""
+    ack = bytes([ord("]"), ACK])
+    replies = [
+      enquiry_reply("00614", 30),
+      enquiry_reply("00634", 0x0162),
+      enquiry_reply("00635", 0xA292),
+      enquiry_reply("00528", 0x1800),
+      enquiry_reply("00605", 5000),
+      ack,
+      ack,
+      ack,
+      ack,
+      enquiry_reply("00634", 0x01E8),
+      enquiry_reply("00635", 0xA292),
+      enquiry_reply("00604", 2000),
+      enquiry_reply("00602", 12),
+      ack,
+      ack,
+    ]
+    for phase, _ in phases:
+      replies.extend([enquiry_reply("00634", phase), enquiry_reply("00635", 0xA292)])
+    # Failure cleanup verifies that the rotor is already stopped.
+    replies.extend([enquiry_reply("00634", 0x01E2), enquiry_reply("00635", 0xA292)])
+    device = make_device(replies)
+    self.schedule_spin_states(device, [when for _, when in phases])
+    events: list[PLREvent] = []
+    bus = EventBus()
+    bus.subscribe(events.append)
+
+    with use_event_bus(bus):
+      if interrupted:
+        with self.assertRaisesRegex(HettichCentrifugeError, "interrupted"):
+          await device.spin(duration=30, speed=2000, timeout=60)
+      else:
+        await device.spin(duration=30, speed=2000, timeout=60)
+
+    terminal = "failed" if interrupted else "completed"
+    self.assertEqual(
+      [event.name for event in events], ["centrifuge.spin.started", f"centrifuge.spin.{terminal}"]
+    )
+    self.assertNotIn(device._build_select("00521", 1), telegrams(device))
+    self.assertEqual(
+      telegram_parameters(device).count(b"00634"), 2 + len(phases) + int(interrupted)
+    )
+    self.assertGreaterEqual(self.now, phases[-1][1])
+
+  async def test_early_braking_stays_interrupted_after_a_long_run_down(self) -> None:
+    """Braking time cannot satisfy the requested time at speed."""
+    await self.check_cycle([(0x01F0, 5), (0x01F0, 35), (0x01E2, 40)], interrupted=True)
+
+  async def test_early_standstill_is_interrupted_when_braking_was_not_polled(self) -> None:
+    """A short run-down between polls must also report interruption."""
+    await self.check_cycle([(0x01E2, 5)], interrupted=True)
+
+  async def test_complete_cycle_succeeds_with_delayed_polling(self) -> None:
+    """Observing braking after the programmed end remains a successful cycle."""
+    await self.check_cycle([(0x01E8, 20), (0x01F0, 32), (0x01E2, 40)], interrupted=False)
+
+  async def test_timer_rounding_near_the_requested_end_is_allowed(self) -> None:
+    """A subsecond difference due to the integer device timer is not an interruption."""
+    await self.check_cycle([(0x01F0, 29.1), (0x01E2, 40)], interrupted=False)
+
+
 class HettichEventTests(HettichAsyncTestCase):
   async def test_spin_uses_vspin_event_name_and_field_conventions(self) -> None:
     device = make_device(
@@ -796,6 +881,7 @@ class HettichEventTests(HettichAsyncTestCase):
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
+    self.schedule_spin_states(device, [30, 40])
     with use_event_bus(event_bus):
       await device.spin(duration=30, speed=2000, timeout=60)
 

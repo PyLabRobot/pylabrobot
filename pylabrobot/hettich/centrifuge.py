@@ -23,6 +23,7 @@ NAK = 0x15
 ENQUIRY_REPLY_LENGTH = 14
 COMMAND_REPLY_LENGTH = 2
 MINIMUM_ENQUIRY_INTERVAL = 0.4
+RUN_TIME_RESOLUTION = 1.0
 
 # Protocol source: Hettich document AH5680-01EN.
 # https://www.hettweb.com/wp-content/uploads/2019/09/OM-ROBOTIC-CENTRIFUGE-COMMUNICATION-PARAMETERS-AH5680-01EN.pdf
@@ -859,26 +860,47 @@ class HettichRoboticCentrifuge(ABC):
     except BaseException:
       logger.exception("[Hettich %s] failed to stop after spin() failed", self.io.port)
 
-  async def _wait_for_standstill(self, timeout: float, motion_observed: bool) -> CentrifugeStatus:
-    """Wait for standstill, optionally accepting that motion was observed by the caller."""
+  async def _wait_for_standstill(
+    self,
+    timeout: float,
+    motion_observed: bool,
+    expected_end_at: Optional[float] = None,
+  ) -> CentrifugeStatus:
+    """Wait for standstill and optionally reject a prematurely ended timed run.
+
+    ``expected_end_at`` is a monotonic timestamp for the earliest expected end
+    of centrifugation. Allow one second for device timer rounding. Latch early
+    braking or standstill when observed, then report interruption at standstill.
+    """
     if timeout <= 0:
       raise ValueError("timeout must be positive")
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
+    interrupted = False
     while True:
       status = await self.request_status()
       if status.error_number is not None:
         raise HettichCentrifugeError(f"The centrifuge stopped with error {status.error_number}")
+      if (
+        expected_end_at is not None
+        and status.phase in ("braking", "standstill")
+        and monotonic() + RUN_TIME_RESOLUTION < expected_end_at
+      ):
+        interrupted = True
       if status.phase != "standstill":
         motion_observed = True
       elif motion_observed:
+        if interrupted:
+          raise HettichCentrifugeError(
+            "Centrifugation was interrupted before the requested duration at target speed elapsed"
+          )
         return status
       if loop.time() >= deadline:
         raise TimeoutError(f"Centrifuge did not return to standstill within {timeout} seconds")
       await asyncio.sleep(self.poll_interval)
 
-  async def _wait_for_target_speed(self, speed: int, timeout: float) -> int:
-    """Wait for ``speed`` and return the device's elapsed run time at that point."""
+  async def _wait_for_target_speed(self, speed: int, timeout: float) -> tuple[int, float]:
+    """Return elapsed run time at ``speed`` and a monotonic lower bound on its sample time."""
     if timeout <= 0:
       raise ValueError("timeout must be positive")
     loop = asyncio.get_running_loop()
@@ -892,7 +914,8 @@ class HettichRoboticCentrifuge(ABC):
       if status.phase != "standstill" or actual_speed > 0:
         motion_observed = True
       if status.phase == "centrifuging" and actual_speed >= speed:
-        return await self.request_elapsed_time()
+        sample_started_at = monotonic()
+        return await self.request_elapsed_time(), sample_started_at
       if motion_observed and status.phase in ("braking", "standstill"):
         raise HettichCentrifugeError(
           f"The centrifuge began {status.phase} at {actual_speed} rpm before reaching "
@@ -920,6 +943,10 @@ class HettichRoboticCentrifuge(ABC):
     gives that timer a bounded safety value, then replaces its normal end time
     once the measured rotor speed reaches ``speed``. Timing has one-second
     resolution, matching the device protocol.
+
+    If braking or standstill is observed before the expected end, allowing for
+    timer rounding and query delays, the method waits for standstill and raises
+    ``HettichCentrifugeError`` instead of reporting a completed cycle.
     """
     operation_data: dict[str, Any] = {
       "device": device_reference(self, name=self.name),
@@ -965,7 +992,9 @@ class HettichRoboticCentrifuge(ABC):
           raise TimeoutError(
             f"Centrifuge did not reach {speed} rpm within the {cycle_timeout}-second timeout"
           )
-        elapsed_at_target = await self._wait_for_target_speed(speed=speed, timeout=remaining)
+        elapsed_at_target, sampled_at = await self._wait_for_target_speed(
+          speed=speed, timeout=remaining
+        )
         end_time = elapsed_at_target + duration
         if end_time > MAXIMUM_DURATION:
           raise ValueError(
@@ -977,7 +1006,9 @@ class HettichRoboticCentrifuge(ABC):
         remaining = deadline - loop.time()
         if remaining <= 0:
           raise TimeoutError(f"Centrifuge cycle exceeded its {cycle_timeout}-second timeout")
-        await self._wait_for_standstill(timeout=remaining, motion_observed=True)
+        await self._wait_for_standstill(
+          timeout=remaining, motion_observed=True, expected_end_at=sampled_at + duration
+        )
       except BaseException:
         await self._stop_after_spin_failure()
         raise
