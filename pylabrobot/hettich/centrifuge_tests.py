@@ -77,6 +77,119 @@ def telegram_parameters(device: HettichRoboticCentrifuge) -> List[bytes]:
   return [frame[3:8] if frame[2] == STX else frame[2:7] for frame in telegrams(device)]
 
 
+class HettichAsyncTestCase(unittest.IsolatedAsyncioTestCase):
+  """Run mocked protocol exchanges without real communication delays."""
+
+  def setUp(self) -> None:
+    """Advance virtual time on sleeps without delaying the test suite."""
+    self.now = 0.0
+    original_sleep = asyncio.sleep
+
+    async def sleep(delay: float) -> None:
+      """Advance the clock and let concurrent callers run."""
+      self.now += delay
+      await original_sleep(0)
+
+    self.monotonic = patch("pylabrobot.hettich.centrifuge.monotonic", side_effect=lambda: self.now)
+    self.sleep = patch("pylabrobot.hettich.centrifuge.asyncio.sleep", side_effect=sleep)
+    self.monotonic.start()
+    self.sleep.start()
+    self.addCleanup(self.monotonic.stop)
+    self.addCleanup(self.sleep.stop)
+
+
+class HettichEnquiryTimingTests(HettichAsyncTestCase):
+  """Verify protocol timing with a virtual clock and a mocked serial transport."""
+
+  def record_transmissions(self, device: HettichRoboticCentrifuge) -> list[tuple[bytes, float]]:
+    """Record transmission times and simulate 100 ms spent receiving each reply."""
+    transmissions: list[tuple[bytes, float]] = []
+    original_write = writes(device).side_effect
+
+    async def write(data: bytes) -> None:
+      """Timestamp the telegram and its terminating EOT."""
+      if data == bytes([EOT]):
+        self.now += 0.1
+      transmissions.append((data, self.now))
+      await original_write(data)
+
+    writes(device).side_effect = write
+    return transmissions
+
+  def assert_enquiries_spaced(self, transmissions: list[tuple[bytes, float]]) -> None:
+    """Require 400 ms after the previous enquiry's completion before the next."""
+    last_end = None
+    enquiry = False
+    for frame, timestamp in transmissions:
+      if frame == bytes([EOT]):
+        if enquiry:
+          last_end = timestamp
+        enquiry = False
+      else:
+        enquiry = frame[-1] == ENQ
+        if enquiry and last_end is not None:
+          self.assertGreaterEqual(timestamp - last_end, 0.4 - 1e-9)
+
+  async def test_status_speed_and_elapsed_queries_are_spaced(self) -> None:
+    """Every query is spaced even when callers disable motion polling delays."""
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x01E8),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00604", 2000),
+        enquiry_reply("00602", 12),
+      ]
+    )
+    transmissions = self.record_transmissions(device)
+
+    await device.request_status()
+    self.assertEqual(await device.request_speed(), 2000)
+    self.assertEqual(await device.request_elapsed_time(), 12)
+
+    self.assert_enquiries_spaced(transmissions)
+
+  async def test_retries_and_fault_queries_are_spaced(self) -> None:
+    """Corrupt replies and NAK handling must respect the same enquiry interval."""
+    corrupt = bytearray(enquiry_reply("00604", 500))
+    corrupt[-1] ^= 1
+    device = make_device([bytes(corrupt), bytes([ord("]"), NAK]), enquiry_reply("00685", 0x0080)])
+    transmissions = self.record_transmissions(device)
+
+    with self.assertRaises(HettichCommandError):
+      await device.request_speed()
+
+    self.assertEqual(telegram_parameters(device), [b"00604", b"00604", b"00685"])
+    self.assert_enquiries_spaced(transmissions)
+
+  async def test_concurrent_queries_are_spaced_under_the_transaction_lock(self) -> None:
+    """Independent callers share one enquiry schedule."""
+    device = make_device([enquiry_reply("00604", 500), enquiry_reply("00602", 12)])
+    transmissions = self.record_transmissions(device)
+
+    self.assertEqual(
+      await asyncio.gather(device.request_speed(), device.request_elapsed_time()), [500, 12]
+    )
+
+    self.assert_enquiries_spaced(transmissions)
+
+  async def test_select_is_not_delayed_and_idle_time_counts_toward_spacing(self) -> None:
+    """Emergency STOP writes need no extra delay and an idle bus needs no extra sleep."""
+    device = make_device(
+      [enquiry_reply("00604", 500), bytes([ord("]"), ACK]), enquiry_reply("00604", 0)]
+    )
+    transmissions = self.record_transmissions(device)
+
+    await device.request_speed()
+    ready_at = self.now
+    await device._select_parameter("00521", 1)
+    stop_time = next(t for frame, t in transmissions if frame == device._build_select("00521", 1))
+    self.assertEqual(stop_time, ready_at)
+    self.now += 1
+    ready_at = self.now
+    await device.request_speed()
+    self.assertEqual(transmissions[-2][1], ready_at)
+
+
 class HettichFrameTests(unittest.TestCase):
   def setUp(self) -> None:
     self.device = make_device([])
@@ -169,7 +282,7 @@ class HettichFrameTests(unittest.TestCase):
       self.device.rcf_at_speed(1_000)
 
 
-class HettichProtocolTests(unittest.IsolatedAsyncioTestCase):
+class HettichProtocolTests(HettichAsyncTestCase):
   async def test_setup_is_read_only_and_records_identity(self) -> None:
     device = make_model_device(
       [
@@ -652,7 +765,7 @@ class HettichProtocolTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(telegrams(device)[2], device._build_select("00521", 0x0001))
 
 
-class HettichEventTests(unittest.IsolatedAsyncioTestCase):
+class HettichEventTests(HettichAsyncTestCase):
   async def test_spin_uses_vspin_event_name_and_field_conventions(self) -> None:
     device = make_device(
       [

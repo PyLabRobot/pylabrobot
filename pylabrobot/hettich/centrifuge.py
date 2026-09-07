@@ -5,6 +5,7 @@ import logging
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any, Literal, Mapping, Optional
 
 from pylabrobot.events import device_reference, event_operation
@@ -21,6 +22,7 @@ NAK = 0x15
 
 ENQUIRY_REPLY_LENGTH = 14
 COMMAND_REPLY_LENGTH = 2
+MINIMUM_ENQUIRY_INTERVAL = 0.4
 
 # Protocol source: Hettich document AH5680-01EN.
 # https://www.hettweb.com/wp-content/uploads/2019/09/OM-ROBOTIC-CENTRIFUGE-COMMUNICATION-PARAMETERS-AH5680-01EN.pdf
@@ -266,7 +268,8 @@ class HettichRoboticCentrifuge(ABC):
       timeout: Per-read timeout in seconds. The manual specifies a maximum
         response time of 150 ms.
       retries: Total transmission attempts after a timeout or invalid reply.
-      poll_interval: Delay between state requests while waiting for motion.
+      poll_interval: Additional delay between polling iterations while waiting for
+        motion. All ENQUIRY telegrams have a minimum 0.4-second interval.
       rotor_catalog_number: Hettich catalog number for the installed rotor. The
         concrete model class defines which catalog numbers are supported.
       name: Stable name used to identify this centrifuge in events.
@@ -312,6 +315,7 @@ class HettichRoboticCentrifuge(ABC):
       xonxoff=False,
     )
     self._transaction_lock: Optional[asyncio.Lock] = None
+    self._next_enquiry_at = 0.0
     self.device_type_code: Optional[int] = None
     self.device_type: Optional[str] = None
     self.software_version: Optional[str] = None
@@ -443,10 +447,17 @@ class HettichRoboticCentrifuge(ABC):
     return int(raw_value.decode("ascii"), 16)
 
   async def _request_enquiry(self, parameter: str) -> Optional[int]:
-    """Transmit an ENQUIRY and return its value, or ``None`` for NAK."""
+    """Transmit a paced ENQUIRY under the transaction lock; return ``None`` for NAK.
+
+    The manual requires 400 ms between enquiries during centrifugation. Apply
+    that interval in every state because a run can also be started at the panel.
+    """
     frame = self._build_enquiry(parameter)
     last_error: Optional[HettichCommunicationError] = None
     for attempt in range(1, self.retries + 1):
+      delay = self._next_enquiry_at - monotonic()
+      if delay > 0:
+        await asyncio.sleep(delay)
       try:
         await self.io.write(frame)
         prefix = await self._read_exact(COMMAND_REPLY_LENGTH)
@@ -465,7 +476,10 @@ class HettichRoboticCentrifuge(ABC):
           exc,
         )
       finally:
-        await self.io.write(bytes([EOT]))
+        try:
+          await self.io.write(bytes([EOT]))
+        finally:
+          self._next_enquiry_at = monotonic() + MINIMUM_ENQUIRY_INTERVAL
     assert last_error is not None
     raise HettichCommunicationError(
       f"ENQUIRY {parameter} failed after {self.retries} attempts: {last_error}"
@@ -563,8 +577,6 @@ class HettichRoboticCentrifuge(ABC):
   async def request_status(self) -> CentrifugeStatus:
     """Read and decode centrifuge state, program/error, rotor, lid, and key lock."""
     state_1 = await self._enquire_parameter(STATUS_1_PARAMETER)
-    if self.poll_interval:
-      await asyncio.sleep(min(self.poll_interval, 0.4))
     state_2 = await self._enquire_parameter(STATUS_2_PARAMETER)
     state_byte = state_1 & 0xFF
     program_or_error = state_1 >> 8
