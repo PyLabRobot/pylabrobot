@@ -39,38 +39,37 @@ class TestRequestAPI(_SessionTest):
     """Replay the real writer's drain race through the full request API."""
     client, io = self.make_client()
     writer = Mock(spec=asyncio.StreamWriter)
-    written = asyncio.Event()
-    drained = asyncio.Event()
+    cancellations: list[bool] = []
 
-    def write(data: bytes) -> None:
-      """Observe the write without delivering a response yet."""
-      written.set()
+    def cancel_request(completed: asyncio.Task[None]) -> None:
+      """Cancel after drain completes, before its waiter resumes."""
+      cancellations.append(task.cancel())
+
+    def reply_after_write(completed: asyncio.Task[None]) -> None:
+      """A later response must not turn accepted cancellation into success."""
+      io.feed(_response())
 
     async def drain() -> None:
       """Complete before cancellation reaches the socket's timeout wait."""
-      drained.set()
+      drain_task = asyncio.current_task()
+      assert drain_task is not None
+      drain_task.add_done_callback(cancel_request)
+      write_task = client._session._write_task
+      assert write_task is not None
+      write_task.add_done_callback(reply_after_write)
 
-    writer.write.side_effect = write
     writer.drain.side_effect = drain
     io._writer = writer
     io.write = partial(Socket.write, io)  # type: ignore[method-assign]
     task = asyncio.create_task(client.execute(_Query(Address(1, 1, 257))))
-    await asyncio.wait_for(written.wait(), timeout=1)
-    self.assertTrue(drained.is_set())
-    self.assertFalse(task.done())
-    self.assertTrue(task.cancel())
-    # A delayed real response must not turn accepted cancellation into success.
-    reply = asyncio.get_running_loop().call_later(0.01, io.feed, _response())
-    try:
-      with self.assertRaises(asyncio.CancelledError):
-        await task
-      self.assertEqual(client.connection_info.state, SessionState.UNCERTAIN)
-      with self.assertRaises(ConnectionError):
-        await client.execute(_Query(Address(1, 1, 257)))
-      self.assertEqual(writer.write.call_count, 1)
-      self.assertIsNone(client._session._write_task)
-    finally:
-      reply.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await task
+    self.assertEqual(cancellations, [True])
+    self.assertEqual(client.connection_info.state, SessionState.UNCERTAIN)
+    with self.assertRaises(ConnectionError):
+      await client.execute(_Query(Address(1, 1, 257)))
+    self.assertEqual(writer.write.call_count, 1)
+    self.assertIsNone(client._session._write_task)
 
   async def test_execute_decodes_and_exchange_preserves_frame(self):
     client, io = self.make_client()

@@ -11,29 +11,30 @@ class TestSocketWrite(unittest.IsolatedAsyncioTestCase):
   """Exercise production write handling with a controlled StreamWriter."""
 
   def setUp(self) -> None:
-    """Provide an in-memory writer with an observable write boundary."""
+    """Provide an in-memory writer."""
     self.io = Socket("test", "memory-only", 0)
     self.writer = Mock(spec=asyncio.StreamWriter)
-    self.written = asyncio.Event()
-    self.writer.write.side_effect = lambda data: self.written.set()
     self.io._writer = self.writer
 
   async def test_cancel_after_drain_completes_still_propagates(self) -> None:
     """Cancellation must win even when drain finished before its waiter resumed."""
-    drained = asyncio.Event()
+    cancellations: list[bool] = []
+
+    def cancel_write(completed: asyncio.Task[None]) -> None:
+      """Cancel after drain completes, before its waiter resumes."""
+      cancellations.append(task.cancel())
 
     async def drain() -> None:
       """Complete immediately, as an unbuffered real socket commonly does."""
-      drained.set()
+      drain_task = asyncio.current_task()
+      assert drain_task is not None
+      drain_task.add_done_callback(cancel_write)
 
     self.writer.drain.side_effect = drain
     task = asyncio.create_task(self.io.write(b"query"))
-    await asyncio.wait_for(self.written.wait(), timeout=1)
-    self.assertTrue(drained.is_set())
-    self.assertFalse(task.done())
-    self.assertTrue(task.cancel())
     with self.assertRaises(asyncio.CancelledError):
       await task
+    self.assertEqual(cancellations, [True])
     self.writer.write.assert_called_once_with(b"query")
 
   async def test_timeout_cancels_and_joins_drain(self) -> None:

@@ -869,9 +869,9 @@ class TestConnectionLifecycle(_SessionTest):
   async def test_sequence_wraps_only_in_a_usable_session(self):
     client, io = self.make_client()
     client._session.sequence_numbers[Address(1, 1, 257)] = 254
-    for sequence in (255, 0, 1):
+    for write_count, sequence in enumerate((255, 0, 1), start=1):
       task = self.send(client)
-      await self.wait_until(lambda: client._session.pending is not None)
+      await self.wait_until(lambda: len(io.writes) == write_count)
       self.assertEqual(io.writes[-1].seq, sequence)
       io.feed(_response(sequence=sequence))
       await task
