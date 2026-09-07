@@ -586,10 +586,11 @@
 <dt class="sig sig-object py" id="pylabrobot.opentrons.OT2_8ChannelPipette">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.opentrons.</span></span><span class="sig-name descname"><span class="pre">OT2_8ChannelPipette</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">robot</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.opentrons.OT2.html#pylabrobot.opentrons.OT2" title="pylabrobot.opentrons.OT2"><span class="pre">OT2</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mount</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipette_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.opentrons.OT2_8ChannelPipette" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_OT2Pipette</span></code></p>
-<p>An eight-channel OT-2 pipette with a rigid, full-column nozzle layout.</p>
-<p>Instances are discovered and created by <a class="reference internal" href="pylabrobot.opentrons.OT2.setup.html#pylabrobot.opentrons.OT2.setup" title="pylabrobot.opentrons.OT2.setup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">OT2.setup()</span></code></a>. Targets run from the
-back nozzle to the front (rows A-H). Volume, flow rate, liquid height, and offset
-apply equally to every nozzle. Partial columns are not supported.</p>
+<p>An eight-channel OT-2 pipette with a rigid nozzle layout.</p>
+<p>Instances are discovered and created by <a class="reference internal" href="pylabrobot.opentrons.OT2.setup.html#pylabrobot.opentrons.OT2.setup" title="pylabrobot.opentrons.OT2.setup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">OT2.setup()</span></code></a>. Pickup targets run
+consecutively from nozzle 0 toward nozzle 7. Subsequent targets match the mounted
+tips in nozzle order. Volume, flow rate, liquid height, and offset
+apply equally to every mounted tip.</p>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
@@ -618,7 +619,7 @@ apply equally to every nozzle. Partial columns are not supported.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.aspirate.html#pylabrobot.opentrons.OT2_8ChannelPipette.aspirate" title="pylabrobot.opentrons.OT2_8ChannelPipette.aspirate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">aspirate</span></code></a>(containers, volume[, flow_rate, ...])</p></td>
-<td><p>Aspirate <code class="docutils literal notranslate"><span class="pre">volume</span></code> per nozzle from a full column, then retract.</p></td>
+<td><p>Aspirate <code class="docutils literal notranslate"><span class="pre">volume</span></code> per mounted tip from containers in nozzle order, then retract.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.can_use_tip.html#pylabrobot.opentrons.OT2_8ChannelPipette.can_use_tip" title="pylabrobot.opentrons.OT2_8ChannelPipette.can_use_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">can_use_tip</span></code></a>(tip)</p></td>
 <td><p>Whether the tip capacity is supported by this pipette.</p></td>
@@ -627,19 +628,19 @@ apply equally to every nozzle. Partial columns are not supported.</p>
 <td><p>Discard all mounted tips into fixed trash and retract to traversal height.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.dispense.html#pylabrobot.opentrons.OT2_8ChannelPipette.dispense" title="pylabrobot.opentrons.OT2_8ChannelPipette.dispense"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispense</span></code></a>(containers, volume[, flow_rate, ...])</p></td>
-<td><p>Dispense <code class="docutils literal notranslate"><span class="pre">volume</span></code> per nozzle into a full column, then retract.</p></td>
+<td><p>Dispense <code class="docutils literal notranslate"><span class="pre">volume</span></code> per mounted tip into containers in nozzle order, then retract.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.drop_tips.html#pylabrobot.opentrons.OT2_8ChannelPipette.drop_tips" title="pylabrobot.opentrons.OT2_8ChannelPipette.drop_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_tips</span></code></a>(tip_spots[, offset, ...])</p></td>
 <td><p>Drop all mounted tips into a rack with one command, then retract.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.mix.html#pylabrobot.opentrons.OT2_8ChannelPipette.mix" title="pylabrobot.opentrons.OT2_8ChannelPipette.mix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mix</span></code></a>(containers, volume, repetitions[, ...])</p></td>
-<td><p>Mix <code class="docutils literal notranslate"><span class="pre">volume</span></code> per nozzle in a full column, then retract.</p></td>
+<td><p>Mix <code class="docutils literal notranslate"><span class="pre">volume</span></code> per mounted tip in containers in nozzle order, then retract.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.move_to.html#pylabrobot.opentrons.OT2_8ChannelPipette.move_to" title="pylabrobot.opentrons.OT2_8ChannelPipette.move_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to</span></code></a>(location[, speed, minimum_z_height, ...])</p></td>
 <td><p>Move to an absolute robot-frame coordinate, then retract to at least traversal height.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips.html#pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips" title="pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tips</span></code></a>(tip_spots[, offset])</p></td>
-<td><p>Pick up one tip per nozzle with one command, then retract to traversal height.</p></td>
+<td><p>Pick up consecutive tips using nozzles starting at 0, then retract.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.return_tips.html#pylabrobot.opentrons.OT2_8ChannelPipette.return_tips" title="pylabrobot.opentrons.OT2_8ChannelPipette.return_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">return_tips</span></code></a>([offset, allow_nonzero_volume])</p></td>
 <td><p>Return all mounted tips to their pickup positions, then retract.</p></td>

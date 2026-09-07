@@ -586,7 +586,16 @@ Queries return fresh values without changing the driver’s session state.</p>
 <p>Each mount is an <code class="docutils literal notranslate"><span class="pre">OT2SingleChannelPipette</span></code> or <code class="docutils literal notranslate"><span class="pre">OT2_8ChannelPipette</span></code>, selected
 from the discovered model. Both share motion, command execution, and transactional
 tracking. Single-channel pipettes take one tip spot or container; eight-channel
-pipettes take a complete column in nozzle order, with a shared volume per nozzle.</p>
+pipettes take targets in nozzle order, with a shared volume per mounted tip.</p>
+<p>Eight-channel pickup accepts one to eight consecutive tip spots in a single rack
+column, mapped to nozzles starting at 0. For example,
+<code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">pipette.pick_up_tips(rack[&quot;E1:H1&quot;])</span></code> mounts four tips on nozzles 0-3.
+Occupied tip spots under the remaining nozzles always reject the pickup. Include
+every tip the head would pick up in the selection, or clear the extra spots first.
+All declared tips are committed together after the command succeeds.</p>
+<p><code class="docutils literal notranslate"><span class="pre">pipette.tips</span></code> contains the mounted tips in consecutive nozzle order starting at 0.
+Liquid operations and rack drops require one target per mounted tip in that order.
+<code class="docutils literal notranslate"><span class="pre">return_tips()</span></code> returns every mounted tip to its pickup spot.</p>
 <p>Tip pickup and return/drop validate the nominal PLR target against the mount’s
 reach before sending commands. Eight-channel reach checks subtract the reference
 nozzle’s Y offset from <code class="docutils literal notranslate"><span class="pre">OT2RobotGeometry.channel_y_offsets()</span></code> to evaluate the
@@ -595,7 +604,8 @@ Eight-channel pickup also checks other deck
 labware against the full nozzle span, padded by 5 mm in XY and 10 mm below the
 nozzle engagement height. Rotated resources and overhanging child resources
 are included. This conservative destination check does not validate the travel
-path or model the complete pipette body. Partial pickup remains unsupported.</p>
+path or model the complete pipette body. The full eight-nozzle footprint is checked
+even for partial pickups.</p>
 <p><code class="docutils literal notranslate"><span class="pre">OpentronsAPI</span></code> contains the named HTTP endpoints and response parsing.
 <code class="docutils literal notranslate"><span class="pre">OpentronsRun</span></code> provides command primitives and waits for their completion.
 Both use the device’s <code class="docutils literal notranslate"><span class="pre">pylabrobot.io.HTTP</span></code> transport. Pipette operations own
@@ -609,7 +619,7 @@ resource tracking and retraction to traversal height.</p>
 <td><p>A single-channel OT-2 pipette, discovered and created by <a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2.setup.html#pylabrobot.opentrons.OT2.setup" title="pylabrobot.opentrons.OT2.setup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">OT2.setup()</span></code></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2_8ChannelPipette.html#pylabrobot.opentrons.OT2_8ChannelPipette" title="pylabrobot.opentrons.OT2_8ChannelPipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2_8ChannelPipette</span></code></a></p></td>
-<td><p>An eight-channel OT-2 pipette with a rigid, full-column nozzle layout.</p></td>
+<td><p>An eight-channel OT-2 pipette with a rigid nozzle layout.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsAPI.html#pylabrobot.opentrons.OpentronsAPI" title="pylabrobot.opentrons.OpentronsAPI"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsAPI</span></code></a></p></td>
 <td><p>HTTP endpoint encoding and decoding, without device or selected-run state.</p></td>
