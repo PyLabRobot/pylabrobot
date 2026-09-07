@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, call, patch
 
-from pylabrobot.io.http import HTTP
+from pylabrobot.io.http import HTTP, HTTPError
 from pylabrobot.opentrons.api import OpentronsAPI
 from pylabrobot.opentrons.errors import (
   OpentronsCommandError,
@@ -113,15 +113,52 @@ class OpentronsRunTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(OpentronsError):
       await self.protocol_run.stop()
     self.assertTrue(self.protocol_run.active)
-    self.io.request.side_effect = None
-    self.io.request.return_value = {}
+    self.io.request.side_effect = [
+      {},
+      {"data": {"id": "run", "status": "stop-requested"}},
+      {"data": {"id": "run", "status": "stopped"}},
+    ]
+    self.io.request.reset_mock()
     await self.protocol_run.stop()
     self.assertFalse(self.protocol_run.active)
+    self.assertEqual(
+      self.io.request.await_args_list,
+      [
+        call("POST", "/runs/run/actions", {"data": {"actionType": "stop"}}),
+        call("GET", "/runs/run"),
+        call("GET", "/runs/run"),
+      ],
+    )
     self.io.request.reset_mock()
     await self.protocol_run.stop()
     with self.assertRaisesRegex(RuntimeError, "has stopped"):
       await self.protocol_run.move_to("pipette", Coordinate(1, 2, 3))
     self.io.request.assert_not_awaited()
+
+  async def test_stop_timeout_retains_the_run_until_a_retry_confirms_shutdown(self) -> None:
+    self.io.request.side_effect = [
+      {},
+      {"data": {"id": "run", "status": "stop-requested"}},
+    ]
+    with patch("pylabrobot.opentrons.run.time") as clock:
+      clock.monotonic.side_effect = [0, 31]
+      with self.assertRaisesRegex(OpentronsError, "Timed out waiting for run run to stop"):
+        await self.protocol_run.stop()
+    self.assertTrue(self.protocol_run.active)
+    self.io.request.side_effect = [{}, {"data": {"id": "run", "status": "stopped"}}]
+    await self.protocol_run.stop()
+    self.assertFalse(self.protocol_run.active)
+
+  async def test_stop_accepts_a_run_removed_by_a_legacy_endpoint(self) -> None:
+    self.io.request.side_effect = [{}, HTTPError("GET", "/runs/run", 404, "not found")]
+    await self.protocol_run.stop()
+    self.assertFalse(self.protocol_run.active)
+
+  async def test_stop_query_failure_keeps_the_run_active(self) -> None:
+    self.io.request.side_effect = [{}, HTTPError("GET", "/runs/run", 500, "server error")]
+    with self.assertRaises(HTTPError):
+      await self.protocol_run.stop()
+    self.assertTrue(self.protocol_run.active)
 
 
 class OpentronsVersionTests(unittest.TestCase):

@@ -6,10 +6,12 @@ import re
 import time
 from typing import Any, Dict, Optional, Tuple
 
+from pylabrobot.io.http import HTTPError
 from pylabrobot.opentrons.api import OpentronsAPI
 from pylabrobot.opentrons.errors import (
   OpentronsCommandError,
   OpentronsCommandTimeout,
+  OpentronsError,
   OpentronsProtocolError,
 )
 from pylabrobot.opentrons.types import LabwareIdentity, Mount, _object, _string
@@ -92,9 +94,27 @@ class OpentronsRun:
       raise RuntimeError(f"Opentrons run {self.id} has stopped")
 
   async def stop(self) -> None:
-    """Stop this run; retain its active state if the server refuses the stop."""
+    """Wait for this run to stop; retain active state until shutdown is confirmed."""
     if self._active:
       await self._api.stop_run(self.id)
+      deadline = time.monotonic() + self.command_timeout
+      while True:
+        try:
+          status = (await self._api.get_run(self.id)).status
+        except HTTPError as error:
+          if error.status == 404:
+            break  # The legacy stop route can delete the run.
+          raise
+        if status == "stopped":
+          break
+        if status is None:
+          raise OpentronsProtocolError(f"Missing status while waiting for run {self.id} to stop")
+        if time.monotonic() >= deadline:
+          raise OpentronsError(
+            f"Timed out waiting for run {self.id} to stop (status {status!r}); "
+            "state is retained for retry"
+          )
+        await asyncio.sleep(self.command_poll_interval)
       self._active = False
 
   async def _execute(self, command_type: str, params: Dict[str, Any]) -> Dict[str, Any]:

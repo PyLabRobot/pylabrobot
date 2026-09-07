@@ -1,7 +1,6 @@
 """OT-2 lifecycle, deck ownership, and physical pipette discovery."""
 
 import asyncio
-import logging
 import math
 import uuid
 from typing import List, Optional, Tuple
@@ -13,7 +12,7 @@ from pylabrobot.opentrons.labware import (
   build_tip_rack_definition,
   official_tip_rack_identity,
 )
-from pylabrobot.opentrons.ot2.pipette import OT2Pipette, _PIPETTE_SPECS
+from pylabrobot.opentrons.ot2.pipette import _PIPETTE_SPECS, OT2Pipette
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import (
   LabwareIdentity,
@@ -26,8 +25,6 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons import OT2RobotGeometry, OTDeck
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack
-
-logger = logging.getLogger(__name__)
 
 
 class OT2:
@@ -126,10 +123,6 @@ class OT2:
 
   async def setup(self, skip_home: bool = False) -> None:
     """Connect, discover and bind pipettes to a run, and optionally home."""
-    logger.warning(
-      "OT2 has NOT been tested against hardware in the new PyLabRobot architecture. "
-      "Please make a PR to remove this message if you have verified it on your hardware."
-    )
     async with self._operation_lock:
       if self._run is not None:
         raise RuntimeError("The OT-2 is already set up")

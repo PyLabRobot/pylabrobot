@@ -53,6 +53,8 @@ class FakeHTTP(HTTP):
       return {"data": {"id": "run-id"}}
     if method == "GET" and path == "/runs":
       return {"data": [{"id": "run-id", "status": "idle"}]}
+    if method == "GET" and path == "/runs/run-id":
+      return {"data": {"id": "run-id", "status": "stopped"}}
     if method == "GET" and path == "/pipettes":
       return {
         "left": {"name": self.left_pipette_name},
