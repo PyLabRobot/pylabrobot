@@ -892,6 +892,79 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
       _nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._VELOCITY_GAINS)
     )
     self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
+    self.assertFalse(self.vspin.state.recovery_required)
+
+  async def test_spin_preparation_failures_turn_motor_off(self) -> None:
+    """Preparation errors and task cancellation disable the servo and require recovery."""
+    motor_off = _nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)
+    boundaries = (
+      _nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.AMPLIFIER_ENABLE),
+      _nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._VELOCITY_GAINS),
+      None,  # The final safety check after amplifier and gain configuration.
+    )
+    for boundary in boundaries:
+      for cancel, cleanup_fails in ((False, False), (True, False), (False, True)):
+        with self.subTest(boundary=boundary, cancel=cancel, cleanup_fails=cleanup_fails):
+          vspin = VSpin(name="centrifuge")
+          _mark_vspin_ready(vspin)
+          vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+          vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+          vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+          vspin.request_position = AsyncMock(return_value=0)  # type: ignore[method-assign]
+          boundary_reached = asyncio.Event()
+          release_boundary = asyncio.Event()
+          failure = RuntimeError("spin preparation failed")
+
+          async def fail_preparation() -> None:
+            """Pause preparation until the test fails or cancels the spin task."""
+            boundary_reached.set()
+            await release_boundary.wait()
+            raise failure
+
+          async def send_nmc(command: bytes) -> _nmc.NMCResponse:
+            """Fail the selected preparation command or the motor-off cleanup."""
+            if command == boundary:
+              await fail_preparation()
+            if command == motor_off and boundary_reached.is_set() and cleanup_fails:
+              raise RuntimeError("motor-off reply failed")
+            return _nmc.NMCResponse(status=_nmc.STATUS_MOVE_DONE, data=b"")
+
+          send = AsyncMock(side_effect=send_nmc)
+          vspin._send_nmc = send  # type: ignore[method-assign]
+          vspin._raise_for_spin_faults = AsyncMock(  # type: ignore[method-assign]
+            side_effect=fail_preparation if boundary is None else None
+          )
+
+          with (
+            patch("pylabrobot.agilent.vspin.vspin._SERVO_TRANSITION_SETTLE_TIME", 0),
+            patch.object(vspin_module.logger, "exception") as log_exception,
+          ):
+            spin_task: asyncio.Future[None] = asyncio.ensure_future(vspin.spin(g=500, duration=1))
+            await asyncio.wait_for(boundary_reached.wait(), timeout=1)
+            if cancel:
+              spin_task.cancel()
+              with self.assertRaises(asyncio.CancelledError):
+                await spin_task
+            else:
+              release_boundary.set()
+              with self.assertRaises(RuntimeError) as raised:
+                await spin_task
+              self.assertIs(raised.exception, failure)
+
+          self.assertEqual(send.await_args_list[-1], call(motor_off))
+          self.assertFalse(
+            any(c.args[0][2] & 0x0F == _nmc.CMD_LOAD_TRAJECTORY for c in send.await_args_list)
+          )
+          self.assertTrue(vspin.state.recovery_required)
+          self.assertEqual(vspin.state.activity, VSpinActivity.PREPARING_TO_SPIN)
+          self.assertFalse(vspin._command_lock.locked())
+          self.assertTrue(vspin._spin_completion_event.is_set())
+          with self.assertRaisesRegex(RuntimeError, "requires recovery"):
+            vspin._require_operational_state()
+          if cleanup_fails:
+            log_exception.assert_called_once()
+          else:
+            log_exception.assert_not_called()
 
   async def test_stop_spin_reports_owner_failure_after_recovery_is_recorded(self):
     owner_started = asyncio.Event()

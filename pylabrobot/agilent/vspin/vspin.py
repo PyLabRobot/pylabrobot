@@ -1406,17 +1406,18 @@ class VSpin:
       acceleration=_nmc.acceleration_to_nmc(acceleration),
     )
 
-    await self._enable_amplifier_and_reset_servo_status()
-    if self._spin_cancel_requested:
-      await self._disable_servo_after_motion()
-      return
-    await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _VELOCITY_GAINS))
-    if self._spin_cancel_requested:
-      await self._disable_servo_after_motion()
-      return
-
     trajectory_may_be_active = False
     try:
+      transition.mark_actuated()
+      await self._enable_amplifier_and_reset_servo_status()
+      if self._spin_cancel_requested:
+        await self._disable_servo_after_motion()
+        return
+      await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _VELOCITY_GAINS))
+      if self._spin_cancel_requested:
+        await self._disable_servo_after_motion()
+        return
+
       await self._raise_for_spin_faults()
       if self._spin_cancel_requested:
         await self._disable_servo_after_motion()
@@ -1456,6 +1457,15 @@ class VSpin:
           await asyncio.shield(self._wait_until_stopped(rpm, active_deceleration))
         except Exception:
           logger.exception("[vSpin %s] emergency deceleration failed", self.device_id)
+      else:
+        try:
+          await asyncio.shield(
+            self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
+          )
+        except Exception:
+          logger.exception(
+            "[vSpin %s] failed to turn off motor after spin preparation error", self.device_id
+          )
       raise
 
     # The rotor has moved off whichever bucket was parked at the load position.
