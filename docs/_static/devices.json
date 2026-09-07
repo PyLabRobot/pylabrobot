@@ -1713,9 +1713,10 @@
       "liquid handling"
     ],
     "status": "mostly",
-    "api": "pylabrobot.legacy.liquid_handling.backends.OpentronsOT2Backend",
-    "api_version": "v0",
-    "code_slug": "legacy/liquid_handling/backends",
+    "api": "pylabrobot.opentrons.OT2",
+    "api_version": "v1",
+    "code_slug": "opentrons/ot2",
+    "doc_slug": "opentrons/ot2/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://opentrons.com/products/ot-2-robot"
   },
