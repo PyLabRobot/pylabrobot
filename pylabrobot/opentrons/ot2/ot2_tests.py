@@ -3,11 +3,17 @@ import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.io.http import HTTP, HTTPError
-from pylabrobot.opentrons import OT2, OpentronsError
+from pylabrobot.opentrons import OT2, OpentronsError, OT2_8ChannelPipette, OT2SingleChannelPipette
+from pylabrobot.opentrons.ot2.pipette import _OT2Pipette
 from pylabrobot.opentrons.types import ModuleInfo
 from pylabrobot.resources import Coordinate, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.celltreat import celltreat_96_wellplate_350uL_Fb
-from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
+from pylabrobot.resources.errors import (
+  HasTipError,
+  NoTipError,
+  TooLittleLiquidError,
+  TooLittleVolumeError,
+)
 from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
 
 
@@ -149,7 +155,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_full_single_channel_protocol_updates_trackers_and_commands(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     source = self.plate.get_well("A1")
     destination = self.plate.get_well("B1")
     source.tracker.set_volume(15)
@@ -219,7 +225,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_return_tip_restores_its_origin(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     origin = self.tips.get_item("A1")
 
     await pipette.pick_up_tip(origin)
@@ -234,7 +240,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_pickup_retracts_with_tip_state_committed(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     origin = self.tips.get_item("A1")
 
     await pipette.pick_up_tip(origin)
@@ -251,7 +257,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_failed_retraction_preserves_completed_pickup(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     origin = self.tips.get_item("A1")
     for failed_command in ("savePosition", "moveToCoordinates"):
       with self.subTest(failed_command=failed_command):
@@ -269,7 +275,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_to_retracts_without_lowering_an_already_high_tip(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     for z in (10, 150):
       with self.subTest(z=z):
         self.io.saved_position = {"x": 100, "y": 200, "z": z}
@@ -291,7 +297,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_drop_tip_retracts_vertically_from_reported_position(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     self.tips.set_tip_state({"A12": False})
     self.robot.traversal_height = 140
@@ -312,14 +318,14 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_discard_tip_retracts_for_both_trash_apis(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     for tip_index, version in enumerate(("6.3.0", "7.1.0")):
       with self.subTest(version=version):
         await self.robot.stop()
         self.io.api_version = version
         await self.robot.setup(skip_home=True)
         pipette = self.robot.left_pipette
-        assert pipette is not None
+        assert isinstance(pipette, OT2SingleChannelPipette)
         await pipette.pick_up_tip(self.tips.get_item(tip_index))
 
         await pipette.discard_tip()
@@ -335,7 +341,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_drop_does_not_lower_a_nozzle_above_traversal_height(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     self.io.saved_position["z"] = self.robot.traversal_height + 10
     command_count = len(self.io.commands)
@@ -350,7 +356,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_failed_drop_preserves_tip_and_does_not_retract(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     tip = pipette.tip
     self.io.fail_command_type = "dropTip"
@@ -367,7 +373,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_failed_retraction_preserves_completed_tip_drop(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     for tip_index, (operation, failed_command, returned) in enumerate(
       (
         (pipette.return_tip, "savePosition", True),
@@ -395,7 +401,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
     tips = opentrons_96_filtertiprack_20ul(name="official_tips")
     self.deck.assign_child_at_slot(tips, slot=3)
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     definition_request_count = len(
       [
         path
@@ -428,7 +434,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_failed_aspiration_rolls_back_volume_trackers(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     source = self.plate.get_well("A1")
     source.tracker.set_volume(15)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
@@ -443,7 +449,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_liquid_operations_retract_from_reported_position(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     assert pipette.tip is not None
     well = self.plate.get_well("A1")
@@ -463,7 +469,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_rejected_aspiration_preserves_both_volume_trackers(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     assert pipette.tip is not None
     pipette.tip.tracker.set_volume(15)
@@ -482,7 +488,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_rejected_dispense_preserves_both_volume_trackers(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     assert pipette.tip is not None
     pipette.tip.tracker.set_volume(10)
@@ -502,7 +508,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_failed_retraction_preserves_completed_transfer(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     assert pipette.tip is not None
     well = self.plate.get_well("A1")
@@ -529,7 +535,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_moved_or_unassigned_loaded_rack_is_rejected_before_a_command(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     await pipette.return_tip()
     self.deck.unassign_child_resource(self.tips)
@@ -547,7 +553,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_drop_into_moved_rack_preserves_tip_state(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     self.deck.unassign_child_resource(self.tips)
     self.deck.assign_child_at_slot(self.tips, slot=5)
@@ -562,7 +568,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_concurrent_pickups_only_pick_up_one_tip(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     results = await asyncio.wait_for(
       asyncio.gather(
         pipette.pick_up_tip(self.tips.get_item("A1")),
@@ -582,7 +588,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_concurrent_transfer_checks_state_after_preceding_operation(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     source = self.plate.get_well("A1")
     destination = self.plate.get_well("B1")
@@ -603,7 +609,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_concurrent_return_and_discard_only_drop_once(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     results = await asyncio.wait_for(
       asyncio.gather(pipette.return_tip(), pipette.discard_tip(), return_exceptions=True),
@@ -622,7 +628,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_mix_rejects_insufficient_liquid_or_tip_capacity_before_moving(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     assert pipette.tip is not None
     source = self.plate.get_well("A1")
@@ -642,7 +648,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_mix_tracks_each_transfer_when_dispense_fails(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     source = self.plate.get_well("A1")
     source.tracker.set_volume(15)
@@ -660,7 +666,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_mix_preserves_volume_after_completed_cycles(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     await pipette.pick_up_tip(self.tips.get_item("A1"))
     assert pipette.tip is not None
     source = self.plate.get_well("A1")
@@ -690,7 +696,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_unreachable_move_is_rejected_before_an_http_command(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     command_count = len(self.io.commands)
 
     with self.assertRaisesRegex(ValueError, "reachable"):
@@ -700,7 +706,7 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
   async def test_negative_z_move_is_rejected_before_an_http_command(self) -> None:
     pipette = self.robot.left_pipette
-    assert pipette is not None
+    assert isinstance(pipette, OT2SingleChannelPipette)
     command_count = len(self.io.commands)
 
     with self.assertRaisesRegex(ValueError, "non-negative"):
@@ -761,20 +767,261 @@ class OT2Tests(unittest.IsolatedAsyncioTestCase):
 
 
 class OT2MultiChannelTests(unittest.IsolatedAsyncioTestCase):
-  async def test_multi_channel_is_modeled_but_not_mistracked_as_one_tip(self) -> None:
-    io = FakeHTTP(left_pipette_name="p20_multi_gen2")
-    deck = OTDeck()
-    robot = OT2(host="ot2.local", deck=deck, command_poll_interval=0, io=io)
-    await robot.setup(skip_home=True)
-    tips = opentrons_96_filtertiprack_20ul(name="tips")
-    deck.assign_child_at_slot(tips, slot=1)
-    assert robot.left_pipette is not None
-    self.assertEqual(robot.left_pipette.num_channels, 8)
+  async def asyncSetUp(self) -> None:
+    """Set up a multi and a single on the same robot using only fake HTTP."""
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+    self.io = FakeHTTP(left_pipette_name="p20_multi_gen2", right_pipette_name="p20_single_gen2")
+    self.deck = OTDeck()
+    self.robot = OT2(host="ot2.local", deck=self.deck, command_poll_interval=0, io=self.io)
+    await self.robot.setup(skip_home=True)
+    assert isinstance(self.robot.left_pipette, OT2_8ChannelPipette)
+    self.pipette = self.robot.left_pipette
+    self.tips = opentrons_96_filtertiprack_20ul(name="tips")
+    self.tips.model = None
+    self.deck.assign_child_at_slot(self.tips, slot=1)
+    self.plate = celltreat_96_wellplate_350uL_Fb(name="plate")
+    self.deck.assign_child_at_slot(self.plate, slot=2)
+    self.column = self.tips["A1:H1"]
+    self.sources = self.plate["A1:H1"]
+    self.destinations = self.plate["A2:H2"]
+    for well in self.sources:
+      well.tracker.set_volume(15)
 
-    with self.assertRaisesRegex(NotImplementedError, "Multi-channel"):
-      await robot.left_pipette.pick_up_tip(tips.get_item("A1"))
+  async def asyncTearDown(self) -> None:
+    """Close the fake run and restore global tracking switches."""
+    await self.robot.stop()
+    set_tip_tracking(False)
+    set_volume_tracking(False)
 
-    await robot.stop()
+  async def test_setup_selects_the_concrete_class_on_either_mount(self) -> None:
+    """Discovery selects a class from the pipette model, independently of its mount."""
+    self.assertIsInstance(self.pipette, _OT2Pipette)
+    for model in ("p10_multi", "p20_multi_gen2", "p50_multi", "p300_multi", "p300_multi_gen2"):
+      with self.subTest(model=model):
+        await self.robot.stop()
+        self.io.left_pipette_name = "p20_single_gen2"
+        self.io.right_pipette_name = model
+        await self.robot.setup(skip_home=True)
+        self.assertIsInstance(self.robot.left_pipette, OT2SingleChannelPipette)
+        self.assertIsInstance(self.robot.right_pipette, OT2_8ChannelPipette)
+        self.assertEqual([p.num_channels for p in self.robot.pipettes], [1, 8])
+
+  def test_constructors_reject_models_with_the_wrong_channel_count(self) -> None:
+    """A concrete class cannot bind a model whose nozzle count contradicts its API."""
+    with self.assertRaisesRegex(ValueError, "8-channel"):
+      OT2SingleChannelPipette(self.robot, "left", "p20_multi_gen2", "left-pipette-id")
+    with self.assertRaisesRegex(ValueError, "1-channel"):
+      OT2_8ChannelPipette(self.robot, "right", "p20_single_gen2", "right-pipette-id")
+
+  async def test_full_column_uses_one_command_and_tracks_each_nozzle(self) -> None:
+    """One physical stroke transfers the requested volume separately in eight wells."""
+    original_tips = [spot.get_tip() for spot in self.column]
+    await self.pipette.pick_up_tips(self.column)
+    self.assertEqual(self.pipette.num_channels, 8)
+    self.assertEqual(len(self.pipette.tips), 8)
+    for actual, original in zip(self.pipette.tips, original_tips):
+      self.assertIs(actual, original)
+    await self.pipette.aspirate(self.sources, volume=10)
+    self.assertEqual([tip.tracker.volume for tip in self.pipette.tips], [10] * 8)
+    await self.pipette.dispense(self.destinations, volume=10, flow_rate=6)
+    await self.pipette.return_tips()
+
+    for spot, original in zip(self.column, original_tips):
+      self.assertIs(spot.get_tip(), original)
+      self.assertEqual(original.tracker.volume, 0)
+    self.assertFalse(self.pipette.has_tip)
+    self.assertEqual(self.pipette.tips, ())
+    self.assertEqual([well.tracker.volume for well in self.sources], [5] * 8)
+    self.assertEqual([well.tracker.volume for well in self.destinations], [10] * 8)
+    commands = self.io.commands
+    for kind in ("pickUpTip", "aspirateInPlace", "dispenseInPlace", "dropTip"):
+      selected = [command for command in commands if command["commandType"] == kind]
+      self.assertEqual(len(selected), 1)
+      params = selected[0]["params"]
+      self.assertEqual(params["pipetteId"], "left-pipette-id")
+      if kind in ("pickUpTip", "dropTip"):
+        self.assertEqual(params["wellName"], "A1")
+      else:
+        self.assertEqual(params["volume"], 10)
+        self.assertEqual(params["flowRate"], 7.6 if kind == "aspirateInPlace" else 6)
+    # Two liquid moves plus four vertical retractions; the liquid moves anchor at row A.
+    moves = [c["params"] for c in commands if c["commandType"] == "moveToCoordinates"]
+    self.assertEqual(len(moves), 6)
+    anchor = self.sources[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom")
+    anchor -= self.deck.slot_locations[0]
+    self.assertEqual(moves[1]["coordinates"], {"x": anchor.x, "y": anchor.y, "z": anchor.z})
+
+  async def test_single_mount_and_multi_mount_keep_independent_tips(self) -> None:
+    """A multi on one mount does not change the other mount's single-channel API."""
+    single = self.robot.right_pipette
+    assert isinstance(single, OT2SingleChannelPipette)
+    self.assertEqual(single.num_channels, 1)
+    await asyncio.gather(
+      self.pipette.pick_up_tips(self.column), single.pick_up_tip(self.tips.get_item("A3"))
+    )
+    await self.pipette.discard_tips()
+    self.assertTrue(single.has_tip)
+    self.assertIsNotNone(single.tip)
+    await single.return_tip()
+    self.assertTrue(self.tips.get_item("A3").has_tip())
+    self.assertTrue(all(not spot.has_tip() for spot in self.column))
+    pickups = [c["params"] for c in self.io.commands if c["commandType"] == "pickUpTip"]
+    self.assertEqual([p["pipetteId"] for p in pickups], ["left-pipette-id", "right-pipette-id"])
+
+  async def test_incomplete_or_misaligned_pickups_send_nothing(self) -> None:
+    """Reject partial, repeated, mixed-column, and reversed targets before loading labware."""
+    before = len(self.io.calls)
+    for spots in (
+      [],
+      self.column[:7],
+      [self.column[0]] * 8,
+      list(reversed(self.column)),
+      self.column[:7] + [self.tips.get_item("H2")],
+    ):
+      with self.subTest(spots=spots), self.assertRaises(ValueError):
+        await self.pipette.pick_up_tips(spots)
+    self.assertEqual(len(self.io.calls), before)
+    self.assertTrue(all(spot.has_tip() for spot in self.column))
+
+  async def test_missing_last_tip_and_failed_pickup_preserve_the_rack(self) -> None:
+    """A missing eighth tip or failed command must not consume the first seven tips."""
+    last_tip = self.column[-1].get_tip()
+    self.column[-1].tracker.remove_tip(commit=True)
+    before = len(self.io.calls)
+    with self.assertRaises(NoTipError):
+      await self.pipette.pick_up_tips(self.column)
+    self.assertEqual(len(self.io.calls), before)
+    self.assertTrue(all(spot.has_tip() for spot in self.column[:-1]))
+    self.column[-1].tracker.add_tip(last_tip)
+    self.io.fail_command_type = "pickUpTip"
+    with self.assertRaises(OpentronsError):
+      await self.pipette.pick_up_tips(self.column)
+    self.assertTrue(all(spot.has_tip() for spot in self.column))
+    self.assertFalse(self.pipette.has_tip)
+
+  async def test_drop_preflight_and_command_failure_roll_back_every_spot(self) -> None:
+    """A late occupied destination or command failure preserves all mounted tips."""
+    await self.pipette.pick_up_tips(self.column)
+    mounted = self.pipette.tips
+    destinations = self.tips["A2:H2"]
+    for spot in destinations[:-1]:
+      spot.tracker.remove_tip(commit=True)
+    before = len(self.io.calls)
+    with self.assertRaises(HasTipError):
+      await self.pipette.drop_tips(destinations)
+    self.assertEqual(len(self.io.calls), before)
+    self.assertTrue(all(not spot.has_tip() for spot in destinations[:-1]))
+    self.io.fail_command_type = "dropTip"
+    with self.assertRaises(OpentronsError):
+      await self.pipette.return_tips()
+    self.assertTrue(all(not spot.has_tip() for spot in self.column))
+    self.assertIs(self.pipette.tips, mounted)
+    self.io.fail_command_type = None
+    destinations[-1].tracker.remove_tip(commit=True)
+    await self.pipette.drop_tips(destinations)
+    for spot, tip in zip(destinations, mounted):
+      self.assertIs(spot.get_tip(), tip)
+
+  async def test_last_well_or_tip_capacity_failure_rolls_back_the_whole_transfer(self) -> None:
+    """Every nozzle is validated before motion, with earlier staged updates undone."""
+    await self.pipette.pick_up_tips(self.column)
+    self.sources[-1].tracker.set_volume(0)
+    before = len(self.io.calls)
+    with self.assertRaises(TooLittleLiquidError):
+      await self.pipette.aspirate(self.sources, volume=10)
+    self.assertEqual([w.tracker.get_used_volume() for w in self.sources], [15] * 7 + [0])
+    self.assertEqual([tip.tracker.get_used_volume() for tip in self.pipette.tips], [0] * 8)
+    self.sources[-1].tracker.set_volume(15)
+    self.pipette.tips[-1].tracker.set_volume(20)
+    with self.assertRaises(TooLittleVolumeError):
+      await self.pipette.aspirate(self.sources, volume=10)
+    self.assertEqual([w.tracker.get_used_volume() for w in self.sources], [15] * 8)
+    self.assertEqual([tip.tracker.get_used_volume() for tip in self.pipette.tips], [0] * 7 + [20])
+    self.assertEqual(len(self.io.calls), before)
+
+  async def test_liquid_command_failures_preserve_all_volumes(self) -> None:
+    """A rejected aspiration or dispense rolls back the entire column."""
+    await self.pipette.pick_up_tips(self.column)
+    for operation, kind, tip_volume in (
+      (self.pipette.aspirate, "aspirateInPlace", 0),
+      (self.pipette.dispense, "dispenseInPlace", 10),
+    ):
+      with self.subTest(kind=kind):
+        for tip in self.pipette.tips:
+          tip.tracker.set_volume(tip_volume)
+        self.io.fail_command_type = kind
+        with self.assertRaises(OpentronsError):
+          await operation(self.sources, volume=10)
+        self.assertEqual([w.tracker.get_used_volume() for w in self.sources], [15] * 8)
+        self.assertEqual(
+          [tip.tracker.get_used_volume() for tip in self.pipette.tips], [tip_volume] * 8
+        )
+
+  async def test_liquid_targets_must_match_the_rigid_head(self) -> None:
+    """A partial column or row cannot silently command an eight-nozzle stroke."""
+    await self.pipette.pick_up_tips(self.column)
+    before = len(self.io.calls)
+    for targets in (self.sources[:7], self.plate["A1:A8"]):
+      with self.subTest(targets=targets), self.assertRaises(ValueError):
+        await self.pipette.aspirate(targets, volume=10)
+    self.assertEqual(len(self.io.calls), before)
+
+  async def test_mix_commits_each_completed_stroke(self) -> None:
+    """A later failed mix stroke retains the liquid moved by earlier completed strokes."""
+    await self.pipette.pick_up_tips(self.column)
+    await self.pipette.mix(self.sources, volume=5, repetitions=2)
+    self.assertEqual([w.tracker.volume for w in self.sources], [15] * 8)
+    self.io.fail_command_type = "dispenseInPlace"
+    with self.assertRaises(OpentronsError):
+      await self.pipette.mix(self.sources, volume=5, repetitions=1)
+    self.assertEqual([w.tracker.volume for w in self.sources], [10] * 8)
+    self.assertEqual([tip.tracker.volume for tip in self.pipette.tips], [5] * 8)
+
+  async def test_retraction_failure_keeps_completed_tip_and_liquid_state(self) -> None:
+    """A retraction failure must not undo the successful operation preceding it."""
+    self.io.fail_command_type = "savePosition"
+    with self.assertRaises(OpentronsError):
+      await self.pipette.pick_up_tips(self.column)
+    self.assertEqual(len(self.pipette.tips), 8)
+    self.assertTrue(all(not spot.has_tip() for spot in self.column))
+    with self.assertRaises(OpentronsError):
+      await self.pipette.aspirate(self.sources, volume=10)
+    self.assertEqual([w.tracker.volume for w in self.sources], [5] * 8)
+    self.assertEqual([tip.tracker.volume for tip in self.pipette.tips], [10] * 8)
+    with self.assertRaises(OpentronsError):
+      await self.pipette.return_tips(allow_nonzero_volume=True)
+    self.assertFalse(self.pipette.has_tip)
+    self.assertTrue(all(spot.has_tip() for spot in self.column))
+
+  async def test_discard_checks_every_tip_and_retains_tips_on_failure(self) -> None:
+    """Liquid in the last tip blocks disposal; a failed drop keeps tip ownership."""
+    await self.pipette.pick_up_tips(self.column)
+    self.pipette.tips[-1].tracker.set_volume(1)
+    before = len(self.io.calls)
+    with self.assertRaisesRegex(ValueError, "contains liquid"):
+      await self.pipette.discard_tips()
+    self.assertEqual(len(self.io.calls), before)
+    self.io.fail_command_type = "dropTipInPlace"
+    with self.assertRaises(OpentronsError):
+      await self.pipette.discard_tips(allow_nonzero_volume=True)
+    self.assertEqual(len(self.pipette.tips), 8)
+    self.io.fail_command_type = None
+    await self.pipette.discard_tips(allow_nonzero_volume=True)
+    self.assertFalse(self.pipette.has_tip)
+
+  async def test_disabled_tracking_still_owns_and_operates_all_tips(self) -> None:
+    """Global tracking switches do not change the physical command grouping."""
+    set_tip_tracking(False)
+    set_volume_tracking(False)
+    await self.pipette.pick_up_tips(self.column)
+    await self.pipette.aspirate(self.sources, volume=10)
+    await self.pipette.dispense(self.destinations, volume=10)
+    self.assertEqual(len(self.pipette.tips), 8)
+    self.assertTrue(all(spot.has_tip() for spot in self.column))
+    self.assertEqual([w.tracker.volume for w in self.sources], [15] * 8)
+    self.assertEqual([w.tracker.volume for w in self.destinations], [0] * 8)
+    await self.pipette.discard_tips()
 
 
 class OT2ArchitectureTests(unittest.IsolatedAsyncioTestCase):

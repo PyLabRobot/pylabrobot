@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import math
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, Iterator, Optional
+from typing import TYPE_CHECKING, Dict, Iterator, Optional, Sequence, Tuple
 
 from pylabrobot.opentrons.types import Mount
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.tip_tracker import does_tip_tracking
@@ -58,19 +60,20 @@ def _require_finite_coordinate(name: str, coordinate: Coordinate) -> None:
 
 @contextmanager
 def _track_liquid_transfer(
-  source: VolumeTracker, destination: VolumeTracker, volume: float
+  sources: Sequence[VolumeTracker], destinations: Sequence[VolumeTracker], volume: float
 ) -> Iterator[None]:
-  """Track one liquid transfer, committing when its command succeeds."""
+  """Stage all nozzle transfers and commit together when their command succeeds."""
   trackers = [
     tracker
-    for tracker in (source, destination)
+    for tracker in (*sources, *destinations)
     if does_volume_tracking() and not tracker.is_disabled
   ]
   try:
-    if source in trackers:
-      source.remove_liquid(volume)
-    if destination in trackers:
-      destination.add_liquid(volume)
+    for source, destination in zip(sources, destinations):
+      if source in trackers:
+        source.remove_liquid(volume)
+      if destination in trackers:
+        destination.add_liquid(volume)
     yield
   except BaseException:
     for tracker in trackers:
@@ -81,14 +84,8 @@ def _track_liquid_transfer(
       tracker.commit()
 
 
-class OT2Pipette:
-  """A pipette mounted on an OT-2 carriage.
-
-  Instances are discovered and created by :meth:`OT2.setup`. Single-channel
-  pipettes expose tip, liquid, and motion operations. Multi-channel pipettes are represented
-  accurately, but their liquid operations are rejected until all eight tip and volume trackers
-  can be updated atomically.
-  """
+class _OT2Pipette(ABC):
+  """Shared motion, command sequencing, and transactional tracking for mounted OT-2 pipettes."""
 
   def __init__(
     self,
@@ -102,14 +99,17 @@ class OT2Pipette:
     except KeyError as error:
       raise ValueError(f"Unsupported OT-2 pipette {name!r}") from error
 
+    if spec.channels != self.num_channels:
+      raise ValueError(f"{name} requires a {spec.channels}-channel pipette class")
+
     self.robot = robot
     self._run = robot._require_run()
     self.mount = mount
     self.name = name
     self.pipette_id = pipette_id
     self._spec = spec
-    self._tip: Optional[Tip] = None
-    self._tip_origin: Optional[TipSpot] = None
+    self._tips: Tuple[Tip, ...] = ()
+    self._tip_origins: Tuple[TipSpot, ...] = ()
 
   @property
   def minimum_volume(self) -> float:
@@ -122,35 +122,43 @@ class OT2Pipette:
     return self._spec.maximum_volume
 
   @property
+  @abstractmethod
   def num_channels(self) -> int:
-    """Number of nozzles on the pipette."""
-    return self._spec.channels
+    """Number of nozzles exposed by this pipette class."""
+    ...
 
   @property
   def has_tip(self) -> bool:
     """Whether the pipette holds a tip according to commands issued by this object."""
-    return self._tip is not None
-
-  @property
-  def tip(self) -> Optional[Tip]:
-    """The mounted tip, or ``None`` when no tip is mounted."""
-    return self._tip
+    return bool(self._tips)
 
   def _require_active(self) -> None:
     if self.robot._require_run() is not self._run:
       raise RuntimeError("This pipette belongs to an earlier OT-2 run; use the current pipette")
 
-  def _require_single_channel(self) -> None:
-    if self.num_channels != 1:
-      raise NotImplementedError(
-        f"{self.name} has {self.num_channels} channels. Multi-channel liquid operations are not "
-        "implemented yet."
-      )
-
-  def _require_tip(self) -> Tip:
-    if self._tip is None:
+  def _require_tips(self) -> Tuple[Tip, ...]:
+    """Return the mounted tips, requiring a tip on every nozzle."""
+    if not self._tips:
       raise RuntimeError(f"The {self.mount} pipette does not have a tip")
-    return self._tip
+    return self._tips
+
+  def _validate_targets(self, targets: Sequence[Resource]) -> None:
+    """Require one target per nozzle."""
+    if len(targets) != self.num_channels:
+      raise ValueError(f"{self.name} requires {self.num_channels} targets in nozzle order")
+
+  def _validate_nozzle_positions(self, positions: Sequence[Coordinate]) -> None:
+    """Require finite target coordinates."""
+    for position in positions:
+      _require_finite_coordinate("target", position)
+
+  def _tip_rack(self, tip_spots: Sequence[TipSpot]) -> TipRack:
+    """Validate tip spots and return its rack."""
+    self._validate_targets(tip_spots)
+    rack = tip_spots[0].parent
+    if not isinstance(rack, TipRack):
+      raise ValueError("tip spots must be assigned to a tip rack")
+    return rack
 
   def _validate_volume(self, volume: float) -> float:
     volume = float(volume)
@@ -213,98 +221,105 @@ class OT2Pipette:
       )
       await self._retract_to_traversal_height()
 
-  async def pick_up_tip(
+  async def _pick_up_tips(
     self,
-    tip_spot: TipSpot,
+    tip_spots: Sequence[TipSpot],
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Pick up one tip from a tip rack and retract to at least traversal height."""
+    """Pick up one tip per nozzle with one command, then retract to traversal height."""
     async with self.robot._operation_lock:
       self._require_active()
-      self._require_single_channel()
-      if self._tip is not None:
+      if self.has_tip:
         raise RuntimeError(f"The {self.mount} pipette already has a tip")
-      if not isinstance(tip_spot.parent, TipRack):
-        raise ValueError("tip_spot must be assigned to a tip rack")
-
-      tip = tip_spot.get_tip()
+      tip_spots = tuple(tip_spots)
+      rack = self._tip_rack(tip_spots)
+      tips = tuple(spot.get_tip() for spot in tip_spots)
+      tip = tips[0]
       if not self.can_use_tip(tip):
         raise ValueError(f"{self.name} cannot use a {tip.maximal_volume:g} µL-capacity tip")
+      if any(other != tip for other in tips):
+        raise ValueError("All nozzles must use the same tip type")
       offset = offset or Coordinate.zero()
       _require_finite_coordinate("offset", offset)
-      tracked = does_tip_tracking() and not tip_spot.tracker.is_disabled
-      if tracked:
-        tip_spot.tracker.remove_tip(commit=False)
-
+      tracked = [
+        spot.tracker for spot in tip_spots if does_tip_tracking() and not spot.tracker.is_disabled
+      ]
       try:
-        await self.robot._load_tip_rack(tip_spot.parent, tip)
-        binding = self.robot._require_labware().get(tip_spot.parent)
+        for tracker in tracked:
+          tracker.remove_tip(commit=False)
+        await self.robot._load_tip_rack(rack, tip)
+        binding = self.robot._require_labware().get(rack)
         await self._run.pick_up_tip(
           self.pipette_id,
           binding.labware_id,
-          tip_spot.parent.get_child_identifier(tip_spot),
+          rack.get_child_identifier(tip_spots[0]),
           offset + Coordinate(z=tip.total_tip_length),
         )
-      except Exception:
-        if tracked:
-          tip_spot.tracker.rollback()
+      except BaseException:
+        for tracker in tracked:
+          tracker.rollback()
         raise
 
-      if tracked:
-        tip_spot.tracker.commit()
-      self._tip = tip
-      self._tip_origin = tip_spot
+      for tracker in tracked:
+        tracker.commit()
+      self._tips = tips
+      self._tip_origins = tip_spots
       await self._retract_to_traversal_height()
 
-  async def drop_tip(
+  async def _drop_tips(
     self,
-    tip_spot: TipSpot,
+    tip_spots: Sequence[TipSpot],
     offset: Optional[Coordinate] = None,
     allow_nonzero_volume: bool = False,
   ) -> None:
-    """Drop into a tip-rack position and retract vertically to at least traversal height."""
+    """Drop all mounted tips into a rack with one command, then retract."""
     async with self.robot._operation_lock:
       self._require_active()
-      await self._drop_tip(tip_spot, offset, allow_nonzero_volume)
+      await self._drop_tips_locked(tuple(tip_spots), offset, allow_nonzero_volume)
 
-  async def _drop_tip(
+  def _check_tip_volumes(self, allow_nonzero_volume: bool) -> None:
+    """Require mounted tips and reject disposal of liquid unless explicitly allowed."""
+    tips = self._require_tips()
+    if does_volume_tracking() and not allow_nonzero_volume:
+      if any(tip.tracker.get_used_volume() > 0 for tip in tips):
+        raise ValueError("A mounted tip still contains liquid")
+
+  async def _drop_tips_locked(
     self,
-    tip_spot: TipSpot,
+    tip_spots: Sequence[TipSpot],
     offset: Optional[Coordinate] = None,
     allow_nonzero_volume: bool = False,
   ) -> None:
-    """Drop a tip while the robot's operation lock is held."""
-    self._require_single_channel()
-    tip = self._require_tip()
-    if not isinstance(tip_spot.parent, TipRack):
-      raise ValueError("tip_spot must be assigned to a tip rack")
-    if does_volume_tracking() and tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
-      raise ValueError("The mounted tip still contains liquid")
-
+    """Drop tips while the robot's operation lock is held."""
+    self._check_tip_volumes(allow_nonzero_volume)
+    rack = self._tip_rack(tip_spots)
+    tip = self._tips[0]
     offset = offset or Coordinate.zero()
     _require_finite_coordinate("offset", offset)
-    tracked = does_tip_tracking() and not tip_spot.tracker.is_disabled
-    if tracked:
-      tip_spot.tracker.add_tip(tip, origin=tip_spot, commit=False)
-
+    tracked = [
+      spot.tracker for spot in tip_spots if does_tip_tracking() and not spot.tracker.is_disabled
+    ]
     try:
-      await self.robot._load_tip_rack(tip_spot.parent, tip)
-      binding = self.robot._require_labware().get(tip_spot.parent)
+      for spot, mounted_tip in zip(tip_spots, self._tips):
+        if spot.tracker in tracked:
+          spot.tracker.add_tip(mounted_tip, origin=spot, commit=False)
+      await self.robot._load_tip_rack(rack, tip)
+      binding = self.robot._require_labware().get(rack)
       await self._run.drop_tip(
         self.pipette_id,
         binding.labware_id,
-        tip_spot.parent.get_child_identifier(tip_spot),
+        rack.get_child_identifier(tip_spots[0]),
         offset + Coordinate(z=10),
       )
-    except Exception:
-      if tracked:
-        tip_spot.tracker.rollback()
+    except BaseException:
+      for tracker in tracked:
+        tracker.rollback()
       raise
 
-    if tracked:
-      tip_spot.tracker.commit()
-    self._tip = None
-    self._tip_origin = None
+    for tracker in tracked:
+      tracker.commit()
+    self._tips = ()
+    self._tip_origins = ()
     await self._retract_to_traversal_height()
 
   async def _retract_to_traversal_height(self) -> None:
@@ -317,41 +332,32 @@ class OT2Pipette:
         force_direct=True,
       )
 
-  async def return_tip(
+  async def _return_tips(
     self,
     offset: Optional[Coordinate] = None,
     allow_nonzero_volume: bool = False,
   ) -> None:
-    """Return the mounted tip to its pickup position and retract to at least traversal height."""
+    """Return all mounted tips to their pickup positions, then retract."""
     async with self.robot._operation_lock:
       self._require_active()
-      if self._tip_origin is None:
+      if not self._tip_origins:
         raise RuntimeError("The mounted tip's origin is unknown")
-      await self._drop_tip(
-        self._tip_origin,
-        offset=offset,
-        allow_nonzero_volume=allow_nonzero_volume,
-      )
+      await self._drop_tips_locked(self._tip_origins, offset, allow_nonzero_volume)
 
-  async def discard_tip(
+  async def _discard_tips(
     self,
     offset: Optional[Coordinate] = None,
     allow_nonzero_volume: bool = False,
   ) -> None:
-    """Discard into fixed trash and retract vertically to at least traversal height."""
+    """Discard all mounted tips into fixed trash and retract to traversal height."""
     async with self.robot._operation_lock:
       self._require_active()
-      self._require_single_channel()
-      tip = self._require_tip()
-      if does_volume_tracking() and tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
-        raise ValueError("The mounted tip still contains liquid")
+      self._check_tip_volumes(allow_nonzero_volume)
       offset = offset or Coordinate.zero()
       _require_finite_coordinate("offset", offset)
-
       await self._run.discard_tip_in_fixed_trash(self.pipette_id, offset + Coordinate(z=10))
-
-      self._tip = None
-      self._tip_origin = None
+      self._tips = ()
+      self._tip_origins = ()
       await self._retract_to_traversal_height()
 
   def _liquid_location(
@@ -371,27 +377,39 @@ class OT2Pipette:
     )
     return self.robot._deck_to_robot_frame(location + offset + Coordinate(z=liquid_height))
 
-  async def aspirate(
+  def _liquid_targets(
     self,
-    container: Container,
+    containers: Sequence[Container],
+    offset: Coordinate,
+    liquid_height: float,
+  ) -> Tuple[Tuple[VolumeTracker, ...], Coordinate]:
+    """Resolve one container per nozzle and the reference nozzle's liquid position."""
+    self._validate_targets(containers)
+    locations = [self._liquid_location(c, offset, liquid_height) for c in containers]
+    self._validate_nozzle_positions(locations)
+    return tuple(c.tracker for c in containers), locations[0]
+
+  async def _aspirate(
+    self,
+    containers: Sequence[Container],
     volume: float,
     flow_rate: Optional[float] = None,
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Aspirate liquid from a container and return to traversal height."""
+    """Aspirate ``volume`` per nozzle from one container or a full column, then retract."""
     async with self.robot._operation_lock:
       self._require_active()
-      self._require_single_channel()
-      tip = self._require_tip()
+      tips = self._require_tips()
+      tip_trackers = tuple(tip.tracker for tip in tips)
       volume = self._validate_volume(volume)
       flow_rate = self._spec.default_aspiration_flow_rate if flow_rate is None else float(flow_rate)
       if not math.isfinite(flow_rate) or flow_rate <= 0:
         raise ValueError("flow_rate must be finite and greater than zero")
       offset = offset or Coordinate.zero()
-      location = self._liquid_location(container, offset, liquid_height)
+      container_trackers, location = self._liquid_targets(containers, offset, liquid_height)
 
-      with _track_liquid_transfer(container.tracker, tip.tracker, volume):
+      with _track_liquid_transfer(container_trackers, tip_trackers, volume):
         await self._move_to(
           location,
           minimum_z_height=self.robot.traversal_height,
@@ -399,27 +417,27 @@ class OT2Pipette:
         await self._run.aspirate_in_place(self.pipette_id, volume, flow_rate)
       await self._retract_to_traversal_height()
 
-  async def dispense(
+  async def _dispense(
     self,
-    container: Container,
+    containers: Sequence[Container],
     volume: float,
     flow_rate: Optional[float] = None,
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Dispense liquid into a container and return to traversal height."""
+    """Dispense ``volume`` per nozzle into one container or a full column, then retract."""
     async with self.robot._operation_lock:
       self._require_active()
-      self._require_single_channel()
-      tip = self._require_tip()
+      tips = self._require_tips()
+      tip_trackers = tuple(tip.tracker for tip in tips)
       volume = self._validate_volume(volume)
       flow_rate = self._spec.default_dispense_flow_rate if flow_rate is None else float(flow_rate)
       if not math.isfinite(flow_rate) or flow_rate <= 0:
         raise ValueError("flow_rate must be finite and greater than zero")
       offset = offset or Coordinate.zero()
-      location = self._liquid_location(container, offset, liquid_height)
+      container_trackers, location = self._liquid_targets(containers, offset, liquid_height)
 
-      with _track_liquid_transfer(tip.tracker, container.tracker, volume):
+      with _track_liquid_transfer(tip_trackers, container_trackers, volume):
         await self._move_to(
           location,
           minimum_z_height=self.robot.traversal_height,
@@ -427,9 +445,9 @@ class OT2Pipette:
         await self._run.dispense_in_place(self.pipette_id, volume, flow_rate)
       await self._retract_to_traversal_height()
 
-  async def mix(
+  async def _mix(
     self,
-    container: Container,
+    containers: Sequence[Container],
     volume: float,
     repetitions: int,
     aspiration_flow_rate: Optional[float] = None,
@@ -437,11 +455,11 @@ class OT2Pipette:
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Mix in place using aspiration and dispense cycles, then retract to traversal height."""
+    """Mix ``volume`` per nozzle in one container or a full column, then retract."""
     async with self.robot._operation_lock:
       self._require_active()
-      self._require_single_channel()
-      tip = self._require_tip()
+      tips = self._require_tips()
+      tip_trackers = tuple(tip.tracker for tip in tips)
       volume = self._validate_volume(volume)
       if repetitions < 1:
         raise ValueError("repetitions must be at least 1")
@@ -464,12 +482,226 @@ class OT2Pipette:
         raise ValueError("flow rates must be finite and greater than zero")
 
       offset = offset or Coordinate.zero()
-      location = self._liquid_location(container, offset, liquid_height)
+      container_trackers, location = self._liquid_targets(containers, offset, liquid_height)
       for repetition in range(repetitions):
-        with _track_liquid_transfer(container.tracker, tip.tracker, volume):
+        with _track_liquid_transfer(container_trackers, tip_trackers, volume):
           if repetition == 0:
             await self._move_to(location, minimum_z_height=self.robot.traversal_height)
           await self._run.aspirate_in_place(self.pipette_id, volume, aspiration_flow_rate)
-        with _track_liquid_transfer(tip.tracker, container.tracker, volume):
+        with _track_liquid_transfer(tip_trackers, container_trackers, volume):
           await self._run.dispense_in_place(self.pipette_id, volume, dispense_flow_rate)
       await self._retract_to_traversal_height()
+
+
+class OT2SingleChannelPipette(_OT2Pipette):
+  """A single-channel OT-2 pipette, discovered and created by :meth:`OT2.setup`."""
+
+  @property
+  def num_channels(self) -> int:
+    """One independently addressed nozzle."""
+    return 1
+
+  @property
+  def tip(self) -> Optional[Tip]:
+    """The single-channel mounted tip, or ``None`` when no tip is mounted."""
+    return self._tips[0] if self._tips else None
+
+  async def pick_up_tip(
+    self,
+    tip_spot: TipSpot,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Pick up one tip from a tip rack and retract to at least traversal height."""
+    await self._pick_up_tips([tip_spot], offset)
+
+  async def drop_tip(
+    self,
+    tip_spot: TipSpot,
+    offset: Optional[Coordinate] = None,
+    allow_nonzero_volume: bool = False,
+  ) -> None:
+    """Drop into a tip-rack position and retract vertically to at least traversal height."""
+    await self._drop_tips([tip_spot], offset, allow_nonzero_volume)
+
+  async def return_tip(
+    self,
+    offset: Optional[Coordinate] = None,
+    allow_nonzero_volume: bool = False,
+  ) -> None:
+    """Return the mounted single tip to its pickup position, then retract."""
+    await self._return_tips(offset, allow_nonzero_volume)
+
+  async def discard_tip(
+    self,
+    offset: Optional[Coordinate] = None,
+    allow_nonzero_volume: bool = False,
+  ) -> None:
+    """Discard a single tip into fixed trash and retract to traversal height."""
+    await self._discard_tips(offset, allow_nonzero_volume)
+
+  async def aspirate(
+    self,
+    container: Container,
+    volume: float,
+    flow_rate: Optional[float] = None,
+    liquid_height: float = 0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Aspirate ``volume`` from a container, then retract."""
+    await self._aspirate([container], volume, flow_rate, liquid_height, offset)
+
+  async def dispense(
+    self,
+    container: Container,
+    volume: float,
+    flow_rate: Optional[float] = None,
+    liquid_height: float = 0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Dispense ``volume`` into a container, then retract."""
+    await self._dispense([container], volume, flow_rate, liquid_height, offset)
+
+  async def mix(
+    self,
+    container: Container,
+    volume: float,
+    repetitions: int,
+    aspiration_flow_rate: Optional[float] = None,
+    dispense_flow_rate: Optional[float] = None,
+    liquid_height: float = 0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Mix ``volume`` in a container, then retract."""
+    await self._mix(
+      [container],
+      volume,
+      repetitions,
+      aspiration_flow_rate,
+      dispense_flow_rate,
+      liquid_height,
+      offset,
+    )
+
+
+class OT2_8ChannelPipette(_OT2Pipette):
+  """An eight-channel OT-2 pipette with a rigid, full-column nozzle layout.
+
+  Instances are discovered and created by :meth:`OT2.setup`. Targets run from the
+  back nozzle to the front (rows A-H). Volume, flow rate, liquid height, and offset
+  apply equally to every nozzle. Partial columns are not supported.
+  """
+
+  @property
+  def num_channels(self) -> int:
+    """Eight nozzles at 9 mm pitch."""
+    return 8
+
+  @property
+  def tips(self) -> Tuple[Tip, ...]:
+    """Mounted tips in nozzle order, or an empty tuple when no tips are mounted."""
+    return self._tips
+
+  def _validate_targets(self, targets: Sequence[Resource]) -> None:
+    """Require one distinct target per nozzle on the same resource."""
+    super()._validate_targets(targets)
+    if len({id(target) for target in targets}) != len(targets):
+      raise ValueError("Each nozzle must address a distinct target")
+    if any(target.parent is not targets[0].parent for target in targets):
+      raise ValueError("All targets must belong to the same resource")
+
+  def _validate_nozzle_positions(self, positions: Sequence[Coordinate]) -> None:
+    """Require targets to align with the rigid head's 9 mm back-to-front pitch."""
+    super()._validate_nozzle_positions(positions)
+    for nozzle, position in enumerate(positions):
+      expected = positions[0] + Coordinate(y=-9 * nozzle)
+      if any(abs(actual - target) > 0.01 for actual, target in zip(position, expected)):
+        raise ValueError("Targets must align in nozzle order at 9 mm pitch and equal height")
+
+  def _tip_rack(self, tip_spots: Sequence[TipSpot]) -> TipRack:
+    """Validate a complete A-H column and return its rack."""
+    rack = super()._tip_rack(tip_spots)
+    column = rack.get_child_identifier(tip_spots[0])[1:]
+    if rack.num_items_y != 8 or [rack.get_child_identifier(spot) for spot in tip_spots] != [
+      f"{row}{column}" for row in "ABCDEFGH"
+    ]:
+      raise ValueError("Eight-channel tip operations require a full A-H rack column")
+    self._validate_nozzle_positions(
+      [spot.get_location_wrt(self.robot.deck, "c", "c", "b") for spot in tip_spots]
+    )
+    return rack
+
+  async def pick_up_tips(
+    self,
+    tip_spots: Sequence[TipSpot],
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Pick up one tip per nozzle with one command, then retract to traversal height."""
+    await self._pick_up_tips(tip_spots, offset)
+
+  async def drop_tips(
+    self,
+    tip_spots: Sequence[TipSpot],
+    offset: Optional[Coordinate] = None,
+    allow_nonzero_volume: bool = False,
+  ) -> None:
+    """Drop all mounted tips into a rack with one command, then retract."""
+    await self._drop_tips(tip_spots, offset, allow_nonzero_volume)
+
+  async def return_tips(
+    self,
+    offset: Optional[Coordinate] = None,
+    allow_nonzero_volume: bool = False,
+  ) -> None:
+    """Return all mounted tips to their pickup positions, then retract."""
+    await self._return_tips(offset, allow_nonzero_volume)
+
+  async def discard_tips(
+    self,
+    offset: Optional[Coordinate] = None,
+    allow_nonzero_volume: bool = False,
+  ) -> None:
+    """Discard all mounted tips into fixed trash and retract to traversal height."""
+    await self._discard_tips(offset, allow_nonzero_volume)
+
+  async def aspirate(
+    self,
+    containers: Sequence[Container],
+    volume: float,
+    flow_rate: Optional[float] = None,
+    liquid_height: float = 0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Aspirate ``volume`` per nozzle from a full column, then retract."""
+    await self._aspirate(tuple(containers), volume, flow_rate, liquid_height, offset)
+
+  async def dispense(
+    self,
+    containers: Sequence[Container],
+    volume: float,
+    flow_rate: Optional[float] = None,
+    liquid_height: float = 0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Dispense ``volume`` per nozzle into a full column, then retract."""
+    await self._dispense(tuple(containers), volume, flow_rate, liquid_height, offset)
+
+  async def mix(
+    self,
+    containers: Sequence[Container],
+    volume: float,
+    repetitions: int,
+    aspiration_flow_rate: Optional[float] = None,
+    dispense_flow_rate: Optional[float] = None,
+    liquid_height: float = 0,
+    offset: Optional[Coordinate] = None,
+  ) -> None:
+    """Mix ``volume`` per nozzle in a full column, then retract."""
+    await self._mix(
+      tuple(containers),
+      volume,
+      repetitions,
+      aspiration_flow_rate,
+      dispense_flow_rate,
+      liquid_height,
+      offset,
+    )
