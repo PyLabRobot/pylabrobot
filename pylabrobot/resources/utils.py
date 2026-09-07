@@ -1,6 +1,6 @@
 import re
 from itertools import groupby
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -86,6 +86,7 @@ def create_equally_spaced_2d(
   dz: float,
   item_dx: Optional[float],
   item_dy: Optional[float],
+  name_for: Optional[Callable[[int, int], str]] = None,
   **kwargs,
 ) -> List[List[T]]:
   """Make equally spaced resources in a 2D grid. Also see :meth:`create_equally_spaced_x` and
@@ -100,6 +101,7 @@ def create_equally_spaced_2d(
     dz: The z coordinate for all items
     item_dx: The spacing of the items in the x direction (origin to origin), or None when num_items_x is 1
     item_dy: The spacing of the items in the y direction (origin to origin), or None when num_items_y is 1
+    name_for: What to call the item at a grid position. Defaults to the class name and the position.
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
@@ -120,7 +122,7 @@ def create_equally_spaced_2d(
   for i in range(num_items_x):
     items.append([])
     for j in range(num_items_y):
-      name = f"{klass.__name__.lower()}_{i}_{j}"
+      name = name_for(i, j) if name_for is not None else f"{klass.__name__.lower()}_{i}_{j}"
       item = klass(name=name, **kwargs)
       item.location = Coordinate(
         x=dx + i * spacing_x,
@@ -219,6 +221,7 @@ def create_ordered_items_2d(
   dz: float,
   item_dx: Optional[float],
   item_dy: Optional[float],
+  name_prefix: Optional[str] = None,
   **kwargs,
 ) -> Dict[str, T]:
   """Make ordered resources in a 2D grid, with the keys being the identifiers in transposed
@@ -233,12 +236,19 @@ def create_ordered_items_2d(
     dz: The z coordinate for all items
     item_dx: The spacing of the items in the x direction (origin to origin), or None when num_items_x is 1
     item_dy: The spacing of the items in the y direction (origin to origin), or None when num_items_y is 1
+    name_prefix: What the resource holding these items is called. Every item is named after it, so
+      a well of the plate `plate` is `plate_well_A1`. Pass the name the holder is being created
+      with; an item cannot be renamed once it exists.
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
     A dict of resources. The keys are the identifiers in transposed MS-Excel format, so the top
     left item is "A1", the item to the bottom is "B1", the item to the right is "A2", and so on.
   """
+
+  def name_for(i: int, j: int) -> str:
+    item = f"{klass.__name__.lower()}_{row_index_to_label(j)}{i + 1}"
+    return item if name_prefix is None else f"{name_prefix}_{item}"
 
   items = create_equally_spaced_2d(
     klass=klass,
@@ -249,11 +259,11 @@ def create_ordered_items_2d(
     dz=dz,
     item_dx=item_dx,
     item_dy=item_dy,
+    # Named here rather than renamed afterwards: a name is fixed when a resource is created.
+    name_for=name_for,
     **kwargs,
   )
   keys = [f"{row_index_to_label(j)}{i + 1}" for i in range(num_items_x) for j in range(num_items_y)]
-  for key, item in zip(keys, (item for sublist in items for item in sublist)):
-    item.name = f"{klass.__name__.lower()}_{key}"
   return dict(zip(keys, [item for sublist in items for item in sublist]))
 
 

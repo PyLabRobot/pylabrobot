@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, cast
+from typing import Any, Dict, Generic, List, Mapping, Optional, Type, TypeVar, Union, cast
 
 from pylabrobot.resources.resource_holder import ResourceHolder, get_child_location
 
@@ -28,6 +28,7 @@ class Carrier(Resource, Generic[S]):
     sites: Optional[Dict[int, S]] = None,
     category: Optional[str] = "carrier",
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name=name,
@@ -36,6 +37,7 @@ class Carrier(Resource, Generic[S]):
       size_z=size_z,
       category=category,
       model=model,
+      metadata=metadata,
     )
 
     sites = sites or {}
@@ -135,6 +137,7 @@ class TipCarrier(Carrier):
     sites: Optional[Dict[int, ResourceHolder]] = None,
     category="tip_carrier",
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name,
@@ -144,6 +147,7 @@ class TipCarrier(Carrier):
       sites,
       category=category,
       model=model,
+      metadata=metadata,
     )
 
 
@@ -160,9 +164,17 @@ class PlateHolder(ResourceHolder):
     child_location=Coordinate.zero(),
     category="plate_holder",
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
-      name, size_x, size_y, size_z, category=category, model=model, child_location=child_location
+      name,
+      size_x,
+      size_y,
+      size_z,
+      category=category,
+      model=model,
+      child_location=child_location,
+      metadata=metadata,
     )
     if pedestal_size_z is None:
       raise ValueError(
@@ -263,6 +275,7 @@ class PlateCarrier(Carrier):
     sites: Optional[Dict[int, PlateHolder]] = None,
     category="plate_carrier",
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name,
@@ -272,6 +285,7 @@ class PlateCarrier(Carrier):
       sites,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self.sites: Dict[int, PlateHolder] = sites or {}  # fix type
 
@@ -320,6 +334,7 @@ class MFXCarrier(Carrier[ResourceHolder]):
     sites: Optional[Dict[int, ResourceHolder]] = None,
     category="mfx_carrier",
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name=name,
@@ -329,6 +344,7 @@ class MFXCarrier(Carrier[ResourceHolder]):
       sites=sites,
       category=category,
       model=model,
+      metadata=metadata,
     )
 
 
@@ -346,6 +362,7 @@ class TubeCarrier(Carrier):
     sites: Optional[Dict[int, ResourceHolder]] = None,
     category="tube_carrier",
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name,
@@ -355,6 +372,7 @@ class TubeCarrier(Carrier):
       sites,
       category=category,
       model=model,
+      metadata=metadata,
     )
 
 
@@ -372,6 +390,7 @@ class TroughCarrier(Carrier):
     sites: Optional[Dict[int, ResourceHolder]] = None,
     category="trough_carrier",
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     super().__init__(
       name,
@@ -381,6 +400,7 @@ class TroughCarrier(Carrier):
       sites,
       category=category,
       model=model,
+      metadata=metadata,
     )
 
 

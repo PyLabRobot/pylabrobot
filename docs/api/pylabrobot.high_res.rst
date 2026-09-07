@@ -12,3 +12,16 @@ pylabrobot.high_res package
 
     HighResLidValet
     HighResLidValetError
+
+.. currentmodule:: pylabrobot.high_res.sample_storage
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+
+    AmbiStore
+    EnvironmentControl
+    SteriStore
+    TundraStore
+    UnresolvedPlateTransfer
+    high_res_stacker

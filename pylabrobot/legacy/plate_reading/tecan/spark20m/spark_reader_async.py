@@ -272,7 +272,7 @@ class SparkReaderAsync:
     self,
     reader: USB,
     count: int = 512,
-    read_timeout: int = 2000,
+    read_timeout: int = 5000,
   ) -> "asyncio.Future[Any]":
     # Convert read_timeout from milliseconds to seconds for USB class.
     return asyncio.ensure_future(
@@ -292,35 +292,39 @@ class SparkReaderAsync:
   ) -> Optional[Dict[str, Any]]:
     try:
       data = await read_task
-
-      if data is None:
-        logging.warning("Read task returned None")
-        return None
-
-      data_bytes = bytes(data)
-      logging.debug(f"Read task completed ({len(data_bytes)} bytes): {data_bytes.hex()}")
-
       parsed = {}
-      if len(data_bytes) > 0:
-        try:
-          parsed = parse_single_spark_packet(data_bytes)
-        except ValueError as e:
-          logging.warning(f"Failed to parse packet: {e}")
-          # Treat as not ready/retry
 
-      if parsed.get("type") == "RespMessage":
-        self.msgs.append(parsed["payload"])
-      elif parsed.get("type") == "RespError":
-        raise SparkError(parsed)
+      if data is not None:
+        data_bytes = bytes(data)
+        logging.debug(f"Read task completed ({len(data_bytes)} bytes): {data_bytes.hex()}")
+        if len(data_bytes) > 0:
+          try:
+            parsed = parse_single_spark_packet(data_bytes)
+          except ValueError as e:
+            logging.warning(f"Failed to parse packet: {e}")
+
+        if parsed.get("type") == "RespMessage":
+          self.msgs.append(parsed["payload"])
+        elif parsed.get("type") == "RespError":
+          raise SparkError(parsed)
+      else:
+        # Over USBIP the initial read can time out before the device responds.
+        # Fall through to the retry loop instead of giving up immediately.
+        logging.debug("Initial read returned None, entering retry loop...")
 
       deadline = time.monotonic() + timeout
       while parsed.get("type") != "RespReady" and time.monotonic() < deadline:
         try:
-          await asyncio.sleep(0.01)
-          logging.debug(f"Still busy, retrying... time left: {deadline - time.monotonic():.1f}s")
+          remaining = deadline - time.monotonic()
+          if remaining <= 0:
+            break
+          # Use min(1.0, remaining) — USBIP doesn't reliably honor sub-second
+          # USB timeouts, so 20ms reads return immediately as empty on some hosts.
+          usb_timeout = min(1.0, remaining)
+          logging.debug(f"Still busy, retrying... time left: {remaining:.1f}s")
 
           resp = await self._read_packet_in_executor(
-            reader=reader, endpoint=None, size=512, timeout=0.02
+            reader=reader, endpoint=None, size=512, timeout=usb_timeout
           )
 
           if resp:
@@ -372,7 +376,7 @@ class SparkReaderAsync:
         f"Starting background reader for {device_type.name} {endpoint.name} (0x{endpoint.value:02x})"
       )
       while not stop_event.is_set():
-        await asyncio.sleep(0.2)  # Avoid tight loop
+        await asyncio.sleep(0.05)  # 50ms polling to capture fast spectrum data bursts
         try:
           # timeout in seconds
           data = await self._read_packet_in_executor(
