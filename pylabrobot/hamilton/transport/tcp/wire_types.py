@@ -15,7 +15,7 @@ from __future__ import annotations
 import struct as _struct
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import TYPE_CHECKING, Annotated, Any, Optional, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, Any, Optional, Protocol, Sequence, get_args, get_origin
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.transport.tcp.messages import HoiParams
@@ -149,6 +149,14 @@ class Array(WireType):
     return list(values)
 
 
+class HoiStruct(Protocol):
+  """A structure that explicitly encodes its fields in firmware-defined order."""
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Append this structure's fields to the supplied fragment builder."""
+    ...
+
+
 class Struct(WireType):
   """Nested structure -- recurse via ``HoiParams.from_struct``."""
 
@@ -157,7 +165,8 @@ class Struct(WireType):
   def __init__(self):
     super().__init__(HamiltonDataType.STRUCTURE)
 
-  def encode_into(self, value, params: HoiParams) -> HoiParams:
+  def encode_into(self, value: HoiStruct, params: HoiParams) -> HoiParams:
+    """Wrap the structure's explicitly encoded fields in a structure fragment."""
     from pylabrobot.hamilton.transport.tcp.messages import HoiParams as HP
 
     return params._add_fragment(self.type_id, HP.from_struct(value).build())
@@ -174,7 +183,8 @@ class StructArray(WireType):
   def __init__(self):
     super().__init__(HamiltonDataType.STRUCTURE_ARRAY)
 
-  def encode_into(self, value, params: HoiParams) -> HoiParams:
+  def encode_into(self, value: Sequence[HoiStruct], params: HoiParams) -> HoiParams:
+    """Encode each structure with its own length-prefixed fragment."""
     from pylabrobot.hamilton.transport.tcp.messages import HoiParams as HP
 
     inner = b""

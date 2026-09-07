@@ -1306,15 +1306,6 @@ class TestIntrospectionTypeGridInvariants(unittest.TestCase):
 
 
 class TestIntrospectionTypeSetsAndClassification(unittest.TestCase):
-  @staticmethod
-  def _ids_for_flag(flag: str) -> tuple[int, ...]:
-    """Collect all IDs from rows matching a boolean flag (is_struct_kind, is_enum_kind, etc.)."""
-    ids: list[int] = []
-    for row in introspection_mod._HOI_TYPE_ROWS:
-      if getattr(row, flag):
-        ids.extend(tid for tid in row.ids if tid != 0)
-    return tuple(ids)
-
   def test_complex_method_and_struct_sets_are_disjoint(self):
     self.assertTrue(
       introspection_mod._COMPLEX_METHOD_TYPE_IDS.isdisjoint(

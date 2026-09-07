@@ -37,6 +37,7 @@ from pylabrobot.hamilton.transport.tcp.protocol import (
 )
 from pylabrobot.hamilton.transport.tcp.wire_types import (
   HcResultEntry,
+  HoiStruct,
   decode_fragment,
 )
 from pylabrobot.io.binary import Reader, Writer
@@ -175,30 +176,17 @@ class HoiParams:
     return self.add(value, Str)
 
   # ------------------------------------------------------------------
-  # Generic dataclass serialiser (wire_types.py Annotated metadata)
+  # Explicit structure serialization
   # ------------------------------------------------------------------
 
   @classmethod
-  def from_struct(cls, obj) -> "HoiParams":
-    """Serialize any dataclass whose fields use ``Annotated`` wire-type metadata.
+  def from_struct(cls, obj: HoiStruct) -> "HoiParams":
+    """Encode a structure using its explicit ``encode_into(params)`` method.
 
-    Fields without ``Annotated`` metadata (e.g. plain ``Address``) are skipped.
-    The polymorphic ``WireType.encode_into`` on each annotation handles all
-    dispatch -- no if/elif required here.
+    The structure selects its fields, wire types, and ordering. ``Annotated``
+    fields describe decoding; encoding requires an explicit implementation.
     """
-    from dataclasses import fields as dc_fields
-    from typing import get_type_hints
-
-    from pylabrobot.hamilton.transport.tcp.wire_types import wire_type_of
-
-    hints = get_type_hints(type(obj), include_extras=True)
-    params = cls()
-    for f in dc_fields(obj):
-      meta = wire_type_of(hints.get(f.name))
-      if meta is None:
-        continue
-      params = meta.encode_into(getattr(obj, f.name), params)
-    return cast("HoiParams", params)
+    return obj.encode_into(cls())
 
   def build(self) -> bytes:
     """Return concatenated DataFragments."""
@@ -420,8 +408,8 @@ StructT = TypeVar("StructT")
 def parse_into_struct(parser: HoiParamsParser, cls: type[StructT]) -> StructT:
   """Decode a sequence of DataFragments into a dataclass instance using its wire-type annotations.
 
-  Mirrors HoiParams.from_struct: walks the same Annotated field metadata and, for each field in
-  order, consumes one fragment (via parser.parse_next()). Scalars/arrays/string yield the value
+  Walks Annotated field metadata and, for each field in order, consumes one fragment
+  (via parser.parse_next()). Scalars/arrays/string yield the value
   as returned by the parser; Struct recurses on the payload bytes; StructArray yields a list of
   recursively decoded instances.
 
