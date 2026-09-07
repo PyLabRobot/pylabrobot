@@ -185,9 +185,9 @@ class HoiError(Exception):
   """Raised for ``STATUS_EXCEPTION`` / ``COMMAND_EXCEPTION`` when the command wire shape
   does not carry per-channel parameters (e.g. void MLPrep queries).
 
-  Wraps the same enriched per-entry exceptions as the channelized path
-  (``describe_entry`` / error tables); :attr:`exceptions` is keyed by **wire entry
-  index**, not physical channel index. Use :attr:`entries` for raw
+  Preserves offline per-entry descriptions and the original payload, including
+  errors without parseable entries. :attr:`exceptions` is keyed by wire entry
+  index; :attr:`action` identifies the terminal HOI action. Use :attr:`entries` for raw
   :class:`HcResultEntry` data.
   """
 
@@ -197,7 +197,9 @@ class HoiError(Exception):
     exceptions: Dict[int, Exception],
     entries: List[HcResultEntry],
     raw_response: bytes,
+    action: Optional[int] = None,
   ) -> None:
+    self.action = action
     self.exceptions = exceptions
     self.entries = entries
     self.raw_response = raw_response
@@ -205,4 +207,4 @@ class HoiError(Exception):
 
   def _format_message(self) -> str:
     parts = [f"entry[{i}]: {self.exceptions[i]}" for i in sorted(self.exceptions)]
-    return "HoiError(" + "; ".join(parts) + ")"
+    return f"HoiError(action={self.action}, " + "; ".join(parts) + ")"

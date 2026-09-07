@@ -18,9 +18,9 @@ live in :mod:`pylabrobot.hamilton.transport.tcp.hoi_error`.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from dataclasses import fields as dc_fields
-from typing import Any, List, cast, get_args, get_origin, get_type_hints
+from typing import Any, List, TypeVar, cast, get_args, get_origin, get_type_hints
 
 from pylabrobot.hamilton.transport.tcp.hoi_error import parse_hc_results_from_semicolon_string
 from pylabrobot.hamilton.transport.tcp.packets import (
@@ -220,7 +220,7 @@ class HoiParamsParser:
     if not isinstance(data, bytes):
       raise TypeError(
         f"HoiParamsParser requires bytes, got {type(data).__name__}. "
-        "Use get_structs_raw() and inspect_hoi_params() to see the wire format."
+        "Use exchange() and inspect_hoi_params() to see the wire format."
       )
     self._data = data
     self._offset = 0
@@ -414,26 +414,10 @@ def log_hoi_result_entries(command_name: str, entries: list[HcResultEntry], *, s
     )
 
 
-def interpret_hoi_success_payload(command: Any, params_bytes: bytes) -> Any:
-  """Decode command ``Response`` from HOI params.
-
-  Used for CommandResponse / StatusResponse payloads after exception and
-  warning-prefix handling. Success frames carry only the fields declared in
-  the Response dataclass — no HoiResult trailer (see firmware yaml dumps and
-  protocol decoder behavior; HoiResult only rides on warning-prefix or exception
-  frames).
-  """
-  cls = type(command)
-  if not params_bytes:
-    return None
-
-  if cls.Response is not None:
-    return parse_into_struct(HoiParamsParser(params_bytes), cls.Response)
-
-  return command.parse_response_parameters(params_bytes)
+StructT = TypeVar("StructT")
 
 
-def parse_into_struct(parser: HoiParamsParser, cls: type) -> Any:
+def parse_into_struct(parser: HoiParamsParser, cls: type[StructT]) -> StructT:
   """Decode a sequence of DataFragments into a dataclass instance using its wire-type annotations.
 
   Mirrors HoiParams.from_struct: walks the same Annotated field metadata and, for each field in
@@ -458,6 +442,8 @@ def parse_into_struct(parser: HoiParamsParser, cls: type) -> Any:
     wire_type_of,
   )
 
+  if not is_dataclass(cls):
+    raise ValueError("Response type must be a dataclass")
   hints = get_type_hints(cls, include_extras=True)
   values: dict[str, Any] = {}
   for f in dc_fields(cls):

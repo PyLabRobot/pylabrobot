@@ -3,9 +3,8 @@
 Provides dynamic discovery via Interface 0 methods (GetObject, GetMethod,
 GetStructs, GetEnums, GetInterfaces, GetSubobjectAddress).
 
-:class:`HamiltonIntrospection` receives its transport dependencies (registry,
-send_discovery_command, send_query) as explicit callables — no back-reference
-to the client. The client constructs it via the lazy
+:class:`HamiltonIntrospection` receives a connection's registry, global addresses,
+and typed executor. Its caches expire with that connection. Applications use the
 :attr:`~pylabrobot.hamilton.transport.tcp.tcp.HamiltonTCPClient.introspection` property,
 which is the **only** supported entry point from application code.
 
@@ -42,14 +41,27 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Set, Tuple, Union, cast
+from typing import (
+  Any,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Protocol,
+  Sequence,
+  Set,
+  Tuple,
+  TypeVar,
+  Union,
+  cast,
+)
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.messages import (
   PADDED_FLAG,
   HoiParams,
   HoiParamsParser,
-  inspect_hoi_params,
+  parse_into_struct,
 )
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import HamiltonProtocol
@@ -974,7 +986,8 @@ class GlobalTypePool:
 # ============================================================================
 
 
-class GetObjectCommand(TCPCommand):
+@dataclass(frozen=True)
+class GetObjectCommand(TCPCommand["GetObjectCommand.Response"]):
   """Get object metadata (command_id=1)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -982,8 +995,10 @@ class GetObjectCommand(TCPCommand):
   command_id = 1
   action_code = 0  # QUERY
 
-  def __init__(self, object_address: Address):
-    super().__init__(object_address)
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> GetObjectCommand.Response:
+    """Decode the declared response fields."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
 
   @dataclass(frozen=True)
   class Response:
@@ -993,7 +1008,8 @@ class GetObjectCommand(TCPCommand):
     subobject_count: U16
 
 
-class GetMethodCommand(TCPCommand):
+@dataclass(frozen=True)
+class GetMethodCommand(TCPCommand[MethodInfo]):
   """Get method signature (command_id=2)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -1001,16 +1017,14 @@ class GetMethodCommand(TCPCommand):
   command_id = 2
   action_code = 0  # QUERY
 
-  def __init__(self, object_address: Address, method_index: int):
-    super().__init__(object_address)
-    self.method_index = method_index
+  method_index: int
 
   def build_parameters(self) -> HoiParams:
     """Build parameters for get_method command."""
     return HoiParams().u32(self.method_index)
 
   @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
+  def parse_response_parameters(cls, data: bytes) -> MethodInfo:
     """Parse get_method response."""
     parser = HoiParamsParser(data)
 
@@ -1067,19 +1081,20 @@ class GetMethodCommand(TCPCommand):
           "not in _HOI_ID_TO_WIRE — update _HOI_TYPE_ROWS or add an override."
         )
 
-    return {
-      "interface_id": interface_id,
-      "call_type": call_type,
-      "method_id": method_id,
-      "name": name,
-      "parameter_types": parameter_types,
-      "parameter_labels": parameter_labels,
-      "return_types": return_types,
-      "return_labels": return_labels,
-    }
+    return MethodInfo(
+      interface_id=interface_id,
+      call_type=call_type,
+      method_id=method_id,
+      name=name,
+      parameter_types=parameter_types,
+      parameter_labels=parameter_labels,
+      return_types=return_types,
+      return_labels=return_labels,
+    )
 
 
-class GetSubobjectAddressCommand(TCPCommand):
+@dataclass(frozen=True)
+class GetSubobjectAddressCommand(TCPCommand["GetSubobjectAddressCommand.Response"]):
   """Get subobject address (command_id=3)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -1087,13 +1102,16 @@ class GetSubobjectAddressCommand(TCPCommand):
   command_id = 3
   action_code = 0  # QUERY
 
-  def __init__(self, object_address: Address, subobject_index: int):
-    super().__init__(object_address)
-    self.subobject_index = subobject_index
+  subobject_index: int
 
   def build_parameters(self) -> HoiParams:
     """Build parameters for get_subobject_address command."""
     return HoiParams().u16(self.subobject_index)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> GetSubobjectAddressCommand.Response:
+    """Decode the declared response fields."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
 
   @dataclass(frozen=True)
   class Response:
@@ -1102,7 +1120,8 @@ class GetSubobjectAddressCommand(TCPCommand):
     object_id: U16
 
 
-class GetInterfacesCommand(TCPCommand):
+@dataclass(frozen=True)
+class GetInterfacesCommand(TCPCommand["GetInterfacesCommand.Response"]):
   """Get available interfaces (command_id=4).
 
   Firmware signature: InterfaceDescriptors(()) -> interfaceIds: I8_ARRAY, interfaceDescriptors: STRING_ARRAY
@@ -1114,8 +1133,10 @@ class GetInterfacesCommand(TCPCommand):
   command_id = 4
   action_code = 0  # QUERY
 
-  def __init__(self, object_address: Address):
-    super().__init__(object_address)
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> GetInterfacesCommand.Response:
+    """Decode the declared response fields."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
 
   @dataclass(frozen=True)
   class Response:
@@ -1123,7 +1144,8 @@ class GetInterfacesCommand(TCPCommand):
     interface_names: StrArray
 
 
-class GetEnumsCommand(TCPCommand):
+@dataclass(frozen=True)
+class GetEnumsCommand(TCPCommand["GetEnumsCommand.Response"]):
   """Get enum definitions (command_id=5).
 
   Firmware signature: EnumInfo(interfaceId) -> enumerationNames: STRING_ARRAY,
@@ -1137,13 +1159,16 @@ class GetEnumsCommand(TCPCommand):
   command_id = 5
   action_code = 0  # QUERY
 
-  def __init__(self, object_address: Address, target_interface_id: int):
-    super().__init__(object_address)
-    self.target_interface_id = target_interface_id
+  target_interface_id: int
 
   def build_parameters(self) -> HoiParams:
     """Build parameters for get_enums command."""
     return HoiParams().u8(self.target_interface_id)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> GetEnumsCommand.Response:
+    """Decode the declared response fields."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
 
   @dataclass(frozen=True)
   class Response:
@@ -1153,7 +1178,8 @@ class GetEnumsCommand(TCPCommand):
     value_names: StrArray
 
 
-class GetStructsCommand(TCPCommand):
+@dataclass(frozen=True)
+class GetStructsCommand(TCPCommand["GetStructsCommand.Response"]):
   """Get struct definitions (command_id=6)."""
 
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
@@ -1161,13 +1187,16 @@ class GetStructsCommand(TCPCommand):
   command_id = 6
   action_code = 0  # QUERY
 
-  def __init__(self, object_address: Address, target_interface_id: int):
-    super().__init__(object_address)
-    self.target_interface_id = target_interface_id
+  target_interface_id: int
 
   def build_parameters(self) -> HoiParams:
     """Build parameters for get_structs command."""
     return HoiParams().u8(self.target_interface_id)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> GetStructsCommand.Response:
+    """Decode the declared response fields."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
 
   @dataclass(frozen=True)
   class Response:
@@ -1206,6 +1235,23 @@ GET_STRUCTS = 6
 # ============================================================================
 
 
+ResultT = TypeVar("ResultT")
+
+
+class CommandExecutor(Protocol):
+  """A single connection's typed request execution and lifetime check."""
+
+  def require_active(self) -> None:
+    """Reject access after the owning session ends or becomes uncertain."""
+    ...
+
+  async def execute(
+    self, command: TCPCommand[ResultT], *, read_timeout: Optional[float] = None
+  ) -> ResultT:
+    """Exchange and decode a request, raising on firmware errors."""
+    ...
+
+
 class HamiltonIntrospection:
   """High-level API for Hamilton introspection.
 
@@ -1213,8 +1259,8 @@ class HamiltonIntrospection:
   methods are supported and only calls those. Interfaces are per-object;
   there is no aggregation from children.
 
-  Dependencies are injected as explicit callables rather than a back-reference
-  to the client, avoiding the circular reference and the need for a Protocol shim.
+  The executor and all caches belong to one connection. Cached access also
+  checks its lifetime, so a retained facade cannot cross a reconnect.
   Prefer :attr:`~pylabrobot.hamilton.transport.tcp.tcp.HamiltonTCPClient.introspection`
   over constructing this class directly from application code.
   """
@@ -1223,13 +1269,11 @@ class HamiltonIntrospection:
     self,
     registry: ObjectRegistry,
     global_object_addresses: list[Address],
-    send_discovery_command: Callable,
-    send_query: Callable,
+    executor: CommandExecutor,
   ):
     self._registry = registry
     self._global_object_addresses = global_object_addresses
-    self._send_discovery_command = send_discovery_command
-    self._send_query = send_query
+    self._executor = executor
     # Session caches (invalidated by replacing the HamiltonIntrospection instance, e.g. reconnect).
     self._method_table_by_address: Dict[Address, List[MethodInfo]] = {}
     self._iface_types: Dict[
@@ -1370,6 +1414,7 @@ class HamiltonIntrospection:
     Pass ``_object_info`` / ``_supported`` when the caller already has them to avoid redundant
     Interface-0 queries on the cold path.
     """
+    self._executor.require_active()
     addr = await self._resolve_target_address(address)
     cached = self._method_table_by_address.get(addr)
     if cached is not None:
@@ -1401,12 +1446,14 @@ class HamiltonIntrospection:
     self, address: Union[Address, str], interface_id: int
   ) -> List[MethodInfo]:
     """Return methods for *interface_id* using the cached method table when warm."""
+    self._executor.require_active()
     addr = await self._resolve_target_address(address)
     table = await self.ensure_method_table(addr)
     return [m for m in table if m.interface_id == interface_id]
 
   async def ensure_structs_enums(self, address: Union[Address, str], interface_id: int) -> None:
     """Run GetStructs/GetEnums for one HO interface and cache under ``(address, interface_id)``."""
+    self._executor.require_active()
     addr = await self._resolve_target_address(address)
     key = (addr, interface_id)
     if key in self._iface_types:
@@ -1431,6 +1478,7 @@ class HamiltonIntrospection:
     self, address: Union[Address, str], interface_id: int
   ) -> Optional[str]:
     """Return interface name for ``(address, interface_id)`` using session cache."""
+    self._executor.require_active()
     addr = await self._resolve_target_address(address)
     infos = self._interfaces_by_address.get(addr)
     if infos is None:
@@ -1445,6 +1493,7 @@ class HamiltonIntrospection:
     self, address: Union[Address, str], interface_id: int, code: int
   ) -> Optional[str]:
     """Resolve HcResult enum text for one interface using cached enums."""
+    self._executor.require_active()
     addr = await self._resolve_target_address(address)
     key = (addr, interface_id)
     if key not in self._iface_types:
@@ -1455,6 +1504,7 @@ class HamiltonIntrospection:
     self, global_addresses: Optional[Sequence[Address]] = None
   ) -> GlobalTypePool:
     """Return the session-global :class:`GlobalTypePool` (``source_id=1``), building once."""
+    self._executor.require_active()
     if self._global_type_pool_singleton is not None:
       return self._global_type_pool_singleton
     addrs = (
@@ -1473,6 +1523,7 @@ class HamiltonIntrospection:
     max_methods: int = 50,
   ) -> List[str]:
     """Resolved signature strings for up to *max_methods* methods on *interface_id* (lazy types)."""
+    self._executor.require_active()
     addr = await self._resolve_target_address(address)
     methods = [m for m in await self.ensure_method_table(addr) if m.interface_id == interface_id][
       :max_methods
@@ -1543,6 +1594,7 @@ class HamiltonIntrospection:
     firmware trees do not trigger a full tree walk.
     Raises :exc:`KeyError` if the path cannot be found.
     """
+    self._executor.require_active()
     cached = self._registry.address_for(path)
     if cached is not None:
       return cached
@@ -1610,6 +1662,7 @@ class HamiltonIntrospection:
 
   async def get_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
     """Return cached firmware tree, or build and cache it when missing."""
+    self._executor.require_active()
     if not refresh and self._firmware_tree_cache is not None:
       return self._firmware_tree_cache
 
@@ -1620,6 +1673,7 @@ class HamiltonIntrospection:
     self, refresh: bool = False
   ) -> List[Tuple[str, Address, ObjectInfo]]:
     """Firmware tree as a flat preorder list of ``(path, address, object_info)``."""
+    self._executor.require_active()
     tree = await self.get_firmware_tree(refresh=refresh)
     return flatten_firmware_tree(tree)
 
@@ -1631,6 +1685,7 @@ class HamiltonIntrospection:
     Used to guard calls so we never send an Interface 0 command the object
     did not advertise.
     """
+    self._executor.require_active()
     cached = self._supported_i0_by_address.get(address)
     if cached is not None:
       return set(cached)
@@ -1652,10 +1707,9 @@ class HamiltonIntrospection:
     Returns:
       Object metadata
     """
+    self._executor.require_active()
     command = GetObjectCommand(address)
-    response = await self._send_discovery_command(command)
-    if response is None:
-      raise RuntimeError("GetObjectCommand returned None")
+    response = await self._executor.execute(command)
 
     return ObjectInfo(
       name=response.name,
@@ -1675,19 +1729,11 @@ class HamiltonIntrospection:
     Returns:
       Method signature
     """
+    self._executor.require_active()
     command = GetMethodCommand(address, method_index)
-    response = await self._send_discovery_command(command)
+    response = await self._executor.execute(command)
 
-    return MethodInfo(
-      interface_id=response["interface_id"],
-      call_type=response["call_type"],
-      method_id=response["method_id"],
-      name=response["name"],
-      parameter_types=response.get("parameter_types", []),
-      parameter_labels=response.get("parameter_labels", []),
-      return_types=response.get("return_types", []),
-      return_labels=response.get("return_labels", []),
-    )
+    return response
 
   async def get_subobject_address(self, address: Address, subobject_index: int) -> Address:
     """Get subobject address.
@@ -1699,10 +1745,9 @@ class HamiltonIntrospection:
     Returns:
       Subobject address
     """
+    self._executor.require_active()
     command = GetSubobjectAddressCommand(address, subobject_index)
-    response = await self._send_discovery_command(command)
-    if response is None:
-      raise RuntimeError("GetSubobjectAddressCommand returned None")
+    response = await self._executor.execute(command)
 
     return Address(response.module_id, response.node_id, response.object_id)
 
@@ -1726,6 +1771,7 @@ class HamiltonIntrospection:
     Returns:
       List of interface information
     """
+    self._executor.require_active()
     if _supported is None:
       _supported = await self.get_supported_interface0_method_ids(address)
     if GET_INTERFACES not in _supported:
@@ -1735,9 +1781,7 @@ class HamiltonIntrospection:
       )
       return []
     command = GetInterfacesCommand(address)
-    response = await self._send_discovery_command(command)
-    if response is None:
-      raise RuntimeError("GetInterfacesCommand returned None")
+    response = await self._executor.execute(command)
 
     ids = list(response.interface_ids)
     names = list(response.interface_names)
@@ -1766,10 +1810,9 @@ class HamiltonIntrospection:
     Returns:
       List of enum definitions
     """
+    self._executor.require_active()
     command = GetEnumsCommand(address, interface_id)
-    response = await self._send_discovery_command(command)
-    if response is None:
-      raise RuntimeError("GetEnumsCommand returned None")
+    response = await self._executor.execute(command)
 
     enum_names = list(response.enum_names)
     value_counts = list(response.value_counts)
@@ -1788,24 +1831,6 @@ class HamiltonIntrospection:
       result.append(EnumInfo(enum_id=i, name=enum_names[i], values=vals))
       offset += cnt
     return result
-
-  async def _get_structs_raw(self, address: Address, interface_id: int) -> tuple[bytes, List[dict]]:
-    """Get raw GetStructs response bytes and a fragment-by-fragment breakdown.
-
-    Use this to see exactly what the device sends so response parsing can
-    match the wire format. Returns (params_bytes, inspect_hoi_params(params)).
-
-    Example:
-      raw, fragments = await intro.get_structs_raw(mph_addr, 1)
-      for i, f in enumerate(fragments):
-        print(f\"{i}: type_id={f['type_id']} len={f['length']} decoded={f['decoded']!r}\")
-    """
-    command = GetStructsCommand(address, interface_id)
-    result = await self._send_query(command)
-    if result is None:
-      raise RuntimeError("GetStructs query returned no data.")
-    (params,) = result
-    return params, inspect_hoi_params(params)
 
   async def get_structs(self, address: Address, interface_id: int) -> List[StructInfo]:
     """Get struct definitions.
@@ -1826,10 +1851,9 @@ class HamiltonIntrospection:
     Returns:
       List of struct definitions
     """
+    self._executor.require_active()
     command = GetStructsCommand(address, interface_id)
-    response = await self._send_discovery_command(command)
-    if response is None:
-      raise RuntimeError("GetStructsCommand returned None")
+    response = await self._executor.execute(command)
 
     struct_names = list(response.struct_names)
     # field_counts = numberStructureElements from the device: logical fields per struct.
@@ -1884,6 +1908,7 @@ class HamiltonIntrospection:
     Returns:
       TypeRegistry with all type information for this object
     """
+    self._executor.require_active()
     address = await self._resolve_target_address(address)
     if global_pool is None:
       global_pool = await self.ensure_global_type_pool()
@@ -1933,6 +1958,7 @@ class HamiltonIntrospection:
     Returns:
       TypeRegistry that can resolve types from both parent and children.
     """
+    self._executor.require_active()
     address = await self._resolve_target_address(address)
     supported = await self.get_supported_interface0_method_ids(address)
     registry = await self.build_type_registry(
@@ -1985,6 +2011,7 @@ class HamiltonIntrospection:
     Returns:
       GlobalTypePool with all global structs and enums.
     """
+    self._executor.require_active()
     return await self._build_global_type_pool_impl(global_addresses)
 
   async def get_method_by_id(
@@ -2009,6 +2036,7 @@ class HamiltonIntrospection:
     Returns:
       MethodInfo for the matching method, or None if not found.
     """
+    self._executor.require_active()
     if registry is not None:
       cached = registry.get_method(interface_id, method_id)
       if cached is not None:
@@ -2042,6 +2070,7 @@ class HamiltonIntrospection:
     Returns:
       Human-readable signature string, or a descriptive error string.
     """
+    self._executor.require_active()
     address = await self._resolve_target_address(address)
     if registry is not None:
       method = await self.get_method_by_id(address, interface_id, method_id, registry=registry)
