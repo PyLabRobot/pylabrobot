@@ -13,6 +13,8 @@ from typing import (
   TypeVar,
 )
 
+from pylabrobot.events import emit_event
+from pylabrobot.hamilton.protocol.text.framing import to_list
 from pylabrobot.io.usb import USB
 
 T = TypeVar("T")
@@ -113,41 +115,8 @@ class HamiltonUSBDriver(metaclass=ABCMeta):
     return self.id_ % 10000
 
   def _to_list(self, val: List[T], tip_pattern: List[bool]) -> List[T]:
-    """Convert a list of values to a list of values with the correct length.
-
-    This is roughly one-hot encoding. STAR expects a value for a list parameter at the position
-    for the corresponding channel. If `tip_pattern` is False, there, the value itself is ignored,
-    but it must be present.
-
-    Args:
-      val: A list of values, exactly one for each channel that is involved in the operation.
-      tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
-
-    Returns:
-      A list of values with the correct length. Each value that is not involved in the operation
-      is set to the first value in `val`, which is ignored by STAR.
-    """
-
-    # use the default value if a channel is not involved, otherwise use the value in val
-    if len(val) == 0:
-      raise ValueError("val must not be empty")
-    if len(val) > len(tip_pattern):
-      raise ValueError(f"val has more entries ({len(val)}) than tip_pattern ({len(tip_pattern)})")
-
-    result: List[T] = []
-    arg_index = 0
-    for channel_involved in tip_pattern:
-      if channel_involved:
-        if arg_index >= len(val):
-          raise ValueError(f"Too few values for tip pattern {tip_pattern}: {val}")
-        result.append(val[arg_index])
-        arg_index += 1
-      else:
-        # this value will be ignored, so just use a value we know is valid
-        result.append(val[0])
-    if arg_index < len(val):
-      raise ValueError(f"Too many values for tip pattern {tip_pattern}: {val}")
-    return result
+    """One-hot encode a per-channel list; see `pylabrobot.hamilton.protocol.text.framing`."""
+    return to_list(val, tip_pattern)
 
   def _assemble_command(
     self,
@@ -241,16 +210,34 @@ class HamiltonUSBDriver(metaclass=ABCMeta):
       auto_id=auto_id,
       **kwargs,
     )
-    resp = await self._write_and_read_command(
-      id_=id_,
-      cmd=cmd,
-      write_timeout=write_timeout,
-      read_timeout=read_timeout,
-      wait=wait,
-    )
-    if resp is not None and fmt is not None:
-      return self._parse_response(resp, fmt)
-    return resp
+    event_data = {
+      "transport": "hamilton_usb",
+      "driver": type(self).__name__,
+      "module": module,
+      "command": command,
+      "command_id": id_,
+      "raw_command": cmd,
+    }
+    emit_event("firmware.command.started", **event_data)
+    try:
+      resp = await self._write_and_read_command(
+        id_=id_,
+        cmd=cmd,
+        write_timeout=write_timeout,
+        read_timeout=read_timeout,
+        wait=wait,
+      )
+      result = self._parse_response(resp, fmt) if resp is not None and fmt is not None else resp
+    except BaseException as error:
+      emit_event(
+        "firmware.command.failed",
+        **event_data,
+        error_type=type(error).__name__,
+        error_message=str(error),
+      )
+      raise
+    emit_event("firmware.command.completed", **event_data, response=resp)
+    return result
 
   async def _write_and_read_command(
     self,

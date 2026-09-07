@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Any, List, Mapping, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
@@ -61,8 +61,11 @@ class ResourceStack(Resource):
     name: str,
     direction: str,
     resources: Optional[List[Resource]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
-    super().__init__(name, size_x=0, size_y=0, size_z=0, category="resource_group")
+    super().__init__(
+      name, size_x=0, size_y=0, size_z=0, category="resource_group", metadata=metadata
+    )
     assert direction in [
       "x",
       "y",

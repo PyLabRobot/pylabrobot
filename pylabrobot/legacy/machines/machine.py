@@ -5,7 +5,9 @@ import sys
 from abc import ABC
 from typing import Any, Awaitable, Callable, TypeVar
 
+from pylabrobot.events import device_reference, evented_operation, resource_reference
 from pylabrobot.legacy.machines.backend import MachineBackend
+from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import SerializableMixin
 
 if sys.version_info < (3, 10):
@@ -15,6 +17,26 @@ else:
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R", bound=Awaitable[Any])
+
+
+def _machine_event_context(machine: "Machine") -> dict:
+  device = (
+    resource_reference(machine)
+    if isinstance(machine, Resource)
+    else device_reference(machine, name=type(machine).__name__)
+  )
+  return {
+    "device": device,
+    "backend": type(machine.backend).__name__,
+  }
+
+
+def _machine_setup_event_context(self: "Machine", **backend_kwargs: Any) -> dict:
+  return _machine_event_context(self)
+
+
+def _machine_stop_event_context(self: "Machine") -> dict:
+  return _machine_event_context(self)
 
 
 def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
@@ -60,11 +82,13 @@ class Machine(SerializableMixin, ABC):
     data_copy["backend"] = backend
     return cls(**data_copy)
 
+  @evented_operation("machine.setup", _machine_setup_event_context)
   async def setup(self, **backend_kwargs):
     await self.backend.setup(**backend_kwargs)
     self._setup_finished = True
 
   @need_setup_finished
+  @evented_operation("machine.stop", _machine_stop_event_context)
   async def stop(self):
     await self.backend.stop()
     self._setup_finished = False

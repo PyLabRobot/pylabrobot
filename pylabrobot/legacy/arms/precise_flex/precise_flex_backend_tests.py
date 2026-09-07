@@ -115,6 +115,51 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.write.assert_any_call(b"exit\n")
     self.mock_socket_instance.stop.assert_called_once()
 
+  async def test_connect_opens_the_link_without_powering_or_homing(self):
+    self.mock_socket_instance.readline.side_effect = [b"0 OK\r\n"]  # set_mode
+    await self.backend.connect()
+    self.mock_socket_instance.setup.assert_called_once()
+    self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
+    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
+    self.assertNotIn(b"hp 1 20\n", written)
+    self.assertNotIn(b"home\n", written)
+
+  async def test_initialize_raises_power_without_homing(self):
+    self.mock_socket_instance.readline.side_effect = [
+      b"0 OK\r\n",  # power_on_robot
+      b"0 OK\r\n",  # attach
+    ]
+    await self.backend.initialize()
+    self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
+    self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
+    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
+    self.assertNotIn(b"home\n", written)
+
+  async def test_disconnect_drops_power_and_releases_the_link(self):
+    self.mock_socket_instance.readline.side_effect = [
+      b"0 attach\r\n",  # detach
+      b"0 hp\r\n",  # power_off_robot
+      b"0 exit\r\n",  # exit
+    ]
+    await self.backend.disconnect()
+    self.mock_socket_instance.write.assert_any_call(b"attach 0\n")
+    self.mock_socket_instance.write.assert_any_call(b"hp 0\n")
+    self.mock_socket_instance.write.assert_any_call(b"exit\n")
+    self.mock_socket_instance.stop.assert_called_once()
+
+  async def test_setup_skips_only_the_home_when_asked(self):
+    self.mock_socket_instance.readline.side_effect = [
+      b"0 OK\r\n",  # set_mode
+      b"0 OK\r\n",  # power_on_robot
+      b"0 OK\r\n",  # attach
+    ]
+    await self.backend.setup(skip_home=True)
+    self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
+    self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
+    self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
+    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
+    self.assertNotIn(b"home\n", written)
+
   async def test_set_speed(self):
     self.mock_socket_instance.readline.return_value = b"0 Speed 1 50.0\r\n"
     await self.backend.set_speed(50.0)

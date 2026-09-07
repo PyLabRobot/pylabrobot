@@ -8,6 +8,7 @@ import time
 import warnings
 from typing import Optional
 
+from pylabrobot.events import device_reference, evented_operation, resource_reference
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -54,6 +55,33 @@ bucket_1_not_set_error = RuntimeError(
 )
 
 
+def _vspin_event_context(
+  self: "VSpin",
+  g: float = 500,
+  duration: float = 60,
+  acceleration: float = 0.8,
+  deceleration: float = 0.8,
+) -> dict:
+  """Describe the currently loaded buckets and requested centrifuge run."""
+  bucket_resources = [
+    {
+      "holder": resource_reference(bucket),
+      "resource": resource_reference(bucket.resource),
+    }
+    for bucket in (self.bucket1, self.bucket2)
+    if bucket.resource is not None
+  ]
+  return {
+    "device": device_reference(self, name=self.name),
+    "resources": [bucket["resource"] for bucket in bucket_resources],
+    "bucket_resources": bucket_resources,
+    "relative_centrifugal_force": g,
+    "duration": duration,
+    "acceleration_fraction": acceleration,
+    "deceleration_fraction": deceleration,
+  }
+
+
 # ---------------------------------------------------------------------------
 # VSpin Driver — FTDI I/O and hardware queries
 # ---------------------------------------------------------------------------
@@ -72,6 +100,7 @@ class VSpin:
         `python -m pylibftdi.examples.list_devices`
     """
     super().__init__()
+    self.name = name
     self.io = FTDI(human_readable_device_name="Agilent VSpin Centrifuge", device_id=device_id)
     self.device_id = device_id
     self._bucket_1_remainder: Optional[int] = None
@@ -389,6 +418,7 @@ class VSpin:
     rpm = int((g / (1.118 * 10**-5 * r)) ** 0.5)
     return rpm
 
+  @evented_operation("centrifuge.spin", _vspin_event_context)
   async def spin(
     self,
     g: float = 500,

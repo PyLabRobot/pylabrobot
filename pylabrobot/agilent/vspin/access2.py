@@ -10,10 +10,32 @@ from pylabrobot.agilent.vspin.errors import (
   NotAtBucketError,
 )
 from pylabrobot.agilent.vspin.vspin import VSpin
+from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 logger = logging.getLogger(__name__)
+
+
+def _loader_load_event_context(self: "Access2") -> dict:
+  plate = self.resource
+  return {
+    "device": resource_reference(self),
+    "resources": [] if plate is None else [resource_reference(plate)],
+    "source": resource_reference(self),
+    "destination": resource_reference(self._vspin.at_bucket),
+  }
+
+
+def _loader_unload_event_context(self: "Access2") -> dict:
+  bucket = self._vspin.at_bucket
+  plate = None if bucket is None else bucket.resource
+  return {
+    "device": resource_reference(self),
+    "resources": [] if plate is None else [resource_reference(plate)],
+    "source": resource_reference(bucket),
+    "destination": resource_reference(self),
+  }
 
 
 class Access2Driver:
@@ -147,6 +169,7 @@ class Access2(ResourceHolder):
     self.driver: Access2Driver = driver
     self._vspin = vspin
 
+  @evented_operation("centrifuge_loader.load", _loader_load_event_context)
   async def load(self) -> None:
     if not self._vspin.door_open:
       raise CentrifugeDoorError("Centrifuge door must be open to load a plate.")
@@ -164,6 +187,7 @@ class Access2(ResourceHolder):
 
     self._vspin.at_bucket.assign_child_resource(self.resource, location=Coordinate.zero())
 
+  @evented_operation("centrifuge_loader.unload", _loader_unload_event_context)
   async def unload(self) -> None:
     if not self._vspin.door_open:
       raise CentrifugeDoorError("Centrifuge door must be open to unload a plate.")

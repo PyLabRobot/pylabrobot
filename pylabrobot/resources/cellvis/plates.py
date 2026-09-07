@@ -50,6 +50,7 @@ def cellvis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.FLAT,
       material_z_thickness=0.25,
       cross_section_type=CrossSectionType.CIRCLE,
+      name_prefix=name,
     ),
   )
 
@@ -93,6 +94,7 @@ def cellvis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.FLAT,
       material_z_thickness=0.17,  # +- 0.005mm
       cross_section_type=CrossSectionType.CIRCLE,
+      name_prefix=name,
     ),
   )
 

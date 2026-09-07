@@ -3,6 +3,21 @@
 pylabrobot.agilent package
 ==========================
 
+BenchCel 4R
+-----------
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BenchCel4R
+    BenchCelLabwareSettings
+    PlateNotchSettings
+
+
 BioTek EL406
 ------------
 
@@ -84,3 +99,19 @@ VSpin
     VSpin
     Access2
     Access2Driver
+
+
+PlateLoc
+--------
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    PlateLoc
+    PlateLocSerialProfile
+    PlateLocStatus
+    PlateLocError

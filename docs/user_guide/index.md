@@ -19,6 +19,7 @@ getting-started/units
 
 machines
 definitions
+generic/index
 00_liquid-handling/_liquid-handling
 ```
 
@@ -40,9 +41,11 @@ inheco/index
 kbioscience/index
 kbiosystems/index
 mettler_toledo/index
+micronic/index
 molecular_devices/index
 opentrons/index
 qinstruments/index
+revvity/index
 sartorius/index
 thermo_fisher/index
 ufactory/index
@@ -55,11 +58,13 @@ ufactory/index
 
 machine-agnostic-features/using-the-visualizer
 machine-agnostic-features/using-trackers
+machine-agnostic-features/event-bus
 machine-agnostic-features/writing-robot-agnostic-protocols
 machine-agnostic-features/tip-spot-generators
 machine-agnostic-features/logging-and-validation/logging-and-validation
 machine-agnostic-features/error-handling-general
 machine-agnostic-features/sila-discovery
+machine-agnostic-features/manual-operator
 ```
 
 ```{toctree}

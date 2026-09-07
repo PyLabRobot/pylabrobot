@@ -1,10 +1,37 @@
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
+from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .backend import ShakerBackend
+
+
+def _shaker_controller_event_context(self: "Shaker") -> dict[str, Any]:
+  context: dict[str, Any] = {"device": resource_reference(self)}
+  if self.resource is not None:
+    context["resources"] = [resource_reference(self.resource)]
+  return context
+
+
+def _shake_event_context(
+  self: "Shaker",
+  speed: float,
+  duration: Optional[float] = None,
+  **backend_kwargs: Any,
+) -> dict[str, Any]:
+  """Describe a shaker operation and its directly loaded resource, when present."""
+
+  context = _shaker_controller_event_context(self)
+  context["speed_rpm"] = float(speed)
+  if duration is not None:
+    context["duration"] = float(duration)
+  return context
+
+
+def _stop_shaking_event_context(self: "Shaker", **backend_kwargs: Any) -> dict[str, Any]:
+  return _shaker_controller_event_context(self)
 
 
 class Shaker(ResourceHolder, Machine):
@@ -34,6 +61,7 @@ class Shaker(ResourceHolder, Machine):
     Machine.__init__(self, backend=backend)
     self.backend: ShakerBackend = backend  # fix type
 
+  @evented_operation("shaker.shake", _shake_event_context)
   async def shake(self, speed: float, duration: Optional[float] = None, **backend_kwargs):
     """Shake the shaker at the given speed
 
@@ -53,6 +81,7 @@ class Shaker(ResourceHolder, Machine):
     if self.backend.supports_locking:
       await self.backend.unlock_plate()
 
+  @evented_operation("shaker.stop_shaking", _stop_shaking_event_context)
   async def stop_shaking(self, **backend_kwargs):
     await self.backend.stop_shaking(**backend_kwargs)
 
