@@ -6,8 +6,9 @@ import math
 import re
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Optional, Tuple, cast
+from typing import Any, Dict, Iterator, List, Literal, Optional, Tuple, cast
 
 from pylabrobot import utils
 from pylabrobot.io.http import HTTP
@@ -17,7 +18,7 @@ from pylabrobot.resources.opentrons import OT2RobotGeometry, OTDeck
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.tip_tracker import does_tip_tracking
-from pylabrobot.resources.volume_tracker import does_volume_tracking
+from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,31 @@ def _require_finite_coordinate(name: str, coordinate: Coordinate) -> None:
     raise ValueError(f"{name} coordinates must be finite")
 
 
+@contextmanager
+def _track_liquid_transfer(
+  source: VolumeTracker, destination: VolumeTracker, volume: float
+) -> Iterator[None]:
+  """Track one liquid transfer, committing when its command succeeds."""
+  trackers = [
+    tracker
+    for tracker in (source, destination)
+    if does_volume_tracking() and not tracker.is_disabled
+  ]
+  try:
+    if source in trackers:
+      source.remove_liquid(volume)
+    if destination in trackers:
+      destination.add_liquid(volume)
+    yield
+  except BaseException:
+    for tracker in trackers:
+      tracker.rollback()
+    raise
+  else:
+    for tracker in trackers:
+      tracker.commit()
+
+
 class OT2Pipette:
   """A pipette mounted on an OT-2 carriage.
 
@@ -136,7 +162,7 @@ class OT2Pipette:
     return self._spec.maximum_volume
 
   @property
-  def channels(self) -> int:
+  def num_channels(self) -> int:
     """Number of nozzles on the pipette."""
     return self._spec.channels
 
@@ -151,9 +177,9 @@ class OT2Pipette:
     return self._tip
 
   def _require_single_channel(self) -> None:
-    if self.channels != 1:
+    if self.num_channels != 1:
       raise NotImplementedError(
-        f"{self.name} has {self.channels} channels. Multi-channel liquid operations are not "
+        f"{self.name} has {self.num_channels} channels. Multi-channel liquid operations are not "
         "implemented yet."
       )
 
@@ -230,23 +256,23 @@ class OT2Pipette:
     offset: Optional[Coordinate] = None,
   ) -> None:
     """Pick up one tip from a tip rack."""
-    self._require_single_channel()
-    if self._tip is not None:
-      raise RuntimeError(f"The {self.mount} pipette already has a tip")
-    if not isinstance(tip_spot.parent, TipRack):
-      raise ValueError("tip_spot must be assigned to a tip rack")
+    async with self.robot._operation_lock:
+      self._require_single_channel()
+      if self._tip is not None:
+        raise RuntimeError(f"The {self.mount} pipette already has a tip")
+      if not isinstance(tip_spot.parent, TipRack):
+        raise ValueError("tip_spot must be assigned to a tip rack")
 
-    tip = tip_spot.get_tip()
-    if not self.can_use_tip(tip):
-      raise ValueError(f"{self.name} cannot use a {tip.maximal_volume:g} µL-capacity tip")
-    offset = offset or Coordinate.zero()
-    _require_finite_coordinate("offset", offset)
-    tracked = does_tip_tracking() and not tip_spot.tracker.is_disabled
-    if tracked:
-      tip_spot.tracker.remove_tip(commit=False)
+      tip = tip_spot.get_tip()
+      if not self.can_use_tip(tip):
+        raise ValueError(f"{self.name} cannot use a {tip.maximal_volume:g} µL-capacity tip")
+      offset = offset or Coordinate.zero()
+      _require_finite_coordinate("offset", offset)
+      tracked = does_tip_tracking() and not tip_spot.tracker.is_disabled
+      if tracked:
+        tip_spot.tracker.remove_tip(commit=False)
 
-    try:
-      async with self.robot._operation_lock:
+      try:
         await self.robot._assign_tip_rack(tip_spot.parent, tip)
         await self.robot._enqueue_command(
           "pickUpTip",
@@ -264,15 +290,15 @@ class OT2Pipette:
             "pipetteId": self.pipette_id,
           },
         )
-    except Exception:
-      if tracked:
-        tip_spot.tracker.rollback()
-      raise
+      except Exception:
+        if tracked:
+          tip_spot.tracker.rollback()
+        raise
 
-    if tracked:
-      tip_spot.tracker.commit()
-    self._tip = tip
-    self._tip_origin = tip_spot
+      if tracked:
+        tip_spot.tracker.commit()
+      self._tip = tip
+      self._tip_origin = tip_spot
 
   async def drop_tip(
     self,
@@ -281,6 +307,16 @@ class OT2Pipette:
     allow_nonzero_volume: bool = False,
   ) -> None:
     """Drop the mounted tip into a tip-rack position."""
+    async with self.robot._operation_lock:
+      await self._drop_tip(tip_spot, offset, allow_nonzero_volume)
+
+  async def _drop_tip(
+    self,
+    tip_spot: TipSpot,
+    offset: Optional[Coordinate] = None,
+    allow_nonzero_volume: bool = False,
+  ) -> None:
+    """Drop a tip while the robot's operation lock is held."""
     self._require_single_channel()
     tip = self._require_tip()
     if not isinstance(tip_spot.parent, TipRack):
@@ -295,20 +331,19 @@ class OT2Pipette:
       tip_spot.tracker.add_tip(tip, origin=tip_spot, commit=False)
 
     try:
-      async with self.robot._operation_lock:
-        await self.robot._assign_tip_rack(tip_spot.parent, tip)
-        await self.robot._enqueue_command(
-          "dropTip",
-          {
-            "labwareId": self.robot._ot_name(tip_spot.parent.name),
-            "wellName": self.robot._well_name(tip_spot),
-            "wellLocation": {
-              "origin": "bottom",
-              "offset": {"x": offset.x, "y": offset.y, "z": offset.z + 10},
-            },
-            "pipetteId": self.pipette_id,
+      await self.robot._assign_tip_rack(tip_spot.parent, tip)
+      await self.robot._enqueue_command(
+        "dropTip",
+        {
+          "labwareId": self.robot._ot_name(tip_spot.parent.name),
+          "wellName": self.robot._well_name(tip_spot),
+          "wellLocation": {
+            "origin": "bottom",
+            "offset": {"x": offset.x, "y": offset.y, "z": offset.z + 10},
           },
-        )
+          "pipetteId": self.pipette_id,
+        },
+      )
     except Exception:
       if tracked:
         tip_spot.tracker.rollback()
@@ -325,13 +360,14 @@ class OT2Pipette:
     allow_nonzero_volume: bool = False,
   ) -> None:
     """Return the mounted tip to the position it came from."""
-    if self._tip_origin is None:
-      raise RuntimeError("The mounted tip's origin is unknown")
-    await self.drop_tip(
-      self._tip_origin,
-      offset=offset,
-      allow_nonzero_volume=allow_nonzero_volume,
-    )
+    async with self.robot._operation_lock:
+      if self._tip_origin is None:
+        raise RuntimeError("The mounted tip's origin is unknown")
+      await self._drop_tip(
+        self._tip_origin,
+        offset=offset,
+        allow_nonzero_volume=allow_nonzero_volume,
+      )
 
   async def discard_tip(
     self,
@@ -339,14 +375,14 @@ class OT2Pipette:
     allow_nonzero_volume: bool = False,
   ) -> None:
     """Discard the mounted tip into the OT-2's fixed trash."""
-    self._require_single_channel()
-    tip = self._require_tip()
-    if does_volume_tracking() and tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
-      raise ValueError("The mounted tip still contains liquid")
-    offset = offset or Coordinate.zero()
-    _require_finite_coordinate("offset", offset)
-
     async with self.robot._operation_lock:
+      self._require_single_channel()
+      tip = self._require_tip()
+      if does_volume_tracking() and tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
+        raise ValueError("The mounted tip still contains liquid")
+      offset = offset or Coordinate.zero()
+      _require_finite_coordinate("offset", offset)
+
       if self.robot.api_version is None:
         raise RuntimeError("OT-2 API version is unavailable; call setup() first")
       if _version_at_least(
@@ -380,8 +416,8 @@ class OT2Pipette:
           },
         )
 
-    self._tip = None
-    self._tip_origin = None
+      self._tip = None
+      self._tip_origin = None
 
   def _liquid_location(
     self,
@@ -426,43 +462,26 @@ class OT2Pipette:
     offset: Optional[Coordinate] = None,
   ) -> None:
     """Aspirate liquid from a container and return to traversal height."""
-    self._require_single_channel()
-    tip = self._require_tip()
-    volume = self._validate_volume(volume)
-    flow_rate = self._spec.default_aspiration_flow_rate if flow_rate is None else float(flow_rate)
-    if not math.isfinite(flow_rate) or flow_rate <= 0:
-      raise ValueError("flow_rate must be finite and greater than zero")
-    offset = offset or Coordinate.zero()
-    location = self._liquid_location(container, offset, liquid_height)
+    async with self.robot._operation_lock:
+      self._require_single_channel()
+      tip = self._require_tip()
+      volume = self._validate_volume(volume)
+      flow_rate = self._spec.default_aspiration_flow_rate if flow_rate is None else float(flow_rate)
+      if not math.isfinite(flow_rate) or flow_rate <= 0:
+        raise ValueError("flow_rate must be finite and greater than zero")
+      offset = offset or Coordinate.zero()
+      location = self._liquid_location(container, offset, liquid_height)
 
-    tracked = does_volume_tracking()
-    if tracked:
-      if not container.tracker.is_disabled:
-        container.tracker.remove_liquid(volume)
-      tip.tracker.add_liquid(volume)
-
-    try:
-      async with self.robot._operation_lock:
+      with _track_liquid_transfer(container.tracker, tip.tracker, volume):
         await self._move_to(
           location,
           minimum_z_height=self.robot.traversal_height,
         )
         await self._aspirate_in_place(volume, flow_rate)
-        await self._move_to(
-          Coordinate(location.x, location.y, self.robot.traversal_height),
-          minimum_z_height=self.robot.traversal_height,
-        )
-    except Exception:
-      if tracked:
-        if not container.tracker.is_disabled:
-          container.tracker.rollback()
-        tip.tracker.rollback()
-      raise
-
-    if tracked:
-      if not container.tracker.is_disabled:
-        container.tracker.commit()
-      tip.tracker.commit()
+      await self._move_to(
+        Coordinate(location.x, location.y, self.robot.traversal_height),
+        minimum_z_height=self.robot.traversal_height,
+      )
 
   async def dispense(
     self,
@@ -473,43 +492,26 @@ class OT2Pipette:
     offset: Optional[Coordinate] = None,
   ) -> None:
     """Dispense liquid into a container and return to traversal height."""
-    self._require_single_channel()
-    tip = self._require_tip()
-    volume = self._validate_volume(volume)
-    flow_rate = self._spec.default_dispense_flow_rate if flow_rate is None else float(flow_rate)
-    if not math.isfinite(flow_rate) or flow_rate <= 0:
-      raise ValueError("flow_rate must be finite and greater than zero")
-    offset = offset or Coordinate.zero()
-    location = self._liquid_location(container, offset, liquid_height)
+    async with self.robot._operation_lock:
+      self._require_single_channel()
+      tip = self._require_tip()
+      volume = self._validate_volume(volume)
+      flow_rate = self._spec.default_dispense_flow_rate if flow_rate is None else float(flow_rate)
+      if not math.isfinite(flow_rate) or flow_rate <= 0:
+        raise ValueError("flow_rate must be finite and greater than zero")
+      offset = offset or Coordinate.zero()
+      location = self._liquid_location(container, offset, liquid_height)
 
-    tracked = does_volume_tracking()
-    if tracked:
-      tip.tracker.remove_liquid(volume)
-      if not container.tracker.is_disabled:
-        container.tracker.add_liquid(volume)
-
-    try:
-      async with self.robot._operation_lock:
+      with _track_liquid_transfer(tip.tracker, container.tracker, volume):
         await self._move_to(
           location,
           minimum_z_height=self.robot.traversal_height,
         )
         await self._dispense_in_place(volume, flow_rate)
-        await self._move_to(
-          Coordinate(location.x, location.y, self.robot.traversal_height),
-          minimum_z_height=self.robot.traversal_height,
-        )
-    except Exception:
-      if tracked:
-        tip.tracker.rollback()
-        if not container.tracker.is_disabled:
-          container.tracker.rollback()
-      raise
-
-    if tracked:
-      tip.tracker.commit()
-      if not container.tracker.is_disabled:
-        container.tracker.commit()
+      await self._move_to(
+        Coordinate(location.x, location.y, self.robot.traversal_height),
+        minimum_z_height=self.robot.traversal_height,
+      )
 
   async def mix(
     self,
@@ -522,36 +524,39 @@ class OT2Pipette:
     offset: Optional[Coordinate] = None,
   ) -> None:
     """Mix in place using client-side aspiration and dispense cycles."""
-    self._require_single_channel()
-    self._require_tip()
-    volume = self._validate_volume(volume)
-    if repetitions < 1:
-      raise ValueError("repetitions must be at least 1")
-    aspiration_flow_rate = (
-      self._spec.default_aspiration_flow_rate
-      if aspiration_flow_rate is None
-      else float(aspiration_flow_rate)
-    )
-    dispense_flow_rate = (
-      self._spec.default_dispense_flow_rate
-      if dispense_flow_rate is None
-      else float(dispense_flow_rate)
-    )
-    if (
-      not math.isfinite(aspiration_flow_rate)
-      or not math.isfinite(dispense_flow_rate)
-      or aspiration_flow_rate <= 0
-      or dispense_flow_rate <= 0
-    ):
-      raise ValueError("flow rates must be finite and greater than zero")
-
-    offset = offset or Coordinate.zero()
-    location = self._liquid_location(container, offset, liquid_height)
     async with self.robot._operation_lock:
-      await self._move_to(location, minimum_z_height=self.robot.traversal_height)
-      for _ in range(repetitions):
-        await self._aspirate_in_place(volume, aspiration_flow_rate)
-        await self._dispense_in_place(volume, dispense_flow_rate)
+      self._require_single_channel()
+      tip = self._require_tip()
+      volume = self._validate_volume(volume)
+      if repetitions < 1:
+        raise ValueError("repetitions must be at least 1")
+      aspiration_flow_rate = (
+        self._spec.default_aspiration_flow_rate
+        if aspiration_flow_rate is None
+        else float(aspiration_flow_rate)
+      )
+      dispense_flow_rate = (
+        self._spec.default_dispense_flow_rate
+        if dispense_flow_rate is None
+        else float(dispense_flow_rate)
+      )
+      if (
+        not math.isfinite(aspiration_flow_rate)
+        or not math.isfinite(dispense_flow_rate)
+        or aspiration_flow_rate <= 0
+        or dispense_flow_rate <= 0
+      ):
+        raise ValueError("flow rates must be finite and greater than zero")
+
+      offset = offset or Coordinate.zero()
+      location = self._liquid_location(container, offset, liquid_height)
+      for repetition in range(repetitions):
+        with _track_liquid_transfer(container.tracker, tip.tracker, volume):
+          if repetition == 0:
+            await self._move_to(location, minimum_z_height=self.robot.traversal_height)
+          await self._aspirate_in_place(volume, aspiration_flow_rate)
+        with _track_liquid_transfer(tip.tracker, container.tracker, volume):
+          await self._dispense_in_place(volume, dispense_flow_rate)
       await self._move_to(
         Coordinate(location.x, location.y, self.robot.traversal_height),
         minimum_z_height=self.robot.traversal_height,
@@ -640,12 +645,10 @@ class OpentronsOT2:
       raise
 
   async def stop(self) -> None:
-    """Cancel the active OT run and close the HTTP transport."""
-    try:
-      await self._cancel_run()
-    finally:
-      self._clear_run_state()
-      await self.io.stop()
+    """Cancel the run and close the transport; retain state if cancellation fails."""
+    await self._cancel_run()
+    self._clear_run_state()
+    await self.io.stop()
 
   def _clear_run_state(self) -> None:
     self._run_id = None
@@ -668,13 +671,17 @@ class OpentronsOT2:
       ("POST", f"/runs/{self._run_id}/actions/cancel", None),
       ("DELETE", f"/runs/{self._run_id}", None),
     )
+    last_error: Optional[Exception] = None
     for method, path, data in requests:
       try:
         await self.io.request(method, path, data)
         return
       except Exception as error:  # noqa: BLE001 - firmware versions expose different routes
+        last_error = error
         logger.debug("OT-2 run cancellation through %s failed: %s", path, error)
-    logger.warning("Could not cancel OT-2 run %s", self._run_id)
+    raise OpentronsOT2Error(
+      f"Could not cancel OT-2 run {self._run_id}; run state is retained so stop() can be retried"
+    ) from last_error
 
   async def _load_mounted_pipette(
     self,
@@ -765,11 +772,17 @@ class OpentronsOT2:
     return tip_spot.parent.get_child_identifier(tip_spot)
 
   async def _assign_tip_rack(self, tip_rack: TipRack, tip: Tip) -> None:
-    if tip_rack.name in self._tip_racks:
-      return
     slot = self.deck.get_slot(tip_rack)
     if slot is None:
       raise ValueError("tip rack must be assigned directly to an OT-2 deck slot")
+    if tip_rack.name in self._tip_racks:
+      loaded_slot = self._tip_racks[tip_rack.name]
+      if slot != loaded_slot:
+        raise ValueError(
+          f"Tip rack {tip_rack.name!r} is loaded in slot {loaded_slot}; "
+          f"it cannot be used in slot {slot} during the same run"
+        )
+      return
 
     official_load_name = _OFFICIAL_TIP_RACKS.get(tip_rack.model or "")
     if official_load_name is not None:
