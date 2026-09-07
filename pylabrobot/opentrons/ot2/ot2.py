@@ -3,7 +3,7 @@
 import asyncio
 import math
 import uuid
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from pylabrobot.io.http import HTTP
 from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
@@ -12,7 +12,11 @@ from pylabrobot.opentrons.labware import (
   build_tip_rack_definition,
   official_tip_rack_identity,
 )
-from pylabrobot.opentrons.ot2.pipette import _PIPETTE_SPECS, OT2Pipette
+from pylabrobot.opentrons.ot2.pipette import (
+  _PIPETTE_SPECS,
+  OT2_8ChannelPipette,
+  OT2SingleChannelPipette,
+)
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import (
   LabwareIdentity,
@@ -73,12 +77,12 @@ class OT2:
     self._connected = False
     self._run: Optional[OpentronsRun] = None
     self._labware: Optional[LabwareRegistry] = None
-    self.left_pipette: Optional[OT2Pipette] = None
-    self.right_pipette: Optional[OT2Pipette] = None
+    self.left_pipette: Optional[Union[OT2SingleChannelPipette, OT2_8ChannelPipette]] = None
+    self.right_pipette: Optional[Union[OT2SingleChannelPipette, OT2_8ChannelPipette]] = None
     self._operation_lock = asyncio.Lock()
 
   @property
-  def pipettes(self) -> List[OT2Pipette]:
+  def pipettes(self) -> List[Union[OT2SingleChannelPipette, OT2_8ChannelPipette]]:
     """Mounted pipettes, left first."""
     return [p for p in (self.left_pipette, self.right_pipette) if p is not None]
 
@@ -153,7 +157,11 @@ class OT2:
     run = self._require_run()
     for pipette in mounted:
       pipette_id = await run.load_pipette(pipette.name, pipette.mount)
-      bound = OT2Pipette(self, pipette.mount, pipette.name, pipette_id)
+      bound: Union[OT2SingleChannelPipette, OT2_8ChannelPipette]
+      if _PIPETTE_SPECS[pipette.name].channels == 8:
+        bound = OT2_8ChannelPipette(self, pipette.mount, pipette.name, pipette_id)
+      else:
+        bound = OT2SingleChannelPipette(self, pipette.mount, pipette.name, pipette_id)
       if pipette.mount == "left":
         self.left_pipette = bound
       else:
