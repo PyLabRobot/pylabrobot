@@ -60,7 +60,11 @@
       "liquid handling"
     ],
     "status": "Mostly",
-    "docs": "/user_guide/00_liquid-handling/opentrons-ot2/_opentrons-ot2.html",
+    "api": "pylabrobot.opentrons.OT2",
+    "api_version": "v1",
+    "code_slug": "opentrons/ot2",
+    "doc_slug": "opentrons/ot2/hello-world",
+    "docs": "/user_guide/opentrons/ot2/hello-world.html",
     "oem": "https://opentrons.com/products/ot-2-robot"
   },
   {
