@@ -12,10 +12,10 @@ import asyncio
 import unittest
 from typing import Any, Dict, Optional, Tuple
 
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
+from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
-from pylabrobot.opentrons.flex.errors import OpentronsError
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import Resource, cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.plate import Plate

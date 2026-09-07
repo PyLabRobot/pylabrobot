@@ -18,12 +18,12 @@ the robot's own for official load names, or the uploaded custom definition
 import logging
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Optional, Set
 
+from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex_wire import (
   UNTESTED_HARDWARE_WARNING,
   _require_robot_commands,
   slot_wire_location,
 )
-from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:

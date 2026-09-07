@@ -21,10 +21,10 @@ import asyncio
 import unittest
 from typing import Any, Dict, List, Optional, Tuple, Type
 
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
+from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
-from pylabrobot.opentrons.flex.errors import OpentronsError
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.flex_wire import OFFLINE_API_VERSION
 from pylabrobot.resources import (
   Container,

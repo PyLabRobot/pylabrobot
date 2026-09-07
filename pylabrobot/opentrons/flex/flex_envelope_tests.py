@@ -10,11 +10,11 @@ import asyncio
 import unittest
 from typing import List, Tuple
 
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.envelope import FLEX_ENVELOPE
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 

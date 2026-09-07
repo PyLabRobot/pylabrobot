@@ -10,10 +10,10 @@ import asyncio
 import unittest
 from typing import List, Tuple
 
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
+from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
-from pylabrobot.opentrons.flex.errors import OpentronsError
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import TooLittleLiquidError
@@ -1213,9 +1213,7 @@ class DeclaredIdentityTests(unittest.TestCase):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
     plate.ot_version = 2  # type: ignore[attr-defined]
-    self.assertEqual(
-      Flex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2)
-    )
+    self.assertEqual(Flex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2))
 
   def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
     # The robot resolves against its own shipped definitions AND a lab's own

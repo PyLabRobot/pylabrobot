@@ -39,10 +39,10 @@ from typing import (
 )
 
 from pylabrobot.opentrons.flex.checks import traversal_z
+from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.flex_wire import UNTESTED_HARDWARE_WARNING
 from pylabrobot.opentrons.flex.labware_definitions import container_footprint
 from pylabrobot.opentrons.flex.pipette_defaults import FlowRates, flow_rates
-from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.resources import (
   Container,
   Plate,
@@ -561,9 +561,9 @@ class _FlexHead:
   def _require_itemized_parent(item: Resource) -> ItemizedResource:
     """Return ``item.parent``, asserted to be an addressable-by-name container."""
     parent = item.parent
-    assert isinstance(parent, ItemizedResource), (
-      f"'{item.name}' has no itemized parent resource (rack/plate)."
-    )
+    assert isinstance(
+      parent, ItemizedResource
+    ), f"'{item.name}' has no itemized parent resource (rack/plate)."
     return parent
 
   @staticmethod

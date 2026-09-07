@@ -25,11 +25,11 @@ import asyncio
 import unittest
 from typing import Any, Dict, Optional
 
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
+from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1
 from pylabrobot.opentrons.flex.flex_tests import _flex_head1, _flex_head8, _flex_head96
-from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import (
   biorad_384_wellplate_50uL_Vb,
   cor_96_wellplate_360uL_Fb,

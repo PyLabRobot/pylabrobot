@@ -6,11 +6,11 @@ from pylabrobot.opentrons.errors import (
   OpentronsProtocolError,
 )
 from pylabrobot.opentrons.flex import (
+  Flex,
   FlexGripper,
   FlexHead1,
   FlexHead8,
   FlexHead96,
-  Flex,
 )
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP, ReplayTransport
 from pylabrobot.opentrons.ot2 import OT2, OT2Pipette

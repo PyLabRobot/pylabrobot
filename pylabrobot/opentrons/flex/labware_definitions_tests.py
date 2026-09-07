@@ -13,6 +13,8 @@ import asyncio
 import unittest
 from typing import Any, Dict, Optional, Tuple
 
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
+from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
 from pylabrobot.opentrons.flex.labware_definitions import (
@@ -22,8 +24,6 @@ from pylabrobot.opentrons.flex.labware_definitions import (
   build_tip_rack_definition,
   container_footprint,
 )
-from pylabrobot.opentrons.flex.errors import OpentronsError
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import (
   Container,
   CrossSectionType,

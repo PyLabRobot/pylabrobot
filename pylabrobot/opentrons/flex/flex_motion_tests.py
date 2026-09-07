@@ -13,12 +13,12 @@ import asyncio
 import unittest
 from typing import Any, Dict, List, Tuple
 
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.opentrons.flex.checks import traversal_z
+from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper, _require_robot_commands
 from pylabrobot.opentrons.flex.flex_head import FlexHead8, _FlexHead
-from pylabrobot.opentrons.flex.errors import OpentronsError
-from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import set_tip_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck

@@ -8,7 +8,11 @@ from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
 from pylabrobot.opentrons.flex.flex_run import COMMAND_POLL_HEADROOM, FlexRun, PipetteInfo
-from pylabrobot.opentrons.flex.flex_wire import ROBOT_AXES, _require_robot_commands, slot_wire_location
+from pylabrobot.opentrons.flex.flex_wire import (
+  ROBOT_AXES,
+  _require_robot_commands,
+  slot_wire_location,
+)
 from pylabrobot.opentrons.flex.labware_definitions import (
   build_container_definition,
   build_movable_labware_definition,
