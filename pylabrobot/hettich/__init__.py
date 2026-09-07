@@ -1,3 +1,4 @@
+from ._state import HettichMachineState
 from .centrifuge import (
   MIKRO_220_ROBOTIC_ROTORS,
   CentrifugeStatus,
@@ -21,6 +22,7 @@ __all__ = [
   "HettichCommandError",
   "HettichCommunicationError",
   "HettichCooledRoboticCentrifuge",
+  "HettichMachineState",
   "HettichMikro220RoboticCentrifuge",
   "HettichRoboticCentrifuge",
   "HettichRotanta460RoboticCentrifuge",

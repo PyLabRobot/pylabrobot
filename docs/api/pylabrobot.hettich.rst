@@ -21,4 +21,5 @@ pylabrobot.hettich package
     HettichCommandError
     CentrifugeStatus
     HatchStatus
+    HettichMachineState
     RotorSpecification

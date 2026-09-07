@@ -37,6 +37,7 @@ HettichCentrifugeT = TypeVar("HettichCentrifugeT", bound=HettichRoboticCentrifug
 def make_model_device(
   replies: List[bytes],
   device_class: type[HettichCentrifugeT],
+  connected: bool = True,
   **kwargs,
 ) -> HettichCentrifugeT:
   io = AsyncMock(spec=Serial)
@@ -57,6 +58,8 @@ def make_model_device(
   io.read.side_effect = read
   with patch("pylabrobot.hettich.centrifuge.Serial", return_value=io):
     device = device_class(port="FAKE", timeout=0.2, poll_interval=0, **kwargs)
+  if connected:
+    device._machine.set_connection("connected")
   return device
 
 
@@ -309,6 +312,7 @@ class HettichProtocolTests(HettichAsyncTestCase):
         enquiry_reply("00636", 0x0112),
       ],
       HettichRotanta460RoboticCentrifuge,
+      connected=False,
     )
     with patch("pylabrobot.hettich.centrifuge.logger.warning") as warning:
       await device.setup()
@@ -328,7 +332,8 @@ class HettichProtocolTests(HettichAsyncTestCase):
         enquiry_reply("00600", 0x1234),
         enquiry_reply("00537", 0xE800),
         enquiry_reply("00636", 0x0121),
-      ]
+      ],
+      connected=False,
     )
     with patch("pylabrobot.hettich.centrifuge.logger.warning") as warning:
       await device.setup()
@@ -342,7 +347,8 @@ class HettichProtocolTests(HettichAsyncTestCase):
         enquiry_reply("00685", 0x0000),
         enquiry_reply("00600", 0x1234),
         enquiry_reply("00537", 0xE8FF),
-      ]
+      ],
+      connected=False,
     )
 
     with self.assertRaisesRegex(HettichCentrifugeError, "unknown type 0xE8FF"):
@@ -356,7 +362,8 @@ class HettichProtocolTests(HettichAsyncTestCase):
         enquiry_reply("00685", 0x0000),
         enquiry_reply("00600", 0x1234),
         enquiry_reply("00537", 0xC901),
-      ]
+      ],
+      connected=False,
     )
 
     with self.assertRaisesRegex(HettichCentrifugeError, "ROTANTA 460 R POS"):

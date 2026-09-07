@@ -11,6 +11,9 @@ from typing import Any, Literal, Mapping, Optional
 from pylabrobot.events import device_reference, event_operation
 from pylabrobot.io.serial import Serial
 
+from ._errors import HettichCentrifugeError, HettichCommandError, HettichCommunicationError
+from ._state import HettichMachineState, _StateMachine
+
 logger = logging.getLogger(__name__)
 
 EOT = 0x04
@@ -54,17 +57,6 @@ DEFAULT_TIMEOUT_MARGIN = 30
 GENERATION_2_IDENTIFICATION = 0x1234
 
 _VALID_ADDRESSES = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]")
-
-_SIOF_MESSAGES = {
-  0: "power on after reset or mains interruption",
-  1: "serial parity error",
-  2: "maximum allowed rotor cycles passed",
-  3: "wrong BCC checksum",
-  4: "framing error (wrong STX, ETX, ENQ, or '=')",
-  5: "wrong or unknown parameter",
-  6: "modification not permitted (read-only parameter)",
-  7: "improper value or command not allowed",
-}
 
 _KNOWN_DEVICE_TYPES = {
   0xE800: "MIKRO 220 POS",
@@ -210,26 +202,6 @@ class HatchStatus:
   positioning_error: bool
 
 
-class HettichCentrifugeError(Exception):
-  """Base exception raised by a Hettich robotic centrifuge."""
-
-
-class HettichCommunicationError(HettichCentrifugeError):
-  """The centrifuge returned no response or a malformed response."""
-
-
-class HettichCommandError(HettichCentrifugeError):
-  """The centrifuge rejected a parameter or command."""
-
-  def __init__(self, parameter: str, siof: int) -> None:
-    """Describe a rejected parameter using the device's SIOF fault bits."""
-    self.parameter = parameter
-    self.siof = siof
-    messages = [_SIOF_MESSAGES[bit] for bit in range(8) if siof & (1 << bit)]
-    reason = ", ".join(messages) if messages else "no SIOF reason bit was set"
-    super().__init__(f"Hettich parameter {parameter} was rejected: {reason} (SIOF=0x{siof:02X})")
-
-
 class HettichRoboticCentrifuge(ABC):
   """Shared Generation 2 protocol for a model-specific Hettich centrifuge.
 
@@ -316,12 +288,36 @@ class HettichRoboticCentrifuge(ABC):
       xonxoff=False,
     )
     self._transaction_lock: Optional[asyncio.Lock] = None
+    self._machine = _StateMachine()
+    self._spin_stop_requested = False
+    self._spin_completion: Optional[asyncio.Event] = None
     self._next_enquiry_at = 0.0
     self.device_type_code: Optional[int] = None
     self.device_type: Optional[str] = None
     self.software_version: Optional[str] = None
 
+  @property
+  def state(self) -> HettichMachineState:
+    """Return an immutable snapshot of connection, active workflow, and recovery state."""
+    return self._machine.state
+
   async def setup(self) -> None:
+    """Connect and identify the device, preserving any outstanding recovery requirement."""
+    async with self._machine.operation("setting_up", require_connected=False, allow_recovery=True):
+      if self.state.connection == "connected":
+        return
+      if self.state.connection == "unknown":
+        raise HettichCentrifugeError("Transport closure is uncertain; call stop() before setup()")
+      self._machine.set_connection("connecting")
+      try:
+        await self._setup()
+      except BaseException:
+        if self.state.connection != "disconnected":
+          self._machine.set_connection("unknown")
+        raise
+      self._machine.set_connection("connected")
+
+  async def _setup(self) -> None:
     """Open the port and verify a Generation 2 Hettich centrifuge without moving it."""
     await self.io.setup()
     try:
@@ -374,11 +370,62 @@ class HettichRoboticCentrifuge(ABC):
       )
     except BaseException:
       await self.io.stop()
+      self._machine.set_connection("disconnected")
       raise
 
   async def stop(self) -> None:
     """Close the serial connection without changing the centrifuge's run state."""
-    await self.io.stop()
+    async with self._machine.operation(
+      "disconnecting", require_connected=False, allow_recovery=True
+    ):
+      if self.state.connection == "disconnected":
+        return
+      self._machine.set_connection("disconnecting")
+      async with self._get_transaction_lock():
+        try:
+          await self.io.stop()
+        except BaseException:
+          self._machine.set_connection("unknown")
+          self._machine.require_recovery()
+          raise
+        self._machine.set_connection("disconnected")
+
+  async def recover(self) -> None:
+    """Clear the recovery flag after fresh, read-only checks of identity and safe standstill.
+
+    Resolve the cause of the failure and inspect the samples first. This method
+    does not move the rotor or hatch, restart a cycle, or restore program settings.
+    Reconnect with ``setup()`` first if the transport was closed.
+    """
+    async with self._machine.operation("recovering", allow_recovery=True):
+      self._machine.require_recovery()
+      await self._enquire_parameter(SIOF_PARAMETER, allow_nak=False)
+      generation = await self._enquire_parameter(GENERATION_PARAMETER)
+      device_type = await self._enquire_parameter(DEVICE_TYPE_PARAMETER)
+      if (
+        generation != GENERATION_2_IDENTIFICATION
+        or device_type not in self._configuration().device_type_codes
+      ):
+        raise HettichCentrifugeError("The connected centrifuge identity does not match this driver")
+      self._require_remote_standstill(await self.request_status())
+      if await self.request_speed() != 0:
+        raise HettichCentrifugeError("Recovery requires zero measured rotor speed")
+      hatch = await self.request_hatch_status()
+      if (
+        hatch.hatch_moving
+        or hatch.rotor_moving
+        or hatch.hatch_timeout
+        or hatch.positioning_timeout
+        or hatch.positioning_error
+        or hatch.hatch_open == hatch.hatch_closed
+        or (hatch.hatch_closed and not hatch.lid_lock_closed)
+        or (hatch.positioning_active and not hatch.position_reached)
+      ):
+        raise HettichCentrifugeError(
+          "Recovery requires stable, fault-free hatch and positioning state"
+        )
+      self._machine.confirm_recovery()
+      logger.info("[Hettich %s] recovery checks passed", self.io.port)
 
   @staticmethod
   def _bcc(data: bytes) -> int:
@@ -492,6 +539,7 @@ class HettichRoboticCentrifuge(ABC):
     last_error: Optional[HettichCommunicationError] = None
     for attempt in range(1, self.retries + 1):
       try:
+        self._machine.mark_actuated()
         await self.io.write(frame)
         reply = await self._read_exact(COMMAND_REPLY_LENGTH)
         if reply[0] != ord(self.address):
@@ -529,6 +577,8 @@ class HettichRoboticCentrifuge(ABC):
   async def _enquire_parameter(self, parameter: str, allow_nak: bool = True) -> int:
     """Read a parameter while serializing access to the bus."""
     async with self._get_transaction_lock():
+      if self.state.connection not in ("connected", "connecting"):
+        raise HettichCentrifugeError("The centrifuge is not connected; call setup() first")
       value = await self._request_enquiry(parameter)
       if value is not None:
         return value
@@ -542,6 +592,8 @@ class HettichRoboticCentrifuge(ABC):
   async def _select_parameter(self, parameter: str, value: int) -> None:
     """Write a parameter and decode SIOF when the centrifuge returns NAK."""
     async with self._get_transaction_lock():
+      if self.state.connection != "connected":
+        raise HettichCentrifugeError("The centrifuge is not connected; call setup() first")
       acknowledged = await self._request_select(parameter, value)
       if acknowledged:
         return
@@ -703,23 +755,25 @@ class HettichRoboticCentrifuge(ABC):
 
   async def open_hatch(self, timeout: float = 30.0) -> None:
     """Move the loading hatch to the open state and wait for confirmation."""
-    hatch = await self.request_hatch_status()
-    if hatch.hatch_open:
-      return
-    self._require_positioning_ready(await self.request_status())
-    logger.info("[Hettich %s] opening hatch", self.io.port)
-    await self._select_parameter(POSITION_COMMAND, 0x0060)
-    await self._wait_for_hatch("open", timeout)
+    async with self._machine.operation("opening_hatch"):
+      hatch = await self.request_hatch_status()
+      if hatch.hatch_open:
+        return
+      self._require_positioning_ready(await self.request_status())
+      logger.info("[Hettich %s] opening hatch", self.io.port)
+      await self._select_parameter(POSITION_COMMAND, 0x0060)
+      await self._wait_for_hatch("open", timeout)
 
   async def close_hatch(self, timeout: float = 30.0) -> None:
     """Move the loading hatch to the closed state and wait for both closed switches."""
-    hatch = await self.request_hatch_status()
-    if hatch.hatch_closed and hatch.lid_lock_closed:
-      return
-    self._require_positioning_ready(await self.request_status())
-    logger.info("[Hettich %s] closing hatch", self.io.port)
-    await self._select_parameter(POSITION_COMMAND, 0x0070)
-    await self._wait_for_hatch("closed", timeout)
+    async with self._machine.operation("closing_hatch"):
+      hatch = await self.request_hatch_status()
+      if hatch.hatch_closed and hatch.lid_lock_closed:
+        return
+      self._require_positioning_ready(await self.request_status())
+      logger.info("[Hettich %s] closing hatch", self.io.port)
+      await self._select_parameter(POSITION_COMMAND, 0x0070)
+      await self._wait_for_hatch("closed", timeout)
 
   async def move_to_position(
     self,
@@ -735,40 +789,43 @@ class HettichRoboticCentrifuge(ABC):
       timeout: Maximum total positioning time. Firmware may make three attempts
         of up to 100 seconds each.
     """
-    if speed not in ("slow", "fast"):
-      raise ValueError('speed must be "slow" or "fast"')
-    current_target = await self._enquire_parameter(TARGET_POSITION_PARAMETER)
-    maximum_positions = current_target >> 8
-    if not 1 <= position <= maximum_positions:
-      raise ValueError(f"position must be 1..{maximum_positions} for the installed rotor")
+    async with self._machine.operation("positioning"):
+      if speed not in ("slow", "fast"):
+        raise ValueError('speed must be "slow" or "fast"')
+      current_target = await self._enquire_parameter(TARGET_POSITION_PARAMETER)
+      maximum_positions = current_target >> 8
+      if not 1 <= position <= maximum_positions:
+        raise ValueError(f"position must be 1..{maximum_positions} for the installed rotor")
 
-    hatch = await self.request_hatch_status()
-    self._require_positioning_ready(await self.request_status())
-    if current_target & 0xFF == position and hatch.position_reached:
-      return
-
-    if hatch.rotor_moving:
-      if current_target & 0xFF != position:
-        raise HettichCentrifugeError(
-          "A different rotor positioning move is already active; wait for it to finish"
-        )
-    else:
-      if current_target & 0xFF != position:
-        await self._select_parameter(TARGET_POSITION_PARAMETER, (maximum_positions << 8) | position)
-      logger.info("[Hettich %s] moving to rotor position %d (%s)", self.io.port, position, speed)
-      await self._select_parameter(POSITION_COMMAND, 0x0001 if speed == "slow" else 0x0002)
-
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
-    while True:
-      state = await self.request_hatch_status()
-      if state.positioning_timeout or state.positioning_error:
-        raise HettichCentrifugeError(f"Positioning rotor at position {position} failed")
-      if state.position_reached:
+      hatch = await self.request_hatch_status()
+      self._require_positioning_ready(await self.request_status())
+      if current_target & 0xFF == position and hatch.position_reached:
         return
-      if loop.time() >= deadline:
-        raise TimeoutError(f"Rotor did not reach position {position} within {timeout} seconds")
-      await asyncio.sleep(self.poll_interval)
+
+      if hatch.rotor_moving:
+        if current_target & 0xFF != position:
+          raise HettichCentrifugeError(
+            "A different rotor positioning move is already active; wait for it to finish"
+          )
+      else:
+        if current_target & 0xFF != position:
+          await self._select_parameter(
+            TARGET_POSITION_PARAMETER, (maximum_positions << 8) | position
+          )
+        logger.info("[Hettich %s] moving to rotor position %d (%s)", self.io.port, position, speed)
+        await self._select_parameter(POSITION_COMMAND, 0x0001 if speed == "slow" else 0x0002)
+
+      loop = asyncio.get_running_loop()
+      deadline = loop.time() + timeout
+      while True:
+        state = await self.request_hatch_status()
+        if state.positioning_timeout or state.positioning_error:
+          raise HettichCentrifugeError(f"Positioning rotor at position {position} failed")
+        if state.position_reached:
+          return
+        if loop.time() >= deadline:
+          raise TimeoutError(f"Rotor did not reach position {position} within {timeout} seconds")
+        await asyncio.sleep(self.poll_interval)
 
   async def _wait_for_positioning_end(self, timeout: float) -> None:
     """Wait until the positioning-active state clears."""
@@ -786,11 +843,12 @@ class HettichRoboticCentrifuge(ABC):
 
   async def end_positioning(self, timeout: float = 10.0) -> None:
     """Leave positioning mode if it is active, readying the centrifuge for a run."""
-    if not (await self.request_hatch_status()).positioning_active:
-      return
-    self._require_positioning_ready(await self.request_status())
-    await self._select_parameter(POSITION_COMMAND, 0x0080)
-    await self._wait_for_positioning_end(timeout)
+    async with self._machine.operation("ending_positioning"):
+      if not (await self.request_hatch_status()).positioning_active:
+        return
+      self._require_positioning_ready(await self.request_status())
+      await self._select_parameter(POSITION_COMMAND, 0x0080)
+      await self._wait_for_positioning_end(timeout)
 
   async def select_program(self, program: int) -> None:
     """Select a stored program without starting centrifugation.
@@ -798,14 +856,15 @@ class HettichRoboticCentrifuge(ABC):
     Args:
       program: Stored program number, from 1 through 89.
     """
-    if not 1 <= program <= 89:
-      raise ValueError("program must be 1..89")
-    status = await self.request_status()
-    self._require_remote_standstill(status)
-    if status.program_number == program:
-      return
-    await self._select_parameter(PROGRAM_COMMAND, (program << 8) | 0x04)
-    logger.info("[Hettich %s] selected program %d", self.io.port, program)
+    async with self._machine.operation("selecting_program"):
+      if not 1 <= program <= 89:
+        raise ValueError("program must be 1..89")
+      status = await self.request_status()
+      self._require_remote_standstill(status)
+      if status.program_number == program:
+        return
+      await self._select_parameter(PROGRAM_COMMAND, (program << 8) | 0x04)
+      logger.info("[Hettich %s] selected program %d", self.io.port, program)
 
   async def _start_spin(self, run_time: int, speed: int) -> None:
     """Start without waiting, using the device-native acceleration-inclusive run time."""
@@ -813,6 +872,7 @@ class HettichRoboticCentrifuge(ABC):
       raise ValueError(f"run_time must be 1..{MAXIMUM_DURATION} seconds")
     if speed < MINIMUM_SPEED:
       raise ValueError(f"speed must be at least {MINIMUM_SPEED} rpm")
+    self._raise_if_spin_stop_requested()
 
     status = await self.request_status()
     self._require_remote_standstill(status)
@@ -826,6 +886,7 @@ class HettichRoboticCentrifuge(ABC):
     if not hatch.hatch_closed or not hatch.lid_lock_closed:
       raise HettichCentrifugeError("The hatch and lid lock must both be closed before a run")
     if hatch.positioning_active:
+      self._raise_if_spin_stop_requested()
       await self._select_parameter(POSITION_COMMAND, 0x0080)
       await self._wait_for_positioning_end(timeout=10.0)
       status = await self.request_status()
@@ -837,9 +898,12 @@ class HettichRoboticCentrifuge(ABC):
     if speed > maximum_speed:
       raise ValueError(f"speed must not exceed the installed rotor limit of {maximum_speed} rpm")
 
+    self._raise_if_spin_stop_requested()
     await self._select_parameter(RUN_TIME_PARAMETER, run_time)
     await self._select_parameter(SPEED_PARAMETER, speed)
     await self._select_parameter(ACTIVATE_PARAMETERS_COMMAND, 0x0001)
+
+    self._raise_if_spin_stop_requested()
 
     logger.info(
       "[Hettich %s] starting centrifugation: run_time=%d seconds, speed=%d rpm",
@@ -855,10 +919,17 @@ class HettichRoboticCentrifuge(ABC):
 
   async def _stop_after_spin_failure(self) -> None:
     """Attempt to stop a possibly running rotor without masking the original failure."""
+    if self.state.activity in ("preparing_to_spin", "accelerating", "at_speed", "braking"):
+      self._machine.set_activity("braking")
     try:
-      await self.stop_spin()
+      await self._stop_spin()
     except BaseException:
       logger.exception("[Hettich %s] failed to stop after spin() failed", self.io.port)
+
+  def _raise_if_spin_stop_requested(self) -> None:
+    """Let the spin owner handle an external stop request through its cleanup path."""
+    if self._spin_stop_requested:
+      raise HettichCentrifugeError("Centrifugation was interrupted by stop_spin()")
 
   async def _wait_for_standstill(
     self,
@@ -878,7 +949,11 @@ class HettichRoboticCentrifuge(ABC):
     deadline = loop.time() + timeout
     interrupted = False
     while True:
+      if expected_end_at is not None:
+        self._raise_if_spin_stop_requested()
       status = await self.request_status()
+      if expected_end_at is not None and status.phase == "braking":
+        self._machine.set_activity("braking")
       if status.error_number is not None:
         raise HettichCentrifugeError(f"The centrifuge stopped with error {status.error_number}")
       if (
@@ -907,6 +982,7 @@ class HettichRoboticCentrifuge(ABC):
     deadline = loop.time() + timeout
     motion_observed = False
     while True:
+      self._raise_if_spin_stop_requested()
       status = await self.request_status()
       if status.error_number is not None:
         raise HettichCentrifugeError(f"The centrifuge stopped with error {status.error_number}")
@@ -948,77 +1024,108 @@ class HettichRoboticCentrifuge(ABC):
     timer rounding and query delays, the method waits for standstill and raises
     ``HettichCentrifugeError`` instead of reporting a completed cycle.
     """
-    operation_data: dict[str, Any] = {
-      "device": device_reference(self, name=self.name),
-      "resources": [],
-      "bucket_resources": [],
-      "speed_rpm": speed,
-      "duration": duration,
-    }
-    if (
-      self.rotor_specification is not None and 0 <= speed <= self.rotor_specification.maximum_speed
-    ):
-      operation_data["relative_centrifugal_force"] = self.rotor_specification.rcf_at_speed(speed)
-
-    with event_operation("centrifuge.spin", **operation_data):
-      if not 1 <= duration <= MAXIMUM_DURATION:
-        raise ValueError(f"duration must be 1..{MAXIMUM_DURATION} seconds")
-      if timeout is not None and timeout <= duration:
-        raise ValueError("timeout must exceed duration to allow for acceleration and braking")
-
-      maximum_run_up_time = await self._enquire_parameter(MAXIMUM_RUN_UP_TIME_PARAMETER)
-      maximum_target_duration = MAXIMUM_DURATION - maximum_run_up_time
-      if duration > maximum_target_duration:
-        raise ValueError(
-          f"duration must not exceed {maximum_target_duration} seconds with the centrifuge's "
-          f"configured maximum run-up time of {maximum_run_up_time} seconds"
-        )
-      cycle_timeout: float
-      if timeout is None:
-        maximum_run_down_time = await self._enquire_parameter(MAXIMUM_RUN_DOWN_TIME_PARAMETER)
-        cycle_timeout = (
-          duration + maximum_run_up_time + maximum_run_down_time + DEFAULT_TIMEOUT_MARGIN
-        )
-      else:
-        cycle_timeout = timeout
-
-      loop = asyncio.get_running_loop()
-      deadline = loop.time() + cycle_timeout
-      initial_run_time = duration + maximum_run_up_time
-      await self._start_spin(run_time=initial_run_time, speed=speed)
+    async with self._machine.operation("preparing_to_spin"):
+      self._spin_completion = asyncio.Event()
+      self._spin_stop_requested = False
       try:
-        remaining = deadline - loop.time()
-        if remaining <= 0:
-          raise TimeoutError(
-            f"Centrifuge did not reach {speed} rpm within the {cycle_timeout}-second timeout"
+        operation_data: dict[str, Any] = {
+          "device": device_reference(self, name=self.name),
+          "resources": [],
+          "bucket_resources": [],
+          "speed_rpm": speed,
+          "duration": duration,
+        }
+        if (
+          self.rotor_specification is not None
+          and 0 <= speed <= self.rotor_specification.maximum_speed
+        ):
+          operation_data["relative_centrifugal_force"] = self.rotor_specification.rcf_at_speed(
+            speed
           )
-        elapsed_at_target, sampled_at = await self._wait_for_target_speed(
-          speed=speed, timeout=remaining
-        )
-        end_time = elapsed_at_target + duration
-        if end_time > MAXIMUM_DURATION:
-          raise ValueError(
-            "duration is too long to exclude acceleration within the device's maximum run time"
-          )
-        await self._select_parameter(RUN_TIME_PARAMETER, end_time)
-        await self._select_parameter(ACTIVATE_PARAMETERS_COMMAND, 0x0001)
 
-        remaining = deadline - loop.time()
-        if remaining <= 0:
-          raise TimeoutError(f"Centrifuge cycle exceeded its {cycle_timeout}-second timeout")
-        await self._wait_for_standstill(
-          timeout=remaining, motion_observed=True, expected_end_at=sampled_at + duration
-        )
-      except BaseException:
-        await self._stop_after_spin_failure()
-        raise
+        with event_operation("centrifuge.spin", **operation_data):
+          if not 1 <= duration <= MAXIMUM_DURATION:
+            raise ValueError(f"duration must be 1..{MAXIMUM_DURATION} seconds")
+          if timeout is not None and timeout <= duration:
+            raise ValueError("timeout must exceed duration to allow for acceleration and braking")
+
+          maximum_run_up_time = await self._enquire_parameter(MAXIMUM_RUN_UP_TIME_PARAMETER)
+          maximum_target_duration = MAXIMUM_DURATION - maximum_run_up_time
+          if duration > maximum_target_duration:
+            raise ValueError(
+              f"duration must not exceed {maximum_target_duration} seconds with the centrifuge's "
+              f"configured maximum run-up time of {maximum_run_up_time} seconds"
+            )
+          cycle_timeout: float
+          if timeout is None:
+            maximum_run_down_time = await self._enquire_parameter(MAXIMUM_RUN_DOWN_TIME_PARAMETER)
+            cycle_timeout = (
+              duration + maximum_run_up_time + maximum_run_down_time + DEFAULT_TIMEOUT_MARGIN
+            )
+          else:
+            cycle_timeout = timeout
+
+          loop = asyncio.get_running_loop()
+          deadline = loop.time() + cycle_timeout
+          initial_run_time = duration + maximum_run_up_time
+          await self._start_spin(run_time=initial_run_time, speed=speed)
+          try:
+            self._machine.set_activity("accelerating")
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+              raise TimeoutError(
+                f"Centrifuge did not reach {speed} rpm within the {cycle_timeout}-second timeout"
+              )
+            elapsed_at_target, sampled_at = await self._wait_for_target_speed(
+              speed=speed, timeout=remaining
+            )
+            self._raise_if_spin_stop_requested()
+            self._machine.set_activity("at_speed")
+            end_time = elapsed_at_target + duration
+            if end_time > MAXIMUM_DURATION:
+              raise ValueError(
+                "duration is too long to exclude acceleration within the device's maximum run time"
+              )
+            await self._select_parameter(RUN_TIME_PARAMETER, end_time)
+            await self._select_parameter(ACTIVATE_PARAMETERS_COMMAND, 0x0001)
+
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+              raise TimeoutError(f"Centrifuge cycle exceeded its {cycle_timeout}-second timeout")
+            await self._wait_for_standstill(
+              timeout=remaining, motion_observed=True, expected_end_at=sampled_at + duration
+            )
+          except BaseException:
+            await self._stop_after_spin_failure()
+            raise
+      finally:
+        self._spin_stop_requested = False
+        self._spin_completion.set()
 
   async def stop_spin(self, timeout: float = 300.0) -> None:
     """Emergency-stop an active run and wait for standstill.
 
     The Hettich manual explicitly classifies a PC STOP command as an emergency
-    stop. If the rotor is already at standstill, this method is a no-op.
+    stop. If PLR owns a spin, ask that workflow to stop and wait for it to release
+    ownership. Then verify standstill, sending STOP if necessary. This operation
+    is available during recovery and never clears the recovery flag.
     """
+    if timeout <= 0:
+      raise ValueError("timeout must be positive")
+    deadline = asyncio.get_running_loop().time() + timeout
+    if self.state.activity in ("preparing_to_spin", "accelerating", "at_speed", "braking"):
+      completion = self._spin_completion
+      assert completion is not None
+      self._spin_stop_requested = True
+      await asyncio.wait_for(completion.wait(), timeout=timeout)
+    async with self._machine.operation("stopping_spin", allow_recovery=True):
+      remaining = deadline - asyncio.get_running_loop().time()
+      if remaining <= 0:
+        raise TimeoutError("Timed out waiting for the spin workflow to stop")
+      await self._stop_spin(timeout=remaining)
+
+  async def _stop_spin(self, timeout: float = 300.0) -> None:
+    """Stop under the owning operation's guard, without competing for ownership."""
     status = await self.request_status()
     if status.phase == "standstill":
       return
