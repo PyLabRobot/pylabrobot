@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import dataclasses
 import unittest
@@ -6,7 +8,8 @@ from typing import Awaitable, Callable
 from unittest.mock import ANY, AsyncMock, call, patch
 
 from pylabrobot.agilent.vspin import _access2_protocol as protocol
-from pylabrobot.agilent.vspin import _nmc, vspin as vspin_module
+from pylabrobot.agilent.vspin import _nmc
+from pylabrobot.agilent.vspin import vspin as vspin_module
 from pylabrobot.agilent.vspin._state import (
   ConnectionState,
   TransitionToken,
@@ -20,7 +23,6 @@ from pylabrobot.agilent.vspin.vspin import VSpin
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Coordinate, Resource
-
 
 _SERVO_STATUS_MASK = (
   _nmc.SEND_POSITION | _nmc.SEND_ANALOG | _nmc.SEND_VELOCITY | _nmc.SEND_AUXILIARY | _nmc.SEND_HOME
@@ -700,6 +702,99 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
     self.assertFalse(self.vspin.state.recovery_required)
     self.assertTrue(self.vspin._spin_completion_event.is_set())
+
+  async def test_stop_spin_during_preparation_prevents_servo_motion(self):
+    position_request_started = asyncio.Event()
+    allow_position_response = asyncio.Event()
+
+    self.vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    async def request_position() -> int:
+      position_request_started.set()
+      await allow_position_response.wait()
+      return 0
+
+    self.vspin.request_position = AsyncMock(side_effect=request_position)  # type: ignore[method-assign]
+    self.vspin._enable_amplifier_and_reset_servo_status = AsyncMock()  # type: ignore[method-assign]
+    self.vspin._send_nmc = AsyncMock()  # type: ignore[method-assign]
+
+    spin_task: asyncio.Future[None] = asyncio.ensure_future(self.vspin.spin(g=500, duration=1))
+    await position_request_started.wait()
+    stop_task = asyncio.create_task(self.vspin.stop_spin(deceleration=0.5))
+    while not self.vspin._spin_cancel_requested:
+      await asyncio.sleep(0)
+
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.PREPARING_TO_SPIN)
+    self.assertFalse(stop_task.done())
+
+    allow_position_response.set()
+    await asyncio.gather(spin_task, stop_task)
+
+    self.vspin._enable_amplifier_and_reset_servo_status.assert_not_awaited()  # type: ignore[attr-defined]
+    self.vspin._send_nmc.assert_not_awaited()  # type: ignore[attr-defined]
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
+    self.assertTrue(self.vspin._spin_completion_event.is_set())
+
+    cancellation_seen_by_next_spin: list[bool] = []
+
+    async def next_spin_cycle(
+      g: float,
+      duration: float,
+      acceleration: float,
+      deceleration: float,
+      *,
+      transition: TransitionToken,
+    ) -> None:
+      del g, duration, acceleration, deceleration, transition
+      cancellation_seen_by_next_spin.append(self.vspin._spin_cancel_requested)
+
+    self.vspin._run_spin_cycle = AsyncMock(side_effect=next_spin_cycle)  # type: ignore[method-assign]
+
+    await self.vspin.spin(g=500, duration=1)
+
+    self.assertEqual(cancellation_seen_by_next_spin, [False])
+
+  async def test_stop_spin_at_end_of_preparation_turns_off_the_servo(self):
+    final_safety_check_started = asyncio.Event()
+    allow_safety_check = asyncio.Event()
+
+    self.vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_position = AsyncMock(return_value=0)  # type: ignore[method-assign]
+    self.vspin._enable_amplifier_and_reset_servo_status = AsyncMock()  # type: ignore[method-assign]
+    self.vspin._disable_servo_after_motion = AsyncMock()  # type: ignore[method-assign]
+    self.vspin._send_nmc = AsyncMock(  # type: ignore[method-assign]
+      return_value=_nmc.NMCResponse(status=0, data=b"")
+    )
+
+    async def final_safety_check() -> None:
+      final_safety_check_started.set()
+      await allow_safety_check.wait()
+
+    self.vspin._raise_for_spin_faults = AsyncMock(  # type: ignore[method-assign]
+      side_effect=final_safety_check
+    )
+
+    spin_task: asyncio.Future[None] = asyncio.ensure_future(self.vspin.spin(g=500, duration=1))
+    await final_safety_check_started.wait()
+    stop_task = asyncio.create_task(self.vspin.stop_spin(deceleration=0.5))
+    while not self.vspin._spin_cancel_requested:
+      await asyncio.sleep(0)
+
+    self.assertFalse(stop_task.done())
+
+    allow_safety_check.set()
+    await asyncio.gather(spin_task, stop_task)
+
+    self.vspin._enable_amplifier_and_reset_servo_status.assert_awaited_once()  # type: ignore[attr-defined]
+    self.vspin._disable_servo_after_motion.assert_awaited_once()  # type: ignore[attr-defined]
+    self.vspin._send_nmc.assert_awaited_once_with(  # type: ignore[attr-defined]
+      _nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._VELOCITY_GAINS)
+    )
+    self.assertEqual(self.vspin.state.activity, VSpinActivity.IDLE)
 
   async def test_stop_spin_reports_owner_failure_after_recovery_is_recorded(self):
     owner_started = asyncio.Event()

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import dataclasses
 import json
@@ -863,6 +865,7 @@ class VSpin:
       raise ValueError("Deceleration must be within 0-1.")
     activity = self._state.activity
     if activity not in (
+      VSpinActivity.PREPARING_TO_SPIN,
       VSpinActivity.ACCELERATING,
       VSpinActivity.AT_SPEED,
       VSpinActivity.DECELERATING,
@@ -1319,6 +1322,8 @@ class VSpin:
         activity=VSpinActivity.PREPARING_TO_SPIN,
       ) as transition:
         self._spin_completion_event.clear()
+        self._spin_cancel_requested = False
+        self._spin_stop_deceleration = None
         owns_completion_event = True
         await self._run_spin_cycle(
           g,
@@ -1348,6 +1353,9 @@ class VSpin:
     if await self.request_bucket_locked():
       await self._unlock_bucket(transition=transition)
 
+    if self._spin_cancel_requested:
+      return
+
     rpm = VSpin.g_to_rpm(g)
     logger.info(
       "[vSpin %s] spin: g=%.1f rpm=%d duration=%.1fs acceleration=%.2f deceleration=%.2f",
@@ -1375,6 +1383,9 @@ class VSpin:
         "Please report this issue on discuss.pylabrobot.org."
       )
 
+    if self._spin_cancel_requested:
+      return
+
     spin_trajectory = _nmc.build_load_trajectory(
       _nmc.PIC_SERVO_ADDRESS,
       _POSITION_TRAJECTORY_MODE,
@@ -1384,13 +1395,20 @@ class VSpin:
     )
 
     await self._enable_amplifier_and_reset_servo_status()
+    if self._spin_cancel_requested:
+      await self._disable_servo_after_motion()
+      return
     await self._send_nmc(_nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, _VELOCITY_GAINS))
+    if self._spin_cancel_requested:
+      await self._disable_servo_after_motion()
+      return
 
     trajectory_started = False
-    self._spin_cancel_requested = False
-    self._spin_stop_deceleration = None
     try:
       await self._raise_for_spin_faults()
+      if self._spin_cancel_requested:
+        await self._disable_servo_after_motion()
+        return
       self._at_bucket = None
       self._set_activity(VSpinActivity.ACCELERATING)
       transition.mark_actuated(position_uncertain=True)

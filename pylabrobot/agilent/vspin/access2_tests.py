@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import unittest
 from collections import deque
@@ -13,7 +15,6 @@ from pylabrobot.agilent.vspin._state import (
 )
 from pylabrobot.agilent.vspin.access2 import Access2Driver
 from pylabrobot.io.binary import Writer
-
 
 _READY_FLAGS = protocol.STATUS_INITIALIZED | protocol.STATUS_HOMED
 

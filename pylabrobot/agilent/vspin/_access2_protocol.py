@@ -130,7 +130,7 @@ class Access2Status:
     return bool(self.access2_status & STATUS_OPTICAL_PLATE_SENSOR)
 
   def axis_status(self, axis: int) -> int | None:
-    """Return the PIC-SERVO status byte for ``axis`` when full status is available."""
+    """Return the raw Access2 axis-status byte when full status is available."""
     if axis == AXIS_GRIPPER:
       return self.gripper_status
     if axis == AXIS_Y:
