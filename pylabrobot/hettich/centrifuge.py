@@ -834,7 +834,18 @@ class HettichRoboticCentrifuge(ABC):
       run_time,
       speed,
     )
-    await self._select_parameter(SPIN_COMMAND, 0x0002)
+    try:
+      await self._select_parameter(SPIN_COMMAND, 0x0002)
+    except BaseException:
+      await self._stop_after_spin_failure()
+      raise
+
+  async def _stop_after_spin_failure(self) -> None:
+    """Attempt to stop a possibly running rotor without masking the original failure."""
+    try:
+      await self.stop_spin()
+    except BaseException:
+      logger.exception("[Hettich %s] failed to stop after spin() failed", self.io.port)
 
   async def _wait_for_standstill(self, timeout: float, motion_observed: bool) -> CentrifugeStatus:
     """Wait for standstill, optionally accepting that motion was observed by the caller."""
@@ -956,10 +967,7 @@ class HettichRoboticCentrifuge(ABC):
           raise TimeoutError(f"Centrifuge cycle exceeded its {cycle_timeout}-second timeout")
         await self._wait_for_standstill(timeout=remaining, motion_observed=True)
       except BaseException:
-        try:
-          await self.stop_spin()
-        except BaseException:
-          logger.exception("[Hettich %s] failed to stop after spin() failed", self.io.port)
+        await self._stop_after_spin_failure()
         raise
 
   async def stop_spin(self, timeout: float = 300.0) -> None:

@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from inspect import isabstract
 from typing import List, TypeVar, cast
@@ -537,6 +538,93 @@ class HettichProtocolTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(telegram_parameters(device), [b"00614"])
     self.assertNotIn(b"00521", telegram_parameters(device))
+
+  async def test_spin_stops_after_lost_start_acknowledgements(self) -> None:
+    """A lost START reply must not leave a potentially running rotor unattended."""
+    ack = bytes([ord("]"), ACK])
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+        ack,
+        ack,
+        ack,
+        b"",
+        b"",
+        b"",
+        enquiry_reply("00634", 0x01E4),
+        enquiry_reply("00635", 0xA292),
+        ack,
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+
+    with self.assertRaisesRegex(HettichCommunicationError, "SELECT 00521 failed"):
+      await device.spin(duration=30, speed=2000, timeout=60)
+
+    self.assertEqual(telegrams(device).count(device._build_select("00521", 2)), 3)
+    self.assertIn(device._build_select("00521", 1), telegrams(device))
+    self.assertEqual(telegram_parameters(device)[-2:], [b"00634", b"00635"])
+
+  async def test_spin_stops_when_cancelled_while_awaiting_start_reply(self) -> None:
+    """Cancellation during START must stop the rotor and still propagate cancellation."""
+    ack = bytes([ord("]"), ACK])
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+        ack,
+        ack,
+        ack,
+        ack,
+        enquiry_reply("00634", 0x01E4),
+        enquiry_reply("00635", 0xA292),
+        ack,
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+    start_sent = asyncio.Event()
+    original_read = cast(AsyncMock, device.io.read).side_effect
+
+    async def read(num_bytes: int = 1) -> bytes:
+      """Suspend delivery of the START reply until the spin task is cancelled."""
+      reply = cast(bytes, await original_read(num_bytes))
+      if telegrams(device)[-1] == device._build_select("00521", 2):
+        start_sent.set()
+        await asyncio.Event().wait()
+      return reply
+
+    cast(AsyncMock, device.io.read).side_effect = read
+    task = asyncio.create_task(device.spin(duration=30, speed=2000, timeout=60))
+    await asyncio.wait_for(start_sent.wait(), timeout=1)
+    task.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await task
+
+    self.assertIn(device._build_select("00521", 1), telegrams(device))
+    self.assertEqual(telegram_parameters(device)[-2:], [b"00634", b"00635"])
+
+  async def test_spin_preflight_failure_does_not_stop_an_existing_run(self) -> None:
+    """Rejecting an already running machine must not interrupt its existing cycle."""
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x01E8),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+    with self.assertRaisesRegex(HettichCentrifugeError, "standstill"):
+      await device.spin(duration=30, speed=2000, timeout=60)
+
+    self.assertEqual(telegram_parameters(device), [b"00614", b"00634", b"00635"])
 
   async def test_stop_spin_is_noop_at_standstill(self) -> None:
     device = make_device(
