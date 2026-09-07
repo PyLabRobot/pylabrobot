@@ -180,10 +180,14 @@ class _OT2Pipette(ABC):
     _require_finite_coordinate("location", location)
     if location.z < 0:
       raise ValueError("location.z must be non-negative")
-    if not self.robot.geometry.can_reach_position(self.mount, location):
+    # Full-column alignment fixes every nozzle relative to the reference nozzle.
+    # Checking its offset therefore checks the common head center for the whole column.
+    channel_offset = self.robot.geometry.channel_y_offsets()[0] if self.num_channels == 8 else 0.0
+    if not self.robot.geometry.can_reach_position(self.mount, location, channel_offset):
       bounds = self.robot.geometry.single_channel_reach(self.mount)
       raise ValueError(
-        f"{location} is outside the {self.mount} mount's reachable x/y region {bounds}"
+        f"{location} with nozzle Y offset {channel_offset:g} is outside the "
+        f"{self.mount} mount's reachable x/y region {bounds}"
       )
 
   async def _move_to(
@@ -633,8 +637,9 @@ class OT2_8ChannelPipette(_OT2Pipette):
   def _validate_nozzle_positions(self, positions: Sequence[Coordinate]) -> None:
     """Require targets to align with the rigid head's 9 mm back-to-front pitch."""
     super()._validate_nozzle_positions(positions)
-    for nozzle, position in enumerate(positions):
-      expected = positions[0] + Coordinate(y=-9 * nozzle)
+    channel_offsets = self.robot.geometry.channel_y_offsets()
+    for position, channel_offset in zip(positions, channel_offsets):
+      expected = positions[0] + Coordinate(y=channel_offset - channel_offsets[0])
       if any(abs(actual - target) > 0.01 for actual, target in zip(position, expected)):
         raise ValueError("Targets must align in nozzle order at 9 mm pitch and equal height")
 
@@ -661,7 +666,9 @@ class OT2_8ChannelPipette(_OT2Pipette):
     primary = tip_spots[0].get_location_wrt(self.robot.deck, "c", "c", "b") + offset
     nozzle_z = primary.z + tip.total_tip_length - tip.fitting_depth
     x_min, x_max = primary.x - 5, primary.x + 5
-    y_min, y_max = primary.y - 9 * (self.num_channels - 1) - 5, primary.y + 5
+    channel_offsets = self.robot.geometry.channel_y_offsets()
+    y_min = primary.y + channel_offsets[-1] - channel_offsets[0] - 5
+    y_max = primary.y + 5
     for labware in self.robot.deck.slots:
       if labware is None or labware is tip_spots[0].parent:
         continue

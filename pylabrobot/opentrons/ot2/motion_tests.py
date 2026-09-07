@@ -11,7 +11,12 @@ from pylabrobot.resources import (
   set_tip_tracking,
   set_volume_tracking,
 )
-from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
+from pylabrobot.resources.celltreat import celltreat_96_wellplate_350uL_Fb
+from pylabrobot.resources.opentrons import (
+  OTDeck,
+  opentrons_96_filtertiprack_20ul,
+  opentrons_96_tiprack_300ul,
+)
 
 
 class OT2MotionTests(unittest.IsolatedAsyncioTestCase):
@@ -82,6 +87,53 @@ class OT2MotionTests(unittest.IsolatedAsyncioTestCase):
     await self.multi.pick_up_tips(self.column, offset=offset)
     self.assertTrue(self.multi.has_tip)
 
+  async def test_eight_channel_y_reach_uses_head_center(self) -> None:
+    """The reference nozzle is 31.5 mm behind the center used for reach checks."""
+    self.io.saved_position["z"] = 120
+    for y in (31.5, 379.0):
+      with self.subTest(y=y):
+        before = len(self.io.commands)
+        await self.multi.move_to(Coordinate(100, y, 120))
+        moves = [c for c in self.io.commands[before:] if c["commandType"] == "moveToCoordinates"]
+        self.assertEqual(len(moves), 1)
+        self.assertEqual(moves[0]["params"]["coordinates"], {"x": 100, "y": y, "z": 120})
+    for y in (20, 31.49, 379.01):
+      with self.subTest(y=y):
+        before = len(self.io.calls)
+        with self.assertRaises(ValueError):
+          await self.multi.move_to(Coordinate(100, y, 120))
+        self.assertEqual(len(self.io.calls), before)
+
+  async def test_single_channel_y_reach_has_no_head_center_offset(self) -> None:
+    """Single-channel targets remain bounded directly by Y=0 through Y=347.5."""
+    self.io.saved_position["z"] = 120
+    for y in (0, 20, 347.5):
+      await self.single.move_to(Coordinate(100, y, 120))
+    for y in (-0.01, 347.51, 379):
+      with self.subTest(y=y):
+        before = len(self.io.calls)
+        with self.assertRaises(ValueError):
+          await self.single.move_to(Coordinate(100, y, 120))
+        self.assertEqual(len(self.io.calls), before)
+
+  async def test_tip_commands_use_head_center_before_tracker_changes(self) -> None:
+    """Pickup and drop apply the same reference offset as explicit moves."""
+    robot_y = self.primary.y - self.deck.slot_locations[0].y
+    offset = Coordinate(y=20 - robot_y)
+    before = len(self.io.calls)
+    with self.assertRaises(ValueError):
+      await self.multi.pick_up_tips(self.column, offset=offset)
+    self.assertEqual(len(self.io.calls), before)
+    self.assertTrue(all(spot.has_tip() for spot in self.column))
+    await self.multi.pick_up_tips(self.column)
+    tips = self.multi.tips
+    before = len(self.io.calls)
+    with self.assertRaises(ValueError):
+      await self.multi.drop_tips(self.column, offset=offset)
+    self.assertEqual(len(self.io.calls), before)
+    self.assertIs(self.multi.tips, tips)
+    self.assertTrue(all(not spot.has_tip() for spot in self.column))
+
   async def test_tall_overlapping_resource_rejects_before_pickup(self) -> None:
     """A tall neighboring resource blocks the entire eight-nozzle footprint."""
     self._place_obstacle(self.primary + Coordinate(x=-10, y=-50, z=-self.primary.z), 100)
@@ -99,6 +151,31 @@ class OT2MotionTests(unittest.IsolatedAsyncioTestCase):
     )
     await self.multi.pick_up_tips(self.column)
     self.assertTrue(self.multi.has_tip)
+
+  async def test_300ul_pickup_clears_short_plate_below_nozzle_engagement(self) -> None:
+    """Long tips clear an overlapping short plate despite their bottoms being near the deck."""
+    io = FakeHTTP(left_pipette_name="p300_multi_gen2")
+    deck = OTDeck()
+    robot = OT2("ot2.local", deck=deck, io=io, command_poll_interval=0)
+    await robot.setup(skip_home=True)
+    try:
+      assert isinstance(robot.left_pipette, OT2_8ChannelPipette)
+      rack = opentrons_96_tiprack_300ul("tips300")
+      rack.model = None
+      deck.assign_child_at_slot(rack, 10)
+      plate = celltreat_96_wellplate_350uL_Fb("short_plate")
+      deck.assign_child_at_slot(plate, 7)
+      # Extend the plate beneath the full column's front nozzles.
+      assert plate.location is not None
+      plate.location += Coordinate(y=36)
+
+      await robot.left_pipette.pick_up_tips(rack["A1:H1"])
+
+      self.assertEqual(len(robot.left_pipette.tips), 8)
+      self.assertTrue(all(not spot.has_tip() for spot in rack["A1:H1"]))
+      self.assertEqual(sum(c["commandType"] == "pickUpTip" for c in io.commands), 1)
+    finally:
+      await robot.stop()
 
   async def test_z_offset_is_included_in_pickup_clearance(self) -> None:
     """A downward pickup offset can bring the nozzle envelope into a short obstacle."""
