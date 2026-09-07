@@ -1,6 +1,6 @@
 """Tests for the Flex gripper capability (``flex.gripper``).
 
-Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxTransport``
+Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxHTTP``
 advertising a gripper on the extension mount, and asserts discovery attaches
 a :class:`~pylabrobot.opentrons.flex.flex_gripper.FlexGripper`; ``move_labware``
 follows the stage -> wire -> commit idiom (PLR-side validation before any
@@ -14,26 +14,26 @@ from typing import Any, Dict, Optional, Tuple
 
 from pylabrobot.opentrons.flex.flex import OpentronsFlex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
-from pylabrobot.opentrons.robot import OpentronsError
-from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.opentrons.flex.errors import OpentronsError
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import Resource, cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.plate import Plate
 
 
-def _flex_with_gripper(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxTransport]:
+def _flex_with_gripper(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
   """An ``OpentronsFlex`` whose transport advertises a gripper on the
   extension mount (plus a single-channel pipette so setup() succeeds),
   returning the transport too so a test can inspect recorded commands.
 
-  ``transport_kwargs`` are forwarded to ``ChatterboxTransport``.
+  ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
   """
-  transport = ChatterboxTransport(
+  transport = ChatterboxHTTP(
     pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")],
     gripper=True,
     **transport_kwargs,
   )
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   return flex, transport
 
 
@@ -43,16 +43,18 @@ def _plate(name: str = "plate") -> Plate:
   return plate
 
 
-class _FailingMoveTransport(ChatterboxTransport):
+class _FailingMoveTransport(ChatterboxHTTP):
   """Chatterbox whose ``moveLabware`` commands fail at the robot: the command
   is accepted (recorded) but its status poll reports ``failed``, so
   ``_execute_command`` raises the way a real robot-server failure would.
   """
 
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    result = await super().post(path, json)
-    data = (json or {}).get("data", {})
-    if path.endswith("/commands") and data.get("commandType") == "moveLabware":
+  async def request(
+    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+  ) -> Dict[str, Any]:
+    result = await super().request(method, path, data)
+    body = (data or {}).get("data", {})
+    if path.endswith("/commands") and body.get("commandType") == "moveLabware":
       cmd_data = result["data"]
       cmd_data["status"] = "failed"
       cmd_data["error"] = {"detail": "simulated gripper failure"}
@@ -75,8 +77,8 @@ class TestGripperDiscovery(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_gripper_none_when_absent(self):
-    transport = ChatterboxTransport(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    transport = ChatterboxHTTP(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       self.assertIsNone(flex.gripper)
@@ -252,7 +254,7 @@ class TestGripDistanceDiscarded(unittest.TestCase):
 class TestMoveLabwarePreWireRejections(unittest.TestCase):
   """Invalid moves raise OpentronsError BEFORE any wire command is sent."""
 
-  def _assert_no_move_commands(self, transport: ChatterboxTransport) -> None:
+  def _assert_no_move_commands(self, transport: ChatterboxHTTP) -> None:
     move_cmds = [c for c in transport.commands if c["commandType"] == "moveLabware"]
     self.assertEqual(len(move_cmds), 0, "no moveLabware wire command may be sent")
 
@@ -316,7 +318,7 @@ class TestMoveLabwareWireFailure(unittest.TestCase):
     transport = _FailingMoveTransport(
       pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], gripper=True
     )
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       plate = _plate()

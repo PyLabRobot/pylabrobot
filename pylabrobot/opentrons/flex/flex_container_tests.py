@@ -23,8 +23,9 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 
 from pylabrobot.opentrons.flex.flex import OpentronsFlex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
-from pylabrobot.opentrons.robot import OpentronsError
-from pylabrobot.opentrons.transport import OFFLINE_API_VERSION, ChatterboxTransport
+from pylabrobot.opentrons.flex.errors import OpentronsError
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
+from pylabrobot.opentrons.flex.flex_wire import OFFLINE_API_VERSION
 from pylabrobot.resources import (
   Container,
   cor_96_wellplate_360uL_Fb,
@@ -38,23 +39,27 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
 
 
-class _FailingAspirateTransport(ChatterboxTransport):
+class _FailingAspirateTransport(ChatterboxHTTP):
   """Chatterbox whose ``aspirate`` POST raises -- models a wire-level failure
   AFTER trackers are staged, driving the rollback paths."""
 
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    if path.endswith("/commands") and (json or {}).get("data", {}).get("commandType") == "aspirate":
+  async def request(
+    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+  ) -> Dict[str, Any]:
+    if path.endswith("/commands") and (data or {}).get("data", {}).get("commandType") == "aspirate":
       raise RuntimeError("simulated aspirate wire failure")
-    return await super().post(path, json)
+    return await super().request(method, path, data)
 
 
-class _FailingDispenseTransport(ChatterboxTransport):
+class _FailingDispenseTransport(ChatterboxHTTP):
   """Like ``_FailingAspirateTransport`` but for ``dispense`` commands."""
 
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    if path.endswith("/commands") and (json or {}).get("data", {}).get("commandType") == "dispense":
+  async def request(
+    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+  ) -> Dict[str, Any]:
+    if path.endswith("/commands") and (data or {}).get("data", {}).get("commandType") == "dispense":
       raise RuntimeError("simulated dispense wire failure")
-    return await super().post(path, json)
+    return await super().request(method, path, data)
 
 
 def _make_trough(
@@ -82,13 +87,13 @@ def _make_trough(
 
 
 def _flex_head1(
-  transport_cls: Type[ChatterboxTransport] = ChatterboxTransport,
-) -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead1]:
+  transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
+) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead1]:
   """An ``OpentronsFlex`` with a single-channel head on the right mount, plus
   the transport (for command inspection) and the head itself.
   """
   transport = transport_cls(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.right
   assert isinstance(head, FlexHead1)
@@ -96,13 +101,13 @@ def _flex_head1(
 
 
 def _flex_head8(
-  transport_cls: Type[ChatterboxTransport] = ChatterboxTransport,
-) -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead8]:
+  transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
+) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
   """An ``OpentronsFlex`` with an 8-channel head on the left mount, plus the
   transport (for command inspection) and the head itself.
   """
   transport = transport_cls(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
@@ -110,13 +115,13 @@ def _flex_head8(
 
 
 def _flex_head96(
-  transport_cls: Type[ChatterboxTransport] = ChatterboxTransport,
-) -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead96]:
+  transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
+) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead96]:
   """An ``OpentronsFlex`` with a 96-channel head, plus the transport (for
   command inspection) and the head itself.
   """
   transport = transport_cls(pipettes=[("p1000_96", 96, 1.0, 1000.0, "left")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.head96
   assert isinstance(head, FlexHead96)
@@ -886,14 +891,16 @@ class TestLiquidOpsRequireAMountedTip(unittest.TestCase):
       asyncio.run(flex.stop())
 
 
-class _AxisPositionTransport(ChatterboxTransport):
+class _AxisPositionTransport(ChatterboxHTTP):
   """Chatterbox whose robot/moveAxes* commands report the axis positions they
   reached, as the real robot-server does. The dict it hands back is the one the
   completion poll reads, so setting the result here is what the caller sees."""
 
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    response = await super().post(path, json)
-    command_type = (json or {}).get("data", {}).get("commandType")
+  async def request(
+    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+  ) -> Dict[str, Any]:
+    response = await super().request(method, path, data)
+    command_type = (data or {}).get("data", {}).get("commandType")
     if command_type in ("robot/moveAxesTo", "robot/moveAxesRelative"):
       response["data"]["result"] = {"position": {"x": 11.0, "y": 22.0, "leftZ": 33.0}}
     return response
@@ -901,8 +908,8 @@ class _AxisPositionTransport(ChatterboxTransport):
 
 def _flex_device(
   api_version: str = OFFLINE_API_VERSION,
-  transport_cls: Type[ChatterboxTransport] = ChatterboxTransport,
-) -> Tuple[OpentronsFlex, ChatterboxTransport]:
+  transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
+) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
   """A set-up ``OpentronsFlex`` plus its transport, for the robot-level
   commands that belong to the device rather than to a head. ``api_version`` is
   what ``/health`` reports, which is what the robot/* version gate reads.
@@ -910,12 +917,12 @@ def _flex_device(
   transport = transport_cls(
     pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], api_version=api_version
   )
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   return flex, transport
 
 
-def _cmds(transport: ChatterboxTransport, command_type: str) -> List[Dict[str, Any]]:
+def _cmds(transport: ChatterboxHTTP, command_type: str) -> List[Dict[str, Any]]:
   return [c for c in transport.commands if c["commandType"] == command_type]
 
 

@@ -3,7 +3,7 @@
 Covers ``blow_out`` (in-place plunger blow-out, all heads), ``touch_tip``
 (wall-touch, all heads) and ``liquid_probe``/``try_liquid_probe``
 (pressure-based liquid-level detection, mount heads only), driven through the
-recording ``ChatterboxTransport``. Two no-liquid signals are modeled: the
+recording ``ChatterboxHTTP``. Two no-liquid signals are modeled: the
 ``liquid_probe_z`` kwarg omits the ``z_position`` result key entirely (a
 succeeding transport's shape), and ``simulate_liquid_probe_not_found`` fails
 the ``liquidProbe`` command with the engine's defined "liquidNotFound" error
@@ -28,8 +28,8 @@ from typing import Any, Dict, Optional
 from pylabrobot.opentrons.flex.flex import OpentronsFlex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1
 from pylabrobot.opentrons.flex.flex_tests import _flex_head1, _flex_head8, _flex_head96
-from pylabrobot.opentrons.robot import OpentronsCommandError, OpentronsError
-from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import (
   biorad_384_wellplate_50uL_Vb,
   cor_96_wellplate_360uL_Fb,
@@ -473,13 +473,15 @@ class TestLiquidProbeHead1(unittest.TestCase):
       asyncio.run(flex.stop())
 
   def test_liquid_probe_other_wire_failure_reraises_untranslated(self):
-    class _OverpressureProbeTransport(ChatterboxTransport):
+    class _OverpressureProbeTransport(ChatterboxHTTP):
       """Fails liquidProbe with a different defined error than liquidNotFound."""
 
-      async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        result = await super().post(path, json)
-        data = (json or {}).get("data", {})
-        if path.endswith("/commands") and data.get("commandType") == "liquidProbe":
+      async def request(
+        self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+      ) -> Dict[str, Any]:
+        result = await super().request(method, path, data)
+        body = (data or {}).get("data", {})
+        if path.endswith("/commands") and body.get("commandType") == "liquidProbe":
           cmd_data = result["data"]
           cmd_data["status"] = "failed"
           cmd_data["error"] = {"errorType": "overpressure", "detail": "clogged tip"}
@@ -488,7 +490,7 @@ class TestLiquidProbeHead1(unittest.TestCase):
     transport = _OverpressureProbeTransport(
       pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")]
     )
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       head = flex.right
@@ -512,11 +514,13 @@ class TestLiquidProbeHead1(unittest.TestCase):
     and a probe wants a dry tip. The driver translates it like an in-place
     draw rather than letting the raw wire error through."""
 
-    class _UnprimedProbeTransport(ChatterboxTransport):
-      async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        result = await super().post(path, json)
-        data = (json or {}).get("data", {})
-        if path.endswith("/commands") and data.get("commandType") == "liquidProbe":
+    class _UnprimedProbeTransport(ChatterboxHTTP):
+      async def request(
+        self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+      ) -> Dict[str, Any]:
+        result = await super().request(method, path, data)
+        body = (data or {}).get("data", {})
+        if path.endswith("/commands") and body.get("commandType") == "liquidProbe":
           cmd_data = result["data"]
           cmd_data["status"] = "failed"
           cmd_data["error"] = {
@@ -527,7 +531,7 @@ class TestLiquidProbeHead1(unittest.TestCase):
         return result
 
     transport = _UnprimedProbeTransport(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       head = flex.right
@@ -779,7 +783,7 @@ class TestWellPositionOffsets(unittest.TestCase):
     asyncio.run(head.pick_up_tips(rack, column=0))
     return flex, transport, head, plate
 
-  def _aspirate_well_location(self, transport: ChatterboxTransport) -> dict:
+  def _aspirate_well_location(self, transport: ChatterboxHTTP) -> dict:
     aspirate_cmds = [c for c in transport.commands if c["commandType"] == "aspirate"]
     self.assertEqual(len(aspirate_cmds), 1)
     well_location: dict = aspirate_cmds[0]["params"]["wellLocation"]
@@ -862,7 +866,7 @@ class TestSingleNozzleLayout(unittest.TestCase):
     flex.deck.assign_child_at_slot(rack, slot)
     return flex, transport, head, rack
 
-  def _nozzle_params(self, transport: ChatterboxTransport) -> list:
+  def _nozzle_params(self, transport: ChatterboxHTTP) -> list:
     return [
       c["params"]["configurationParams"]
       for c in transport.commands
@@ -1141,7 +1145,7 @@ class TestInPlaceLiquidOps(unittest.TestCase):
     flex.deck.assign_child_at_slot(rack, "C1")
     return flex, transport, head, rack
 
-  def _params(self, transport: ChatterboxTransport, command_type: str) -> dict:
+  def _params(self, transport: ChatterboxHTTP, command_type: str) -> dict:
     cmds = [c for c in transport.commands if c["commandType"] == command_type]
     self.assertEqual(len(cmds), 1)
     params: dict = cmds[0]["params"]
@@ -1382,17 +1386,19 @@ class TestInPlaceLiquidOps(unittest.TestCase):
       asyncio.run(flex96.stop())
 
 
-class _TipPresenceTransport(ChatterboxTransport):
+class _TipPresenceTransport(ChatterboxHTTP):
   """Answers getTipPresence with a fixed sensor reading."""
 
   def __init__(self, status: str, **kwargs):
     super().__init__(**kwargs)
     self.status = status
 
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    result = await super().post(path, json)
-    data = (json or {}).get("data", {})
-    if path.endswith("/commands") and data.get("commandType") == "getTipPresence":
+  async def request(
+    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+  ) -> Dict[str, Any]:
+    result = await super().request(method, path, data)
+    body = (data or {}).get("data", {})
+    if path.endswith("/commands") and body.get("commandType") == "getTipPresence":
       result["data"]["result"] = {"status": self.status}
     return result
 
@@ -1413,7 +1419,7 @@ class TestTipPresenceCommands(unittest.TestCase):
     transport = _TipPresenceTransport(
       status, pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")]
     )
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     head = flex.right
     assert isinstance(head, FlexHead1)

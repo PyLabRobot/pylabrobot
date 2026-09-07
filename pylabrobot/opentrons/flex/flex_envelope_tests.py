@@ -14,21 +14,21 @@ from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.envelope import FLEX_ENVELOPE
 from pylabrobot.opentrons.flex.flex import OpentronsFlex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
-from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 
 
-def _flex_head8() -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead8]:
-  transport = ChatterboxTransport(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+def _flex_head8() -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
+  transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
   return flex, transport, head
 
 
-def _commands_of(transport: ChatterboxTransport, command_type: str) -> List[dict]:
+def _commands_of(transport: ChatterboxHTTP, command_type: str) -> List[dict]:
   return [c for c in transport.commands if c["commandType"] == command_type]
 
 

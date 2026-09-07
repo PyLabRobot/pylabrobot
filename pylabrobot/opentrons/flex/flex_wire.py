@@ -12,8 +12,13 @@ heads) for them.
 
 from typing import Dict, FrozenSet, List, Optional, Tuple
 
-from pylabrobot.opentrons.robot import OpentronsError
-from pylabrobot.opentrons.transport import OFFLINE_API_VERSION
+from pylabrobot.opentrons.flex.errors import OpentronsError
+
+# ChatterboxHTTP's offline /health version: deliberately not a version string,
+# so a caller gating on robot software can tell offline from any real robot.
+# The offline simulator imports this sentinel from here rather than the reverse,
+# keeping the product module free of any dependency on the simulator.
+OFFLINE_API_VERSION = "dry-run"
 
 # Shared by the heads and the gripper so the notice reads identically
 # everywhere; each module logs it through its own logger.

@@ -3,7 +3,7 @@
 Builder-level tests pin the definition content produced from PLR geometry
 (dimensions, well positions and shapes, the shared front-left slot anchoring,
 grip height). Flex-level tests drive ``OpentronsFlex._ensure_labware_loaded``
-with an injected ``ChatterboxTransport`` and assert labware without an
+with an injected ``ChatterboxHTTP`` and assert labware without an
 official Opentrons definition is uploaded and then loaded by the uploaded
 definition's namespace/loadName/version, that the run-scoped caches reset
 with the run, and that official-name labware keeps loading with zero uploads.
@@ -22,8 +22,8 @@ from pylabrobot.opentrons.flex.labware_definitions import (
   build_tip_rack_definition,
   container_footprint,
 )
-from pylabrobot.opentrons.robot import OpentronsError
-from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.opentrons.flex.errors import OpentronsError
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import (
   Container,
   CrossSectionType,
@@ -522,27 +522,27 @@ class TestBuildMovableLabwareDefinition(unittest.TestCase):
 
 
 def _flex_with_transport(
-  transport: Optional[ChatterboxTransport] = None,
-) -> Tuple[OpentronsFlex, ChatterboxTransport]:
-  transport = transport or ChatterboxTransport(
+  transport: Optional[ChatterboxHTTP] = None,
+) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
+  transport = transport or ChatterboxHTTP(
     pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right"
   )
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   return flex, transport
 
 
-def _flex_head8_with_gripper() -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead8]:
+def _flex_head8_with_gripper() -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
   """A set-up Flex with an 8-channel head AND a gripper, so one bench can
   drive both the gripper-intent and pipetting-intent load paths."""
-  transport = ChatterboxTransport(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")], gripper=True)
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")], gripper=True)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
   return flex, transport, head
 
 
-def _load_labware_commands(transport: ChatterboxTransport) -> list:
+def _load_labware_commands(transport: ChatterboxHTTP) -> list:
   return [c for c in transport.commands if c["commandType"] == "loadLabware"]
 
 
@@ -553,33 +553,37 @@ def _mount_tips(flex: OpentronsFlex, head: FlexHead8) -> None:
   asyncio.run(head.pick_up_tips(rack, column=0))
 
 
-class _FailFirstUploadTransport(ChatterboxTransport):
+class _FailFirstUploadTransport(ChatterboxHTTP):
   """Chatterbox whose FIRST labware-definition upload raises; retries succeed."""
 
   def __init__(self, **kwargs) -> None:
     super().__init__(**kwargs)
     self._upload_failed_once = False
 
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+  async def request(
+    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+  ) -> Dict[str, Any]:
     if path.endswith("/labware_definitions") and not self._upload_failed_once:
       self._upload_failed_once = True
       raise RuntimeError("simulated definition upload failure")
-    return await super().post(path, json)
+    return await super().request(method, path, data)
 
 
-class _FailFirstLoadTransport(ChatterboxTransport):
+class _FailFirstLoadTransport(ChatterboxHTTP):
   """Chatterbox whose FIRST loadLabware command fails at the robot; retries succeed."""
 
   def __init__(self, **kwargs) -> None:
     super().__init__(**kwargs)
     self._load_failed_once = False
 
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    result = await super().post(path, json)
-    data = (json or {}).get("data", {})
+  async def request(
+    self, method: str, path: str, data: Optional[Dict[str, Any]] = None
+  ) -> Dict[str, Any]:
+    result = await super().request(method, path, data)
+    body = (data or {}).get("data", {})
     if (
       path.endswith("/commands")
-      and data.get("commandType") == "loadLabware"
+      and body.get("commandType") == "loadLabware"
       and not self._load_failed_once
     ):
       self._load_failed_once = True

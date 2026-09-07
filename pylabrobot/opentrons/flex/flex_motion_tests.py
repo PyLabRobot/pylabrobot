@@ -2,7 +2,7 @@
 (``_FlexHead.position``/``_FlexHead.move_to``) and gripper motion + jaw
 control (``FlexGripper.move_to``/``grip``/``open_jaw``).
 
-Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxTransport`` and
+Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxHTTP`` and
 asserts the exact wire commands: ``savePosition`` reads, ``moveToCoordinates``
 axis merging and ``minimumZHeight``/``speed`` handling, the ``robot/moveTo``
 extension-mount params, jaw force validation before any wire command, and the
@@ -17,8 +17,8 @@ from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.flex import OpentronsFlex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper, _require_robot_commands
 from pylabrobot.opentrons.flex.flex_head import FlexHead8, _FlexHead
-from pylabrobot.opentrons.robot import OpentronsError
-from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.opentrons.flex.errors import OpentronsError
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import set_tip_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
@@ -26,17 +26,17 @@ from pylabrobot.resources.opentrons.flex_plates import corning_96_wellplate_360u
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
 
-def _flex_with_gripper(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxTransport]:
+def _flex_with_gripper(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
   """An ``OpentronsFlex`` with a single-channel right-mount pipette and a
   gripper, returning the transport too so a test can inspect recorded
-  commands. ``transport_kwargs`` are forwarded to ``ChatterboxTransport``.
+  commands. ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
   """
-  transport = ChatterboxTransport(
+  transport = ChatterboxHTTP(
     pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")],
     gripper=True,
     **transport_kwargs,
   )
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   return flex, transport
 
 
@@ -52,11 +52,11 @@ def _gripper(flex: OpentronsFlex) -> FlexGripper:
   return gripper
 
 
-def _cmds(transport: ChatterboxTransport, command_type: str) -> List[Dict[str, Any]]:
+def _cmds(transport: ChatterboxHTTP, command_type: str) -> List[Dict[str, Any]]:
   return [c for c in transport.commands if c["commandType"] == command_type]
 
 
-def _flex_with_version(api_version: str) -> Tuple[OpentronsFlex, ChatterboxTransport]:
+def _flex_with_version(api_version: str) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
   """A gripper-equipped Flex whose ``/health`` reports ``api_version``, so a
   test can drive the robot/* version gate."""
   return _flex_with_gripper(api_version=api_version)
@@ -265,7 +265,7 @@ class TestRobotCommandsVersionGate(unittest.TestCase):
   family.
   """
 
-  def _assert_no_robot_commands(self, transport: ChatterboxTransport) -> None:
+  def _assert_no_robot_commands(self, transport: ChatterboxHTTP) -> None:
     robot_cmds = [c for c in transport.commands if c["commandType"].startswith("robot/")]
     self.assertEqual(len(robot_cmds), 0, "no robot/* wire command may be sent")
 
@@ -406,8 +406,8 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
     set_tip_tracking(False)
 
   def _flex_head8(self) -> Tuple[OpentronsFlex, FlexHead8]:
-    transport = ChatterboxTransport(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     head = flex.left
     assert isinstance(head, FlexHead8)
@@ -484,8 +484,8 @@ class TestUntestedHardwareWarnings(unittest.TestCase):
 
   def test_head1_hardware_verified_ops_do_not_warn(self):
     """FlexHead1's ops were confirmed on a p50 single channel, so they stay quiet."""
-    transport = ChatterboxTransport(pipettes=[("p50_single_flex", 1, 1.0, 50.0, "left")])
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+    transport = ChatterboxHTTP(pipettes=[("p50_single_flex", 1, 1.0, 50.0, "left")])
+    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       head = flex.left

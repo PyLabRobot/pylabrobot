@@ -8,7 +8,7 @@ nozzles for that call. The layout itself is fixed at pickup (the engine refuses 
 nozzle reconfiguration while tips are attached), so a liquid op emits NO
 ``configureNozzleLayout`` -- only the ``aspirate``/``dispense`` command.
 
-Wire payloads are inspected through the injected ``ChatterboxTransport``.
+Wire payloads are inspected through the injected ``ChatterboxHTTP``.
 """
 
 import asyncio
@@ -17,8 +17,8 @@ from typing import List, Tuple
 
 from pylabrobot.opentrons.flex.flex import OpentronsFlex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
-from pylabrobot.opentrons.robot import OpentronsError
-from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.opentrons.flex.errors import OpentronsError
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import (
   Container,
   cor_96_wellplate_360uL_Fb,
@@ -43,9 +43,9 @@ def _make_trough(name: str = "trough") -> Container:
   return trough
 
 
-def _flex_head8() -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead8]:
-  transport = ChatterboxTransport(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+def _flex_head8() -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
+  transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
@@ -65,7 +65,7 @@ def _rack_on(flex: OpentronsFlex, slot: str = "C1"):
   return rack
 
 
-def _commands_of(transport: ChatterboxTransport, command_type: str) -> List[dict]:
+def _commands_of(transport: ChatterboxHTTP, command_type: str) -> List[dict]:
   return [c for c in transport.commands if c["commandType"] == command_type]
 
 

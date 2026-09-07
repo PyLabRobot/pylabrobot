@@ -1,6 +1,6 @@
 """Tests for OpentronsFlex device shell + head composition (Task 2).
 
-Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxTransport`` (no
+Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxHTTP`` (no
 network) reporting a configurable mounted pipette, and asserts discovery
 composes the matching head onto the right attribute (``left``/``right``/
 ``head96``).
@@ -12,8 +12,8 @@ from typing import List, Tuple
 
 from pylabrobot.opentrons.flex.flex import OpentronsFlex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
-from pylabrobot.opentrons.robot import OpentronsError
-from pylabrobot.opentrons.transport import ChatterboxTransport
+from pylabrobot.opentrons.flex.errors import OpentronsError
+from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import TooLittleLiquidError
@@ -22,23 +22,23 @@ from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
 
 def _flex(pipette: Tuple[str, int, float, float], mount: str = "right") -> OpentronsFlex:
-  transport = ChatterboxTransport(pipette=pipette, mount=mount)
-  return OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  transport = ChatterboxHTTP(pipette=pipette, mount=mount)
+  return OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
 
 
 def _flex_with_transport(
   pipettes: List[Tuple[str, int, float, float, str]],
   **transport_kwargs,
-) -> Tuple[OpentronsFlex, ChatterboxTransport]:
+) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
   """Like ``_flex`` but simulates multiple mounted pipettes and returns the
   transport too, so a test can inspect recorded commands.
 
-  ``transport_kwargs`` are forwarded to ``ChatterboxTransport`` (e.g.
+  ``transport_kwargs`` are forwarded to ``ChatterboxHTTP`` (e.g.
   ``simulate_failed_pickup=True``/``simulate_stuck_tip=True`` to drive the
   hardware tip-presence sensor model).
   """
-  transport = ChatterboxTransport(pipettes=pipettes, **transport_kwargs)
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", transport=transport)
+  transport = ChatterboxHTTP(pipettes=pipettes, **transport_kwargs)
+  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
   return flex, transport
 
 
@@ -261,11 +261,11 @@ class TestGetMountedTips(unittest.TestCase):
       asyncio.run(flex.stop())
 
 
-def _flex_head8(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead8]:
+def _flex_head8(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
   """An ``OpentronsFlex`` with an 8-channel head on the left mount, plus the
   transport (for command inspection) and the head itself.
 
-  ``transport_kwargs`` are forwarded to ``ChatterboxTransport``.
+  ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
   """
   flex, transport = _flex_with_transport(
     [("p50_multi_flex", 8, 1.0, 50.0, "left")], **transport_kwargs
@@ -901,11 +901,11 @@ class TestFlexHead8HardwareTipPresence(unittest.TestCase):
       asyncio.run(flex.stop())
 
 
-def _flex_head1(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead1]:
+def _flex_head1(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead1]:
   """An ``OpentronsFlex`` with a single-channel head on the right mount, plus
   the transport (for command inspection) and the head itself.
 
-  ``transport_kwargs`` are forwarded to ``ChatterboxTransport``.
+  ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
   """
   flex, transport = _flex_with_transport(
     [("p1000_single_flex", 1, 1.0, 1000.0, "right")], **transport_kwargs
@@ -916,11 +916,11 @@ def _flex_head1(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxTransport,
   return flex, transport, head
 
 
-def _flex_head96(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxTransport, FlexHead96]:
+def _flex_head96(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead96]:
   """An ``OpentronsFlex`` with a 96-channel head, plus the transport (for
   command inspection) and the head itself.
 
-  ``transport_kwargs`` are forwarded to ``ChatterboxTransport``.
+  ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
   """
   flex, transport = _flex_with_transport(
     [("p1000_96", 96, 1.0, 1000.0, "left")], **transport_kwargs

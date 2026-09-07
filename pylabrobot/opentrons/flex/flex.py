@@ -1,8 +1,13 @@
 import logging
+import math
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
 
+from pylabrobot.io.http import HTTP
+from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
+from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
+from pylabrobot.opentrons.flex.flex_run import COMMAND_POLL_HEADROOM, FlexRun, PipetteInfo
 from pylabrobot.opentrons.flex.flex_wire import ROBOT_AXES, _require_robot_commands, slot_wire_location
 from pylabrobot.opentrons.flex.labware_definitions import (
   build_container_definition,
@@ -10,8 +15,6 @@ from pylabrobot.opentrons.flex.labware_definitions import (
   build_plate_definition,
   build_tip_rack_definition,
 )
-from pylabrobot.opentrons.robot import COMMAND_POLL_HEADROOM, OpentronsError, OpentronsRobot
-from pylabrobot.opentrons.transport import OpentronsTransport
 from pylabrobot.resources import Container, Plate, Resource, TipRack
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.trash import Trash
@@ -89,13 +92,19 @@ def _axis_motion_params(
   return params
 
 
-class OpentronsFlex(OpentronsRobot):
-  """Opentrons Flex liquid handler (plain class, post-#1180 architecture).
+class OpentronsFlex:
+  """Opentrons Flex liquid handler, over the robot-server HTTP API.
 
-  A device shell: it owns the deck, deck-scoped labware loading, and the
-  discover-then-compose lifecycle that builds mount-addressed head
-  sub-objects (``left``/``right``/``head96``). Liquid-handling ops live on
-  the heads, not here — see :mod:`pylabrobot.opentrons.flex.flex_head`.
+  A device shell composed on the shared ``pylabrobot.io.HTTP`` transport
+  (``OpentronsAPI`` + a run-scoped ``FlexRun``): it owns the deck, deck-scoped
+  labware loading, and the discover-then-compose lifecycle that builds
+  mount-addressed head sub-objects (``left``/``right``/``head96``).
+  Liquid-handling ops live on the heads, not here — see
+  :mod:`pylabrobot.opentrons.flex.flex_head`.
+
+  ``connect()`` opens the transport for health/discovery queries; ``setup()``
+  also creates a run, homes, and composes the heads. Pass a stand-in ``io``
+  (e.g. ``ChatterboxHTTP``) to drive the whole lifecycle offline.
   """
 
   def __init__(
@@ -103,9 +112,38 @@ class OpentronsFlex(OpentronsRobot):
     deck: FlexDeck,
     host: str,
     port: int = 31950,
-    transport: Optional[OpentronsTransport] = None,
+    io: Optional[HTTP] = None,
+    command_timeout: float = 30.0,
+    command_poll_interval: float = 0.05,
   ) -> None:
-    super().__init__(host=host, port=port, transport=transport)
+    if "://" in host:
+      raise ValueError("host must be a hostname or IP address without a URL scheme")
+    if not 1 <= port <= 65535:
+      raise ValueError("port must be between 1 and 65535")
+    if not math.isfinite(command_timeout) or command_timeout <= 0:
+      raise ValueError("command_timeout must be finite and greater than zero")
+    if not math.isfinite(command_poll_interval) or command_poll_interval < 0:
+      raise ValueError("command_poll_interval must be finite and non-negative")
+
+    self.host, self.port = host, port
+    self.base_url = f"http://{host}:{port}"
+    self.command_timeout = command_timeout
+    self.command_poll_interval = command_poll_interval
+    # Built here rather than on connect: a pylabrobot io refuses construction
+    # once a capture is armed, so a robot built first can still be recorded.
+    self.io: HTTP = io or HTTP(
+      human_readable_device_name="Opentrons Flex",
+      base_url=self.base_url,
+      headers={"Opentrons-Version": HTTP_API_VERSION},
+      timeout=command_timeout,
+    )
+    self._api = OpentronsAPI(self.io)
+    self._connected = False
+    self._run: Optional[FlexRun] = None
+    self.run_id: Optional[str] = None
+    self.api_version: Optional[str] = None
+    self.robot_model: Optional[str] = None
+
     self.deck = deck
     self._loaded_labware: Dict[str, str] = {}
     # resource.name -> (namespace, load_name, version) of an uploaded custom definition.
@@ -131,23 +169,205 @@ class OpentronsFlex(OpentronsRobot):
     self._defined_labware.clear()
     self._stub_labware.clear()
 
-  async def _create_run(self) -> str:
-    # labwareIds and uploaded definitions are both run-scoped server-side, so
-    # a new run must not serve cached identities from a previous one.
-    run_id = await super()._create_run()
+  # --- Lifecycle ---
+
+  async def setup(self, skip_home: bool = False) -> None:
+    """Bring the robot fully up, PyLabRobot's usual one-call lifecycle entry.
+
+    Composed of the steps below so a caller who needs only some of them (talk to
+    the robot without moving it, hand it back without homing it) can take them
+    one at a time.
+    """
+    await self.connect()
+    await self.create_run()
+    if not skip_home:
+      await self.home()
+    await self.initialize()
+
+  async def connect(self) -> None:
+    """Open the link and confirm the robot answers. Starts no run, moves nothing."""
+    await self.io.setup()
+    health = await self._api.get_health()
+    self.api_version = health.software_version
+    self.robot_model = health.model
+    self._connected = True
+    logger.info(
+      "Connected to robot '%s' at %s:%s (API %s, model: %s)",
+      health.name,
+      self.host,
+      self.port,
+      self.api_version,
+      self.robot_model,
+    )
+
+  async def create_run(self) -> None:
+    """Start a control session.
+
+    The robot reports itself as in use and refuses its own touchscreen for as
+    long as a run is current, so this is the step that takes it from the
+    operator, not ``connect``. Cancels a run this object already holds first;
+    ``run_id`` is the only handle on a run, so overwriting it would strand the
+    old one on the robot with nothing left able to release it.
+
+    labwareIds and uploaded definitions are both run-scoped server-side, so a
+    new run must not serve cached identities from a previous one.
+    """
+    await self._cancel_run()
+    receipt = await self._api.create_run()
+    self.run_id = receipt.id
+    self._run = FlexRun(
+      self._api,
+      receipt.id,
+      self.api_version or "",
+      command_timeout=self.command_timeout,
+      command_poll_interval=self.command_poll_interval,
+    )
     self._loaded_labware.clear()
     self._defined_labware.clear()
     self._stub_labware.clear()
-    return run_id
+    logger.info("Created run %s", self.run_id)
+
+  async def initialize(self) -> None:
+    """Discover what is mounted and compose the heads. Moves nothing."""
+    await self._model_setup()
+
+  async def cancel_run(self) -> None:
+    """End the control session, handing the robot back to its own touchscreen.
+
+    Safe with no run open. This, not ``disconnect``, is what frees local
+    control: the run is what the robot holds, and it outlives our link.
+    """
+    await self._cancel_run()
+
+  async def disconnect(self) -> None:
+    """Drop the link, moving nothing. Cancels an open run first."""
+    await self._cancel_run()
+    if self._connected:
+      await self.io.stop()
+      self._connected = False
+
+  async def _cancel_run(self) -> None:
+    """Cancel the current run. Safe to call if no run is active."""
+    if self.run_id is not None:
+      try:
+        await self._api.stop_run(self.run_id)
+      except Exception:
+        logger.warning("cancel run %s failed; continuing to release", self.run_id, exc_info=True)
+    self._run = None
+    self.run_id = None
+
+  async def home(self) -> Dict[str, Any]:
+    """Home all axes. The gantry moves to the rear-left-top."""
+    return await self._execute_command("home", {})
+
+  async def stop(self) -> None:
+    """Park the gantry and release the robot, dropping any mounted tips first."""
+    # Drop any mounted tips to the trash BEFORE parking/disconnecting, so the
+    # robot is never left holding tips. A failure here must not block the
+    # home/cancel/disconnect that follows.
+    try:
+      trash: Optional[Trash] = self.deck.get_trash_area()
+    except ValueError:
+      trash = None
+    if trash is not None:
+      for head in reversed(self._heads):
+        try:
+          if any(tip is not None for tip in head.get_mounted_tips()):
+            await head.discard_tips(trash)
+        except Exception:
+          logger.warning(
+            "Dropping tips on stop failed for the %s head; continuing to disconnect.",
+            head.mount,
+            exc_info=True,
+          )
+    for head in reversed(self._heads):
+      await head._on_stop()
+    # Home inside the run (before cancelling it) so the gantry parks in a known
+    # pose; a failure here must not block the release that follows.
+    try:
+      await self.home()
+    except Exception:
+      logger.warning("home() before stop failed; continuing to release", exc_info=True)
+    await self.cancel_run()
+    await self.disconnect()
+
+  # --- Command execution + discovery (over api/run) ---
+
+  async def _execute_command(
+    self,
+    command_type: str,
+    params: Optional[Dict[str, Any]] = None,
+    wait: bool = True,
+    timeout: float = 30.0,
+  ) -> Dict[str, Any]:
+    """Run a command in the current run, returning the completed command dict.
+
+    The single seam the heads and gripper submit every robot-server command
+    through. Returns the full command dict (with its ``result``), raising
+    :class:`OpentronsCommandError` on failure and ``OpentronsCommandTimeout``
+    if it does not complete in time.
+    """
+    if self._run is None:
+      raise OpentronsError("No active run", "Call setup() or create_run() first.")
+    return await self._run.execute(command_type, params or {}, wait=wait, timeout=timeout)
+
+  async def send_command(
+    self,
+    command_type: str,
+    params: Optional[Dict[str, Any]] = None,
+    wait: bool = True,
+    timeout: float = 30.0,
+  ) -> Dict[str, Any]:
+    """Send any robot command by name, for the parts of the robot this class does not wrap.
+
+    ``command_type`` is the robot's own command name (``"moveToWell"``,
+    ``"heaterShaker/setTargetTemperature"``) and ``params`` its payload; both
+    pass through untouched and the completed command dict is returned. Validates
+    nothing and updates no resource-tree state, so a command that moves labware
+    or changes tip/liquid state leaves PyLabRobot's own trackers unchanged.
+    """
+    return await self._execute_command(command_type, params or {}, wait=wait, timeout=timeout)
+
+  async def _get_instruments(self) -> Dict[str, Any]:
+    """Query mounted instruments (pipettes, gripper) off the Flex /instruments endpoint."""
+    return await self.io.request("GET", "/instruments")
+
+  def _parse_pipettes(self, instruments_data: Dict[str, Any]) -> List[PipetteInfo]:
+    """Parse the /instruments response into PipetteInfo objects.
+
+    Uses actual data from the API (channels, min_volume, max_volume) rather
+    than guessing from pipette names.
+    """
+    pipettes = []
+    for instrument in instruments_data.get("data", []):
+      if instrument.get("instrumentType") != "pipette":
+        continue
+      pip_data = instrument.get("data", {})
+      pipettes.append(
+        PipetteInfo(
+          mount=instrument.get("mount", "unknown"),
+          pipette_name=instrument.get("instrumentName", "unknown"),
+          pipette_model=instrument.get("instrumentModel", "unknown"),
+          pipette_id="",  # set by _load_pipette() later
+          channels=pip_data.get("channels", 1),
+          min_volume=pip_data.get("min_volume", 1.0),
+          max_volume=pip_data.get("max_volume", 1000.0),
+        )
+      )
+    return pipettes
+
+  async def _load_pipette(self, pipette_name: str, mount: str) -> str:
+    """Load a pipette into the current run, returning its run-scoped pipette ID."""
+    if self._run is None:
+      raise OpentronsError("No active run", "Call setup() or create_run() first.")
+    pipette_id = await self._run.load_pipette(pipette_name, mount)
+    logger.info("Loaded pipette %s on %s mount -> ID: %s", pipette_name, mount, pipette_id)
+    return pipette_id
 
   async def _model_setup(self) -> None:
     """Discover and compose heads. Homing is setup()'s own step, so that a
     caller can ask what is mounted without moving the robot."""
-    # Discover ALL mounted pipettes (not just the first — _discover_pipette
-    # only surfaces one) and compose the matching head per mount. The base
-    # setup() no longer discovers/loads a pipette itself (that would double
-    # `loadPipette` the first mount), so this is the only place a Flex loads
-    # its pipettes.
+    # Discover ALL mounted pipettes and compose the matching head per mount.
     # Discovery is re-runnable: drop whatever a previous setup composed rather
     # than stacking a second set of heads onto dead pipette ids.
     self.left = self.right = self.head96 = None
@@ -208,28 +428,7 @@ class OpentronsFlex(OpentronsRobot):
         return cast(str, instrument.get("instrumentModel", "unknown"))
     return None
 
-  async def stop(self) -> None:
-    # Drop any mounted tips to the trash BEFORE parking/disconnecting, so the
-    # robot is never left holding tips. A failure here must not block the
-    # home/cancel/disconnect that follows.
-    try:
-      trash: Optional[Trash] = self.deck.get_trash_area()
-    except ValueError:
-      trash = None
-    if trash is not None:
-      for head in reversed(self._heads):
-        try:
-          if any(tip is not None for tip in head.get_mounted_tips()):
-            await head.discard_tips(trash)
-        except Exception:
-          logger.warning(
-            "Dropping tips on stop failed for the %s head; continuing to disconnect.",
-            head.mount,
-            exc_info=True,
-          )
-    for head in reversed(self._heads):
-      await head._on_stop()
-    await super().stop()  # homes the gantry, then cancels the run + disconnects
+  # --- Deck-scoped labware loading ---
 
   async def _ensure_labware_loaded(
     self,
@@ -534,14 +733,19 @@ class OpentronsFlex(OpentronsRobot):
       return self._defined_labware[name]
 
     definition = self._build_labware_definition(resource, grip_distance_from_top, allow_stub)
-    assert self.run_id is not None, "No active run. Call setup() first."
-    data = await self._post(f"/runs/{self.run_id}/labware_definitions", {"data": definition})
-    uri = cast(str, data["data"]["definitionUri"])
-    namespace, load_name, version = uri.split("/")
-    self._defined_labware[name] = (namespace, load_name, int(version))
+    if self._run is None:
+      raise OpentronsError("No active run", "Call setup() or create_run() first.")
+    identity = await self._api.define_labware(self._run.id, definition)
+    self._defined_labware[name] = (identity.namespace, identity.load_name, identity.version)
     if not _has_pipettable_geometry(resource):
       self._stub_labware.add(name)
-    logger.info("Uploaded custom labware definition for '%s': %s", name, uri)
+    logger.info(
+      "Uploaded custom labware definition for '%s': %s/%s/%s",
+      name,
+      identity.namespace,
+      identity.load_name,
+      identity.version,
+    )
     return self._defined_labware[name]
 
   @staticmethod

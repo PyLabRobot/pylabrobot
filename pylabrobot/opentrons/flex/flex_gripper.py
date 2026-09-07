@@ -23,7 +23,7 @@ from pylabrobot.opentrons.flex.flex_wire import (
   _require_robot_commands,
   slot_wire_location,
 )
-from pylabrobot.opentrons.robot import OpentronsError
+from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:

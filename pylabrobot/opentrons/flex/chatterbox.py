@@ -1,48 +1,43 @@
-"""Swappable wire-level transport for :class:`~pylabrobot.opentrons.robot.OpentronsRobot`.
+"""Offline HTTP io for the Opentrons Flex: logs commands, returns canned replies.
 
-``OpentronsRobot`` talks to the robot-server's Protocol-Engine HTTP API
-(``/health``, ``/runs``, ``/instruments``, ``/runs/{id}/commands``). Everything
-it needs from the wire is three verbs (``get``/``post``/``delete``) that return
-parsed JSON, plus a ``close()`` to tear the connection down. That surface is
-captured here as the :class:`OpentronsTransport` Protocol so the robot can be
-driven by a real ``httpx.AsyncClient`` (:class:`HttpxTransport`) or by an
-offline recording stand-in (:class:`ChatterboxTransport`) without knowing the
-difference.
+Where a real :class:`~pylabrobot.io.http.HTTP` reaches the robot-server, this
+subclass answers the ``/health``, ``/instruments``, ``/runs``,
+``/runs/{id}/commands`` and ``/runs/{id}/labware_definitions`` shapes the
+:class:`~pylabrobot.opentrons.flex.flex.OpentronsFlex` lifecycle (health check,
+create-run, discover pipette) and labware loading read, so a caller can drive
+the whole device with no network.
 
-``ChatterboxTransport`` is the transport-level analog of Hamilton's
+``ChatterboxHTTP`` is the transport-level analog of Hamilton's
 ``STARChatterboxDriver`` (which logs firmware commands instead of sending them
-over USB): it logs each command and returns a canned "succeeded" response, so
-the robot lifecycle (health check, create-run, instrument discovery) — and any
-PLR-native checks layered on top of it — can run with no network.
+over USB): it logs each command and returns a canned "succeeded" response. It
+overrides the single :meth:`request` seam the device drives through
+(``OpentronsAPI`` calls ``io.request(method, path, data)``), collapsing the
+old get/post/delete verbs into one method switch.
+
+Scope: this exercises PLR-native checks only. It does NOT reproduce the
+Opentrons Protocol Engine's *analysis* stage (deck-conflict, capacity,
+partial-tip extents) -- that is protocol-file based (``opentrons_simulate``
+against a virtual Protocol Engine) and needs the ``opentrons`` package, which
+an HTTP transport cannot reach.
+
+It does track the engine's plunger-priming rule (see :meth:`_track_plunger`),
+so a draw the real robot would refuse fails here too. That rule cost a round of
+tests that passed on wire traffic hardware rejects.
 """
 
 import logging
 from pathlib import Path
-from typing import (
-  Any,
-  Callable,
-  Dict,
-  List,
-  Optional,
-  Protocol,
-  Tuple,
-  Union,
-  cast,
-  runtime_checkable,
-)
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 from pylabrobot.io.capture import CaptureReader
 from pylabrobot.io.http import HTTP, HTTPValidator
+from pylabrobot.opentrons.flex.flex_wire import OFFLINE_API_VERSION
 
 logger = logging.getLogger(__name__)
 
 # The robot-server rejects a request that does not name the API version it
 # should be read as.
 DEFAULT_HEADERS = {"opentrons-version": "3"}
-
-# ChatterboxTransport's default /health version: deliberately not a version
-# string, so a caller gating on robot software can tell offline from any robot.
-OFFLINE_API_VERSION = "dry-run"
 
 # /instruments serves a versioned model, and flow-rate defaults differ between
 # versions of the same pipette, so the fake cannot just echo the name back.
@@ -79,131 +74,19 @@ def _reject_unknown_enum_values(command_type: str, params: Dict[str, Any]) -> No
       )
 
 
-@runtime_checkable
-class OpentronsTransport(Protocol):
-  """Wire-level seam: the subset of HTTP that ``OpentronsRobot`` needs.
+class ChatterboxHTTP(HTTP):
+  """Offline ``HTTP``: logs commands, returns canned 'succeeded' responses.
 
-  Implementations return parsed JSON bodies directly (no response object) —
-  raising for non-2xx status is the transport's job, not the robot's.
-  """
-
-  async def setup(self) -> None: ...
-
-  async def get(self, path: str) -> Dict[str, Any]: ...
-
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]: ...
-
-  async def delete(self, path: str) -> Dict[str, Any]: ...
-
-  async def close(self) -> None: ...
-
-
-class HttpxTransport:
-  """Real transport, over the :class:`~pylabrobot.io.http.HTTP` io.
-
-  Going through the io rather than a bare ``httpx.AsyncClient`` is what puts
-  every robot-server exchange in PyLabRobot's capture log, so a run wrapped in
-  ``start_capture()`` can later be replayed by :class:`ReplayTransport`.
+  Overrides :meth:`setup`/:meth:`stop`/:meth:`request` so nothing reaches a
+  socket. Construct it with the pipettes (and optional gripper) to discover,
+  and pass it as the ``io`` of an :class:`OpentronsFlex` to drive the device
+  offline. The recorded state lists (``commands``, ``load_pipette_commands``,
+  ``labware_definitions``, ...) are the surface tests assert against.
   """
 
   def __init__(
     self,
-    base_url: str,
-    timeout: float = 30.0,
-    headers: Optional[Dict[str, str]] = None,
-  ) -> None:
-    self.io = HTTP(base_url=base_url, timeout=timeout, headers=headers or DEFAULT_HEADERS)
-
-  async def setup(self) -> None:
-    await self.io.setup()
-
-  async def get(self, path: str) -> Dict[str, Any]:
-    return cast(Dict[str, Any], await self.io.get(path))
-
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    return cast(Dict[str, Any], await self.io.post(path, json=json or {}))
-
-  async def delete(self, path: str) -> Dict[str, Any]:
-    return cast(Dict[str, Any], await self.io.delete(path))
-
-  async def close(self) -> None:
-    await self.io.stop()
-
-
-class ReplayTransport:
-  """Offline transport that replays a capture file recorded from a real robot.
-
-  Where :class:`ChatterboxTransport` returns responses we wrote by hand, this
-  returns the ones an actual robot gave, in the order it gave them, and raises
-  the same refusal on an exchange that failed. Nothing reaches the network.
-
-  Build the capture file by wrapping a live run in ``start_capture()`` /
-  ``stop_capture()``. Construct the robot BEFORE arming the capture: every
-  pylabrobot io refuses construction while one is active, and the robot builds
-  its transport in ``__init__`` for exactly that reason.
-
-      flex = OpentronsFlex(deck=deck, host=host)   # transport built here
-      pylabrobot.start_capture(path)
-      await flex.setup()
-      ...
-      pylabrobot.stop_capture()
-
-  Call :meth:`assert_fully_replayed` at the end of a test: it fails when the
-  protocol stopped short of the recording, which is what catches a dropped
-  command.
-  """
-
-  def __init__(
-    self,
-    capture_file: Union[str, Path],
-    base_url: str,
-    headers: Optional[Dict[str, str]] = None,
-  ) -> None:
-    self._cr = CaptureReader(path=str(capture_file))
-    self.io = HTTPValidator(self._cr, base_url=base_url, headers=headers or DEFAULT_HEADERS)
-
-  async def setup(self) -> None:
-    await self.io.setup()
-
-  async def get(self, path: str) -> Dict[str, Any]:
-    return cast(Dict[str, Any], await self.io.get(path))
-
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    return cast(Dict[str, Any], await self.io.post(path, json=json or {}))
-
-  async def delete(self, path: str) -> Dict[str, Any]:
-    return cast(Dict[str, Any], await self.io.delete(path))
-
-  async def close(self) -> None:
-    await self.io.stop()
-
-  def assert_fully_replayed(self) -> None:
-    """Raise unless every recorded exchange was consumed."""
-    self._cr.done()
-
-
-class ChatterboxTransport:
-  """Offline transport: logs commands, returns canned 'succeeded' responses.
-
-  Instead of reaching a robot server it returns the fixed ``/health``,
-  ``/instruments``, ``/runs``, ``/runs/{id}/commands`` and
-  ``/runs/{id}/labware_definitions`` shapes the ``OpentronsRobot`` lifecycle
-  (``setup()``: health check, create-run, discover pipette) and labware
-  loading read, so a caller can drive the robot with no network.
-
-  Scope: this exercises PLR-native checks only. It does NOT reproduce the
-  Opentrons Protocol Engine's *analysis* stage (deck-conflict, capacity,
-  partial-tip extents) — that is protocol-file based (``opentrons_simulate``
-  against a virtual Protocol Engine) and needs the ``opentrons`` package,
-  which an HTTP transport cannot reach.
-
-  It does track the engine's plunger-priming rule (see ``_track_plunger``),
-  so a draw the real robot would refuse fails here too. That rule cost a
-  round of tests that passed on wire traffic hardware rejects.
-  """
-
-  def __init__(
-    self,
+    *,
     pipette: Tuple[str, int, float, float] = ("p1000_single_flex", 1, 1.0, 1000.0),
     mount: str = "right",
     pipettes: Optional[List[Tuple[str, int, float, float, str]]] = None,
@@ -224,7 +107,7 @@ class ChatterboxTransport:
       ``"right"``), so tests can drive left- vs right-mount discovery. Ignored
       if ``pipettes`` is given.
     pipettes: the simulated mounted pipettes as a list of
-      ``(name, channels, min_vol, max_vol, mount)`` — one entry per mount, so
+      ``(name, channels, min_vol, max_vol, mount)`` -- one entry per mount, so
       tests can simulate multiple pipettes (e.g. left + right) at once. Pass
       ``[]`` to simulate no pipette mounted. Takes precedence over
       ``pipette``/``mount`` when given (even when empty).
@@ -259,6 +142,14 @@ class ChatterboxTransport:
       a real version string (e.g. ``"8.1.0"``) to drive a caller's own
       version gating without subclassing.
     """
+    # No executor, no socket: the whole HTTP base is bypassed by overriding
+    # request/setup/stop, so the attributes it would set are given directly
+    # (no super().__init__, which also refuses construction under capture).
+    self.human_readable_device_name = "chatterbox"
+    self.base_url = "http://chatterbox.local"
+    self.headers: Dict[str, str] = dict(DEFAULT_HEADERS)
+    self.timeout = 30.0
+
     if pipettes is not None:
       self._pipettes: List[Tuple[str, int, float, float, str]] = list(pipettes)
     else:
@@ -297,7 +188,31 @@ class ChatterboxTransport:
   async def setup(self) -> None:
     """No connection to open."""
 
-  async def get(self, path: str) -> Dict[str, Any]:
+  async def stop(self) -> None:
+    """No connection to close."""
+
+  async def request(
+    self,
+    method: str,
+    path: str,
+    data: Optional[Dict[str, Any]] = None,
+  ) -> Dict[str, Any]:
+    """Answer one robot-server exchange from the canned state.
+
+    The single seam ``OpentronsAPI`` drives through: the old get/post/delete
+    ladders collapse into this switch. Every reply keeps the ``{"data": ...}``
+    envelope the driver reads.
+    """
+    m = method.upper()
+    if m == "GET":
+      return self._get(path)
+    if m == "POST":
+      return self._post(path, data)
+    if m == "DELETE":
+      return {"data": {}}
+    return {"data": {}}
+
+  def _get(self, path: str) -> Dict[str, Any]:
     if path == "/health":
       return {
         "api_version": self.api_version,
@@ -407,7 +322,7 @@ class ChatterboxTransport:
       )
     return None
 
-  async def post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+  def _post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     if path == "/runs":
       return {"data": {"id": "chatterbox-run"}}
     if path.endswith("/labware_definitions"):  # custom labware definition upload
@@ -519,8 +434,45 @@ class ChatterboxTransport:
       return {"data": cmd_data}
     return {"data": {}}  # e.g. /actions
 
-  async def delete(self, path: str) -> Dict[str, Any]:
-    return {"data": {}}
 
-  async def close(self) -> None:
-    return None
+class ReplayTransport(HTTPValidator):
+  """Offline io that replays a capture file recorded from a real robot.
+
+  Where :class:`ChatterboxHTTP` returns responses we wrote by hand, this
+  returns the ones an actual robot gave, in the order it gave them, and raises
+  the same refusal on an exchange that failed. Nothing reaches the network.
+
+  Build the capture file by wrapping a live run in ``start_capture()`` /
+  ``stop_capture()``. Construct the robot BEFORE arming the capture: every
+  pylabrobot io refuses construction while one is active, and the robot builds
+  its io in ``__init__`` for exactly that reason.
+
+      flex = OpentronsFlex(deck=deck, host=host)   # io built here
+      pylabrobot.start_capture(path)
+      await flex.setup()
+      ...
+      pylabrobot.stop_capture()
+
+  Pass the ``ReplayTransport`` as the robot's ``io``. Call
+  :meth:`assert_fully_replayed` at the end of a test: it fails when the
+  protocol stopped short of the recording, which is what catches a dropped
+  command.
+  """
+
+  def __init__(
+    self,
+    capture_file: Union[str, Path],
+    base_url: str,
+    headers: Optional[Mapping[str, str]] = None,
+    human_readable_device_name: str = "Opentrons Flex",
+  ) -> None:
+    super().__init__(
+      CaptureReader(path=str(capture_file)),
+      human_readable_device_name,
+      base_url=base_url,
+      headers=headers or DEFAULT_HEADERS,
+    )
+
+  def assert_fully_replayed(self) -> None:
+    """Raise unless every recorded exchange was consumed."""
+    self.cr.done()

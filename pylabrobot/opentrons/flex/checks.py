@@ -16,7 +16,7 @@ from pylabrobot.opentrons.flex.envelope import (
 from pylabrobot.opentrons.flex.envelope import (
   FLEX_8CH_NOZZLE_H1_Y as FLEX_8CH_NOZZLE_H1_Y,  # re-exported for callers importing from checks
 )
-from pylabrobot.opentrons.robot import PipetteInfo
+from pylabrobot.opentrons.flex.flex_run import PipetteInfo
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.errors import NoLocationError
 from pylabrobot.resources.tip import Tip
