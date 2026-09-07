@@ -83,9 +83,11 @@ class Direction(IntEnum):
 
 async def _subobject_address_and_info(
   intro: "HamiltonIntrospection", parent_addr: Address, index: int
-) -> Tuple[Address, ObjectInfo]:
-  """Resolve one subobject index to ``(address, ObjectInfo)`` (shared resolve/tree path)."""
+) -> Optional[Tuple[Address, ObjectInfo]]:
+  """Resolve a populated subobject slot; a zero address denotes an empty slot."""
   sub_addr = await intro.get_subobject_address(parent_addr, index)
+  if sub_addr == Address(0, 0, 0):
+    return None
   sub_info = await intro.get_object(sub_addr)
   return sub_addr, sub_info
 
@@ -1519,7 +1521,10 @@ class HamiltonIntrospection:
 
     for i in range(obj.subobject_count):
       try:
-        sub_addr, sub_obj = await _subobject_address_and_info(self, addr, i)
+        subobject = await _subobject_address_and_info(self, addr, i)
+        if subobject is None:
+          continue
+        sub_addr, sub_obj = subobject
         obj.children[sub_obj.name] = sub_obj
         child = await self._walk_node(sub_addr, f"{path}.{sub_obj.name}", visited)
         if child is not None:
@@ -1576,7 +1581,10 @@ class HamiltonIntrospection:
 
       found: Optional[Address] = None
       for i in range(obj.subobject_count):
-        sub_addr, sub_obj = await _subobject_address_and_info(self, current_addr, i)
+        subobject = await _subobject_address_and_info(self, current_addr, i)
+        if subobject is None:
+          continue
+        sub_addr, sub_obj = subobject
         self._registry.register(f"{current_path}.{sub_obj.name}", sub_obj)
         if sub_obj.name == part:
           found = sub_addr

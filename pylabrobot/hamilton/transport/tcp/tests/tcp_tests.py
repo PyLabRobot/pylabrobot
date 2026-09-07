@@ -1043,6 +1043,31 @@ class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(seen), 1)
     self.assertEqual(seen[0].hoi.action_code, Hoi2Action.EVENT)
 
+  async def test_idle_socket_survives_the_request_timeout(self):
+    """A quiet session can receive a response after its per-request timeout has elapsed."""
+    client = HamiltonTCPClient(host="127.0.0.1", port=0, read_timeout=0.01)
+    stream = asyncio.StreamReader()
+    client.io._reader = stream
+    client._connected = True
+    client._reader_task = asyncio.create_task(client._reader_loop())
+    self.addAsyncCleanup(client.stop)
+
+    await asyncio.sleep(0.05)
+    self.assertTrue(client._is_reader_running(), "Idle time killed the background reader")
+    self.assertTrue(client.is_connected)
+
+    client._pending_response = asyncio.get_running_loop().create_future()
+    response = client._pending_response
+    client._pending_expect = (Address(1, 1, 0xC000), 62)
+    stream.feed_data(
+      bytes.fromhex(
+        "2e00063000000100010000c002000400ffff3e0002012a0000000000030109000001"
+        "0f000a0050525042443133393400"
+      )
+    )
+    received = await asyncio.wait_for(response, timeout=1)
+    self.assertEqual(HoiParamsParser(received.hoi.params).parse_next()[1], "PRPBD1394")
+
   async def test_ack_is_skipped_and_terminal_frame_is_delivered(self):
     client, queue = self._make_client([])
     task = asyncio.ensure_future(
@@ -1463,6 +1488,63 @@ class TestHamiltonIntrospectionLazyCaches(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(text1, "SomethingFailed")
     self.assertEqual(text2, "SomethingFailed")
     self.assertEqual(self.intro.get_enums.call_count, 1)
+
+
+class TestEmptyChildSlots(unittest.IsolatedAsyncioTestCase):
+  """Empty firmware slots are skipped during tree and path discovery."""
+
+  async def test_tree_does_not_query_zero_address(self) -> None:
+    """Tree discovery skips an empty slot and retains the populated child."""
+    await self._check_empty_child_slot("tree")
+
+  async def test_path_does_not_query_zero_address(self) -> None:
+    """Path discovery skips an empty slot and resolves the populated child."""
+    await self._check_empty_child_slot("path")
+
+  async def _check_empty_child_slot(self, operation: str) -> None:
+    """Replay the empty-slot response while retaining a later populated slot."""
+    client = HamiltonTCPClient("127.0.0.1", 0)
+    intro = client.introspection
+    parent = Address(1, 236, 48896)
+    empty_slot_index = 4
+    recorded_response = bytes.fromhex(
+      "3200063000000100ec0000bf02000600ffff0f0002012e0000000000000103000003"
+      "050002000000050002000000050002000000"
+    )
+    child = Address(1, 236, 256)
+    client.registry.set_root_address(parent)
+    objects = {
+      parent: ObjectInfo("Channel Root", "", 6, 6, parent),
+      child: ObjectInfo("Channel", "", 1, 0, child),
+    }
+    calls = []
+
+    async def get_object(address: Address) -> ObjectInfo:
+      """Reject attempts to query firmware metadata at the zero address."""
+      calls.append(address)
+      return objects[address]
+
+    async def get_subobject(address: Address, subobject_index: int) -> Address:
+      """Use the captured response at slot four and another child at slot five."""
+      if subobject_index == empty_slot_index:
+        return await original_get_subobject(address, subobject_index)
+      return child
+
+    original_get_subobject = intro.get_subobject_address
+    response = CommandResponse.from_bytes(recorded_response)
+    client._transact = AsyncMock(return_value=response)  # type: ignore[method-assign]
+    intro.get_object = get_object  # type: ignore[method-assign]
+    intro.get_subobject_address = get_subobject  # type: ignore[method-assign]
+    intro.get_supported_interface0_method_ids = AsyncMock(  # type: ignore[method-assign]
+      side_effect=lambda address: {1, 3} if address == parent else {1}
+    )
+    if operation == "tree":
+      tree = await intro.get_firmware_tree()
+      self.assertEqual([node.address for node in tree.children], [child])
+    else:
+      self.assertEqual(await intro.resolve_path("Channel Root.Channel"), child)
+    self.assertNotIn(Address(0, 0, 0), calls)
+    client._transact.assert_awaited_once()
 
 
 if __name__ == "__main__":

@@ -368,7 +368,9 @@ class HamiltonTCPClient:
     try:
       while True:
         try:
-          message = await self._read_one_message()
+          # Idle time is not a request timeout. _transact applies the caller's
+          # deadline; stop() cancels this reader and closes the socket.
+          message = await self._read_one_message(timeout=float("inf"))
         except ValueError as exc:
           # A malformed frame must not take the reader down with it. Frames are
           # length-prefixed and consumed whole, so skipping one keeps the stream
