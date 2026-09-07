@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OpentronsAPI
+=================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OpentronsAPI
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsAPI.__init__
+      ~OpentronsAPI.create_run
+      ~OpentronsAPI.define_labware
+      ~OpentronsAPI.get_command
+      ~OpentronsAPI.get_connected_modules
+      ~OpentronsAPI.get_health
+      ~OpentronsAPI.get_mounted_pipettes
+      ~OpentronsAPI.get_run
+      ~OpentronsAPI.get_runs
+      ~OpentronsAPI.home
+      ~OpentronsAPI.stop_run
+      ~OpentronsAPI.submit_command
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Pipette.has\_tip
+========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2Pipette.has_tip

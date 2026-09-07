@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OT2
+========================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OT2
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2.pipettes
+      ~OT2.software_version
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2.__init__
+      ~OT2.connect
+      ~OT2.get_health
+      ~OT2.get_mounted_pipettes
+      ~OT2.get_runs
+      ~OT2.home
+      ~OT2.list_connected_modules
+      ~OT2.setup
+      ~OT2.stop
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsRun.pick\_up\_tip
+===============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsRun.pick_up_tip

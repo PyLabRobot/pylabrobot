@@ -1,0 +1,6 @@
+pylabrobot.opentrons.ModuleInfo.from\_response
+==============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: ModuleInfo.from_response

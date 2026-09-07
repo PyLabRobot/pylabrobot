@@ -1,0 +1,6 @@
+pylabrobot.opentrons.RobotInfo.name
+===================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: RobotInfo.name

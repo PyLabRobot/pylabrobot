@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.home
+======================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.home

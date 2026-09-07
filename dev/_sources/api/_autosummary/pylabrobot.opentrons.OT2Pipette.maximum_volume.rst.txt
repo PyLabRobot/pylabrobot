@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Pipette.maximum\_volume
+===============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2Pipette.maximum_volume

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Pipette.drop\_tip
+=========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Pipette.drop_tip

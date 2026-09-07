@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2.pipettes
+=================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2.pipettes

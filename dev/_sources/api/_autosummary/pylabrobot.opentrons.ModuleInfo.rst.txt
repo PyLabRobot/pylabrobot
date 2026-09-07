@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.ModuleInfo
+===============================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: ModuleInfo
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ModuleInfo.model
+      ~ModuleInfo.module_type
+      ~ModuleInfo.serial_number
+      ~ModuleInfo.id
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ModuleInfo.__init__
+      ~ModuleInfo.from_response
+   
+   

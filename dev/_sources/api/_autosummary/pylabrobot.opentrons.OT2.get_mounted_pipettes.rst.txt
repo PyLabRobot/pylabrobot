@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2.get\_mounted\_pipettes
+===============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2.get_mounted_pipettes

@@ -1,0 +1,6 @@
+﻿pylabrobot.opentrons.OpentronsProtocolError
+===========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoexception:: OpentronsProtocolError

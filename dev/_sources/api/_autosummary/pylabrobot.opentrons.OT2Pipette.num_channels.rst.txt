@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Pipette.num\_channels
+=============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2Pipette.num_channels

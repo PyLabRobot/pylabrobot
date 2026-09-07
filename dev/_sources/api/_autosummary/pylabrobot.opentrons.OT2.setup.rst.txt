@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2.setup
+==============================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2.setup

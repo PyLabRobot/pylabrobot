@@ -1,0 +1,6 @@
+pylabrobot.opentrons.ModuleInfo.id
+==================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: ModuleInfo.id

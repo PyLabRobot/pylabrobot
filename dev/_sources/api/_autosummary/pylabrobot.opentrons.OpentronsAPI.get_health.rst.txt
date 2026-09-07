@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.get\_health
+=============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.get_health

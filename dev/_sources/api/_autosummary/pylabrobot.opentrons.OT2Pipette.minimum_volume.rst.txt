@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Pipette.minimum\_volume
+===============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2Pipette.minimum_volume

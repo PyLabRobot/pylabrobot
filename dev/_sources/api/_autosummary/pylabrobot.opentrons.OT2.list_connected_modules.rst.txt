@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2.list\_connected\_modules
+=================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2.list_connected_modules

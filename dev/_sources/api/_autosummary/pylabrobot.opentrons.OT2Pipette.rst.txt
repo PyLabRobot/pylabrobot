@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OT2Pipette
+===============================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OT2Pipette
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2Pipette.has_tip
+      ~OT2Pipette.maximum_volume
+      ~OT2Pipette.minimum_volume
+      ~OT2Pipette.num_channels
+      ~OT2Pipette.tip
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2Pipette.__init__
+      ~OT2Pipette.aspirate
+      ~OT2Pipette.can_use_tip
+      ~OT2Pipette.discard_tip
+      ~OT2Pipette.dispense
+      ~OT2Pipette.drop_tip
+      ~OT2Pipette.mix
+      ~OT2Pipette.move_to
+      ~OT2Pipette.pick_up_tip
+      ~OT2Pipette.return_tip
+   
+   

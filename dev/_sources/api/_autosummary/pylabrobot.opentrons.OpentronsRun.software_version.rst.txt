@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsRun.software\_version
+===================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OpentronsRun.software_version

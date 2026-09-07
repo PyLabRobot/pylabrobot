@@ -1,0 +1,6 @@
+pylabrobot.opentrons.MountedPipette.\_\_init\_\_
+================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: MountedPipette.__init__

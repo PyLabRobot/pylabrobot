@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.\_\_init\_\_
+==============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.__init__

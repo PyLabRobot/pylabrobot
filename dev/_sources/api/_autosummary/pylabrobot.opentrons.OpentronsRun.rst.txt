@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OpentronsRun
+=================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OpentronsRun
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsRun.active
+      ~OpentronsRun.id
+      ~OpentronsRun.software_version
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsRun.__init__
+      ~OpentronsRun.aspirate_in_place
+      ~OpentronsRun.define_labware
+      ~OpentronsRun.discard_tip_in_fixed_trash
+      ~OpentronsRun.dispense_in_place
+      ~OpentronsRun.drop_tip
+      ~OpentronsRun.get_position
+      ~OpentronsRun.load_labware
+      ~OpentronsRun.load_pipette
+      ~OpentronsRun.move_to
+      ~OpentronsRun.pick_up_tip
+      ~OpentronsRun.stop
+   
+   
