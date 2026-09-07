@@ -1403,7 +1403,7 @@ class VSpin:
       await self._disable_servo_after_motion()
       return
 
-    trajectory_started = False
+    trajectory_may_be_active = False
     try:
       await self._raise_for_spin_faults()
       if self._spin_cancel_requested:
@@ -1412,8 +1412,9 @@ class VSpin:
       self._at_bucket = None
       self._set_activity(VSpinActivity.ACCELERATING)
       transition.mark_actuated(position_uncertain=True)
+      # The controller may start moving before its reply is received.
+      trajectory_may_be_active = True
       await self._send_nmc(spin_trajectory)
-      trajectory_started = True
 
       await self._wait_for_target_speed(rpm, acceleration)
       if not self._spin_cancel_requested:
@@ -1432,10 +1433,10 @@ class VSpin:
       active_deceleration = self._spin_stop_deceleration or deceleration
       await self._command_deceleration(active_deceleration)
       await self._wait_until_stopped(rpm, active_deceleration)
-      trajectory_started = False
+      trajectory_may_be_active = False
       transition.confirm_position()
     except BaseException:
-      if trajectory_started:
+      if trajectory_may_be_active:
         self._set_activity(VSpinActivity.DECELERATING)
         active_deceleration = self._spin_stop_deceleration or deceleration
         try:

@@ -656,6 +656,88 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
     finally:
       self.vspin._command_lock.release()
 
+  async def _check_spin_reply_failure(self, *, cancel: bool) -> None:
+    """Fail a reply after writing the spin trajectory and require controlled stopping."""
+    self.vspin._at_bucket = self.vspin.bucket1
+    self.vspin.request_door_open = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_door_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    self.vspin.request_bucket_locked = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    self.vspin.request_position = AsyncMock(return_value=0)  # type: ignore[method-assign]
+    self.vspin._enable_amplifier_and_reset_servo_status = AsyncMock()  # type: ignore[method-assign]
+    self.vspin._raise_for_spin_faults = AsyncMock()  # type: ignore[method-assign]
+
+    rpm = VSpin.g_to_rpm(500)
+    spin_trajectory = _nmc.build_load_trajectory(
+      _nmc.PIC_SERVO_ADDRESS,
+      vspin_module._POSITION_TRAJECTORY_MODE,
+      position=_nmc.spin_target_distance(rpm, duration=1, acceleration=0.5),
+      velocity=_nmc.rpm_to_nmc_velocity(rpm),
+      acceleration=_nmc.acceleration_to_nmc(0.5),
+    )
+    deceleration_trajectory = _nmc.build_load_trajectory(
+      _nmc.PIC_SERVO_ADDRESS,
+      vspin_module._VELOCITY_TRAJECTORY_MODE,
+      velocity=0,
+      acceleration=_nmc.acceleration_to_nmc(0.6),
+    )
+    reply_started = asyncio.Event()
+    fail_reply = asyncio.Event()
+
+    async def read(length: int) -> bytes:
+      """Leave the trajectory reply pending until the test times out or cancels it."""
+      self.assertEqual(length, 2)
+      if self.io.write.call_args.args[0] == spin_trajectory:
+        reply_started.set()
+        await fail_reply.wait()
+        raise TimeoutError("spin acknowledgement timed out")
+      return _nmc_response(_nmc.STATUS_MOVE_DONE)
+
+    async def confirm_stop(initial_rpm: float, deceleration: float) -> None:
+      """Check that the spin owns its lock and completion event until stop confirmation."""
+      self.assertEqual((initial_rpm, deceleration), (rpm, 0.6))
+      self.assertTrue(self.vspin._command_lock.locked())
+      self.assertFalse(self.vspin._spin_completion_event.is_set())
+
+    self.io.write = AsyncMock(side_effect=len)
+    self.io.read = AsyncMock(side_effect=read)
+    wait_until_stopped = AsyncMock(side_effect=confirm_stop)
+    self.vspin._wait_until_stopped = wait_until_stopped  # type: ignore[method-assign]
+
+    spin_task = asyncio.ensure_future(self.vspin.spin(500, 1, 0.5, 0.6))
+    await asyncio.wait_for(reply_started.wait(), timeout=1)
+    if cancel:
+      spin_task.cancel()
+      with self.assertRaises(asyncio.CancelledError):
+        await spin_task
+    else:
+      fail_reply.set()
+      with self.assertRaisesRegex(TimeoutError, "spin acknowledgement timed out"):
+        await spin_task
+
+    gain_command = _nmc.build_set_gain(_nmc.PIC_SERVO_ADDRESS, vspin_module._VELOCITY_GAINS)
+    self.assertEqual(
+      self.io.write.await_args_list,
+      [
+        call(gain_command),
+        call(spin_trajectory),
+        call(gain_command),
+        call(deceleration_trajectory),
+      ],
+    )
+    wait_until_stopped.assert_awaited_once_with(rpm, 0.6)
+    self.assertTrue(self.vspin.state.recovery_required)
+    self.assertIsNone(self.vspin.at_bucket)
+    self.assertTrue(self.vspin._spin_completion_event.is_set())
+    self.assertFalse(self.vspin._command_lock.locked())
+
+  async def test_spin_reply_timeout_decelerates_before_reraising(self) -> None:
+    """A timeout after the motion write must still stop the rotor before returning."""
+    await self._check_spin_reply_failure(cancel=False)
+
+  async def test_cancelled_spin_reply_decelerates_before_reraising(self) -> None:
+    """Cancelling a task awaiting the motion reply must still stop the rotor."""
+    await self._check_spin_reply_failure(cancel=True)
+
   async def test_stop_spin_requests_owner_deceleration_and_waits_for_completion(self):
     owner_started = asyncio.Event()
     allow_completion = asyncio.Event()
