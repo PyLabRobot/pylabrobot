@@ -16,14 +16,12 @@ pipettes take targets in nozzle order, with a shared volume per mounted tip.
 Eight-channel pickup accepts one to eight consecutive tip spots in a single rack
 column, mapped to nozzles starting at 0. For example,
 ``await pipette.pick_up_tips(rack["E1:H1"])`` mounts four tips on nozzles 0-3.
-Occupied tip spots under the remaining nozzles are rejected by default.
-``allow_undeclared_tip_pickup=True`` accepts and tracks those extra tips with a
-warning; set it on ``OT2`` as a default or on ``pick_up_tips()`` for one call.
-All picked-up tips are committed together after the command succeeds.
+Occupied tip spots under the remaining nozzles always reject the pickup. Include
+every tip the head would pick up in the selection, or clear the extra spots first.
+All declared tips are committed together after the command succeeds.
 
-``pipette.tip_channels`` gives the nozzle indices corresponding to ``pipette.tips``,
-including any accepted extra tips. Liquid operations and rack drops require one
-target per mounted tip in that order, preserving gaps between occupied nozzles.
+``pipette.tips`` contains the mounted tips in consecutive nozzle order starting at 0.
+Liquid operations and rack drops require one target per mounted tip in that order.
 ``return_tips()`` returns every mounted tip to its pickup spot.
 
 Tip pickup and return/drop validate the nominal PLR target against the mount's

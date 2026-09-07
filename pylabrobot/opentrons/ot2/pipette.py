@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import warnings
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -111,7 +110,6 @@ class _OT2Pipette(ABC):
     self._spec = spec
     self._tips: Tuple[Tip, ...] = ()
     self._tip_origins: Tuple[TipSpot, ...] = ()
-    self._tip_channels: Tuple[int, ...] = ()
 
   @property
   def minimum_volume(self) -> float:
@@ -245,17 +243,10 @@ class _OT2Pipette(ABC):
       self._tip_command_location(tip_spots[0], offset + Coordinate(z=tip.total_tip_length))
     )
 
-  def _prepare_tip_pickup(
-    self, tip_spots: Sequence[TipSpot], allow_undeclared_tip_pickup: Optional[bool]
-  ) -> Tuple[Tuple[int, TipSpot], ...]:
-    """Resolve the nozzles and tip spots to track in the pickup transaction."""
-    return tuple(enumerate(tip_spots))
-
   async def _pick_up_tips(
     self,
     tip_spots: Sequence[TipSpot],
     offset: Optional[Coordinate] = None,
-    allow_undeclared_tip_pickup: Optional[bool] = None,
   ) -> None:
     """Pick up one tip per nozzle with one command, then retract to traversal height."""
     async with self.robot._operation_lock:
@@ -264,8 +255,6 @@ class _OT2Pipette(ABC):
         raise RuntimeError(f"The {self.mount} pipette already has a tip")
       tip_spots = tuple(tip_spots)
       rack = self._tip_rack(tip_spots)
-      pickup = self._prepare_tip_pickup(tip_spots, allow_undeclared_tip_pickup)
-      tip_spots = tuple(spot for _, spot in pickup)
       tips = tuple(spot.get_tip() for spot in tip_spots)
       tip = tips[0]
       if not self.can_use_tip(tip):
@@ -298,7 +287,6 @@ class _OT2Pipette(ABC):
         tracker.commit()
       self._tips = tips
       self._tip_origins = tip_spots
-      self._tip_channels = tuple(nozzle for nozzle, _ in pickup)
       await self._retract_to_traversal_height()
 
   async def _drop_tips(
@@ -356,7 +344,6 @@ class _OT2Pipette(ABC):
       tracker.commit()
     self._tips = ()
     self._tip_origins = ()
-    self._tip_channels = ()
     await self._retract_to_traversal_height()
 
   async def _retract_to_traversal_height(self) -> None:
@@ -395,7 +382,6 @@ class _OT2Pipette(ABC):
       await self._run.discard_tip_in_fixed_trash(self.pipette_id, offset + Coordinate(z=10))
       self._tips = ()
       self._tip_origins = ()
-      self._tip_channels = ()
       await self._retract_to_traversal_height()
 
   def _liquid_location(
@@ -627,7 +613,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
 
   Instances are discovered and created by :meth:`OT2.setup`. Pickup targets run
   consecutively from nozzle 0 toward nozzle 7. Subsequent targets match the mounted
-  tips in :attr:`tip_channels` order. Volume, flow rate, liquid height, and offset
+  tips in nozzle order. Volume, flow rate, liquid height, and offset
   apply equally to every mounted tip.
   """
 
@@ -641,17 +627,12 @@ class OT2_8ChannelPipette(_OT2Pipette):
     """Mounted tips in nozzle order, or an empty tuple when no tips are mounted."""
     return self._tips
 
-  @property
-  def tip_channels(self) -> Tuple[int, ...]:
-    """Nozzle indices corresponding to :attr:`tips`, including any accepted extra tips."""
-    return self._tip_channels
-
   def _validate_targets(self, targets: Sequence[Resource]) -> None:
     """Require pickup targets or one target per mounted tip on the same resource."""
     if not 1 <= len(targets) <= self.num_channels:
       raise ValueError("Eight-channel operations require between 1 and 8 targets")
     if self.has_tip and len(targets) != len(self._tips):
-      raise ValueError("Targets must match all mounted tips in tip_channels order")
+      raise ValueError("Targets must match all mounted tips in nozzle order")
     if len({id(target) for target in targets}) != len(targets):
       raise ValueError("Each nozzle must address a distinct target")
     if any(target.parent is not targets[0].parent for target in targets):
@@ -661,9 +642,8 @@ class OT2_8ChannelPipette(_OT2Pipette):
     """Require targets to align with the rigid head's 9 mm back-to-front pitch."""
     super()._validate_nozzle_positions(positions)
     channel_offsets = self.robot.geometry.channel_y_offsets()
-    channels = self._tip_channels or tuple(range(len(positions)))
-    for position, nozzle in zip(positions, channels):
-      expected = positions[0] + Coordinate(y=channel_offsets[nozzle] - channel_offsets[0])
+    for position, channel_offset in zip(positions, channel_offsets):
+      expected = positions[0] + Coordinate(y=channel_offset - channel_offsets[0])
       if any(abs(actual - target) > 0.01 for actual, target in zip(position, expected)):
         raise ValueError("Targets must align in nozzle order at 9 mm pitch and equal height")
 
@@ -680,8 +660,8 @@ class OT2_8ChannelPipette(_OT2Pipette):
     )
     return rack
 
-  def _check_head8_pickup(self, tip_spots: Sequence[TipSpot]) -> List[Tuple[int, TipSpot]]:
-    """Return occupied tip spots under undeclared nozzles below a contiguous selection.
+  def _check_head8_pickup(self, tip_spots: Sequence[TipSpot]) -> None:
+    """Reject occupied tip spots under undeclared nozzles below a contiguous selection.
 
     The supplied tips implicitly address channels 0 through len(tip_spots)-1.
     Every other nozzle within the rack also picks up any tip beneath it.
@@ -726,41 +706,21 @@ class OT2_8ChannelPipette(_OT2Pipette):
 
     # The head also grabs occupied tipspots below the selection within its eight-nozzle reach.
     used = set(use_channels)
-    extras: List[Tuple[int, TipSpot]] = []
+    extras: List[TipSpot] = []
     for nozzle in range(num_nozzles):
       if nozzle in used:
         continue
       spot = spot_by_row.get(nozzle + top_row)
       if spot is not None and spot.has_tip():
-        extras.append((nozzle, spot))
-    return extras
-
-  def _prepare_tip_pickup(
-    self, tip_spots: Sequence[TipSpot], allow_undeclared_tip_pickup: Optional[bool]
-  ) -> Tuple[Tuple[int, TipSpot], ...]:
-    """Reject extra tips by default, or include them in the shared pickup transaction."""
-    allow_undeclared = (
-      self.robot.allow_undeclared_tip_pickup
-      if allow_undeclared_tip_pickup is None
-      else allow_undeclared_tip_pickup
-    )
-    extras = self._check_head8_pickup(tip_spots)
+        extras.append(spot)
     if extras:
-      where = ", ".join(spot.name for _, spot in extras)
-      if not allow_undeclared:
-        raise ValueError(
-          f"OT-2 8-channel pickup would also grab undeclared tips at {where}. The head fills "
-          f"from channel 0 down toward row H, and these occupied tipspots sit below your "
-          f"selection within its 8-nozzle reach, so the hardware would pick them up too. "
-          f"Extend the selection down to include them, clear those spots first, or pass "
-          f"allow_undeclared_tip_pickup=True (per call or on OT2) to absorb them."
-        )
-      warnings.warn(
-        f"OT-2 8-channel pickup is also grabbing undeclared tips at {where} (below the "
-        f"selection) and absorbing them into tracking (allow_undeclared_tip_pickup=True).",
-        stacklevel=2,
+      where = ", ".join(spot.name for spot in extras)
+      raise ValueError(
+        f"OT-2 8-channel pickup would also grab undeclared tips at {where}. The head fills "
+        f"from channel 0 down toward row H, and these occupied tipspots sit below your "
+        f"selection within its 8-nozzle reach, so the hardware would pick them up too. "
+        f"Extend the selection down to include them or clear those spots first."
       )
-    return (*enumerate(tip_spots), *extras)
 
   def _check_tip_pickup(self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate) -> None:
     """Reject labware overlapping the pickup footprint near the bare nozzle height.
@@ -769,6 +729,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     conservative destination check, not a swept-path or complete pipette-body model.
     """
     super()._check_tip_pickup(tip_spots, tip, offset)
+    self._check_head8_pickup(tip_spots)
     primary = tip_spots[0].get_location_wrt(self.robot.deck, "c", "c", "b") + offset
     nozzle_z = primary.z + tip.total_tip_length - tip.fitting_depth
     x_min, x_max = primary.x - 5, primary.x + 5
@@ -800,16 +761,12 @@ class OT2_8ChannelPipette(_OT2Pipette):
     self,
     tip_spots: Sequence[TipSpot],
     offset: Optional[Coordinate] = None,
-    *,
-    allow_undeclared_tip_pickup: Optional[bool] = None,
   ) -> None:
     """Pick up consecutive tips using nozzles starting at 0, then retract.
 
-    Extra tips under the remaining nozzles are rejected unless
-    ``allow_undeclared_tip_pickup`` is true, in which case they are tracked too,
-    with a warning. None uses the default configured on :class:`OT2`.
+    Occupied tip spots under the remaining nozzles always reject the pickup.
     """
-    await self._pick_up_tips(tip_spots, offset, allow_undeclared_tip_pickup)
+    await self._pick_up_tips(tip_spots, offset)
 
   async def drop_tips(
     self,
@@ -844,7 +801,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Aspirate ``volume`` per mounted tip from containers in tip_channels order, then retract."""
+    """Aspirate ``volume`` per mounted tip from containers in nozzle order, then retract."""
     await self._aspirate(tuple(containers), volume, flow_rate, liquid_height, offset)
 
   async def dispense(
@@ -855,7 +812,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Dispense ``volume`` per mounted tip into containers in tip_channels order, then retract."""
+    """Dispense ``volume`` per mounted tip into containers in nozzle order, then retract."""
     await self._dispense(tuple(containers), volume, flow_rate, liquid_height, offset)
 
   async def mix(
@@ -868,7 +825,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Mix ``volume`` per mounted tip in containers in tip_channels order, then retract."""
+    """Mix ``volume`` per mounted tip in containers in nozzle order, then retract."""
     await self._mix(
       tuple(containers),
       volume,
