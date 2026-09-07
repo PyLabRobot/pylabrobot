@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2SingleChannelPipette.can\_use\_tip
+==========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2SingleChannelPipette.can_use_tip

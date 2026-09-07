@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2SingleChannelPipette.dispense
+=====================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2SingleChannelPipette.dispense

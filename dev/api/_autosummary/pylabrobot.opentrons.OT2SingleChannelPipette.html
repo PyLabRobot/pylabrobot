@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pylabrobot.opentrons.OT2.stop &#8212; PyLabRobot dev documentation</title>
+    <title>pylabrobot.opentrons.OT2SingleChannelPipette &#8212; PyLabRobot dev documentation</title>
   
   
   
@@ -48,7 +48,7 @@
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../_static/plr_devices.js?v=ba1a2da2"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.opentrons.OT2.stop';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/_autosummary/pylabrobot.opentrons.OT2SingleChannelPipette';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.21.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
@@ -58,12 +58,12 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
-    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.opentrons.OT2.stop.html" />
+    <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.opentrons.OT2SingleChannelPipette.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.opentrons.OT2SingleChannelPipette" href="pylabrobot.opentrons.OT2SingleChannelPipette.html" />
-    <link rel="prev" title="pylabrobot.opentrons.OT2.setup" href="pylabrobot.opentrons.OT2.setup.html" />
+    <link rel="next" title="pylabrobot.opentrons.OT2SingleChannelPipette.has_tip" href="pylabrobot.opentrons.OT2SingleChannelPipette.has_tip.html" />
+    <link rel="prev" title="pylabrobot.opentrons.OT2.stop" href="pylabrobot.opentrons.OT2.stop.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.2" />
@@ -563,10 +563,7 @@
     
     <li class="breadcrumb-item"><a href="../pylabrobot.opentrons.html" class="nav-link">pylabrobot.opentrons package</a></li>
     
-    
-    <li class="breadcrumb-item"><a href="pylabrobot.opentrons.OT2.html" class="nav-link">pylabrobot.opentrons.OT2</a></li>
-    
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.opentrons.OT2.stop</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">pylabrobot.opentrons.OT2SingleChannelPipette</span></li>
   </ul>
 </nav>
 </div>
@@ -583,15 +580,78 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pylabrobot-opentrons-ot2-stop">
-<h1>pylabrobot.opentrons.OT2.stop<a class="headerlink" href="#pylabrobot-opentrons-ot2-stop" title="Link to this heading">#</a></h1>
-<dl class="py method">
-<dt class="sig sig-object py" id="pylabrobot.opentrons.OT2.stop">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">OT2.</span></span><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.opentrons.OT2.stop" title="Link to this definition">#</a></dt>
-<dd><p>Stop the run and close the transport, retaining state if run shutdown fails.</p>
+  <section id="pylabrobot-opentrons-ot2singlechannelpipette">
+<h1>pylabrobot.opentrons.OT2SingleChannelPipette<a class="headerlink" href="#pylabrobot-opentrons-ot2singlechannelpipette" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="pylabrobot.opentrons.OT2SingleChannelPipette">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.opentrons.</span></span><span class="sig-name descname"><span class="pre">OT2SingleChannelPipette</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">robot</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.opentrons.OT2.html#pylabrobot.opentrons.OT2" title="pylabrobot.opentrons.OT2"><span class="pre">OT2</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mount</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipette_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.opentrons.OT2SingleChannelPipette" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_OT2Pipette</span></code></p>
+<p>A single-channel OT-2 pipette, discovered and created by <a class="reference internal" href="pylabrobot.opentrons.OT2.setup.html#pylabrobot.opentrons.OT2.setup" title="pylabrobot.opentrons.OT2.setup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">OT2.setup()</span></code></a>.</p>
+<p class="rubric">Attributes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.has_tip.html#pylabrobot.opentrons.OT2SingleChannelPipette.has_tip" title="pylabrobot.opentrons.OT2SingleChannelPipette.has_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_tip</span></code></a></p></td>
+<td><p>Whether the pipette holds a tip according to commands issued by this object.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.maximum_volume.html#pylabrobot.opentrons.OT2SingleChannelPipette.maximum_volume" title="pylabrobot.opentrons.OT2SingleChannelPipette.maximum_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">maximum_volume</span></code></a></p></td>
+<td><p>Maximum supported transfer volume, in µL.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.minimum_volume.html#pylabrobot.opentrons.OT2SingleChannelPipette.minimum_volume" title="pylabrobot.opentrons.OT2SingleChannelPipette.minimum_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">minimum_volume</span></code></a></p></td>
+<td><p>Minimum supported transfer volume, in µL.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.num_channels.html#pylabrobot.opentrons.OT2SingleChannelPipette.num_channels" title="pylabrobot.opentrons.OT2SingleChannelPipette.num_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_channels</span></code></a></p></td>
+<td><p>One independently addressed nozzle.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.tip.html#pylabrobot.opentrons.OT2SingleChannelPipette.tip" title="pylabrobot.opentrons.OT2SingleChannelPipette.tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tip</span></code></a></p></td>
+<td><p>The single-channel mounted tip, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when no tip is mounted.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.__init__.html#pylabrobot.opentrons.OT2SingleChannelPipette.__init__" title="pylabrobot.opentrons.OT2SingleChannelPipette.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(robot, mount, name, pipette_id)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.aspirate.html#pylabrobot.opentrons.OT2SingleChannelPipette.aspirate" title="pylabrobot.opentrons.OT2SingleChannelPipette.aspirate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">aspirate</span></code></a>(container, volume[, flow_rate, ...])</p></td>
+<td><p>Aspirate <code class="docutils literal notranslate"><span class="pre">volume</span></code> from a container, then retract.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.can_use_tip.html#pylabrobot.opentrons.OT2SingleChannelPipette.can_use_tip" title="pylabrobot.opentrons.OT2SingleChannelPipette.can_use_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">can_use_tip</span></code></a>(tip)</p></td>
+<td><p>Whether the tip capacity is supported by this pipette.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.discard_tip.html#pylabrobot.opentrons.OT2SingleChannelPipette.discard_tip" title="pylabrobot.opentrons.OT2SingleChannelPipette.discard_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">discard_tip</span></code></a>([offset, allow_nonzero_volume])</p></td>
+<td><p>Discard a single tip into fixed trash and retract to traversal height.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.dispense.html#pylabrobot.opentrons.OT2SingleChannelPipette.dispense" title="pylabrobot.opentrons.OT2SingleChannelPipette.dispense"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispense</span></code></a>(container, volume[, flow_rate, ...])</p></td>
+<td><p>Dispense <code class="docutils literal notranslate"><span class="pre">volume</span></code> into a container, then retract.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.drop_tip.html#pylabrobot.opentrons.OT2SingleChannelPipette.drop_tip" title="pylabrobot.opentrons.OT2SingleChannelPipette.drop_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_tip</span></code></a>(tip_spot[, offset, ...])</p></td>
+<td><p>Drop into a tip-rack position and retract vertically to at least traversal height.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.mix.html#pylabrobot.opentrons.OT2SingleChannelPipette.mix" title="pylabrobot.opentrons.OT2SingleChannelPipette.mix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mix</span></code></a>(container, volume, repetitions[, ...])</p></td>
+<td><p>Mix <code class="docutils literal notranslate"><span class="pre">volume</span></code> in a container, then retract.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.move_to.html#pylabrobot.opentrons.OT2SingleChannelPipette.move_to" title="pylabrobot.opentrons.OT2SingleChannelPipette.move_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to</span></code></a>(location[, speed, minimum_z_height, ...])</p></td>
+<td><p>Move to an absolute robot-frame coordinate, then retract to at least traversal height.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.pick_up_tip.html#pylabrobot.opentrons.OT2SingleChannelPipette.pick_up_tip" title="pylabrobot.opentrons.OT2SingleChannelPipette.pick_up_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tip</span></code></a>(tip_spot[, offset])</p></td>
+<td><p>Pick up one tip from a tip rack and retract to at least traversal height.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2SingleChannelPipette.return_tip.html#pylabrobot.opentrons.OT2SingleChannelPipette.return_tip" title="pylabrobot.opentrons.OT2SingleChannelPipette.return_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">return_tip</span></code></a>([offset, allow_nonzero_volume])</p></td>
+<td><p>Return the mounted single tip to its pickup position, then retract.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>None</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>robot</strong> (<a class="reference internal" href="pylabrobot.opentrons.OT2.html#pylabrobot.opentrons.OT2" title="pylabrobot.opentrons.OT2"><em>OT2</em></a>)</p></li>
+<li><p><strong>mount</strong> (<em>Mount</em>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>pipette_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -609,20 +669,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.opentrons.OT2.setup.html"
+       href="pylabrobot.opentrons.OT2.stop.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.opentrons.OT2.setup</p>
+        <p class="prev-next-title">pylabrobot.opentrons.OT2.stop</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.opentrons.OT2SingleChannelPipette.html"
+       href="pylabrobot.opentrons.OT2SingleChannelPipette.has_tip.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.opentrons.OT2SingleChannelPipette</p>
+        <p class="prev-next-title">pylabrobot.opentrons.OT2SingleChannelPipette.has_tip</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -645,7 +705,7 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.opentrons.OT2.stop"><code class="docutils literal notranslate"><span class="pre">OT2.stop()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pylabrobot.opentrons.OT2SingleChannelPipette"><code class="docutils literal notranslate"><span class="pre">OT2SingleChannelPipette</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -653,7 +713,7 @@
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.opentrons.OT2.stop.rst">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/api/_autosummary/pylabrobot.opentrons.OT2SingleChannelPipette.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -668,7 +728,7 @@
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../../_sources/api/_autosummary/pylabrobot.opentrons.OT2.stop.rst.txt">
+    <a href="../../_sources/api/_autosummary/pylabrobot.opentrons.OT2SingleChannelPipette.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>

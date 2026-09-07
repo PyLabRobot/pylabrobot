@@ -583,6 +583,10 @@
 <code class="docutils literal notranslate"><span class="pre">connect()</span></code> for health and discovery queries without starting a run or moving
 the robot; <code class="docutils literal notranslate"><span class="pre">setup()</span></code> also loads the pipettes into a run and optionally homes.
 Queries return fresh values without changing the driver’s session state.</p>
+<p>Each mount is an <code class="docutils literal notranslate"><span class="pre">OT2SingleChannelPipette</span></code> or <code class="docutils literal notranslate"><span class="pre">OT2_8ChannelPipette</span></code>, selected
+from the discovered model. Both share motion, command execution, and transactional
+tracking. Single-channel pipettes take one tip spot or container; eight-channel
+pipettes take a complete column in nozzle order, with a shared volume per nozzle.</p>
 <p><code class="docutils literal notranslate"><span class="pre">OpentronsAPI</span></code> contains the named HTTP endpoints and response parsing.
 <code class="docutils literal notranslate"><span class="pre">OpentronsRun</span></code> provides command primitives and waits for their completion.
 Both use the device’s <code class="docutils literal notranslate"><span class="pre">pylabrobot.io.HTTP</span></code> transport. Pipette operations own
@@ -592,34 +596,37 @@ resource tracking and retraction to traversal height.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2.html#pylabrobot.opentrons.OT2" title="pylabrobot.opentrons.OT2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2</span></code></a></p></td>
 <td><p>Opentrons OT-2 controlled through its robot-server HTTP API.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2Pipette.html#pylabrobot.opentrons.OT2Pipette" title="pylabrobot.opentrons.OT2Pipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2Pipette</span></code></a></p></td>
-<td><p>A pipette mounted on an OT-2 carriage.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2SingleChannelPipette.html#pylabrobot.opentrons.OT2SingleChannelPipette" title="pylabrobot.opentrons.OT2SingleChannelPipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2SingleChannelPipette</span></code></a></p></td>
+<td><p>A single-channel OT-2 pipette, discovered and created by <a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2.setup.html#pylabrobot.opentrons.OT2.setup" title="pylabrobot.opentrons.OT2.setup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">OT2.setup()</span></code></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsAPI.html#pylabrobot.opentrons.OpentronsAPI" title="pylabrobot.opentrons.OpentronsAPI"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsAPI</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2_8ChannelPipette.html#pylabrobot.opentrons.OT2_8ChannelPipette" title="pylabrobot.opentrons.OT2_8ChannelPipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2_8ChannelPipette</span></code></a></p></td>
+<td><p>An eight-channel OT-2 pipette with a rigid, full-column nozzle layout.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsAPI.html#pylabrobot.opentrons.OpentronsAPI" title="pylabrobot.opentrons.OpentronsAPI"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsAPI</span></code></a></p></td>
 <td><p>HTTP endpoint encoding and decoding, without device or selected-run state.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsRun.html#pylabrobot.opentrons.OpentronsRun" title="pylabrobot.opentrons.OpentronsRun"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsRun</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsRun.html#pylabrobot.opentrons.OpentronsRun" title="pylabrobot.opentrons.OpentronsRun"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsRun</span></code></a></p></td>
 <td><p>One server run, bound to one client and a fixed software version.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.RobotInfo.html#pylabrobot.opentrons.RobotInfo" title="pylabrobot.opentrons.RobotInfo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RobotInfo</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.RobotInfo.html#pylabrobot.opentrons.RobotInfo" title="pylabrobot.opentrons.RobotInfo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RobotInfo</span></code></a></p></td>
 <td><p>A health reading.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.MountedPipette.html#pylabrobot.opentrons.MountedPipette" title="pylabrobot.opentrons.MountedPipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MountedPipette</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.MountedPipette.html#pylabrobot.opentrons.MountedPipette" title="pylabrobot.opentrons.MountedPipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MountedPipette</span></code></a></p></td>
 <td><p>A physical pipette, independent of any run's loaded pipette ID.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.ModuleInfo.html#pylabrobot.opentrons.ModuleInfo" title="pylabrobot.opentrons.ModuleInfo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModuleInfo</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.ModuleInfo.html#pylabrobot.opentrons.ModuleInfo" title="pylabrobot.opentrons.ModuleInfo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModuleInfo</span></code></a></p></td>
 <td><p>The identity of a connected module.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsError.html#pylabrobot.opentrons.OpentronsError" title="pylabrobot.opentrons.OpentronsError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsError</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsError.html#pylabrobot.opentrons.OpentronsError" title="pylabrobot.opentrons.OpentronsError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsError</span></code></a></p></td>
 <td><p>An Opentrons operation could not be completed.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsCommandError.html#pylabrobot.opentrons.OpentronsCommandError" title="pylabrobot.opentrons.OpentronsCommandError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsCommandError</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsCommandError.html#pylabrobot.opentrons.OpentronsCommandError" title="pylabrobot.opentrons.OpentronsCommandError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsCommandError</span></code></a></p></td>
 <td><p>A command failed, with its server identifiers available for inspection.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsCommandTimeout.html#pylabrobot.opentrons.OpentronsCommandTimeout" title="pylabrobot.opentrons.OpentronsCommandTimeout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsCommandTimeout</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsCommandTimeout.html#pylabrobot.opentrons.OpentronsCommandTimeout" title="pylabrobot.opentrons.OpentronsCommandTimeout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsCommandTimeout</span></code></a></p></td>
 <td><p>The command's completion is unknown; its ID can be used to query the server.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsProtocolError.html#pylabrobot.opentrons.OpentronsProtocolError" title="pylabrobot.opentrons.OpentronsProtocolError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsProtocolError</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsProtocolError.html#pylabrobot.opentrons.OpentronsProtocolError" title="pylabrobot.opentrons.OpentronsProtocolError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsProtocolError</span></code></a></p></td>
 <td><p>A robot-server response does not match the expected protocol.</p></td>
 </tr>
 </tbody>

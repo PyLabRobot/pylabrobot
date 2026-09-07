@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OT2\_8ChannelPipette
+=========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OT2_8ChannelPipette
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2_8ChannelPipette.has_tip
+      ~OT2_8ChannelPipette.maximum_volume
+      ~OT2_8ChannelPipette.minimum_volume
+      ~OT2_8ChannelPipette.num_channels
+      ~OT2_8ChannelPipette.tips
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2_8ChannelPipette.__init__
+      ~OT2_8ChannelPipette.aspirate
+      ~OT2_8ChannelPipette.can_use_tip
+      ~OT2_8ChannelPipette.discard_tips
+      ~OT2_8ChannelPipette.dispense
+      ~OT2_8ChannelPipette.drop_tips
+      ~OT2_8ChannelPipette.mix
+      ~OT2_8ChannelPipette.move_to
+      ~OT2_8ChannelPipette.pick_up_tips
+      ~OT2_8ChannelPipette.return_tips
+   
+   

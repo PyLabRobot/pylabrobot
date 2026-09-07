@@ -1,0 +1,44 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OT2SingleChannelPipette
+============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OT2SingleChannelPipette
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2SingleChannelPipette.has_tip
+      ~OT2SingleChannelPipette.maximum_volume
+      ~OT2SingleChannelPipette.minimum_volume
+      ~OT2SingleChannelPipette.num_channels
+      ~OT2SingleChannelPipette.tip
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2SingleChannelPipette.__init__
+      ~OT2SingleChannelPipette.aspirate
+      ~OT2SingleChannelPipette.can_use_tip
+      ~OT2SingleChannelPipette.discard_tip
+      ~OT2SingleChannelPipette.dispense
+      ~OT2SingleChannelPipette.drop_tip
+      ~OT2SingleChannelPipette.mix
+      ~OT2SingleChannelPipette.move_to
+      ~OT2SingleChannelPipette.pick_up_tip
+      ~OT2SingleChannelPipette.return_tip
+   
+   

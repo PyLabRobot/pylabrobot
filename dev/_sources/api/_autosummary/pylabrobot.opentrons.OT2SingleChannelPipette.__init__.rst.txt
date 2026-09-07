@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2SingleChannelPipette.\_\_init\_\_
+=========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2SingleChannelPipette.__init__

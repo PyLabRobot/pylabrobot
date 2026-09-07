@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2SingleChannelPipette.mix
+================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2SingleChannelPipette.mix
