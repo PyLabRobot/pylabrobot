@@ -1,6 +1,6 @@
 """Named robot-server endpoints over a caller-owned PLR HTTP transport."""
 
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Tuple
 
 from pylabrobot.io.http import HTTP, HTTPError
 from pylabrobot.opentrons.errors import OpentronsError, OpentronsProtocolError
@@ -72,27 +72,52 @@ class OpentronsAPI:
 
   async def stop_run(self, run_id: str) -> None:
     """Stop a run, falling back only when a firmware endpoint is unsupported."""
-    requests = (
-      ("POST", f"/runs/{run_id}/actions", {"data": {"actionType": "stop"}}),
-      ("POST", f"/runs/{run_id}/cancel", None),
-      ("POST", f"/runs/{run_id}/actions/cancel", None),
-      ("DELETE", f"/runs/{run_id}", None),
-    )
-    last_error: Optional[Exception] = None
-    for method, path, data in requests:
+    try:
       try:
-        await self._io.request(method, path, data)
-        return
+        await self._stop_run_action(run_id)
       except HTTPError as error:
-        last_error = error
         if error.status not in {404, 405}:
-          break
-      except Exception as error:
-        last_error = error
-        break
-    raise OpentronsError(
-      f"Could not cancel Opentrons run {run_id}; state is retained for retry"
-    ) from (last_error)
+          raise
+      else:
+        return
+
+      try:
+        await self._cancel_run(run_id)
+      except HTTPError as error:
+        if error.status not in {404, 405}:
+          raise
+      else:
+        return
+
+      try:
+        await self._cancel_run_action(run_id)
+      except HTTPError as error:
+        if error.status not in {404, 405}:
+          raise
+      else:
+        return
+
+      await self._delete_run(run_id)
+    except Exception as error:
+      raise OpentronsError(
+        f"Could not cancel Opentrons run {run_id}; state is retained for retry"
+      ) from error
+
+  async def _stop_run_action(self, run_id: str) -> None:
+    """Submit a stop action to the run-control endpoint."""
+    await self._io.request("POST", f"/runs/{run_id}/actions", {"data": {"actionType": "stop"}})
+
+  async def _cancel_run(self, run_id: str) -> None:
+    """Cancel a run through the legacy run cancel endpoint."""
+    await self._io.request("POST", f"/runs/{run_id}/cancel", None)
+
+  async def _cancel_run_action(self, run_id: str) -> None:
+    """Cancel a run through the legacy cancel action endpoint."""
+    await self._io.request("POST", f"/runs/{run_id}/actions/cancel", None)
+
+  async def _delete_run(self, run_id: str) -> None:
+    """Delete a run through the run endpoint."""
+    await self._io.request("DELETE", f"/runs/{run_id}", None)
 
   async def home(self) -> None:
     """Home the OT-2 gantry and pipette axes through the robot endpoint."""
