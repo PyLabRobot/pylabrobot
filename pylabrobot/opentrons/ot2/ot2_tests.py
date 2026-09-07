@@ -30,6 +30,7 @@ class FakeHTTP(HTTP):
     self.stop_action_supported = True
     self.stop_requests_fail = False
     self.started = False
+    self.saved_position = {"x": 30.25, "y": 40.5, "z": 20.0}
 
   async def setup(self) -> None:
     self.started = True
@@ -80,6 +81,8 @@ class FakeHTTP(HTTP):
       result: Dict[str, Any] = {}
       if command["commandType"] == "loadPipette":
         result = {"pipetteId": f"{command['params']['mount']}-pipette-id"}
+      elif command["commandType"] == "savePosition":
+        result = {"positionId": "position-id", "position": self.saved_position.copy()}
       self.command_results[command_id] = {
         "commandType": command["commandType"],
         "result": result,
@@ -163,7 +166,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(command_types.count("pickUpTip"), 1)
     self.assertEqual(command_types.count("aspirateInPlace"), 1)
     self.assertEqual(command_types.count("dispenseInPlace"), 1)
-    self.assertEqual(command_types.count("moveToCoordinates"), 4)
+    self.assertEqual(command_types.count("moveToCoordinates"), 6)
     self.assertEqual(command_types.count("moveToAddressableAreaForDropTip"), 1)
     self.assertEqual(command_types.count("dropTipInPlace"), 1)
 
@@ -224,6 +227,164 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     command_types = [command["commandType"] for command in self.io.commands]
     self.assertEqual(command_types.count("loadLabware"), 1)
     self.assertEqual(command_types.count("dropTip"), 1)
+    self.assertEqual(command_types[-3:], ["dropTip", "savePosition", "moveToCoordinates"])
+
+  async def test_pickup_retracts_with_tip_state_committed(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    origin = self.tips.get_item("A1")
+
+    await pipette.pick_up_tip(origin)
+
+    pickup, save, retract = self.io.commands[-3:]
+    self.assertEqual(pickup["commandType"], "pickUpTip")
+    self.assertEqual(save["commandType"], "savePosition")
+    self.assertEqual(save["params"], {"pipetteId": pipette.pipette_id})
+    self.assertEqual(retract["commandType"], "moveToCoordinates")
+    self.assertEqual(retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 120})
+    self.assertTrue(retract["params"]["forceDirect"])
+    self.assertTrue(pipette.has_tip)
+    self.assertFalse(origin.has_tip())
+
+  async def test_failed_retraction_preserves_completed_pickup(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    origin = self.tips.get_item("A1")
+    for failed_command in ("savePosition", "moveToCoordinates"):
+      with self.subTest(failed_command=failed_command):
+        self.io.fail_command_type = failed_command
+        tip = origin.get_tip()
+
+        with self.assertRaisesRegex(OpentronsOT2Error, failed_command):
+          await pipette.pick_up_tip(origin)
+
+        self.assertIs(pipette.tip, tip)
+        self.assertFalse(origin.has_tip())
+        self.io.fail_command_type = None
+        await pipette.return_tip()
+        self.assertIs(origin.get_tip(), tip)
+
+  async def test_move_to_retracts_without_lowering_an_already_high_tip(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    for z in (10, 150):
+      with self.subTest(z=z):
+        self.io.saved_position = {"x": 100, "y": 200, "z": z}
+        command_count = len(self.io.commands)
+
+        await asyncio.wait_for(pipette.move_to(Coordinate(100, 200, z)), timeout=1)
+
+        commands = self.io.commands[command_count:]
+        self.assertEqual(commands[0]["commandType"], "moveToCoordinates")
+        self.assertEqual(commands[0]["params"]["coordinates"], self.io.saved_position)
+        self.assertEqual(commands[1]["commandType"], "savePosition")
+        if z < self.robot.traversal_height:
+          self.assertEqual(len(commands), 3)
+          self.assertEqual(commands[2]["commandType"], "moveToCoordinates")
+          self.assertEqual(commands[2]["params"]["coordinates"], {"x": 100, "y": 200, "z": 120})
+          self.assertTrue(commands[2]["params"]["forceDirect"])
+        else:
+          self.assertEqual(len(commands), 2)
+
+  async def test_drop_tip_retracts_vertically_from_reported_position(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    await pipette.pick_up_tip(self.tips.get_item("A1"))
+    self.tips.set_tip_state({"A12": False})
+    self.robot.traversal_height = 140
+
+    await pipette.drop_tip(self.tips.get_item("A12"))
+
+    drop, save, retract = self.io.commands[-3:]
+    self.assertEqual(drop["commandType"], "dropTip")
+    self.assertEqual(drop["params"]["wellName"], "A12")
+    self.assertEqual(save["commandType"], "savePosition")
+    self.assertEqual(save["params"], {"pipetteId": pipette.pipette_id})
+    self.assertEqual(retract["commandType"], "moveToCoordinates")
+    self.assertEqual(retract["params"]["pipetteId"], pipette.pipette_id)
+    self.assertEqual(retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 140})
+    self.assertTrue(retract["params"]["forceDirect"])
+    self.assertTrue(self.tips.get_item("A12").has_tip())
+    self.assertFalse(pipette.has_tip)
+
+  async def test_discard_tip_retracts_for_both_trash_apis(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    for tip_index, version in enumerate(("6.3.0", "7.1.0")):
+      with self.subTest(version=version):
+        self.robot.api_version = version
+        await pipette.pick_up_tip(self.tips.get_item(tip_index))
+
+        await pipette.discard_tip()
+
+        drop, save, retract = self.io.commands[-3:]
+        expected_drop = "dropTip" if version == "6.3.0" else "dropTipInPlace"
+        self.assertEqual(drop["commandType"], expected_drop)
+        self.assertEqual(save["commandType"], "savePosition")
+        self.assertEqual(retract["commandType"], "moveToCoordinates")
+        self.assertEqual(
+          retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 120}
+        )
+        self.assertTrue(retract["params"]["forceDirect"])
+        self.assertFalse(pipette.has_tip)
+
+  async def test_drop_does_not_lower_a_nozzle_above_traversal_height(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    await pipette.pick_up_tip(self.tips.get_item("A1"))
+    self.io.saved_position["z"] = self.robot.traversal_height + 10
+    command_count = len(self.io.commands)
+
+    await pipette.return_tip()
+
+    self.assertEqual(
+      [command["commandType"] for command in self.io.commands[command_count:]],
+      ["dropTip", "savePosition"],
+    )
+    self.assertFalse(pipette.has_tip)
+
+  async def test_failed_drop_preserves_tip_and_does_not_retract(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    await pipette.pick_up_tip(self.tips.get_item("A1"))
+    tip = pipette.tip
+    self.io.fail_command_type = "dropTip"
+    command_count = len(self.io.commands)
+
+    with self.assertRaisesRegex(OpentronsOT2Error, "dropTip"):
+      await pipette.return_tip()
+
+    self.assertIs(pipette.tip, tip)
+    self.assertFalse(self.tips.get_item("A1").has_tip())
+    self.assertEqual(
+      [command["commandType"] for command in self.io.commands[command_count:]], ["dropTip"]
+    )
+
+  async def test_failed_retraction_preserves_completed_tip_drop(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    for tip_index, (operation, failed_command, returned) in enumerate(
+      (
+        (pipette.return_tip, "savePosition", True),
+        (pipette.return_tip, "moveToCoordinates", True),
+        (pipette.discard_tip, "savePosition", False),
+        (pipette.discard_tip, "moveToCoordinates", False),
+      )
+    ):
+      with self.subTest(operation=operation.__name__, failed_command=failed_command):
+        self.io.fail_command_type = None
+        origin = self.tips.get_item(tip_index)
+        await pipette.pick_up_tip(origin)
+        self.io.fail_command_type = failed_command
+
+        with self.assertRaisesRegex(OpentronsOT2Error, failed_command):
+          await operation()
+
+        self.assertFalse(pipette.has_tip)
+        self.assertIsNone(pipette.tip)
+        self.assertEqual(origin.has_tip(), returned)
+        with self.assertRaisesRegex(RuntimeError, "origin is unknown"):
+          await pipette.return_tip()
 
   async def test_official_tip_rack_uses_builtin_definition_for_tip_length_calibration(self) -> None:
     tips = opentrons_96_filtertiprack_20ul(name="official_tips")
@@ -274,6 +435,28 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(source.tracker.get_used_volume(), 15)
     assert pipette.tip is not None
     self.assertAlmostEqual(pipette.tip.tracker.get_used_volume(), 0)
+
+  async def test_liquid_operations_retract_from_reported_position(self) -> None:
+    pipette = self.robot.left_pipette
+    assert pipette is not None
+    await pipette.pick_up_tip(self.tips.get_item("A1"))
+    assert pipette.tip is not None
+    well = self.plate.get_well("A1")
+    for operation, initial_tip in ((pipette.aspirate, 0), (pipette.dispense, 10)):
+      with self.subTest(operation=operation.__name__):
+        well.tracker.set_volume(30)
+        pipette.tip.tracker.set_volume(initial_tip)
+
+        await operation(well, volume=10)
+
+        save, retract = self.io.commands[-2:]
+        self.assertEqual(save["commandType"], "savePosition")
+        self.assertEqual(save["params"], {"pipetteId": pipette.pipette_id})
+        self.assertEqual(retract["commandType"], "moveToCoordinates")
+        self.assertEqual(
+          retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 120}
+        )
+        self.assertTrue(retract["params"]["forceDirect"])
 
   async def test_rejected_aspiration_preserves_both_volume_trackers(self) -> None:
     pipette = self.robot.left_pipette
@@ -485,6 +668,7 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     source = self.plate.get_well("A1")
     source.tracker.set_volume(15)
     pipette.tip.tracker.set_volume(5)
+    command_count = len(self.io.commands)
 
     await pipette.mix(source, volume=10, repetitions=3)
 
@@ -496,6 +680,15 @@ class OpentronsOT2Tests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       sum(command["commandType"] == "dispenseInPlace" for command in self.io.commands), 3
     )
+    self.assertEqual(
+      [command["commandType"] for command in self.io.commands[command_count:]],
+      ["moveToCoordinates"]
+      + ["aspirateInPlace", "dispenseInPlace"] * 3
+      + ["savePosition", "moveToCoordinates"],
+    )
+    retract = self.io.commands[-1]
+    self.assertEqual(retract["params"]["coordinates"], {"x": 30.25, "y": 40.5, "z": 120})
+    self.assertTrue(retract["params"]["forceDirect"])
 
   async def test_unreachable_move_is_rejected_before_an_http_command(self) -> None:
     pipette = self.robot.left_pipette

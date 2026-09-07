@@ -241,7 +241,7 @@ class OT2Pipette:
     minimum_z_height: Optional[float] = None,
     force_direct: bool = False,
   ) -> None:
-    """Move the pipette's nozzle or mounted tip to an absolute robot-frame coordinate."""
+    """Move to an absolute robot-frame coordinate, then retract to at least traversal height."""
     async with self.robot._operation_lock:
       await self._move_to(
         location=location,
@@ -249,13 +249,14 @@ class OT2Pipette:
         minimum_z_height=minimum_z_height,
         force_direct=force_direct,
       )
+      await self._retract_to_traversal_height()
 
   async def pick_up_tip(
     self,
     tip_spot: TipSpot,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Pick up one tip from a tip rack."""
+    """Pick up one tip from a tip rack and retract to at least traversal height."""
     async with self.robot._operation_lock:
       self._require_single_channel()
       if self._tip is not None:
@@ -299,6 +300,7 @@ class OT2Pipette:
         tip_spot.tracker.commit()
       self._tip = tip
       self._tip_origin = tip_spot
+      await self._retract_to_traversal_height()
 
   async def drop_tip(
     self,
@@ -306,7 +308,7 @@ class OT2Pipette:
     offset: Optional[Coordinate] = None,
     allow_nonzero_volume: bool = False,
   ) -> None:
-    """Drop the mounted tip into a tip-rack position."""
+    """Drop into a tip-rack position and retract vertically to at least traversal height."""
     async with self.robot._operation_lock:
       await self._drop_tip(tip_spot, offset, allow_nonzero_volume)
 
@@ -353,13 +355,25 @@ class OT2Pipette:
       tip_spot.tracker.commit()
     self._tip = None
     self._tip_origin = None
+    await self._retract_to_traversal_height()
+
+  async def _retract_to_traversal_height(self) -> None:
+    """Raise the nozzle or mounted tip from its reported position under the operation lock."""
+    result = await self.robot._enqueue_command("savePosition", {"pipetteId": self.pipette_id})
+    position = Coordinate(**result["position"])
+    _require_finite_coordinate("position", position)
+    if position.z < self.robot.traversal_height:
+      await self._move_to(
+        Coordinate(position.x, position.y, self.robot.traversal_height),
+        force_direct=True,
+      )
 
   async def return_tip(
     self,
     offset: Optional[Coordinate] = None,
     allow_nonzero_volume: bool = False,
   ) -> None:
-    """Return the mounted tip to the position it came from."""
+    """Return the mounted tip to its pickup position and retract to at least traversal height."""
     async with self.robot._operation_lock:
       if self._tip_origin is None:
         raise RuntimeError("The mounted tip's origin is unknown")
@@ -374,7 +388,7 @@ class OT2Pipette:
     offset: Optional[Coordinate] = None,
     allow_nonzero_volume: bool = False,
   ) -> None:
-    """Discard the mounted tip into the OT-2's fixed trash."""
+    """Discard into fixed trash and retract vertically to at least traversal height."""
     async with self.robot._operation_lock:
       self._require_single_channel()
       tip = self._require_tip()
@@ -418,6 +432,7 @@ class OT2Pipette:
 
       self._tip = None
       self._tip_origin = None
+      await self._retract_to_traversal_height()
 
   def _liquid_location(
     self,
@@ -478,10 +493,7 @@ class OT2Pipette:
           minimum_z_height=self.robot.traversal_height,
         )
         await self._aspirate_in_place(volume, flow_rate)
-      await self._move_to(
-        Coordinate(location.x, location.y, self.robot.traversal_height),
-        minimum_z_height=self.robot.traversal_height,
-      )
+      await self._retract_to_traversal_height()
 
   async def dispense(
     self,
@@ -508,10 +520,7 @@ class OT2Pipette:
           minimum_z_height=self.robot.traversal_height,
         )
         await self._dispense_in_place(volume, flow_rate)
-      await self._move_to(
-        Coordinate(location.x, location.y, self.robot.traversal_height),
-        minimum_z_height=self.robot.traversal_height,
-      )
+      await self._retract_to_traversal_height()
 
   async def mix(
     self,
@@ -523,7 +532,7 @@ class OT2Pipette:
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Mix in place using client-side aspiration and dispense cycles."""
+    """Mix in place using aspiration and dispense cycles, then retract to traversal height."""
     async with self.robot._operation_lock:
       self._require_single_channel()
       tip = self._require_tip()
@@ -557,10 +566,7 @@ class OT2Pipette:
           await self._aspirate_in_place(volume, aspiration_flow_rate)
         with _track_liquid_transfer(tip.tracker, container.tracker, volume):
           await self._dispense_in_place(volume, dispense_flow_rate)
-      await self._move_to(
-        Coordinate(location.x, location.y, self.robot.traversal_height),
-        minimum_z_height=self.robot.traversal_height,
-      )
+      await self._retract_to_traversal_height()
 
 
 class OpentronsOT2:
