@@ -4,7 +4,7 @@ import math
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, Iterator, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from pylabrobot.opentrons.types import Mount
 from pylabrobot.resources.container import Container
@@ -137,7 +137,7 @@ class _OT2Pipette(ABC):
       raise RuntimeError("This pipette belongs to an earlier OT-2 run; use the current pipette")
 
   def _require_tips(self) -> Tuple[Tip, ...]:
-    """Return the mounted tips, requiring a tip on every nozzle."""
+    """Return the mounted tips, requiring at least one tip."""
     if not self._tips:
       raise RuntimeError(f"The {self.mount} pipette does not have a tip")
     return self._tips
@@ -180,8 +180,8 @@ class _OT2Pipette(ABC):
     _require_finite_coordinate("location", location)
     if location.z < 0:
       raise ValueError("location.z must be non-negative")
-    # Full-column alignment fixes every nozzle relative to the reference nozzle.
-    # Checking its offset therefore checks the common head center for the whole column.
+    # Nozzle alignment fixes every target relative to the reference nozzle.
+    # Checking its offset therefore checks the common head center for the whole selection.
     channel_offset = self.robot.geometry.channel_y_offsets()[0] if self.num_channels == 8 else 0.0
     if not self.robot.geometry.can_reach_position(self.mount, location, channel_offset):
       bounds = self.robot.geometry.single_channel_reach(self.mount)
@@ -422,7 +422,7 @@ class _OT2Pipette(ABC):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Aspirate ``volume`` per nozzle from one container or a full column, then retract."""
+    """Aspirate ``volume`` per mounted tip from its container, then retract."""
     async with self.robot._operation_lock:
       self._require_active()
       tips = self._require_tips()
@@ -450,7 +450,7 @@ class _OT2Pipette(ABC):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Dispense ``volume`` per nozzle into one container or a full column, then retract."""
+    """Dispense ``volume`` per mounted tip into its container, then retract."""
     async with self.robot._operation_lock:
       self._require_active()
       tips = self._require_tips()
@@ -480,7 +480,7 @@ class _OT2Pipette(ABC):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Mix ``volume`` per nozzle in one container or a full column, then retract."""
+    """Mix ``volume`` per mounted tip in its container, then retract."""
     async with self.robot._operation_lock:
       self._require_active()
       tips = self._require_tips()
@@ -609,11 +609,12 @@ class OT2SingleChannelPipette(_OT2Pipette):
 
 
 class OT2_8ChannelPipette(_OT2Pipette):
-  """An eight-channel OT-2 pipette with a rigid, full-column nozzle layout.
+  """An eight-channel OT-2 pipette with a rigid nozzle layout.
 
-  Instances are discovered and created by :meth:`OT2.setup`. Targets run from the
-  back nozzle to the front (rows A-H). Volume, flow rate, liquid height, and offset
-  apply equally to every nozzle. Partial columns are not supported.
+  Instances are discovered and created by :meth:`OT2.setup`. Pickup targets run
+  consecutively from nozzle 0 toward nozzle 7. Subsequent targets match the mounted
+  tips in nozzle order. Volume, flow rate, liquid height, and offset
+  apply equally to every mounted tip.
   """
 
   @property
@@ -627,8 +628,11 @@ class OT2_8ChannelPipette(_OT2Pipette):
     return self._tips
 
   def _validate_targets(self, targets: Sequence[Resource]) -> None:
-    """Require one distinct target per nozzle on the same resource."""
-    super()._validate_targets(targets)
+    """Require pickup targets or one target per mounted tip on the same resource."""
+    if not 1 <= len(targets) <= self.num_channels:
+      raise ValueError("Eight-channel operations require between 1 and 8 targets")
+    if self.has_tip and len(targets) != len(self._tips):
+      raise ValueError("Targets must match all mounted tips in nozzle order")
     if len({id(target) for target in targets}) != len(targets):
       raise ValueError("Each nozzle must address a distinct target")
     if any(target.parent is not targets[0].parent for target in targets):
@@ -644,17 +648,79 @@ class OT2_8ChannelPipette(_OT2Pipette):
         raise ValueError("Targets must align in nozzle order at 9 mm pitch and equal height")
 
   def _tip_rack(self, tip_spots: Sequence[TipSpot]) -> TipRack:
-    """Validate a complete A-H column and return its rack."""
+    """Validate a column aligned with the selected or mounted nozzles and return its rack."""
     rack = super()._tip_rack(tip_spots)
+    if rack.num_items_y != self.num_channels:
+      raise ValueError("Eight-channel tip operations require an eight-row tip rack")
     column = rack.get_child_identifier(tip_spots[0])[1:]
-    if rack.num_items_y != 8 or [rack.get_child_identifier(spot) for spot in tip_spots] != [
-      f"{row}{column}" for row in "ABCDEFGH"
-    ]:
-      raise ValueError("Eight-channel tip operations require a full A-H rack column")
+    if any(rack.get_child_identifier(spot)[1:] != column for spot in tip_spots):
+      raise ValueError("Eight-channel tip operations require a single rack column")
     self._validate_nozzle_positions(
       [spot.get_location_wrt(self.robot.deck, "c", "c", "b") for spot in tip_spots]
     )
     return rack
+
+  def _check_head8_pickup(self, tip_spots: Sequence[TipSpot]) -> None:
+    """Reject occupied tip spots under undeclared nozzles below a contiguous selection.
+
+    The supplied tips implicitly address channels 0 through len(tip_spots)-1.
+    Every other nozzle within the rack also picks up any tip beneath it.
+    """
+    channel_offsets = self.robot.geometry.channel_y_offsets()
+    head8_pitch = channel_offsets[0] - channel_offsets[1]
+    num_nozzles = self.num_channels
+    use_channels = list(range(len(tip_spots)))
+
+    def loc(resource: Resource) -> Coordinate:
+      """Locate a tip spot in the deck frame."""
+      return resource.get_location_wrt(self.robot.deck, "c", "c", "b")
+
+    rack = tip_spots[0].parent
+    if not isinstance(rack, TipRack) or any(s.parent is not rack for s in tip_spots):
+      raise ValueError("OT-2 8-channel pickup must come from a single tip rack.")
+
+    col_x = loc(tip_spots[0]).x
+    if any(abs(loc(s).x - col_x) > 0.5 for s in tip_spots):
+      raise ValueError(
+        "OT-2 8-channel pickup must be within a single column (all tipspots must share x)."
+      )
+
+    col_spots = [s for s in rack.get_all_items() if abs(loc(s).x - col_x) < 0.5]
+    top_y = max(loc(s).y for s in col_spots)
+
+    def row_of(y: float) -> int:
+      """Map a tip spot's Y coordinate to its row in this column."""
+      return int(round((top_y - y) / head8_pitch))
+
+    spot_by_row = {row_of(loc(s).y): s for s in col_spots}
+
+    # The declared tipspots must run consecutively down the column in channel order.
+    offsets = {row_of(loc(spot).y) - ch for spot, ch in zip(tip_spots, use_channels)}
+    if len(offsets) != 1:
+      raise ValueError(
+        "OT-2 8-channel pickup tipspots must run consecutively down the column in channel order "
+        "(channel 0 = topmost well, then one row per channel at 9 mm pitch). The given tipspots "
+        "do not line up 1:1 with the channels."
+      )
+    top_row = offsets.pop()
+
+    # The head also grabs occupied tipspots below the selection within its eight-nozzle reach.
+    used = set(use_channels)
+    extras: List[TipSpot] = []
+    for nozzle in range(num_nozzles):
+      if nozzle in used:
+        continue
+      spot = spot_by_row.get(nozzle + top_row)
+      if spot is not None and spot.has_tip():
+        extras.append(spot)
+    if extras:
+      where = ", ".join(spot.name for spot in extras)
+      raise ValueError(
+        f"OT-2 8-channel pickup would also grab undeclared tips at {where}. The head fills "
+        f"from channel 0 down toward row H, and these occupied tipspots sit below your "
+        f"selection within its 8-nozzle reach, so the hardware would pick them up too. "
+        f"Extend the selection down to include them or clear those spots first."
+      )
 
   def _check_tip_pickup(self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate) -> None:
     """Reject labware overlapping the pickup footprint near the bare nozzle height.
@@ -663,6 +729,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     conservative destination check, not a swept-path or complete pipette-body model.
     """
     super()._check_tip_pickup(tip_spots, tip, offset)
+    self._check_head8_pickup(tip_spots)
     primary = tip_spots[0].get_location_wrt(self.robot.deck, "c", "c", "b") + offset
     nozzle_z = primary.z + tip.total_tip_length - tip.fitting_depth
     x_min, x_max = primary.x - 5, primary.x + 5
@@ -695,7 +762,10 @@ class OT2_8ChannelPipette(_OT2Pipette):
     tip_spots: Sequence[TipSpot],
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Pick up one tip per nozzle with one command, then retract to traversal height."""
+    """Pick up consecutive tips using nozzles starting at 0, then retract.
+
+    Occupied tip spots under the remaining nozzles always reject the pickup.
+    """
     await self._pick_up_tips(tip_spots, offset)
 
   async def drop_tips(
@@ -731,7 +801,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Aspirate ``volume`` per nozzle from a full column, then retract."""
+    """Aspirate ``volume`` per mounted tip from containers in nozzle order, then retract."""
     await self._aspirate(tuple(containers), volume, flow_rate, liquid_height, offset)
 
   async def dispense(
@@ -742,7 +812,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Dispense ``volume`` per nozzle into a full column, then retract."""
+    """Dispense ``volume`` per mounted tip into containers in nozzle order, then retract."""
     await self._dispense(tuple(containers), volume, flow_rate, liquid_height, offset)
 
   async def mix(
@@ -755,7 +825,7 @@ class OT2_8ChannelPipette(_OT2Pipette):
     liquid_height: float = 0,
     offset: Optional[Coordinate] = None,
   ) -> None:
-    """Mix ``volume`` per nozzle in a full column, then retract."""
+    """Mix ``volume`` per mounted tip in containers in nozzle order, then retract."""
     await self._mix(
       tuple(containers),
       volume,
