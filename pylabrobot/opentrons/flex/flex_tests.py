@@ -11,7 +11,7 @@ import unittest
 from typing import List, Tuple
 
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
-from pylabrobot.opentrons.flex.errors import OpentronsError
+from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_tip_tracking, set_volume_tracking
@@ -163,6 +163,28 @@ class TestHeadDiscovery(unittest.TestCase):
     flex = _flex(("weird_pipette", 4, 1.0, 100.0), mount="right")
     with self.assertRaises(OpentronsError):
       asyncio.run(flex.setup())
+
+  def test_load_pipette_failure_raises_flex_command_error(self):
+    """A loadPipette failure surfaces the flex OpentronsCommandError -- the same
+    shape (a readable ``error_type``) every other command raises -- not the
+    package-level variant an inherited ``OpentronsRun.load_pipette`` would give.
+    """
+
+    class _FailLoadPipette(ChatterboxHTTP):
+      async def request(self, method, path, data=None):
+        resp = await super().request(method, path, data)
+        cmd = resp.get("data", {})
+        if isinstance(cmd, dict) and cmd.get("commandType") == "loadPipette":
+          cmd["status"] = "failed"
+          cmd["error"] = {"errorType": "PipetteNotFoundError", "detail": "no such pipette"}
+          cmd.pop("result", None)
+        return resp
+
+    io = _FailLoadPipette(pipette=("p50_multi_flex", 8, 1.0, 50.0), mount="left")
+    flex = Flex(deck=FlexDeck(), host="localhost", io=io)
+    with self.assertRaises(OpentronsCommandError) as ctx:
+      asyncio.run(flex.setup())
+    self.assertEqual(ctx.exception.error_type, "PipetteNotFoundError")
 
 
 class TestNoDoubleLoad(unittest.TestCase):

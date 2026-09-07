@@ -19,7 +19,6 @@ from pylabrobot.opentrons.flex.labware_definitions import (
   build_plate_definition,
   build_tip_rack_definition,
 )
-from pylabrobot.opentrons.types import Mount
 from pylabrobot.resources import Container, Plate, Resource, TipRack
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.trash import Trash
@@ -362,14 +361,19 @@ class Flex:
     return pipettes
 
   async def _load_pipette(self, pipette_name: str, mount: str) -> str:
-    """Load a pipette into the current run, returning its run-scoped pipette ID."""
-    if self._run is None:
-      raise OpentronsError("No active run", "Call setup() or create_run() first.")
-    # /instruments only ever mounts a pipette on left/right; the gripper (the
-    # sole "extension" instrument) is discovered separately and never loaded here.
-    pipette_id = await self._run.load_pipette(pipette_name, cast(Mount, mount))
+    """Load a pipette into the current run, returning its run-scoped pipette ID.
+
+    Goes through ``_execute_command`` like every other command, so a load
+    failure (e.g. an unrecognized pipette during discovery) raises the same
+    ``OpentronsCommandError`` shape as the rest of the driver rather than the
+    package-level variant ``OpentronsRun.load_pipette`` would raise.
+    """
+    result = await self._execute_command(
+      "loadPipette", {"pipetteName": pipette_name, "mount": mount}
+    )
+    pipette_id = result.get("result", {}).get("pipetteId", "")
     logger.info("Loaded pipette %s on %s mount -> ID: %s", pipette_name, mount, pipette_id)
-    return pipette_id
+    return cast(str, pipette_id)
 
   async def _model_setup(self) -> None:
     """Discover and compose heads. Homing is setup()'s own step, so that a
