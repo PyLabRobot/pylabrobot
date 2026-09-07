@@ -1,10 +1,10 @@
-"""Gripper sub-object for :class:`~pylabrobot.opentrons.flex.flex.OpentronsFlex`.
+"""Gripper sub-object for :class:`~pylabrobot.opentrons.flex.flex.Flex`.
 
 The Flex gripper rides the extension mount and moves labware between deck
 slots. Like the heads (:mod:`pylabrobot.opentrons.flex.flex_head`), it is a
 plain-class sub-object: it holds a back-reference to the owning
-``OpentronsFlex`` and issues commands through the shared transport via
-``self.flex._execute_command``. It is composed by ``OpentronsFlex.setup()``
+``Flex`` and issues commands through the shared transport via
+``self.flex._execute_command``. It is composed by ``Flex.setup()``
 when ``GET /instruments`` reports a gripper -- ``flex.gripper`` is ``None``
 on a Flex without one.
 
@@ -27,7 +27,7 @@ from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:
-  from pylabrobot.opentrons.flex.flex import OpentronsFlex
+  from pylabrobot.opentrons.flex.flex import Flex
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ _GRIPPER_MAX_FORCE = 30.0
 class FlexGripper:
   """The Opentrons Flex gripper (extension mount).
 
-  Constructed by ``OpentronsFlex._model_setup()`` when instrument discovery
+  Constructed by ``Flex._model_setup()`` when instrument discovery
   reports a gripper; access it as ``flex.gripper``.
 
   The Flex gripper has NO rotation capability (a hardware limitation, not a
@@ -66,7 +66,7 @@ class FlexGripper:
     }
   )
 
-  def __init__(self, flex: "OpentronsFlex", gripper_model: str) -> None:
+  def __init__(self, flex: "Flex", gripper_model: str) -> None:
     self.flex = flex
     self.gripper_model = gripper_model
     self._untested_hardware_warned: Set[str] = set()

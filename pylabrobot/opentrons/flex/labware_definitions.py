@@ -3,7 +3,7 @@
 Labware without an official Opentrons definition (third-party plates, troughs,
 lids) cannot ``loadLabware`` by name. The pure functions here (no I/O) build a
 robot-server labware definition dict from the PLR resource's own geometry;
-:class:`~pylabrobot.opentrons.flex.flex.OpentronsFlex` uploads the dict to
+:class:`~pylabrobot.opentrons.flex.flex.Flex` uploads the dict to
 ``POST /runs/{run_id}/labware_definitions`` and then loads the labware by the
 uploaded definition's ``namespace``/``loadName``/``version``.
 
@@ -23,7 +23,7 @@ without that, the default 1 mm bottom clearance aims the tip INTO the plastic.
 pipette, which is why pipetting ops refuse stub-loaded labware outright.)
 
 The builders are pure: they raise ``ValueError`` for geometry no Opentrons
-definition can describe, and :class:`~pylabrobot.opentrons.flex.flex.OpentronsFlex`
+definition can describe, and :class:`~pylabrobot.opentrons.flex.flex.Flex`
 turns that into an ``OpentronsError`` before any wire command.
 """
 

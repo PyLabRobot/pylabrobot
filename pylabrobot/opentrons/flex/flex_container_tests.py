@@ -21,7 +21,7 @@ import asyncio
 import unittest
 from typing import Any, Dict, List, Optional, Tuple, Type
 
-from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
@@ -88,12 +88,12 @@ def _make_trough(
 
 def _flex_head1(
   transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
-) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead1]:
-  """An ``OpentronsFlex`` with a single-channel head on the right mount, plus
+) -> Tuple[Flex, ChatterboxHTTP, FlexHead1]:
+  """An ``Flex`` with a single-channel head on the right mount, plus
   the transport (for command inspection) and the head itself.
   """
   transport = transport_cls(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.right
   assert isinstance(head, FlexHead1)
@@ -102,12 +102,12 @@ def _flex_head1(
 
 def _flex_head8(
   transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
-) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
-  """An ``OpentronsFlex`` with an 8-channel head on the left mount, plus the
+) -> Tuple[Flex, ChatterboxHTTP, FlexHead8]:
+  """An ``Flex`` with an 8-channel head on the left mount, plus the
   transport (for command inspection) and the head itself.
   """
   transport = transport_cls(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
@@ -116,12 +116,12 @@ def _flex_head8(
 
 def _flex_head96(
   transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
-) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead96]:
-  """An ``OpentronsFlex`` with a 96-channel head, plus the transport (for
+) -> Tuple[Flex, ChatterboxHTTP, FlexHead96]:
+  """An ``Flex`` with a 96-channel head, plus the transport (for
   command inspection) and the head itself.
   """
   transport = transport_cls(pipettes=[("p1000_96", 96, 1.0, 1000.0, "left")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.head96
   assert isinstance(head, FlexHead96)
@@ -841,7 +841,7 @@ class TestLiquidOpsRequireAMountedTip(unittest.TestCase):
     set_volume_tracking(False)
 
   @staticmethod
-  def _plate(flex: OpentronsFlex):
+  def _plate(flex: Flex):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
     flex.deck.assign_child_at_slot(plate, "C2")
@@ -909,15 +909,15 @@ class _AxisPositionTransport(ChatterboxHTTP):
 def _flex_device(
   api_version: str = OFFLINE_API_VERSION,
   transport_cls: Type[ChatterboxHTTP] = ChatterboxHTTP,
-) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
-  """A set-up ``OpentronsFlex`` plus its transport, for the robot-level
+) -> Tuple[Flex, ChatterboxHTTP]:
+  """A set-up ``Flex`` plus its transport, for the robot-level
   commands that belong to the device rather than to a head. ``api_version`` is
   what ``/health`` reports, which is what the robot/* version gate reads.
   """
   transport = transport_cls(
     pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], api_version=api_version
   )
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   return flex, transport
 

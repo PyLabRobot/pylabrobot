@@ -1,10 +1,10 @@
-"""Head sub-objects for :class:`~pylabrobot.opentrons.flex.flex.OpentronsFlex`.
+"""Head sub-objects for :class:`~pylabrobot.opentrons.flex.flex.Flex`.
 
 Each head is a plain-class sub-object (EL406/Cytation5 idiom), not a
 Capability/CapabilityBackend split: it holds a back-reference to the owning
-``OpentronsFlex`` device and issues commands through the shared transport via
+``Flex`` device and issues commands through the shared transport via
 ``self.flex._execute_command``. Deck-scoped labware loading stays on
-``OpentronsFlex`` (heads call ``self.flex._ensure_labware_loaded(...)``); only
+``Flex`` (heads call ``self.flex._ensure_labware_loaded(...)``); only
 which physical channel holds which tip is genuine head-local state
 (``self._channel_tips``).
 
@@ -60,13 +60,13 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 
 if TYPE_CHECKING:
-  from pylabrobot.opentrons.flex.flex import OpentronsFlex
+  from pylabrobot.opentrons.flex.flex import Flex
 
 logger = logging.getLogger(__name__)
 
 
 class _FlexHead:
-  """Base class for a mount- (or 96-head-) addressed pipette on an ``OpentronsFlex``.
+  """Base class for a mount- (or 96-head-) addressed pipette on an ``Flex``.
 
   Subclasses implement the liquid-handling ops appropriate to their channel
   count. This base holds the shared plumbing: the back-reference to the
@@ -80,7 +80,7 @@ class _FlexHead:
 
   def __init__(
     self,
-    flex: "OpentronsFlex",
+    flex: "Flex",
     mount: str,
     pipette_id: str,
     channels: int,
@@ -1358,7 +1358,7 @@ class FlexHead8(_FlexHead):
 
   def __init__(
     self,
-    flex: "OpentronsFlex",
+    flex: "Flex",
     mount: str,
     pipette_id: str,
     channels: int,

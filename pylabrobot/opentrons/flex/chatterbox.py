@@ -3,7 +3,7 @@
 Where a real :class:`~pylabrobot.io.http.HTTP` reaches the robot-server, this
 subclass answers the ``/health``, ``/instruments``, ``/runs``,
 ``/runs/{id}/commands`` and ``/runs/{id}/labware_definitions`` shapes the
-:class:`~pylabrobot.opentrons.flex.flex.OpentronsFlex` lifecycle (health check,
+:class:`~pylabrobot.opentrons.flex.flex.Flex` lifecycle (health check,
 create-run, discover pipette) and labware loading read, so a caller can drive
 the whole device with no network.
 
@@ -79,7 +79,7 @@ class ChatterboxHTTP(HTTP):
 
   Overrides :meth:`setup`/:meth:`stop`/:meth:`request` so nothing reaches a
   socket. Construct it with the pipettes (and optional gripper) to discover,
-  and pass it as the ``io`` of an :class:`OpentronsFlex` to drive the device
+  and pass it as the ``io`` of an :class:`Flex` to drive the device
   offline. The recorded state lists (``commands``, ``load_pipette_commands``,
   ``labware_definitions``, ...) are the surface tests assert against.
   """
@@ -447,7 +447,7 @@ class ReplayTransport(HTTPValidator):
   pylabrobot io refuses construction while one is active, and the robot builds
   its io in ``__init__`` for exactly that reason.
 
-      flex = OpentronsFlex(deck=deck, host=host)   # io built here
+      flex = Flex(deck=deck, host=host)   # io built here
       pylabrobot.start_capture(path)
       await flex.setup()
       ...

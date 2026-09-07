@@ -10,7 +10,7 @@ from pylabrobot.opentrons.flex import (
   FlexHead1,
   FlexHead8,
   FlexHead96,
-  OpentronsFlex,
+  Flex,
 )
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP, ReplayTransport
 from pylabrobot.opentrons.ot2 import OT2, OT2Pipette
@@ -31,7 +31,7 @@ __all__ = [
   "OpentronsCommandError",
   "OpentronsCommandTimeout",
   "OpentronsError",
-  "OpentronsFlex",
+  "Flex",
   "OpentronsProtocolError",
   "OpentronsRun",
   "ReplayTransport",

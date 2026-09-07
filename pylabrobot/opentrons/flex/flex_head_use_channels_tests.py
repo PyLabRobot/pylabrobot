@@ -15,7 +15,7 @@ import asyncio
 import unittest
 from typing import List, Tuple
 
-from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
@@ -43,23 +43,23 @@ def _make_trough(name: str = "trough") -> Container:
   return trough
 
 
-def _flex_head8() -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
+def _flex_head8() -> Tuple[Flex, ChatterboxHTTP, FlexHead8]:
   transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
   return flex, transport, head
 
 
-def _plate_on(flex: OpentronsFlex, slot: str = "C2"):
+def _plate_on(flex: Flex, slot: str = "C2"):
   plate = cor_96_wellplate_360uL_Fb(name="plate")
   plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
   flex.deck.assign_child_at_slot(plate, slot)
   return plate
 
 
-def _rack_on(flex: OpentronsFlex, slot: str = "C1"):
+def _rack_on(flex: Flex, slot: str = "C1"):
   rack = flex_96_tiprack_50ul(name="rack")
   flex.deck.assign_child_at_slot(rack, slot)
   return rack

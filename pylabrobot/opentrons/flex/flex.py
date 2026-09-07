@@ -15,6 +15,7 @@ from pylabrobot.opentrons.flex.labware_definitions import (
   build_plate_definition,
   build_tip_rack_definition,
 )
+from pylabrobot.opentrons.types import Mount
 from pylabrobot.resources import Container, Plate, Resource, TipRack
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.trash import Trash
@@ -92,7 +93,7 @@ def _axis_motion_params(
   return params
 
 
-class OpentronsFlex:
+class Flex:
   """Opentrons Flex liquid handler, over the robot-server HTTP API.
 
   A device shell composed on the shared ``pylabrobot.io.HTTP`` transport
@@ -360,7 +361,9 @@ class OpentronsFlex:
     """Load a pipette into the current run, returning its run-scoped pipette ID."""
     if self._run is None:
       raise OpentronsError("No active run", "Call setup() or create_run() first.")
-    pipette_id = await self._run.load_pipette(pipette_name, mount)
+    # /instruments only ever mounts a pipette on left/right; the gripper (the
+    # sole "extension" instrument) is discovered separately and never loaded here.
+    pipette_id = await self._run.load_pipette(pipette_name, cast(Mount, mount))
     logger.info("Loaded pipette %s on %s mount -> ID: %s", pipette_name, mount, pipette_id)
     return pipette_id
 

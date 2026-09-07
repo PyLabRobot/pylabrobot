@@ -1,6 +1,6 @@
 """Tests for the Flex gripper capability (``flex.gripper``).
 
-Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxHTTP``
+Drives ``Flex.setup()`` with an injected ``ChatterboxHTTP``
 advertising a gripper on the extension mount, and asserts discovery attaches
 a :class:`~pylabrobot.opentrons.flex.flex_gripper.FlexGripper`; ``move_labware``
 follows the stage -> wire -> commit idiom (PLR-side validation before any
@@ -12,7 +12,7 @@ import asyncio
 import unittest
 from typing import Any, Dict, Optional, Tuple
 
-from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
@@ -21,8 +21,8 @@ from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.plate import Plate
 
 
-def _flex_with_gripper(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
-  """An ``OpentronsFlex`` whose transport advertises a gripper on the
+def _flex_with_gripper(**transport_kwargs) -> Tuple[Flex, ChatterboxHTTP]:
+  """An ``Flex`` whose transport advertises a gripper on the
   extension mount (plus a single-channel pipette so setup() succeeds),
   returning the transport too so a test can inspect recorded commands.
 
@@ -33,7 +33,7 @@ def _flex_with_gripper(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTT
     gripper=True,
     **transport_kwargs,
   )
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   return flex, transport
 
 
@@ -78,7 +78,7 @@ class TestGripperDiscovery(unittest.TestCase):
 
   def test_gripper_none_when_absent(self):
     transport = ChatterboxHTTP(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       self.assertIsNone(flex.gripper)
@@ -318,7 +318,7 @@ class TestMoveLabwareWireFailure(unittest.TestCase):
     transport = _FailingMoveTransport(
       pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")], gripper=True
     )
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       plate = _plate()

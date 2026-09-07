@@ -1,6 +1,6 @@
-"""Tests for OpentronsFlex device shell + head composition (Task 2).
+"""Tests for Flex device shell + head composition (Task 2).
 
-Drives ``OpentronsFlex.setup()`` with an injected ``ChatterboxHTTP`` (no
+Drives ``Flex.setup()`` with an injected ``ChatterboxHTTP`` (no
 network) reporting a configurable mounted pipette, and asserts discovery
 composes the matching head onto the right attribute (``left``/``right``/
 ``head96``).
@@ -10,7 +10,7 @@ import asyncio
 import unittest
 from typing import List, Tuple
 
-from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP
@@ -21,15 +21,15 @@ from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 from pylabrobot.resources.opentrons.flex_tip_racks import flex_96_tiprack_50ul
 
 
-def _flex(pipette: Tuple[str, int, float, float], mount: str = "right") -> OpentronsFlex:
+def _flex(pipette: Tuple[str, int, float, float], mount: str = "right") -> Flex:
   transport = ChatterboxHTTP(pipette=pipette, mount=mount)
-  return OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  return Flex(deck=FlexDeck(), host="localhost", io=transport)
 
 
 def _flex_with_transport(
   pipettes: List[Tuple[str, int, float, float, str]],
   **transport_kwargs,
-) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
+) -> Tuple[Flex, ChatterboxHTTP]:
   """Like ``_flex`` but simulates multiple mounted pipettes and returns the
   transport too, so a test can inspect recorded commands.
 
@@ -38,7 +38,7 @@ def _flex_with_transport(
   hardware tip-presence sensor model).
   """
   transport = ChatterboxHTTP(pipettes=pipettes, **transport_kwargs)
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   return flex, transport
 
 
@@ -261,8 +261,8 @@ class TestGetMountedTips(unittest.TestCase):
       asyncio.run(flex.stop())
 
 
-def _flex_head8(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
-  """An ``OpentronsFlex`` with an 8-channel head on the left mount, plus the
+def _flex_head8(**transport_kwargs) -> Tuple[Flex, ChatterboxHTTP, FlexHead8]:
+  """An ``Flex`` with an 8-channel head on the left mount, plus the
   transport (for command inspection) and the head itself.
 
   ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
@@ -901,8 +901,8 @@ class TestFlexHead8HardwareTipPresence(unittest.TestCase):
       asyncio.run(flex.stop())
 
 
-def _flex_head1(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead1]:
-  """An ``OpentronsFlex`` with a single-channel head on the right mount, plus
+def _flex_head1(**transport_kwargs) -> Tuple[Flex, ChatterboxHTTP, FlexHead1]:
+  """An ``Flex`` with a single-channel head on the right mount, plus
   the transport (for command inspection) and the head itself.
 
   ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
@@ -916,8 +916,8 @@ def _flex_head1(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP, Flex
   return flex, transport, head
 
 
-def _flex_head96(**transport_kwargs) -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead96]:
-  """An ``OpentronsFlex`` with a 96-channel head, plus the transport (for
+def _flex_head96(**transport_kwargs) -> Tuple[Flex, ChatterboxHTTP, FlexHead96]:
+  """An ``Flex`` with a 96-channel head, plus the transport (for
   command inspection) and the head itself.
 
   ``transport_kwargs`` are forwarded to ``ChatterboxHTTP``.
@@ -1203,7 +1203,7 @@ class DeclaredIdentityTests(unittest.TestCase):
   def test_a_declared_load_name_is_what_the_resource_loads_by(self):
     plate = cor_96_wellplate_360uL_Fb(name="anything at all")
     plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
-    load_name, version = OpentronsFlex._ot_declared_identity(plate)
+    load_name, version = Flex._ot_declared_identity(plate)
     self.assertEqual(load_name, "corning_96_wellplate_360ul_flat")
     self.assertEqual(version, 1)
 
@@ -1214,7 +1214,7 @@ class DeclaredIdentityTests(unittest.TestCase):
     plate.ot_load_name = "corning_96_wellplate_360ul_flat"  # type: ignore[attr-defined]
     plate.ot_version = 2  # type: ignore[attr-defined]
     self.assertEqual(
-      OpentronsFlex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2)
+      Flex._ot_declared_identity(plate), ("corning_96_wellplate_360ul_flat", 2)
     )
 
   def test_a_declared_name_is_passed_through_rather_than_checked_against_a_list(self):
@@ -1222,14 +1222,14 @@ class DeclaredIdentityTests(unittest.TestCase):
     # uploads, so any list here would be wrong for somebody's robot.
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     plate.ot_load_name = "a_lab_uploaded_this_one_themselves"  # type: ignore[attr-defined]
-    load_name, version = OpentronsFlex._ot_declared_identity(plate)
+    load_name, version = Flex._ot_declared_identity(plate)
     self.assertEqual(load_name, "a_lab_uploaded_this_one_themselves")
     self.assertEqual(version, 1)
 
   def test_a_resource_declaring_nothing_asks_for_a_synthesized_definition(self):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     with self.assertRaises(OpentronsError):
-      OpentronsFlex._ot_declared_identity(plate)
+      Flex._ot_declared_identity(plate)
 
   def test_the_model_never_decides_the_load_name(self):
     # A PLR model is not an Opentrons load name, and sending one that merely
@@ -1237,7 +1237,7 @@ class DeclaredIdentityTests(unittest.TestCase):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     plate.model = "corning_96_wellplate_360ul_flat"
     with self.assertRaises(OpentronsError):
-      OpentronsFlex._ot_declared_identity(plate)
+      Flex._ot_declared_identity(plate)
 
   def test_the_instance_name_never_decides_the_load_name(self):
     # It is a user-chosen label, so naming a plate after a tip rack must not
@@ -1245,7 +1245,7 @@ class DeclaredIdentityTests(unittest.TestCase):
     plate = cor_96_wellplate_360uL_Fb(name="flex_96_tiprack_50ul")
     plate.model = None
     with self.assertRaises(OpentronsError):
-      OpentronsFlex._ot_declared_identity(plate)
+      Flex._ot_declared_identity(plate)
 
 
 if __name__ == "__main__":

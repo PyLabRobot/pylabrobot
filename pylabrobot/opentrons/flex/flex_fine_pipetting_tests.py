@@ -25,7 +25,7 @@ import asyncio
 import unittest
 from typing import Any, Dict, Optional
 
-from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead1
 from pylabrobot.opentrons.flex.flex_tests import _flex_head1, _flex_head8, _flex_head96
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
@@ -490,7 +490,7 @@ class TestLiquidProbeHead1(unittest.TestCase):
     transport = _OverpressureProbeTransport(
       pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")]
     )
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       head = flex.right
@@ -531,7 +531,7 @@ class TestLiquidProbeHead1(unittest.TestCase):
         return result
 
     transport = _UnprimedProbeTransport(pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")])
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     try:
       head = flex.right
@@ -1419,7 +1419,7 @@ class TestTipPresenceCommands(unittest.TestCase):
     transport = _TipPresenceTransport(
       status, pipettes=[("p1000_single_flex", 1, 1.0, 1000.0, "right")]
     )
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+    flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
     asyncio.run(flex.setup())
     head = flex.right
     assert isinstance(head, FlexHead1)

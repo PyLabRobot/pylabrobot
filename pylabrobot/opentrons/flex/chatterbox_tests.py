@@ -1,7 +1,7 @@
 """Tests for the offline ``ChatterboxHTTP`` io and the record/replay roundtrip.
 
 ``ChatterboxHTTP`` answers the robot-server exchanges from canned state, so an
-``OpentronsFlex`` runs its whole lifecycle with no network. These pin the reply
+``Flex`` runs its whole lifecycle with no network. These pin the reply
 shapes a driver reads (the ``{"data": ...}`` envelope, succeeded/failed command
 bodies, the instrument list) and prove a Flex setup recorded through the real
 ``HTTP`` replays byte-for-byte through ``ReplayTransport``.
@@ -18,7 +18,7 @@ import pylabrobot
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.http import HTTP
 from pylabrobot.opentrons.flex.chatterbox import DEFAULT_HEADERS, ChatterboxHTTP, ReplayTransport
-from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
 from pylabrobot.resources.opentrons.flex_deck import FlexDeck
 
@@ -161,12 +161,12 @@ class TestChatterboxPlungerModeling(unittest.TestCase):
     self.assertEqual(result["data"]["error"]["errorType"], "PipetteNotReadyToAspirateError")
 
 
-class TestOpentronsFlexOffline(unittest.IsolatedAsyncioTestCase):
+class TestFlexOffline(unittest.IsolatedAsyncioTestCase):
   """An injected ``ChatterboxHTTP`` lets the whole lifecycle run with no network."""
 
   async def test_setup_completes_and_discovers_the_configured_head(self):
     io = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")])
-    flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=io)
+    flex = Flex(deck=FlexDeck(), host="localhost", io=io)
     await flex.setup()
     try:
       self.assertEqual(flex.api_version, "dry-run")
@@ -217,7 +217,7 @@ class RecordAndReplayTests(unittest.IsolatedAsyncioTestCase):
     # The io is built before capture starts: every pylabrobot io refuses
     # construction while a capture is active.
     recording = _RecordingThroughChatterbox(chatterbox, base_url=self.base_url)
-    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test", io=recording)
+    flex = Flex(deck=FlexDeck(), host="robot.test", io=recording)
     pylabrobot.start_capture(self.capture_file)
     try:
       await flex.setup()
@@ -228,7 +228,7 @@ class RecordAndReplayTests(unittest.IsolatedAsyncioTestCase):
     await self._record_a_setup()
 
     replay = ReplayTransport(self.capture_file, base_url=self.base_url)
-    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test", io=replay)
+    flex = Flex(deck=FlexDeck(), host="robot.test", io=replay)
     await flex.setup()
 
     left = flex.left
@@ -243,7 +243,7 @@ class RecordAndReplayTests(unittest.IsolatedAsyncioTestCase):
     await self._record_a_setup()
 
     replay = ReplayTransport(self.capture_file, base_url=self.base_url)
-    flex = OpentronsFlex(deck=FlexDeck(), host="robot.test", io=replay)
+    flex = Flex(deck=FlexDeck(), host="robot.test", io=replay)
     await flex.connect()
 
     with self.assertRaisesRegex(ValidationError, "not fully read"):

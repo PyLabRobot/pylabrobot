@@ -2,7 +2,7 @@
 
 Builder-level tests pin the definition content produced from PLR geometry
 (dimensions, well positions and shapes, the shared front-left slot anchoring,
-grip height). Flex-level tests drive ``OpentronsFlex._ensure_labware_loaded``
+grip height). Flex-level tests drive ``Flex._ensure_labware_loaded``
 with an injected ``ChatterboxHTTP`` and assert labware without an
 official Opentrons definition is uploaded and then loaded by the uploaded
 definition's namespace/loadName/version, that the run-scoped caches reset
@@ -13,7 +13,7 @@ import asyncio
 import unittest
 from typing import Any, Dict, Optional, Tuple
 
-from pylabrobot.opentrons.flex.flex import OpentronsFlex
+from pylabrobot.opentrons.flex.flex import Flex
 from pylabrobot.opentrons.flex.flex_head import FlexHead8
 from pylabrobot.opentrons.flex.labware_definitions import (
   build_container_definition,
@@ -523,19 +523,19 @@ class TestBuildMovableLabwareDefinition(unittest.TestCase):
 
 def _flex_with_transport(
   transport: Optional[ChatterboxHTTP] = None,
-) -> Tuple[OpentronsFlex, ChatterboxHTTP]:
+) -> Tuple[Flex, ChatterboxHTTP]:
   transport = transport or ChatterboxHTTP(
     pipette=("p1000_single_flex", 1, 1.0, 1000.0), mount="right"
   )
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   return flex, transport
 
 
-def _flex_head8_with_gripper() -> Tuple[OpentronsFlex, ChatterboxHTTP, FlexHead8]:
+def _flex_head8_with_gripper() -> Tuple[Flex, ChatterboxHTTP, FlexHead8]:
   """A set-up Flex with an 8-channel head AND a gripper, so one bench can
   drive both the gripper-intent and pipetting-intent load paths."""
   transport = ChatterboxHTTP(pipettes=[("p50_multi_flex", 8, 1.0, 50.0, "left")], gripper=True)
-  flex = OpentronsFlex(deck=FlexDeck(), host="localhost", io=transport)
+  flex = Flex(deck=FlexDeck(), host="localhost", io=transport)
   asyncio.run(flex.setup())
   head = flex.left
   assert isinstance(head, FlexHead8)
@@ -546,7 +546,7 @@ def _load_labware_commands(transport: ChatterboxHTTP) -> list:
   return [c for c in transport.commands if c["commandType"] == "loadLabware"]
 
 
-def _mount_tips(flex: OpentronsFlex, head: FlexHead8) -> None:
+def _mount_tips(flex: Flex, head: FlexHead8) -> None:
   """Pick up a column of tips, so a liquid op reaches past the mounted-tip guard."""
   rack = flex_96_tiprack_50ul(name=f"tips for {head.mount}")
   flex.deck.assign_child_at_slot(rack, "D1")
