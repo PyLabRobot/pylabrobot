@@ -338,6 +338,21 @@ class TestVSpinProtocol(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(self.vspin.state, before)
 
+  async def test_setup_network_failure_does_not_send_motor_commands(self) -> None:
+    """A failure before setup motion must not send commands to an uninitialized servo."""
+    self.vspin._initialize_nmc_network = AsyncMock(  # type: ignore[method-assign]
+      side_effect=TimeoutError("network initialization failed")
+    )
+    send_nmc = AsyncMock()
+    self.vspin._send_nmc = send_nmc  # type: ignore[method-assign]
+
+    with self.assertRaisesRegex(TimeoutError, "network initialization failed"):
+      await self.vspin.setup()
+
+    send_nmc.assert_not_awaited()
+    self.assertTrue(self.vspin.state.recovery_required)
+    self.assertFalse(self.vspin._command_lock.locked())
+
   async def test_actuated_position_failure_invalidates_presentation(self):
     self.vspin._at_bucket = self.vspin.bucket1
 
@@ -1291,6 +1306,90 @@ class TestVSpinScriptedFTDI(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(vspin.state.connection, ConnectionState.CONNECTED)
     self.assertEqual(vspin.state.initialization, VSpinInitializationState.INITIALIZED)
     self.assertEqual(vspin.state.homing, VSpinHomingState.HOMED)
+
+  async def test_setup_homing_timeout_turns_motor_off(self) -> None:
+    """A homing timeout must turn off the motor before propagating the failure."""
+    steps = self._setup_steps()
+    home_command = _nmc.build_set_homing(_nmc.PIC_SERVO_ADDRESS, 0x28)
+    home_index = next(i for i, step in enumerate(steps) if step.command == home_command)
+    motor_off = _nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)
+    vspin, io = self._make_vspin(steps[: home_index + 2] + [_servo_step(motor_off)])
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()),
+      patch("pylabrobot.agilent.vspin.vspin._NETWORK_PROBE_TIMEOUT", 0),
+      patch("pylabrobot.agilent.vspin.vspin._MOTION_TIMEOUT", 0),
+      self.assertRaisesRegex(TimeoutError, "homing did not finish"),
+    ):
+      await vspin.setup()
+
+    io.assert_complete(self)
+    self.assertEqual(io.writes[-1], motor_off)
+    self.assertTrue(vspin.state.recovery_required)
+    self.assertEqual(vspin.state.homing, VSpinHomingState.HOMING)
+    self.assertIsNone(vspin.at_bucket)
+    self.assertFalse(vspin._command_lock.locked())
+
+  async def test_setup_motor_off_failure_preserves_homing_timeout(self) -> None:
+    """A failed motor-off acknowledgement must not hide the original homing error."""
+    steps = self._setup_steps()
+    home_command = _nmc.build_set_homing(_nmc.PIC_SERVO_ADDRESS, 0x28)
+    home_index = next(i for i, step in enumerate(steps) if step.command == home_command)
+    motor_off = _nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)
+    invalid_reply = _nmc_response(0, _servo_status_data())[:-1] + b"\x01"
+    vspin, io = self._make_vspin(
+      steps[: home_index + 2] + [_VSpinScriptStep(motor_off, invalid_reply)]
+    )
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()),
+      patch("pylabrobot.agilent.vspin.vspin._NETWORK_PROBE_TIMEOUT", 0),
+      patch("pylabrobot.agilent.vspin.vspin._MOTION_TIMEOUT", 0),
+      self.assertLogs(vspin_module.logger, level="ERROR") as logs,
+      self.assertRaisesRegex(TimeoutError, "homing did not finish"),
+    ):
+      await vspin.setup()
+
+    io.assert_complete(self)
+    self.assertIn("failed to turn off motor after setup error", logs.output[0])
+    self.assertTrue(vspin.state.recovery_required)
+    self.assertFalse(vspin._command_lock.locked())
+
+  async def test_cancelled_setup_homing_turns_motor_off(self) -> None:
+    """Task cancellation during homing must wait for motor-off cleanup."""
+    steps = self._setup_steps()
+    home_command = _nmc.build_set_homing(_nmc.PIC_SERVO_ADDRESS, 0x28)
+    home_index = next(i for i, step in enumerate(steps) if step.command == home_command)
+    motor_off = _nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF)
+    vspin, io = self._make_vspin(steps[: home_index + 2] + [_servo_step(motor_off)])
+    homing_started = asyncio.Event()
+    allow_status = asyncio.Event()
+    request_status = vspin.request_positions_and_tachometer
+
+    async def wait_for_homing_status() -> _nmc.ServoStatus:
+      """Pause setup with homing active and the status reply fully consumed."""
+      status = await request_status()
+      homing_started.set()
+      await allow_status.wait()
+      return status
+
+    with (
+      patch("pylabrobot.agilent.vspin.vspin.asyncio.sleep", new=AsyncMock()),
+      patch("pylabrobot.agilent.vspin.vspin._NETWORK_PROBE_TIMEOUT", 0),
+      patch.object(vspin, "request_positions_and_tachometer", side_effect=wait_for_homing_status),
+    ):
+      setup_task = asyncio.create_task(vspin.setup())
+      await asyncio.wait_for(homing_started.wait(), timeout=1)
+      setup_task.cancel()
+      with self.assertRaises(asyncio.CancelledError):
+        await setup_task
+
+    io.assert_complete(self)
+    self.assertEqual(io.writes[-1], motor_off)
+    self.assertTrue(vspin.state.recovery_required)
+    self.assertEqual(vspin.state.homing, VSpinHomingState.HOMING)
+    self.assertIsNone(vspin.at_bucket)
+    self.assertFalse(vspin._command_lock.locked())
 
   async def test_network_initialization_probes_the_next_baudrate(self):
     steps = self._network_reset_steps()

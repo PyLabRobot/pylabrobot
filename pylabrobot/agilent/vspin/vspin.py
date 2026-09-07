@@ -305,7 +305,19 @@ class VSpin:
   async def setup(self) -> None:
     """Connect, initialize, home, and place the VSpin in its safe setup position."""
     async with self._command_scope("set up VSpin", require_ready=False) as transition:
-      await self._setup(transition=transition)
+      try:
+        await self._setup(transition=transition)
+      except BaseException:
+        if transition.position_uncertain:
+          try:
+            await asyncio.shield(
+              self._send_nmc(_nmc.build_stop_motor(_nmc.PIC_SERVO_ADDRESS, _nmc.MOTOR_OFF))
+            )
+          except Exception:
+            logger.exception(
+              "[vSpin %s] failed to turn off motor after setup error", self.device_id
+            )
+        raise
 
   async def _setup(self, *, transition: TransitionToken) -> None:
     """Run the VSpin setup sequence while recording verified lifecycle checkpoints."""
