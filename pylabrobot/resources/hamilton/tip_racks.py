@@ -48,6 +48,7 @@ def hamilton_96_tiprack_10uL_filter(name: str, with_tips: bool = True) -> TipRac
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_10uL_filter,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -76,6 +77,7 @@ def hamilton_96_tiprack_10uL(name: str, with_tips: bool = True) -> TipRack:
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_10uL,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -106,6 +108,7 @@ def hamilton_96_tiprack_50uL_filter(name: str, with_tips: bool = True) -> TipRac
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_50uL_filter,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -133,6 +136,7 @@ def hamilton_96_tiprack_50uL(name: str, with_tips: bool = True) -> TipRack:
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_50uL,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -163,6 +167,7 @@ def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> NestedTip
       size_x=8.15,
       size_y=8.15,
       make_tip=hamilton_tip_50uL,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -193,6 +198,7 @@ def hamilton_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRa
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_300uL_filter,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -220,6 +226,7 @@ def hamilton_96_tiprack_300uL(name: str, with_tips: bool = True) -> TipRack:
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_300uL,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -247,6 +254,7 @@ def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> 
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_300uL_filter_slim,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -274,6 +282,7 @@ def hamilton_96_tiprack_300uL_filter_ultrawide(name: str, with_tips: bool = True
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_300uL_filter_ultrawide,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -305,6 +314,7 @@ def hamilton_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipR
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_1000uL_filter,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -332,6 +342,7 @@ def hamilton_96_tiprack_1000uL(name: str, with_tips: bool = True) -> TipRack:
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_1000uL,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -370,6 +381,7 @@ def hamilton_96_tiprack_1000uL_filter_wide(name: str, with_tips: bool = True) ->
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_1000uL_filter_wide,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -408,6 +420,7 @@ def hamilton_96_tiprack_1000uL_filter_ultrawide(name: str, with_tips: bool = Tru
       size_x=9.0,
       size_y=9.0,
       make_tip=hamilton_tip_1000uL_filter_ultrawide,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -438,6 +451,7 @@ def hamilton_24_tiprack_4000uL_filter(name: str, with_tips: bool = True) -> TipR
       size_x=18.0,
       size_y=18.0,
       make_tip=hamilton_tip_4000uL_filter,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -468,6 +482,7 @@ def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
       size_x=18.0,
       size_y=18.0,
       make_tip=hamilton_tip_5000uL,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )

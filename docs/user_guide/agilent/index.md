@@ -3,6 +3,7 @@
 ```{toctree}
 :maxdepth: 1
 
-biotek/index
-vspin/hello-world
+benchcel/hello-world
+plateloc/hello-world
+vspin/index
 ```

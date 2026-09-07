@@ -27,22 +27,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.write.return_value = None
     self.mock_socket_instance.setup.return_value = None  # Configure setup to return None
     self.mock_socket_instance._writer = AsyncMock()  # Mock the _writer attribute
-    self.mock_socket_instance._host = "localhost"  # Mock the _host attribute for logging
-    self.mock_socket_instance._port = 10100  # Mock the _port attribute for logging
 
-    # Patch the Socket class where it's used in PreciseFlexBackend and the new driver
-    patcher_legacy = patch(
+    # Patch the Socket class where it's used in PreciseFlexBackend
+    patcher = patch(
       "pylabrobot.legacy.arms.precise_flex.precise_flex_backend.Socket",
       return_value=self.mock_socket_instance,
     )
-    patcher_new = patch(
-      "pylabrobot.brooks.precise_flex.Socket",
-      return_value=self.mock_socket_instance,
-    )
-    self.MockSocketClass = patcher_legacy.start()
-    patcher_new.start()
-    self.addCleanup(patcher_legacy.stop)
-    self.addCleanup(patcher_new.stop)
+    self.MockSocketClass = patcher.start()  # Store the mock of the class
+    self.addCleanup(patcher.stop)
 
     self.backend = PreciseFlexBackend(has_rail=False, host="localhost", port=10100)
     # self.backend.io is already self.mock_socket_instance because of the patch
@@ -122,6 +114,51 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.write.assert_any_call(b"hp 0\n")
     self.mock_socket_instance.write.assert_any_call(b"exit\n")
     self.mock_socket_instance.stop.assert_called_once()
+
+  async def test_connect_opens_the_link_without_powering_or_homing(self):
+    self.mock_socket_instance.readline.side_effect = [b"0 OK\r\n"]  # set_mode
+    await self.backend.connect()
+    self.mock_socket_instance.setup.assert_called_once()
+    self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
+    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
+    self.assertNotIn(b"hp 1 20\n", written)
+    self.assertNotIn(b"home\n", written)
+
+  async def test_initialize_raises_power_without_homing(self):
+    self.mock_socket_instance.readline.side_effect = [
+      b"0 OK\r\n",  # power_on_robot
+      b"0 OK\r\n",  # attach
+    ]
+    await self.backend.initialize()
+    self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
+    self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
+    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
+    self.assertNotIn(b"home\n", written)
+
+  async def test_disconnect_drops_power_and_releases_the_link(self):
+    self.mock_socket_instance.readline.side_effect = [
+      b"0 attach\r\n",  # detach
+      b"0 hp\r\n",  # power_off_robot
+      b"0 exit\r\n",  # exit
+    ]
+    await self.backend.disconnect()
+    self.mock_socket_instance.write.assert_any_call(b"attach 0\n")
+    self.mock_socket_instance.write.assert_any_call(b"hp 0\n")
+    self.mock_socket_instance.write.assert_any_call(b"exit\n")
+    self.mock_socket_instance.stop.assert_called_once()
+
+  async def test_setup_skips_only_the_home_when_asked(self):
+    self.mock_socket_instance.readline.side_effect = [
+      b"0 OK\r\n",  # set_mode
+      b"0 OK\r\n",  # power_on_robot
+      b"0 OK\r\n",  # attach
+    ]
+    await self.backend.setup(skip_home=True)
+    self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
+    self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
+    self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
+    written = [call.args[0] for call in self.mock_socket_instance.write.call_args_list]
+    self.assertNotIn(b"home\n", written)
 
   async def test_set_speed(self):
     self.mock_socket_instance.readline.return_value = b"0 Speed 1 50.0\r\n"
@@ -262,7 +299,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_approach_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
+      TypeError, r"Position must be of type Dict\[int, float\] or CartesianCoords."
     ):
       await self.backend.approach("invalid")  # type: ignore
 
@@ -293,7 +330,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 OK\r\n",  # For set_grasp_data
     ]
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
+      TypeError, r"Position must be of type Dict\[int, float\] or CartesianCoords."
     ):
       await self.backend.pick_up_resource("invalid", plate_width=1.0)  # type: ignore
 
@@ -317,7 +354,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_place_plate_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
+      TypeError, "place_plate only supports CartesianCoords for PreciseFlex."
     ):
       await self.backend.drop_resource("invalid")  # type: ignore
 
@@ -349,7 +386,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_to_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Dict\[int, float\] or PreciseFlexGripperLocation."
+      TypeError, r"Position must be of type Dict\[int, float\] or CartesianCoords."
     ):
       await self.backend.move_to("invalid")  # type: ignore
 

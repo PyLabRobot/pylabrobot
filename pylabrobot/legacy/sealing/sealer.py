@@ -1,28 +1,28 @@
-"""Legacy. Use pylabrobot.azenta.A4S instead."""
-
 from pylabrobot.legacy.machines import Machine
 
 from .backend import SealerBackend
 
 
 class Sealer(Machine):
-  """Legacy. Use pylabrobot.azenta.A4S instead."""
+  """A microplate sealer"""
 
   def __init__(self, backend: SealerBackend):
     super().__init__(backend=backend)
-    self._backend: SealerBackend = backend
+    self.backend: SealerBackend = backend  # fix type
 
   async def seal(self, temperature: int, duration: float):
-    return await self._backend.seal(temperature=temperature, duration=duration)
+    return await self.backend.seal(temperature=temperature, duration=duration)
 
   async def open(self):
-    return await self._backend.open()
+    return await self.backend.open()
 
   async def close(self):
-    return await self._backend.close()
+    return await self.backend.close()
 
   async def set_temperature(self, temperature: float):
-    return await self._backend.set_temperature(temperature=temperature)
+    """Set the temperature of the sealer in degrees Celsius."""
+    return await self.backend.set_temperature(temperature=temperature)
 
   async def get_temperature(self) -> float:
-    return await self._backend.get_temperature()
+    """Get the current temperature of the sealer in degrees Celsius."""
+    return await self.backend.get_temperature()

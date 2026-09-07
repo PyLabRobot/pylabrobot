@@ -3,112 +3,83 @@
 pylabrobot.thermo_fisher package
 ================================
 
-Multidrop Combi
----------------
+ALPS Heat Sealers
+-----------------
 
-.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.multidrop_combi
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    MultidropCombi
-
-.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.driver
+.. currentmodule:: pylabrobot.thermo_fisher.alps.sealer
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    MultidropCombiDriver
+    ThermoScientificALPSSealer
+    ThermoScientificALPSError
 
-.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    MultidropCombiPeristalticDispensingBackend8
-
-.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8.MultidropCombiPeristalticDispensingBackend8.DispenseParams
-   :members:
-
-.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8.MultidropCombiPeristalticDispensingBackend8.PrimeParams
-   :members:
-
-.. autoclass:: pylabrobot.thermo_fisher.multidrop_combi.peristaltic_dispensing_backend8.MultidropCombiPeristalticDispensingBackend8.PurgeParams
-   :members:
-
-.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.enums
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps300
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    CassetteType
-    DispensingOrder
-    PrimeMode
-    EmptyMode
+    ThermoScientificALPS300
+    ALPS300Status
 
-.. currentmodule:: pylabrobot.thermo_fisher.multidrop_combi.helpers
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps3000
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    plate_to_type_index
-    plate_to_pla_params
+    ThermoScientificALPS3000
+    ALPS3000Status
 
-
-Cytomat
--------
-
-.. currentmodule:: pylabrobot.thermo_fisher.cytomat.cytomat
+.. currentmodule:: pylabrobot.thermo_fisher.alps.alps5000
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    Cytomat
+    ThermoScientificALPS5000
+    ALPS5000Status
 
-.. currentmodule:: pylabrobot.thermo_fisher.cytomat.backend
+BTX Gemini X2
+-------------
 
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    CytomatBackend
-
-.. currentmodule:: pylabrobot.thermo_fisher.cytomat.chatterbox
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    CytomatChatterbox
+    BTXGeminiX2
 
-.. currentmodule:: pylabrobot.thermo_fisher.cytomat.heraeus_backend
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    HeraeusCytomatBackend
-
-.. currentmodule:: pylabrobot.thermo_fisher.cytomat.constants
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.standard
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    CytomatType
+    ElectroporationProtocol
+    ElectroporationPreparationDetails
+    ElectroporationExecutionDetails
+    ElectroporationCancellationDetails
+    ElectroporationLogCapture
+    ElectroporationCleanup
+    PreparedElectroporationRun
+    ElectroporationRunResult
+    ElectroporationCancellationResult
+
+.. currentmodule:: pylabrobot.thermo_fisher.btx.gemini.X2.ht200
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BTXHT200

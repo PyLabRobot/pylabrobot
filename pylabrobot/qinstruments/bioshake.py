@@ -1,16 +1,7 @@
 import asyncio
 import logging
-from dataclasses import dataclass
 from typing import Optional, Union
 
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.shaking import Shaker, ShakerBackend
-from pylabrobot.capabilities.shaking.backend import HasContinuousShaking
-from pylabrobot.capabilities.temperature_controlling import (
-  TemperatureController,
-  TemperatureControllerBackend,
-)
-from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
@@ -26,17 +17,39 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 
-class BioShakeDriver(Driver):
-  """Serial driver for QInstruments BioShake devices.
+class BioShake(PlateHolder):
+  """Serial driver for QInstruments BioShake devices."""
 
-  Owns the serial connection, command protocol, and device-level operations
-  (reset, home) that don't belong to any capability.
-  """
-
-  def __init__(self, port: str, timeout: int = 60):
-    super().__init__()
+  def __init__(
+    self,
+    port: str,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    child_location: Coordinate,
+    pedestal_size_z: float,
+    model: Optional[str] = None,
+    timeout: int = 60,
+    supports_shaking: bool = False,
+    supports_locking: bool = False,
+    supports_temperature_control: bool = False,
+    supports_active_cooling: bool = False,
+  ):
     if not HAS_SERIAL:
       raise RuntimeError(f"pyserial is required for BioShake. Import error: {_SERIAL_IMPORT_ERROR}")
+
+    PlateHolder.__init__(
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      child_location=child_location,
+      pedestal_size_z=pedestal_size_z,
+      category="bioshake",
+      model=model,
+    )
 
     self.port = port
     self.timeout = timeout
@@ -50,6 +63,10 @@ class BioShakeDriver(Driver):
       write_timeout=10,
       timeout=self.timeout,
     )
+    self.supports_shaking = supports_shaking
+    self.supports_locking = supports_locking
+    self.supports_temperature_control = supports_temperature_control
+    self.supports_active_cooling = supports_active_cooling
 
   async def send_command(self, cmd: str, delay: float = 0.5, timeout: float = 2):
     try:
@@ -84,22 +101,13 @@ class BioShakeDriver(Driver):
     except Exception as e:
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
-  @dataclass
-  class SetupParams(BackendParams):
-    """BioShake-specific parameters for ``setup``.
-
+  async def setup(self, skip_home: bool = False):
+    """
     Args:
       skip_home: If True, skip the reset and home steps during setup.
     """
-
-    skip_home: bool = False
-
-  async def setup(self, backend_params: Optional[BackendParams] = None):
-    if not isinstance(backend_params, BioShakeDriver.SetupParams):
-      backend_params = BioShakeDriver.SetupParams()
-
     await self.io.setup()
-    if not backend_params.skip_home:
+    if not skip_home and self.supports_shaking:
       await self.reset()
       await asyncio.sleep(4)
       await self.home()
@@ -135,21 +143,20 @@ class BioShakeDriver(Driver):
         continue
 
   async def home(self):
+    if not self.supports_shaking:
+      raise RuntimeError("This BioShake device does not support shaking.")
     await self.send_command(cmd="shakeGoHome", delay=5)
 
-
-class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
-  """Translates ShakerBackend calls into BioShake serial commands."""
-
-  def __init__(self, driver: BioShakeDriver):
-    self.driver = driver
-
-  async def shake(self, speed: float, duration: float, backend_params=None):
+  async def shake(self, speed: float, duration: float):
+    if not self.supports_shaking:
+      raise RuntimeError("This BioShake device does not support shaking.")
     await self.start_shaking(speed=speed)
     await asyncio.sleep(duration)
     await self.stop_shaking()
 
   async def start_shaking(self, speed: float, acceleration: Union[int, float] = 0):
+    if not self.supports_shaking:
+      raise RuntimeError("This BioShake device does not support shaking.")
     if isinstance(speed, float):
       if not speed.is_integer():
         raise ValueError(f"Speed must be a whole number, not {speed}")
@@ -159,15 +166,15 @@ class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
         f"Speed must be an integer or a whole number float, not {type(speed).__name__}"
       )
 
-    min_speed = int(float(await self.driver.send_command(cmd="getShakeMinRpm", delay=0.2)))
-    max_speed = int(float(await self.driver.send_command(cmd="getShakeMaxRpm", delay=0.2)))
+    min_speed = int(float(await self.send_command(cmd="getShakeMinRpm", delay=0.2)))
+    max_speed = int(float(await self.send_command(cmd="getShakeMaxRpm", delay=0.2)))
 
     if not (min_speed <= speed <= max_speed):
       raise ValueError(
         f"Speed {speed} RPM is out of range. Allowed range is {min_speed}-{max_speed} RPM"
       )
 
-    await self.driver.send_command(cmd=f"setShakeTargetSpeed{speed}")
+    await self.send_command(cmd=f"setShakeTargetSpeed{speed}")
 
     if isinstance(acceleration, float):
       if not acceleration.is_integer():
@@ -178,8 +185,8 @@ class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
         f"Acceleration must be an integer or a whole number float, not {type(acceleration).__name__}"
       )
 
-    min_accel = int(float(await self.driver.send_command(cmd="getShakeAccelerationMin", delay=0.2)))
-    max_accel = int(float(await self.driver.send_command(cmd="getShakeAccelerationMax", delay=0.2)))
+    min_accel = int(float(await self.send_command(cmd="getShakeAccelerationMin", delay=0.2)))
+    max_accel = int(float(await self.send_command(cmd="getShakeAccelerationMax", delay=0.2)))
 
     if not (min_accel <= acceleration <= max_accel):
       raise ValueError(
@@ -187,13 +194,13 @@ class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
         f"Allowed range is {min_accel}-{max_accel} seconds"
       )
 
-    await self.driver.send_command(cmd=f"setShakeAcceleration{acceleration}", delay=0.2)
-    logger.info(
-      "[BioShake %s] start shaking: speed=%d, accel=%d", self.driver.port, speed, acceleration
-    )
-    await self.driver.send_command(cmd="shakeOn", delay=0.2)
+    await self.send_command(cmd=f"setShakeAcceleration{acceleration}", delay=0.2)
+    logger.info("[BioShake %s] start shaking: speed=%d, accel=%d", self.port, speed, acceleration)
+    await self.send_command(cmd="shakeOn", delay=0.2)
 
   async def stop_shaking(self, deceleration: Union[int, float] = 0):
+    if not self.supports_shaking:
+      raise RuntimeError("This BioShake device does not support shaking.")
     if isinstance(deceleration, float):
       if not deceleration.is_integer():
         raise ValueError(f"Deceleration must be a whole number, not {deceleration}")
@@ -204,8 +211,8 @@ class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
         f"not {type(deceleration).__name__}"
       )
 
-    min_decel = int(float(await self.driver.send_command(cmd="getShakeAccelerationMin", delay=0.2)))
-    max_decel = int(float(await self.driver.send_command(cmd="getShakeAccelerationMax", delay=0.2)))
+    min_decel = int(float(await self.send_command(cmd="getShakeAccelerationMin", delay=0.2)))
+    max_decel = int(float(await self.send_command(cmd="getShakeAccelerationMax", delay=0.2)))
 
     if not (min_decel <= deceleration <= max_decel):
       raise ValueError(
@@ -213,40 +220,30 @@ class BioShakeShakerBackend(ShakerBackend, HasContinuousShaking):
         f"Allowed range is {min_decel}-{max_decel} seconds"
       )
 
-    await self.driver.send_command(cmd=f"setShakeAcceleration{deceleration}", delay=0.2)
-    logger.info("[BioShake %s] stop shaking (decel=%d)", self.driver.port, deceleration)
-    await self.driver.send_command(cmd="shakeOff", delay=0.2)
+    await self.send_command(cmd=f"setShakeAcceleration{deceleration}", delay=0.2)
+    logger.info("[BioShake %s] stop shaking (decel=%d)", self.port, deceleration)
+    await self.send_command(cmd="shakeOff", delay=0.2)
 
     # The firmware needs the motor to fully decelerate before ELM can operate.
     await asyncio.sleep(3)
 
-  @property
-  def supports_locking(self) -> bool:
-    return True
-
   async def lock_plate(self):
-    logger.info("[BioShake %s] lock plate", self.driver.port)
-    await self.driver.send_command(cmd="setElmLockPos", delay=0.3)
+    if not self.supports_locking:
+      raise RuntimeError("This BioShake device does not have an ELM and cannot lock plates.")
+    logger.info("[BioShake %s] lock plate", self.port)
+    await self.send_command(cmd="setElmLockPos", delay=0.3)
 
   async def unlock_plate(self):
-    logger.info("[BioShake %s] unlock plate", self.driver.port)
-    await self.driver.send_command(cmd="setElmUnlockPos", delay=0.3)
-
-
-class BioShakeTemperatureBackend(TemperatureControllerBackend):
-  """Translates TemperatureControllerBackend calls into BioShake serial commands."""
-
-  def __init__(self, driver: BioShakeDriver, supports_active_cooling: bool = False):
-    self.driver = driver
-    self._supports_active_cooling = supports_active_cooling
-
-  @property
-  def supports_active_cooling(self) -> bool:
-    return self._supports_active_cooling
+    if not self.supports_locking:
+      raise RuntimeError("This BioShake device does not have an ELM and cannot lock plates.")
+    logger.info("[BioShake %s] unlock plate", self.port)
+    await self.send_command(cmd="setElmUnlockPos", delay=0.3)
 
   async def set_temperature(self, temperature: float):
-    min_temp = int(float(await self.driver.send_command(cmd="getTempMin", delay=0.2)))
-    max_temp = int(float(await self.driver.send_command(cmd="getTempMax", delay=0.2)))
+    if not self.supports_temperature_control:
+      raise RuntimeError("This BioShake device does not support temperature control.")
+    min_temp = int(float(await self.send_command(cmd="getTempMin", delay=0.2)))
+    max_temp = int(float(await self.send_command(cmd="getTempMax", delay=0.2)))
 
     if not (min_temp <= temperature <= max_temp):
       raise ValueError(
@@ -260,76 +257,21 @@ class BioShakeTemperatureBackend(TemperatureControllerBackend):
         raise ValueError(f"Temperature must be a whole number in 1/10 C, not {temperature_tenths}")
       temperature_tenths = int(temperature_tenths)
 
-    logger.info("[BioShake %s] setting temperature to %.1f C", self.driver.port, temperature)
-    await self.driver.send_command(cmd=f"setTempTarget{temperature_tenths}", delay=0.2)
-    await self.driver.send_command(cmd="tempOn", delay=0.2)
+    logger.info("[BioShake %s] setting temperature to %.1f C", self.port, temperature)
+    await self.send_command(cmd=f"setTempTarget{temperature_tenths}", delay=0.2)
+    await self.send_command(cmd="tempOn", delay=0.2)
 
   async def request_current_temperature(self) -> float:
-    response = await self.driver.send_command(cmd="getTempActual", delay=0.2)
+    if not self.supports_temperature_control:
+      raise RuntimeError("This BioShake device does not support temperature control.")
+    response = await self.send_command(cmd="getTempActual", delay=0.2)
     temp = float(response)
-    logger.info("[BioShake %s] read temperature: actual=%.1f C", self.driver.port, temp)
+    logger.info("[BioShake %s] read temperature: actual=%.1f C", self.port, temp)
     return temp
 
   async def deactivate(self):
-    logger.info("[BioShake %s] deactivating temperature", self.driver.port)
-    await self.driver.send_command(cmd="tempOff", delay=0.2)
-
-
-class BioShake(PlateHolder, Device):
-  """QInstruments BioShake device.
-
-  Use a model-specific factory function (e.g. ``BioShake3000``) to create instances.
-  ``shaker`` and ``tc`` are ``None`` when the hardware doesn't support the capability.
-  """
-
-  def __init__(
-    self,
-    name: str,
-    port: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    child_location: Coordinate,
-    pedestal_size_z: float,
-    has_shaking: bool = False,
-    has_temperature: bool = False,
-    supports_active_cooling: bool = False,
-    category: str = "bioshake",
-    model: Optional[str] = None,
-  ):
-    driver = BioShakeDriver(port=port)
-    PlateHolder.__init__(
-      self,
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      child_location=child_location,
-      pedestal_size_z=pedestal_size_z,
-      category=category,
-      model=model,
-    )
-    Device.__init__(self, driver=driver)
-    self.driver: BioShakeDriver = driver
-
-    self.shaker: Optional[Shaker] = None
-    self.tc: Optional[TemperatureController] = None
-    self._capabilities = []
-
-    if has_shaking:
-      self.shaker = Shaker(backend=BioShakeShakerBackend(driver))
-      self._capabilities.append(self.shaker)
-    if has_temperature:
-      self.tc = TemperatureController(
-        backend=BioShakeTemperatureBackend(driver, supports_active_cooling=supports_active_cooling)
-      )
-      self._capabilities.append(self.tc)
-
-  def serialize(self) -> dict:
-    return {
-      **Device.serialize(self),
-      **PlateHolder.serialize(self),
-    }
+    logger.info("[BioShake %s] deactivating temperature", self.port)
+    await self.send_command(cmd="tempOff", delay=0.2)
 
 
 # -- Factory functions for specific models --
@@ -345,7 +287,7 @@ def BioShake3000(name: str, port: str) -> BioShake:
     size_z=60.67,  # from spec
     child_location=Coordinate(7.12, 6.76, 51.75),  # from spec
     pedestal_size_z=0,
-    has_shaking=True,
+    supports_shaking=True,
     model=BioShake3000.__name__,
   )
 
@@ -360,7 +302,8 @@ def BioShake3000Elm(name: str, port: str) -> BioShake:
     size_z=55.35,  # from spec
     child_location=Coordinate(7.12, 6.76, 48.20),  # from spec
     pedestal_size_z=0,
-    has_shaking=True,
+    supports_shaking=True,
+    supports_locking=True,
     model=BioShake3000Elm.__name__,
   )
 
@@ -375,7 +318,8 @@ def BioShake3000ElmDWP(name: str, port: str) -> BioShake:
     size_z=55.35,  # from spec
     child_location=Coordinate(7.12, 6.76, 48.20),  # from spec
     pedestal_size_z=0,
-    has_shaking=True,
+    supports_shaking=True,
+    supports_locking=True,
     model=BioShake3000ElmDWP.__name__,
   )
 
@@ -418,8 +362,9 @@ def BioShakeQ1(name: str, port: str) -> BioShake:
     size_z=97.30,  # from spec
     child_location=Coordinate(7.12, 6.76, 90.50),  # from spec
     pedestal_size_z=0,
-    has_shaking=True,
-    has_temperature=True,
+    supports_shaking=True,
+    supports_locking=True,
+    supports_temperature_control=True,
     supports_active_cooling=True,
     model=BioShakeQ1.__name__,
   )

@@ -1,4 +1,5 @@
 import enum
+import warnings
 from typing import Optional
 
 from pylabrobot.resources.tip import Tip
@@ -27,6 +28,13 @@ class TecanTip(Tip):
     fitting_depth: float = 0,
     name: Optional[str] = None,
   ):
+    if total_tip_length <= 0:
+      warnings.warn(
+        "WARNING: total_tip_length <= 0. Please get in touch at https://discuss.pylabrobot.org",
+        UserWarning,
+        stacklevel=3,
+      )
+
     super().__init__(
       has_filter=has_filter,
       total_tip_length=total_tip_length,
@@ -336,8 +344,6 @@ def DiTi_500ul_SBS_MCA96_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_Nested_Waste_MCA384_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_Nested_Waste_MCA384"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -371,8 +377,6 @@ def DiTi_200ul_SBS_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_50ul_SBS_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_50ul_SBS_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -494,8 +498,6 @@ def DiTi_1000ul_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_10ul_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_10ul_Filter_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -507,8 +509,6 @@ def DiTi_10ul_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_10ul_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_10ul_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -520,8 +520,6 @@ def DiTi_10ul_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_200ul_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_200ul_Filter_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -533,8 +531,6 @@ def DiTi_200ul_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_200ul_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_200ul_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -546,8 +542,6 @@ def DiTi_200ul_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_50ul_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_50ul_Filter_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -559,8 +553,6 @@ def DiTi_50ul_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_50ul_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_50ul_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -572,8 +564,6 @@ def DiTi_50ul_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_350ul_Nested_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_350ul_Nested_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -585,8 +575,6 @@ def DiTi_350ul_Nested_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_10ul_Filter_LiHa_L_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_10ul_Filter_LiHa_L"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -598,8 +586,6 @@ def DiTi_10ul_Filter_LiHa_L_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_10ul_Filter_Nested_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_10ul_Filter_Nested_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -611,8 +597,6 @@ def DiTi_10ul_Filter_Nested_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_10ul_LiHa_L_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_10ul_LiHa_L"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -624,8 +608,6 @@ def DiTi_10ul_LiHa_L_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_10ul_Nested_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_10ul_Nested_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -637,8 +619,6 @@ def DiTi_10ul_Nested_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_10ul_SBS_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_10ul_SBS_Filter_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -650,8 +630,6 @@ def DiTi_10ul_SBS_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_10ul_SBS_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_10ul_SBS_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -696,8 +674,6 @@ def DiTi_1000ul_CL_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_200ul_CL_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_200ul_CL_Filter_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -709,8 +685,6 @@ def DiTi_200ul_CL_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_200ul_CL_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_200ul_CL_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -722,8 +696,6 @@ def DiTi_200ul_CL_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_50ul_CL_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_50ul_CL_Filter_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,
@@ -735,8 +707,6 @@ def DiTi_50ul_CL_Filter_LiHa_tip(name: Optional[str] = None) -> TecanTip:
 
 def DiTi_50ul_CL_LiHa_tip(name: Optional[str] = None) -> TecanTip:
   """Tip for DiTi_50ul_CL_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     name=name,
     has_filter=False,

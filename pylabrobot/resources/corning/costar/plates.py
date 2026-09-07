@@ -1,5 +1,6 @@
 """Corning-Costar plates."""
 
+import warnings
 from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
@@ -14,10 +15,10 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-# # # # # # # # # # Cor_Cos_6_wellplate_16800ul_Fb # # # # # # # # # #
+# # # # # # # # # # cor_cos_6_wellplate_16800uL_Fb # # # # # # # # # #
 
 
-def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_cos_6_wellplate_16800uL_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3335, 3506, 3516, 3471
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/costarMultipleWellCellCulturePlates
@@ -50,7 +51,7 @@ def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     size_y=85.47,
     size_z=20.27,
     lid=lid,
-    model=Cor_Cos_6_wellplate_16800ul_Fb.__name__,
+    model=cor_cos_6_wellplate_16800uL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=3,
@@ -61,12 +62,13 @@ def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       item_dx=39.12,  # from Corning Product Description
       item_dy=39.12,  # from Corning Product Description
       material_z_thickness=1.27,  # from Corning Product Description
+      name_prefix=name,
       **well_kwargs,
     ),
   )
 
 
-def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
+def cor_cos_6_wellplate_16800uL_Fb_lid(name: str) -> Lid:
   """
   - brand: Costar
   """
@@ -76,14 +78,14 @@ def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
     size_y=86.0,
     size_z=7.8,
     nesting_z_height=6.7,  # measure overlap between lid and plate
-    model="Cor_Cos_6_wellplate_16800ul_Fb_Lid",
+    model=cor_cos_6_wellplate_16800uL_Fb_lid.__name__,
   )
 
 
-# # # # # # # # # # Cor_12_wellplate_6900ul_Fb # # # # # # # # # #
+# # # # # # # # # # cor_cos_12_wellplate_6900uL_Fb # # # # # # # # # #
 
 
-def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_cos_12_wellplate_6900uL_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3336, 3512, 3513
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3336
@@ -118,7 +120,7 @@ def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     size_y=85.6,  # from Corning Product Description
     size_z=20.02,  # from Corning Product Description
     lid=lid,
-    model=Cor_Cos_12_wellplate_6900ul_Fb.__name__,
+    model=cor_cos_12_wellplate_6900uL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=4,
@@ -129,15 +131,16 @@ def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       item_dx=26.01,  # from Corning Product Description
       item_dy=26.01,  # from Corning Product Description
       material_z_thickness=1.27,  # from Corning Product Description
+      name_prefix=name,
       **well_kwargs,
     ),
   )
 
 
-# # # # # # # # # # Cor_24_wellplate_3470ul_Fb # # # # # # # # # #
+# # # # # # # # # # cor_cos_24_wellplate_3470uL_Fb # # # # # # # # # #
 
 
-def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_cos_24_wellplate_3470uL_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3337, 3524, 3526, 3527
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3337
@@ -170,7 +173,7 @@ def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     size_y=85.47,  # from Corning Product Description
     size_z=20.27,  # from Corning Product Description
     lid=lid,
-    model=Cor_Cos_24_wellplate_3470ul_Fb.__name__,
+    model=cor_cos_24_wellplate_3470uL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=6,
@@ -181,15 +184,16 @@ def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       item_dx=19.3,  # from Corning Product Description
       item_dy=19.3,  # from Corning Product Description
       material_z_thickness=1.27,  # from Corning Product Description
+      name_prefix=name,
       **well_kwargs,
     ),
   )
 
 
-# # # # # # # # # # Cor_Cos_48_wellplate_1620ul_Fb # # # # # # # # # #
+# # # # # # # # # # cor_cos_48_wellplate_1620uL_Fb # # # # # # # # # #
 
 
-def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_cos_48_wellplate_1620uL_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3548
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3548
@@ -226,7 +230,7 @@ def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     size_y=85.6,  # from Corning Product Description
     size_z=20.02,  # from Corning Product Description
     lid=lid,
-    model=Cor_Cos_48_wellplate_1620ul_Fb.__name__,
+    model=cor_cos_48_wellplate_1620uL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=8,
@@ -237,6 +241,87 @@ def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       item_dx=13.08,  # from Corning Product Description
       item_dy=13.08,  # from Corning Product Description
       material_z_thickness=1.27,  # from Corning Product Description
+      name_prefix=name,
       **well_kwargs,
     ),
   )
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
+
+
+def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_cos_12_wellplate_6900uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `cor_cos_12_wellplate_6900uL_Fb()` instead.
+  """
+  warnings.warn(
+    "Cor_Cos_12_wellplate_6900ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use cor_cos_12_wellplate_6900uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_cos_12_wellplate_6900uL_Fb(name, lid)
+
+
+def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_cos_24_wellplate_3470uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `cor_cos_24_wellplate_3470uL_Fb()` instead.
+  """
+  warnings.warn(
+    "Cor_Cos_24_wellplate_3470ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use cor_cos_24_wellplate_3470uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_cos_24_wellplate_3470uL_Fb(name, lid)
+
+
+def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_cos_48_wellplate_1620uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `cor_cos_48_wellplate_1620uL_Fb()` instead.
+  """
+  warnings.warn(
+    "Cor_Cos_48_wellplate_1620ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use cor_cos_48_wellplate_1620uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_cos_48_wellplate_1620uL_Fb(name, lid)
+
+
+def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_cos_6_wellplate_16800uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `cor_cos_6_wellplate_16800uL_Fb()` instead.
+  """
+  warnings.warn(
+    "Cor_Cos_6_wellplate_16800ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use cor_cos_6_wellplate_16800uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_cos_6_wellplate_16800uL_Fb(name, lid)
+
+
+def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:  # remove v1b1
+  """Deprecated alias for cor_cos_6_wellplate_16800uL_Fb_lid().
+
+  This alias will be removed in v1b1.
+  Use `cor_cos_6_wellplate_16800uL_Fb_lid()` instead.
+  """
+  warnings.warn(
+    "Cor_Cos_6_wellplate_16800ul_Fb_Lid() is deprecated and will be removed in v1b1. "
+    "Use cor_cos_6_wellplate_16800uL_Fb_lid() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_cos_6_wellplate_16800uL_Fb_lid(name)

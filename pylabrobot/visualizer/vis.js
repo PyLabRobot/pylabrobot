@@ -25,6 +25,9 @@ function updateStatusLabel(status) {
 }
 
 function setRootResource(data) {
+  // Method signatures arrive once per class; make them available before the tree is
+  // built so each Resource can attach its methods by type.
+  methodRegistry = data.method_registry || {};
   resource = loadResource(data.resource);
 
   resource.location = { x: 0, y: 0, z: 0 };
@@ -36,6 +39,9 @@ function setRootResource(data) {
   fitToViewport();
 
   buildResourceTree(resource);
+
+  // Cache idle plates/tip racks so subsequent updates don't repaint them.
+  cacheAllIdleOwners();
 }
 
 // Save the full serialized resource data before it is destroyed.
@@ -81,10 +87,13 @@ async function processCentralEvent(event, data) {
       break;
 
     case "resource_assigned":
+      Object.assign(methodRegistry, data.method_registry || {});
       resource = loadResource(data.resource);
       resource.draw(resourceLayer);
       setState(data.state);
       addResourceToTree(resource);
+      // Cache the newly-assigned plate/tip rack (or the owner it landed in).
+      cacheResourceGroup(getCacheOwner(resource));
       break;
 
     case "resource_unassigned":
@@ -98,9 +107,30 @@ async function processCentralEvent(event, data) {
 
     case "set_state":
       let allStates = data;
-      setState(allStates);
-      // Update only the affected sidepanel nodes instead of rebuilding the entire tree
+      // Clear the cache on each affected plate/tip rack so the update renders live,
+      // then re-cache it once it goes idle (handled by markCacheOwnerActive).
+      let activeOwners = new Set();
       for (let resourceName in allStates) {
+        let owner = getCacheOwner(resources[resourceName]);
+        if (owner) activeOwners.add(owner);
+      }
+      activeOwners.forEach(uncacheResourceGroup);
+      setState(allStates);
+      activeOwners.forEach(markCacheOwnerActive);
+      // Update only the affected sidepanel nodes instead of rebuilding the entire
+      // tree. Wells/tip spots/tubes all refresh their parent's summary, so dedupe
+      // by target node to avoid recomputing the same plate/rack summary once per
+      // child (e.g. 96 identical refreshes for a single 96-channel operation).
+      let refreshedNodes = new Set();
+      for (let resourceName in allStates) {
+        let target = resources[resourceName];
+        let targetName = resourceName;
+        if (target && (target instanceof TipSpot || target instanceof Well || target instanceof Tube)
+            && target.parent) {
+          targetName = target.parent.name;
+        }
+        if (refreshedNodes.has(targetName)) continue;
+        refreshedNodes.add(targetName);
         updateSidepanelState(resourceName);
       }
       break;
@@ -123,7 +153,7 @@ async function handleEvent(id, event, data) {
     return; // don't parse pongs.
   }
 
-  console.log("[event] " + event, data);
+  if (window.VIS_DEBUG) console.log("[event] " + event, data);
 
   const ret = {
     event: event,
@@ -192,7 +222,7 @@ function openSocket() {
       if (value == "-Infinity") return -Infinity;
       return value;
     });
-    console.log(`[message] Data received from server:`, data);
+    if (window.VIS_DEBUG) console.log(`[message] Data received from server:`, data);
     handleEvent(data.id, data.event, data.data);
   });
 }

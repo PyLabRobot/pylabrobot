@@ -3,26 +3,14 @@
 API
 ===
 
-Core
-----
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    device.Device
-
-
 Subpackages
 -----------
 
 .. toctree::
     :maxdepth: 1
 
-    pylabrobot.capabilities
-    pylabrobot.arms
     pylabrobot.config
+    pylabrobot.generic
     pylabrobot.resources
     pylabrobot.utils
 
@@ -34,15 +22,21 @@ Manufacturers
 
     pylabrobot.agilent
     pylabrobot.azenta
-    pylabrobot.bmg_labtech
+    pylabrobot.big_bear
     pylabrobot.brooks
     pylabrobot.byonoy
+    pylabrobot.cole_parmer
+    pylabrobot.curiox
     pylabrobot.hamilton
+    pylabrobot.high_res
     pylabrobot.inheco
-    pylabrobot.liconic
+    pylabrobot.kbioscience
+    pylabrobot.kbiosystems
     pylabrobot.mettler_toledo
+    pylabrobot.micronic
     pylabrobot.molecular_devices
     pylabrobot.opentrons
     pylabrobot.qinstruments
-    pylabrobot.tecan
+    pylabrobot.revvity
+    pylabrobot.sartorius
     pylabrobot.thermo_fisher

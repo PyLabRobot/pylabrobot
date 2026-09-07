@@ -1,5 +1,1 @@
-from .keyence_backend import (
-  KeyenceBarcodeScannerBarcodeScanningBackend,
-  KeyenceBarcodeScannerDriver,
-)
-from .keyence_barcode_scanner import KeyenceBarcodeScanner
+from pylabrobot.keyence.barcode_scanner import KeyenceBarcodeScanner, KeyenceBarcodeScannerError

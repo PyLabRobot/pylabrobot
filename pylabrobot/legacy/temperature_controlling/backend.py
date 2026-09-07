@@ -1,5 +1,3 @@
-"""Legacy. Use pylabrobot.capabilities.temperature_controlling instead."""
-
 from abc import ABCMeta, abstractmethod
 
 from pylabrobot.legacy.machines.backend import MachineBackend

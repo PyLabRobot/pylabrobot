@@ -1,19 +1,11 @@
-# Hamilton STAR
+# Hamilton STAR and STARlet
+
+```{device-card} hamilton-star
+```
 
 ```{toctree}
 :maxdepth: 1
 
-hello-world
-96head
-iswap
-core-grippers
-autoload
-lld
-surface-following
-foil
-liquid-classes
-y-probing
-z-probing
 debug
 hardware/index
 ```

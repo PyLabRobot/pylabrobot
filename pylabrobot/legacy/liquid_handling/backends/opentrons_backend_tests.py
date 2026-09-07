@@ -8,6 +8,7 @@ pytest.importorskip("ot_api")
 from pylabrobot.legacy.liquid_handling import LiquidHandler
 from pylabrobot.legacy.liquid_handling.backends.opentrons_backend import (
   OpentronsOT2Backend,
+  _fixed_trash_is_addressable,
 )
 from pylabrobot.legacy.liquid_handling.errors import NoChannelError
 from pylabrobot.legacy.liquid_handling.standard import (
@@ -16,7 +17,7 @@ from pylabrobot.legacy.liquid_handling.standard import (
   SingleChannelAspiration,
 )
 from pylabrobot.resources import Coordinate, Tip, no_volume_tracking
-from pylabrobot.resources.celltreat import CellTreat_96_wellplate_350ul_Fb
+from pylabrobot.resources.celltreat import celltreat_96_wellplate_350uL_Fb
 from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
 from pylabrobot.resources.well import Well
 
@@ -33,6 +34,25 @@ def _mock_health_get():
   return {
     "api_version": "7.0.1",
   }
+
+
+@pytest.mark.parametrize(
+  ("version", "expected"),
+  (
+    ("7.0.1", False),
+    ("7.1.0", True),
+    ("9.1.0-alpha.12", True),
+    ("9.1.0.dev12", True),
+    ("26.6.0", True),
+  ),
+)
+def test_fixed_trash_is_addressable(version: str, expected: bool) -> None:
+  assert _fixed_trash_is_addressable(version) is expected
+
+
+def test_fixed_trash_rejects_invalid_server_version() -> None:
+  with pytest.raises(ValueError, match="must start with major, minor, and patch numbers"):
+    _fixed_trash_is_addressable("development")
 
 
 class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
@@ -112,7 +132,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
     self.deck.assign_child_at_slot(self.tip_rack, slot=1)
-    self.plate = CellTreat_96_wellplate_350ul_Fb(name="plate")
+    self.plate = celltreat_96_wellplate_350uL_Fb(name="plate")
     self.deck.assign_child_at_slot(self.plate, slot=11)
 
   @patch("ot_api.lh.pick_up_tip")
@@ -146,6 +166,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(offset_z, offset_z)
 
     mock_drop_tip.side_effect = assert_parameters
+    self.backend.ot_api_version = "development"
 
     await self.test_tip_pick_up()
     await self.lh.drop_tips(self.tip_rack["A1"])
@@ -187,6 +208,59 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     await self.test_aspirate()  # aspirate first
     with no_volume_tracking():
       await self.lh.dispense(self.plate["A1"], vols=[10])
+
+  # -- characterization of the remaining ot_api call sites (Phase 0 safety net) --
+
+  @patch("ot_api.health.home")
+  async def test_home_calls_health_home(self, mock_home):
+    """home() issues exactly one ot_api.health.home() call."""
+    await self.backend.home()
+    mock_home.assert_called_once_with()
+
+  @patch("ot_api.modules.list_connected_modules")
+  async def test_list_connected_modules_passthrough(self, mock_modules):
+    """list_connected_modules() returns ot_api.modules.list_connected_modules() verbatim."""
+    mock_modules.return_value = [{"id": "tempdeck"}]
+    result = await self.backend.list_connected_modules()
+    mock_modules.assert_called_once_with()
+    self.assertEqual(result, [{"id": "tempdeck"}])
+
+  @patch("ot_api.run_id", "run-id", create=True)
+  @patch("ot_api.requestor.post")
+  async def test_stop_cancels_active_run_and_clears_pipettes(self, mock_post):
+    """stop() cancels the active run through the requestor and clears mounted pipettes."""
+    await self.backend.stop()
+    mock_post.assert_called_once_with("/runs/run-id/cancel")
+    self.assertIsNone(self.backend.left_pipette)
+    self.assertIsNone(self.backend.right_pipette)
+
+  @patch("ot_api.lh.drop_tip_in_place")
+  @patch("ot_api.lh.move_to_addressable_area_for_drop_tip")
+  @patch("ot_api.lh.drop_tip")
+  @patch("ot_api.lh.pick_up_tip")
+  @patch("ot_api.labware.define")
+  @patch("ot_api.labware.add")
+  async def test_tip_drop_to_trash_uses_addressable_area(
+    self,
+    mock_add,
+    mock_define,
+    mock_pick_up_tip,
+    mock_drop_tip,
+    mock_to_trash,
+    mock_drop_in_place,
+  ):
+    """At api_version >= 7.1.0 a discard to the deck trash routes via the addressable
+    area (move_to_addressable_area_for_drop_tip + drop_tip_in_place), not drop_tip."""
+    mock_define.side_effect = _mock_define
+    mock_add.side_effect = _mock_add
+    self.backend.ot_api_version = "26.6.0"
+
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    await self.lh.discard_tips()
+
+    mock_to_trash.assert_called_once()
+    mock_drop_in_place.assert_called_once()
+    mock_drop_tip.assert_not_called()
 
 
 def _make_backend_with_pipettes(left_name="p300_single_gen2", right_name="p20_single_gen2"):
@@ -238,6 +312,19 @@ class OpentronsSharedHelperTests(unittest.TestCase):
     ops = [Pickup(resource=self.tip_spot, offset=Coordinate.zero(), tip=self.tip_20)]
     with self.assertRaises(NoChannelError):
       self.backend._get_pickup_pipette(ops)
+
+  # -- _deck_to_robot_frame --
+
+  def test_deck_to_robot_frame_maps_slot1_corner_to_robot_origin(self):
+    """The deck->robot transform subtracts slot 1's corner, so a deck-frame point at slot 1's
+    corner becomes the robot origin and a point offset from it keeps that offset."""
+    self.backend.set_deck(self.deck)
+    corner = self.deck.slot_locations[0]
+    self.assertEqual(self.backend._deck_to_robot_frame(corner), Coordinate(0, 0, 0))
+    self.assertEqual(
+      self.backend._deck_to_robot_frame(corner + Coordinate(10, 20, 3)),
+      Coordinate(10, 20, 3),
+    )
 
   # -- _get_drop_pipette --
 

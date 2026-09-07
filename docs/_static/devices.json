@@ -1,690 +1,2040 @@
 [
   {
-    "vendor": "Hamilton",
-    "name": "STAR(let)",
+    "id": "agilent-benchcel-4r",
+    "vendor": "Agilent",
+    "name": "BenchCel 4R",
+    "kind": "storage",
     "capabilities": [
-      "liquid handling",
-      "arm"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/00_liquid-handling/hamilton-star/_hamilton-star.html",
-    "oem": "https://www.hamiltoncompany.com/microlab-star"
-  },
-  {
-    "vendor": "Hamilton",
-    "name": "Vantage",
-    "capabilities": [
-      "liquid handling",
-      "arm"
-    ],
-    "status": "Mostly",
-    "docs": "/user_guide/00_liquid-handling/hamilton-vantage/_hamilton-vantage.html",
-    "oem": "https://www.hamiltoncompany.com/microlab-vantage"
-  },
-  {
-    "vendor": "Hamilton",
-    "name": "Prep",
-    "capabilities": [
-      "liquid handling"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.hamiltoncompany.com/microlab-prep"
-  },
-  {
-    "vendor": "Hamilton",
-    "name": "Nimbus",
-    "capabilities": [
-      "liquid handling",
-      "arm"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.hamiltoncompany.com/microlab-nimbus"
-  },
-  {
-    "vendor": "Tecan",
-    "name": "Freedom EVO",
-    "capabilities": [
-      "liquid handling",
-      "arm"
-    ],
-    "status": "Basic",
-    "docs": "/user_guide/00_liquid-handling/tecan-evo/_tecan-evo.html",
-    "oem": "https://lifesciences.tecan.com/freedom-evo-platform"
-  },
-  {
-    "vendor": "Opentrons",
-    "name": "OT-2",
-    "capabilities": [
-      "liquid handling"
-    ],
-    "status": "Mostly",
-    "docs": "/user_guide/00_liquid-handling/opentrons-ot2/_opentrons-ot2.html",
-    "oem": "https://opentrons.com/products/ot-2-robot"
-  },
-  {
-    "vendor": "Cole Parmer",
-    "name": "Masterflex L/S",
-    "capabilities": [
-      "pumping"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/00_liquid-handling/pumps/cole-parmer-masterflex.html",
-    "oem": "https://www.masterflex.nl/assets/uploads/2017/09/07551-xx.pdf"
-  },
-  {
-    "vendor": "Agrowtek",
-    "name": "Pump Array",
-    "capabilities": [
-      "pumping"
-    ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://www.agrowtek.com/index.php/products/dosing_systems/dosing-pumps/agrowdose-adi-digital-persitaltic-dosing-pumps-detail"
-  },
-  {
-    "vendor": "Agilent (BioTek)",
-    "name": "EL406",
-    "capabilities": [
-      "plate washing"
-    ],
-    "status": "Mostly",
-    "docs": "/user_guide/00_liquid-handling/plate-washing/biotek-el406.html",
-    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-washers-dispensers/biotek-el406-washer-dispenser-795212"
-  },
-  {
-    "vendor": "Brooks",
-    "name": "PreciseFlex PF400",
-    "capabilities": [
-      "arm"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html",
-    "oem": "https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/"
-  },
-  {
-    "vendor": "Brooks",
-    "name": "PreciseFlex PF3400",
-    "capabilities": [
-      "arm"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html",
-    "oem": "https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/"
-  },
-  {
-    "vendor": "PAA",
-    "name": "KX2",
-    "capabilities": [
-      "arm"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": null
-  },
-  {
-    "vendor": "Hamilton",
-    "name": "HEPA Fan",
-    "capabilities": [
-      "air filtration"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/fans/fans.html",
-    "oem": null
-  },
-  {
-    "vendor": "Inheco",
-    "name": "Thermoshake RM",
-    "capabilities": [
-      "heating",
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/heating_shaking/inheco.html",
-    "oem": "https://www.inheco.com/thermoshake-classic.html"
-  },
-  {
-    "vendor": "Inheco",
-    "name": "Thermoshake",
-    "capabilities": [
-      "heating",
-      "cooling",
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/heating_shaking/inheco.html",
-    "oem": "https://www.inheco.com/thermoshake.html"
-  },
-  {
-    "vendor": "Inheco",
-    "name": "Thermoshake AC",
-    "capabilities": [
-      "heating",
-      "cooling",
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/heating_shaking/inheco.html",
-    "oem": "https://www.inheco.com/thermoshake-ac.html"
-  },
-  {
-    "vendor": "Opentrons",
-    "name": "Heater Shaker",
-    "capabilities": [
-      "heating",
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://opentrons.com/products/heater-shaker-module"
-  },
-  {
-    "vendor": "Hamilton",
-    "name": "Heater Shaker",
-    "capabilities": [
-      "heating",
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/heating_shaking/hamilton.html",
-    "oem": "https://www.hamiltoncompany.com/temperature-control/hamilton-heater-shaker"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake 3000",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/heating_shaking/qinstruments.html",
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake 3000 elm",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/heating_shaking/qinstruments.html",
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake 3000 elm DWP",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/heating_shaking/qinstruments.html",
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake Q1",
-    "capabilities": [
-      "heating",
-      "cooling",
-      "shaking"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/heating_shaking/qinstruments.html",
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake D30 elm",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake 5000 elm",
-    "capabilities": [
-      "shaking"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake 3000-T",
-    "capabilities": [
-      "heating",
-      "shaking"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake 3000-T elm",
-    "capabilities": [
-      "heating",
-      "shaking"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake D30-T elm",
-    "capabilities": [
-      "heating",
-      "shaking"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "BioShake Q2",
-    "capabilities": [
-      "heating",
-      "cooling",
-      "shaking"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "Heatplate",
-    "capabilities": [
-      "heating"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "QInstruments",
-    "name": "ColdPlate",
-    "capabilities": [
-      "heating",
-      "cooling"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.qinstruments.com/automation/"
-  },
-  {
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 6000",
-    "capabilities": [
-      "heating",
       "storage"
     ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
-    "oem": "https://assets.thermofisher.com/TFS-Assets/CMD/brochures/br-90468-cytomat-2-c-lin-br90468-en.pdf"
+    "status": "mostly",
+    "api": "pylabrobot.agilent.benchcel.BenchCel4R",
+    "api_version": "v1",
+    "code_slug": "agilent/benchcel",
+    "doc_slug": "agilent/benchcel/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "BenchCel 4R four-stacker configuration; protocol verified with firmware 3.2.20.0."
   },
   {
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 6002",
-    "capabilities": [
-      "heating",
-      "storage"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
-    "oem": "https://www.thermofisher.com/order/catalog/product/50075279"
-  },
-  {
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C_50",
-    "capabilities": [
-      "heating",
-      "storage"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
-    "oem": null
-  },
-  {
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C425",
-    "capabilities": [
-      "heating",
-      "cooling",
-      "storage"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51033032"
-  },
-  {
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 2 C450 Shake",
-    "capabilities": [
-      "heating",
-      "shaking",
-      "storage"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51033035"
-  },
-  {
-    "vendor": "Thermo Fisher",
-    "name": "Cytomat 5C",
-    "capabilities": [
-      "heating",
-      "storage"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
-    "oem": "https://www.thermofisher.com/order/catalog/product/51031526"
-  },
-  {
-    "vendor": "Thermo/Liconic",
-    "name": "Heraeus Cytomat",
-    "capabilities": [
-      "heating",
-      "storage"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/incubators/cytomat.html",
-    "oem": null
-  },
-  {
-    "vendor": "Inheco",
-    "name": "Incubator Shaker",
-    "capabilities": [
-      "heating",
-      "shaking",
-      "storage"
-    ],
-    "status": "Mostly",
-    "docs": null,
-    "oem": "https://www.inheco.com/incubator-shaker.html"
-  },
-  {
-    "vendor": "Inheco",
-    "name": "SCILA",
-    "capabilities": [
-      "heating",
-      "shaking",
-      "storage"
-    ],
-    "status": "Mostly",
-    "docs": null,
-    "oem": "https://www.inheco.com/scila.html"
-  },
-  {
-    "vendor": "Azenta",
-    "name": "XPeel",
-    "capabilities": [
-      "peeling"
-    ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel"
-  },
-  {
-    "vendor": "Azenta",
-    "name": "a4S",
+    "id": "agilent-plateloc",
+    "vendor": "Agilent",
+    "name": "PlateLoc",
+    "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/sealers/a4s.html",
-    "oem": "https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s"
+    "status": "mostly",
+    "api": "pylabrobot.agilent.PlateLoc",
+    "api_version": "v1",
+    "code_slug": "agilent/plateloc",
+    "doc_slug": "agilent/plateloc/hello-world"
   },
   {
-    "vendor": "Opentrons",
-    "name": "Thermocycler",
-    "capabilities": [
-      "heating",
-      "cooling"
-    ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://opentrons.com/products/thermocycler-module-1"
-  },
-  {
-    "vendor": "Thermo Fisher",
-    "name": "ATC",
-    "capabilities": [
-      "heating",
-      "cooling"
-    ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html"
-  },
-  {
-    "vendor": "Thermo Fisher",
-    "name": "ProFlex",
-    "capabilities": [
-      "heating",
-      "cooling"
-    ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html"
-  },
-  {
-    "vendor": "Inheco",
-    "name": "ODTC",
-    "capabilities": [
-      "heating",
-      "cooling"
-    ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.inheco.com/odtc.html"
-  },
-  {
-    "vendor": "Opentrons",
-    "name": "Temperature Module",
-    "capabilities": [
-      "heating",
-      "cooling"
-    ],
-    "status": "Mostly",
-    "docs": "/user_guide/01_material-handling/temperature.html",
-    "oem": "https://opentrons.com/products/temperature-module-gen2"
-  },
-  {
-    "vendor": "Inheco",
-    "name": "CPAC",
-    "capabilities": [
-      "heating",
-      "cooling"
-    ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://www.inheco.com/cpac.html"
-  },
-  {
-    "vendor": "Hamilton",
-    "name": "Tilt Module",
-    "capabilities": [
-      "tilting"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/tilting.html",
-    "oem": "https://www.hamiltoncompany.com/other-robotics/188061"
-  },
-  {
+    "id": "agilent-vspin",
     "vendor": "Agilent",
     "name": "VSpin",
+    "kind": "centrifuge",
     "capabilities": [
       "centrifuging"
     ],
-    "status": "Mostly",
-    "docs": "/user_guide/01_material-handling/centrifuge/agilent_vspin.html",
+    "status": "mostly",
+    "api": "pylabrobot.agilent.vspin.VSpin",
+    "api_version": "v1",
+    "code_slug": "agilent/vspin",
+    "doc_slug": "agilent/vspin/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge"
   },
   {
+    "id": "agilent-vspin-access2",
     "vendor": "Agilent",
     "name": "VSpin Access2 Loader",
+    "kind": "centrifuge loader",
     "capabilities": [
       "centrifuging"
     ],
-    "status": "Full",
-    "docs": "/user_guide/01_material-handling/centrifuge/agilent_vspin.html#loader",
+    "status": "full",
+    "api": "pylabrobot.agilent.vspin.Access2",
+    "api_version": "v1",
+    "code_slug": "agilent/vspin",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge"
   },
   {
-    "vendor": "BMG Labtech",
-    "name": "CLARIOstar Plus",
-    "capabilities": [
-      "absorbance",
-      "fluorescence",
-      "luminescence"
-    ],
-    "status": "Full",
-    "docs": "/user_guide/02_analytical/plate-reading/bmg-clariostar.html",
-    "oem": "https://www.bmglabtech.com/en/clariostar-plus/"
-  },
-  {
+    "id": "biotek-cytation-1",
     "vendor": "Agilent (BioTek)",
     "name": "Cytation 1",
+    "kind": "plate reader",
     "capabilities": [
       "microscopy"
     ],
-    "status": "Full",
-    "docs": "/user_guide/02_analytical/plate-reading/cytation.html",
+    "status": "full",
+    "api": "pylabrobot.agilent.biotek.cytation.Cytation1",
+    "api_version": "v1",
+    "code_slug": "agilent/biotek/cytation",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-1-cell-imaging-multimode-reader-1623200"
   },
   {
+    "id": "biotek-cytation-5",
     "vendor": "Agilent (BioTek)",
     "name": "Cytation 5",
+    "kind": "plate reader",
     "capabilities": [
       "absorbance",
       "fluorescence",
       "luminescence",
       "microscopy"
     ],
-    "status": "Full",
-    "docs": "/user_guide/02_analytical/plate-reading/cytation.html",
+    "status": "full",
+    "api": "pylabrobot.agilent.biotek.cytation.Cytation5",
+    "api_version": "v1",
+    "code_slug": "agilent/biotek/cytation",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-5-cell-imaging-multimode-reader-1623202"
   },
   {
+    "id": "biotek-el405",
+    "vendor": "Agilent (BioTek)",
+    "name": "EL405",
+    "kind": "plate washer",
+    "capabilities": [
+      "plate washing",
+      "dispensing"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/automated-liquid-dispensing-handling/automated-microplate-washers-dispensers/biotek-elx405-select-deep-well-washer-1623269"
+  },
+  {
+    "id": "biotek-el406",
+    "vendor": "Agilent (BioTek)",
+    "name": "EL406",
+    "kind": "plate washer",
+    "capabilities": [
+      "plate washing",
+      "dispensing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.agilent.biotek.el406.EL406",
+    "api_version": "v1",
+    "code_slug": "agilent/biotek/el406",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.agilent.com/en/product/cell-analysis/microplate-automation-detection/microplate-washers-dispensers/biotek-el406-washer-dispenser-1623255"
+  },
+  {
+    "id": "biotek-synergy-h1",
     "vendor": "Agilent (BioTek)",
     "name": "Synergy H1",
+    "kind": "plate reader",
     "capabilities": [
       "absorbance",
       "fluorescence",
       "luminescence"
     ],
-    "status": "Full",
-    "docs": "/user_guide/02_analytical/plate-reading/synergyh1.html",
+    "status": "full",
+    "api": "pylabrobot.agilent.biotek.synergy.SynergyH1",
+    "api_version": "v1",
+    "code_slug": "agilent/biotek/synergy",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-h1-multimode-reader-1623193"
   },
   {
+    "id": "biotek-synergy-ht",
+    "vendor": "Agilent (BioTek)",
+    "name": "Synergy HT",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence"
+    ],
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-ht-multi-mode-reader-1623194"
+  },
+  {
+    "id": "agrowtek-pump-array",
+    "vendor": "Agrowtek",
+    "name": "Pump Array",
+    "kind": "pump",
+    "capabilities": [
+      "pumping"
+    ],
+    "status": "full",
+    "api": "pylabrobot.agrowpumps.AgrowPumpArray",
+    "api_version": "v1",
+    "code_slug": "agrowpumps",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.agrowtek.com/index.php/products/dosing_systems/dosing-pumps/agrowdose-adi-digital-persitaltic-dosing-pumps-detail"
+  },
+  {
+    "id": "azenta-a4s",
+    "vendor": "Azenta",
+    "name": "a4S",
+    "kind": "sealer",
+    "capabilities": [
+      "sealing"
+    ],
+    "status": "full",
+    "api": "pylabrobot.azenta.A4S",
+    "api_version": "v1",
+    "code_slug": "azenta",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s"
+  },
+  {
+    "id": "azenta-fluidx-intellixcap96",
+    "vendor": "Azenta",
+    "name": "FluidX IntelliXcap 96",
+    "kind": "decapper",
+    "capabilities": [
+      "decapping"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.azenta.fluidx.FluidXIntelliXcap96",
+    "api_version": "v1",
+    "code_slug": "azenta/fluidx",
+    "doc_slug": "azenta/fluidx/intellixcap96/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.azenta.com/products/intellixcap-automated-screw-cap-decapper-recapper-96-format"
+  },
+  {
+    "id": "azenta-xpeel",
+    "vendor": "Azenta",
+    "name": "XPeel",
+    "kind": "peeler",
+    "capabilities": [
+      "peeling"
+    ],
+    "status": "full",
+    "api": "pylabrobot.azenta.XPeel",
+    "api_version": "v1",
+    "code_slug": "azenta",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel"
+  },
+  {
+    "id": "beckman-cytoflex-s",
+    "vendor": "Beckman Coulter",
+    "name": "CytoFLEX S",
+    "kind": "flow cytometer",
+    "capabilities": [
+      "flow cytometry"
+    ],
+    "status": "wip",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.beckman.com/flow-cytometry/research-flow-cytometers/cytoflex-s"
+  },
+  {
+    "id": "big-bear-orbital-shaker",
+    "vendor": "BigBear",
+    "name": "Orbital Shaker",
+    "kind": "shaker",
+    "capabilities": [
+      "shaking"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.big_bear.BigBearOrbitalShaker",
+    "api_version": "v1",
+    "code_slug": "big_bear",
+    "doc_slug": "big_bear/orbital-shaker/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
+  },
+  {
+    "id": "bmg-clariostar",
+    "vendor": "BMG Labtech",
+    "name": "CLARIOstar (Plus)",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence"
+    ],
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/camillomoschner",
+    "oem": "https://www.bmglabtech.com/en/clariostar-plus/"
+  },
+  {
+    "id": "brooks-preciseflex",
+    "vendor": "Brooks",
+    "name": "PreciseFlex",
+    "models": [
+      {"name": "PreciseFlex PF3400", "status": "full"},
+      {"name": "PreciseFlex PF400", "status": "full"}
+    ],
+    "kind": "arm",
+    "capabilities": [
+      "arm"
+    ],
+    "status": "full",
+    "api": "pylabrobot.brooks.precise_flex.PreciseFlex",
+    "api_version": "v1",
+    "code_slug": "brooks/precise_flex",
+    "doc_slug": "brooks/precise_flex/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.preciseflexrobots.com/lab-automation-applicable-products"
+  },
+  {
+    "id": "btx-gemini-x2",
+    "vendor": "BTX",
+    "name": "Gemini X2",
+    "kind": "electroporator",
+    "capabilities": [
+      "electroporation"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.thermo_fisher.btx.gemini.X2.BTXGeminiX2",
+    "api_version": "v1",
+    "code_slug": "thermo_fisher/btx/gemini/X2",
+    "doc_slug": "thermo_fisher/btx/gemini/X2/hello-world",
+    "oem": "https://support.btxonline.com/hc/en-us/articles/6215664757907-Gemini-Twin-Wave-Electroporators-Manual-and-Quick-Start-guide"
+  },
+  {
+    "id": "byonoy-absorbance-96",
     "vendor": "Byonoy",
     "name": "Absorbance 96 Automate",
+    "kind": "plate reader",
     "capabilities": [
       "absorbance"
     ],
-    "status": "Full",
-    "docs": "/user_guide/02_analytical/plate-reading/byonoy/absorbance.html",
-    "oem": "https://byonoy.com/absorbance-96-automate/"
+    "status": "full",
+    "api": "pylabrobot.byonoy.ByonoyAbsorbance96",
+    "api_version": "v1",
+    "code_slug": "byonoy",
+    "doc_slug": "byonoy/absorbance_96/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://byonoy.com/absorbance-automate/"
   },
   {
+    "id": "byonoy-luminescence-96",
     "vendor": "Byonoy",
     "name": "Luminescence 96",
+    "kind": "plate reader",
     "capabilities": [
       "luminescence"
     ],
-    "status": "Full",
-    "docs": "/user_guide/02_analytical/plate-reading/byonoy/luminescence.html",
+    "status": "full",
+    "api": "pylabrobot.byonoy.ByonoyLuminescence96",
+    "api_version": "v1",
+    "code_slug": "byonoy",
+    "doc_slug": "byonoy/luminescence_96/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://byonoy.com/luminescence-96/"
   },
   {
+    "id": "byonoy-luminescence-96-automate",
     "vendor": "Byonoy",
     "name": "Luminescence 96 Automate",
+    "kind": "plate reader",
     "capabilities": [
       "luminescence"
     ],
-    "status": "Full",
-    "docs": "/user_guide/02_analytical/plate-reading/byonoy/luminescence.html",
+    "status": "full",
+    "api": "pylabrobot.byonoy.ByonoyLuminescence96",
+    "api_version": "v1",
+    "code_slug": "byonoy",
+    "doc_slug": "byonoy/luminescence_96/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://byonoy.com/luminescence-96-automate/"
   },
   {
+    "id": "cole-parmer-genogrinder",
+    "vendor": "Cole Parmer",
+    "name": "GenoGrinder",
+    "kind": "shaker",
+    "capabilities": [
+      "shaking",
+      "grinding"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.cole_parmer.GenoGrinder",
+    "api_version": "v1",
+    "code_slug": "cole_parmer",
+    "doc_slug": "cole_parmer/genogrinder/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.cpsampleprep.com/product/bead-beaters/hg-600-geno-grinder-2010"
+  },
+  {
+    "id": "cole-parmer-masterflex",
+    "vendor": "Cole Parmer",
+    "name": "Masterflex L/S",
+    "models": [
+      {"name": "07522-20", "status": "full"},
+      {"name": "07522-30", "status": "full"},
+      {"name": "07551-20", "status": "full"},
+      {"name": "07551-30", "status": "full"},
+      {"name": "07575-30", "status": "full"},
+      {"name": "07575-40", "status": "full"}
+    ],
+    "kind": "pump",
+    "capabilities": [
+      "pumping"
+    ],
+    "status": "full",
+    "api": "pylabrobot.cole_parmer.Masterflex",
+    "api_version": "v1",
+    "code_slug": "cole_parmer",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://corporate.avantorsciences.com/us/en/bioprocess-solutions/fluid-management/masterflex-peristaltic-pumps/ls-series"
+  },
+  {
+    "id": "curiox-ht2000",
+    "vendor": "Curiox",
+    "name": "HT2000",
+    "kind": "plate washer",
+    "capabilities": [
+      "plate washing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.curiox.CurioxHT2000",
+    "api_version": "v1",
+    "code_slug": "curiox",
+    "doc_slug": "curiox/curiox-ht2000/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.curiox.com/laminar-wash-ht2000-system/"
+  },
+  {
+    "id": "formulatrix-mantis",
+    "vendor": "Formulatrix",
+    "name": "Mantis",
+    "kind": "bulk dispenser",
+    "capabilities": [
+      "dispensing"
+    ],
+    "status": "wip",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/"
+  },
+  {
+    "id": "hamilton-heater-shaker",
+    "vendor": "Hamilton",
+    "name": "Heater Shaker",
+    "kind": "heater shaker",
+    "capabilities": [
+      "heating",
+      "shaking"
+    ],
+    "status": "full",
+    "api": "pylabrobot.legacy.heating_shaking.HamiltonHeaterShakerBackend",
+    "api_version": "v0",
+    "code_slug": "legacy/heating_shaking",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hamiltoncompany.com/temperature-control/hamilton-heater-shaker"
+  },
+  {
+    "id": "hamilton-heater-cooler",
+    "vendor": "Hamilton",
+    "name": "Heater/Cooler",
+    "kind": "temperature controller",
+    "capabilities": [
+      "heating",
+      "active cooling"
+    ],
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hamiltoncompany.com/temperature-control/hamilton-heater-cooler"
+  },
+  {
+    "id": "hamilton-hepa-fan",
+    "vendor": "Hamilton",
+    "name": "HEPA Fan",
+    "kind": "fan",
+    "capabilities": [
+      "air filtration"
+    ],
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
+  },
+  {
+    "id": "hamilton-nimbus",
+    "vendor": "Hamilton",
+    "name": "Nimbus",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hamiltoncompany.com/microlab-nimbus"
+  },
+  {
+    "id": "hamilton-prep",
+    "vendor": "Hamilton",
+    "name": "Prep",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling"
+    ],
+    "status": "wip",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hamiltoncompany.com/microlab-prep"
+  },
+  {
+    "id": "hamilton-star",
+    "vendor": "Hamilton",
+    "name": "STAR",
+    "models": [
+      {"name": "STAR", "status": "full"},
+      {"name": "STARlet", "status": "full"}
+    ],
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "full",
+    "api": "pylabrobot.legacy.liquid_handling.backends.STARBackend",
+    "api_version": "v0",
+    "code_slug": "legacy/liquid_handling/backends/hamilton/STAR_backend",
+    "doc_slug": "hamilton/star/index",
+    "manager": "https://discuss.pylabrobot.org/u/camillomoschner",
+    "oem": "https://www.hamiltoncompany.com/microlab-star"
+  },
+  {
+    "id": "hamilton-tilt-module",
+    "vendor": "Hamilton",
+    "name": "Tilt Module",
+    "kind": "tilter",
+    "capabilities": [
+      "tilting"
+    ],
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hamiltoncompany.com/other-robotics/188061"
+  },
+  {
+    "id": "hamilton-vantage",
+    "vendor": "Hamilton",
+    "name": "Vantage",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hamiltoncompany.com/microlab-vantage"
+  },
+  {
+    "id": "hettich-rotanta-460",
+    "vendor": "Hettich",
+    "name": "ROTANTA 460 Robotic",
+    "kind": "centrifuge",
+    "capabilities": [
+      "centrifuging"
+    ],
+    "status": "wip",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hettichlab.com/products/centrifuges/automated-centrifuges/rotanta-460-robotic/"
+  },
+  {
+    "id": "hettich-sbs-300r",
+    "vendor": "Hettich",
+    "name": "SBS 300 R",
+    "kind": "centrifuge",
+    "capabilities": [
+      "centrifuging",
+      "active cooling"
+    ],
+    "status": "wip",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.hettweb.com/products/sbs300robotic/"
+  },
+  {
+    "id": "highres-ambistore",
+    "vendor": "HighRes Biosolutions",
+    "name": "AmbiStore",
+    "kind": "storage",
+    "capabilities": [
+      "storage"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.high_res.sample_storage.AmbiStore",
+    "api_version": "v1",
+    "code_slug": "high_res/sample_storage",
+    "doc_slug": "high_res/sample-storage/ambistore/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.highres.com/lab-instruments/sample-storage"
+  },
+  {
+    "id": "highres-lid-valet",
+    "vendor": "HighRes Biosolutions",
+    "name": "LidValet",
+    "kind": "delidder",
+    "capabilities": [
+      "delidding"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.high_res.HighResLidValet",
+    "api_version": "v1",
+    "code_slug": "high_res",
+    "doc_slug": "high_res/lid-valet/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.highres.com/lab-instruments/lid-management"
+  },
+  {
+    "id": "highres-microspin",
+    "vendor": "HighRes Biosolutions",
+    "name": "MicroSpin",
+    "kind": "centrifuge",
+    "capabilities": [
+      "centrifuging"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.legacy.centrifuge.MicroSpin",
+    "api_version": "v0",
+    "code_slug": "legacy/centrifuge",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.highres.com/lab-instruments/microspin-centrifuge"
+  },
+  {
+    "id": "highres-steristore",
+    "vendor": "HighRes Biosolutions",
+    "name": "SteriStore",
+    "kind": "storage",
+    "capabilities": [
+      "storage",
+      "heating",
+      "active cooling"
+    ],
+    "status": "full",
+    "api": "pylabrobot.high_res.sample_storage.SteriStore",
+    "api_version": "v1",
+    "code_slug": "high_res/sample_storage",
+    "doc_slug": "high_res/sample-storage/steristore/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.highres.com/lab-instruments/sample-storage"
+  },
+  {
+    "id": "highres-tundrastore",
+    "vendor": "HighRes Biosolutions",
+    "name": "TundraStore",
+    "kind": "storage",
+    "capabilities": [
+      "storage",
+      "active cooling"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.high_res.sample_storage.TundraStore",
+    "api_version": "v1",
+    "code_slug": "high_res/sample_storage",
+    "doc_slug": "high_res/sample-storage/tundrastore/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.highres.com/lab-instruments/sample-storage"
+  },
+  {
+    "id": "inheco-cpac",
+    "vendor": "Inheco",
+    "name": "CPAC",
+    "kind": "temperature controller",
+    "capabilities": [
+      "heating",
+      "active cooling"
+    ],
+    "status": "full",
+    "api": "pylabrobot.inheco.InhecoCPAC",
+    "api_version": "v1",
+    "code_slug": "inheco",
+    "doc_slug": "inheco/cpac/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.inheco.com/cpac.html"
+  },
+  {
+    "id": "inheco-incubator-shaker",
+    "vendor": "Inheco",
+    "name": "Incubator Shaker (MTP/DWP)",
+    "kind": "storage",
+    "capabilities": [
+      "storage",
+      "heating",
+      "shaking"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "doc_slug": "inheco/incubator_shaker/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.inheco.com/single-plate-incubator-shaker.html"
+  },
+  {
+    "id": "inheco-odtc",
+    "vendor": "Inheco",
+    "name": "ODTC",
+    "kind": "thermocycler",
+    "capabilities": [
+      "thermocycling",
+      "heating",
+      "active cooling"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "doc_slug": "inheco/odtc/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.inheco.com/odtc.html"
+  },
+  {
+    "id": "inheco-scila",
+    "vendor": "Inheco",
+    "name": "SCILA",
+    "kind": "storage",
+    "capabilities": [
+      "storage",
+      "heating",
+      "shaking"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.inheco.scila.SCILA",
+    "api_version": "v1",
+    "code_slug": "inheco/scila",
+    "doc_slug": "inheco/scila/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.inheco.com/scila-co2-4-position-cell-incubator.html"
+  },
+  {
+    "id": "inheco-thermoshake",
+    "vendor": "Inheco",
+    "name": "Thermoshake",
+    "models": [
+      {"name": "Thermoshake", "status": "full"},
+      {"name": "Thermoshake AC", "status": "wip"},
+      {"name": "Thermoshake RM", "status": "wip"}
+    ],
+    "kind": "heater shaker",
+    "capabilities": [
+      "heating",
+      "active cooling",
+      "shaking"
+    ],
+    "status": "full",
+    "api": "pylabrobot.inheco.inheco_thermoshake",
+    "api_version": "v1",
+    "code_slug": "inheco",
+    "doc_slug": "inheco/thermoshake/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "The ThermoShake resource is available; the AC and RM resource definitions are incomplete and cannot yet be instantiated.",
+    "oem": "https://www.inheco.com/thermoshake-classic.html"
+  },
+  {
+    "id": "kbioscience-kube",
+    "vendor": "KBioscience",
+    "name": "KUBE",
+    "kind": "sealer",
+    "capabilities": [
+      "sealing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.kbioscience.KBioscienceKUBE",
+    "api_version": "v1",
+    "code_slug": "kbioscience",
+    "doc_slug": "kbioscience/kube/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.biosearchtech.com/products/pcr-reagents-kits-and-instruments/pcr-instruments-and-software/snpline-genotyping-automation/kube-plate-sealer"
+  },
+  {
+    "id": "kbiosystems-ultraseal",
+    "vendor": "KBiosystems",
+    "name": "Ultraseal",
+    "models": [
+      {"name": "Ultraseal ePRO", "status": "mostly"},
+      {"name": "Ultraseal PRO", "status": "mostly"},
+      {"name": "Ultraseal XT PRO", "status": "mostly"}
+    ],
+    "kind": "sealer",
+    "capabilities": [
+      "sealing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.kbiosystems",
+    "api_version": "v1",
+    "code_slug": "kbiosystems",
+    "doc_slug": "kbiosystems/index",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "Each model has its own driver class and hello-world guide.",
+    "oem": "https://kbiosystems.com/"
+  },
+  {
+    "id": "keyence-barcode-scanner",
+    "vendor": "Keyence",
+    "name": "Barcode Scanner",
+    "kind": "barcode scanner",
+    "capabilities": [
+      "barcode reading"
+    ],
+    "status": "full",
+    "api": "pylabrobot.keyence.KeyenceBarcodeScanner",
+    "api_version": "v1",
+    "code_slug": "keyence",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.keyence.com/products/barcode/"
+  },
+  {
+    "id": "liconic-stx",
+    "vendor": "Liconic",
+    "name": "STX series",
+    "kind": "storage",
+    "capabilities": [
+      "storage",
+      "heating",
+      "active cooling"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://liconic.com/products/stx.php"
+  },
+  {
+    "id": "mettler-toledo-mt-sics",
+    "vendor": "Mettler Toledo",
+    "name": "MT-SICS scales and weigh modules",
+    "models": [
+      {"name": "AB104", "status": "wip"},
+      {"name": "AB104-S", "status": "wip"},
+      {"name": "AB104-S/FACT", "status": "wip"},
+      {"name": "AB135-S", "status": "wip"},
+      {"name": "AB135-S/FACT", "status": "wip"},
+      {"name": "AB204", "status": "wip"},
+      {"name": "AB204-S", "status": "wip"},
+      {"name": "AB204-S/FACT", "status": "wip"},
+      {"name": "AB265-S", "status": "wip"},
+      {"name": "AB265-S/FACT", "status": "wip"},
+      {"name": "AB304-S", "status": "wip"},
+      {"name": "AB304-S/FACT", "status": "wip"},
+      {"name": "AB54", "status": "wip"},
+      {"name": "AB54-S", "status": "wip"},
+      {"name": "AB54-S/FACT", "status": "wip"},
+      {"name": "BBA422", "status": "wip"},
+      {"name": "BBA425", "status": "wip"},
+      {"name": "BBA432", "status": "wip"},
+      {"name": "BBA439", "status": "wip"},
+      {"name": "BBA442", "status": "wip"},
+      {"name": "BBA462", "status": "wip"},
+      {"name": "BBK422", "status": "wip"},
+      {"name": "BBK432", "status": "wip"},
+      {"name": "BBK442", "status": "wip"},
+      {"name": "BBK462", "status": "wip"},
+      {"name": "ICS226", "status": "wip"},
+      {"name": "ICS241", "status": "wip"},
+      {"name": "ICS425", "status": "wip"},
+      {"name": "ICS426x", "status": "wip"},
+      {"name": "ICS429", "status": "wip"},
+      {"name": "ICS435", "status": "wip"},
+      {"name": "ICS439", "status": "wip"},
+      {"name": "ICS445", "status": "wip"},
+      {"name": "ICS449", "status": "wip"},
+      {"name": "ICS465", "status": "wip"},
+      {"name": "ICS466x", "status": "wip"},
+      {"name": "ICS469", "status": "wip"},
+      {"name": "ICS629", "status": "wip"},
+      {"name": "ICS639", "status": "wip"},
+      {"name": "ICS649", "status": "wip"},
+      {"name": "ICS669", "status": "wip"},
+      {"name": "ICS685", "status": "wip"},
+      {"name": "ICS689", "status": "wip"},
+      {"name": "IND131", "status": "wip"},
+      {"name": "IND221", "status": "wip"},
+      {"name": "IND226", "status": "wip"},
+      {"name": "IND226x", "status": "wip"},
+      {"name": "IND231", "status": "wip"},
+      {"name": "IND236", "status": "wip"},
+      {"name": "IND246", "status": "wip"},
+      {"name": "IND256x", "status": "wip"},
+      {"name": "IND331", "status": "wip"},
+      {"name": "IND360", "status": "wip"},
+      {"name": "IND400", "status": "wip"},
+      {"name": "IND425", "status": "wip"},
+      {"name": "IND435", "status": "wip"},
+      {"name": "IND445", "status": "wip"},
+      {"name": "IND465", "status": "wip"},
+      {"name": "IND560", "status": "wip"},
+      {"name": "IND560x", "status": "wip"},
+      {"name": "IND570", "status": "wip"},
+      {"name": "IND690", "status": "wip"},
+      {"name": "IND780", "status": "wip"},
+      {"name": "IND930", "status": "wip"},
+      {"name": "IND930SQC", "status": "wip"},
+      {"name": "IND970-15", "status": "wip"},
+      {"name": "IND970-19", "status": "wip"},
+      {"name": "JE1002G", "status": "wip"},
+      {"name": "JE1002GE", "status": "wip"},
+      {"name": "JE1103C", "status": "wip"},
+      {"name": "JE1103CE", "status": "wip"},
+      {"name": "JE155DUG", "status": "wip"},
+      {"name": "JE2002G", "status": "wip"},
+      {"name": "JE2002GE", "status": "wip"},
+      {"name": "JE203G", "status": "wip"},
+      {"name": "JE203GE", "status": "wip"},
+      {"name": "JE3002G", "status": "wip"},
+      {"name": "JE3002GE", "status": "wip"},
+      {"name": "JE303G", "status": "wip"},
+      {"name": "JE303GE", "status": "wip"},
+      {"name": "JE4002G", "status": "wip"},
+      {"name": "JE4002GE", "status": "wip"},
+      {"name": "JE5002G", "status": "wip"},
+      {"name": "JE5002GE", "status": "wip"},
+      {"name": "JE503C", "status": "wip"},
+      {"name": "JE503CE", "status": "wip"},
+      {"name": "JE503G", "status": "wip"},
+      {"name": "JE503GE", "status": "wip"},
+      {"name": "JE703C", "status": "wip"},
+      {"name": "JE703CE", "status": "wip"},
+      {"name": "JET1002G", "status": "wip"},
+      {"name": "JET1002G/AED", "status": "wip"},
+      {"name": "JET1003G", "status": "wip"},
+      {"name": "JET1103C", "status": "wip"},
+      {"name": "JET12002G", "status": "wip"},
+      {"name": "JET1603C", "status": "wip"},
+      {"name": "JET2001G/AED", "status": "wip"},
+      {"name": "JET2002G", "status": "wip"},
+      {"name": "JET3001G/AED", "status": "wip"},
+      {"name": "JET3002G", "status": "wip"},
+      {"name": "JET303G", "status": "wip"},
+      {"name": "JET4002G", "status": "wip"},
+      {"name": "JET503C", "status": "wip"},
+      {"name": "JET6001G", "status": "wip"},
+      {"name": "JET6001G/AED", "status": "wip"},
+      {"name": "JET6002G", "status": "wip"},
+      {"name": "JET602G/AED", "status": "wip"},
+      {"name": "JET603G", "status": "wip"},
+      {"name": "JET703C", "status": "wip"},
+      {"name": "JL1502GE", "status": "wip"},
+      {"name": "JL6001GE", "status": "wip"},
+      {"name": "JL602GE", "status": "wip"},
+      {"name": "JP105DUG", "status": "wip"},
+      {"name": "JP1203C", "status": "wip"},
+      {"name": "JP1603C", "status": "wip"},
+      {"name": "JP2002G", "status": "wip"},
+      {"name": "JP3002G", "status": "wip"},
+      {"name": "JP303G", "status": "wip"},
+      {"name": "JP4002G", "status": "wip"},
+      {"name": "JP503C", "status": "wip"},
+      {"name": "JP503G", "status": "wip"},
+      {"name": "JP6002G", "status": "wip"},
+      {"name": "JP703C", "status": "wip"},
+      {"name": "JP8001G", "status": "wip"},
+      {"name": "JP802G", "status": "wip"},
+      {"name": "JS1203C", "status": "wip"},
+      {"name": "JS1603C", "status": "wip"},
+      {"name": "JS2002G", "status": "wip"},
+      {"name": "JS3002G", "status": "wip"},
+      {"name": "JS303G", "status": "wip"},
+      {"name": "JS4002G", "status": "wip"},
+      {"name": "JS503C", "status": "wip"},
+      {"name": "JS503G", "status": "wip"},
+      {"name": "JS6002G", "status": "wip"},
+      {"name": "JS703C", "status": "wip"},
+      {"name": "JS8001G", "status": "wip"},
+      {"name": "JS802G", "status": "wip"},
+      {"name": "LA104", "status": "wip"},
+      {"name": "LA104E", "status": "wip"},
+      {"name": "LA2002", "status": "wip"},
+      {"name": "LA2002E", "status": "wip"},
+      {"name": "LA203", "status": "wip"},
+      {"name": "LA203E", "status": "wip"},
+      {"name": "LA204", "status": "wip"},
+      {"name": "LA204E", "status": "wip"},
+      {"name": "LA4002", "status": "wip"},
+      {"name": "LA4002E", "status": "wip"},
+      {"name": "LA403", "status": "wip"},
+      {"name": "LA403E", "status": "wip"},
+      {"name": "LA84", "status": "wip"},
+      {"name": "LA84E", "status": "wip"},
+      {"name": "MA1002", "status": "wip"},
+      {"name": "MA1002E", "status": "wip"},
+      {"name": "MA103", "status": "wip"},
+      {"name": "MA103E", "status": "wip"},
+      {"name": "MA104", "status": "wip"},
+      {"name": "MA104E", "status": "wip"},
+      {"name": "MA12001L", "status": "wip"},
+      {"name": "MA155DU", "status": "wip"},
+      {"name": "MA16001L", "status": "wip"},
+      {"name": "MA2002", "status": "wip"},
+      {"name": "MA2002E", "status": "wip"},
+      {"name": "MA2002P", "status": "wip"},
+      {"name": "MA2002PE", "status": "wip"},
+      {"name": "MA203", "status": "wip"},
+      {"name": "MA203E", "status": "wip"},
+      {"name": "MA204", "status": "wip"},
+      {"name": "MA204E", "status": "wip"},
+      {"name": "MA3002", "status": "wip"},
+      {"name": "MA3002E", "status": "wip"},
+      {"name": "MA303", "status": "wip"},
+      {"name": "MA303E", "status": "wip"},
+      {"name": "MA32000L", "status": "wip"},
+      {"name": "MA32001L", "status": "wip"},
+      {"name": "MA4002", "status": "wip"},
+      {"name": "MA4002E", "status": "wip"},
+      {"name": "MA5001", "status": "wip"},
+      {"name": "MA5001E", "status": "wip"},
+      {"name": "MA503", "status": "wip"},
+      {"name": "MA503E", "status": "wip"},
+      {"name": "MA54", "status": "wip"},
+      {"name": "MA54E", "status": "wip"},
+      {"name": "MA55", "status": "wip"},
+      {"name": "MA6001P", "status": "wip"},
+      {"name": "MA6001PE", "status": "wip"},
+      {"name": "MA6002", "status": "wip"},
+      {"name": "MA6002E", "status": "wip"},
+      {"name": "MA602", "status": "wip"},
+      {"name": "MA602E", "status": "wip"},
+      {"name": "MA602P", "status": "wip"},
+      {"name": "MA602PE", "status": "wip"},
+      {"name": "MA95", "status": "wip"},
+      {"name": "ME1002", "status": "wip"},
+      {"name": "ME1002E", "status": "wip"},
+      {"name": "ME1002T/00", "status": "wip"},
+      {"name": "ME1002TE/00", "status": "wip"},
+      {"name": "ME103", "status": "wip"},
+      {"name": "ME103E", "status": "wip"},
+      {"name": "ME103T/00", "status": "wip"},
+      {"name": "ME103TE/00", "status": "wip"},
+      {"name": "ME2002", "status": "wip"},
+      {"name": "ME2002E", "status": "wip"},
+      {"name": "ME2002T/00", "status": "wip"},
+      {"name": "ME2002TE/00", "status": "wip"},
+      {"name": "ME203", "status": "wip"},
+      {"name": "ME203E", "status": "wip"},
+      {"name": "ME203T/00", "status": "wip"},
+      {"name": "ME203TE/00", "status": "wip"},
+      {"name": "ME3002", "status": "wip"},
+      {"name": "ME3002E", "status": "wip"},
+      {"name": "ME3002T/00", "status": "wip"},
+      {"name": "ME3002TE/00", "status": "wip"},
+      {"name": "ME303", "status": "wip"},
+      {"name": "ME303E", "status": "wip"},
+      {"name": "ME303T/00", "status": "wip"},
+      {"name": "ME303TE/00", "status": "wip"},
+      {"name": "ME4001T/00", "status": "wip"},
+      {"name": "ME4001TE/00", "status": "wip"},
+      {"name": "ME4002", "status": "wip"},
+      {"name": "ME4002E", "status": "wip"},
+      {"name": "ME4002T/00", "status": "wip"},
+      {"name": "ME4002TE/00", "status": "wip"},
+      {"name": "ME403", "status": "wip"},
+      {"name": "ME403E", "status": "wip"},
+      {"name": "ME403T/00", "status": "wip"},
+      {"name": "ME403TE/00", "status": "wip"},
+      {"name": "ME5002T/00", "status": "wip"},
+      {"name": "ME5002TE/00", "status": "wip"},
+      {"name": "ME503T/00", "status": "wip"},
+      {"name": "ME503TE/00", "status": "wip"},
+      {"name": "ME6002T/00", "status": "wip"},
+      {"name": "ME6002TE/00", "status": "wip"},
+      {"name": "ME603T/00", "status": "wip"},
+      {"name": "ME603TE/00", "status": "wip"},
+      {"name": "ML1602T/00", "status": "wip"},
+      {"name": "ML203T/00", "status": "wip"},
+      {"name": "ML3001T/00", "status": "wip"},
+      {"name": "ML3002T/00", "status": "wip"},
+      {"name": "ML303T/00", "status": "wip"},
+      {"name": "ML4002T/00", "status": "wip"},
+      {"name": "ML503T/00", "status": "wip"},
+      {"name": "ML6001T/00", "status": "wip"},
+      {"name": "ML6002T/00", "status": "wip"},
+      {"name": "ML802T/00", "status": "wip"},
+      {"name": "MR1002", "status": "wip"},
+      {"name": "MR104", "status": "wip"},
+      {"name": "MR2002", "status": "wip"},
+      {"name": "MR203", "status": "wip"},
+      {"name": "MR204", "status": "wip"},
+      {"name": "MR3002", "status": "wip"},
+      {"name": "MR303", "status": "wip"},
+      {"name": "MR304", "status": "wip"},
+      {"name": "MR4002", "status": "wip"},
+      {"name": "MR503", "status": "wip"},
+      {"name": "MR6001", "status": "wip"},
+      {"name": "MR6002", "status": "wip"},
+      {"name": "MR603", "status": "wip"},
+      {"name": "MS1003S", "status": "wip"},
+      {"name": "MS1003TS", "status": "wip"},
+      {"name": "MS1003TS/00", "status": "wip"},
+      {"name": "MS104S", "status": "wip"},
+      {"name": "MS104TS", "status": "wip"},
+      {"name": "MS105", "status": "wip"},
+      {"name": "MS105DU", "status": "wip"},
+      {"name": "MS12001L", "status": "wip"},
+      {"name": "MS12002TS", "status": "wip"},
+      {"name": "MS12002TS/00", "status": "wip"},
+      {"name": "MS15KLE", "status": "wip"},
+      {"name": "MS15KLIPE", "status": "wip"},
+      {"name": "MS16001L", "status": "wip"},
+      {"name": "MS16001LE", "status": "wip"},
+      {"name": "MS1602S", "status": "wip"},
+      {"name": "MS1602SE", "status": "wip"},
+      {"name": "MS1602TS", "status": "wip"},
+      {"name": "MS1602TS/00", "status": "wip"},
+      {"name": "MS204", "status": "wip"},
+      {"name": "MS204S", "status": "wip"},
+      {"name": "MS204TS", "status": "wip"},
+      {"name": "MS205DU", "status": "wip"},
+      {"name": "MS24KLIPE", "status": "wip"},
+      {"name": "MS3001S", "status": "wip"},
+      {"name": "MS3002S", "status": "wip"},
+      {"name": "MS3002SE", "status": "wip"},
+      {"name": "MS3002TS", "status": "wip"},
+      {"name": "MS3002TS/00", "status": "wip"},
+      {"name": "MS303S", "status": "wip"},
+      {"name": "MS303SE", "status": "wip"},
+      {"name": "MS303TS", "status": "wip"},
+      {"name": "MS303TS/00", "status": "wip"},
+      {"name": "MS304S", "status": "wip"},
+      {"name": "MS304TS", "status": "wip"},
+      {"name": "MS30KLE", "status": "wip"},
+      {"name": "MS32000L", "status": "wip"},
+      {"name": "MS32000LE", "status": "wip"},
+      {"name": "MS32001L", "status": "wip"},
+      {"name": "MS32001LE", "status": "wip"},
+      {"name": "MS4002S", "status": "wip"},
+      {"name": "MS4002SDR", "status": "wip"},
+      {"name": "MS4002TS", "status": "wip"},
+      {"name": "MS4002TS/00", "status": "wip"},
+      {"name": "MS4002TSDR", "status": "wip"},
+      {"name": "MS4002TSDR/00", "status": "wip"},
+      {"name": "MS403S", "status": "wip"},
+      {"name": "MS403TS", "status": "wip"},
+      {"name": "MS403TS/00", "status": "wip"},
+      {"name": "MS6001S", "status": "wip"},
+      {"name": "MS6002S", "status": "wip"},
+      {"name": "MS6002SDR", "status": "wip"},
+      {"name": "MS6002TS", "status": "wip"},
+      {"name": "MS6002TS/00", "status": "wip"},
+      {"name": "MS6002TSDR", "status": "wip"},
+      {"name": "MS6002TSDR/00", "status": "wip"},
+      {"name": "MS603S", "status": "wip"},
+      {"name": "MS603TS", "status": "wip"},
+      {"name": "MS603TS/00", "status": "wip"},
+      {"name": "MS8000S", "status": "wip"},
+      {"name": "MS8000SE", "status": "wip"},
+      {"name": "MS8001S", "status": "wip"},
+      {"name": "MS8001SE", "status": "wip"},
+      {"name": "MS8001TS", "status": "wip"},
+      {"name": "MS8001TS/00", "status": "wip"},
+      {"name": "MS802S", "status": "wip"},
+      {"name": "MX104", "status": "wip"},
+      {"name": "MX105", "status": "wip"},
+      {"name": "MX105DU", "status": "wip"},
+      {"name": "MX12001L", "status": "wip"},
+      {"name": "MX12002", "status": "wip"},
+      {"name": "MX1203", "status": "wip"},
+      {"name": "MX1203N", "status": "wip"},
+      {"name": "MX16001L", "status": "wip"},
+      {"name": "MX2002", "status": "wip"},
+      {"name": "MX204", "status": "wip"},
+      {"name": "MX205DU", "status": "wip"},
+      {"name": "MX303", "status": "wip"},
+      {"name": "MX303N", "status": "wip"},
+      {"name": "MX304", "status": "wip"},
+      {"name": "MX32000L", "status": "wip"},
+      {"name": "MX32001L", "status": "wip"},
+      {"name": "MX4002", "status": "wip"},
+      {"name": "MX6001", "status": "wip"},
+      {"name": "MX6002", "status": "wip"},
+      {"name": "MX6002DR", "status": "wip"},
+      {"name": "MX603", "status": "wip"},
+      {"name": "MX603N", "status": "wip"},
+      {"name": "PB1501-L", "status": "wip"},
+      {"name": "PB1501-S", "status": "wip"},
+      {"name": "PB1501-S/FACT", "status": "wip"},
+      {"name": "PB1502-L", "status": "wip"},
+      {"name": "PB1502-S", "status": "wip"},
+      {"name": "PB1502-S/FACT", "status": "wip"},
+      {"name": "PB153-L", "status": "wip"},
+      {"name": "PB153-S", "status": "wip"},
+      {"name": "PB153-S/FACT", "status": "wip"},
+      {"name": "PB3001-L", "status": "wip"},
+      {"name": "PB3001-S", "status": "wip"},
+      {"name": "PB3001-S/FACT", "status": "wip"},
+      {"name": "PB3002-L", "status": "wip"},
+      {"name": "PB3002-LDR", "status": "wip"},
+      {"name": "PB3002-S", "status": "wip"},
+      {"name": "PB3002-S/FACT", "status": "wip"},
+      {"name": "PB3002-SDR", "status": "wip"},
+      {"name": "PB3002-SDR/FACT", "status": "wip"},
+      {"name": "PB303-L", "status": "wip"},
+      {"name": "PB303-LDR", "status": "wip"},
+      {"name": "PB303-S", "status": "wip"},
+      {"name": "PB303-S/FACT", "status": "wip"},
+      {"name": "PB303-SDR", "status": "wip"},
+      {"name": "PB303-SDR/FACT", "status": "wip"},
+      {"name": "PB4002-S", "status": "wip"},
+      {"name": "PB4002-S/FACT", "status": "wip"},
+      {"name": "PB403-S", "status": "wip"},
+      {"name": "PB403-S/FACT", "status": "wip"},
+      {"name": "PB5001-L", "status": "wip"},
+      {"name": "PB5001-S", "status": "wip"},
+      {"name": "PB5001-S/FACT", "status": "wip"},
+      {"name": "PB503-S", "status": "wip"},
+      {"name": "PB503-S/FACT", "status": "wip"},
+      {"name": "PB602-L", "status": "wip"},
+      {"name": "PB602-S", "status": "wip"},
+      {"name": "PB602-S/FACT", "status": "wip"},
+      {"name": "PB8000-L", "status": "wip"},
+      {"name": "PB8000-S", "status": "wip"},
+      {"name": "PB8000-S/FACT", "status": "wip"},
+      {"name": "PB8001-L", "status": "wip"},
+      {"name": "PB8001-S", "status": "wip"},
+      {"name": "PB8001-S/FACT", "status": "wip"},
+      {"name": "PG1003-S", "status": "wip"},
+      {"name": "PG2002-S", "status": "wip"},
+      {"name": "PG203-S", "status": "wip"},
+      {"name": "PG3001-S", "status": "wip"},
+      {"name": "PG4002-S", "status": "wip"},
+      {"name": "PG403-S", "status": "wip"},
+      {"name": "PG5002-S", "status": "wip"},
+      {"name": "PG503-S", "status": "wip"},
+      {"name": "PG6002-S", "status": "wip"},
+      {"name": "PG603-S", "status": "wip"},
+      {"name": "PG802-S", "status": "wip"},
+      {"name": "PR10003MC", "status": "wip"},
+      {"name": "PR1200", "status": "wip"},
+      {"name": "PR1203", "status": "wip"},
+      {"name": "PR2002", "status": "wip"},
+      {"name": "PR2003DR", "status": "wip"},
+      {"name": "PR2003MC", "status": "wip"},
+      {"name": "PR2004MC", "status": "wip"},
+      {"name": "PR203", "status": "wip"},
+      {"name": "PR3001", "status": "wip"},
+      {"name": "PR5001", "status": "wip"},
+      {"name": "PR5002", "status": "wip"},
+      {"name": "PR5002DR", "status": "wip"},
+      {"name": "PR5003DU", "status": "wip"},
+      {"name": "PR5003MC", "status": "wip"},
+      {"name": "PR502", "status": "wip"},
+      {"name": "PR503", "status": "wip"},
+      {"name": "PR503DR", "status": "wip"},
+      {"name": "PR504DR", "status": "wip"},
+      {"name": "PR700", "status": "wip"},
+      {"name": "PR8000", "status": "wip"},
+      {"name": "PR8001", "status": "wip"},
+      {"name": "PR8002", "status": "wip"},
+      {"name": "PR8002DR", "status": "wip"},
+      {"name": "PR802", "status": "wip"},
+      {"name": "PR803", "status": "wip"},
+      {"name": "SAG203F", "status": "wip"},
+      {"name": "SAG204", "status": "wip"},
+      {"name": "SAG245", "status": "wip"},
+      {"name": "SAG285", "status": "wip"},
+      {"name": "SB12001", "status": "wip"},
+      {"name": "SB16000", "status": "wip"},
+      {"name": "SB16001", "status": "wip"},
+      {"name": "SB16001DR", "status": "wip"},
+      {"name": "SB24001DR", "status": "wip"},
+      {"name": "SB32000", "status": "wip"},
+      {"name": "SB32001DR", "status": "wip"},
+      {"name": "SB8000", "status": "wip"},
+      {"name": "SB8001", "status": "wip"},
+      {"name": "SLF615", "status": "wip"},
+      {"name": "SLF630", "status": "wip"},
+      {"name": "SLF660", "status": "wip"},
+      {"name": "SPC", "status": "wip"},
+      {"name": "SPD12002", "status": "wip"},
+      {"name": "SPD12002-C", "status": "wip"},
+      {"name": "SPE2003-C", "status": "wip"},
+      {"name": "SPE4002-C", "status": "wip"},
+      {"name": "SPE403-C", "status": "wip"},
+      {"name": "SPE404-C", "status": "wip"},
+      {"name": "SPE7002-C", "status": "wip"},
+      {"name": "SR16000", "status": "wip"},
+      {"name": "SR16001", "status": "wip"},
+      {"name": "SR16001DR", "status": "wip"},
+      {"name": "SR32000", "status": "wip"},
+      {"name": "SR32001", "status": "wip"},
+      {"name": "SR32001DR", "status": "wip"},
+      {"name": "SR64000", "status": "wip"},
+      {"name": "SR64001", "status": "wip"},
+      {"name": "SR64001DR", "status": "wip"},
+      {"name": "SR8001", "status": "wip"},
+      {"name": "Viper EX", "status": "wip"},
+      {"name": "Viper SC", "status": "wip"},
+      {"name": "Viper SW", "status": "wip"},
+      {"name": "WKC204C", "status": "wip"},
+      {"name": "WKC6002C", "status": "wip"},
+      {"name": "WKC603C", "status": "wip"},
+      {"name": "WM123", "status": "wip"},
+      {"name": "WM124", "status": "wip"},
+      {"name": "WM3002", "status": "wip"},
+      {"name": "WM3002X", "status": "wip"},
+      {"name": "WM503", "status": "wip"},
+      {"name": "WM6002", "status": "wip"},
+      {"name": "WM6002X", "status": "wip"},
+      {"name": "WMC15-SH", "status": "wip"},
+      {"name": "WMC24-SH", "status": "wip"},
+      {"name": "WMC25-SH", "status": "wip"},
+      {"name": "WMF204C-L/IE", "status": "wip"},
+      {"name": "WMF204C-L/PN", "status": "wip"},
+      {"name": "WMF204C-W/IE", "status": "wip"},
+      {"name": "WMF204C-W/PN", "status": "wip"},
+      {"name": "WMF303C-L/IE", "status": "wip"},
+      {"name": "WMF303C-L/PN", "status": "wip"},
+      {"name": "WMF303C-W/IE", "status": "wip"},
+      {"name": "WMF303C-W/PN", "status": "wip"},
+      {"name": "WMS104C", "status": "wip"},
+      {"name": "WMS1203C", "status": "wip"},
+      {"name": "WMS204", "status": "wip"},
+      {"name": "WMS4002", "status": "wip"},
+      {"name": "WMS403", "status": "wip"},
+      {"name": "WMS404C", "status": "wip"},
+      {"name": "WMS404C-L", "status": "wip"},
+      {"name": "WMS6002C", "status": "wip"},
+      {"name": "WMS803", "status": "wip"},
+      {"name": "WXS204", "status": "wip"},
+      {"name": "WXS204S/15", "status": "wip"},
+      {"name": "WXS204SV/15", "status": "wip"},
+      {"name": "WXS205", "status": "wip"},
+      {"name": "WXS205DU", "status": "wip"},
+      {"name": "WXS205S/15", "status": "wip"},
+      {"name": "WXS205SDU/15", "status": "full"},
+      {"name": "WXS205SDUV/15", "status": "wip"},
+      {"name": "WXS205SV/15", "status": "wip"},
+      {"name": "WXS26", "status": "wip"},
+      {"name": "WXS26DU", "status": "wip"},
+      {"name": "WXS26S/15", "status": "wip"},
+      {"name": "WXS26SDU/15", "status": "wip"},
+      {"name": "WXS26SDUV/15", "status": "wip"},
+      {"name": "WXS26SV/15", "status": "wip"},
+      {"name": "WXSS204", "status": "wip"},
+      {"name": "WXSS204/A", "status": "wip"},
+      {"name": "WXSS204/M", "status": "wip"},
+      {"name": "WXSS204V", "status": "wip"},
+      {"name": "WXSS205", "status": "wip"},
+      {"name": "WXSS205/A", "status": "wip"},
+      {"name": "WXSS205/M", "status": "wip"},
+      {"name": "WXSS205DU", "status": "wip"},
+      {"name": "WXSS205DU/A", "status": "wip"},
+      {"name": "WXSS205DU/M", "status": "wip"},
+      {"name": "WXSS205DUV", "status": "wip"},
+      {"name": "WXSS205V", "status": "wip"},
+      {"name": "WXSS26", "status": "wip"},
+      {"name": "WXSS26/A", "status": "wip"},
+      {"name": "WXSS26/M", "status": "wip"},
+      {"name": "WXSS26DU", "status": "wip"},
+      {"name": "WXSS26DU/A", "status": "wip"},
+      {"name": "WXSS26DU/M", "status": "wip"},
+      {"name": "WXSS26DUV", "status": "wip"},
+      {"name": "WXSS26V", "status": "wip"},
+      {"name": "WXTP204", "status": "wip"},
+      {"name": "WXTP204V", "status": "wip"},
+      {"name": "WXTP205", "status": "wip"},
+      {"name": "WXTP205DU", "status": "wip"},
+      {"name": "WXTP205DUV", "status": "wip"},
+      {"name": "WXTP205V", "status": "wip"},
+      {"name": "WXTP26", "status": "wip"},
+      {"name": "WXTP26DU", "status": "wip"},
+      {"name": "WXTP26DUV", "status": "wip"},
+      {"name": "WXTP26V", "status": "wip"},
+      {"name": "WXTS204", "status": "wip"},
+      {"name": "WXTS204/A", "status": "wip"},
+      {"name": "WXTS204/M", "status": "wip"},
+      {"name": "WXTS204V", "status": "wip"},
+      {"name": "WXTS205", "status": "wip"},
+      {"name": "WXTS205/A", "status": "wip"},
+      {"name": "WXTS205/M", "status": "wip"},
+      {"name": "WXTS205DU", "status": "wip"},
+      {"name": "WXTS205DU/A", "status": "wip"},
+      {"name": "WXTS205DU/M", "status": "wip"},
+      {"name": "WXTS205DUV", "status": "wip"},
+      {"name": "WXTS205V", "status": "wip"},
+      {"name": "WXTS26", "status": "wip"},
+      {"name": "WXTS26/A", "status": "wip"},
+      {"name": "WXTS26/M", "status": "wip"},
+      {"name": "WXTS26DU", "status": "wip"},
+      {"name": "WXTS26DU/A", "status": "wip"},
+      {"name": "WXTS26DU/M", "status": "wip"},
+      {"name": "WXTS26DUV", "status": "wip"},
+      {"name": "WXTS26V", "status": "wip"},
+      {"name": "WXTS3DU", "status": "wip"},
+      {"name": "WXTS3DU/A", "status": "wip"},
+      {"name": "WXTS3DU/M", "status": "wip"},
+      {"name": "XA105", "status": "wip"},
+      {"name": "XA1502S", "status": "wip"},
+      {"name": "XA204", "status": "wip"},
+      {"name": "XA3001S", "status": "wip"},
+      {"name": "XA3002S", "status": "wip"},
+      {"name": "XA303S", "status": "wip"},
+      {"name": "XA5002S", "status": "wip"},
+      {"name": "XA503S", "status": "wip"},
+      {"name": "XP105", "status": "wip"},
+      {"name": "XP1202S", "status": "wip"},
+      {"name": "XP1203S", "status": "wip"},
+      {"name": "XP2001S", "status": "wip"},
+      {"name": "XP2002S", "status": "wip"},
+      {"name": "XP2003S", "status": "wip"},
+      {"name": "XP203S", "status": "wip"},
+      {"name": "XP204S", "status": "wip"},
+      {"name": "XP205", "status": "wip"},
+      {"name": "XP26", "status": "wip"},
+      {"name": "XP2U", "status": "wip"},
+      {"name": "XP4001S", "status": "wip"},
+      {"name": "XP4002S", "status": "wip"},
+      {"name": "XP404S", "status": "wip"},
+      {"name": "XP5003S", "status": "wip"},
+      {"name": "XP504", "status": "wip"},
+      {"name": "XP56", "status": "wip"},
+      {"name": "XP6", "status": "wip"},
+      {"name": "XP6001S", "status": "wip"},
+      {"name": "XP6002S", "status": "wip"},
+      {"name": "XP603S", "status": "wip"},
+      {"name": "XP8001S", "status": "wip"},
+      {"name": "XP8002S", "status": "wip"},
+      {"name": "XP802S", "status": "wip"},
+      {"name": "XPE10001L", "status": "wip"},
+      {"name": "XPE10001S", "status": "wip"},
+      {"name": "XPE10002S", "status": "wip"},
+      {"name": "XPE105", "status": "wip"},
+      {"name": "XPE1202S", "status": "wip"},
+      {"name": "XPE1203S", "status": "wip"},
+      {"name": "XPE15002L", "status": "wip"},
+      {"name": "XPE16001L", "status": "wip"},
+      {"name": "XPE20002LDR", "status": "wip"},
+      {"name": "XPE2002S", "status": "wip"},
+      {"name": "XPE204", "status": "wip"},
+      {"name": "XPE204S", "status": "wip"},
+      {"name": "XPE205", "status": "wip"},
+      {"name": "XPE205CDR", "status": "wip"},
+      {"name": "XPE205DR", "status": "wip"},
+      {"name": "XPE26", "status": "wip"},
+      {"name": "XPE26C", "status": "wip"},
+      {"name": "XPE26DR", "status": "wip"},
+      {"name": "XPE3003S", "status": "wip"},
+      {"name": "XPE3003SD5", "status": "wip"},
+      {"name": "XPE303S", "status": "wip"},
+      {"name": "XPE303SN", "status": "wip"},
+      {"name": "XPE32000L", "status": "wip"},
+      {"name": "XPE32001L", "status": "wip"},
+      {"name": "XPE4001S", "status": "wip"},
+      {"name": "XPE4002S", "status": "wip"},
+      {"name": "XPE404S", "status": "wip"},
+      {"name": "XPE5003S", "status": "wip"},
+      {"name": "XPE504", "status": "wip"},
+      {"name": "XPE505C", "status": "wip"},
+      {"name": "XPE56C", "status": "wip"},
+      {"name": "XPE6001S", "status": "wip"},
+      {"name": "XPE6002S", "status": "wip"},
+      {"name": "XPE6002SDR", "status": "wip"},
+      {"name": "XPE6003SD5", "status": "wip"},
+      {"name": "XPE603S", "status": "wip"},
+      {"name": "XPE603SDR", "status": "wip"},
+      {"name": "XPE603SN", "status": "wip"},
+      {"name": "XPE603SNDR", "status": "wip"},
+      {"name": "XPE64000L", "status": "wip"},
+      {"name": "XPE64001L", "status": "wip"},
+      {"name": "XPE8001S", "status": "wip"},
+      {"name": "XPE8002S", "status": "wip"},
+      {"name": "XPR10", "status": "wip"},
+      {"name": "XPR10003SC", "status": "wip"},
+      {"name": "XPR1004SC", "status": "wip"},
+      {"name": "XPR105", "status": "wip"},
+      {"name": "XPR105DUHR", "status": "wip"},
+      {"name": "XPR106DUH", "status": "wip"},
+      {"name": "XPR106DUHR", "status": "wip"},
+      {"name": "XPR12001L", "status": "wip"},
+      {"name": "XPR12001S", "status": "wip"},
+      {"name": "XPR12002S", "status": "wip"},
+      {"name": "XPR12003SD5", "status": "wip"},
+      {"name": "XPR1202S", "status": "wip"},
+      {"name": "XPR1203S", "status": "wip"},
+      {"name": "XPR15002L", "status": "wip"},
+      {"name": "XPR16001L", "status": "wip"},
+      {"name": "XPR2", "status": "wip"},
+      {"name": "XPR20002LDR", "status": "wip"},
+      {"name": "XPR2002S", "status": "wip"},
+      {"name": "XPR2003S", "status": "wip"},
+      {"name": "XPR2003SC", "status": "wip"},
+      {"name": "XPR2004SC", "status": "wip"},
+      {"name": "XPR204", "status": "wip"},
+      {"name": "XPR204E", "status": "wip"},
+      {"name": "XPR204E/A", "status": "wip"},
+      {"name": "XPR204E/M", "status": "wip"},
+      {"name": "XPR204S", "status": "wip"},
+      {"name": "XPR205", "status": "wip"},
+      {"name": "XPR225DR", "status": "wip"},
+      {"name": "XPR226CDR", "status": "wip"},
+      {"name": "XPR226DR", "status": "wip"},
+      {"name": "XPR26003LC", "status": "wip"},
+      {"name": "XPR2U", "status": "wip"},
+      {"name": "XPR2U/A", "status": "wip"},
+      {"name": "XPR2U/M", "status": "wip"},
+      {"name": "XPR3003S", "status": "wip"},
+      {"name": "XPR3004SD5", "status": "wip"},
+      {"name": "XPR303S", "status": "wip"},
+      {"name": "XPR303SN", "status": "wip"},
+      {"name": "XPR305DR", "status": "wip"},
+      {"name": "XPR32000L", "status": "wip"},
+      {"name": "XPR32001L", "status": "wip"},
+      {"name": "XPR32003LD5C", "status": "wip"},
+      {"name": "XPR36", "status": "wip"},
+      {"name": "XPR36C", "status": "wip"},
+      {"name": "XPR36DR", "status": "wip"},
+      {"name": "XPR4001S", "status": "wip"},
+      {"name": "XPR4002S", "status": "wip"},
+      {"name": "XPR404S", "status": "wip"},
+      {"name": "XPR5003S", "status": "wip"},
+      {"name": "XPR5003SC", "status": "wip"},
+      {"name": "XPR5004SC", "status": "wip"},
+      {"name": "XPR504S", "status": "wip"},
+      {"name": "XPR56", "status": "wip"},
+      {"name": "XPR56C", "status": "wip"},
+      {"name": "XPR56DR", "status": "wip"},
+      {"name": "XPR6002S", "status": "wip"},
+      {"name": "XPR6002SDR", "status": "wip"},
+      {"name": "XPR6003SD5", "status": "wip"},
+      {"name": "XPR603S", "status": "wip"},
+      {"name": "XPR603SN", "status": "wip"},
+      {"name": "XPR64000L", "status": "wip"},
+      {"name": "XPR64001L", "status": "wip"},
+      {"name": "XPR64002LC", "status": "wip"},
+      {"name": "XPR64002LC-T", "status": "wip"},
+      {"name": "XPR64003LD5C", "status": "wip"},
+      {"name": "XPR6U", "status": "wip"},
+      {"name": "XPR6U/M", "status": "wip"},
+      {"name": "XPR6UD5", "status": "wip"},
+      {"name": "XPR8001S", "status": "wip"},
+      {"name": "XPR8002S", "status": "wip"},
+      {"name": "XS10000M", "status": "wip"},
+      {"name": "XS10001L", "status": "wip"},
+      {"name": "XS10001M", "status": "wip"},
+      {"name": "XS10001S", "status": "wip"},
+      {"name": "XS10002S", "status": "wip"},
+      {"name": "XS1003S", "status": "wip"},
+      {"name": "XS104", "status": "wip"},
+      {"name": "XS105", "status": "wip"},
+      {"name": "XS1202S", "status": "wip"},
+      {"name": "XS1203S", "status": "wip"},
+      {"name": "XS16000L", "status": "wip"},
+      {"name": "XS16000M", "status": "wip"},
+      {"name": "XS16001L", "status": "wip"},
+      {"name": "XS2002S", "status": "wip"},
+      {"name": "XS203S", "status": "wip"},
+      {"name": "XS204", "status": "wip"},
+      {"name": "XS204SX", "status": "wip"},
+      {"name": "XS205", "status": "wip"},
+      {"name": "XS3", "status": "wip"},
+      {"name": "XS303S", "status": "wip"},
+      {"name": "XS303SN", "status": "wip"},
+      {"name": "XS32000L", "status": "wip"},
+      {"name": "XS32001L", "status": "wip"},
+      {"name": "XS32001LDR", "status": "wip"},
+      {"name": "XS32001LX", "status": "wip"},
+      {"name": "XS4001S", "status": "wip"},
+      {"name": "XS4002S", "status": "wip"},
+      {"name": "XS403S", "status": "wip"},
+      {"name": "XS5003S", "status": "wip"},
+      {"name": "XS5003SXDR", "status": "wip"},
+      {"name": "XS6001M", "status": "wip"},
+      {"name": "XS6001MDR", "status": "wip"},
+      {"name": "XS6001S", "status": "wip"},
+      {"name": "XS6002S", "status": "wip"},
+      {"name": "XS6002SDR", "status": "wip"},
+      {"name": "XS6002SX", "status": "wip"},
+      {"name": "XS603S", "status": "wip"},
+      {"name": "XS603SN", "status": "wip"},
+      {"name": "XS603SX", "status": "wip"},
+      {"name": "XS64", "status": "wip"},
+      {"name": "XS64001LX", "status": "wip"},
+      {"name": "XS8001L", "status": "wip"},
+      {"name": "XS8001S", "status": "wip"},
+      {"name": "XS802S", "status": "wip"},
+      {"name": "XSR10001L", "status": "wip"},
+      {"name": "XSR10001S", "status": "wip"},
+      {"name": "XSR10002S", "status": "wip"},
+      {"name": "XSR104", "status": "wip"},
+      {"name": "XSR105", "status": "wip"},
+      {"name": "XSR105DU", "status": "wip"},
+      {"name": "XSR1202S", "status": "wip"},
+      {"name": "XSR1203S", "status": "wip"},
+      {"name": "XSR16000L", "status": "wip"},
+      {"name": "XSR16001L", "status": "wip"},
+      {"name": "XSR2002S", "status": "wip"},
+      {"name": "XSR204", "status": "wip"},
+      {"name": "XSR204DR", "status": "wip"},
+      {"name": "XSR205DU", "status": "wip"},
+      {"name": "XSR225DU", "status": "wip"},
+      {"name": "XSR303S", "status": "wip"},
+      {"name": "XSR303SN", "status": "wip"},
+      {"name": "XSR304", "status": "wip"},
+      {"name": "XSR32000L", "status": "wip"},
+      {"name": "XSR32001L", "status": "wip"},
+      {"name": "XSR32001LDR", "status": "wip"},
+      {"name": "XSR4001S", "status": "wip"},
+      {"name": "XSR4002S", "status": "wip"},
+      {"name": "XSR6001S", "status": "wip"},
+      {"name": "XSR6002S", "status": "wip"},
+      {"name": "XSR6002SDR", "status": "wip"},
+      {"name": "XSR603S", "status": "wip"},
+      {"name": "XSR603SN", "status": "wip"},
+      {"name": "XSR64", "status": "wip"},
+      {"name": "XSR8001S", "status": "wip"}
+    ],
+    "kind": "scale",
+    "capabilities": [
+      "weighing"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.mettler_toledo.MTSICSDriver",
+    "api_version": "v1",
+    "code_slug": "mettler_toledo/scales",
+    "doc_slug": "mettler_toledo/scales/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "The listed models are known to support SICS; only WXS205SDU/15 has been hardware-validated with this driver (WXA-Bridge firmware 1.10)."
+  },
+  {
+    "id": "micronic-code-reader",
+    "vendor": "Micronic",
+    "name": "RD235",
+    "kind": "barcode scanner",
+    "capabilities": [
+      "barcode reading"
+    ],
+    "status": "full",
+    "api": "pylabrobot.micronic.MicronicRD235",
+    "api_version": "v1",
+    "code_slug": "micronic/code_reader",
+    "doc_slug": "micronic/code_reader/hello-world",
+    "oem": "https://www.micronic.com/products/code-reader/"
+  },
+  {
+    "id": "molecular-devices-imagexpress-micro",
+    "vendor": "Molecular Devices",
+    "name": "ImageXpress Micro",
+    "kind": "microscope",
+    "capabilities": [
+      "microscopy"
+    ],
+    "status": "wip",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-micro-4"
+  },
+  {
+    "id": "molecular-devices-imagexpress-nano",
+    "vendor": "Molecular Devices",
+    "name": "ImageXpress Nano",
+    "kind": "microscope",
+    "capabilities": [
+      "microscopy"
+    ],
+    "status": "wip",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-nano"
+  },
+  {
+    "id": "molecular-devices-imagexpress-pico",
+    "vendor": "Molecular Devices",
+    "name": "ImageXpress Pico",
+    "kind": "microscope",
+    "capabilities": [
+      "microscopy"
+    ],
+    "status": "basic",
+    "api": "pylabrobot.molecular_devices.imageXpress.pico.Pico",
+    "api_version": "v1",
+    "code_slug": "molecular_devices/imageXpress/pico",
+    "doc_slug": "molecular_devices/imageXpress/pico",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico"
+  },
+  {
+    "id": "molecular-devices-spectramax-384plus",
+    "vendor": "Molecular Devices",
+    "name": "SpectraMax 384 Plus",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance"
+    ],
+    "status": "full",
+    "api": "pylabrobot.molecular_devices.spectramax.SpectraMax384Plus",
+    "api_version": "v1",
+    "code_slug": "molecular_devices/spectramax",
+    "doc_slug": "molecular_devices/spectramax/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.moleculardevices.com/products/microplate-readers/absorbance-readers"
+  },
+  {
+    "id": "molecular-devices-spectramax-gemini-em",
+    "vendor": "Molecular Devices",
+    "name": "SpectraMax Gemini EM",
+    "kind": "plate reader",
+    "capabilities": [
+      "fluorescence",
+      "luminescence"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.moleculardevices.com/products/microplate-readers/fluorescence-readers/gemini-em-xps-readers"
+  },
+  {
+    "id": "molecular-devices-spectramax-m5",
     "vendor": "Molecular Devices",
     "name": "SpectraMax M5e",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence",
+      "time-resolved fluorescence",
+      "fluorescence polarization"
+    ],
+    "status": "full",
+    "api": "pylabrobot.molecular_devices.spectramax.SpectraMaxM5",
+    "api_version": "v1",
+    "code_slug": "molecular_devices/spectramax",
+    "doc_slug": "molecular_devices/spectramax/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers"
+  },
+  {
+    "id": "opentrons-heater-shaker",
+    "vendor": "Opentrons",
+    "name": "Heater-Shaker Module",
+    "kind": "heater shaker",
+    "capabilities": [
+      "heating",
+      "shaking"
+    ],
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://opentrons.com/products/heater-shaker-module"
+  },
+  {
+    "id": "opentrons-ot2",
+    "vendor": "Opentrons",
+    "name": "OT-2",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.opentrons.OT2",
+    "api_version": "v1",
+    "code_slug": "opentrons/ot2",
+    "doc_slug": "opentrons/ot2/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://opentrons.com/products/ot-2-robot"
+  },
+  {
+    "id": "opentrons-temperature-module",
+    "vendor": "Opentrons",
+    "name": "Temperature Module",
+    "kind": "temperature controller",
+    "capabilities": [
+      "heating",
+      "active cooling"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://opentrons.com/products/temperature-module-gen2"
+  },
+  {
+    "id": "opentrons-thermocycler",
+    "vendor": "Opentrons",
+    "name": "Thermocycler Module",
+    "kind": "thermocycler",
+    "capabilities": [
+      "thermocycling",
+      "heating",
+      "active cooling"
+    ],
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://opentrons.com/products/thermocycler-module-1"
+  },
+  {
+    "id": "paa-kx2",
+    "vendor": "PAA",
+    "name": "KX2",
+    "kind": "arm",
+    "capabilities": [
+      "arm"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
+  },
+  {
+    "id": "qinstruments-bioshake",
+    "vendor": "QInstruments",
+    "name": "BioShake",
+    "models": [
+      {"name": "BioShake 3000", "status": "full"},
+      {"name": "BioShake 3000 elm", "status": "full"},
+      {"name": "BioShake 3000 elm DWP", "status": "full"},
+      {"name": "BioShake 3000-T", "status": "wip"},
+      {"name": "BioShake 3000-T elm", "status": "wip"},
+      {"name": "BioShake 5000 elm", "status": "wip"},
+      {"name": "BioShake D30 elm", "status": "wip"},
+      {"name": "BioShake D30-T elm", "status": "wip"},
+      {"name": "BioShake Q1", "status": "full"},
+      {"name": "BioShake Q2", "status": "wip"}
+    ],
+    "kind": "heater shaker",
+    "capabilities": [
+      "shaking",
+      "heating",
+      "active cooling"
+    ],
+    "status": "full",
+    "api": "pylabrobot.qinstruments.BioShake",
+    "api_version": "v1",
+    "code_slug": "qinstruments",
+    "doc_slug": "qinstruments/bioshake/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "Capabilities vary by model; use a model-specific factory function.",
+    "oem": "https://www.qinstruments.com/"
+  },
+  {
+    "id": "qinstruments-coldplate",
+    "vendor": "QInstruments",
+    "name": "ColdPlate",
+    "kind": "temperature controller",
+    "capabilities": [
+      "heating",
+      "active cooling"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.qinstruments.ColdPlate",
+    "api_version": "v1",
+    "code_slug": "qinstruments",
+    "doc_slug": "qinstruments/bioshake/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.qinstruments.com/automation/coldplate/"
+  },
+  {
+    "id": "qinstruments-heatplate",
+    "vendor": "QInstruments",
+    "name": "Heatplate",
+    "kind": "temperature controller",
+    "capabilities": [
+      "heating"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.qinstruments.Heatplate",
+    "api_version": "v1",
+    "code_slug": "qinstruments",
+    "doc_slug": "qinstruments/bioshake/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.qinstruments.com/automation/heatplate/"
+  },
+  {
+    "id": "revvity-celigo",
+    "vendor": "Revvity",
+    "name": "Celigo",
+    "kind": "microscope",
+    "capabilities": [
+      "fluorescence",
+      "microscopy"
+    ],
+    "status": "basic",
+    "api": "pylabrobot.revvity.Celigo",
+    "api_version": "v1",
+    "code_slug": "revvity/celigo",
+    "doc_slug": "revvity/celigo/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
+  },
+  {
+    "id": "sartorius-entris2",
+    "vendor": "Sartorius",
+    "name": "Entris II",
+    "kind": "scale",
+    "capabilities": [
+      "weighing"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.sartorius.SartoriusEntris2",
+    "api_version": "v1",
+    "code_slug": "sartorius",
+    "doc_slug": "sartorius/entris2/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.sartorius.com/en/products/weighing/laboratory-balances/entris-ii"
+  },
+  {
+    "id": "tecan-evo",
+    "vendor": "Tecan",
+    "name": "EVO",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "basic",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://lifesciences.tecan.com/freedom-evo-platform"
+  },
+  {
+    "id": "tecan-infinite-200-pro",
+    "vendor": "Tecan",
+    "name": "Infinite 200 PRO",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/hazlamshamin",
+    "oem": "https://lifesciences.tecan.com/plate_readers/infinite_200_pro"
+  },
+  {
+    "id": "tecan-spark-20m",
+    "vendor": "Tecan",
+    "name": "Spark 20M",
+    "kind": "plate reader",
     "capabilities": [
       "absorbance",
       "fluorescence"
     ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers"
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://lifesciences.tecan.com/multimode-plate-reader"
   },
   {
-    "vendor": "Molecular Devices",
-    "name": "SpectraMax 384plus",
-    "capabilities": [
-      "absorbance"
+    "id": "thermo-fisher-alps",
+    "vendor": "Thermo Fisher",
+    "name": "ALPS",
+    "models": [
+      {"name": "ALPS 300", "status": "mostly"},
+      {"name": "ALPS 3000", "status": "mostly"},
+      {"name": "ALPS 5000", "status": "mostly"}
     ],
-    "status": "Full",
-    "docs": null,
-    "oem": "https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers"
-  },
-  {
-    "vendor": "Molecular Devices",
-    "name": "ImageXpress Pico",
+    "kind": "sealer",
     "capabilities": [
-      "microscopy"
+      "sealing"
     ],
-    "status": "Basic",
-    "docs": "/user_guide/02_analytical/plate-reading/pico.html",
-    "oem": "https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico"
+    "status": "mostly",
+    "api": "pylabrobot.thermo_fisher.alps",
+    "api_version": "v1",
+    "code_slug": "thermo_fisher/alps",
+    "doc_slug": "thermo_fisher/alps/index",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "Each model has its own driver class and hello-world guide.",
+    "oem": "https://www.thermofisher.com/order/catalog/product/AB-5000"
   },
   {
-    "vendor": "Tecan",
-    "name": "Infinite 200 PRO",
+    "id": "thermo-fisher-atc",
+    "vendor": "Thermo Fisher",
+    "name": "ATC",
+    "kind": "thermocycler",
     "capabilities": [
-      "absorbance",
-      "fluorescence",
-      "luminescence"
+      "thermocycling",
+      "heating",
+      "active cooling"
     ],
-    "status": "Mostly",
-    "docs": "/user_guide/tecan/infinite/hello-world.html",
-    "oem": "https://lifesciences.tecan.com/infinite-200-pro"
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html"
   },
   {
-    "vendor": "Beckman Coulter",
-    "name": "CytoFLEX S",
+    "id": "thermo-fisher-cytomat",
+    "vendor": "Thermo Fisher",
+    "name": "Cytomat",
+    "models": [
+      {"name": "Cytomat 2 C425", "status": "full"},
+      {"name": "Cytomat 2 C450 SHAKE", "status": "full"},
+      {"name": "Cytomat 2 C_50", "status": "wip"},
+      {"name": "Cytomat 5C", "status": "full"},
+      {"name": "Cytomat 6000", "status": "full"},
+      {"name": "Cytomat 6002", "status": "full"}
+    ],
+    "kind": "storage",
     "capabilities": [
-      "flow cytometry"
+      "storage",
+      "heating",
+      "active cooling",
+      "shaking"
     ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.beckman.com/flow-cytometry/research-flow-cytometers/cytoflex-s"
+    "status": "full",
+    "api": "pylabrobot.legacy.storage.cytomat.CytomatBackend",
+    "api_version": "v0",
+    "code_slug": "legacy/storage/cytomat",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "Capabilities vary by model. The driver lists Cytomat 2 C_50 but rejects it with NotImplementedError.",
+    "oem": "https://www.thermofisher.com/us/en/home/life-science/lab-equipment/lab-automation/lab-automation-incubators.html"
   },
   {
+    "id": "thermo-fisher-heraeus-cytomat",
+    "vendor": "Thermo Fisher",
+    "name": "Heraeus Cytomat",
+    "kind": "storage",
+    "capabilities": [
+      "storage",
+      "heating"
+    ],
+    "status": "full",
+    "api": "pylabrobot.legacy.storage.cytomat.heraeus_cytomat_backend.HeraeusCytomatBackend",
+    "api_version": "v0",
+    "code_slug": "legacy/storage/cytomat",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "notes": "The legacy Heraeus unit, which uses a separate backend."
+  },
+  {
+    "id": "thermo-fisher-multidrop-combi",
+    "vendor": "Thermo Fisher",
+    "name": "Multidrop Combi",
+    "kind": "bulk dispenser",
+    "capabilities": [
+      "dispensing"
+    ],
+    "status": "mostly",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.thermofisher.com/us/en/home/life-science/lab-equipment/multidrop-dispensers/models/multidrop-combi.html"
+  },
+  {
+    "id": "thermo-fisher-proflex",
+    "vendor": "Thermo Fisher",
+    "name": "ProFlex",
+    "kind": "thermocycler",
+    "capabilities": [
+      "thermocycling",
+      "heating",
+      "active cooling"
+    ],
+    "status": "full",
+    "api_version": "v0",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html"
+  },
+  {
+    "id": "thermo-fisher-quantstudio-5",
     "vendor": "Thermo Fisher",
     "name": "QuantStudio 5",
+    "kind": "qPCR machine",
     "capabilities": [
-      "qPCR"
+      "qPCR",
+      "thermocycling"
     ],
-    "status": "WIP",
-    "docs": null,
-    "oem": "https://www.thermofisher.com/order/catalog/product/A34322"
+    "status": "wip",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.thermofisher.com/order/catalog/product/A28574"
   },
   {
-    "vendor": "Mettler Toledo",
-    "name": "WXS205SDU",
+    "id": "ufactory-xarm6",
+    "vendor": "UFACTORY",
+    "name": "xArm 6",
+    "kind": "arm",
     "capabilities": [
-      "weighing"
+      "arm"
     ],
-    "status": "Full",
-    "docs": "/user_guide/02_analytical/scales.html#mettler-toledo-wxs205sdu",
-    "oem": "https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html"
+    "status": "basic",
+    "api": "pylabrobot.ufactory.xarm6.XArm6",
+    "api_version": "v1",
+    "code_slug": "ufactory/xarm6",
+    "doc_slug": "ufactory/xarm6/hello-world",
+    "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
+    "oem": "https://www.ufactory.cc/xarm-collaborative-robot/"
   }
 ]

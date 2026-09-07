@@ -2,8 +2,11 @@ import unittest
 from unittest.mock import AsyncMock, call, patch
 
 from pylabrobot.io.usb import USB
-from pylabrobot.legacy.plate_reading.tecan.infinite_backend import (
+from pylabrobot.legacy.plate_reading.tecan import (
   ExperimentalTecanInfinite200ProBackend,
+  TecanInfiniteResponseError,
+)
+from pylabrobot.legacy.plate_reading.tecan.infinite_backend import (
   _absorbance_od_calibrated,
   _AbsorbanceRunDecoder,
   _consume_leading_ascii_frame,
@@ -71,6 +74,7 @@ def _make_test_plate():
       size_x=4,
       size_y=4,
       size_z=5,
+      name_prefix="plate",
     ),
   )
   plate.location = Coordinate.zero()
@@ -606,7 +610,7 @@ class TestTecanInfiniteScanGeometry(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(identifiers, ["A1", "A2", "A3", "B1", "B2", "B3"])
 
   def test_scan_range_serpentine(self):
-    setattr(self.backend._driver, "map_well_to_stage", lambda well: (well.get_column(), well.get_row()))
+    setattr(self.backend, "_map_well_to_stage", lambda well: (well.get_column(), well.get_row()))
     row_index, row_wells = self.backend._group_by_row(self.plate.get_all_items())[0]
     start_x, end_x, count = self.backend._scan_range(row_index, row_wells, serpentine=True)
     self.assertEqual((start_x, end_x, count), (0, 2, 3))
@@ -637,8 +641,14 @@ class TestTecanInfiniteAscii(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("ST"))
     self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("+"))
     self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("-"))
-    self.assertTrue(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("BY#T5000"))
+    self.assertFalse(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("BY#T5000"))
     self.assertFalse(ExperimentalTecanInfinite200ProBackend._is_terminal_frame("OK"))
+
+  def test_timed_busy_timeout(self):
+    self.assertEqual(ExperimentalTecanInfinite200ProBackend._timed_busy_timeout("BY#T5000"), 5)
+    self.assertEqual(ExperimentalTecanInfinite200ProBackend._timed_busy_timeout("BY#T5001"), 6)
+    self.assertEqual(ExperimentalTecanInfinite200ProBackend._timed_busy_timeout("+BY#T0"), 1)
+    self.assertIsNone(ExperimentalTecanInfinite200ProBackend._timed_busy_timeout("BY#A5000"))
 
 
 class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
@@ -669,29 +679,398 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     """Helper to frame a command."""
     return ExperimentalTecanInfinite200ProBackend._frame_command(command)
 
+  async def test_timed_command_waits_for_standby_before_next_command(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("BY#T5000"),
+      self._frame("ST"),
+      self._frame("+"),
+    ]
+
+    mode_responses = await self.backend._send_command("MODE FI.TOP")
+    clear_responses = await self.backend._send_command("EXCITATION CLEAR")
+
+    self.assertEqual(mode_responses, ["BY#T5000", "ST"])
+    self.assertEqual(clear_responses, ["+"])
+    self.assertEqual(self.mock_usb.read.await_args_list[1], call(timeout=30, size=128))
+    self.assertEqual(self.mock_usb.read.await_count, 3)
+
+  async def test_timed_command_uses_longer_advertised_timeout(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("BY#T80000"),
+      self._frame("ST"),
+    ]
+
+    responses = await self.backend._send_command("INIT FORCE")
+
+    self.assertEqual(responses, ["BY#T80000", "ST"])
+    self.assertEqual(self.mock_usb.read.await_args_list[1], call(timeout=80, size=128))
+
+  async def test_required_terminal_response_does_not_accept_busy_frame(self):
+    self.mock_usb.read.return_value = self._frame("BY#T5000")
+
+    with self.assertRaisesRegex(TimeoutError, "terminal response frame"):
+      await self.backend._read_command_response(max_iterations=1, recover_on_timeout=False)
+
+  async def test_clear_mode_timeout_does_not_reinitialize_or_continue(self):
+    self.mock_usb.read.side_effect = TimeoutError("clear response timed out")
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "outcome could not be confirmed"):
+      await self.backend._clear_mode_settings(excitation=True)
+
+    self.mock_usb.write.assert_awaited_once_with(self._frame("EXCITATION CLEAR"))
+    self.mock_usb.stop.assert_not_awaited()
+    self.mock_usb.setup.assert_not_awaited()
+
+  async def test_clear_mode_rejects_device_error(self):
+    self.mock_usb.read.return_value = self._frame("-")
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "did not confirm"):
+      await self.backend._clear_mode_settings(excitation=True)
+
+    self.mock_usb.write.assert_awaited_once_with(self._frame("EXCITATION CLEAR"))
+
   async def test_open(self):
     self.backend._ready = True
+    self.mock_usb.read.side_effect = [
+      self._frame("BY#T5000"),
+      self._frame("ST"),
+      self._frame("OUT"),
+    ]
 
     await self.backend.open()
 
     self.mock_usb.write.assert_has_calls(
       [
         call(self._frame("ABSOLUTE MTP,OUT")),
-        call(self._frame("BY#T5000")),
+        call(self._frame("?ABSOLUTE MTP,POS")),
       ]
     )
 
   async def test_close(self):
     self.backend._ready = True
+    self.mock_usb.read.side_effect = [
+      self._frame("BY#T5000"),
+      self._frame("ST"),
+      self._frame("IN"),
+    ]
 
     await self.backend.close(self.plate)
 
     self.mock_usb.write.assert_has_calls(
       [
         call(self._frame("ABSOLUTE MTP,IN")),
-        call(self._frame("BY#T5000")),
+        call(self._frame("?ABSOLUTE MTP,POS")),
       ]
     )
+
+  async def test_transport_timeout_does_not_reinitialize_indeterminate_hardware(self):
+    self.mock_usb.read.side_effect = [self._frame("BY#T5000"), TimeoutError("move timed out")]
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "transport may not be OUT"):
+      await self.backend.open()
+
+    self.mock_usb.stop.assert_not_awaited()
+    self.mock_usb.setup.assert_not_awaited()
+
+  async def test_transport_initial_timeout_does_not_reinitialize_indeterminate_hardware(self):
+    self.mock_usb.read.side_effect = TimeoutError("initial response timed out")
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "was not received"):
+      await self.backend.open()
+
+    self.mock_usb.stop.assert_not_awaited()
+    self.mock_usb.setup.assert_not_awaited()
+
+  async def test_request_plate_position_reads_transport_position(self):
+    self.mock_usb.read.return_value = self._frame("IN")
+
+    position = await self.backend.request_plate_position()
+
+    self.assertEqual(position, "IN")
+    self.mock_usb.write.assert_awaited_once_with(self._frame("?ABSOLUTE MTP,POS"))
+
+  async def test_request_plate_sensor_state_returns_reader_states(self):
+    for response in ("FREE", "TAKEN", "UNDEFINED"):
+      with self.subTest(response=response):
+        self.mock_usb.read.return_value = self._frame(response)
+        self.assertEqual(await self.backend.request_plate_sensor_state(), response)
+
+    self.assertEqual(
+      self.mock_usb.write.await_args_list,
+      [call(self._frame("?SENSOR PLATEPOS"))] * 3,
+    )
+
+  async def test_request_plate_sensor_state_rejects_unknown_sensor_state(self):
+    self.mock_usb.read.return_value = self._frame("NOT_READY")
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "unknown sensor state"):
+      await self.backend.request_plate_sensor_state()
+
+  async def test_temperature_queries_convert_tenths_of_a_degree(self):
+    self.mock_usb.read.side_effect = [self._frame("218"), self._frame("370"), self._frame("ON")]
+
+    current = await self.backend.request_current_temperature()
+    target = await self.backend.request_target_temperature()
+    status = await self.backend.request_temperature_status()
+
+    self.assertEqual(current, 21.8)
+    self.assertEqual(target, 37.0)
+    self.assertEqual(status, "ON")
+    self.mock_usb.write.assert_has_awaits(
+      [
+        call(self._frame("?TEMPERATURE PLATE,CURRENT")),
+        call(self._frame("?TEMPERATURE PLATE,TARGET")),
+        call(self._frame("?TEMPERATURE PLATE,STATUS")),
+      ]
+    )
+
+  async def test_temperature_query_rejects_non_numeric_response(self):
+    self.mock_usb.read.return_value = self._frame("MSG001: warming")
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "tenths of a degree Celsius"):
+      await self.backend.request_current_temperature()
+
+  async def test_set_temperature_applies_target_enables_control_and_verifies_both(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("ST"),
+      self._frame("370"),
+      self._frame("ST"),
+      self._frame("ON"),
+    ]
+
+    await self.backend.set_temperature(37.0)
+
+    self.mock_usb.write.assert_has_awaits(
+      [
+        call(self._frame("TEMPERATURE PLATE,TARGET=370")),
+        call(self._frame("?TEMPERATURE PLATE,TARGET")),
+        call(self._frame("TEMPERATURE PLATE,STATUS=ON")),
+        call(self._frame("?TEMPERATURE PLATE,STATUS")),
+      ]
+    )
+
+  async def test_set_temperature_rejects_invalid_values_before_io(self):
+    invalid_cases = [
+      (-0.1, "0 to 42 degrees Celsius"),
+      (42.1, "0 to 42 degrees Celsius"),
+      (37.05, "0.1 degree Celsius increments"),
+    ]
+
+    for temperature, message in invalid_cases:
+      with self.subTest(temperature=temperature):
+        with self.assertRaisesRegex(ValueError, message):
+          await self.backend.set_temperature(temperature)
+
+    self.mock_usb.write.assert_not_awaited()
+
+  async def test_set_temperature_rejects_readback_mismatch(self):
+    self.mock_usb.read.side_effect = [self._frame("ST"), self._frame("369")]
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "requested target 37.0"):
+      await self.backend.set_temperature(37.0)
+
+  async def test_set_temperature_stops_after_device_rejects_target(self):
+    self.mock_usb.read.return_value = self._frame("-")
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "did not confirm"):
+      await self.backend.set_temperature(37.0)
+
+    self.mock_usb.write.assert_awaited_once_with(self._frame("TEMPERATURE PLATE,TARGET=370"))
+
+  async def test_stop_temperature_control_verifies_disabled_state(self):
+    self.mock_usb.read.side_effect = [self._frame("ST"), self._frame("OFF")]
+
+    await self.backend.stop_temperature_control()
+
+    self.mock_usb.write.assert_has_awaits(
+      [
+        call(self._frame("TEMPERATURE PLATE,STATUS=OFF")),
+        call(self._frame("?TEMPERATURE PLATE,STATUS")),
+      ]
+    )
+
+  async def test_shaking_queries_decode_device_values(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("ORBITAL"),
+      self._frame("2"),
+      self._frame("1500"),
+    ]
+
+    self.assertEqual(await self.backend.request_shaking_mode(), "ORBITAL")
+    self.assertEqual(await self.backend.request_shaking_duration(), 2)
+    self.assertEqual(await self.backend.request_shaking_amplitude(), 1.5)
+
+  async def test_shaking_queries_report_unconfigured_values_as_unavailable(self):
+    self.mock_usb.read.side_effect = [self._frame("-1"), self._frame("-1")]
+
+    self.assertIsNone(await self.backend.request_shaking_duration())
+    self.assertIsNone(await self.backend.request_shaking_amplitude())
+
+  async def test_shake_configures_readbacks_and_waits_for_completion(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("ST"),
+      self._frame("ORBITAL"),
+      self._frame("ST"),
+      self._frame("1000"),
+      self._frame("ST"),
+      self._frame("2"),
+      self._frame("BY#T2000"),
+      self._frame("ST"),
+    ]
+
+    await self.backend.shake(duration=2, mode="ORBITAL", amplitude=1.0)
+
+    self.mock_usb.write.assert_has_awaits(
+      [
+        call(self._frame("SHAKING MODE=ORBITAL")),
+        call(self._frame("?SHAKING MODE")),
+        call(self._frame("SHAKING AMPLITUDE=1000")),
+        call(self._frame("?SHAKING AMPLITUDE")),
+        call(self._frame("SHAKING TIME=2")),
+        call(self._frame("?SHAKING TIME")),
+        call(self._frame("SHAKING ON")),
+      ]
+    )
+    self.assertEqual(self.mock_usb.read.await_args_list[-1], call(timeout=7, size=128))
+
+  async def test_shake_accepts_coalesced_busy_and_completion_frames(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("ST"),
+      self._frame("LINEAR"),
+      self._frame("ST"),
+      self._frame("1500"),
+      self._frame("ST"),
+      self._frame("1"),
+      self._frame("BY#T1000") + self._frame("ST"),
+    ]
+
+    await self.backend.shake(duration=1, mode="LINEAR", amplitude=1.5)
+
+    self.assertEqual(self.mock_usb.read.await_count, 7)
+
+  async def test_shake_timeout_does_not_reinitialize_indeterminate_hardware(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("ST"),
+      self._frame("ORBITAL"),
+      self._frame("ST"),
+      self._frame("1000"),
+      self._frame("ST"),
+      self._frame("1"),
+      self._frame("BY#T1000"),
+      TimeoutError("reader did not report completion"),
+    ]
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "reader may still be shaking"):
+      await self.backend.shake(duration=1)
+
+    self.mock_usb.stop.assert_not_awaited()
+    self.mock_usb.setup.assert_not_awaited()
+
+  async def test_shake_initial_timeout_does_not_reinitialize_indeterminate_hardware(self):
+    self.mock_usb.read.side_effect = [
+      self._frame("ST"),
+      self._frame("ORBITAL"),
+      self._frame("ST"),
+      self._frame("1000"),
+      self._frame("ST"),
+      self._frame("1"),
+      TimeoutError("initial response timed out"),
+    ]
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "reader may still be shaking"):
+      await self.backend.shake(duration=1)
+
+    self.mock_usb.stop.assert_not_awaited()
+    self.mock_usb.setup.assert_not_awaited()
+
+  async def test_control_readback_timeout_does_not_reinitialize_indeterminate_hardware(self):
+    self.mock_usb.read.side_effect = [self._frame("ST"), TimeoutError("readback timed out")]
+
+    with self.assertRaisesRegex(TecanInfiniteResponseError, "state is indeterminate"):
+      await self.backend.set_temperature(25.0)
+
+    self.mock_usb.stop.assert_not_awaited()
+    self.mock_usb.setup.assert_not_awaited()
+
+  async def test_normal_read_timeout_retains_transport_recovery(self):
+    self.mock_usb.read.side_effect = TimeoutError("transport timed out")
+
+    with patch.object(self.backend, "_recover_transport", new_callable=AsyncMock) as recover:
+      with self.assertRaisesRegex(TimeoutError, "transport timed out"):
+        await self.backend._read_packet(128)
+
+    recover.assert_awaited_once_with()
+
+  async def test_shake_rejects_invalid_parameters_before_io(self):
+    invalid_cases = [
+      {"duration": 0},
+      {"duration": 1000},
+      {"duration": True},
+      {"duration": 1, "mode": "SIDEWAYS"},
+      {"duration": 1, "amplitude": 0.5},
+      {"duration": 1, "amplitude": 1.2},
+      {"duration": 1, "amplitude": 6.5},
+    ]
+
+    for parameters in invalid_cases:
+      with self.subTest(parameters=parameters):
+        with self.assertRaises(ValueError):
+          await self.backend.shake(**parameters)  # type: ignore[arg-type]
+
+    self.mock_usb.write.assert_not_awaited()
+
+  async def test_request_instrument_status_normalizes_known_states_and_retains_raw_reply(self):
+    cases = [
+      ("ST", "standby"),
+      ("PD", "power_down"),
+      ("PU", "power_up"),
+      ("PA", "parked"),
+      ("BY", "busy"),
+      ("BY#T5000", "busy"),
+      ("BY%C50", "unknown"),
+      ("BY%50", "busy"),
+      ("BY$reading", "busy"),
+      ("+BY#C2", "busy_in_background"),
+      ("MSG001: service requested", "message"),
+      ("NEW_STATUS", "unknown"),
+    ]
+
+    for raw, expected_state in cases:
+      with self.subTest(raw=raw):
+        self.mock_usb.read.return_value = self._frame(raw)
+        status = await self.backend.request_instrument_status()
+        self.assertEqual(status.state, expected_state)
+        self.assertEqual(status.raw, raw)
+
+  async def test_request_is_busy_sends_one_status_query(self):
+    self.mock_usb.read.return_value = self._frame("BY#C4")
+
+    self.assertTrue(await self.backend.request_is_busy())
+
+    self.mock_usb.write.assert_awaited_once_with(self._frame("QQ"))
+
+  async def test_request_is_busy_rejects_indeterminate_status(self):
+    for response in ("MSG001: service requested", "NEW_STATUS"):
+      with self.subTest(response=response):
+        self.mock_usb.read.return_value = self._frame(response)
+        with self.assertRaisesRegex(TecanInfiniteResponseError, "known busy or non-busy state"):
+          await self.backend.request_is_busy()
+
+  async def test_state_query_raises_device_error_with_raw_reply(self):
+    self.mock_usb.read.return_value = self._frame("ERR123: sensor failed")
+
+    with self.assertRaises(TecanInfiniteResponseError) as raised:
+      await self.backend.request_plate_sensor_state()
+
+    self.assertEqual(raised.exception.command, "?SENSOR PLATEPOS")
+    self.assertEqual(raised.exception.responses, ("ERR123: sensor failed",))
+
+  async def test_state_query_requires_exactly_one_response_frame(self):
+    for response in (b"", self._frame("IN") + self._frame("ST")):
+      with self.subTest(response=response):
+        self.mock_usb.read.return_value = response
+        with self.assertRaisesRegex(TecanInfiniteResponseError, "exactly one frame"):
+          await self.backend.request_plate_position()
 
   async def test_read_absorbance_commands(self):
     """Test that read_absorbance sends the correct configuration commands."""
@@ -704,8 +1083,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _abs_data_blob(6000, 500, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_absorbance(self.plate, [], wavelength=600)
 
     self.mock_usb.write.assert_has_calls(
@@ -765,8 +1144,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         cal_len, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
         self.backend._pending_bin_events.append((cal_len, cal_blob))
 
-    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend._driver, "_await_scan_terminal", side_effect=mock_terminal):
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", side_effect=mock_terminal):
         result = await self.backend.read_absorbance(self.plate, [], wavelength=600)
 
     self.assertAlmostEqual(result[0]["data"][0][0], 0.3010299956639812)
@@ -783,8 +1162,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _abs_data_blob(6000, 500, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
         result = await self.backend.read_absorbance(self.plate, wells, wavelength=600)
 
     self.mock_usb.write.assert_has_calls(
@@ -817,8 +1196,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _flr_data_blob(4850, 5200, 500, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_fluorescence(
           self.plate, [], excitation_wavelength=485, emission_wavelength=520
         )
@@ -892,8 +1271,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _lum_data_blob(0, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_luminescence(self.plate, [], focal_height=14.62)
 
     self.mock_usb.write.assert_has_calls(
@@ -952,8 +1331,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         data_len, data_blob = _lum_data_blob(0, 1000)
         decoder.feed_bin(data_len, data_blob)
 
-    with patch.object(self.backend._driver, "_await_measurements", side_effect=mock_await):
-      with patch.object(self.backend._driver, "_await_scan_terminal", new_callable=AsyncMock):
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_luminescence(self.plate, [])
 
     self.mock_usb.write.assert_any_call(self._frame("POSITION LUM,Z=20000"))

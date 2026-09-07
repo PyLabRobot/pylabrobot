@@ -4,9 +4,9 @@ Thank you for your interest in contributing to PyLabRobot! This document will he
 
 ## Getting Started
 
-See the installation instructions [here](../user_guide/_getting-started/installation.md). For contributing, you should install PyLabRobot from source.
+See the installation instructions [here](../user_guide/getting-started/installation.md). For contributing, you should install PyLabRobot from source.
 
-If this is your first time contributing to open source, check out [How to Open Source](/contributor_guide/how-to-open-source.md) for an easy introduction.
+If this is your first time contributing to open source, check out [How to Open Source](how-to-open-source.md) for an easy introduction.
 
 It's highly appreciated by the PyLabRobot developers if you communicate what you want to work on, to minimize any duplicate work. You can do this on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).
 
@@ -51,11 +51,25 @@ make typecheck
 
 PyLabRobot uses [pre-commit](https://pre-commit.com/) to run the above commands before every commit. To install pre-commit, run `pip install pre-commit` and then `pre-commit install`.
 
+## Code conventions
+
+Code and comments describe current behavior, not project history. Do not add diary or changelog comments such as "new", "now", or "previously", and do not add provenance stories to code, commits, or pull requests.
+
+Do not commit one-time backfill or migration scripts. Run one-time operations ad hoc so the repository contains only permanent software.
+
+Do not use reflective attribute access. `getattr`, `setattr`, `hasattr`, `delattr`, and equivalent techniques are not allowed. Do not work around this rule with `vars`, direct `__dict__` access, `__getattribute__`, wrappers around these functions, or attribute names constructed as strings.
+
+Define explicit, typed methods and properties instead. When a value or callable must be selected by name, use a typed mapping with a fixed set of keys. Model behavioral differences with normal control flow or polymorphism so static analysis and readers can see every supported path.
+
+## API conventions
+
+Use PyLabRobot's [default units](../user_guide/getting-started/units.md) in public APIs. Omit the unit from a parameter or attribute name when it uses the PyLabRobot default—for example, use `temperature`, not `temperature_celsius`. Deviate from the default only for a compelling reason, make the alternative unit explicit, and document why it is necessary. Convert device-native units internally.
+
 ## Writing documentation
 
 It is important that you write documentation for your code. As a rule of thumb, all functions and classes, whether public or private, are required to have a docstring. PyLabRobot uses [Google Style Python Docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html). In addition, PyLabRobot uses [type hints](https://docs.python.org/3/library/typing.html) to document the types of variables.
 
-To build the documentation, run `make docs` in the root directory. The documentation will be built in `docs/_build/html`. Run `open docs/_build/html/index.html` to open the documentation in your browser.
+To build the documentation, run `make docs` in the root directory. The documentation will be built in `docs/build`. Run `open docs/build/index.html` to open the documentation in your browser.
 
 ## Common Tasks
 
@@ -67,7 +81,7 @@ Make sure you write a test that fails before your fix and passes after your fix.
 
 ### Adding resources
 
-If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a [partial function](https://docs.python.org/3/library/functools.html#functools.partial) is enough. There are many examples, like [tipracks.py](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/liquid_handling/resources/hamilton/tipracks.py). If you are writing a new kind of resource, you should probably subclass resource in a new file.
+If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a [partial function](https://docs.python.org/3/library/functools.html#functools.partial) is enough. There are many examples, like [tip_racks.py](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/resources/hamilton/tip_racks.py). If you are writing a new kind of resource, you should probably subclass resource in a new file.
 
 Make sure to add your file to the imports in `__init__.py` of your resources package.
 

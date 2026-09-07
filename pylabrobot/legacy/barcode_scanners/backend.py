@@ -1,5 +1,3 @@
-"""Legacy. Use pylabrobot.capabilities.barcode_scanning.backend instead."""
-
 from abc import ABCMeta, abstractmethod
 
 from pylabrobot.legacy.machines.backend import MachineBackend

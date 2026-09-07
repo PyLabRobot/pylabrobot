@@ -1,6 +1,1 @@
-from .driver import EL406Driver
-from .el406 import EL406
-from .peristaltic_dispensing_backend8 import EL406PeristalticDispensingBackend8
-from .plate_washing_backend import EL406PlateWasher96Backend
-from .shaking_backend import EL406ShakingBackend
-from .syringe_dispensing_backend8 import EL406SyringeDispensingBackend8
+from pylabrobot.agilent.biotek.el406.el406 import EL406

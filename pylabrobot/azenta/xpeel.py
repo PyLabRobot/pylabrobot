@@ -11,14 +11,10 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.peeling import Peeler, PeelerBackend
-from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
-from pylabrobot.serializer import SerializableMixin
 
 
-class XPeelDriver(Driver):
+class XPeel:
   """Serial driver for the Azenta XPeel automated plate seal remover (RS-232).
 
   Owns the hardware connection and provides generic send/receive plus device-level operations
@@ -74,7 +70,7 @@ class XPeelDriver(Driver):
       rtscts=False,
     )
 
-  async def setup(self, backend_params: Optional[BackendParams] = None):
+  async def setup(self):
     await self.io.setup()
 
   async def stop(self):
@@ -227,44 +223,19 @@ class XPeelDriver(Driver):
     """Advance tape / move spool."""
     return await self.send_command("*movespool", expect_ack=True, wait_for_ready=True)
 
-
-class XPeelPeelerBackend(PeelerBackend):
-  """Translates PeelerBackend interface into XPeel driver commands.
-
-  Protocol encoding for peel and restart operations lives here.
-  """
-
-  @dataclass
-  class PeelParams(BackendParams):
-    """XPeel-specific parameters for the peel (de-seal) operation.
-
-    Args:
-      begin_location: Starting roller position offset in mm. Must be one of -2, 0, 2,
-        or 4. Default 0.
-      fast: If True, uses faster peel speed. Default False.
-      adhere_time: Time in seconds for the roller to press on the seal before peeling.
-        Must be one of 2.5, 5.0, 7.5, or 10.0. Default 2.5.
-    """
-
-    begin_location: Literal[-2, 0, 2, 4] = 0
-    fast: bool = False
-    adhere_time: float = 2.5
-
-  def __init__(self, driver: XPeelDriver):
-    self.driver = driver
-
   async def peel(
     self,
-    backend_params: Optional[SerializableMixin] = None,
+    begin_location: Literal[-2, 0, 2, 4] = 0,
+    fast: bool = False,
+    adhere_time: float = 2.5,
   ):
-    """Run an automated de-seal cycle."""
-    if not isinstance(backend_params, self.PeelParams):
-      backend_params = XPeelPeelerBackend.PeelParams()
+    """Run an automated de-seal cycle.
 
-    adhere_time = backend_params.adhere_time
-    begin_location = backend_params.begin_location
-    fast = backend_params.fast
-
+    Args:
+      begin_location: Starting roller position offset in mm. Must be one of -2, 0, 2, or 4. Default 0.
+      fast: If True, uses faster peel speed. Default False.
+      adhere_time: Time in seconds for the roller to press on the seal before peeling.  Must be one of 2.5, 5.0, 7.5, or 10.0. Default 2.5.
+    """
     if adhere_time not in {2.5, 5.0, 7.5, 10.0}:
       raise ValueError("adhere_time must be one of: 2.5, 5.0, 7.5, 10.0")
     if begin_location not in {-2, 0, 2, 4}:
@@ -282,19 +253,8 @@ class XPeelPeelerBackend(PeelerBackend):
     }.get((begin_location, fast), 9)
 
     cmd = f"*xpeel:{parameter_set}{adhere_time}"
-    return await self.driver.send_command(cmd, expect_ack=True, wait_for_ready=True)
+    return await self.send_command(cmd, expect_ack=True, wait_for_ready=True)
 
-  async def restart(self, backend_params: Optional[SerializableMixin] = None):
+  async def restart(self):
     """Request restart with full homing sequence."""
-    return await self.driver.send_command("*restart", expect_ack=True, wait_for_ready=True)
-
-
-class XPeel(Device):
-  """Azenta XPeel automated plate seal remover."""
-
-  def __init__(self, name: str, port: str, timeout: Optional[float] = None):
-    driver = XPeelDriver(port=port, timeout=timeout)
-    super().__init__(driver=driver)
-    self.driver: XPeelDriver = driver
-    self.peeler = Peeler(backend=XPeelPeelerBackend(driver))
-    self._capabilities = [self.peeler]
+    return await self.send_command("*restart", expect_ack=True, wait_for_ready=True)

@@ -14,9 +14,6 @@ a4S Sealer
   :recursive:
 
     A4S
-    A4SDriver
-    A4SSealerBackend
-    A4STemperatureBackend
     A4SStatus
 
 .. autoclass:: pylabrobot.azenta.a4s.A4SStatus.SystemStatus
@@ -40,8 +37,23 @@ XPeel Peeler
   :recursive:
 
     XPeel
-    XPeelDriver
-    XPeelPeelerBackend
 
-.. autoclass:: pylabrobot.azenta.xpeel.XPeelPeelerBackend.PeelParams
-   :members:
+
+FluidX IntelliXcap 96
+---------------------
+
+.. currentmodule:: pylabrobot.azenta.fluidx.intellixcap96
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    FluidXIntelliXcap96
+    FluidXError
+    ExtendedStatus
+    CartridgeProfile
+    CartridgeInfo
+    FirmwareVersions
+    get_error_message
+    is_recoverable_error

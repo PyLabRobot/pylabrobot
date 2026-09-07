@@ -1,15 +1,10 @@
-"""Legacy. Use pylabrobot.capabilities.barcode_scanning instead."""
-
 from pylabrobot.legacy.barcode_scanners.backend import BarcodeScannerBackend
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.resources.barcode import Barcode
 
 
 class BarcodeScanner(Machine):
-  """Legacy standalone barcode scanner Machine.
-
-  In new code, use BarcodeScanner instead.
-  """
+  """Frontend for barcode scanners."""
 
   def __init__(self, backend: BarcodeScannerBackend):
     super().__init__(backend=backend)

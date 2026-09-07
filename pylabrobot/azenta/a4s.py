@@ -3,7 +3,7 @@ import dataclasses
 import enum
 import logging
 import time
-from typing import Optional, Set
+from typing import Set
 
 try:
   import serial
@@ -13,16 +13,7 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.sealing import Sealer, SealerBackend
-from pylabrobot.capabilities.temperature_controlling import (
-  TemperatureController,
-  TemperatureControllerBackend,
-)
-from pylabrobot.device import Device, Driver
 from pylabrobot.io.serial import Serial
-from pylabrobot.resources import Coordinate
-from pylabrobot.resources.carrier import PlateHolder
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +53,8 @@ class A4SStatus:
   remaining_time: int
 
 
-class A4SDriver(Driver):
-  """Serial driver for the Azenta a4S thermal sealer.
-
-  Owns I/O, connection lifecycle, and device-level operations (status polling,
-  system reset, heater on/off, timing).
+class A4S:
+  """Driver for the Azenta a4S thermal sealer.
 
   https://web.azenta.com/hubfs/azenta-files/resources/tech-drawings/TD-automated-roll-heat-sealer.pdf
   """
@@ -89,15 +77,13 @@ class A4SDriver(Driver):
       stopbits=serial.STOPBITS_ONE,
     )
 
-  async def setup(self, backend_params: Optional[BackendParams] = None):
-    await super().setup(backend_params=backend_params)  # type: ignore[safe-super]
+  async def setup(self):
     await self.io.setup()
     await self.system_reset()
     logger.info("[A4S %s] connected and reset", self.port)
 
   async def stop(self):
     await self.set_heater(on=False)
-    await super().stop()  # type: ignore[safe-super]
     await self.io.stop()
     logger.info("[A4S %s] disconnected", self.port)
 
@@ -208,53 +194,24 @@ class A4SDriver(Driver):
     status = await self.request_status()
     return status.remaining_time
 
-  def serialize(self) -> dict:
-    return {**super().serialize(), "port": self.port, "timeout": self.timeout}
-
-
-class A4SSealerBackend(SealerBackend):
-  """Translates SealerBackend operations into A4S driver commands."""
-
-  def __init__(self, driver: A4SDriver):
-    self.driver = driver
-
   async def seal(self, temperature: int, duration: float):
-    logger.info("[A4S %s] sealing at %d C for %.1fs", self.driver.port, temperature, duration)
-    await self.driver.send_command(f"*00DH={round(temperature):04d}zz!")
+    logger.info("[A4S %s] sealing at %d C for %.1fs", self.port, temperature, duration)
+    await self.send_command(f"*00DH={round(temperature):04d}zz!")
     await self._wait_for_temperature(temperature, timeout=300)
-    await self.driver.set_time(duration)
-    await self.driver.send_command("*00GS=zz!")
-    await self.driver.wait_for_status({A4SStatus.SystemStatus.single_cycle})
-    return await self.driver.wait_for_status(
-      {A4SStatus.SystemStatus.idle, A4SStatus.SystemStatus.finish}
-    )
+    await self.set_time(duration)
+    await self.send_command("*00GS=zz!")
+    await self.wait_for_status({A4SStatus.SystemStatus.single_cycle})
+    return await self.wait_for_status({A4SStatus.SystemStatus.idle, A4SStatus.SystemStatus.finish})
 
   async def open(self):
-    logger.info("[A4S %s] open shuttle", self.driver.port)
-    await self.driver.send_command("*00MO=zz!")
-    return await self.driver.wait_for_shuttle_open_sensor(True)
+    logger.info("[A4S %s] open shuttle", self.port)
+    await self.send_command("*00MO=zz!")
+    return await self.wait_for_shuttle_open_sensor(True)
 
   async def close(self):
-    logger.info("[A4S %s] close shuttle", self.driver.port)
-    await self.driver.send_command("*00MC=zz!")
-    return await self.driver.wait_for_shuttle_open_sensor(False)
-
-  async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
-    start = time.time()
-    while True:
-      status = await self.driver.request_status()
-      if abs(status.current_temperature - degrees) < tolerance:
-        break
-      if time.time() - start > timeout:
-        raise TimeoutError("Timeout while waiting for temperature")
-      await asyncio.sleep(0.1)
-
-
-class A4STemperatureBackend(TemperatureControllerBackend):
-  """Translates TemperatureControllerBackend operations into A4S driver commands."""
-
-  def __init__(self, driver: A4SDriver):
-    self.driver = driver
+    logger.info("[A4S %s] close shuttle", self.port)
+    await self.send_command("*00MC=zz!")
+    return await self.wait_for_shuttle_open_sensor(False)
 
   @property
   def supports_active_cooling(self) -> bool:
@@ -263,9 +220,9 @@ class A4STemperatureBackend(TemperatureControllerBackend):
   async def set_temperature(self, temperature: float):
     if not (50 <= temperature <= 200):
       raise ValueError("Temperature out of range. Please enter a value between 50 and 200.")
-    logger.info("[A4S %s] setting temperature to %.1f C", self.driver.port, temperature)
+    logger.info("[A4S %s] setting temperature to %.1f C", self.port, temperature)
     command = f"*00DH={round(temperature):04d}zz!"
-    await self.driver.send_command(command)
+    await self.send_command(command)
     await self._wait_for_temperature(temperature, timeout=300)
 
   async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
@@ -279,56 +236,11 @@ class A4STemperatureBackend(TemperatureControllerBackend):
       await asyncio.sleep(0.1)
 
   async def request_current_temperature(self) -> float:
-    status = await self.driver.request_status()
+    status = await self.request_status()
     temp = status.current_temperature
-    logger.info("[A4S %s] read temperature: actual=%.1f C", self.driver.port, temp)
+    logger.info("[A4S %s] read temperature: actual=%.1f C", self.port, temp)
     return temp
 
   async def deactivate(self):
-    logger.info("[A4S %s] deactivate heater", self.driver.port)
-    await self.driver.set_heater(on=False)
-
-
-class A4S(PlateHolder, Device):
-  """Azenta a4S automated thermal sealer.
-
-  222 x 500 x 276 mm
-  """
-
-  def __init__(
-    self,
-    name: str,
-    port: str,
-    timeout: int = 20,
-    size_x: float = 222,
-    size_y: float = 500,
-    size_z: float = 276,
-    child_location: Coordinate = Coordinate(0, 0, 0),  # TODO
-    pedestal_size_z: float = 0,  # TODO
-    category: str = "sealer",
-    model: Optional[str] = None,
-  ):
-    raise NotImplementedError("A4S is missing resource definition.")
-    driver = A4SDriver(port=port, timeout=timeout)
-    PlateHolder.__init__(
-      self,
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      child_location=child_location,
-      pedestal_size_z=pedestal_size_z,
-      category=category,
-      model=model,
-    )
-    Device.__init__(self, driver=driver)
-    self.driver: A4SDriver = driver
-    self.sealer = Sealer(backend=A4SSealerBackend(driver))
-    self.tc = TemperatureController(backend=A4STemperatureBackend(driver))
-    self._capabilities = [self.tc, self.sealer]
-
-  def serialize(self) -> dict:
-    return {
-      **Device.serialize(self),
-      **PlateHolder.serialize(self),
-    }
+    logger.info("[A4S %s] deactivate heater", self.port)
+    await self.set_heater(on=False)

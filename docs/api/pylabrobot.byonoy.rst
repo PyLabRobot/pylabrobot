@@ -14,8 +14,8 @@ Absorbance 96
   :recursive:
 
     ByonoyAbsorbance96
-    ByonoyAbsorbance96Backend
     ByonoyAbsorbanceBaseUnit
+    AbsorbanceResult
     byonoy_a96a
     byonoy_a96a_detection_unit
     byonoy_a96a_illumination_unit
@@ -33,14 +33,12 @@ Luminescence 96
   :recursive:
 
     ByonoyLuminescence96
-    ByonoyLuminescence96Backend
     ByonoyLuminescenceBaseUnit
+    LuminescenceResult
+    Lum96IntegrationMode
     byonoy_l96
     byonoy_l96_base_unit
     byonoy_l96_reader_unit
     byonoy_l96a
     byonoy_l96a_base_unit
     byonoy_l96a_reader_unit
-
-.. autoclass:: pylabrobot.byonoy.luminescence_96.ByonoyLuminescence96Backend.LuminescenceParams
-   :members:

@@ -44,7 +44,7 @@ from pylabrobot.legacy.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
@@ -571,7 +571,8 @@ class TestNimbusBackendUnit(unittest.IsolatedAsyncioTestCase):
       backend.set_minimum_channel_traversal_height(-10)
 
   async def test_fill_by_channels(self):
-    backend = _setup_backend()
+    backend = NimbusBackend(host="192.168.1.100")
+    backend._num_channels = 8
 
     # Test with channels 0, 2, 4
     values = [100, 200, 300]
@@ -582,7 +583,8 @@ class TestNimbusBackendUnit(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result, expected)
 
   async def test_fill_by_channels_mismatched_lengths(self):
-    backend = _setup_backend()
+    backend = NimbusBackend(host="192.168.1.100")
+    backend._num_channels = 8
 
     with self.assertRaises(ValueError):
       backend._fill_by_channels([1, 2], [0, 1, 2], default=0)
@@ -605,25 +607,12 @@ def _mock_send_command_response(command) -> Optional[dict]:
 
 def _setup_backend() -> NimbusBackend:
   """Create a NimbusBackend with pre-configured state for testing."""
-  from pylabrobot.hamilton.liquid_handlers.nimbus.door import NimbusDoor
-  from pylabrobot.hamilton.liquid_handlers.nimbus.pip_backend import NimbusPIPBackend
-
   backend = NimbusBackend(host="192.168.1.100", port=2000)
   backend._num_channels = 8
   backend._pipette_address = Address(1, 1, 257)
   backend._door_lock_address = Address(1, 1, 268)
   backend._nimbus_core_address = Address(1, 1, 48896)
   backend._is_initialized = True
-  backend._pip_backend = NimbusPIPBackend(
-    driver=backend,  # type: ignore[arg-type]
-    deck=NimbusDeck(),
-    address=Address(1, 1, 257),
-    num_channels=8,
-  )
-  backend._door = NimbusDoor(
-    driver=backend,  # type: ignore[arg-type]
-    address=Address(1, 1, 268),
-  )
   return backend
 
 
@@ -631,8 +620,6 @@ def _setup_backend_with_deck(deck: NimbusDeck) -> NimbusBackend:
   """Create a NimbusBackend with pre-configured state and deck for testing."""
   backend = _setup_backend()
   backend._deck = deck
-  assert backend._pip_backend is not None
-  backend._pip_backend.deck = deck
   return backend
 
 
@@ -673,7 +660,6 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_door_methods_without_address_raise(self):
     self.backend._door_lock_address = None
-    self.backend._door = None
 
     with self.assertRaises(RuntimeError):
       await self.backend.lock_door()
@@ -715,7 +701,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.tip_rack = hamilton_96_tiprack_300uL("tip_rack")
     self.deck.assign_child_resource(self.tip_rack, rails=1)
 
-    self.plate = Cor_96_wellplate_360ul_Fb("plate")
+    self.plate = cor_96_wellplate_360uL_Fb("plate")
     self.deck.assign_child_resource(self.plate, rails=10)
 
     self.tip = HamiltonTip(
