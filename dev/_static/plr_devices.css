@@ -377,6 +377,59 @@ td.plr-device-links {
   display: none;
 }
 
+.plr-device-card__models-scroll {
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0.75rem 0;
+}
+
+.plr-device-card__models-scroll:focus-visible {
+  outline: 2px solid var(--pst-color-primary, #215f9a);
+  outline-offset: 2px;
+}
+
+table.plr-device-card__models {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: inherit;
+}
+
+.plr-device-card__models caption {
+  caption-side: top;
+  padding: 0 0 0.35rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--pst-color-text-muted, #666);
+}
+
+.plr-device-card__models th,
+.plr-device-card__models td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.35);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.plr-device-card__models thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--pst-color-surface, #f3f4f5);
+  font-weight: 600;
+}
+
+.plr-device-card__models tbody th {
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.plr-device-card__models td {
+  width: 1%;
+  white-space: nowrap;
+}
+
 .plr-device-card__row {
   display: flex;
   gap: 0.6rem;

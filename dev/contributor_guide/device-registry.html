@@ -33,7 +33,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=16de1b4f" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=c92e449a" />
     <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=ed9dfa64" />
   
   <!-- So that users can add custom icons -->
@@ -759,7 +759,10 @@ pre-filtered list on a vendor page.</p>
 <h2>Rendering a card<a class="headerlink" href="#rendering-a-card" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">device-card</span></code> renders one device. It works anywhere MyST is parsed, including markdown cells in the
 notebooks under <code class="docutils literal notranslate"><span class="pre">docs/user_guide</span></code> — put one at the top of a machine’s hello-world notebook so the
-page carries the same vendor, models, support level, capabilities and links as the table.</p>
+page carries the same vendor, models, support level, capabilities and links as the table.
+Models appear in a scrollable table with a colored support badge for each model. The table’s
+height is capped so long model lists keep the card compact. When a model has
+no explicit status, its badge uses the device’s support level.</p>
 <div class="highlight-md notranslate"><div class="highlight"><pre><span></span>```{device-card} curiox-ht2000
 ```
 </pre></div>
