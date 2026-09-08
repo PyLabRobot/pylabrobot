@@ -19,7 +19,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
   serial_constructor: MagicMock
 
   def make_device(
-    self, ack_timeout: float = 0.01, timeout: float = 30
+    self, ack_timeout: float = 1, timeout: float = 30
   ) -> tuple[PlateLoc, MagicMock, Deque[int]]:
     responses: Deque[int] = deque()
     io = MagicMock(spec=Serial)
@@ -38,7 +38,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     io.read.side_effect = read
 
     profile = PlateLocSerialProfile(
-      response_timeout=0.01,
+      response_timeout=1,
       ack_timeout=ack_timeout,
       read_delay=0,
       stage_move_delay=0,
@@ -85,7 +85,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     await device.setup()
     responses.extend(b"STAK\r")
 
-    response = await device._send_command("ST 0.030", timeout=0.01)
+    response = await device._send_command("ST 0.030", timeout=1)
 
     self.assertEqual(response, "STAK")
     self.assert_writes(io, [b"ST 0.030\r"])
@@ -124,7 +124,7 @@ class PlateLocTests(unittest.IsolatedAsyncioTestCase):
     self.assert_writes(io, [b"ST 0.030\r"])
 
   async def test_missing_acknowledgement_raises_timeout(self):
-    device, io, _ = self.make_device()
+    device, io, _ = self.make_device(ack_timeout=0.01)
     await device.setup()
 
     with self.assertRaisesRegex(TimeoutError, "Timeout"):
