@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Status.vspin\_status
+====================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoattribute:: Access2Status.vspin_status

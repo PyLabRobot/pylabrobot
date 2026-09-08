@@ -31,6 +31,7 @@
 <link href="../../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../../_static/plr_devices.css?v=c92e449a" />
@@ -57,6 +58,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.agilent.vspin.Access2.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
@@ -606,7 +608,7 @@
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.__init__.html#pylabrobot.agilent.vspin.Access2.__init__" title="pylabrobot.agilent.vspin.Access2.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(name, device_id, vspin[, size_x, ...])</p></td>
-<td><p></p></td>
+<td><p>Create an Access2 loader paired with a VSpin centrifuge.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.assign_child_by_anchor.html#pylabrobot.agilent.vspin.Access2.assign_child_by_anchor" title="pylabrobot.agilent.vspin.Access2.assign_child_by_anchor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assign_child_by_anchor</span></code></a>(resource[, ...])</p></td>
 <td><p>Assign a child resource by aligning anchor points.</p></td>
@@ -704,8 +706,8 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.is_in_subtree_of.html#pylabrobot.agilent.vspin.Access2.is_in_subtree_of" title="pylabrobot.agilent.vspin.Access2.is_in_subtree_of"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_in_subtree_of</span></code></a>(other)</p></td>
 <td><p>Return <code class="docutils literal notranslate"><span class="pre">True</span></code> if <code class="docutils literal notranslate"><span class="pre">self</span></code> is in the subtree rooted at <code class="docutils literal notranslate"><span class="pre">other</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.load.html#pylabrobot.agilent.vspin.Access2.load" title="pylabrobot.agilent.vspin.Access2.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.load.html#pylabrobot.agilent.vspin.Access2.load" title="pylabrobot.agilent.vspin.Access2.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>(*[, plate_height, source_z_offset, ...])</p></td>
+<td><p>Move the loader's plate into the currently presented VSpin bucket.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.load_all_state.html#pylabrobot.agilent.vspin.Access2.load_all_state" title="pylabrobot.agilent.vspin.Access2.load_all_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_all_state</span></code></a>(state)</p></td>
 <td><p>Load state for this resource and all children.</p></td>
@@ -764,8 +766,8 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.unassign_child_resource.html#pylabrobot.agilent.vspin.Access2.unassign_child_resource" title="pylabrobot.agilent.vspin.Access2.unassign_child_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign_child_resource</span></code></a>(resource)</p></td>
 <td><p>Unassign a child resource from this resource.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.unload.html#pylabrobot.agilent.vspin.Access2.unload" title="pylabrobot.agilent.vspin.Access2.unload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unload</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2.unload.html#pylabrobot.agilent.vspin.Access2.unload" title="pylabrobot.agilent.vspin.Access2.unload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unload</span></code></a>(*[, plate_height, source_z_offset, ...])</p></td>
+<td><p>Move the presented VSpin bucket's plate onto the loader.</p></td>
 </tr>
 </tbody>
 </table>
@@ -775,7 +777,7 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
 <li><p><strong>device_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>vspin</strong> (<a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.html#pylabrobot.agilent.vspin.VSpin" title="pylabrobot.agilent.vspin.vspin.VSpin"><em>VSpin</em></a>)</p></li>
+<li><p><strong>vspin</strong> (<a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.html#pylabrobot.agilent.vspin.VSpin" title="pylabrobot.agilent.vspin.VSpin"><em>VSpin</em></a>)</p></li>
 <li><p><strong>size_x</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
 <li><p><strong>size_y</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
 <li><p><strong>size_z</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>

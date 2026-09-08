@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.ServoStatus.module\_type
+=================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoattribute:: ServoStatus.module_type

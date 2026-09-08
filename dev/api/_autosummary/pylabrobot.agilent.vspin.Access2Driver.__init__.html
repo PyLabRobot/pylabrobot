@@ -31,6 +31,7 @@
 <link href="../../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../../_static/plr_devices.css?v=c92e449a" />
@@ -57,13 +58,14 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.agilent.vspin.Access2Driver.__init__.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.agilent.vspin.Access2Driver.close" href="pylabrobot.agilent.vspin.Access2Driver.close.html" />
-    <link rel="prev" title="pylabrobot.agilent.vspin.Access2Driver" href="pylabrobot.agilent.vspin.Access2Driver.html" />
+    <link rel="next" title="pylabrobot.agilent.vspin.Access2Driver.close_gripper" href="pylabrobot.agilent.vspin.Access2Driver.close_gripper.html" />
+    <link rel="prev" title="pylabrobot.agilent.vspin.Access2Driver.state" href="pylabrobot.agilent.vspin.Access2Driver.state.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.2.2" />
@@ -593,7 +595,7 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>device_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – The libftdi id for the loader. Find using
 <code class="code docutils literal notranslate"><span class="pre">python3</span> <span class="pre">-m</span> <span class="pre">pylibftdi.examples.list_devices</span></code></p></li>
-<li><p><strong>timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Communication and operation timeout in seconds.</p></li>
 </ul>
 </dd>
 </dl>
@@ -612,20 +614,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.agilent.vspin.Access2Driver.html"
+       href="pylabrobot.agilent.vspin.Access2Driver.state.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.agilent.vspin.Access2Driver</p>
+        <p class="prev-next-title">pylabrobot.agilent.vspin.Access2Driver.state</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.agilent.vspin.Access2Driver.close.html"
+       href="pylabrobot.agilent.vspin.Access2Driver.close_gripper.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.agilent.vspin.Access2Driver.close</p>
+        <p class="prev-next-title">pylabrobot.agilent.vspin.Access2Driver.close_gripper</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

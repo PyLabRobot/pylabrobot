@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Status.motor\_power\_fault
+==========================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoproperty:: Access2Status.motor_power_fault

@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.agilent.vspin.ServoStatus
+====================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoclass:: ServoStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ServoStatus.analog
+      ~ServoStatus.auxiliary
+      ~ServoStatus.home_position
+      ~ServoStatus.module_type
+      ~ServoStatus.module_version
+      ~ServoStatus.path_points
+      ~ServoStatus.position
+      ~ServoStatus.position_error
+      ~ServoStatus.velocity
+      ~ServoStatus.status
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ServoStatus.__init__
+   
+   

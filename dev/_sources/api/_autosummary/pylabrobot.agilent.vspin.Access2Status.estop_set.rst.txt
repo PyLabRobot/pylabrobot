@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Status.estop\_set
+=================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoproperty:: Access2Status.estop_set

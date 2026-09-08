@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2Status.y\_position
+==================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoattribute:: Access2Status.y_position

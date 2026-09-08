@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.ServoStatus.home\_position
+===================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. autoattribute:: ServoStatus.home_position

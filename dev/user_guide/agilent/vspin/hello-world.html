@@ -31,6 +31,7 @@
 <link href="../../../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../../../_static/plr_devices.css?v=c92e449a" />
@@ -57,12 +58,13 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/agilent/vspin/hello-world.html" />
     <link rel="icon" href="../../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="VSpin and Access2 events" href="events.html" />
+    <link rel="next" title="VSpin and Access2 state machine" href="state-machine.html" />
     <link rel="prev" title="VSpin" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -545,6 +547,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../plateloc/hello-world.html">Agilent PlateLoc</a></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="index.html">VSpin</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">Agilent VSpin centrifuge quickstart</a></li>
+<li class="toctree-l3"><a class="reference internal" href="state-machine.html">VSpin and Access2 state machine</a></li>
 <li class="toctree-l3"><a class="reference internal" href="events.html">VSpin and Access2 events</a></li>
 </ul>
 </details></li>
@@ -770,7 +773,7 @@
 <h1>Agilent VSpin centrifuge quickstart<a class="headerlink" href="#agilent-vspin-centrifuge-quickstart" title="Link to this heading">#</a></h1>
 <p>The Agilent VSpin is a two-bucket microplate centrifuge. This quickstart connects directly to the
 centrifuge, calibrates its bucket positions, runs one balanced spin, and disconnects. The optional
-Access2 plate loader is not covered here.</p>
+Access2 plate loader settings are covered at the end.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Property</p></th>
@@ -800,7 +803,7 @@ Access2 plate loader is not covered here.</p>
 <p class="admonition-title">Warning</p>
 <p>Follow the centrifuge manufacturer’s installation, plate-compatibility, balancing, and safety
 instructions. Before every run, use two opposing loads of equal mass and make sure both are fully
-seated. The driver does not provide a public software abort command, so keep the instrument’s
+seated. <code class="docutils literal notranslate"><span class="pre">stop_spin()</span></code> provides a controlled software abort, but always keep the instrument’s
 physical controls accessible.</p>
 </div>
 <div class="plr-device-card" id="device-agilent-vspin">
@@ -809,7 +812,7 @@ physical controls accessible.</p>
       <div class="plr-device-card__vendor">Agilent</div>
       <div class="plr-device-card__name">VSpin</div>
     </div>
-    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--mostly">Mostly</span><span class="plr-device-api-version">v1</span></div>
+    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--full">Full</span><span class="plr-device-api-version">v1</span></div>
   </div>
   <div class="plr-device-card__kind">centrifuge</div>
   <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 139">centrifuging</span></div>
@@ -952,6 +955,15 @@ of the device’s maximum rates. The call returns after the run has completed.</
 </div>
 </div>
 </section>
+<section id="abort-an-active-spin-safely">
+<h2>Abort an active spin safely<a class="headerlink" href="#abort-an-active-spin-safely" title="Link to this heading">#</a></h2>
+<p>If another task needs to abort a running <code class="docutils literal notranslate"><span class="pre">spin()</span></code> call, use <code class="docutils literal notranslate"><span class="pre">stop_spin()</span></code>. It sends a controlled
+zero-velocity trajectory and returns only after the tachometer confirms that the rotor stopped.
+The physical emergency stop remains the authority for an emergency.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">vspin</span><span class="o">.</span><span class="n">stop_spin</span><span class="p">(</span><span class="n">deceleration</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
 <section id="return-to-bucket-1">
 <h2>Return to bucket 1<a class="headerlink" href="#return-to-bucket-1" title="Link to this heading">#</a></h2>
 <p>After a spin, the rotor is no longer parked at a known bucket. Return bucket 1 to the loading
@@ -995,6 +1007,126 @@ teardown method, not an emergency stop for a spin in progress.</p>
 </div>
 </div>
 </section>
+<section id="optional-access2-loader-parameters">
+<h2>Optional Access2 loader parameters<a class="headerlink" href="#optional-access2-loader-parameters" title="Link to this heading">#</a></h2>
+<p>Use these examples before disconnecting, with an initialized Access2 loader named <code class="docutils literal notranslate"><span class="pre">loader</span></code>
+paired with the connected, homed <code class="docutils literal notranslate"><span class="pre">vspin</span></code>.
+Before <code class="docutils literal notranslate"><span class="pre">load()</span></code>, present an empty bucket and place and assign the plate on the loader stage;
+before <code class="docutils literal notranslate"><span class="pre">unload()</span></code>, present the occupied bucket and leave the loader stage empty. See the
+<a class="reference internal" href="state-machine.html#access2-plate-transfers"><span class="std std-ref">state-machine guide</span></a> for transfer preconditions.</p>
+<p>Pass plate-specific settings to each <code class="docutils literal notranslate"><span class="pre">load()</span></code> or <code class="docutils literal notranslate"><span class="pre">unload()</span></code> call. They are not stored on
+the loader, and changing a plate resource’s dimensions does not change the motion settings.
+All values below are in millimeters:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head text-right"><p><code class="docutils literal notranslate"><span class="pre">load()</span></code> default</p></th>
+<th class="head text-right"><p><code class="docutils literal notranslate"><span class="pre">unload()</span></code> default</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plate_height</span></code></p></td>
+<td class="text-right"><p>10</p></td>
+<td class="text-right"><p>10</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">source_z_offset</span></code></p></td>
+<td class="text-right"><p>3</p></td>
+<td class="text-right"><p>3</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">destination_z_offset</span></code></p></td>
+<td class="text-right"><p>3</p></td>
+<td class="text-right"><p>3</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">park_z_offset</span></code></p></td>
+<td class="text-right"><p>3</p></td>
+<td class="text-right"><p>0</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gripper_open_position</span></code></p></td>
+<td class="text-right"><p>0</p></td>
+<td class="text-right"><p>0</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gripper_closed_position</span></code></p></td>
+<td class="text-right"><p>5.68</p></td>
+<td class="text-right"><p>5.68</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gripper_close_threshold</span></code></p></td>
+<td class="text-right"><p>1.5</p></td>
+<td class="text-right"><p>1.5</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">source_z_offset</span></code> applies at pickup and <code class="docutils literal notranslate"><span class="pre">destination_z_offset</span></code> at placement: the source
+is the loader stage for <code class="docutils literal notranslate"><span class="pre">load()</span></code> and the presented bucket for <code class="docutils literal notranslate"><span class="pre">unload()</span></code>. <code class="docutils literal notranslate"><span class="pre">plate_height</span></code>
+is passed to the controller for all three teachpoint moves, including return to park.
+Gripper positions are absolute axis coordinates, not plate widths or jaw gaps.
+The gripper can stop on plate contact before its closed target; acceptance requires
+motion completion, the close threshold, and plate detection.</p>
+<p>For example, explicitly passing the default settings for a load looks like:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+  <span class="n">plate_height</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+  <span class="n">source_z_offset</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+  <span class="n">destination_z_offset</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+  <span class="n">park_z_offset</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+  <span class="n">gripper_open_position</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+  <span class="n">gripper_closed_position</span><span class="o">=</span><span class="mf">5.68</span><span class="p">,</span>
+  <span class="n">gripper_close_threshold</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Use settings established for the plate and teachpoints in your setup. Every value must
+be finite, height must be positive, and gripper settings must satisfy
+<code class="docutils literal notranslate"><span class="pre">gripper_open_position</span> <span class="pre">&lt;</span> <span class="pre">gripper_close_threshold</span> <span class="pre">&lt;=</span> <span class="pre">gripper_closed_position</span></code>.
+Invalid settings are rejected before loader actuation.</p>
+<p>Each transfer movement also accepts a speed preset: <code class="docutils literal notranslate"><span class="pre">&quot;slow&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;medium&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;fast&quot;</span></code>.
+These are controller presets, not velocities in millimeters per second.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Movement</p></th>
+<th class="head"><p>Default for both directions</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">source_speed</span></code></p></td>
+<td><p>Approach the pickup teachpoint</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;slow&quot;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">destination_speed</span></code></p></td>
+<td><p>Carry the plate to placement</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;slow&quot;</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">park_speed</span></code></p></td>
+<td><p>Return to park after release</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;slow&quot;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gripper_open_speed</span></code></p></td>
+<td><p>Open before pickup</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;fast&quot;</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gripper_close_speed</span></code></p></td>
+<td><p>Close on the plate</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;slow&quot;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gripper_release_speed</span></code></p></td>
+<td><p>Open to release the plate</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;slow&quot;</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Standalone loader movements follow the same per-call pattern:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">loader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">park</span><span class="p">(</span><span class="n">plate_height</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">z_offset</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="s2">"slow"</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">loader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">open_gripper</span><span class="p">(</span><span class="n">gripper_open_position</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="s2">"slow"</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">loader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">close_gripper</span><span class="p">(</span>
+  <span class="n">gripper_closed_position</span><span class="o">=</span><span class="mf">5.68</span><span class="p">,</span> <span class="n">gripper_close_threshold</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="s2">"slow"</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The examples show method defaults. Standalone <code class="docutils literal notranslate"><span class="pre">park()</span></code> has its own height and offset
+defaults; it does not reuse the preceding transfer’s settings. Speed presets are
+validated before actuation, including movements scheduled later in a transfer.</p>
+</section>
 </section>
 
 
@@ -1017,11 +1149,11 @@ teardown method, not an emergency stop for a spin in progress.</p>
       </div>
     </a>
     <a class="right-next"
-       href="events.html"
+       href="state-machine.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">VSpin and Access2 events</p>
+        <p class="prev-next-title">VSpin and Access2 state machine</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1055,11 +1187,13 @@ teardown method, not an emergency stop for a spin in progress.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#move-bucket-2-to-the-loading-opening">Move bucket 2 to the loading opening</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-the-balance-plate">Load the balance plate</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-a-spin-cycle">Run a spin cycle</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#abort-an-active-spin-safely">Abort an active spin safely</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#return-to-bucket-1">Return to bucket 1</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#unload-the-sample-plate">Unload the sample plate</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#return-to-bucket-2">Return to bucket 2</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#unload-the-balance-plate">Unload the balance plate</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#disconnect">Disconnect</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-access2-loader-parameters">Optional Access2 loader parameters</a></li>
 </ul>
   </nav></div>
 

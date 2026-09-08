@@ -31,6 +31,7 @@
 <link href="../../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../../_static/plr_devices.css?v=c92e449a" />
@@ -57,6 +58,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.agilent.vspin.VSpin.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
@@ -597,8 +599,8 @@
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.bucket_1_remainder.html#pylabrobot.agilent.vspin.VSpin.bucket_1_remainder" title="pylabrobot.agilent.vspin.VSpin.bucket_1_remainder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bucket_1_remainder</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.door_open.html#pylabrobot.agilent.vspin.VSpin.door_open" title="pylabrobot.agilent.vspin.VSpin.door_open"><code class="xref py py-obj docutils literal notranslate"><span class="pre">door_open</span></code></a></p></td>
-<td><p>Whether the door was left open by the last door command.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.state.html#pylabrobot.agilent.vspin.VSpin.state" title="pylabrobot.agilent.vspin.VSpin.state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">state</span></code></a></p></td>
+<td><p>Return the current VSpin semantic-state snapshot.</p></td>
 </tr>
 </tbody>
 </table>
@@ -610,49 +612,55 @@
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.close_door.html#pylabrobot.agilent.vspin.VSpin.close_door" title="pylabrobot.agilent.vspin.VSpin.close_door"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close_door</span></code></a>()</p></td>
+<td><p>Close the centrifuge door and wait for its physical sensor.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.g_to_rpm.html#pylabrobot.agilent.vspin.VSpin.g_to_rpm" title="pylabrobot.agilent.vspin.VSpin.g_to_rpm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">g_to_rpm</span></code></a>(g)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.configure_and_initialize.html#pylabrobot.agilent.vspin.VSpin.configure_and_initialize" title="pylabrobot.agilent.vspin.VSpin.configure_and_initialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">configure_and_initialize</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.go_to_bucket1.html#pylabrobot.agilent.vspin.VSpin.go_to_bucket1" title="pylabrobot.agilent.vspin.VSpin.go_to_bucket1"><code class="xref py py-obj docutils literal notranslate"><span class="pre">go_to_bucket1</span></code></a>()</p></td>
+<td><p>Present bucket 1 at the load opening.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.g_to_rpm.html#pylabrobot.agilent.vspin.VSpin.g_to_rpm" title="pylabrobot.agilent.vspin.VSpin.g_to_rpm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">g_to_rpm</span></code></a>(g)</p></td>
-<td><p></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.go_to_bucket2.html#pylabrobot.agilent.vspin.VSpin.go_to_bucket2" title="pylabrobot.agilent.vspin.VSpin.go_to_bucket2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">go_to_bucket2</span></code></a>()</p></td>
+<td><p>Present bucket 2 at the load opening.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.go_to_bucket1.html#pylabrobot.agilent.vspin.VSpin.go_to_bucket1" title="pylabrobot.agilent.vspin.VSpin.go_to_bucket1"><code class="xref py py-obj docutils literal notranslate"><span class="pre">go_to_bucket1</span></code></a>()</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.go_to_bucket2.html#pylabrobot.agilent.vspin.VSpin.go_to_bucket2" title="pylabrobot.agilent.vspin.VSpin.go_to_bucket2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">go_to_bucket2</span></code></a>()</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.go_to_position.html#pylabrobot.agilent.vspin.VSpin.go_to_position" title="pylabrobot.agilent.vspin.VSpin.go_to_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">go_to_position</span></code></a>(position)</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.initialize.html#pylabrobot.agilent.vspin.VSpin.initialize" title="pylabrobot.agilent.vspin.VSpin.initialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initialize</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.go_to_position.html#pylabrobot.agilent.vspin.VSpin.go_to_position" title="pylabrobot.agilent.vspin.VSpin.go_to_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">go_to_position</span></code></a>(position)</p></td>
+<td><p>Move to an absolute encoder position without claiming a presented bucket.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.lock_bucket.html#pylabrobot.agilent.vspin.VSpin.lock_bucket" title="pylabrobot.agilent.vspin.VSpin.lock_bucket"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lock_bucket</span></code></a>()</p></td>
-<td><p></p></td>
+<td><p>Lock the presented bucket and wait for its physical sensor.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.lock_door.html#pylabrobot.agilent.vspin.VSpin.lock_door" title="pylabrobot.agilent.vspin.VSpin.lock_door"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lock_door</span></code></a>()</p></td>
-<td><p></p></td>
+<td><p>Lock the centrifuge door and wait for its physical sensor.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.open_door.html#pylabrobot.agilent.vspin.VSpin.open_door" title="pylabrobot.agilent.vspin.VSpin.open_door"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_door</span></code></a>()</p></td>
+<td><p>Open the centrifuge door and wait for its physical sensor.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_amplifier_fault.html#pylabrobot.agilent.vspin.VSpin.request_amplifier_fault" title="pylabrobot.agilent.vspin.VSpin.request_amplifier_fault"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_amplifier_fault</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_bucket_1_position.html#pylabrobot.agilent.vspin.VSpin.request_bucket_1_position" title="pylabrobot.agilent.vspin.VSpin.request_bucket_1_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_bucket_1_position</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_bucket_1_position.html#pylabrobot.agilent.vspin.VSpin.request_bucket_1_position" title="pylabrobot.agilent.vspin.VSpin.request_bucket_1_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_bucket_1_position</span></code></a>()</p></td>
 <td><p>Get the bucket 1 position based on calibration.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_bucket_2_position.html#pylabrobot.agilent.vspin.VSpin.request_bucket_2_position" title="pylabrobot.agilent.vspin.VSpin.request_bucket_2_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_bucket_2_position</span></code></a>()</p></td>
+<td><p>Get the bucket 2 position based on calibration.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_bucket_locked.html#pylabrobot.agilent.vspin.VSpin.request_bucket_locked" title="pylabrobot.agilent.vspin.VSpin.request_bucket_locked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_bucket_locked</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_door_locked.html#pylabrobot.agilent.vspin.VSpin.request_door_locked" title="pylabrobot.agilent.vspin.VSpin.request_door_locked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_door_locked</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_bucket_unlocked.html#pylabrobot.agilent.vspin.VSpin.request_bucket_unlocked" title="pylabrobot.agilent.vspin.VSpin.request_bucket_unlocked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_bucket_unlocked</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_door_open.html#pylabrobot.agilent.vspin.VSpin.request_door_open" title="pylabrobot.agilent.vspin.VSpin.request_door_open"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_door_open</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_door_locked.html#pylabrobot.agilent.vspin.VSpin.request_door_locked" title="pylabrobot.agilent.vspin.VSpin.request_door_locked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_door_locked</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_home_position.html#pylabrobot.agilent.vspin.VSpin.request_home_position" title="pylabrobot.agilent.vspin.VSpin.request_home_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_home_position</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_door_open.html#pylabrobot.agilent.vspin.VSpin.request_door_open" title="pylabrobot.agilent.vspin.VSpin.request_door_open"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_door_open</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_home_position.html#pylabrobot.agilent.vspin.VSpin.request_home_position" title="pylabrobot.agilent.vspin.VSpin.request_home_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_home_position</span></code></a>()</p></td>
 <td><p>Changes during a run, but the bucket 1 position relative to it does not.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_imbalance.html#pylabrobot.agilent.vspin.VSpin.request_imbalance" title="pylabrobot.agilent.vspin.VSpin.request_imbalance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_imbalance</span></code></a>()</p></td>
+<td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_position.html#pylabrobot.agilent.vspin.VSpin.request_position" title="pylabrobot.agilent.vspin.VSpin.request_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_position</span></code></a>()</p></td>
 <td><p></p></td>
@@ -660,32 +668,38 @@
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_positions_and_tachometer.html#pylabrobot.agilent.vspin.VSpin.request_positions_and_tachometer" title="pylabrobot.agilent.vspin.VSpin.request_positions_and_tachometer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_positions_and_tachometer</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_tachometer.html#pylabrobot.agilent.vspin.VSpin.request_tachometer" title="pylabrobot.agilent.vspin.VSpin.request_tachometer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tachometer</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_spinning.html#pylabrobot.agilent.vspin.VSpin.request_spinning" title="pylabrobot.agilent.vspin.VSpin.request_spinning"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_spinning</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.request_tachometer.html#pylabrobot.agilent.vspin.VSpin.request_tachometer" title="pylabrobot.agilent.vspin.VSpin.request_tachometer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_tachometer</span></code></a>()</p></td>
 <td><p>Current speed in rpm.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.send_command.html#pylabrobot.agilent.vspin.VSpin.send_command" title="pylabrobot.agilent.vspin.VSpin.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(cmd[, read_timeout])</p></td>
-<td><p></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.reserve_transfer.html#pylabrobot.agilent.vspin.VSpin.reserve_transfer" title="pylabrobot.agilent.vspin.VSpin.reserve_transfer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reserve_transfer</span></code></a>(bucket)</p></td>
+<td><p>Reserve the load opening while a paired loader may enter the rotor.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.send_command.html#pylabrobot.agilent.vspin.VSpin.send_command" title="pylabrobot.agilent.vspin.VSpin.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(cmd, expected_response_length)</p></td>
+<td><p>Send a VSpin command and read its fixed-length response.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.set_bucket_1_position_to_current.html#pylabrobot.agilent.vspin.VSpin.set_bucket_1_position_to_current" title="pylabrobot.agilent.vspin.VSpin.set_bucket_1_position_to_current"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_bucket_1_position_to_current</span></code></a>()</p></td>
 <td><p>Set the current position as bucket 1 position and save calibration.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.set_configuration_data.html#pylabrobot.agilent.vspin.VSpin.set_configuration_data" title="pylabrobot.agilent.vspin.VSpin.set_configuration_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_configuration_data</span></code></a>()</p></td>
-<td><p>Set the device configuration data.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.setup.html#pylabrobot.agilent.vspin.VSpin.setup" title="pylabrobot.agilent.vspin.VSpin.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>()</p></td>
+<td><p>Connect, initialize, home, and place the VSpin in its safe setup position.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.setup.html#pylabrobot.agilent.vspin.VSpin.setup" title="pylabrobot.agilent.vspin.VSpin.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>()</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.spin.html#pylabrobot.agilent.vspin.VSpin.spin" title="pylabrobot.agilent.vspin.VSpin.spin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spin</span></code></a>([g, duration, acceleration, deceleration])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.spin.html#pylabrobot.agilent.vspin.VSpin.spin" title="pylabrobot.agilent.vspin.VSpin.spin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spin</span></code></a>([g, duration, acceleration, deceleration])</p></td>
 <td><p>Start a spin cycle.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.stop.html#pylabrobot.agilent.vspin.VSpin.stop" title="pylabrobot.agilent.vspin.VSpin.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.stop.html#pylabrobot.agilent.vspin.VSpin.stop" title="pylabrobot.agilent.vspin.VSpin.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
+<td><p>Close the VSpin transport and invalidate session-scoped state.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.stop_spin.html#pylabrobot.agilent.vspin.VSpin.stop_spin" title="pylabrobot.agilent.vspin.VSpin.stop_spin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_spin</span></code></a>([deceleration])</p></td>
+<td><p>Ask the active spin owner to decelerate, then wait for its completion.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.unlock_bucket.html#pylabrobot.agilent.vspin.VSpin.unlock_bucket" title="pylabrobot.agilent.vspin.VSpin.unlock_bucket"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unlock_bucket</span></code></a>()</p></td>
-<td><p></p></td>
+<td><p>Unlock the presented bucket and wait for its physical sensor.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.VSpin.unlock_door.html#pylabrobot.agilent.vspin.VSpin.unlock_door" title="pylabrobot.agilent.vspin.VSpin.unlock_door"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unlock_door</span></code></a>()</p></td>
-<td><p></p></td>
+<td><p>Unlock the centrifuge door and wait for its physical sensor.</p></td>
 </tr>
 </tbody>
 </table>
@@ -694,7 +708,7 @@
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>device_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>device_id</strong> (<em>Optional</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>)</p></li>
 </ul>
 </dd>
 </dl>

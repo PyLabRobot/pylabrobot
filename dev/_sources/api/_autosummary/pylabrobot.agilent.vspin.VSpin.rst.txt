@@ -17,7 +17,7 @@ pylabrobot.agilent.vspin.VSpin
    
       ~VSpin.at_bucket
       ~VSpin.bucket_1_remainder
-      ~VSpin.door_open
+      ~VSpin.state
    
    
 
@@ -30,29 +30,33 @@ pylabrobot.agilent.vspin.VSpin
    
       ~VSpin.__init__
       ~VSpin.close_door
-      ~VSpin.configure_and_initialize
       ~VSpin.g_to_rpm
       ~VSpin.go_to_bucket1
       ~VSpin.go_to_bucket2
       ~VSpin.go_to_position
-      ~VSpin.initialize
       ~VSpin.lock_bucket
       ~VSpin.lock_door
       ~VSpin.open_door
+      ~VSpin.request_amplifier_fault
       ~VSpin.request_bucket_1_position
+      ~VSpin.request_bucket_2_position
       ~VSpin.request_bucket_locked
+      ~VSpin.request_bucket_unlocked
       ~VSpin.request_door_locked
       ~VSpin.request_door_open
       ~VSpin.request_home_position
+      ~VSpin.request_imbalance
       ~VSpin.request_position
       ~VSpin.request_positions_and_tachometer
+      ~VSpin.request_spinning
       ~VSpin.request_tachometer
+      ~VSpin.reserve_transfer
       ~VSpin.send_command
       ~VSpin.set_bucket_1_position_to_current
-      ~VSpin.set_configuration_data
       ~VSpin.setup
       ~VSpin.spin
       ~VSpin.stop
+      ~VSpin.stop_spin
       ~VSpin.unlock_bucket
       ~VSpin.unlock_door
    

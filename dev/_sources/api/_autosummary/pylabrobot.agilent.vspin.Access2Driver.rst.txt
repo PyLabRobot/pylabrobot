@@ -10,6 +10,13 @@ pylabrobot.agilent.vspin.Access2Driver
 
    
    
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Access2Driver.state
+   
    
 
    
@@ -20,10 +27,14 @@ pylabrobot.agilent.vspin.Access2Driver
       :toctree: .
    
       ~Access2Driver.__init__
-      ~Access2Driver.close
+      ~Access2Driver.close_gripper
+      ~Access2Driver.home
       ~Access2Driver.load
-      ~Access2Driver.open
+      ~Access2Driver.open_gripper
       ~Access2Driver.park
+      ~Access2Driver.request_firmware_version
+      ~Access2Driver.request_hardware_version
+      ~Access2Driver.request_sensor_values
       ~Access2Driver.request_status
       ~Access2Driver.send_command
       ~Access2Driver.setup

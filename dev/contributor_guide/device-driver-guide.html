@@ -31,6 +31,7 @@
 <link href="../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=c92e449a" />
@@ -57,6 +58,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/graphviz.js?v=0710df9f"></script>
     <script src="../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/contributor_guide/device-driver-guide.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
@@ -629,6 +631,7 @@
 <section id="idempotent-public-api">
 <h3>Idempotent public API<a class="headerlink" href="#idempotent-public-api" title="Link to this heading">#</a></h3>
 <p>The public surface must expose <strong>no non-idempotent commands.</strong> If the hardware only offers a raw toggle/flip, keep it private (<code class="docutils literal notranslate"><span class="pre">_toggle_x</span></code>) and expose move-to-state methods (<code class="docutils literal notranslate"><span class="pre">move_x_out</span></code> / <code class="docutils literal notranslate"><span class="pre">move_x_in</span></code>) that read current state, act only if needed, then confirm. This keeps the API safe to call repeatedly — the caller states intent (“be open”), not a blind toggle.</p>
+<p>Keep connection, calibration, and state on the device; pass operation-specific settings (plate geometry, grip, offsets, speed, duration) as method arguments without carrying them between calls.</p>
 </section>
 <section id="unverified-drivers">
 <h3>Unverified drivers<a class="headerlink" href="#unverified-drivers" title="Link to this heading">#</a></h3>

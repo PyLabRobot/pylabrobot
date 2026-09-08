@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.VSpin.request\_amplifier\_fault
+========================================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: VSpin.request_amplifier_fault

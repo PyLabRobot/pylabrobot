@@ -31,6 +31,7 @@
 <link href="../../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../../_static/plr_devices.css?v=c92e449a" />
@@ -57,12 +58,13 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/graphviz.js?v=0710df9f"></script>
     <script src="../../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/api/_autosummary/pylabrobot.agilent.vspin.Access2Driver.html" />
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.agilent.vspin.Access2Driver.__init__" href="pylabrobot.agilent.vspin.Access2Driver.__init__.html" />
+    <link rel="next" title="pylabrobot.agilent.vspin.Access2Driver.state" href="pylabrobot.agilent.vspin.Access2Driver.state.html" />
     <link rel="prev" title="pylabrobot.agilent.vspin.Access2.unload" href="pylabrobot.agilent.vspin.Access2.unload.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -587,38 +589,59 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.agilent.vspin.</span></span><span class="sig-name descname"><span class="pre">Access2Driver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.agilent.vspin.Access2Driver" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>FTDI driver for the Agilent Access2 centrifuge loader.</p>
+<p class="rubric">Attributes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.state.html#pylabrobot.agilent.vspin.Access2Driver.state" title="pylabrobot.agilent.vspin.Access2Driver.state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">state</span></code></a></p></td>
+<td><p>Return the current Access2 semantic-state snapshot.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.__init__.html#pylabrobot.agilent.vspin.Access2Driver.__init__" title="pylabrobot.agilent.vspin.Access2Driver.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(device_id[, timeout])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.close.html#pylabrobot.agilent.vspin.Access2Driver.close" title="pylabrobot.agilent.vspin.Access2Driver.close"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.close_gripper.html#pylabrobot.agilent.vspin.Access2Driver.close_gripper" title="pylabrobot.agilent.vspin.Access2Driver.close_gripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close_gripper</span></code></a>(*[, gripper_closed_position, ...])</p></td>
+<td><p>Close the gripper with per-call position, contact threshold, and speed.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.load.html#pylabrobot.agilent.vspin.Access2Driver.load" title="pylabrobot.agilent.vspin.Access2Driver.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>()</p></td>
-<td><p>Only tested for 1cm plate, 3mm pickup height.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.home.html#pylabrobot.agilent.vspin.Access2Driver.home" title="pylabrobot.agilent.vspin.Access2Driver.home"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home</span></code></a>()</p></td>
+<td><p>Home all Access2 axes and wait for the controller to confirm completion.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.open.html#pylabrobot.agilent.vspin.Access2Driver.open" title="pylabrobot.agilent.vspin.Access2Driver.open"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.load.html#pylabrobot.agilent.vspin.Access2Driver.load" title="pylabrobot.agilent.vspin.Access2Driver.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>([bucket_teachpoint, plate_height, ...])</p></td>
+<td><p>Move a plate from the stage into the selected bucket.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.park.html#pylabrobot.agilent.vspin.Access2Driver.park" title="pylabrobot.agilent.vspin.Access2Driver.park"><code class="xref py py-obj docutils literal notranslate"><span class="pre">park</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.open_gripper.html#pylabrobot.agilent.vspin.Access2Driver.open_gripper" title="pylabrobot.agilent.vspin.Access2Driver.open_gripper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_gripper</span></code></a>(*[, gripper_open_position, speed])</p></td>
+<td><p>Open the gripper with per-call position and speed.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.park.html#pylabrobot.agilent.vspin.Access2Driver.park" title="pylabrobot.agilent.vspin.Access2Driver.park"><code class="xref py py-obj docutils literal notranslate"><span class="pre">park</span></code></a>(*[, plate_height, z_offset, speed])</p></td>
+<td><p>Move the Access2 arm to its park teachpoint.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.request_firmware_version.html#pylabrobot.agilent.vspin.Access2Driver.request_firmware_version" title="pylabrobot.agilent.vspin.Access2Driver.request_firmware_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_firmware_version</span></code></a>()</p></td>
+<td><p>Return the Access2 controller firmware version.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.request_hardware_version.html#pylabrobot.agilent.vspin.Access2Driver.request_hardware_version" title="pylabrobot.agilent.vspin.Access2Driver.request_hardware_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_hardware_version</span></code></a>()</p></td>
+<td><p>Return the Access2 controller hardware version.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.request_sensor_values.html#pylabrobot.agilent.vspin.Access2Driver.request_sensor_values" title="pylabrobot.agilent.vspin.Access2Driver.request_sensor_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_sensor_values</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.request_status.html#pylabrobot.agilent.vspin.Access2Driver.request_status" title="pylabrobot.agilent.vspin.Access2Driver.request_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_status</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.send_command.html#pylabrobot.agilent.vspin.Access2Driver.send_command" title="pylabrobot.agilent.vspin.Access2Driver.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(command)</p></td>
-<td><p></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.send_command.html#pylabrobot.agilent.vspin.Access2Driver.send_command" title="pylabrobot.agilent.vspin.Access2Driver.send_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send_command</span></code></a>(command[, raise_on_error])</p></td>
+<td><p>Send one transport-independent command through the FTDI envelope.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.setup.html#pylabrobot.agilent.vspin.Access2Driver.setup" title="pylabrobot.agilent.vspin.Access2Driver.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>()</p></td>
-<td><p></p></td>
+<td><p>Connect, initialize, home, open, and park the Access2 loader.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.stop.html#pylabrobot.agilent.vspin.Access2Driver.stop" title="pylabrobot.agilent.vspin.Access2Driver.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
-<td><p></p></td>
+<td><p>Close the Access2 transport and invalidate session-scoped state.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.unload.html#pylabrobot.agilent.vspin.Access2Driver.unload" title="pylabrobot.agilent.vspin.Access2Driver.unload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unload</span></code></a>()</p></td>
-<td><p>Only tested for 1cm plate, 3mm pickup height.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.agilent.vspin.Access2Driver.unload.html#pylabrobot.agilent.vspin.Access2Driver.unload" title="pylabrobot.agilent.vspin.Access2Driver.unload"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unload</span></code></a>([bucket_teachpoint, plate_height, ...])</p></td>
+<td><p>Move a plate from the selected bucket onto the stage.</p></td>
 </tr>
 </tbody>
 </table>
@@ -655,11 +678,11 @@
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.agilent.vspin.Access2Driver.__init__.html"
+       href="pylabrobot.agilent.vspin.Access2Driver.state.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.agilent.vspin.Access2Driver.__init__</p>
+        <p class="prev-next-title">pylabrobot.agilent.vspin.Access2Driver.state</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

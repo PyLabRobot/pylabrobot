@@ -31,6 +31,7 @@
 <link href="../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=c92e449a" />
@@ -57,6 +58,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/graphviz.js?v=0710df9f"></script>
     <script src="../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/contributor_guide/contributing.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
@@ -657,6 +659,10 @@ make<span class="w"> </span>format-check
 <section id="writing-documentation">
 <h2>Writing documentation<a class="headerlink" href="#writing-documentation" title="Link to this heading">#</a></h2>
 <p>It is important that you write documentation for your code. As a rule of thumb, all functions and classes, whether public or private, are required to have a docstring. PyLabRobot uses <a class="reference external" href="https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html">Google Style Python Docstrings</a>. In addition, PyLabRobot uses <a class="reference external" href="https://docs.python.org/3/library/typing.html">type hints</a> to document the types of variables.</p>
+<p>Install the Graphviz system package before building documentation (<code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt-get</span> <span class="pre">install</span> <span class="pre">graphviz</span></code>
+on Debian/Ubuntu or <code class="docutils literal notranslate"><span class="pre">brew</span> <span class="pre">install</span> <span class="pre">graphviz</span></code> on macOS). The <code class="docutils literal notranslate"><span class="pre">dot</span></code> executable must be on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.
+Sphinx renders diagrams from their <code class="docutils literal notranslate"><span class="pre">.dot</span></code> sources during the build; edit the source rather than
+saving generated SVG files in the documentation source tree.</p>
 <p>To build the documentation, run <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">docs</span></code> in the root directory. The documentation will be built in <code class="docutils literal notranslate"><span class="pre">docs/build</span></code>. Run <code class="docutils literal notranslate"><span class="pre">open</span> <span class="pre">docs/build/index.html</span></code> to open the documentation in your browser.</p>
 </section>
 <section id="common-tasks">

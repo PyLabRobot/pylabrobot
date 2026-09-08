@@ -31,6 +31,7 @@
 <link href="../_static/styles/pydata-sphinx-theme.css?digest=cb8930eaaf36d9849b67" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=c92e449a" />
@@ -57,6 +58,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/graphviz.js?v=0710df9f"></script>
     <script src="../_static/plr_cards.js?v=9ebdf6b1"></script>
     <link rel="canonical" href="https://docs.pylabrobot.org/api/pylabrobot.agilent.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
@@ -660,7 +662,9 @@
 </div>
 </section>
 <section id="vspin">
-<h2>VSpin<a class="headerlink" href="#vspin" title="Link to this heading">#</a></h2>
+<span id="vspin-api"></span><h2>VSpin<a class="headerlink" href="#vspin" title="Link to this heading">#</a></h2>
+<p>For operation states, plate-transfer coordination, and recovery behavior, see the
+<a class="reference internal" href="../user_guide/agilent/vspin/state-machine.html"><span class="doc">VSpin and Access2 state-machine guide</span></a>.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.agilent.vspin.VSpin.html#pylabrobot.agilent.vspin.VSpin" title="pylabrobot.agilent.vspin.VSpin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VSpin</span></code></a></p></td>
@@ -671,6 +675,12 @@
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.agilent.vspin.Access2Driver.html#pylabrobot.agilent.vspin.Access2Driver" title="pylabrobot.agilent.vspin.Access2Driver"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Access2Driver</span></code></a></p></td>
 <td><p>FTDI driver for the Agilent Access2 centrifuge loader.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.agilent.vspin.ServoStatus.html#pylabrobot.agilent.vspin.ServoStatus" title="pylabrobot.agilent.vspin.ServoStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ServoStatus</span></code></a></p></td>
+<td><p>Decoded PIC-SERVO response fields selected by a status mask.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.agilent.vspin.Access2Status.html#pylabrobot.agilent.vspin.Access2Status" title="pylabrobot.agilent.vspin.Access2Status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Access2Status</span></code></a></p></td>
+<td><p>Decoded controller status and optional per-axis positions.</p></td>
 </tr>
 </tbody>
 </table>
