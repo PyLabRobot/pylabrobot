@@ -42,6 +42,7 @@ extensions = [
   "sphinx.ext.autosectionlabel",
   "sphinx.ext.intersphinx",
   "sphinx.ext.mathjax",
+  "sphinx.ext.graphviz",
   "myst_nb",
   "sphinx_copybutton",
   "IPython.sphinxext.ipython_console_highlighting",
@@ -87,6 +88,9 @@ default_role = "code"  # allow single backticks for inline code
 #
 html_theme = "pydata_sphinx_theme"
 
+# Render DOT diagrams as scalable images during HTML builds.
+graphviz_output_format = "svg"
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
@@ -103,6 +107,7 @@ if "plr_cards.css" not in html_css_files:
   html_css_files.append("plr_cards.css")  # served from _static/plr_cards.css
 
 html_js_files = list(globals().get("html_js_files", []))
+html_js_files.append("graphviz.js")
 if "plr_cards.js" not in html_js_files:
   html_js_files.append("plr_cards.js")    # served from _static/plr_cards.js
 

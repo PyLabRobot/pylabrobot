@@ -69,6 +69,11 @@ Use PyLabRobot's [default units](../user_guide/getting-started/units.md) in publ
 
 It is important that you write documentation for your code. As a rule of thumb, all functions and classes, whether public or private, are required to have a docstring. PyLabRobot uses [Google Style Python Docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html). In addition, PyLabRobot uses [type hints](https://docs.python.org/3/library/typing.html) to document the types of variables.
 
+Install the Graphviz system package before building documentation (`sudo apt-get install graphviz`
+on Debian/Ubuntu or `brew install graphviz` on macOS). The `dot` executable must be on `PATH`.
+Sphinx renders diagrams from their `.dot` sources during the build; edit the source rather than
+saving generated SVG files in the documentation source tree.
+
 To build the documentation, run `make docs` in the root directory. The documentation will be built in `docs/build`. Run `open docs/build/index.html` to open the documentation in your browser.
 
 ## Common Tasks
