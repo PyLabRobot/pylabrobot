@@ -47,6 +47,13 @@ from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 logger = logging.getLogger(__name__)
 
 
+def is_ftdi_transport_error(error: BaseException) -> bool:
+  """Return whether an exception was raised by the optional pylibftdi transport."""
+  if not HAS_PYLIBFTDI:
+    return False
+  return isinstance(error, FtdiError)
+
+
 def _parse_usb_address(address: str) -> Tuple[int, Tuple[int, ...]]:
   """Parse a USB topology path '<bus>-<port>[.<port>...]' into its bus and ports."""
   bus_str, sep, port_str = address.partition("-")
