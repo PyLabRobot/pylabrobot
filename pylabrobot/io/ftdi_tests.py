@@ -1,10 +1,12 @@
 import asyncio
 import logging
 import tempfile
+import threading
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, List, Union
 from unittest import mock
 
@@ -189,6 +191,106 @@ class FTDICancellationTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(received["first"], [b"A", b"B", b"C", b"D"])
     self.assertEqual(received["second"], [b"", b"", b"", b""])
+
+
+class FTDITopologyLifecycleTests(unittest.IsolatedAsyncioTestCase):
+  """Topology selection remains portable and always releases its host resources."""
+
+  @staticmethod
+  def _ftdi_without_optional_dependency_checks() -> FTDI:
+    io = FTDI.__new__(FTDI)
+    io._interface_select = None
+    io._detached_kernel_driver = None
+    io._dev = None
+    io._executor = None
+    io._unread = bytearray()
+    io._pending_read = None
+    return io
+
+  async def test_detach_tolerates_a_backend_without_kernel_driver_support(self) -> None:
+    io = self._ftdi_without_optional_dependency_checks()
+    device = mock.Mock()
+    device.is_kernel_driver_active.side_effect = NotImplementedError
+    dispose_resources = mock.Mock()
+    usb_module = SimpleNamespace(util=SimpleNamespace(dispose_resources=dispose_resources))
+
+    with (
+      mock.patch.object(ftdi_module, "usb", usb_module, create=True),
+      mock.patch.object(io, "_usb_device_at", return_value=device),
+    ):
+      io._detach_kernel_driver(3, 17)
+
+    self.assertIsNone(io._detached_kernel_driver)
+    device.detach_kernel_driver.assert_not_called()
+    dispose_resources.assert_called_once_with(device)
+
+  async def test_detach_tolerates_an_unsupported_detach_operation(self) -> None:
+    io = self._ftdi_without_optional_dependency_checks()
+    device = mock.Mock()
+    device.is_kernel_driver_active.return_value = True
+    device.detach_kernel_driver.side_effect = NotImplementedError
+    dispose_resources = mock.Mock()
+    usb_module = SimpleNamespace(util=SimpleNamespace(dispose_resources=dispose_resources))
+
+    with (
+      mock.patch.object(ftdi_module, "usb", usb_module, create=True),
+      mock.patch.object(io, "_usb_device_at", return_value=device),
+    ):
+      io._detach_kernel_driver(3, 17)
+
+    self.assertIsNone(io._detached_kernel_driver)
+    device.detach_kernel_driver.assert_called_once_with(0)
+    dispose_resources.assert_called_once_with(device)
+
+  async def test_stop_reattaches_and_shuts_down_after_close_failure(self) -> None:
+    io = self._ftdi_without_optional_dependency_checks()
+    device = mock.Mock()
+    device.close.side_effect = RuntimeError("simulated close failure")
+    io._dev = device
+    io._executor = ThreadPoolExecutor(max_workers=1)
+    io._detached_kernel_driver = (3, 17, 0)
+
+    with (
+      mock.patch.object(io, "_reattach_kernel_driver") as reattach,
+      self.assertRaisesRegex(RuntimeError, "close failure"),
+    ):
+      await io.stop()
+
+    reattach.assert_called_once_with()
+    self.assertIsNone(io._dev)
+    self.assertIsNone(io._executor)
+
+  async def test_cancelled_stop_waits_for_close_and_reattaches(self) -> None:
+    io = self._ftdi_without_optional_dependency_checks()
+    close_started = threading.Event()
+
+    def close() -> None:
+      close_started.set()
+      time.sleep(0.05)
+
+    io._dev = SimpleNamespace(close=close)
+    io._executor = ThreadPoolExecutor(max_workers=1)
+    io._detached_kernel_driver = (3, 17, 0)
+
+    with mock.patch.object(io, "_reattach_kernel_driver") as reattach:
+      stop_task = asyncio.create_task(io.stop())
+      for _ in range(100):
+        if close_started.is_set():
+          break
+        await asyncio.sleep(0.001)
+      self.assertTrue(close_started.is_set())
+      stop_task.cancel()
+      for _ in range(200):
+        if stop_task.done():
+          break
+        await asyncio.sleep(0.001)
+      self.assertTrue(stop_task.done())
+      with self.assertRaises(asyncio.CancelledError):
+        await stop_task
+
+    reattach.assert_called_once_with()
+    self.assertIsNone(io._dev)
+    self.assertIsNone(io._executor)
 
 
 @unittest.skipUnless(HAS_PYLIBFTDI and HAS_PYUSB, "pylibftdi/pyusb not installed")

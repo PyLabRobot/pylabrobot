@@ -82,6 +82,9 @@ operations. When emitted inside a semantic operation, they inherit its event con
 | `timeout` | `float` | Requested timeout in PLR's default time unit. |
 | `target_temperature` | `float` | Configured or requested controller target temperature. |
 | `current_temperature` | `float` | Controller sensor reading observed by the operation. It is not a resource-temperature measurement unless explicitly documented otherwise. |
+| `target_humidity` | `float` | Requested relative-humidity setpoint as a fraction from 0 to 1. |
+| `target_co2` | `float` | Requested CO2 concentration as a fraction from 0 to 1. |
+| `target_o2` | `float` | Requested O2 concentration as a fraction from 0 to 1. |
 | `tolerance` | `float` | Allowed temperature difference in PLR's default temperature unit. |
 | `volume` | `float` | Requested liquid volume in PLR's default volume unit. |
 
@@ -102,6 +105,9 @@ Use these names consistently across operation families:
 | Requested elapsed time | `duration` | `time`, `duration_s`, `duration_sec`, `seconds` |
 | Maximum wait | `timeout` | `timeout_s`, `wait_time` |
 | Requested thermal setpoint | `target_temperature` | `temperature_target`, `set_temperature`, `target_temperature_c` |
+| Requested relative humidity | `target_humidity` | `humidity`, `humidity_pct`, `relative_humidity` |
+| Requested CO2 concentration | `target_co2` | `co2`, `co2_pct`, `co2_fraction` |
+| Requested O2 concentration | `target_o2` | `o2`, `o2_pct`, `o2_fraction` |
 | Observed controller temperature | `current_temperature` | `actual_temperature`, `measured_temperature`, `current_temperature_c` |
 | Temperature acceptance range | `tolerance` | `temperature_tolerance`, `tolerance_c` |
 | Relative centrifugal force | `relative_centrifugal_force` | `g`, `g_force`, `rcf` |
@@ -141,6 +147,7 @@ These are state-transition records rather than semantic operation lifecycles.
 | --- | --- | --- |
 | `incubator.fetch_plate` | `device`, `resources`, `source`, `destination` | `resources` contains the directly moved plate; endpoints describe the storage site and loading tray when known. |
 | `incubator.take_in_plate` | `device`, `resources`, `source`, `destination` | Moves the loading-tray plate into storage. A requested selector such as `"random"` or `"smallest"` may identify an unresolved destination at invocation. |
+| `incubator.transfer_plate` | `device`, `resources`, `source`, `destination` | Moves a plate directly between two transfer nests or other incubator endpoints. |
 
 ### Stackers
 
@@ -164,6 +171,21 @@ These are state-transition records rather than semantic operation lifecycles.
 | `liquid_handler.resource_pickup` | `device`, `resources`, optional `source` | `resources` contains the directly picked-up resource. Capture `source` before successful pickup unassigns it. |
 | `liquid_handler.resource_move` | `device`, `resources` | Moves the currently held resource without assigning it to a destination. |
 | `liquid_handler.resource_drop` | `device`, `resources`, `destination` | Drops the currently held resource at a resource or geometric destination. |
+
+### Manual operator actions
+
+Manual actions use the semantic lifecycle `manual_operator.<action>.*`, where `<action>` is a
+stable, developer-defined action identifier such as `centrifuge.spin`, `plate_reader.read`, or
+`quality_control.inspect`.
+
+| Operation | Fields | Notes |
+| --- | --- | --- |
+| `manual_operator.<action>` | `device`, optional `resources`, `manual_action`, `title`, `instructions`, `confirmation_text`, `details`; **completed only:** optional `confirmed_by`, optional `result_message` | `device` is the `ManualOperator`; `details` contains action-specific request data. When the action has an automated counterpart, reuse its canonical field names and PLR default units inside `details`. |
+| `manual_operator.resource.move` | `device`, `resources`, `source`, `destination`, `manual_action`, `title`, `instructions`, `confirmation_text`, optional `details`; **completed only:** optional `confirmed_by`, optional `result_message` | `resources` contains the directly moved resource. `source` and `destination` are its actual modeled transfer endpoints. When supplied, `details.destination_rotation` is the explicit local rotation relative to `destination`, not an absolute/world rotation. PLR composes its resulting absolute rotation with the destination's absolute rotation; use the local pose that an equivalent automated transfer would produce. It is never inferred from the destination. The subsequent model update emits normal `resource.unassigned` and `resource.assigned` state transitions. |
+
+Manual action providers decide how an operator acknowledges the request. Cancellation,
+provider-reported failure, invalid provider results, and provider exceptions produce the normal
+failed lifecycle record with `error_type` and `error_message`.
 
 ## Liquid handling
 
@@ -201,7 +223,86 @@ record per channel with `channel` and direct `resource` fields.
 | `liquid_handler.tip_pickup_96` | `device`, `resources` | Direct resource is the operated `TipRack`. |
 | `liquid_handler.tip_drop_96` | `device`, `resources` | Direct resource is the destination `TipRack` or `Trash`. |
 
-## Shaking and temperature control
+## Plate reading and imaging
+
+### Plate-reader lifecycle and measurements
+
+| Operation | Fields | Notes |
+| --- | --- | --- |
+| `plate_reader.open` | `device`, `resources` | Opens the reader. `resources` contains the directly loaded plate when one is assigned. |
+| `plate_reader.close` | `device`, `resources` | Closes the reader. `resources` contains the directly loaded plate when one is assigned. |
+| `plate_reader.read_luminescence` | `device`, `resources`, `well_count`, `return_format`, `focal_height`; **completed only:** `record_count` | Reads luminescence from the selected wells. |
+| `plate_reader.read_absorbance` | `device`, `resources`, `well_count`, `return_format`, `wavelength_nm`; **completed only:** `record_count` | Reads absorbance at the requested wavelength. |
+| `plate_reader.read_fluorescence` | `device`, `resources`, `well_count`, `return_format`, `excitation_wavelength_nm`, `emission_wavelength_nm`, `focal_height`; **completed only:** `record_count` | Reads fluorescence at the requested wavelengths. |
+
+For measurement operations, `resources` contains the direct selected `Well` references. Their
+`ancestors` retain the owning plate; do not replace the wells with that plate. `well_count` is the
+number of selected wells, while `record_count` is the number of records returned by the backend.
+`return_format` is `"records"` or `"legacy_matrix"` and describes the public return projection.
+Measurement values are not copied into events.
+
+`focal_height` uses PLR's default length unit (millimeters). Wavelengths are deliberately expressed
+in nanometers and therefore use the `_nm` suffix.
+
+### Imaging
+
+| Operation | Fields | Notes |
+| --- | --- | --- |
+| `imager.capture` | `device`, `resources`, optional `plate`, `target`, `mode`, `objective`, `exposure`, `focus`, `gain`; **completed only:** `image_count`, `reported_exposure_time_ms`, `reported_focal_height` | Captures one user-requested imaging result. Software auto-exposure or autofocus retries remain inside this single lifecycle. |
+
+`target` contains integer `row` and `column` indices. `mode` and `objective` are stable enum member
+names. When the caller supplies a `Well`, `resources` contains that direct well reference; a
+row/column tuple has no direct resource and uses an empty list. `plate`, when known, identifies the
+loaded plate that provides target context.
+
+The three requested setting objects are JSON-ready and use these shapes:
+
+| Setting | Modes and fields |
+| --- | --- |
+| `exposure` | Fixed: `mode="fixed"`, `time_ms`; machine auto: `mode="machine_auto"`; software auto: `mode="software_auto"`, `minimum_time_ms`, `maximum_time_ms`, optional `max_rounds`. |
+| `focus` | Fixed: `mode="fixed"`, `height`; machine auto: `mode="machine_auto"`; software auto: `mode="software_auto"`, `minimum_height`, `maximum_height`, `tolerance`, `timeout`. |
+| `gain` | Fixed: `mode="fixed"`, `value`; machine auto: `mode="machine_auto"`. |
+
+Exposure values use milliseconds, as made explicit by `_ms`. Focus heights and focus tolerance use
+PLR's default length unit; autofocus `timeout` uses the default time unit. The completed event
+contains only bounded result metadata. Pixel arrays and other image data are never included.
+
+`ImageReader` inherits the PlateReader and Imager public operations. It emits the inherited
+canonical lifecycle directly and must not add a second wrapper lifecycle.
+
+Backend-only keyword arguments are forwarded to the backend but are not part of these canonical
+payloads.
+
+## Thermocycling
+
+Controllers that are `ResourceHolder`s include their directly loaded resource in `resources` when
+one is assigned at operation start.
+
+| Operation | Fields | Notes |
+| --- | --- | --- |
+| `thermocycler.open_lid` | `device`, optional `resources` | Opens the thermocycler lid. |
+| `thermocycler.close_lid` | `device`, optional `resources` | Closes the thermocycler lid. |
+| `thermocycler.set_block_temperature` | `device`, optional `resources`, `target_temperatures` | Sets one temperature per block zone. |
+| `thermocycler.set_lid_temperature` | `device`, optional `resources`, `target_temperatures` | Sets one temperature per lid zone. |
+| `thermocycler.deactivate_block` | `device`, optional `resources` | Turns off block temperature control. |
+| `thermocycler.deactivate_lid` | `device`, optional `resources` | Turns off lid temperature control. |
+| `thermocycler.run_protocol` | `device`, optional `resources`, `block_max_volume`, `stage_count`, `step_definition_count`, `step_execution_count`, optional `temperature_zone_count` | Submits a bounded summary of the requested protocol. Completion means the backend coroutine returned successfully, not that the physical temperature profile finished. |
+
+`target_temperatures` is an ordered list in PLR's default temperature unit (degrees Celsius); it is
+plural because the public API supports multiple thermal zones. `block_max_volume` uses PLR's
+default volume unit (microliters). `step_definition_count` counts the distinct step definitions in
+all stages, and `step_execution_count` includes stage repetition. `temperature_zone_count` is
+included when it can be derived from the protocol.
+
+The complete `Protocol`, individual temperatures and hold times, backend return value, and backend
+keyword arguments are deliberately excluded from the event payload.
+
+`run_pcr_profile` is a composite convenience method and has no separate parent lifecycle; its
+instrumented primitive calls emit their normal events. Thermocycler status queries and wait helpers
+are not yet instrumented because their polling and completion semantics need to be stabilized
+before they can define canonical EventBus operations.
+
+## Shaking and environmental control
 
 Controllers that are `ResourceHolder`s include their directly loaded resource in `resources` when
 one is assigned at operation start.
@@ -211,9 +312,19 @@ one is assigned at operation start.
 | `shaker.shake` | `device`, optional `resources`, `speed_rpm`, optional `duration` | Omitted `duration` means shaking continues after the call returns. |
 | `shaker.stop_shaking` | `device`, optional `resources` | Explicitly stops an indefinite shake. |
 | `temperature_controller.set_temperature` | `device`, optional `resources`, `target_temperature`, `passive` | Records the requested target and cooling policy. |
+| `temperature_controller.activate` | `device`, optional `resources` | Starts active temperature control at the configured setpoint. |
 | `temperature_controller.wait_for_temperature` | `device`, optional `resources`, `target_temperature`, `timeout`, `tolerance`; **completed only:** `current_temperature` | `current_temperature` is the final controller reading that satisfied tolerance. |
 | `temperature_controller.hold_temperature` | `device`, optional `resources`, `duration`, optional `target_temperature` | Records a requested dwell without reissuing a setpoint or asserting that a resource reached temperature. |
 | `temperature_controller.deactivate` | `device`, optional `resources`, optional `target_temperature` | Stops active temperature control. |
+| `humidity_controller.set_humidity` | `device`, optional `resources`, `target_humidity` | Records the requested relative-humidity fraction. |
+| `humidity_controller.activate` | `device`, optional `resources` | Starts active humidity control at the configured setpoint. |
+| `humidity_controller.deactivate` | `device`, optional `resources` | Stops active humidity control. |
+| `co2_controller.set_co2` | `device`, optional `resources`, `target_co2` | Records the requested CO2 fraction. |
+| `co2_controller.activate` | `device`, optional `resources` | Starts active CO2 control at the configured setpoint. |
+| `co2_controller.deactivate` | `device`, optional `resources` | Stops active CO2 control. |
+| `o2_controller.set_o2` | `device`, optional `resources`, `target_o2` | Records the requested O2 fraction. |
+| `o2_controller.activate` | `device`, optional `resources` | Starts active O2 control at the configured setpoint. |
+| `o2_controller.deactivate` | `device`, optional `resources` | Stops active O2 control. |
 
 ## Centrifugation
 

@@ -99,3 +99,19 @@ VSpin
     VSpin
     Access2
     Access2Driver
+
+
+PlateLoc
+--------
+
+.. currentmodule:: pylabrobot.agilent.plateloc
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    PlateLoc
+    PlateLocSerialProfile
+    PlateLocStatus
+    PlateLocError

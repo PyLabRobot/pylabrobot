@@ -44,7 +44,9 @@ kbiosystems/index
 mettler_toledo/index
 micronic/index
 molecular_devices/index
+opentrons/index
 qinstruments/index
+revvity/index
 sartorius/index
 thermo_fisher/index
 ufactory/index
@@ -63,6 +65,7 @@ machine-agnostic-features/tip-spot-generators
 machine-agnostic-features/logging-and-validation/logging-and-validation
 machine-agnostic-features/error-handling-general
 machine-agnostic-features/sila-discovery
+machine-agnostic-features/manual-operator
 ```
 
 ```{toctree}

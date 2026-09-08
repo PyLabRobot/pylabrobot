@@ -9,6 +9,9 @@ you apply specific PyLabRobot features in real-world contexts.
 Rather than full experimental protocols, these recipes aim to inspire, 
 teach, and accelerate your own automation workflows.
 
+There is also a `community cookbook <https://chory-lab.github.io/plr-cookbook/>`_
+from the Chory Lab with additional PyLabRobot examples.
+
 ------------------------------------------
 
 .. raw:: html
@@ -38,6 +41,15 @@ teach, and accelerate your own automation workflows.
    :link: slack_notifications.html
    :tags: Notifications Slack Monitoring EventBus
 
+.. plrcard::
+   :header: Use ManualOperator in a Jupyter notebook
+   :card_description: <ul>
+      <li>Pause a notebook for an acknowledged manual handoff</li>
+      <li>Reconcile a manually moved plate in PLR's resource model</li>
+      <li>Observe incubator and ManualOperator lifecycle events</li></ul>
+   :link: manual_operator_jupyter.html
+   :tags: ResourceMovement EventBus
+
 .. plrcardgrid::
 
 .. End of tutorial card section
@@ -51,3 +63,4 @@ teach, and accelerate your own automation workflows.
 
    star_movement_plate_to_alpaqua_core
    slack_notifications
+   manual_operator_jupyter

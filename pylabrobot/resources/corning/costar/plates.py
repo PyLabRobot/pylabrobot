@@ -62,6 +62,7 @@ def cor_cos_6_wellplate_16800uL_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       item_dx=39.12,  # from Corning Product Description
       item_dy=39.12,  # from Corning Product Description
       material_z_thickness=1.27,  # from Corning Product Description
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -130,6 +131,7 @@ def cor_cos_12_wellplate_6900uL_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       item_dx=26.01,  # from Corning Product Description
       item_dy=26.01,  # from Corning Product Description
       material_z_thickness=1.27,  # from Corning Product Description
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -182,6 +184,7 @@ def cor_cos_24_wellplate_3470uL_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       item_dx=19.3,  # from Corning Product Description
       item_dy=19.3,  # from Corning Product Description
       material_z_thickness=1.27,  # from Corning Product Description
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -238,6 +241,7 @@ def cor_cos_48_wellplate_1620uL_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       item_dx=13.08,  # from Corning Product Description
       item_dy=13.08,  # from Corning Product Description
       material_z_thickness=1.27,  # from Corning Product Description
+      name_prefix=name,
       **well_kwargs,
     ),
   )

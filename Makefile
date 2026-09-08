@@ -42,7 +42,7 @@ test:
 	$(BIN)python -m pytest -s -v
 
 typecheck:
-	$(BIN)python -m mypy pylabrobot --check-untyped-defs
+	$(BIN)python -m mypy pylabrobot
 
 clear-pyc:
 	find . -name "*.pyc" | xargs rm

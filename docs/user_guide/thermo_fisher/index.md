@@ -4,4 +4,5 @@
 :maxdepth: 1
 
 alps/index
+btx/index
 ```

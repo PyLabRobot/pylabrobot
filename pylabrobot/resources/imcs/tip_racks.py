@@ -43,6 +43,7 @@ def imcs_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipRack:
       size_x=9.0,
       size_y=9.0,
       make_tip=imcs_tip_1000uL,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
@@ -117,6 +118,7 @@ def imcs_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRack:
       size_x=9.0,
       size_y=9.0,
       make_tip=imcs_tip_300uL,
+      name_prefix=name,
     ),
     with_tips=with_tips,
   )
