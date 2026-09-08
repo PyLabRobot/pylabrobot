@@ -108,10 +108,42 @@ class OpentronsAPITests(unittest.IsolatedAsyncioTestCase):
 
   async def test_stop_does_not_mask_a_server_or_connection_failure_with_a_fallback(self) -> None:
     for failure in (HTTPError("POST", "/actions", 500, "server error"), TimeoutError("timeout")):
-      with self.subTest(failure=failure):
-        self.io.request.reset_mock()
-        self.io.request.side_effect = failure
-        with self.assertRaises(OpentronsError) as raised:
+      for fallback_count in range(4):
+        with self.subTest(failure=failure, fallback_count=fallback_count):
+          self.io.request.reset_mock()
+          self.io.request.side_effect = [
+            HTTPError("POST", "/actions", 404, "unsupported")
+          ] * fallback_count + [failure]
+          with self.assertRaises(OpentronsError) as raised:
+            await self.api.stop_run("run")
+          self.assertIs(raised.exception.__cause__, failure)
+          self.assertEqual(self.io.request.await_count, fallback_count + 1)
+
+  async def test_stop_preserves_fallback_order_and_stops_at_first_success(self) -> None:
+    """Every supported route ends the fallback sequence immediately."""
+    expected_calls = [
+      call("POST", "/runs/run/actions", {"data": {"actionType": "stop"}}),
+      call("POST", "/runs/run/cancel", None),
+      call("POST", "/runs/run/actions/cancel", None),
+      call("DELETE", "/runs/run", None),
+    ]
+    for status in (404, 405):
+      for fallback_count in range(4):
+        with self.subTest(status=status, fallback_count=fallback_count):
+          self.io.request.reset_mock()
+          self.io.request.side_effect = [
+            HTTPError("POST", "/actions", status, "unsupported")
+          ] * fallback_count + [{}]
           await self.api.stop_run("run")
-        self.assertIs(raised.exception.__cause__, failure)
-        self.io.request.assert_awaited_once()
+          self.assertEqual(self.io.request.await_args_list, expected_calls[: fallback_count + 1])
+
+  async def test_stop_reports_last_error_when_all_routes_are_unsupported(self) -> None:
+    """Exhausting the fallback routes preserves the final failure as the cause."""
+    failure = HTTPError("DELETE", "/runs/run", 405, "unsupported")
+    self.io.request.side_effect = [HTTPError("POST", "/actions", 404, "unsupported")] * 3 + [
+      failure
+    ]
+    with self.assertRaisesRegex(OpentronsError, "state is retained for retry") as raised:
+      await self.api.stop_run("run")
+    self.assertIs(raised.exception.__cause__, failure)
+    self.assertEqual(self.io.request.await_count, 4)

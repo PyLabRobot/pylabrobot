@@ -13,12 +13,13 @@ from pylabrobot.opentrons.flex import (
   FlexHead96,
 )
 from pylabrobot.opentrons.flex.chatterbox import ChatterboxHTTP, ReplayTransport
-from pylabrobot.opentrons.ot2 import OT2, OT2Pipette
+from pylabrobot.opentrons.ot2 import OT2, OT2_8ChannelPipette, OT2SingleChannelPipette
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import ModuleInfo, MountedPipette, RobotInfo
 
 __all__ = [
   "ChatterboxHTTP",
+  "Flex",
   "FlexGripper",
   "FlexHead1",
   "FlexHead8",
@@ -26,12 +27,12 @@ __all__ = [
   "ModuleInfo",
   "MountedPipette",
   "OT2",
-  "OT2Pipette",
+  "OT2SingleChannelPipette",
+  "OT2_8ChannelPipette",
   "OpentronsAPI",
   "OpentronsCommandError",
   "OpentronsCommandTimeout",
   "OpentronsError",
-  "Flex",
   "OpentronsProtocolError",
   "OpentronsRun",
   "ReplayTransport",
