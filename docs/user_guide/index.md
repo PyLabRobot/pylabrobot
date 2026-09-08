@@ -40,6 +40,7 @@ high_res/index
 inheco/index
 kbioscience/index
 kbiosystems/index
+li_cor/index
 mettler_toledo/index
 micronic/index
 molecular_devices/index
