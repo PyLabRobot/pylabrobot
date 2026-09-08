@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from inspect import isabstract
-from typing import List, TypeVar, cast
+from typing import List, Optional, TypeVar, cast
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
@@ -63,8 +63,12 @@ def make_model_device(
   return device
 
 
-def make_device(replies: List[bytes], **kwargs) -> HettichMikro220RoboticCentrifuge:
-  return make_model_device(replies, HettichMikro220RoboticCentrifuge, **kwargs)
+def make_device(
+  replies: List[bytes], rotor_catalog_number: Optional[str] = "2334", **kwargs
+) -> HettichMikro220RoboticCentrifuge:
+  return make_model_device(
+    replies, HettichMikro220RoboticCentrifuge, rotor_catalog_number=rotor_catalog_number, **kwargs
+  )
 
 
 def writes(device: HettichRoboticCentrifuge) -> AsyncMock:
@@ -212,7 +216,7 @@ class HettichEnquiryTimingTests(HettichAsyncTestCase):
 
 class HettichFrameTests(unittest.TestCase):
   def setUp(self) -> None:
-    self.device = make_device([])
+    self.device = make_device([], rotor_catalog_number=None)
 
   def test_build_enquiry_matches_manual_example(self) -> None:
     self.assertEqual(
@@ -277,29 +281,29 @@ class HettichFrameTests(unittest.TestCase):
 
   def test_rotor_specification_converts_between_speed_and_rcf(self) -> None:
     rotor = MIKRO_220_ROBOTIC_ROTORS["2394"]
-    self.assertEqual(rotor.rcf_at_speed(13_000), 18_516)
-    self.assertEqual(rotor.rcf_at_speed(6_500), 4_629)
-    self.assertEqual(rotor.speed_for_rcf(18_516), 13_000)
-    self.assertEqual(rotor.speed_for_rcf(4_629), 6_500)
+    self.assertEqual(rotor.rpm_to_g(13_000), 18_516)
+    self.assertEqual(rotor.rpm_to_g(6_500), 4_629)
+    self.assertEqual(rotor.g_to_rpm(18_516), 13_000)
+    self.assertEqual(rotor.g_to_rpm(4_629), 6_500)
 
   def test_rotor_specification_rejects_values_above_limits(self) -> None:
     rotor = MIKRO_220_ROBOTIC_ROTORS["2394"]
     with self.assertRaisesRegex(ValueError, "13000 rpm"):
-      rotor.rcf_at_speed(13_001)
+      rotor.rpm_to_g(13_001)
     with self.assertRaisesRegex(ValueError, "18516"):
-      rotor.speed_for_rcf(18_517)
+      rotor.g_to_rpm(18_517)
 
   def test_device_uses_configured_rotor_specification(self) -> None:
     device = make_device([], rotor_catalog_number="2334")
     self.assertIs(device.rotor_specification, MIKRO_220_ROBOTIC_ROTORS["2334"])
-    self.assertEqual(device.rcf_at_speed(13_000), 18_327)
-    self.assertEqual(device.speed_for_rcf(18_327), 13_000)
+    self.assertEqual(device.rpm_to_g(13_000), 18_327)
+    self.assertEqual(device.g_to_rpm(18_327), 13_000)
 
   def test_device_requires_known_rotor_for_rcf_conversion(self) -> None:
     with self.assertRaisesRegex(ValueError, "unsupported rotor catalog"):
       make_device([], rotor_catalog_number="unknown")
     with self.assertRaisesRegex(HettichCentrifugeError, "rotor_catalog_number"):
-      self.device.rcf_at_speed(1_000)
+      self.device.rpm_to_g(1_000)
 
 
 class HettichProtocolTests(HettichAsyncTestCase):
@@ -656,7 +660,7 @@ class HettichProtocolTests(HettichAsyncTestCase):
     )
 
     self.schedule_spin_states(device, [30, 40])
-    await device.spin(duration=30, speed=2000, timeout=60)
+    await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
 
     frames = telegrams(device)
     run_time_frames = [
@@ -672,7 +676,7 @@ class HettichProtocolTests(HettichAsyncTestCase):
     device = make_device([enquiry_reply("00614", 30)])
 
     with self.assertRaisesRegex(ValueError, "59969 seconds"):
-      await device.spin(duration=59_970, speed=2_000)
+      await device.spin(g=device.rpm_to_g(2_000), duration=59_970)
 
     self.assertEqual(telegram_parameters(device), [b"00614"])
     self.assertNotIn(b"00521", telegram_parameters(device))
@@ -702,7 +706,7 @@ class HettichProtocolTests(HettichAsyncTestCase):
     )
 
     with self.assertRaisesRegex(HettichCommunicationError, "SELECT 00521 failed"):
-      await device.spin(duration=30, speed=2000, timeout=60)
+      await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
 
     self.assertEqual(telegrams(device).count(device._build_select("00521", 2)), 3)
     self.assertIn(device._build_select("00521", 1), telegrams(device))
@@ -741,7 +745,7 @@ class HettichProtocolTests(HettichAsyncTestCase):
       return reply
 
     cast(AsyncMock, device.io.read).side_effect = read
-    task = asyncio.create_task(device.spin(duration=30, speed=2000, timeout=60))
+    task = asyncio.create_task(device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60))
     await asyncio.wait_for(start_sent.wait(), timeout=1)
     task.cancel()
     with self.assertRaises(asyncio.CancelledError):
@@ -760,7 +764,7 @@ class HettichProtocolTests(HettichAsyncTestCase):
       ]
     )
     with self.assertRaisesRegex(HettichCentrifugeError, "standstill"):
-      await device.spin(duration=30, speed=2000, timeout=60)
+      await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
 
     self.assertEqual(telegram_parameters(device), [b"00614", b"00634", b"00635"])
 
@@ -826,9 +830,9 @@ class HettichSpinCompletionTests(HettichAsyncTestCase):
     with use_event_bus(bus):
       if interrupted:
         with self.assertRaisesRegex(HettichCentrifugeError, "interrupted"):
-          await device.spin(duration=30, speed=2000, timeout=60)
+          await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
       else:
-        await device.spin(duration=30, speed=2000, timeout=60)
+        await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
 
     terminal = "failed" if interrupted else "completed"
     self.assertEqual(
@@ -855,6 +859,119 @@ class HettichSpinCompletionTests(HettichAsyncTestCase):
   async def test_timer_rounding_near_the_requested_end_is_allowed(self) -> None:
     """A subsecond difference due to the integer device timer is not an interruption."""
     await self.check_cycle([(0x01F0, 29.1), (0x01E2, 40)], interrupted=False)
+
+
+class HettichForceTests(HettichAsyncTestCase):
+  """Verify force-based spin requests against the RPM sent to the controller."""
+
+  async def test_spin_converts_force_and_preserves_requested_event_value(self) -> None:
+    """Catalog and live-limit conversions both keep the requested RCF in events."""
+    for catalog, g, rpm in (("2394", 4629.25, 6500), (None, 500.0, 2500)):
+      with self.subTest(catalog=catalog):
+        replies = [enquiry_reply("00614", 30)]
+        if catalog is None:
+          replies.extend([enquiry_reply("00605", 5000), enquiry_reply("00608", 2000)])
+        replies.extend(
+          [
+            enquiry_reply("00634", 0x0162),
+            enquiry_reply("00635", 0xA292),
+            enquiry_reply("00528", 0x1800),
+            enquiry_reply("00605", 13000 if catalog is not None else 5000),
+            b"]\x06",
+            b"]\x06",
+            b"]\x06",
+            b"]\x06",
+            enquiry_reply("00634", 0x01E8),
+            enquiry_reply("00635", 0xA292),
+            enquiry_reply("00604", rpm),
+            enquiry_reply("00602", 12),
+            b"]\x06",
+            b"]\x06",
+            enquiry_reply("00634", 0x01F0),
+            enquiry_reply("00635", 0xA292),
+            enquiry_reply("00634", 0x01E2),
+            enquiry_reply("00635", 0xA292),
+          ]
+        )
+        device = make_device(replies, rotor_catalog_number=catalog)
+        self.schedule_spin_states(device, [30, 40])
+        events: list[PLREvent] = []
+        bus = EventBus()
+        bus.subscribe(events.append)
+        with use_event_bus(bus):
+          await device.spin(g=g, duration=30, timeout=60)
+
+        self.assertIn(device._build_select("00603", rpm), telegrams(device))
+        self.assertEqual(
+          [event.name for event in events], ["centrifuge.spin.started", "centrifuge.spin.completed"]
+        )
+        self.assertEqual(events[0].data["relative_centrifugal_force"], g)
+        self.assertNotIn("speed_rpm", events[0].data)
+        self.assertFalse(device.state.recovery_required)
+
+  async def test_spin_rejects_invalid_force_without_communicating(self) -> None:
+    """Nonpositive and nonfinite RCF cannot cause device changes."""
+    for g in (0, -1, float("nan"), float("inf"), -float("inf")):
+      with self.subTest(g=g):
+        device = make_device([])
+        with self.assertRaisesRegex(ValueError, "finite, positive"):
+          await device.spin(g=g, duration=30)
+        self.assertEqual(telegrams(device), [])
+        self.assertFalse(device.state.recovery_required)
+
+  async def test_spin_checks_catalog_force_limits_before_actuation(self) -> None:
+    """Excessive force and force below the minimum RPM are rejected without SELECT."""
+    for g in (18516.1, 0.0001):
+      with self.subTest(g=g):
+        device = make_device([enquiry_reply("00614", 30)], rotor_catalog_number="2394")
+        with self.assertRaises(ValueError):
+          await device.spin(g=g, duration=30, timeout=60)
+        self.assertEqual(telegram_parameters(device), [b"00614"])
+        self.assertFalse(device.state.recovery_required)
+
+  async def test_spin_checks_live_force_limits_without_a_catalog(self) -> None:
+    """Models without a catalog must still enforce the controller's RCF limit."""
+    device = make_model_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00605", 5000),
+        enquiry_reply("00608", 2000),
+      ],
+      HettichRotanta460RoboticCentrifuge,
+    )
+    with self.assertRaisesRegex(ValueError, "2000 × g"):
+      await device.spin(g=2001, duration=30, timeout=60)
+    self.assertTrue(all(frame[-1] == ENQ for frame in telegrams(device)))
+
+  async def test_spin_rejects_invalid_live_conversion_limits(self) -> None:
+    """A zero RCF limit cannot be used to derive an RPM."""
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00605", 5000),
+        enquiry_reply("00608", 0),
+      ],
+      rotor_catalog_number=None,
+    )
+    with self.assertRaisesRegex(HettichCentrifugeError, "invalid rotor limits"):
+      await device.spin(g=500, duration=30, timeout=60)
+    self.assertTrue(all(frame[-1] == ENQ for frame in telegrams(device)))
+
+  async def test_catalog_conversion_still_checks_the_live_speed_limit(self) -> None:
+    """A configured catalog does not override the installed rotor's speed limit."""
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+      ],
+      rotor_catalog_number="2394",
+    )
+    with self.assertRaisesRegex(ValueError, "5000 rpm"):
+      await device.spin(g=4629, duration=30, timeout=60)
+    self.assertTrue(all(frame[-1] == ENQ for frame in telegrams(device)))
 
 
 class HettichEventTests(HettichAsyncTestCase):
@@ -890,7 +1007,7 @@ class HettichEventTests(HettichAsyncTestCase):
 
     self.schedule_spin_states(device, [30, 40])
     with use_event_bus(event_bus):
-      await device.spin(duration=30, speed=2000, timeout=60)
+      await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
 
     self.assertEqual(
       [event.name for event in events],
@@ -901,11 +1018,11 @@ class HettichEventTests(HettichAsyncTestCase):
     self.assertEqual(started.data["device"]["name"], "hettich_centrifuge")
     self.assertEqual(started.data["resources"], [])
     self.assertEqual(started.data["bucket_resources"], [])
-    self.assertEqual(started.data["speed_rpm"], 2000)
+    self.assertNotIn("speed_rpm", started.data)
     self.assertEqual(started.data["duration"], 30)
     self.assertAlmostEqual(
       cast(float, started.data["relative_centrifugal_force"]),
-      device.rcf_at_speed(2000),
+      device.rpm_to_g(2000),
     )
     self.assertNotIn("speed", started.data)
     self.assertNotIn("duration_seconds", started.data)
@@ -918,7 +1035,7 @@ class HettichEventTests(HettichAsyncTestCase):
 
     with use_event_bus(event_bus):
       with self.assertRaisesRegex(ValueError, "duration"):
-        await device.spin(0, 2000)
+        await device.spin(g=device.rpm_to_g(2000), duration=0)
 
     self.assertEqual(
       [event.name for event in events],
@@ -926,9 +1043,9 @@ class HettichEventTests(HettichAsyncTestCase):
     )
     started, failed = events
     self.assertEqual(started.context["operation_id"], failed.context["operation_id"])
-    self.assertEqual(started.data["speed_rpm"], 2000)
+    self.assertNotIn("speed_rpm", started.data)
     self.assertEqual(started.data["duration"], 0)
-    self.assertNotIn("relative_centrifugal_force", started.data)
+    self.assertEqual(started.data["relative_centrifugal_force"], device.rpm_to_g(2000))
     self.assertEqual(failed.data["error_type"], "ValueError")
 
 

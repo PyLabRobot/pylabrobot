@@ -330,7 +330,7 @@ one is assigned at operation start.
 
 | Operation | Fields | Notes |
 | --- | --- | --- |
-| `centrifuge.spin` | `device`, `resources`, `bucket_resources`, `duration`; at least one of `relative_centrifugal_force` or `speed_rpm`; optional `acceleration_fraction`, `deceleration_fraction` | Describes one requested spin cycle using the frontend's requested force or speed. |
+| `centrifuge.spin` | `device`, `resources`, `bucket_resources`, `relative_centrifugal_force`, `duration`; optional `acceleration_fraction`, `deceleration_fraction` | Describes one requested spin cycle. |
 
 `resources` contains directly loaded resources only. Empty buckets are not represented.
 `bucket_resources` preserves the association between each loaded resource and its holder:
@@ -343,9 +343,8 @@ one is assigned at operation start.
 ```
 
 A frontend without a PLR rotor-resource model emits empty `resources` and `bucket_resources`.
-Hettich centrifuges report the requested `speed_rpm`; when a rotor catalog number is configured,
-they also report the corresponding calculated `relative_centrifugal_force`. VSpin reports the
-requested `relative_centrifugal_force`, `acceleration_fraction`, and `deceleration_fraction`.
+Hettich and VSpin report the requested `relative_centrifugal_force`. VSpin also reports
+`acceleration_fraction` and `deceleration_fraction`.
 
 `relative_centrifugal_force` is the dimensionless multiple of standard gravity conventionally
 written as x g. Acceleration and deceleration are fractions of the device maximum.

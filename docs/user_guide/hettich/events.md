@@ -6,9 +6,10 @@ centrifuge frontends, including VSpin.
 
 | Operation | Primary fields |
 | --- | --- |
-| `centrifuge.spin` | `device`, empty `resources`, empty `bucket_resources`, `speed_rpm`, `duration`, optional `relative_centrifugal_force` |
+| `centrifuge.spin` | `device`, empty `resources`, empty `bucket_resources`, `relative_centrifugal_force`, `duration` |
 
-The driver reports the requested rotor speed as `speed_rpm`. If it was constructed with a supported
-`rotor_catalog_number`, it also calculates and reports `relative_centrifugal_force`. The Hettich
-frontend does not currently model rotor positions as PLR resource holders, so both resource lists
-are empty.
+The driver reports the requested `g` as `relative_centrifugal_force`, in multiples of standard
+gravity (× g), including when the value was calculated with `rpm_to_g()`. Conversion to the
+device's integer RPM happens internally; the event preserves the requested force without
+rounding it to the achievable RPM. The Hettich frontend does not currently model rotor positions
+as PLR resource holders, so both resource lists are empty.

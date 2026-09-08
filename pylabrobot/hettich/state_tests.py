@@ -93,7 +93,7 @@ class HettichStateTests(HettichAsyncTestCase):
     """A rejected request before actuation leaves the device ready for another operation."""
     device = make_device([enquiry_reply("00528", 0xA000)])
     with self.assertRaises(ValueError):
-      await device.spin(duration=0, speed=500)
+      await device.spin(g=device.rpm_to_g(500), duration=0)
     self.assertEqual(device.state, HettichMachineState(connection="connected"))
     await device.open_hatch()
     self.assertEqual(telegram_parameters(device), [b"00528"])
@@ -122,7 +122,7 @@ class HettichStateTests(HettichAsyncTestCase):
       device.move_to_position(1),
       device.end_positioning(),
       device.select_program(1),
-      device.spin(30, 500),
+      device.spin(g=device.rpm_to_g(500), duration=30),
     ):
       with self.assertRaisesRegex(HettichCentrifugeError, "requires recovery"):
         await operation
@@ -160,12 +160,12 @@ class HettichStateTests(HettichAsyncTestCase):
       return 0, 0.0
 
     with patch.object(device, "_wait_for_target_speed", side_effect=wait_for_speed):
-      task = asyncio.create_task(device.spin(30, 500, timeout=60))
+      task = asyncio.create_task(device.spin(g=device.rpm_to_g(500), duration=30, timeout=60))
       await asyncio.wait_for(waiting.wait(), 1)
       self.assertEqual(device.state.activity, "accelerating")
       before = len(telegrams(device))
       for operation in (
-        device.spin(30, 500),
+        device.spin(g=device.rpm_to_g(500), duration=30),
         device.open_hatch(),
         device.close_hatch(),
         device.move_to_position(1),
@@ -206,7 +206,7 @@ class HettichStateTests(HettichAsyncTestCase):
       return await original_wait(speed, timeout)
 
     with patch.object(device, "_wait_for_target_speed", side_effect=wait_for_speed):
-      spin = asyncio.create_task(device.spin(30, 500, timeout=60))
+      spin = asyncio.create_task(device.spin(g=device.rpm_to_g(500), duration=30, timeout=60))
       await asyncio.wait_for(waiting.wait(), 1)
       stop = asyncio.create_task(device.stop_spin())
       await asyncio.sleep(0)
@@ -233,7 +233,7 @@ class HettichStateTests(HettichAsyncTestCase):
         await release.wait()
 
     writes(device).side_effect = write
-    spin = asyncio.create_task(device.spin(30, 500, timeout=60))
+    spin = asyncio.create_task(device.spin(g=device.rpm_to_g(500), duration=30, timeout=60))
     await asyncio.wait_for(waiting.wait(), 1)
     self.assertEqual(device.state.activity, "preparing_to_spin")
     stop = asyncio.create_task(device.stop_spin())
@@ -252,13 +252,13 @@ class HettichStateTests(HettichAsyncTestCase):
     with patch.object(device, "_wait_for_target_speed", side_effect=failure):
       with self.assertLogs("pylabrobot.hettich.centrifuge", level="ERROR"):
         with self.assertRaises(TimeoutError) as raised:
-          await device.spin(30, 500, timeout=60)
+          await device.spin(g=device.rpm_to_g(500), duration=30, timeout=60)
     self.assertIs(raised.exception, failure)
     self.assertTrue(device.state.recovery_required)
     self.assertEqual(device.state.activity, "idle")
     self.assertEqual(await device.request_speed(), 0)
     with self.assertRaisesRegex(HettichCentrifugeError, "requires recovery"):
-      await device.spin(30, 500)
+      await device.spin(g=device.rpm_to_g(500), duration=30)
 
   async def test_successful_spin_records_each_workflow_phase(self) -> None:
     """State follows confirmed spin phases and returns to idle on success."""
@@ -286,7 +286,7 @@ class HettichStateTests(HettichAsyncTestCase):
       await original_write(data)
 
     writes(device).side_effect = write
-    await device.spin(30, 500, timeout=60)
+    await device.spin(g=device.rpm_to_g(500), duration=30, timeout=60)
     activities = list(dict.fromkeys(snapshot.activity for snapshot in snapshots))
     self.assertEqual(activities, ["preparing_to_spin", "accelerating", "at_speed", "braking"])
     self.assertEqual(device.state, HettichMachineState(connection="connected"))

@@ -39,6 +39,7 @@ ACTUAL_RUN_TIME_PARAMETER = "00602"
 SPEED_PARAMETER = "00603"
 ACTUAL_SPEED_PARAMETER = "00604"
 MAXIMUM_SPEED_PARAMETER = "00605"
+MAXIMUM_RCF_PARAMETER = "00608"
 MAXIMUM_RUN_UP_TIME_PARAMETER = "00614"
 MAXIMUM_RUN_DOWN_TIME_PARAMETER = "00616"
 ACTIVATE_PARAMETERS_COMMAND = "00522"
@@ -91,17 +92,17 @@ class RotorSpecification:
   maximum_speed: int
   maximum_rcf: int
 
-  def rcf_at_speed(self, speed: int) -> float:
-    """Return the RCF produced at ``speed`` in rpm."""
-    if not 0 <= speed <= self.maximum_speed:
-      raise ValueError(f"speed must be 0..{self.maximum_speed} rpm")
-    return self.maximum_rcf * (speed / self.maximum_speed) ** 2
+  def rpm_to_g(self, rpm: int) -> float:
+    """Return the relative centrifugal force at ``rpm`` in multiples of standard gravity."""
+    if not 0 <= rpm <= self.maximum_speed:
+      raise ValueError(f"rpm must be 0..{self.maximum_speed} rpm")
+    return self.maximum_rcf * (rpm / self.maximum_speed) ** 2
 
-  def speed_for_rcf(self, rcf: float) -> int:
-    """Return the nearest speed in rpm that produces ``rcf``."""
-    if not 0 <= rcf <= self.maximum_rcf:
-      raise ValueError(f"rcf must be 0..{self.maximum_rcf}")
-    return round(self.maximum_speed * math.sqrt(rcf / self.maximum_rcf))
+  def g_to_rpm(self, g: float) -> int:
+    """Return the nearest integer RPM that produces ``g`` multiples of standard gravity."""
+    if not 0 <= g <= self.maximum_rcf:
+      raise ValueError(f"g must be 0..{self.maximum_rcf} × g")
+    return round(self.maximum_speed * math.sqrt(g / self.maximum_rcf))
 
 
 # Source: https://www.hettichlab.com/products/centrifuges/automated-centrifuges/mikro-220-robotic/
@@ -684,31 +685,31 @@ class HettichRoboticCentrifuge(ABC):
     """Return the installed rotor's maximum speed in rpm."""
     return await self._enquire_parameter(MAXIMUM_SPEED_PARAMETER)
 
-  def rcf_at_speed(self, speed: int) -> float:
-    """Return RCF at ``speed`` using the configured rotor specification.
+  def rpm_to_g(self, rpm: int) -> float:
+    """Convert RPM to multiples of standard gravity using the configured rotor specification.
 
     Raises:
       HettichCentrifugeError: No rotor catalog number was supplied at construction.
-      ValueError: ``speed`` is outside the rotor's manufacturer limits.
+      ValueError: ``rpm`` is outside the rotor's manufacturer limits.
     """
     if self.rotor_specification is None:
       raise HettichCentrifugeError(
         "Set rotor_catalog_number to calculate RCF from the manufacturer rotor table"
       )
-    return self.rotor_specification.rcf_at_speed(speed)
+    return self.rotor_specification.rpm_to_g(rpm)
 
-  def speed_for_rcf(self, rcf: float) -> int:
-    """Return rpm for ``rcf`` using the configured rotor specification.
+  def g_to_rpm(self, g: float) -> int:
+    """Convert multiples of standard gravity to RPM using the configured rotor specification.
 
     Raises:
       HettichCentrifugeError: No rotor catalog number was supplied at construction.
-      ValueError: ``rcf`` is outside the rotor's manufacturer limits.
+      ValueError: ``g`` is outside the rotor's manufacturer limits.
     """
     if self.rotor_specification is None:
       raise HettichCentrifugeError(
         "Set rotor_catalog_number to calculate speed from the manufacturer rotor table"
       )
-    return self.rotor_specification.speed_for_rcf(rcf)
+    return self.rotor_specification.g_to_rpm(g)
 
   async def request_elapsed_time(self) -> int:
     """Return the current run time in seconds."""
@@ -1003,21 +1004,26 @@ class HettichRoboticCentrifuge(ABC):
 
   async def spin(
     self,
+    g: float,
     duration: int,
-    speed: int,
     timeout: Optional[float] = None,
   ) -> None:
     """Run a finite centrifugation cycle and block until standstill.
 
     Args:
-      duration: Time in seconds at the target speed, excluding acceleration and braking.
-      speed: Rotor speed in rpm, bounded at runtime by the installed rotor.
+      g: Relative centrifugal force in multiples of standard gravity (× g).
+      duration: Time in seconds at the requested force, excluding acceleration and braking.
       timeout: Total wait timeout. By default this uses the centrifuge's maximum
         configured run-up and run-down times plus a communication margin.
 
+    Force is converted to the nearest integer RPM using the configured rotor
+    specification, or the device-reported maximum RPM and RCF when no catalog
+    number is configured. The latter depends on the radius configured on the
+    centrifuge. The installed rotor's live speed limit is checked before START.
+
     The centrifuge's native timer starts during acceleration. This method first
     gives that timer a bounded safety value, then replaces its normal end time
-    once the measured rotor speed reaches ``speed``. Timing has one-second
+    once the measured rotor speed reaches the converted target. Timing has one-second
     resolution, matching the device protocol.
 
     If braking or standstill is observed before the expected end, allowing for
@@ -1032,22 +1038,16 @@ class HettichRoboticCentrifuge(ABC):
           "device": device_reference(self, name=self.name),
           "resources": [],
           "bucket_resources": [],
-          "speed_rpm": speed,
+          "relative_centrifugal_force": g,
           "duration": duration,
         }
-        if (
-          self.rotor_specification is not None
-          and 0 <= speed <= self.rotor_specification.maximum_speed
-        ):
-          operation_data["relative_centrifugal_force"] = self.rotor_specification.rcf_at_speed(
-            speed
-          )
-
         with event_operation("centrifuge.spin", **operation_data):
           if not 1 <= duration <= MAXIMUM_DURATION:
             raise ValueError(f"duration must be 1..{MAXIMUM_DURATION} seconds")
           if timeout is not None and timeout <= duration:
             raise ValueError("timeout must exceed duration to allow for acceleration and braking")
+          if not math.isfinite(g) or g <= 0:
+            raise ValueError("g must be a finite, positive relative centrifugal force")
 
           maximum_run_up_time = await self._enquire_parameter(MAXIMUM_RUN_UP_TIME_PARAMETER)
           maximum_target_duration = MAXIMUM_DURATION - maximum_run_up_time
@@ -1065,6 +1065,7 @@ class HettichRoboticCentrifuge(ABC):
           else:
             cycle_timeout = timeout
 
+          speed = await self._speed_for_spin(g)
           loop = asyncio.get_running_loop()
           deadline = loop.time() + cycle_timeout
           initial_run_time = duration + maximum_run_up_time
@@ -1101,6 +1102,24 @@ class HettichRoboticCentrifuge(ABC):
       finally:
         self._spin_stop_requested = False
         self._spin_completion.set()
+
+  async def _speed_for_spin(self, g: float) -> int:
+    """Convert requested RCF to firmware RPM using catalog data or live rotor limits."""
+    if self.rotor_specification is not None:
+      speed = self.rotor_specification.g_to_rpm(g)
+    else:
+      maximum_speed = await self.request_maximum_speed()
+      maximum_rcf = await self._enquire_parameter(MAXIMUM_RCF_PARAMETER)
+      if maximum_speed < MINIMUM_SPEED or maximum_rcf == 0:
+        raise HettichCentrifugeError(
+          "The centrifuge reported invalid rotor limits for RCF conversion"
+        )
+      if g > maximum_rcf:
+        raise ValueError(f"g must not exceed the installed rotor limit of {maximum_rcf} × g")
+      speed = round(maximum_speed * math.sqrt(g / maximum_rcf))
+    if speed < MINIMUM_SPEED:
+      raise ValueError(f"g corresponds to a speed below the device minimum of {MINIMUM_SPEED} rpm")
+    return speed
 
   async def stop_spin(self, timeout: float = 300.0) -> None:
     """Emergency-stop an active run and wait for standstill.
