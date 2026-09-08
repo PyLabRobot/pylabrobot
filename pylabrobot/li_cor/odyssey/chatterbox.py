@@ -1,205 +1,176 @@
-"""Chatterbox path for the Odyssey Classic — no instrument required.
-
-Three backend-tier chatterbox classes (one per capability) share an
-:class:`_OdysseyChatterboxState` object that simulates the
-instrument's state machine and stored scans. A minimal
-:class:`OdysseyChatterboxDriver` overrides ``setup`` / ``stop`` to
-no-ops; it exists only because :class:`pylabrobot.device.Device`
-requires a :class:`Driver` instance — the chatterbox backends do
-not call it.
-"""
+"""In-memory HTTP responses for exercising Odyssey control without an instrument."""
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import List, Optional
+import struct
+from html import escape
+from typing import Mapping, Optional
+from urllib.parse import parse_qs, urlsplit
+from xml.etree import ElementTree
 
-from pylabrobot.capabilities.capability import BackendParams
-from pylabrobot.capabilities.scanning.image_retrieval import ImageRetrievalBackend
-from pylabrobot.capabilities.scanning.instrument_status import (
-  InstrumentStatusBackend,
-  InstrumentStatusReading,
-)
-from pylabrobot.capabilities.scanning.scanning import ScanningBackend
-from pylabrobot.device import Driver
-from pylabrobot.serializer import SerializableMixin
+from pylabrobot.io.http import HTTP, HTTPResponse
 
-from .driver import OdysseyDriver
-from .instrument_status_backend import OdysseyState
-from .scanning_backend import DEFAULT_GROUP, OdysseyScanningParams
+from . import protocol
 
 logger = logging.getLogger(__name__)
 
 
-class _OdysseyChatterboxState:
-  """Shared mutable state for the three chatterbox backends."""
+def _tiff() -> bytes:
+  """Create a one-pixel, 16-bit TIFF without an imaging dependency."""
+  offset = 8 + 2 + 9 * 12 + 4
+  entries = [
+    (256, 4, 1),
+    (257, 4, 1),
+    (258, 3, 16),
+    (259, 3, 1),
+    (262, 3, 1),
+    (273, 4, offset),
+    (277, 3, 1),
+    (278, 4, 1),
+    (279, 4, 2),
+  ]
+  return (
+    b"II*\x00"
+    + struct.pack("<I", 8)
+    + struct.pack("<H", len(entries))
+    + b"".join(struct.pack("<HHII", tag, kind, 1, value) for tag, kind, value in entries)
+    + struct.pack("<I", 0)
+    + b"\x01\x00"
+  )
 
-  def __init__(self) -> None:
-    self.scanner_state: OdysseyState = "Idle"
-    self.progress: float = 0.0
-    self.lid_open: bool = False
-    self.current_user: str = ""
-    self.current_scan_name: str = ""
-    self.current_group: str = ""
-    self.configured: bool = False
-    self.stop_was_partial: bool = False
-    # Pre-seed the default working group so the chatterbox mirrors
-    # the lab instrument's name space.
-    self.scans: dict[str, dict[str, bytes]] = {
-      DEFAULT_GROUP: {
-        "test_scan": b"CHATTERBOX_TIFF_DATA_700nm",
-      },
-    }
 
+class OdysseyChatterbox(HTTP):
+  """HTTP simulation for ``OdysseyClassic(io=OdysseyChatterbox())``.
 
-class OdysseyChatterboxDriver(OdysseyDriver):
-  """No-op driver for chatterbox runs.
-
-  Bypasses the OdysseyDriver constructor's credential check and
-  overrides ``setup`` / ``stop`` so a Device can be wired with this
-  driver + chatterbox backends without contacting any instrument.
+  Scan progress advances by 25 percent on each status read. The stored TIFFs are one-pixel
+  synthetic images. No socket is opened and no background tasks are created.
   """
 
   def __init__(self) -> None:
-    # Skip OdysseyDriver.__init__ — it requires real credentials.
-    # Call Driver.__init__ directly for instance-set registration.
-    Driver.__init__(self)
-    self._host = "chatterbox"
-    self._port = 0
-    self._timeout_seconds = 0.0
-    self._username = ""
-    self._password = ""
-    self._base_url = ""
-    self._auth = None
-    self._timeout = None
-    self._session = None
+    super().__init__("Odyssey chatterbox", "http://chatterbox")
+    self._connected = False
+    self.state = "Idle"
+    self.progress = 0
+    self._form: dict[str, str] = {}
+    self.scans: dict[str, dict[str, dict[int, bytes]]] = {
+      "odyssey": {"test_scan": {700: _tiff(), 800: _tiff()}}
+    }
 
-  async def setup(self, backend_params: Optional[BackendParams] = None) -> None:
-    return None
+  async def setup(self) -> None:
+    """Enable the simulated connection."""
+    self._connected = True
 
   async def stop(self) -> None:
-    return None
+    """Close the simulated connection."""
+    self._connected = False
 
-  def serialize(self) -> dict:
-    return {"type": self.__class__.__name__}
+  def _save_scan(self) -> None:
+    """Store an image for each enabled channel of the configured scan."""
+    images = {ch: _tiff() for ch in (700, 800) if f"chan{ch}" in self._form}
+    self.scans.setdefault(self._form["scangroup"], {})[self._form["scan"]] = images
 
+  @staticmethod
+  def _response(body: str = "", status: int = 200) -> HTTPResponse:
+    """Build a text response from the simulated web server."""
+    return HTTPResponse(status, body.encode(), {"content-type": "text/html; charset=utf-8"})
 
-class OdysseyScanningChatterboxBackend(ScanningBackend):
-  """Chatterbox scanning backend — drives state with simulated progress."""
-
-  def __init__(self, state: _OdysseyChatterboxState) -> None:
-    super().__init__()
-    self._state = state
-
-  async def configure(self, backend_params: Optional[SerializableMixin] = None) -> None:
-    params = (
-      backend_params
-      if isinstance(backend_params, OdysseyScanningParams)
-      else OdysseyScanningParams()
-    )
-    self._state.configured = True
-    self._state.current_scan_name = params.name
-    self._state.current_group = params.group
-    self._state.scanner_state = "Configured"
-    self._state.stop_was_partial = False
-    logger.info("Chatterbox configured scan: %s", params.name)
-
-  async def start(self) -> None:
-    if not self._state.configured:
-      raise RuntimeError("Chatterbox scan not configured")
-    self._state.scanner_state = "Scanning"
-    self._state.progress = 0.0
-    for i in range(0, 101, 10):
-      if self._state.scanner_state != "Scanning":
-        return
-      self._state.progress = float(i)
-      await asyncio.sleep(0.05)
-    self._state.scanner_state = "Completed"
-    self._state.progress = 100.0
-    self._save_scan(partial=False)
-    self._state.configured = False
-
-  async def stop(self) -> None:
-    """Graceful stop — write a partial TIFF, transition to Stopped."""
-    if self._state.scanner_state == "Scanning":
-      self._save_scan(partial=True)
-      self._state.stop_was_partial = True
-    self._state.scanner_state = "Stopped"
-    self._state.configured = False
-
-  async def pause(self) -> None:
-    self._state.scanner_state = "Paused"
-
-  async def cancel(self) -> None:
-    self._state.scanner_state = "Idle"
-    self._state.progress = 0.0
-    self._state.configured = False
-    self._state.stop_was_partial = False
-
-  @property
-  def current_scan(self) -> tuple[str, str]:
-    """Return ``(group, name)`` for the most recently configured scan."""
-    return self._state.current_group, self._state.current_scan_name
-
-  def _save_scan(self, partial: bool) -> None:
-    group = self._state.current_group or DEFAULT_GROUP
-    name = self._state.current_scan_name or "scan"
-    if group not in self._state.scans:
-      self._state.scans[group] = {}
-    payload = b"CHATTERBOX_PARTIAL_TIFF_DATA" if partial else b"CHATTERBOX_TIFF_DATA"
-    self._state.scans[group][name] = payload
-
-
-class OdysseyImageRetrievalChatterboxBackend(ImageRetrievalBackend):
-  """Chatterbox image retrieval — reads from the shared state."""
-
-  def __init__(self, state: _OdysseyChatterboxState) -> None:
-    super().__init__()
-    self._state = state
-
-  async def list_groups(self) -> List[str]:
-    return list(self._state.scans.keys())
-
-  async def list_scans(self, group: str) -> List[str]:
-    return list(self._state.scans.get(group, {}).keys())
-
-  async def download(self, group: str, scan_name: str) -> bytes:
-    scans = self._state.scans.get(group, {})
-    if scan_name not in scans:
-      raise FileNotFoundError(f"Scan '{scan_name}' not found in group '{group}'")
-    return scans[scan_name]
-
-  async def download_channel(self, group: str, scan_name: str, channel: int) -> bytes:
-    """Mirrors the real backend's per-channel download.
-
-    The chatterbox stores one blob per scan rather than per channel,
-    so we return that blob for any requested channel — sufficient for
-    cross-capability orchestration tests (e.g. ``stop_and_save``).
-    """
-    return await self.download(group, scan_name)
-
-
-class OdysseyInstrumentStatusChatterboxBackend(InstrumentStatusBackend):
-  """Chatterbox status — reflects the shared state."""
-
-  def __init__(self, state: _OdysseyChatterboxState) -> None:
-    super().__init__()
-    self._state = state
-
-  async def read_status(self) -> InstrumentStatusReading:
-    return InstrumentStatusReading(
-      state=self._state.scanner_state,
-      current_user=self._state.current_user,
-      progress=self._state.progress,
-      time_remaining="",
-      lid_open=self._state.lid_open,
-    )
-
-
-__all__ = [
-  "OdysseyChatterboxDriver",
-  "OdysseyScanningChatterboxBackend",
-  "OdysseyImageRetrievalChatterboxBackend",
-  "OdysseyInstrumentStatusChatterboxBackend",
-]
+  async def request_raw(
+    self,
+    method: str,
+    path: str,
+    body: Optional[bytes] = None,
+    *,
+    headers: Optional[Mapping[str, str]] = None,
+    allow_redirects: bool = True,
+  ) -> HTTPResponse:
+    """Handle a scan-control, status, or image request entirely in memory."""
+    if not self._connected:
+      raise RuntimeError("Odyssey chatterbox is not set up")
+    parsed = urlsplit(path)
+    query = {key: values[0] for key, values in parse_qs(parsed.query).items()}
+    form = {key: values[0] for key, values in parse_qs((body or b"").decode()).items()}
+    path = parsed.path
+    logger.info("Odyssey chatterbox %s %s", method, path)
+    if path == protocol._CONFIGURE_URL_PATH and method == "POST":
+      if self.state in ("Scanning", "Paused"):
+        return self._response('<Error shorterror="Busy">Scanner is busy</Error>')
+      self._form = form
+      self.state = "Initializing"
+      self.progress = 0
+      return HTTPResponse(302, b"", {"location": f"{protocol._INITIALIZING_URL_PATH}?timeout=7"})
+    if path == protocol._INITIALIZING_URL_PATH:
+      if query.get("timeout") == "1":
+        self.state = "Configured"
+        return HTTPResponse(302, b"", {"location": f"{protocol._SCAN_BASE}/console.pl"})
+      return self._response("Initializing")
+    if path == f"{protocol._SCAN_BASE}/console.pl":
+      return self._response("Console")
+    if path == protocol._COMMAND_URL_PATH or path == protocol._STOP_FROM_STATUS_PATH:
+      action = query.get("action", form.get("action", "")).lower()
+      if action == "start":
+        if self.state not in ("Configured", "Paused"):
+          return self._response('<Error shorterror="Not configured">Configure first</Error>')
+        self.state = "Scanning"
+      elif action == "pause":
+        if self.state == "Scanning":
+          self.state = "Paused"
+      elif action == "stop":
+        if self.state in ("Scanning", "Paused"):
+          self._save_scan()
+        self.state = "Stopped"
+      elif action == "cancel":
+        self.state = "Idle"
+        self.progress = 0
+        self._form = {}
+      else:
+        return self._response("Unknown action", 400)
+      return HTTPResponse(302, b"", {"location": f"{protocol._SCAN_BASE}/console.pl"})
+    if path == protocol._STATUS_URL_PATH:
+      if self.state == "Scanning":
+        self.progress = min(100, self.progress + 25)
+        if self.progress == 100:
+          self._save_scan()
+          self.state = "Idle"
+      return self._response(
+        f"<p>Scanner Status: {self.state}</p><p>Current User: chatterbox</p>"
+        f"<p>Percent Complete: {self.progress}%</p><p>Time Remaining: 0 seconds</p>"
+        "<p>Lid Status: Closed</p>"
+      )
+    if path == protocol._SCAN_LIST_PATH:
+      group = query.get("avail", "odyssey")
+      groups = "".join(f'<option value="{escape(g)}">{escape(g)}</option>' for g in self.scans)
+      scans = "".join(
+        f'<option value="{escape(n)}">{escape(n)}</option>' for n in self.scans.get(group, {})
+      )
+      return self._response(
+        f'<select name="avail">{groups}</select><select name="preset">{scans}</select>'
+      )
+    if path.startswith(protocol._SCAN_IMAGE_PATH):
+      xml = ElementTree.fromstring(query["xml"])
+      group = xml.findtext("in/scangroup", "")
+      name = xml.findtext("in/scan", "")
+      channel = xml.findtext("in/channel", "700")
+      images = self.scans.get(group, {}).get(name, {})
+      if xml.findtext("in/format") != "tiff":
+        return self._response("JPEG rendering is not implemented by the chatterbox", 501)
+      if int(channel) not in images:
+        return self._response("Image not found", 404)
+      data = images[int(channel)]
+      return HTTPResponse(
+        200, data, {"content-type": "image/tiff", "content-length": str(len(data))}
+      )
+    if path == protocol._INFO_URL_PATH:
+      return self._response(
+        "<p>Dimensions: 1 x 1</p><p>File Size: 124 bytes</p><p>Time Left: 0 seconds</p>"
+      )
+    if path == protocol._TIME_URL_PATH:
+      return self._response("Estimated Scan Time: 0 hours 0 minutes 1 seconds")
+    if path == protocol._SAVELOG_URL_PATH:
+      return self._response("Chatterbox scan log")
+    if path == "/scanapp/help/instinfo.pl":
+      return self._response("Odyssey Classic chatterbox")
+    if path == "/scanapp/admin/admin/index":
+      self.state = "Idle"
+      return self._response("Chatterbox shut down")
+    return self._response("Unknown endpoint", 404)
