@@ -2326,17 +2326,10 @@ class PrepChannels:
   async def sense_tip_presence(self) -> list[bool]:
     """Sense whether a tip is physically present on each pipettor channel via the sleeve sensor.
 
-    Reads the physical sleeve displacement sensor (GetTipPresent, cmd=15) on each
-    channel's SDrive sub-object. The sensor responds in real-time to sleeve
-    displacement — verified by manual sleeve push tests without any tip pickup.
-
-    Note: the firmware exposes this sensor through the SDrive (squeezer drive) object
-    at object_id 514, but it reads the sleeve displacement sensor independently of
-    the squeeze motor state.
-
-    Channel addresses are discovered lazily from the object tree and cached in
-    ``ChannelDriveMap``, so this works regardless of the node IDs
-    assigned by the firmware on a given instrument.
+    Resolves each channel's Squeeze.SDrive object from the firmware tree, then
+    finds GetTipPresent by name in that object's method table. The query uses
+    the interface and method IDs declared by the firmware. Method tables are
+    cached by the connection's introspection instance.
 
     Returns:
       List of bools, one per channel (index 0=rearmost). True if tip detected.
@@ -2348,7 +2341,12 @@ class PrepChannels:
 
     results: list[bool] = []
     for addr in drive_map.sleeve_sensor_addrs:
-      raw = await self._client.execute(PrepCmd.PrepProbeRequest(dest=addr, command_id=15))
+      method = await self._client.introspection.get_method_by_name(addr, "GetTipPresent")
+      raw = await self._client.execute(
+        PrepCmd.PrepProbeRequest(
+          dest=addr, command_id=method.method_id, interface_id=method.interface_id
+        )
+      )
       if raw is None or len(raw) < 8:
         results.append(False)
       else:

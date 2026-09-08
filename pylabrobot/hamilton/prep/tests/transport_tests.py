@@ -6,10 +6,12 @@ from unittest.mock import AsyncMock, patch
 
 from pylabrobot.hamilton.prep import PrepChatterboxClient
 from pylabrobot.hamilton.prep import prep_commands as C
+from pylabrobot.hamilton.prep.channels import ChannelDriveMap, PrepChannels
 from pylabrobot.hamilton.prep.client import MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH, PrepClient
 from pylabrobot.hamilton.prep.error_tables import PREP_ERROR_CODES
+from pylabrobot.hamilton.prep.info import PrepInstrumentInfo
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
-from pylabrobot.hamilton.transport.tcp.introspection import ObjectInfo
+from pylabrobot.hamilton.transport.tcp.introspection import MethodInfo, ObjectInfo
 from pylabrobot.hamilton.transport.tcp.messages import HoiParams
 from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, HoiPacket
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
@@ -40,6 +42,91 @@ class TestPrepTransport(_SessionTest):
     io = self.start_session(client, Address(1, 1, 257))
     self.addAsyncCleanup(client.stop)
     return client, io
+
+  async def test_tip_presence_uses_each_objects_named_method_and_cached_table(self):
+    """Sensor IDs come from discovery; repeated reads reuse the session's method tables."""
+    client, io = self.make_client()
+    channels = PrepChannels(client=client, info=PrepInstrumentInfo(client))
+    rear, front = Address(1, 236, 514), Address(1, 237, 514)
+    tables = {
+      rear: [
+        MethodInfo(3, 0, 15, "UnrelatedMethod"),
+        MethodInfo(4, 0, 88, "GetTipPresent"),
+      ],
+      front: [
+        MethodInfo(2, 0, 21, "GetTipPresent"),
+        MethodInfo(3, 0, 15, "UnrelatedMethod"),
+      ],
+    }
+
+    async def respond(request: HarpPacket) -> None:
+      """Only answer the discovered sensor query on its own object."""
+      hoi = HoiPacket.unpack(request.payload)
+      ids = (4, 88) if request.dst == rear else (2, 21)
+      self.assertEqual((hoi.interface_id, hoi.action_id), ids)
+      self.assertEqual(hoi.action_code, Hoi2Action.STATUS_REQUEST)
+      self.assertEqual(hoi.params, b"")
+      io.feed(
+        _response(
+          source=request.dst,
+          sequence=request.seq,
+          action=Hoi2Action.STATUS_RESPONSE,
+          params=bytes.fromhex("0600040001000000" if request.dst == rear else "0600040000000000"),
+        )
+      )
+
+    io.on_write = respond
+    with (
+      patch.object(
+        channels,
+        "discover_channel_drives",
+        new=AsyncMock(return_value=ChannelDriveMap([rear, front], [], [])),
+      ),
+      patch.object(
+        client.introspection,
+        "get_object",
+        new=AsyncMock(side_effect=lambda addr: ObjectInfo("SDrive", "", 2, 0, addr)),
+      ),
+      patch.object(
+        client.introspection,
+        "get_method",
+        new=AsyncMock(side_effect=lambda addr, index: tables[addr][index]),
+      ) as get_method,
+    ):
+      self.assertEqual(
+        await asyncio.wait_for(channels.sense_tip_presence(), timeout=1), [True, False]
+      )
+      self.assertEqual(
+        await asyncio.wait_for(channels.sense_tip_presence(), timeout=1), [True, False]
+      )
+      self.assertEqual(get_method.await_count, 4)
+    self.assertEqual(len(io.writes), 4)
+
+  async def test_tip_presence_requires_one_named_method_before_querying(self):
+    """Absent or ambiguous names cannot fall back to numeric sensor IDs."""
+    for methods in (
+      [MethodInfo(3, 0, 15, "UnrelatedMethod")],
+      [MethodInfo(1, 0, 15, "GetTipPresent"), MethodInfo(2, 0, 15, "GetTipPresent")],
+    ):
+      with self.subTest(methods=methods):
+        client, io = self.make_client()
+        channels = PrepChannels(client=client, info=PrepInstrumentInfo(client))
+        addr = Address(1, 236, 514)
+        with (
+          patch.object(
+            channels,
+            "discover_channel_drives",
+            new=AsyncMock(return_value=ChannelDriveMap([addr], [], [])),
+          ),
+          patch.object(
+            client.introspection,
+            "ensure_method_table",
+            new=AsyncMock(return_value=methods),
+          ),
+        ):
+          with self.assertRaisesRegex(RuntimeError, "GetTipPresent"):
+            await asyncio.wait_for(channels.sense_tip_presence(), timeout=1)
+        self.assertEqual(io.writes, [])
 
   async def test_reusable_request_rebinds_after_reconnection(self):
     client, io = self.make_client()
