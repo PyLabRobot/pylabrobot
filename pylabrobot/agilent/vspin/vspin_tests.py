@@ -1804,7 +1804,20 @@ class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(started.data["destination"]["name"], "centrifuge_bucket1")
     self.assertIs(self.vspin.bucket1.resource, plate)
     self.loader.driver.load.assert_awaited_once_with(  # type: ignore[attr-defined]
-      protocol.TEACHPOINT_BUCKET_1
+      protocol.TEACHPOINT_BUCKET_1,
+      plate_height=10,
+      source_z_offset=3,
+      destination_z_offset=3,
+      park_z_offset=3,
+      gripper_open_position=0,
+      gripper_closed_position=5.68,
+      gripper_close_threshold=1.5,
+      source_speed="slow",
+      destination_speed="slow",
+      park_speed="slow",
+      gripper_open_speed="fast",
+      gripper_close_speed="slow",
+      gripper_release_speed="slow",
     )
 
   async def test_load_maps_presented_bucket_2_to_its_teachpoint(self):
@@ -1815,15 +1828,89 @@ class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
     await self.loader.load()
 
     self.loader.driver.load.assert_awaited_once_with(  # type: ignore[attr-defined]
-      protocol.TEACHPOINT_BUCKET_2
+      protocol.TEACHPOINT_BUCKET_2,
+      plate_height=10,
+      source_z_offset=3,
+      destination_z_offset=3,
+      park_z_offset=3,
+      gripper_open_position=0,
+      gripper_closed_position=5.68,
+      gripper_close_threshold=1.5,
+      source_speed="slow",
+      destination_speed="slow",
+      park_speed="slow",
+      gripper_open_speed="fast",
+      gripper_close_speed="slow",
+      gripper_release_speed="slow",
     )
     self.assertIs(self.vspin.bucket2.resource, plate)
+
+  async def test_transfer_parameters_reach_driver_and_events(self):
+    plate = Resource("plate_1", size_x=127, size_y=85, size_z=22)
+    self.loader.assign_child_resource(plate, location=Coordinate.zero())
+    parameters = {
+      "plate_height": 22.0,
+      "source_z_offset": 4.0,
+      "destination_z_offset": 2.0,
+      "park_z_offset": 1.0,
+      "gripper_open_position": 0.25,
+      "gripper_closed_position": 4.75,
+      "gripper_close_threshold": 1.8,
+      "source_speed": "medium",
+      "destination_speed": "fast",
+      "park_speed": "medium",
+      "gripper_open_speed": "slow",
+      "gripper_close_speed": "medium",
+      "gripper_release_speed": "fast",
+    }
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      await self.loader.load(**parameters)
+      self.assertIs(self.vspin.bucket1.resource, plate)
+      self.assertIsNone(self.loader.resource)
+      await self.loader.unload(**parameters)
+
+    self.loader.driver.load.assert_awaited_once_with(  # type: ignore[attr-defined]
+      protocol.TEACHPOINT_BUCKET_1, **parameters
+    )
+    self.loader.driver.unload.assert_awaited_once_with(  # type: ignore[attr-defined]
+      protocol.TEACHPOINT_BUCKET_1, **parameters
+    )
+    self.assertIs(self.loader.resource, plate)
+    self.assertIsNone(self.vspin.bucket1.resource)
+    started = [
+      event
+      for event in events
+      if event.name in ("centrifuge_loader.load.started", "centrifuge_loader.unload.started")
+    ]
+    self.assertEqual(len(started), 2)
+    for event in started:
+      self.assertEqual(event.data["parameters"], parameters)
+
+  async def test_invalid_transfer_settings_release_vspin_without_recovery(self):
+    plate = Resource("plate_1", size_x=127, size_y=85, size_z=22)
+    # Use the real transfer entry points; FTDI remains mocked by the fixture.
+    self.loader = Access2(name="loader", device_id="test", vspin=self.vspin)
+    self.loader.assign_child_resource(plate, location=Coordinate.zero())
+    before = self.vspin.state
+    loader_before = self.loader.driver.state
+
+    with self.assertRaisesRegex(ValueError, "open position < close threshold"):
+      await self.loader.load(gripper_open_position=2, gripper_close_threshold=1)
+
+    self.assertEqual(self.vspin.state, before)
+    self.assertEqual(self.loader.driver.state, loader_before)
+    self.assertIs(self.loader.resource, plate)
+    self.assertIsNone(self.vspin.bucket1.resource)
 
   async def test_actuated_loader_failure_blocks_vspin_motion(self):
     plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)
     self.loader.assign_child_resource(plate, location=Coordinate.zero())
 
-    async def fail_after_actuation(bucket_teachpoint: int) -> None:
+    async def fail_after_actuation(bucket_teachpoint: int, **parameters: float | str) -> None:
       self.assertEqual(bucket_teachpoint, protocol.TEACHPOINT_BUCKET_1)
       self.loader.driver._mark_recovery_required(position_uncertain=False)
       raise RuntimeError("loader motion failed")

@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import logging
+import math
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, Literal
 
 from pylabrobot.agilent.vspin import _access2_protocol as protocol
 from pylabrobot.agilent.vspin._state import (
@@ -41,14 +42,28 @@ _AXIS_NAMES: dict[int, str] = {
   protocol.AXIS_Z: "Z",
 }
 
+Access2Speed = Literal["slow", "medium", "fast"]
+
+
+def _speed_code(speed: Access2Speed) -> int:
+  """Translate a named controller speed preset before starting an operation."""
+  speeds = {
+    "slow": protocol.SPEED_SLOW,
+    "medium": protocol.SPEED_MEDIUM,
+    "fast": protocol.SPEED_FAST,
+  }
+  try:
+    return speeds[speed]
+  except (KeyError, TypeError) as error:
+    raise ValueError("Access2 speed must be 'slow', 'medium', or 'fast'") from error
+
 
 @dataclasses.dataclass(frozen=True)
 class TransferRoute:
-  """Teachpoints and park offset for one transfer direction."""
+  """Teachpoints for one transfer direction."""
 
   source_teachpoint: int
   destination_teachpoint: int
-  park_z_offset: float
   source_name: str
 
 
@@ -67,30 +82,29 @@ def _transfer_route(
     return TransferRoute(
       source_teachpoint=protocol.TEACHPOINT_PICK,
       destination_teachpoint=bucket_teachpoint,
-      park_z_offset=3,
       source_name="stage",
     )
   if direction is TransferDirection.OUT_OF_CENTRIFUGE:
     return TransferRoute(
       source_teachpoint=bucket_teachpoint,
       destination_teachpoint=protocol.TEACHPOINT_PICK,
-      park_z_offset=0,
       source_name="centrifuge",
     )
   raise ValueError(f"Invalid transfer direction: {direction}")
 
 
-def _loader_load_event_context(self: "Access2") -> dict:
+def _loader_load_event_context(self: "Access2", **parameters: float | str) -> dict:
   plate = self.resource
   return {
     "device": resource_reference(self),
     "resources": [] if plate is None else [resource_reference(plate)],
     "source": resource_reference(self),
     "destination": resource_reference(self._vspin.at_bucket),
+    "parameters": parameters,
   }
 
 
-def _loader_unload_event_context(self: "Access2") -> dict:
+def _loader_unload_event_context(self: "Access2", **parameters: float | str) -> dict:
   bucket = self._vspin.at_bucket
   plate = None if bucket is None else bucket.resource
   return {
@@ -98,6 +112,7 @@ def _loader_unload_event_context(self: "Access2") -> dict:
     "resources": [] if plate is None else [resource_reference(plate)],
     "source": resource_reference(bucket),
     "destination": resource_reference(self),
+    "parameters": parameters,
   }
 
 
@@ -108,29 +123,16 @@ class Access2Driver:
     self,
     device_id: str,
     timeout: int = 60,
-    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
-    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
-    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
   ):
     """
     Args:
       device_id: The libftdi id for the loader. Find using
         `python3 -m pylibftdi.examples.list_devices`
       timeout: Communication and operation timeout in seconds.
-      gripper_open_position: Absolute gripper-axis position used when opening.
-      gripper_closed_position: Absolute gripper-axis position used when closing.
-      gripper_close_threshold: Smallest gripper-axis position considered closed around a plate.
     """
     super().__init__()
-    if not gripper_open_position < gripper_close_threshold <= gripper_closed_position:
-      raise ValueError(
-        "Gripper positions must satisfy open position < close threshold <= closed position"
-      )
     self.io = FTDI(human_readable_device_name="Agilent Access2 Loader", device_id=device_id)
     self.timeout = timeout
-    self.gripper_open_position = gripper_open_position
-    self.gripper_closed_position = gripper_closed_position
-    self.gripper_close_threshold = gripper_close_threshold
     self._command_lock = asyncio.Lock()
     self._operation_lock = asyncio.Lock()
     self._state = Access2MachineState()
@@ -268,7 +270,7 @@ class Access2Driver:
       transition.mark_actuated()
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        self.gripper_open_position,
+        _DEFAULT_GRIPPER_OPEN_POSITION,
         profile=protocol.PROFILE_DYNAMIC_EMPTY,
         speed=protocol.SPEED_FAST,
       )
@@ -396,16 +398,22 @@ class Access2Driver:
       and abs(status.gripper_position - position) <= _AXIS_POSITION_TOLERANCE
     )
 
-  def _gripper_is_closed(self, status: protocol.Access2Status) -> bool:
+  @staticmethod
+  def _gripper_is_closed(
+    status: protocol.Access2Status,
+    *,
+    gripper_closed_position: float,
+    gripper_close_threshold: float,
+  ) -> bool:
     at_closed_position = (
       status.gripper_position is not None
-      and abs(status.gripper_position - self.gripper_closed_position) <= _AXIS_POSITION_TOLERANCE
+      and abs(status.gripper_position - gripper_closed_position) <= _AXIS_POSITION_TOLERANCE
     )
     return (
       status.gripper_status is not None
       and bool(status.gripper_status & protocol.AXIS_STATUS_MOVE_DONE)
       and status.gripper_position is not None
-      and status.gripper_position >= self.gripper_close_threshold
+      and status.gripper_position >= gripper_close_threshold
       and (at_closed_position or status.optical_plate_sensor)
     )
 
@@ -533,7 +541,13 @@ class Access2Driver:
     response = await self.send_command(protocol.build_get_sensor_values())
     return protocol.decode_sensor_values(response.data)
 
-  async def _close_gripper(self) -> protocol.Access2Status:
+  async def _close_gripper(
+    self,
+    *,
+    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
+    speed: int = protocol.SPEED_SLOW,
+  ) -> protocol.Access2Status:
     """Close until the configured threshold, allowing normal plate contact.
 
     The FTDI controller can return a nonzero result when a plate stops the
@@ -545,9 +559,9 @@ class Access2Driver:
     response = await self.send_command(
       protocol.build_move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        self.gripper_closed_position,
+        gripper_closed_position,
         protocol.PROFILE_DYNAMIC_EMPTY,
-        protocol.SPEED_SLOW,
+        speed,
       ),
       raise_on_error=False,
     )
@@ -555,14 +569,16 @@ class Access2Driver:
       (protocol.AXIS_GRIPPER,),
       operation="close gripper",
     )
-    if not self._gripper_is_closed(status) or (
-      response.result != 0 and not status.optical_plate_sensor
-    ):
+    if not self._gripper_is_closed(
+      status,
+      gripper_closed_position=gripper_closed_position,
+      gripper_close_threshold=gripper_close_threshold,
+    ) or (response.result != 0 and not status.optical_plate_sensor):
       assert status.gripper_position is not None
       assert status.gripper_status is not None
       error = (
         "Access2 did not close the gripper: "
-        f"position {status.gripper_position:.3f}, threshold {self.gripper_close_threshold:.3f}, "
+        f"position {status.gripper_position:.3f}, threshold {gripper_close_threshold:.3f}, "
         f"axis status 0x{status.gripper_status:02x}, "
         f"optical plate sensor {status.optical_plate_sensor}, "
         f"command result 0x{response.result:02x}"
@@ -577,8 +593,21 @@ class Access2Driver:
       )
     return status
 
-  async def park(self) -> None:
-    """Move the Access2 arm to its park teachpoint."""
+  async def park(
+    self, *, plate_height: float = 15, z_offset: float = 8, speed: Access2Speed = "slow"
+  ) -> None:
+    """Move the Access2 arm to its park teachpoint.
+
+    Args:
+      plate_height: Plate height sent to the controller, in millimeters.
+      z_offset: Z offset at the park teachpoint, in millimeters.
+      speed: Controller speed preset: ``slow``, ``medium``, or ``fast``.
+    """
+    speed_code = _speed_code(speed)
+    if not math.isfinite(plate_height) or plate_height <= 0:
+      raise ValueError("Plate height must be finite and positive")
+    if not math.isfinite(z_offset):
+      raise ValueError("Park Z offset must be finite")
     logger.debug("[loader] park")
     async with self._operation_scope(Access2Activity.MOVING) as transition:
       await self._require_ready(operation="park precondition")
@@ -586,10 +615,10 @@ class Access2Driver:
       transition.mark_actuated(position_uncertain=True)
       await self._move_to_teachpoint(
         protocol.TEACHPOINT_PARK,
-        8,
-        15,
+        z_offset,
+        plate_height,
         profile=protocol.PROFILE_DYNAMIC_FULL,
-        speed=protocol.SPEED_SLOW,
+        speed=speed_code,
       )
       self._state = dataclasses.replace(
         self._state,
@@ -598,29 +627,70 @@ class Access2Driver:
       transition.confirm_position()
       await self._require_ready(operation="park postcondition")
 
-  async def close_gripper(self) -> None:
-    """Move the gripper to its normal closed position."""
+  async def close_gripper(
+    self,
+    *,
+    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
+    speed: Access2Speed = "slow",
+  ) -> None:
+    """Close the gripper with per-call position, contact threshold, and speed.
+
+    Args:
+      gripper_closed_position: Absolute gripper-axis target in millimeters.
+      gripper_close_threshold: Minimum axis position accepted as contact, in millimeters.
+      speed: Controller speed preset: ``slow``, ``medium``, or ``fast``.
+    """
+    speed_code = _speed_code(speed)
+    if not (
+      math.isfinite(gripper_closed_position)
+      and math.isfinite(gripper_close_threshold)
+      and 0 < gripper_close_threshold <= gripper_closed_position
+    ):
+      raise ValueError("Gripper positions must be finite with 0 < threshold <= closed position")
     logger.debug("[loader] close gripper")
     async with self._operation_scope(Access2Activity.MOVING) as transition:
       status = await self._require_ready(operation="gripper-close precondition")
-      if self._gripper_is_closed(status):
+      if self._gripper_is_closed(
+        status,
+        gripper_closed_position=gripper_closed_position,
+        gripper_close_threshold=gripper_close_threshold,
+      ):
         return
       transition.mark_actuated()
-      await self._close_gripper()
+      await self._close_gripper(
+        gripper_closed_position=gripper_closed_position,
+        gripper_close_threshold=gripper_close_threshold,
+        speed=speed_code,
+      )
       await self._require_ready(operation="gripper-close postcondition")
 
-  async def open_gripper(self) -> None:
-    """Move the gripper to its open position."""
+  async def open_gripper(
+    self,
+    *,
+    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
+    speed: Access2Speed = "slow",
+  ) -> None:
+    """Open the gripper with per-call position and speed.
+
+    Args:
+      gripper_open_position: Absolute gripper-axis target in millimeters.
+      speed: Controller speed preset: ``slow``, ``medium``, or ``fast``.
+    """
+    speed_code = _speed_code(speed)
+    if not math.isfinite(gripper_open_position):
+      raise ValueError("Gripper open position must be finite")
     logger.debug("[loader] open gripper")
     async with self._operation_scope(Access2Activity.MOVING) as transition:
       status = await self._require_ready(operation="gripper-open precondition")
-      if self._gripper_is_at_position(status, self.gripper_open_position):
+      if self._gripper_is_at_position(status, gripper_open_position):
         return
       transition.mark_actuated()
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        self.gripper_open_position,
+        gripper_open_position,
         profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        speed=speed_code,
       )
       await self._require_ready(operation="gripper-open postcondition")
 
@@ -628,8 +698,47 @@ class Access2Driver:
     self,
     direction: TransferDirection,
     bucket_teachpoint: int,
+    *,
+    plate_height: float,
+    source_z_offset: float,
+    destination_z_offset: float,
+    park_z_offset: float,
+    gripper_open_position: float,
+    gripper_closed_position: float,
+    gripper_close_threshold: float,
+    source_speed: Access2Speed,
+    destination_speed: Access2Speed,
+    park_speed: Access2Speed,
+    gripper_open_speed: Access2Speed,
+    gripper_close_speed: Access2Speed,
+    gripper_release_speed: Access2Speed,
   ) -> None:
     """Run the load/unload hardware sequence through one stateful path."""
+    if not all(
+      math.isfinite(value)
+      for value in (
+        plate_height,
+        source_z_offset,
+        destination_z_offset,
+        park_z_offset,
+        gripper_open_position,
+        gripper_closed_position,
+        gripper_close_threshold,
+      )
+    ):
+      raise ValueError("Transfer parameters must be finite")
+    if plate_height <= 0:
+      raise ValueError("Plate height must be positive")
+    if not gripper_open_position < gripper_close_threshold <= gripper_closed_position:
+      raise ValueError(
+        "Gripper positions must satisfy open position < close threshold <= closed position"
+      )
+    source_speed_code = _speed_code(source_speed)
+    destination_speed_code = _speed_code(destination_speed)
+    park_speed_code = _speed_code(park_speed)
+    gripper_open_speed_code = _speed_code(gripper_open_speed)
+    gripper_close_speed_code = _speed_code(gripper_close_speed)
+    gripper_release_speed_code = _speed_code(gripper_release_speed)
     route = _transfer_route(direction, bucket_teachpoint)
     progress = TransferProgress(
       direction=direction,
@@ -643,14 +752,16 @@ class Access2Driver:
       transition.mark_actuated()
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        self.gripper_open_position,
+        gripper_open_position,
         profile=protocol.PROFILE_DYNAMIC_EMPTY,
-        speed=protocol.SPEED_FAST,
+        speed=gripper_open_speed_code,
       )
 
       self._state = dataclasses.replace(self._state, last_teachpoint=None)
       transition.mark_actuated(position_uncertain=True)
-      await self._move_to_teachpoint(route.source_teachpoint, 3, 10)
+      await self._move_to_teachpoint(
+        route.source_teachpoint, source_z_offset, plate_height, speed=source_speed_code
+      )
       self._state = dataclasses.replace(
         self._state,
         last_teachpoint=route.source_teachpoint,
@@ -664,7 +775,11 @@ class Access2Driver:
 
       self._set_transfer_phase(TransferPhase.GRIPPING)
       transition.mark_actuated()
-      await self._close_gripper()
+      await self._close_gripper(
+        gripper_closed_position=gripper_closed_position,
+        gripper_close_threshold=gripper_close_threshold,
+        speed=gripper_close_speed_code,
+      )
       self._set_transfer_phase(TransferPhase.HOLDING)
 
       self._set_transfer_phase(TransferPhase.MOVING_TO_DESTINATION)
@@ -672,9 +787,10 @@ class Access2Driver:
       transition.mark_actuated(position_uncertain=True)
       await self._move_to_teachpoint(
         route.destination_teachpoint,
-        3,
-        10,
+        destination_z_offset,
+        plate_height,
         profile=protocol.PROFILE_DYNAMIC_FULL,
+        speed=destination_speed_code,
       )
       self._state = dataclasses.replace(
         self._state,
@@ -687,8 +803,9 @@ class Access2Driver:
       transition.mark_actuated()
       await self._move_axis_to_position(
         protocol.AXIS_GRIPPER,
-        self.gripper_open_position,
+        gripper_open_position,
         profile=protocol.PROFILE_DYNAMIC_EMPTY,
+        speed=gripper_release_speed_code,
       )
 
       self._set_transfer_phase(TransferPhase.RETURNING_TO_PARK)
@@ -696,8 +813,9 @@ class Access2Driver:
       transition.mark_actuated(position_uncertain=True)
       await self._move_to_teachpoint(
         protocol.TEACHPOINT_PARK,
-        route.park_z_offset,
-        10,
+        park_z_offset,
+        plate_height,
+        speed=park_speed_code,
       )
       self._state = dataclasses.replace(
         self._state,
@@ -709,18 +827,112 @@ class Access2Driver:
   async def load(
     self,
     bucket_teachpoint: int = protocol.TEACHPOINT_BUCKET_1,
+    *,
+    plate_height: float = 10,
+    source_z_offset: float = 3,
+    destination_z_offset: float = 3,
+    park_z_offset: float = 3,
+    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
+    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
+    source_speed: Access2Speed = "slow",
+    destination_speed: Access2Speed = "slow",
+    park_speed: Access2Speed = "slow",
+    gripper_open_speed: Access2Speed = "fast",
+    gripper_close_speed: Access2Speed = "slow",
+    gripper_release_speed: Access2Speed = "slow",
   ) -> None:
-    """Move a plate from the stage into the selected bucket."""
+    """Move a plate from the stage into the selected bucket.
+
+    Args:
+      bucket_teachpoint: Controller teachpoint for the target bucket.
+      plate_height: Plate height sent to the controller, in millimeters.
+      source_z_offset: Z offset at the pickup teachpoint, in millimeters.
+      destination_z_offset: Z offset at the placement teachpoint, in millimeters.
+      park_z_offset: Z offset when returning to park, in millimeters.
+      gripper_open_position: Absolute gripper-axis position when opening, in millimeters.
+      gripper_closed_position: Absolute gripper-axis target when closing, in millimeters.
+      gripper_close_threshold: Minimum axis position accepted as plate contact, in millimeters.
+      source_speed: Approach to the pickup teachpoint; ``slow``, ``medium``, or ``fast``.
+      destination_speed: Move carrying the plate to placement; ``slow``, ``medium``, or ``fast``.
+      park_speed: Return to park after release; ``slow``, ``medium``, or ``fast``.
+      gripper_open_speed: Initial opening before pickup; ``slow``, ``medium``, or ``fast``.
+      gripper_close_speed: Closing on the plate; ``slow``, ``medium``, or ``fast``.
+      gripper_release_speed: Opening to release the plate; ``slow``, ``medium``, or ``fast``.
+    """
     logger.debug("[loader] load")
-    await self._transfer(TransferDirection.INTO_CENTRIFUGE, bucket_teachpoint)
+    await self._transfer(
+      TransferDirection.INTO_CENTRIFUGE,
+      bucket_teachpoint,
+      plate_height=plate_height,
+      source_z_offset=source_z_offset,
+      destination_z_offset=destination_z_offset,
+      park_z_offset=park_z_offset,
+      gripper_open_position=gripper_open_position,
+      gripper_closed_position=gripper_closed_position,
+      gripper_close_threshold=gripper_close_threshold,
+      source_speed=source_speed,
+      destination_speed=destination_speed,
+      park_speed=park_speed,
+      gripper_open_speed=gripper_open_speed,
+      gripper_close_speed=gripper_close_speed,
+      gripper_release_speed=gripper_release_speed,
+    )
 
   async def unload(
     self,
     bucket_teachpoint: int = protocol.TEACHPOINT_BUCKET_1,
+    *,
+    plate_height: float = 10,
+    source_z_offset: float = 3,
+    destination_z_offset: float = 3,
+    park_z_offset: float = 0,
+    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
+    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
+    source_speed: Access2Speed = "slow",
+    destination_speed: Access2Speed = "slow",
+    park_speed: Access2Speed = "slow",
+    gripper_open_speed: Access2Speed = "fast",
+    gripper_close_speed: Access2Speed = "slow",
+    gripper_release_speed: Access2Speed = "slow",
   ) -> None:
-    """Move a plate from the selected bucket onto the stage."""
+    """Move a plate from the selected bucket onto the stage.
+
+    Args:
+      bucket_teachpoint: Controller teachpoint for the target bucket.
+      plate_height: Plate height sent to the controller, in millimeters.
+      source_z_offset: Z offset at the pickup teachpoint, in millimeters.
+      destination_z_offset: Z offset at the placement teachpoint, in millimeters.
+      park_z_offset: Z offset when returning to park, in millimeters.
+      gripper_open_position: Absolute gripper-axis position when opening, in millimeters.
+      gripper_closed_position: Absolute gripper-axis target when closing, in millimeters.
+      gripper_close_threshold: Minimum axis position accepted as plate contact, in millimeters.
+      source_speed: Approach to the pickup teachpoint; ``slow``, ``medium``, or ``fast``.
+      destination_speed: Move carrying the plate to placement; ``slow``, ``medium``, or ``fast``.
+      park_speed: Return to park after release; ``slow``, ``medium``, or ``fast``.
+      gripper_open_speed: Initial opening before pickup; ``slow``, ``medium``, or ``fast``.
+      gripper_close_speed: Closing on the plate; ``slow``, ``medium``, or ``fast``.
+      gripper_release_speed: Opening to release the plate; ``slow``, ``medium``, or ``fast``.
+    """
     logger.debug("[loader] unload")
-    await self._transfer(TransferDirection.OUT_OF_CENTRIFUGE, bucket_teachpoint)
+    await self._transfer(
+      TransferDirection.OUT_OF_CENTRIFUGE,
+      bucket_teachpoint,
+      plate_height=plate_height,
+      source_z_offset=source_z_offset,
+      destination_z_offset=destination_z_offset,
+      park_z_offset=park_z_offset,
+      gripper_open_position=gripper_open_position,
+      gripper_closed_position=gripper_closed_position,
+      gripper_close_threshold=gripper_close_threshold,
+      source_speed=source_speed,
+      destination_speed=destination_speed,
+      park_speed=park_speed,
+      gripper_open_speed=gripper_open_speed,
+      gripper_close_speed=gripper_close_speed,
+      gripper_release_speed=gripper_release_speed,
+    )
 
 
 class Access2(ResourceHolder):
@@ -734,11 +946,8 @@ class Access2(ResourceHolder):
     size_x: float = 0.0,
     size_y: float = 0.0,
     size_z: float = 0.0,
-    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
-    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
-    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
   ):
-    """Create an Access2 loader with configurable absolute gripper positions.
+    """Create an Access2 loader paired with a VSpin centrifuge.
 
     Args:
       name: Resource name.
@@ -747,15 +956,9 @@ class Access2(ResourceHolder):
       size_x: Resource width in millimeters.
       size_y: Resource depth in millimeters.
       size_z: Resource height in millimeters.
-      gripper_open_position: Absolute gripper-axis position used when opening.
-      gripper_closed_position: Absolute gripper-axis position used when closing.
-      gripper_close_threshold: Smallest gripper-axis position considered closed around a plate.
     """
     driver = Access2Driver(
       device_id=device_id,
-      gripper_open_position=gripper_open_position,
-      gripper_closed_position=gripper_closed_position,
-      gripper_close_threshold=gripper_close_threshold,
     )
     ResourceHolder.__init__(
       self,
@@ -782,6 +985,20 @@ class Access2(ResourceHolder):
     self,
     direction: TransferDirection,
     bucket: ResourceHolder,
+    *,
+    plate_height: float,
+    source_z_offset: float,
+    destination_z_offset: float,
+    park_z_offset: float,
+    gripper_open_position: float,
+    gripper_closed_position: float,
+    gripper_close_threshold: float,
+    source_speed: Access2Speed,
+    destination_speed: Access2Speed,
+    park_speed: Access2Speed,
+    gripper_open_speed: Access2Speed,
+    gripper_close_speed: Access2Speed,
+    gripper_release_speed: Access2Speed,
   ) -> None:
     """Reserve VSpin and ask Access2Driver to perform one physical transfer."""
     if self.driver.state.recovery_required:
@@ -790,17 +1007,82 @@ class Access2(ResourceHolder):
     async with self._vspin.reserve_transfer(bucket) as vspin_transition:
       try:
         if direction is TransferDirection.INTO_CENTRIFUGE:
-          await self.driver.load(bucket_teachpoint)
+          await self.driver.load(
+            bucket_teachpoint,
+            plate_height=plate_height,
+            source_z_offset=source_z_offset,
+            destination_z_offset=destination_z_offset,
+            park_z_offset=park_z_offset,
+            gripper_open_position=gripper_open_position,
+            gripper_closed_position=gripper_closed_position,
+            gripper_close_threshold=gripper_close_threshold,
+            source_speed=source_speed,
+            destination_speed=destination_speed,
+            park_speed=park_speed,
+            gripper_open_speed=gripper_open_speed,
+            gripper_close_speed=gripper_close_speed,
+            gripper_release_speed=gripper_release_speed,
+          )
         else:
-          await self.driver.unload(bucket_teachpoint)
+          await self.driver.unload(
+            bucket_teachpoint,
+            plate_height=plate_height,
+            source_z_offset=source_z_offset,
+            destination_z_offset=destination_z_offset,
+            park_z_offset=park_z_offset,
+            gripper_open_position=gripper_open_position,
+            gripper_closed_position=gripper_closed_position,
+            gripper_close_threshold=gripper_close_threshold,
+            source_speed=source_speed,
+            destination_speed=destination_speed,
+            park_speed=park_speed,
+            gripper_open_speed=gripper_open_speed,
+            gripper_close_speed=gripper_close_speed,
+            gripper_release_speed=gripper_release_speed,
+          )
       except BaseException:
         if self.driver.state.recovery_required:
           vspin_transition.mark_actuated()
         raise
 
   @evented_operation("centrifuge_loader.load", _loader_load_event_context)
-  async def load(self) -> None:
-    """Move the loader's plate into the currently presented VSpin bucket."""
+  async def load(
+    self,
+    *,
+    plate_height: float = 10,
+    source_z_offset: float = 3,
+    destination_z_offset: float = 3,
+    park_z_offset: float = 3,
+    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
+    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
+    source_speed: Access2Speed = "slow",
+    destination_speed: Access2Speed = "slow",
+    park_speed: Access2Speed = "slow",
+    gripper_open_speed: Access2Speed = "fast",
+    gripper_close_speed: Access2Speed = "slow",
+    gripper_release_speed: Access2Speed = "slow",
+  ) -> None:
+    """Move the loader's plate into the currently presented VSpin bucket.
+
+    Settings apply only to this transfer; plate dimensions are not inferred from the resource.
+    Gripper positions describe axis travel, not plate width or jaw separation.
+
+    Args:
+      plate_height: Plate height sent to the controller, in millimeters.
+      source_z_offset: Z offset at the pickup teachpoint, in millimeters.
+      destination_z_offset: Z offset at the placement teachpoint, in millimeters.
+      park_z_offset: Z offset when returning to park, in millimeters.
+      gripper_open_position: Absolute gripper-axis position when opening, in millimeters.
+      gripper_closed_position: Absolute gripper-axis target when closing, in millimeters.
+      gripper_close_threshold: Minimum axis position accepted as plate contact, in millimeters.
+      source_speed: Approach to the pickup teachpoint; ``slow``, ``medium``, or ``fast``.
+      destination_speed: Move carrying the plate to placement; ``slow``, ``medium``, or ``fast``.
+      park_speed: Return to park after release; ``slow``, ``medium``, or ``fast``.
+      gripper_open_speed: Initial opening before pickup; ``slow``, ``medium``, or ``fast``.
+      gripper_close_speed: Closing on the plate; ``slow``, ``medium``, or ``fast``.
+      gripper_release_speed: Opening to release the plate; ``slow``, ``medium``, or ``fast``.
+    """
     bucket = self._vspin.at_bucket
     if bucket is None:
       raise NotAtBucketError(
@@ -812,13 +1094,64 @@ class Access2(ResourceHolder):
     if bucket.resource is not None:
       raise BucketHasPlateError("Bucket must be empty to load a plate.")
 
-    await self._run_driver_transfer(TransferDirection.INTO_CENTRIFUGE, bucket)
+    await self._run_driver_transfer(
+      TransferDirection.INTO_CENTRIFUGE,
+      bucket,
+      plate_height=plate_height,
+      source_z_offset=source_z_offset,
+      destination_z_offset=destination_z_offset,
+      park_z_offset=park_z_offset,
+      gripper_open_position=gripper_open_position,
+      gripper_closed_position=gripper_closed_position,
+      gripper_close_threshold=gripper_close_threshold,
+      source_speed=source_speed,
+      destination_speed=destination_speed,
+      park_speed=park_speed,
+      gripper_open_speed=gripper_open_speed,
+      gripper_close_speed=gripper_close_speed,
+      gripper_release_speed=gripper_release_speed,
+    )
 
     bucket.assign_child_resource(self.resource, location=Coordinate.zero())
 
   @evented_operation("centrifuge_loader.unload", _loader_unload_event_context)
-  async def unload(self) -> None:
-    """Move the presented VSpin bucket's plate onto the loader."""
+  async def unload(
+    self,
+    *,
+    plate_height: float = 10,
+    source_z_offset: float = 3,
+    destination_z_offset: float = 3,
+    park_z_offset: float = 0,
+    gripper_open_position: float = _DEFAULT_GRIPPER_OPEN_POSITION,
+    gripper_closed_position: float = _DEFAULT_GRIPPER_CLOSED_POSITION,
+    gripper_close_threshold: float = _DEFAULT_GRIPPER_CLOSE_THRESHOLD,
+    source_speed: Access2Speed = "slow",
+    destination_speed: Access2Speed = "slow",
+    park_speed: Access2Speed = "slow",
+    gripper_open_speed: Access2Speed = "fast",
+    gripper_close_speed: Access2Speed = "slow",
+    gripper_release_speed: Access2Speed = "slow",
+  ) -> None:
+    """Move the presented VSpin bucket's plate onto the loader.
+
+    Settings apply only to this transfer; plate dimensions are not inferred from the resource.
+    Gripper positions describe axis travel, not plate width or jaw separation.
+
+    Args:
+      plate_height: Plate height sent to the controller, in millimeters.
+      source_z_offset: Z offset at the pickup teachpoint, in millimeters.
+      destination_z_offset: Z offset at the placement teachpoint, in millimeters.
+      park_z_offset: Z offset when returning to park, in millimeters.
+      gripper_open_position: Absolute gripper-axis position when opening, in millimeters.
+      gripper_closed_position: Absolute gripper-axis target when closing, in millimeters.
+      gripper_close_threshold: Minimum axis position accepted as plate contact, in millimeters.
+      source_speed: Approach to the pickup teachpoint; ``slow``, ``medium``, or ``fast``.
+      destination_speed: Move carrying the plate to placement; ``slow``, ``medium``, or ``fast``.
+      park_speed: Return to park after release; ``slow``, ``medium``, or ``fast``.
+      gripper_open_speed: Initial opening before pickup; ``slow``, ``medium``, or ``fast``.
+      gripper_close_speed: Closing on the plate; ``slow``, ``medium``, or ``fast``.
+      gripper_release_speed: Opening to release the plate; ``slow``, ``medium``, or ``fast``.
+    """
     bucket = self._vspin.at_bucket
     if bucket is None:
       raise NotAtBucketError(
@@ -828,6 +1161,22 @@ class Access2(ResourceHolder):
     if bucket.resource is None:
       raise BucketNoPlateError("Bucket must have a plate to unload.")
 
-    await self._run_driver_transfer(TransferDirection.OUT_OF_CENTRIFUGE, bucket)
+    await self._run_driver_transfer(
+      TransferDirection.OUT_OF_CENTRIFUGE,
+      bucket,
+      plate_height=plate_height,
+      source_z_offset=source_z_offset,
+      destination_z_offset=destination_z_offset,
+      park_z_offset=park_z_offset,
+      gripper_open_position=gripper_open_position,
+      gripper_closed_position=gripper_closed_position,
+      gripper_close_threshold=gripper_close_threshold,
+      source_speed=source_speed,
+      destination_speed=destination_speed,
+      park_speed=park_speed,
+      gripper_open_speed=gripper_open_speed,
+      gripper_close_speed=gripper_close_speed,
+      gripper_release_speed=gripper_release_speed,
+    )
 
     self.assign_child_resource(bucket.resource)

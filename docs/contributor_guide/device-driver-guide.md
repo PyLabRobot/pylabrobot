@@ -28,6 +28,8 @@ Keep it small and idiomatic to PyLabRobot.
 
 The public surface must expose **no non-idempotent commands.** If the hardware only offers a raw toggle/flip, keep it private (`_toggle_x`) and expose move-to-state methods (`move_x_out` / `move_x_in`) that read current state, act only if needed, then confirm. This keeps the API safe to call repeatedly — the caller states intent ("be open"), not a blind toggle.
 
+Keep connection, calibration, and state on the device; pass operation-specific settings (plate geometry, grip, offsets, speed, duration) as method arguments without carrying them between calls.
+
 ### Unverified drivers
 
 If the driver hasn't been checked against real hardware, say so loudly: `setup()` should `logger.warning(...)` that it's untested and invite a change once someone verifies it. Don't quietly present untested code as ready.

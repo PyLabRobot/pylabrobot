@@ -473,6 +473,41 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
 
     io.assert_complete(self)
 
+  async def test_gripper_contact_uses_each_calls_target_and_threshold(self):
+    for threshold, accepted in ((1.8, True), (2.0, False)):
+      with self.subTest(threshold=threshold):
+        driver, io = self._make_driver(
+          [
+            _ScriptStep(
+              protocol.build_move_axis_to_position(
+                protocol.AXIS_GRIPPER, 4.75, speed=protocol.SPEED_FAST
+              ),
+              result=0x51,
+            ),
+            _ScriptStep(
+              protocol.build_get_status(),
+              _full_status_data(
+                flags=_READY_FLAGS | protocol.STATUS_OPTICAL_PLATE_SENSOR,
+                gripper_position=1.94,
+              ),
+            ),
+          ]
+        )
+        if accepted:
+          await driver._close_gripper(
+            gripper_closed_position=4.75,
+            gripper_close_threshold=threshold,
+            speed=protocol.SPEED_FAST,
+          )
+        else:
+          with self.assertRaisesRegex(protocol.Access2ProtocolError, "threshold 2.000"):
+            await driver._close_gripper(
+              gripper_closed_position=4.75,
+              gripper_close_threshold=threshold,
+              speed=protocol.SPEED_FAST,
+            )
+        io.assert_complete(self)
+
   async def test_gripper_close_rejects_a_non_contact_error(self):
     command = protocol.build_move_axis_to_position(protocol.AXIS_GRIPPER, 5.68)
     steps = [
@@ -589,6 +624,242 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
     self.driver._move_to_teachpoint = AsyncMock()  # type: ignore[method-assign]
     self.driver._close_gripper = AsyncMock()  # type: ignore[method-assign]
 
+  async def test_park_parameters_are_per_call(self):
+    self.driver.request_status = AsyncMock(  # type: ignore[method-assign]
+      return_value=_status(flags=_READY_FLAGS)
+    )
+    await self.driver.park(plate_height=22, z_offset=4, speed="medium")
+    await self.driver.park()
+    self.driver._move_to_teachpoint.assert_has_awaits(  # type: ignore[attr-defined]
+      [
+        call(
+          protocol.TEACHPOINT_PARK,
+          4,
+          22,
+          profile=protocol.PROFILE_DYNAMIC_FULL,
+          speed=protocol.SPEED_MEDIUM,
+        ),
+        call(
+          protocol.TEACHPOINT_PARK,
+          8,
+          15,
+          profile=protocol.PROFILE_DYNAMIC_FULL,
+          speed=protocol.SPEED_SLOW,
+        ),
+      ]
+    )
+    self.assertEqual(self.driver.state.operation, Access2Activity.IDLE)
+    self.assertEqual(self.driver.state.last_teachpoint, protocol.TEACHPOINT_PARK)
+
+  async def test_invalid_motion_settings_fail_before_io(self):
+    self.driver.request_status = AsyncMock()  # type: ignore[method-assign]
+    before = self.driver.state
+    for transfer in (self.driver.load, self.driver.unload):
+      for parameter in (
+        "source_speed",
+        "destination_speed",
+        "park_speed",
+        "gripper_open_speed",
+        "gripper_close_speed",
+        "gripper_release_speed",
+      ):
+        with self.subTest(operation=transfer.__name__, parameter=parameter):
+          with self.assertRaisesRegex(ValueError, "Access2 speed"):
+            await transfer(**{parameter: "invalid"})  # type: ignore[arg-type]
+          self.assertEqual(self.driver.state, before)
+    for operation in (self.driver.park, self.driver.open_gripper, self.driver.close_gripper):
+      with self.subTest(operation=operation.__name__):
+        with self.assertRaisesRegex(ValueError, "Access2 speed"):
+          await operation(speed="invalid")  # type: ignore[arg-type]
+        self.assertEqual(self.driver.state, before)
+    for parameters in (
+      {"plate_height": 0},
+      {"plate_height": float("nan")},
+      {"z_offset": float("inf")},
+    ):
+      with self.subTest(parameters=parameters):
+        with self.assertRaises(ValueError):
+          await self.driver.park(**parameters)
+        self.assertEqual(self.driver.state, before)
+    self.driver.request_status.assert_not_awaited()  # type: ignore[attr-defined]
+    self.driver._move_axis_to_position.assert_not_awaited()  # type: ignore[attr-defined]
+    self.driver._move_to_teachpoint.assert_not_awaited()  # type: ignore[attr-defined]
+
+  async def test_standalone_gripper_speeds_are_per_call(self):
+    self.driver.request_status = AsyncMock(  # type: ignore[method-assign]
+      return_value=_status(flags=_READY_FLAGS)
+    )
+    await self.driver.open_gripper(speed="medium")
+    await self.driver.open_gripper()
+    self.driver._move_axis_to_position.assert_has_awaits(  # type: ignore[attr-defined]
+      [
+        call(
+          protocol.AXIS_GRIPPER,
+          0,
+          profile=protocol.PROFILE_DYNAMIC_EMPTY,
+          speed=protocol.SPEED_MEDIUM,
+        ),
+        call(
+          protocol.AXIS_GRIPPER,
+          0,
+          profile=protocol.PROFILE_DYNAMIC_EMPTY,
+          speed=protocol.SPEED_SLOW,
+        ),
+      ]
+    )
+    await self.driver.close_gripper(speed="fast")
+    await self.driver.close_gripper()
+    self.driver._close_gripper.assert_has_awaits(  # type: ignore[attr-defined]
+      [
+        call(gripper_closed_position=5.68, gripper_close_threshold=1.5, speed=protocol.SPEED_FAST),
+        call(gripper_closed_position=5.68, gripper_close_threshold=1.5, speed=protocol.SPEED_SLOW),
+      ]
+    )
+
+  async def test_transfer_speeds_are_per_call_in_both_directions(self):
+    self.driver.request_status = AsyncMock(  # type: ignore[method-assign]
+      return_value=_status(flags=_READY_FLAGS)
+    )
+    self.driver.request_sensor_values = AsyncMock(  # type: ignore[method-assign]
+      return_value=protocol.STATUS_OPTICAL_PLATE_SENSOR
+    )
+    for transfer in (self.driver.load, self.driver.unload):
+      with self.subTest(direction=transfer.__name__):
+        await transfer(
+          source_speed="medium",
+          destination_speed="fast",
+          park_speed="medium",
+          gripper_open_speed="slow",
+          gripper_close_speed="fast",
+          gripper_release_speed="medium",
+        )
+        source, destination = (
+          (protocol.TEACHPOINT_PICK, protocol.TEACHPOINT_BUCKET_1)
+          if transfer == self.driver.load
+          else (protocol.TEACHPOINT_BUCKET_1, protocol.TEACHPOINT_PICK)
+        )
+        self.driver._move_to_teachpoint.assert_has_awaits(  # type: ignore[attr-defined]
+          [
+            call(source, 3, 10, speed=protocol.SPEED_MEDIUM),
+            call(
+              destination, 3, 10, profile=protocol.PROFILE_DYNAMIC_FULL, speed=protocol.SPEED_FAST
+            ),
+            call(
+              protocol.TEACHPOINT_PARK,
+              3 if transfer == self.driver.load else 0,
+              10,
+              speed=protocol.SPEED_MEDIUM,
+            ),
+          ]
+        )
+        self.driver._move_axis_to_position.assert_has_awaits(  # type: ignore[attr-defined]
+          [
+            call(
+              protocol.AXIS_GRIPPER,
+              0,
+              profile=protocol.PROFILE_DYNAMIC_EMPTY,
+              speed=protocol.SPEED_SLOW,
+            ),
+            call(
+              protocol.AXIS_GRIPPER,
+              0,
+              profile=protocol.PROFILE_DYNAMIC_EMPTY,
+              speed=protocol.SPEED_MEDIUM,
+            ),
+          ]
+        )
+        self.driver._close_gripper.assert_awaited_with(  # type: ignore[attr-defined]
+          gripper_closed_position=5.68, gripper_close_threshold=1.5, speed=protocol.SPEED_FAST
+        )
+        await transfer()
+        self.driver._close_gripper.assert_awaited_with(  # type: ignore[attr-defined]
+          gripper_closed_position=5.68, gripper_close_threshold=1.5, speed=protocol.SPEED_SLOW
+        )
+
+  async def test_transfer_parameters_are_per_call_in_both_directions(self):
+    self.driver.request_status = AsyncMock(  # type: ignore[method-assign]
+      return_value=_status(flags=_READY_FLAGS)
+    )
+    self.driver.request_sensor_values = AsyncMock(  # type: ignore[method-assign]
+      return_value=protocol.STATUS_OPTICAL_PLATE_SENSOR
+    )
+    for transfer in (self.driver.load, self.driver.unload):
+      with self.subTest(direction=transfer.__name__):
+        await transfer(
+          protocol.TEACHPOINT_BUCKET_2,
+          plate_height=22,
+          source_z_offset=4,
+          destination_z_offset=2,
+          park_z_offset=1,
+          gripper_open_position=0.25,
+          gripper_closed_position=4.75,
+          gripper_close_threshold=1.8,
+        )
+        source, destination = (
+          (protocol.TEACHPOINT_PICK, protocol.TEACHPOINT_BUCKET_2)
+          if transfer == self.driver.load
+          else (protocol.TEACHPOINT_BUCKET_2, protocol.TEACHPOINT_PICK)
+        )
+        self.driver._move_to_teachpoint.assert_has_awaits(  # type: ignore[attr-defined]
+          [
+            call(source, 4, 22, speed=protocol.SPEED_SLOW),
+            call(
+              destination, 2, 22, profile=protocol.PROFILE_DYNAMIC_FULL, speed=protocol.SPEED_SLOW
+            ),
+            call(protocol.TEACHPOINT_PARK, 1, 22, speed=protocol.SPEED_SLOW),
+          ]
+        )
+        self.driver._close_gripper.assert_awaited_with(  # type: ignore[attr-defined]
+          gripper_closed_position=4.75, gripper_close_threshold=1.8, speed=protocol.SPEED_SLOW
+        )
+        self.driver._move_axis_to_position.assert_awaited_with(  # type: ignore[attr-defined]
+          protocol.AXIS_GRIPPER,
+          0.25,
+          profile=protocol.PROFILE_DYNAMIC_EMPTY,
+          speed=protocol.SPEED_SLOW,
+        )
+        self.assertEqual(self.driver.state.operation, Access2Activity.IDLE)
+        await transfer()
+        self.driver._close_gripper.assert_awaited_with(  # type: ignore[attr-defined]
+          gripper_closed_position=5.68, gripper_close_threshold=1.5, speed=protocol.SPEED_SLOW
+        )
+        self.driver._move_axis_to_position.assert_awaited_with(  # type: ignore[attr-defined]
+          protocol.AXIS_GRIPPER,
+          0,
+          profile=protocol.PROFILE_DYNAMIC_EMPTY,
+          speed=protocol.SPEED_SLOW,
+        )
+        self.driver._move_to_teachpoint.assert_awaited_with(  # type: ignore[attr-defined]
+          protocol.TEACHPOINT_PARK,
+          3 if transfer == self.driver.load else 0,
+          10,
+          speed=protocol.SPEED_SLOW,
+        )
+
+  async def test_invalid_transfer_parameters_fail_before_io(self):
+    self.driver.request_status = AsyncMock()  # type: ignore[method-assign]
+    before = self.driver.state
+    for transfer in (self.driver.load, self.driver.unload):
+      for parameters in (
+        {"gripper_close_threshold": 0},
+        {"gripper_closed_position": 1},
+        {"gripper_open_position": float("nan")},
+        {"gripper_closed_position": float("inf")},
+        {"plate_height": 0},
+        {"plate_height": -1},
+        {"plate_height": float("nan")},
+        {"source_z_offset": float("inf")},
+        {"destination_z_offset": float("nan")},
+        {"park_z_offset": float("inf")},
+      ):
+        with self.subTest(direction=transfer.__name__, parameters=parameters):
+          with self.assertRaises(ValueError):
+            await transfer(**parameters)
+          self.assertEqual(self.driver.state, before)
+    self.driver.request_status.assert_not_awaited()  # type: ignore[attr-defined]
+    self.driver._move_axis_to_position.assert_not_awaited()  # type: ignore[attr-defined]
+    self.driver._move_to_teachpoint.assert_not_awaited()  # type: ignore[attr-defined]
+
   async def test_gripper_state_methods_use_absolute_positions(self):
     self.driver.request_status = AsyncMock(  # type: ignore[method-assign]
       return_value=_status(flags=_READY_FLAGS)
@@ -597,11 +868,14 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
     await self.driver.close_gripper()
     await self.driver.open_gripper()
 
-    self.driver._close_gripper.assert_awaited_once_with()  # type: ignore[attr-defined]
+    self.driver._close_gripper.assert_awaited_once_with(  # type: ignore[attr-defined]
+      gripper_closed_position=5.68, gripper_close_threshold=1.5, speed=protocol.SPEED_SLOW
+    )
     self.driver._move_axis_to_position.assert_awaited_once_with(  # type: ignore[attr-defined]
       protocol.AXIS_GRIPPER,
       0.0,
       profile=protocol.PROFILE_DYNAMIC_EMPTY,
+      speed=protocol.SPEED_SLOW,
     )
 
   async def test_failure_before_actuation_restores_operation(self):
@@ -642,27 +916,8 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.driver.state.connection, ConnectionState.DISCONNECTED)
     self.assertIsNone(self.driver.state.last_teachpoint)
 
-  def test_gripper_positions_are_configurable(self):
-    driver = Access2Driver(
-      device_id="test",
-      gripper_open_position=0.25,
-      gripper_closed_position=4.75,
-      gripper_close_threshold=1.5,
-    )
-
-    self.assertEqual(driver.gripper_open_position, 0.25)
-    self.assertEqual(driver.gripper_closed_position, 4.75)
-    self.assertEqual(driver.gripper_close_threshold, 1.5)
-
-  async def test_rejects_invalid_gripper_close_threshold(self):
-    with self.assertRaisesRegex(ValueError, "open position < close threshold"):
-      Access2Driver(
-        device_id="test",
-        gripper_close_threshold=0,
-      )
-
-  async def test_setup_opens_gripper_with_configured_position_and_profile(self):
-    driver = Access2Driver(device_id="test", gripper_open_position=0.25)
+  async def test_setup_opens_gripper_with_default_position_and_profile(self):
+    driver = Access2Driver(device_id="test")
     driver.io.setup = AsyncMock()  # type: ignore[method-assign]
     driver.io.set_baudrate = AsyncMock()  # type: ignore[method-assign]
     driver.request_status = AsyncMock(  # type: ignore[method-assign]
@@ -677,7 +932,7 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
 
     driver._move_axis_to_position.assert_awaited_once_with(  # type: ignore[attr-defined]
       protocol.AXIS_GRIPPER,
-      0.25,
+      0.0,
       profile=protocol.PROFILE_DYNAMIC_EMPTY,
       speed=protocol.SPEED_FAST,
     )
@@ -729,20 +984,24 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
           protocol.AXIS_GRIPPER,
           0,
           profile=protocol.PROFILE_DYNAMIC_EMPTY,
+          speed=protocol.SPEED_SLOW,
         ),
       ]
     )
-    self.driver._close_gripper.assert_awaited_once_with()  # type: ignore[attr-defined]
+    self.driver._close_gripper.assert_awaited_once_with(  # type: ignore[attr-defined]
+      gripper_closed_position=5.68, gripper_close_threshold=1.5, speed=protocol.SPEED_SLOW
+    )
     self.driver._move_to_teachpoint.assert_has_awaits(  # type: ignore[attr-defined]
       [
-        call(protocol.TEACHPOINT_PICK, 3, 10),
+        call(protocol.TEACHPOINT_PICK, 3, 10, speed=protocol.SPEED_SLOW),
         call(
           protocol.TEACHPOINT_BUCKET_1,
           3,
           10,
           profile=protocol.PROFILE_DYNAMIC_FULL,
+          speed=protocol.SPEED_SLOW,
         ),
-        call(protocol.TEACHPOINT_PARK, 3, 10),
+        call(protocol.TEACHPOINT_PARK, 3, 10, speed=protocol.SPEED_SLOW),
       ]
     )
     self.assertEqual(self.driver.state.operation, Access2Activity.IDLE)
@@ -762,6 +1021,7 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
       3,
       10,
       profile=protocol.PROFILE_DYNAMIC_FULL,
+      speed=protocol.SPEED_SLOW,
     )
 
   async def test_load_reports_each_transfer_phase_at_its_actuation_boundary(self):
@@ -785,7 +1045,7 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
       record_phase()
       return protocol.STATUS_OPTICAL_PLATE_SENSOR
 
-    async def close_gripper() -> protocol.Access2Status:
+    async def close_gripper(**parameters: float) -> protocol.Access2Status:
       record_phase()
       return ready
 
@@ -823,7 +1083,7 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
     self.driver._move_axis_to_position.assert_awaited_once()  # type: ignore[attr-defined]
     self.driver._close_gripper.assert_not_awaited()  # type: ignore[attr-defined]
     self.driver._move_to_teachpoint.assert_awaited_once_with(  # type: ignore[attr-defined]
-      protocol.TEACHPOINT_PICK, 3, 10
+      protocol.TEACHPOINT_PICK, 3, 10, speed=protocol.SPEED_SLOW
     )
 
   async def test_estop_prevents_load_motion(self):
