@@ -181,17 +181,19 @@ class TestPrepTransport(_SessionTest):
 
   async def test_channel_bounds_decode_nested_structures_in_channel_order(self):
     from pylabrobot.hamilton.prep.channels import request_channel_bounds
-    from pylabrobot.hamilton.transport.tcp.wire_types import StructArray
 
     client, io = self.make_client()
     client.registry.register(
       C.PrepGetChannelBounds.firmware_path,
       ObjectInfo("PipettorService", "", 0, 0, Address(1, 1, 257)),
     )
-    values = [
-      C.ChannelBoundsParameters(False, C.ChannelIndex.FrontChannel, 1, 2, 3, 4, 5, 6),
-      C.ChannelBoundsParameters(False, C.ChannelIndex.RearChannel, 7, 8, 9, 10, 11, 12),
-    ]
+    # GetChannelBounds response from MLPrep Runtime V3.0.20.675 (PRPBD1394).
+    payload = bytes.fromhex(
+      "1f0078001e003800200004000100000028000400c095033f28000400cbc19543"
+      "28000400000010c1280004000000bc432800040000009c412800040000802743"
+      "1e003800200004000200000028000400c095033f28000400cbc1954328000400"
+      "00000000280004000080c0432800040000009c412800040000802743"
+    )
 
     async def respond(request: HarpPacket) -> None:
       """Return a real structure array in firmware channel order."""
@@ -199,7 +201,7 @@ class TestPrepTransport(_SessionTest):
         _response(
           sequence=request.seq,
           action=Hoi2Action.STATUS_RESPONSE,
-          params=HoiParams().add(values, StructArray()).build(),
+          params=payload,
         )
       )
 
@@ -208,8 +210,22 @@ class TestPrepTransport(_SessionTest):
     self.assertEqual(
       bounds,
       [
-        dict(x_min=7, x_max=8, y_min=9, y_max=10, z_min=11, z_max=12),
-        dict(x_min=1, x_max=2, y_min=3, y_max=4, z_min=5, z_max=6),
+        dict(
+          x_min=0.5140037536621094,
+          x_max=299.5140075683594,
+          y_min=0,
+          y_max=385,
+          z_min=19.5,
+          z_max=167.5,
+        ),
+        dict(
+          x_min=0.5140037536621094,
+          x_max=299.5140075683594,
+          y_min=-9,
+          y_max=376,
+          z_min=19.5,
+          z_max=167.5,
+        ),
       ],
     )
 

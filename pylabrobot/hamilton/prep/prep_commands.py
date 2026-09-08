@@ -967,7 +967,6 @@ class AdcParameters:
 class ChannelBoundsParameters:
   """Per-channel movement bounds returned by PipettorService.GetChannelBounds."""
 
-  default_values: PaddedBool
   channel: WEnum
   x_min: F32
   x_max: F32
@@ -979,8 +978,7 @@ class ChannelBoundsParameters:
   def encode_into(self, params: HoiParams) -> HoiParams:
     """Encode fields in firmware-defined order."""
     return (
-      params.add(self.default_values, PaddedBool)
-      .add(self.channel, WEnum)
+      params.add(self.channel, WEnum)
       .add(self.x_min, F32)
       .add(self.x_max, F32)
       .add(self.y_min, F32)
