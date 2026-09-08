@@ -1,7 +1,7 @@
 """Prep calibration: MLPrepCalibration commands and session workflows.
 
 Firmware-path resolution is JIT: each ``PrepCommand`` subclass declares its own
-``firmware_path``, and :meth:`PrepClient.send_command` resolves it via the
+``firmware_path``, and :meth:`PrepClient.execute` resolves it via the
 introspection registry (cache-hot after the first call).
 """
 
@@ -72,7 +72,7 @@ class PrepCalibration:
 
   @property
   def client(self) -> "PrepClient":
-    """Alias for code that uses ``client.send_command`` (driver is the TCP client)."""
+    """Alias for code that uses ``client.execute`` (driver is the TCP client)."""
     return self._driver
 
   @property
@@ -111,8 +111,8 @@ class PrepCalibration:
 
   async def get_calibration_site_definitions(self) -> Tuple[PrepCmd.CalibrationSiteInfo, ...]:
     """Return calibration site definitions from DeckConfiguration (GetCalibrationSiteDefinitions, cmd=3)."""
-    result = await self._driver.send_command(PrepCmd.PrepGetCalibrationSiteDefinitions())
-    if result is None or not getattr(result, "sites", None):
+    result = await self._driver.execute(PrepCmd.PrepGetCalibrationSiteDefinitions())
+    if result is None or not result.sites:
       return ()
     return tuple(
       PrepCmd.CalibrationSiteInfo(
@@ -130,31 +130,31 @@ class PrepCalibration:
 
   async def begin_calibration(self) -> None:
     """Enter calibration mode (BeginCalibration, cmd=1)."""
-    await self._driver.send_command(PrepCmd.PrepBeginCalibration())
+    await self._driver.execute(PrepCmd.PrepBeginCalibration())
 
   async def cancel_calibration(self) -> None:
     """Cancel an active calibration session (CancelCalibration, cmd=2)."""
-    await self._driver.send_command(PrepCmd.PrepCancelCalibration())
+    await self._driver.execute(PrepCmd.PrepCancelCalibration())
 
   async def end_calibration(self, date_time: Optional[PrepCmd.HoiDateTime] = None) -> None:
     """End calibration and store results with timestamp (EndCalibration, cmd=3)."""
     if date_time is None:
       date_time = PrepCmd.HoiDateTime.now()
-    await self._driver.send_command(PrepCmd.PrepEndCalibration(date_time=date_time))
+    await self._driver.execute(PrepCmd.PrepEndCalibration(date_time=date_time))
 
   async def reset_calibration(self, store: bool = False) -> None:
     """Reset calibration data (ResetCalibration, cmd=4)."""
-    await self._driver.send_command(PrepCmd.PrepResetCalibration(store=store))
+    await self._driver.execute(PrepCmd.PrepResetCalibration(store=store))
 
   async def calibration_initialize(self) -> None:
     """Initialize calibration hardware (CalibrationInitialize, cmd=5)."""
-    await self._driver.send_command(PrepCmd.PrepCalibrationInitialize())
+    await self._driver.execute(PrepCmd.PrepCalibrationInitialize())
 
   async def read_calibration_values(
     self, read_timeout: Optional[float] = None
   ) -> PrepCmd.CalibrationValues:
     """Read calibration values (GetCalibrationValues, cmd=16)."""
-    result = await self._driver.send_command(
+    result = await self._driver.execute(
       PrepCmd.PrepGetCalibrationValues(),
       read_timeout=read_timeout,
     )
@@ -421,7 +421,7 @@ class PrepCalibrationSession:
     self._ensure_started()
 
     async def _op(timeout: Optional[float]) -> float:
-      result = await self._cal.client.send_command(
+      result = await self._cal.client.execute(
         PrepCmd.PrepCalibrateXAxis(
           site_index=site_index,
           channel=int(channel),
@@ -447,7 +447,7 @@ class PrepCalibrationSession:
     self._ensure_started()
 
     async def _op(timeout: Optional[float]) -> float:
-      result = await self._cal.client.send_command(
+      result = await self._cal.client.execute(
         PrepCmd.PrepCalibrateYAxis(
           site_index=site_index,
           channel=int(channel),
@@ -473,7 +473,7 @@ class PrepCalibrationSession:
     self._ensure_started()
 
     async def _op(timeout: Optional[float]) -> float:
-      result = await self._cal.client.send_command(
+      result = await self._cal.client.execute(
         PrepCmd.PrepCalibrateZAxis(
           site_index=site_index,
           channel=int(channel),
@@ -519,13 +519,13 @@ class PrepCalibrationSession:
           )
         )
 
-      result = await self._cal.client.send_command(
+      result = await self._cal.client.execute(
         PrepCmd.PrepCalibrateSqueezeTips(
           channels=tip_positions,
         ),
         read_timeout=timeout,
       )
-      if result is None or not getattr(result, "positions", None):
+      if result is None or not result.positions:
         return ()
       return tuple(int(p) for p in result.positions)
 
@@ -562,13 +562,13 @@ class PrepCalibrationSession:
         z_seek_offset=z_seek_offset,
       )
 
-      result = await self._cal.client.send_command(
+      result = await self._cal.client.execute(
         PrepCmd.PrepCalibrateSqueezeTips(
           channels=[tip_position],
         ),
         read_timeout=timeout,
       )
-      if result is None or not getattr(result, "positions", None):
+      if result is None or not result.positions:
         return ()
       return tuple(int(p) for p in result.positions)
 

@@ -3,7 +3,7 @@
 Canonical holder of device-wide metadata. ``PrepInstrumentInfo`` owns the
 cached ``InstrumentConfig`` snapshot (loaded in :meth:`_on_setup`), exposes its
 fields as sync properties, and performs on-demand diagnostic / firmware queries
-via the driver transport (``resolve_path``, ``send_command``,
+via the driver transport (``resolve_path``, ``execute``,
 ``PrepClient._query_firmware_string``).
 
 Info is a **bootstrap** phase — it runs before peers are constructed, so it
@@ -129,8 +129,8 @@ class PrepInstrumentInfo:
     if service_addr is None:
       return None
     try:
-      resp = await d.send_command(PrepCmd.PrepGetPresentChannels(dest=service_addr))
-      if resp is None or not getattr(resp, "channels", None):
+      resp = await d.execute(PrepCmd.PrepGetPresentChannels(dest=service_addr))
+      if resp is None or not resp.channels:
         return None
       return tuple(
         PrepCmd.ChannelIndex(v) if v in (0, 1, 2, 3) else PrepCmd.ChannelIndex.InvalidIndex
@@ -153,9 +153,9 @@ class PrepInstrumentInfo:
     """Aggregate MLPrep, DeckConfiguration, and MLPrepService into ``InstrumentConfig``."""
     d = self._driver
     mlprep = d.mlprep_address
-    enc_resp = await d.send_command(PrepCmd.PrepGetIsEnclosurePresent(dest=mlprep))
-    safe_resp = await d.send_command(PrepCmd.PrepGetSafeSpeedsEnabled(dest=mlprep))
-    height_resp = await d.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=mlprep))
+    enc_resp = await d.execute(PrepCmd.PrepGetIsEnclosurePresent(dest=mlprep))
+    safe_resp = await d.execute(PrepCmd.PrepGetSafeSpeedsEnabled(dest=mlprep))
+    height_resp = await d.execute(PrepCmd.PrepGetDefaultTraverseHeight(dest=mlprep))
     has_enclosure = bool(enc_resp.value) if enc_resp else False
     safe_speeds_enabled = bool(safe_resp.value) if safe_resp else False
     default_traverse_height = float(height_resp.value) if height_resp else None
@@ -167,7 +167,7 @@ class PrepInstrumentInfo:
     if deck_addr is None:
       raise RuntimeError("DeckConfiguration path did not resolve — cannot load instrument config")
 
-    bounds_resp = await d.send_command(PrepCmd.PrepGetDeckBounds(dest=deck_addr))
+    bounds_resp = await d.execute(PrepCmd.PrepGetDeckBounds(dest=deck_addr))
     if bounds_resp:
       deck_bounds = PrepCmd.DeckBounds(
         min_x=bounds_resp.min_x,
@@ -178,7 +178,7 @@ class PrepInstrumentInfo:
         max_z=bounds_resp.max_z,
       )
 
-    sites_resp = await d.send_command(PrepCmd.PrepGetDeckSiteDefinitions(dest=deck_addr))
+    sites_resp = await d.execute(PrepCmd.PrepGetDeckSiteDefinitions(dest=deck_addr))
     if sites_resp and sites_resp.sites:
       deck_sites = tuple(
         PrepCmd.DeckSiteInfo(
@@ -194,7 +194,7 @@ class PrepInstrumentInfo:
       )
       logger.debug("Discovered %d deck sites", len(deck_sites))
 
-    waste_resp = await d.send_command(PrepCmd.PrepGetWasteSiteDefinitions(dest=deck_addr))
+    waste_resp = await d.execute(PrepCmd.PrepGetWasteSiteDefinitions(dest=deck_addr))
     if waste_resp and waste_resp.sites:
       waste_sites = tuple(
         PrepCmd.WasteSiteInfo(
@@ -234,7 +234,7 @@ class PrepInstrumentInfo:
 
   async def is_initialized(self) -> bool:
     """Whether MLPrep reports as initialized (GetIsInitialized, cmd=2)."""
-    result = await self._driver.send_command(
+    result = await self._driver.execute(
       PrepCmd.PrepGetIsInitialized(dest=self._driver.mlprep_address)
     )
     if result is None:
@@ -243,10 +243,10 @@ class PrepInstrumentInfo:
 
   async def get_tip_and_needle_definitions(self) -> Tuple[PrepCmd.TipDefinition, ...]:
     """Tip/needle definitions (GetTipAndNeedleDefinitions, cmd=11)."""
-    result = await self._driver.send_command(
+    result = await self._driver.execute(
       PrepCmd.PrepGetTipAndNeedleDefinitions(dest=self._driver.mlprep_address)
     )
-    if result is None or not getattr(result, "definitions", None):
+    if result is None or not result.definitions:
       return ()
     return tuple(result.definitions)
 

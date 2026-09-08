@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import datetime
 import math
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Annotated, ClassVar, Optional, Set, Tuple
+from typing import Annotated, ClassVar, Optional, Set, Tuple, TypeVar
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
+from pylabrobot.hamilton.transport.tcp.messages import HoiParams, HoiParamsParser, parse_into_struct
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import HamiltonProtocol, Hoi2Action
 from pylabrobot.hamilton.transport.tcp.wire_types import (
@@ -160,6 +161,18 @@ class HoiDateTime:
       self.millisecond * 1000,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.year, U16)
+      .add(self.month, PaddedU8)
+      .add(self.day, PaddedU8)
+      .add(self.hour, PaddedU8)
+      .add(self.minute, PaddedU8)
+      .add(self.second, PaddedU8)
+      .add(self.millisecond, U16)
+    )
+
 
 @dataclass(frozen=True)
 class CalibrationSiteInfo:
@@ -277,9 +290,10 @@ def diff_calibration_values(
   """Return structured diff between two calibration snapshots."""
 
   top_level_changes = []
-  for field_name in ("independent_offset_x", "mph_offset_x"):
-    old_value = getattr(old, field_name)
-    new_value = getattr(new, field_name)
+  for field_name, old_value, new_value in (
+    ("independent_offset_x", old.independent_offset_x, new.independent_offset_x),
+    ("mph_offset_x", old.mph_offset_x, new.mph_offset_x),
+  ):
     if not _calibration_value_equal(old_value, new_value, float_tol=float_tol):
       top_level_changes.append(
         CalibrationFieldChange(field=field_name, old=old_value, new=new_value)
@@ -316,10 +330,26 @@ def diff_calibration_values(
     assert old_cv is not None and new_cv is not None
 
     field_changes = []
-    for f in fields(ChannelCalibrationValuesInfo):
-      field_name = f.name
-      old_value = getattr(old_cv, field_name)
-      new_value = getattr(new_cv, field_name)
+    for field_name, old_value, new_value in (
+      ("index", old_cv.index, new_cv.index),
+      ("y_offset", old_cv.y_offset, new_cv.y_offset),
+      ("z_offset", old_cv.z_offset, new_cv.z_offset),
+      ("squeeze_position", old_cv.squeeze_position, new_cv.squeeze_position),
+      ("z_touchoff", old_cv.z_touchoff, new_cv.z_touchoff),
+      ("pressure_shift", old_cv.pressure_shift, new_cv.pressure_shift),
+      (
+        "pressure_monitoring_shift",
+        old_cv.pressure_monitoring_shift,
+        new_cv.pressure_monitoring_shift,
+      ),
+      (
+        "dispenser_return_distance",
+        old_cv.dispenser_return_distance,
+        new_cv.dispenser_return_distance,
+      ),
+      ("z_tip_height", old_cv.z_tip_height, new_cv.z_tip_height),
+      ("core_ii", old_cv.core_ii, new_cv.core_ii),
+    ):
       if not _calibration_value_equal(old_value, new_value, float_tol=float_tol):
         field_changes.append(CalibrationFieldChange(field=field_name, old=old_value, new=new_value))
     if field_changes:
@@ -400,6 +430,16 @@ class SeekParameters:
   distance: F32
   expected_position: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.x_start, F32)
+      .add(self.y_start, F32)
+      .add(self.z_start, F32)
+      .add(self.distance, F32)
+      .add(self.expected_position, F32)
+    )
+
 
 @dataclass
 class XYZCoord:
@@ -408,12 +448,29 @@ class XYZCoord:
   y_position: F32
   z_position: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+      .add(self.z_position, F32)
+    )
+
 
 @dataclass
 class XYCoord:
   default_values: PaddedBool
   x_position: F32
   y_position: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+    )
 
 
 @dataclass
@@ -423,12 +480,29 @@ class ChannelYZMoveParameters:
   y_position: F32
   z_position: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.y_position, F32)
+      .add(self.z_position, F32)
+    )
+
 
 @dataclass
 class GantryMoveXYZParameters:
   default_values: PaddedBool
   gantry_x_position: F32
   axis_parameters: Annotated[list[ChannelYZMoveParameters], StructArray()]
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.gantry_x_position, F32)
+      .add(self.axis_parameters, StructArray())
+    )
 
 
 @dataclass
@@ -437,6 +511,15 @@ class PlateDimensions:
   length: F32
   width: F32
   height: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.length, F32)
+      .add(self.width, F32)
+      .add(self.height, F32)
+    )
 
 
 @dataclass
@@ -451,6 +534,20 @@ class TipDefinition:
   is_tool: PaddedBool
   label: Str
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.id, PaddedU8)
+      .add(self.volume, F32)
+      .add(self.length, F32)
+      .add(self.tip_type, WEnum)
+      .add(self.has_filter, PaddedBool)
+      .add(self.is_needle, PaddedBool)
+      .add(self.is_tool, PaddedBool)
+      .add(self.label, Str)
+    )
+
 
 @dataclass
 class TipPickupParameters:
@@ -461,6 +558,18 @@ class TipPickupParameters:
   has_filter: PaddedBool
   is_needle: PaddedBool
   is_tool: PaddedBool
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.volume, F32)
+      .add(self.length, F32)
+      .add(self.tip_type, WEnum)
+      .add(self.has_filter, PaddedBool)
+      .add(self.is_needle, PaddedBool)
+      .add(self.is_tool, PaddedBool)
+    )
 
 
 @dataclass
@@ -487,6 +596,16 @@ class AspirateParameters:
       blowout_volume=blowout_volume,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+      .add(self.prewet_volume, F32)
+      .add(self.blowout_volume, F32)
+    )
+
 
 @dataclass
 class DispenseParameters:
@@ -509,6 +628,16 @@ class DispenseParameters:
       y_position=loc.y,
       stop_back_volume=stop_back_volume,
       cutoff_speed=cutoff_speed,
+    )
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+      .add(self.stop_back_volume, F32)
+      .add(self.cutoff_speed, F32)
     )
 
 
@@ -567,6 +696,24 @@ class CommonParameters:
       additional_probes=additional_probes,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.empty, PaddedBool)
+      .add(self.z_minimum, F32)
+      .add(self.z_final, F32)
+      .add(self.z_liquid_exit_speed, F32)
+      .add(self.liquid_volume, F32)
+      .add(self.liquid_speed, F32)
+      .add(self.transport_air_volume, F32)
+      .add(self.tube_radius, F32)
+      .add(self.cone_height, F32)
+      .add(self.cone_bottom_radius, F32)
+      .add(self.settling_time, F32)
+      .add(self.additional_probes, U32)
+    )
+
 
 @dataclass
 class NoLldParameters:
@@ -595,6 +742,17 @@ class NoLldParameters:
       z_bottom_offset=z_bottom_offset,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.z_fluid, F32)
+      .add(self.z_air, F32)
+      .add(self.bottom_search, PaddedBool)
+      .add(self.z_bottom_search_offset, F32)
+      .add(self.z_bottom_offset, F32)
+    )
+
 
 @dataclass
 class LldParameters:
@@ -614,6 +772,16 @@ class LldParameters:
       z_out_of_liquid=0.0,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.search_start_position, F32)
+      .add(self.channel_speed, F32)
+      .add(self.z_submerge, F32)
+      .add(self.z_out_of_liquid, F32)
+    )
+
 
 @dataclass
 class CLldParameters:
@@ -627,6 +795,16 @@ class CLldParameters:
   def default(cls) -> CLldParameters:
     return cls(
       default_values=True, sensitivity=1, clot_check_enable=False, z_clot_check=0.0, detect_mode=0
+    )
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.sensitivity, WEnum)
+      .add(self.clot_check_enable, PaddedBool)
+      .add(self.z_clot_check, F32)
+      .add(self.detect_mode, WEnum)
     )
 
 
@@ -648,6 +826,16 @@ class PLldParameters:
       detect_mode=0,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.sensitivity, WEnum)
+      .add(self.dispenser_seek_speed, F32)
+      .add(self.lld_height_difference, F32)
+      .add(self.detect_mode, WEnum)
+    )
+
 
 @dataclass
 class TadmReturnParameters:
@@ -656,6 +844,16 @@ class TadmReturnParameters:
   entries: U32
   error: PaddedBool
   data: I16Array
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.entries, U32)
+      .add(self.error, PaddedBool)
+      .add(self.data, I16Array)
+    )
 
 
 @dataclass
@@ -670,6 +868,14 @@ class TadmParameters:
       default_values=True,
       limit_curve_index=0,
       recording_mode=TadmRecordingModes.Errors,
+    )
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.limit_curve_index, U16)
+      .add(self.recording_mode, WEnum)
     )
 
 
@@ -693,6 +899,17 @@ class AspirateMonitoringParameters:
       clot_threshold=20,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.c_lld_enable, PaddedBool)
+      .add(self.p_lld_enable, PaddedBool)
+      .add(self.minimum_differential, U16)
+      .add(self.maximum_differential, U16)
+      .add(self.clot_threshold, U16)
+    )
+
 
 @dataclass
 class MixParameters:
@@ -712,6 +929,16 @@ class MixParameters:
       speed=250.0,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.z_offset, F32)
+      .add(self.volume, F32)
+      .add(self.cycles, PaddedU8)
+      .add(self.speed, F32)
+    )
+
 
 @dataclass
 class AdcParameters:
@@ -725,6 +952,14 @@ class AdcParameters:
       default_values=True,
       errors=True,
       maximum_volume=4.5,
+    )
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.errors, PaddedBool)
+      .add(self.maximum_volume, F32)
     )
 
 
@@ -741,6 +976,19 @@ class ChannelBoundsParameters:
   z_min: F32
   z_max: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.x_min, F32)
+      .add(self.x_max, F32)
+      .add(self.y_min, F32)
+      .add(self.y_max, F32)
+      .add(self.z_min, F32)
+      .add(self.z_max, F32)
+    )
+
 
 @dataclass
 class ChannelXYZPositionParameters:
@@ -750,12 +998,28 @@ class ChannelXYZPositionParameters:
   position_y: F32
   position_z: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.position_x, F32)
+      .add(self.position_y, F32)
+      .add(self.position_z, F32)
+    )
+
 
 @dataclass
 class PressureReturnParameters:
   default_values: PaddedBool
   channel: WEnum
   pressure: U16
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool).add(self.channel, WEnum).add(self.pressure, U16)
+    )
 
 
 @dataclass
@@ -767,12 +1031,29 @@ class LiquidHeightReturnParameters:
   p_lld_detected: PaddedBool
   p_lld_liquid_height: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.c_lld_detected, PaddedBool)
+      .add(self.c_lld_liquid_height, F32)
+      .add(self.p_lld_detected, PaddedBool)
+      .add(self.p_lld_liquid_height, F32)
+    )
+
 
 @dataclass
 class DispenserVolumeReturnParameters:
   default_values: PaddedBool
   channel: WEnum
   volume: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool).add(self.channel, WEnum).add(self.volume, F32)
+    )
 
 
 @dataclass
@@ -781,6 +1062,15 @@ class PotentiometerParameters:
   channel: WEnum
   gain: PaddedU8
   offset: PaddedU8
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.gain, PaddedU8)
+      .add(self.offset, PaddedU8)
+    )
 
 
 @dataclass
@@ -795,6 +1085,20 @@ class YLLDSeekParameters:
   lld_sensitivity: WEnum
   detect_mode: WEnum
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.start_position_x, F32)
+      .add(self.start_position_y, F32)
+      .add(self.start_position_z, F32)
+      .add(self.seek_position_y, F32)
+      .add(self.seek_velocity_y, F32)
+      .add(self.lld_sensitivity, WEnum)
+      .add(self.detect_mode, WEnum)
+    )
+
 
 @dataclass
 class ChannelSeekParameters:
@@ -805,6 +1109,18 @@ class ChannelSeekParameters:
   seek_height: F32
   min_seek_height: F32
   final_position_z: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.seek_position_x, F32)
+      .add(self.seek_position_y, F32)
+      .add(self.seek_height, F32)
+      .add(self.min_seek_height, F32)
+      .add(self.final_position_z, F32)
+    )
 
 
 @dataclass
@@ -820,6 +1136,21 @@ class LLDChannelSeekParameters:
   lld_sensitivity: WEnum
   detect_mode: WEnum
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.seek_position_x, F32)
+      .add(self.seek_position_y, F32)
+      .add(self.seek_velocity_z, F32)
+      .add(self.seek_height, F32)
+      .add(self.min_seek_height, F32)
+      .add(self.final_position_z, F32)
+      .add(self.lld_sensitivity, WEnum)
+      .add(self.detect_mode, WEnum)
+    )
+
 
 @dataclass
 class SeekResultParameters:
@@ -827,6 +1158,15 @@ class SeekResultParameters:
   channel: WEnum
   detected: PaddedBool
   position: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.detected, PaddedBool)
+      .add(self.position, F32)
+    )
 
 
 @dataclass
@@ -837,6 +1177,17 @@ class ChannelCounterParameters:
   tip_eject_counter: U32
   aspirate_counter: U32
   dispense_counter: U32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.tip_pickup_counter, U32)
+      .add(self.tip_eject_counter, U32)
+      .add(self.aspirate_counter, U32)
+      .add(self.dispense_counter, U32)
+    )
 
 
 @dataclass
@@ -849,6 +1200,18 @@ class ChannelCalibrationParameters:
   z_tip_height: F32
   pressure_monitoring_shift: U32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.dispenser_return_steps, U32)
+      .add(self.squeeze_position, F32)
+      .add(self.z_touchoff, F32)
+      .add(self.z_tip_height, F32)
+      .add(self.pressure_monitoring_shift, U32)
+    )
+
 
 @dataclass
 class LeakCheckSimpleParameters:
@@ -856,6 +1219,15 @@ class LeakCheckSimpleParameters:
   channel: WEnum
   time: F32
   high_pressure: PaddedBool
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.time, F32)
+      .add(self.high_pressure, PaddedBool)
+    )
 
 
 @dataclass
@@ -872,6 +1244,22 @@ class LeakCheckParameters:
   test_time: F32
   high_pressure: PaddedBool
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.start_position_x, F32)
+      .add(self.start_position_y, F32)
+      .add(self.start_position_z, F32)
+      .add(self.seek_distance_y, F32)
+      .add(self.pre_load_distance_y, F32)
+      .add(self.final_z, F32)
+      .add(self.tip_definition_id, PaddedU8)
+      .add(self.test_time, F32)
+      .add(self.high_pressure, PaddedBool)
+    )
+
 
 @dataclass
 class DriveStatus:
@@ -879,6 +1267,15 @@ class DriveStatus:
   position: F32
   encoder_position: F32
   in_home_sensor: PaddedBool
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.initialized, PaddedBool)
+      .add(self.position, F32)
+      .add(self.encoder_position, F32)
+      .add(self.in_home_sensor, PaddedBool)
+    )
 
 
 @dataclass
@@ -889,6 +1286,17 @@ class ChannelDriveStatus:
   z_axis_drive_status: Annotated[DriveStatus, Struct()]
   dispenser_drive_status: Annotated[DriveStatus, Struct()]
   squeeze_drive_status: Annotated[DriveStatus, Struct()]
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.y_axis_drive_status, Struct())
+      .add(self.z_axis_drive_status, Struct())
+      .add(self.dispenser_drive_status, Struct())
+      .add(self.squeeze_drive_status, Struct())
+    )
 
 
 @dataclass
@@ -902,6 +1310,19 @@ class AspirateParametersNoLldAndMonitoring:
   adc: Annotated[AdcParameters, Struct()]
   aspirate_monitoring: Annotated[AspirateMonitoringParameters, Struct()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.aspirate, Struct())
+      .add(self.common, Struct())
+      .add(self.no_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.adc, Struct())
+      .add(self.aspirate_monitoring, Struct())
+    )
+
 
 @dataclass
 class AspirateParametersNoLldAndTadm:
@@ -913,6 +1334,19 @@ class AspirateParametersNoLldAndTadm:
   mix: Annotated[MixParameters, Struct()]
   adc: Annotated[AdcParameters, Struct()]
   tadm: Annotated[TadmParameters, Struct()]
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.aspirate, Struct())
+      .add(self.common, Struct())
+      .add(self.no_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.adc, Struct())
+      .add(self.tadm, Struct())
+    )
 
 
 @dataclass
@@ -928,6 +1362,21 @@ class AspirateParametersLldAndMonitoring:
   aspirate_monitoring: Annotated[AspirateMonitoringParameters, Struct()]
   adc: Annotated[AdcParameters, Struct()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.aspirate, Struct())
+      .add(self.common, Struct())
+      .add(self.lld, Struct())
+      .add(self.p_lld, Struct())
+      .add(self.c_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.aspirate_monitoring, Struct())
+      .add(self.adc, Struct())
+    )
+
 
 @dataclass
 class AspirateParametersLldAndTadm:
@@ -942,6 +1391,21 @@ class AspirateParametersLldAndTadm:
   tadm: Annotated[TadmParameters, Struct()]
   adc: Annotated[AdcParameters, Struct()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.aspirate, Struct())
+      .add(self.common, Struct())
+      .add(self.lld, Struct())
+      .add(self.p_lld, Struct())
+      .add(self.c_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.tadm, Struct())
+      .add(self.adc, Struct())
+    )
+
 
 @dataclass
 class DispenseParametersNoLld:
@@ -953,6 +1417,19 @@ class DispenseParametersNoLld:
   mix: Annotated[MixParameters, Struct()]
   adc: Annotated[AdcParameters, Struct()]
   tadm: Annotated[TadmParameters, Struct()]
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.dispense, Struct())
+      .add(self.common, Struct())
+      .add(self.no_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.adc, Struct())
+      .add(self.tadm, Struct())
+    )
 
 
 @dataclass
@@ -967,6 +1444,20 @@ class DispenseParametersLld:
   adc: Annotated[AdcParameters, Struct()]
   tadm: Annotated[TadmParameters, Struct()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.dispense, Struct())
+      .add(self.common, Struct())
+      .add(self.lld, Struct())
+      .add(self.c_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.adc, Struct())
+      .add(self.tadm, Struct())
+    )
+
 
 @dataclass
 class DropTipParameters:
@@ -979,6 +1470,19 @@ class DropTipParameters:
   z_seek_speed: F32
   drop_type: WEnum
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.y_position, F32)
+      .add(self.z_seek, F32)
+      .add(self.z_tip, F32)
+      .add(self.z_final, F32)
+      .add(self.z_seek_speed, F32)
+      .add(self.drop_type, WEnum)
+    )
+
 
 @dataclass
 class InitTipDropParameters:
@@ -986,6 +1490,15 @@ class InitTipDropParameters:
   x_position: F32
   rolloff_distance: F32
   channel_parameters: Annotated[list[DropTipParameters], StructArray()]
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.x_position, F32)
+      .add(self.rolloff_distance, F32)
+      .add(self.channel_parameters, StructArray())
+    )
 
 
 @dataclass
@@ -996,6 +1509,16 @@ class DispenseInitToWasteParameters:
   y_position: F32
   z_position: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+      .add(self.z_position, F32)
+    )
+
 
 @dataclass
 class MoveAxisAbsoluteParameters:
@@ -1004,6 +1527,16 @@ class MoveAxisAbsoluteParameters:
   axis: WEnum
   position: F32
   delay: U32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.axis, WEnum)
+      .add(self.position, F32)
+      .add(self.delay, U32)
+    )
 
 
 @dataclass
@@ -1014,12 +1547,26 @@ class MoveAxisRelativeParameters:
   distance: F32
   delay: U32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.axis, WEnum)
+      .add(self.distance, F32)
+      .add(self.delay, U32)
+    )
+
 
 @dataclass
 class LimitCurveEntry:
   default_values: PaddedBool
   sample: U16
   pressure: I16
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return params.add(self.default_values, PaddedBool).add(self.sample, U16).add(self.pressure, I16)
 
 
 @dataclass
@@ -1055,6 +1602,17 @@ class TipPositionParameters:
       y_position=loc.y,
       z_position=z,
       z_seek=z_seek,
+    )
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+      .add(self.z_position, F32)
+      .add(self.z_seek, F32)
     )
 
 
@@ -1098,6 +1656,18 @@ class TipDropParameters:
       drop_type=drop_type if drop_type is not None else TipDropType.FixedHeight,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+      .add(self.z_position, F32)
+      .add(self.z_seek, F32)
+      .add(self.drop_type, WEnum)
+    )
+
 
 @dataclass
 class TipHeightCalibrationParameters:
@@ -1111,12 +1681,30 @@ class TipHeightCalibrationParameters:
   volume: F32
   tip_type: WEnum
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+      .add(self.z_start, F32)
+      .add(self.z_stop, F32)
+      .add(self.z_final, F32)
+      .add(self.volume, F32)
+      .add(self.tip_type, WEnum)
+    )
+
 
 @dataclass
 class DispenserVolumeEntry:
   default_values: PaddedBool
   type: WEnum
   volume: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return params.add(self.default_values, PaddedBool).add(self.type, WEnum).add(self.volume, F32)
 
 
 @dataclass
@@ -1126,12 +1714,25 @@ class DispenserVolumeStackReturnParameters:
   total_volume: F32
   volumes: Annotated[list[DispenserVolumeEntry], StructArray()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.total_volume, F32)
+      .add(self.volumes, StructArray())
+    )
+
 
 @dataclass
 class SegmentDescriptor:
   area_top: F32
   area_bottom: F32
   height: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return params.add(self.area_top, F32).add(self.area_bottom, F32).add(self.height, F32)
 
 
 @dataclass
@@ -1146,6 +1747,20 @@ class AspirateParametersNoLldAndMonitoring2:
   adc: Annotated[AdcParameters, Struct()]
   aspirate_monitoring: Annotated[AspirateMonitoringParameters, Struct()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.aspirate, Struct())
+      .add(self.container_description, StructArray())
+      .add(self.common, Struct())
+      .add(self.no_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.adc, Struct())
+      .add(self.aspirate_monitoring, Struct())
+    )
+
 
 @dataclass
 class AspirateParametersNoLldAndTadm2:
@@ -1158,6 +1773,20 @@ class AspirateParametersNoLldAndTadm2:
   mix: Annotated[MixParameters, Struct()]
   adc: Annotated[AdcParameters, Struct()]
   tadm: Annotated[TadmParameters, Struct()]
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.aspirate, Struct())
+      .add(self.container_description, StructArray())
+      .add(self.common, Struct())
+      .add(self.no_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.adc, Struct())
+      .add(self.tadm, Struct())
+    )
 
 
 @dataclass
@@ -1174,6 +1803,22 @@ class AspirateParametersLldAndMonitoring2:
   aspirate_monitoring: Annotated[AspirateMonitoringParameters, Struct()]
   adc: Annotated[AdcParameters, Struct()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.aspirate, Struct())
+      .add(self.container_description, StructArray())
+      .add(self.common, Struct())
+      .add(self.lld, Struct())
+      .add(self.p_lld, Struct())
+      .add(self.c_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.aspirate_monitoring, Struct())
+      .add(self.adc, Struct())
+    )
+
 
 @dataclass
 class AspirateParametersLldAndTadm2:
@@ -1189,6 +1834,22 @@ class AspirateParametersLldAndTadm2:
   tadm: Annotated[TadmParameters, Struct()]
   adc: Annotated[AdcParameters, Struct()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.aspirate, Struct())
+      .add(self.container_description, StructArray())
+      .add(self.common, Struct())
+      .add(self.lld, Struct())
+      .add(self.p_lld, Struct())
+      .add(self.c_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.tadm, Struct())
+      .add(self.adc, Struct())
+    )
+
 
 @dataclass
 class DispenseParametersNoLld2:
@@ -1201,6 +1862,20 @@ class DispenseParametersNoLld2:
   mix: Annotated[MixParameters, Struct()]
   adc: Annotated[AdcParameters, Struct()]
   tadm: Annotated[TadmParameters, Struct()]
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.dispense, Struct())
+      .add(self.container_description, StructArray())
+      .add(self.common, Struct())
+      .add(self.no_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.adc, Struct())
+      .add(self.tadm, Struct())
+    )
 
 
 @dataclass
@@ -1216,123 +1891,75 @@ class DispenseParametersLld2:
   adc: Annotated[AdcParameters, Struct()]
   tadm: Annotated[TadmParameters, Struct()]
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.channel, WEnum)
+      .add(self.dispense, Struct())
+      .add(self.container_description, StructArray())
+      .add(self.common, Struct())
+      .add(self.lld, Struct())
+      .add(self.c_lld, Struct())
+      .add(self.mix, Struct())
+      .add(self.adc, Struct())
+      .add(self.tadm, Struct())
+    )
+
 
 # =============================================================================
 # PrepCommand base class
 # =============================================================================
 
 
-# Sentinel meaning "dest not supplied — resolve firmware_path JIT at send time."
-# PrepClient.send_command detects this and replaces it with the resolved Address
-# before delegating to the base TCP layer. Using a real Address sentinel (rather
-# than None) keeps TCPCommand.__init__ happy without any additional branching.
+# An unresolved command is bound to a firmware address by PrepClient for each execution.
 _UNRESOLVED = Address(-1, -1, -1)
+_CHANNEL_TO_INDEX = {int(ChannelIndex.RearChannel): 0, int(ChannelIndex.FrontChannel): 1}
 
 
-@dataclass
-class PrepCommand(TCPCommand):
-  """Base for all Prep instrument commands.
+def _plr_channel_index(channel: int, entry_index: int) -> Optional[int]:
+  """Map pipettor channel enums or ordered MPH probe entries to PLR indices."""
+  if channel == ChannelIndex.MPHChannel:
+    return entry_index
+  return _CHANNEL_TO_INDEX.get(channel)
 
-  Subclasses are dataclasses with ``Annotated`` payload fields.
-  ``build_parameters()`` is inherited from ``TCPCommand`` and serialises only
-  ``Annotated`` fields via ``HoiParams.from_struct``.
 
-  Destination defaults to :data:`_UNRESOLVED` in :meth:`__post_init__` (not a
-  dataclass field — ``field(kw_only=...)`` needs Python 3.10+ and this package
-  supports 3.9). Callers that need ``dest=`` at construction declare
-  ``dest: Address`` (required or defaulted) on that concrete subclass.
-  ``PrepClient.send_command`` resolves ``_UNRESOLVED`` from ``firmware_path``.
+ResponseT = TypeVar("ResponseT", covariant=True)
+
+
+@dataclass(frozen=True)
+class PrepCommand(TCPCommand[ResponseT]):
+  """Immutable Prep request, with its destination resolved at execution time.
+
+  Concrete commands explicitly encode their wire fields and decode their declared
+  response. Commands targeting multiple firmware objects declare a constructor
+  ``dest`` field; fixed-target commands declare ``firmware_path``.
   """
 
+  dest: Address = field(default=_UNRESOLVED, init=False)
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
-
-  # Declared by each concrete subclass. None means "caller must supply dest=".
   firmware_path: ClassVar[Optional[str]] = None
-
-  # Aggregates populated by ``__init_subclass__`` at import time (unique paths for chatterbox seeding).
   _ALL_PATHS: ClassVar[Set[str]] = set()
-
-  # Instance field so dataclasses generate ``__init__`` (shadowing TCPCommand's
-  # ``__init__(dest)`` for typecheckers). ``init=False`` keeps it out of
-  # constructors and avoids Python 3.9 field-ordering errors on subclasses.
-  _prep_command_base: None = field(default=None, init=False, repr=False, compare=False)
 
   def __init_subclass__(cls, **kwargs):
     super().__init_subclass__(**kwargs)
-    path = cls.__dict__.get("firmware_path")
-    if path is None:
-      return
-    PrepCommand._ALL_PATHS.add(path)
-
-  def __post_init__(self):
-    if not hasattr(self, "dest"):
-      self.dest = _UNRESOLVED
-    super().__init__(self.dest)
-
-  @property
-  def uses_physical_channels(self) -> bool:  # type: ignore[override]
-    """Whether this command's firmware errors map onto physical channels.
-
-    True when the command carries a per-channel ``StructArray`` -- the same
-    fields :meth:`_channel_index_for_entry` maps entries through. Prep declares
-    over a hundred command types whose per-channel-ness follows directly from
-    their wire shape, so it is derived here rather than repeated as a flag on
-    each one. Commands without such a field (``PrepGetPositions``,
-    ``PrepIsParked``, ...) stay False so an instrument-wide fault raises
-    :class:`HoiError` instead of being attributed to a synthetic ``ch0``.
-
-    The transport itself no longer guesses this; deriving it is the device
-    layer's business, where the wire shapes are known.
-    """
-    for f in fields(self):
-      value = getattr(self, f.name, None)
-      if isinstance(value, list) and value and getattr(value[0], "channel", None) is not None:
-        return True
-    return False
-
-  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
-    """Map HoiResult entry → 0-indexed channel via the first per-channel struct-array field.
-
-    Prep commands carry a ``StructArray`` of per-channel parameters whose
-    elements have a ``channel`` attribute (e.g. ``aspirate_parameters[i].channel``).
-    Entry N maps to the ``channel`` of element N. Commands without such a field
-    (``PrepGetPositions``, ``PrepIsParked``, …) fall back to the entry index.
-    """
-    for f in fields(self):
-      value = getattr(self, f.name, None)
-      if not isinstance(value, list) or not value:
-        continue
-      if entry_index >= len(value):
-        continue
-      elem = value[entry_index]
-      channel = getattr(elem, "channel", None)
-      if channel is None:
-        continue
-      try:
-        return int(channel)
-      except (TypeError, ValueError):
-        continue
-    return entry_index
+    if cls.firmware_path is not None:
+      PrepCommand._ALL_PATHS.add(cls.firmware_path)
 
 
-@dataclass
-class PrepStatusRequest(PrepCommand):
-  """Base for Prep commands that use HOI STATUS_REQUEST (``action_code == Hoi2Action.STATUS_REQUEST``).
-
-  Subclasses target various firmware objects (Pipettor, MLPrep, MLPrepService,
-  DeckConfiguration, calibration, etc.). Responses still use the default
-  ``response_required=True`` in :meth:`TCPCommand.build`.
-  """
+@dataclass(frozen=True)
+class PrepStatusRequest(PrepCommand[ResponseT]):
+  """Prep status request; decoding follows the concrete command's response type."""
 
   action_code = Hoi2Action.STATUS_REQUEST
 
 
-@dataclass
-class PrepProbeRequest(PrepCommand):
+@dataclass(frozen=True)
+class PrepProbeRequest(PrepCommand[bytes]):
   """Ad-hoc STATUS_REQUEST with runtime command_id and interface_id.
 
-  Use with :meth:`~PrepClient.send_query` when the target command_id is only
+  Use with :meth:`~PrepClient.exchange` when the target command_id is only
   known at runtime. Always supply ``dest=`` explicitly; the JIT firmware-path
   resolver is bypassed because ``firmware_path = None``.
 
@@ -1344,8 +1971,17 @@ class PrepProbeRequest(PrepCommand):
   action_code = Hoi2Action.STATUS_REQUEST
   firmware_path = None
   dest: Address
-  command_id: int
-  interface_id: int = 3
+  command_id: int  # type: ignore[misc]  # Runtime identity on an immutable probe request.
+  interface_id: int = 3  # type: ignore[misc]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> bytes:
+    """Decode the declared success response."""
+    return data
 
 
 # =============================================================================
@@ -1353,71 +1989,190 @@ class PrepProbeRequest(PrepCommand):
 # =============================================================================
 
 
-@dataclass
-class PrepAspirateNoLldMonitoring(PrepCommand):
+@dataclass(frozen=True)
+class PrepAspirateNoLldMonitoring(PrepCommand[None]):
   """Aspirate without LLD or monitoring (cmd=1, dest=Pipettor)."""
 
   command_id = 1
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   aspirate_parameters: Annotated[list[AspirateParametersNoLldAndMonitoring], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class PrepAspirateTadm(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepAspirateTadm(PrepCommand[None]):
   """Aspirate with TADM, no LLD (cmd=2, dest=Pipettor)."""
 
   command_id = 2
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   aspirate_parameters: Annotated[list[AspirateParametersNoLldAndTadm], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class PrepAspirateWithLld(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepAspirateWithLld(PrepCommand[None]):
   """Aspirate with LLD and monitoring (cmd=3, dest=Pipettor)."""
 
   command_id = 3
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   aspirate_parameters: Annotated[list[AspirateParametersLldAndMonitoring], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class PrepAspirateWithLldTadm(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepAspirateWithLldTadm(PrepCommand[None]):
   """Aspirate with LLD and TADM (cmd=4, dest=Pipettor)."""
 
   command_id = 4
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   aspirate_parameters: Annotated[list[AspirateParametersLldAndTadm], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class PrepDispenseNoLld(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepDispenseNoLld(PrepCommand[None]):
   """Dispense without LLD (cmd=5, dest=Pipettor)."""
 
   command_id = 5
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   dispense_parameters: Annotated[list[DispenseParametersNoLld], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.dispense_parameters, StructArray())
 
-@dataclass
-class PrepDispenseWithLld(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.dispense_parameters):
+      return None
+    return _plr_channel_index(int(self.dispense_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepDispenseWithLld(PrepCommand[None]):
   """Dispense with LLD (cmd=6, dest=Pipettor)."""
 
   command_id = 6
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   dispense_parameters: Annotated[list[DispenseParametersLld], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.dispense_parameters, StructArray())
 
-@dataclass
-class PrepDispenseInitToWaste(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.dispense_parameters):
+      return None
+    return _plr_channel_index(int(self.dispense_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepDispenseInitToWaste(PrepCommand[None]):
   """Dispense initialize to waste (cmd=7, dest=Pipettor)."""
 
   command_id = 7
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   waste_parameters: Annotated[list[DispenseInitToWasteParameters], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.waste_parameters, StructArray())
 
-@dataclass
-class PrepPickUpTipsById(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.waste_parameters):
+      return None
+    return _plr_channel_index(int(self.waste_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepPickUpTipsById(PrepCommand[None]):
   """Pick up tips by tip-definition ID (cmd=8, dest=Pipettor)."""
 
   command_id = 8
@@ -1430,9 +2185,35 @@ class PrepPickUpTipsById(PrepCommand):
   dispenser_volume: F32
   dispenser_speed: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_positions, StructArray())
+      .add(self.final_z, F32)
+      .add(self.seek_speed, F32)
+      .add(self.tip_definition_id, PaddedU8)
+      .add(self.enable_tadm, PaddedBool)
+      .add(self.dispenser_volume, F32)
+      .add(self.dispenser_speed, F32)
+    )
 
-@dataclass
-class PrepPickUpTips(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.tip_positions):
+      return None
+    return _plr_channel_index(int(self.tip_positions[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepPickUpTips(PrepCommand[None]):
   """Pick up tips by tip-definition struct (cmd=9, dest=Pipettor)."""
 
   command_id = 9
@@ -1445,9 +2226,35 @@ class PrepPickUpTips(PrepCommand):
   dispenser_volume: F32
   dispenser_speed: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_positions, StructArray())
+      .add(self.final_z, F32)
+      .add(self.seek_speed, F32)
+      .add(self.tip_definition, Struct())
+      .add(self.enable_tadm, PaddedBool)
+      .add(self.dispenser_volume, F32)
+      .add(self.dispenser_speed, F32)
+    )
 
-@dataclass
-class PrepPickUpNeedlesById(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.tip_positions):
+      return None
+    return _plr_channel_index(int(self.tip_positions[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepPickUpNeedlesById(PrepCommand[None]):
   """Pick up needles by tip-definition ID (cmd=10, dest=Pipettor)."""
 
   command_id = 10
@@ -1462,9 +2269,37 @@ class PrepPickUpNeedlesById(PrepCommand):
   dispenser_volume: F32
   dispenser_speed: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_positions, StructArray())
+      .add(self.final_z, F32)
+      .add(self.seek_speed, F32)
+      .add(self.tip_definition_id, PaddedU8)
+      .add(self.blowout_offset, F32)
+      .add(self.blowout_speed, F32)
+      .add(self.enable_tadm, PaddedBool)
+      .add(self.dispenser_volume, F32)
+      .add(self.dispenser_speed, F32)
+    )
 
-@dataclass
-class PrepPickUpNeedles(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.tip_positions):
+      return None
+    return _plr_channel_index(int(self.tip_positions[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepPickUpNeedles(PrepCommand[None]):
   """Pick up needles by tip-definition struct (cmd=11, dest=Pipettor)."""
 
   command_id = 11
@@ -1479,9 +2314,37 @@ class PrepPickUpNeedles(PrepCommand):
   dispenser_volume: F32
   dispenser_speed: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_positions, StructArray())
+      .add(self.final_z, F32)
+      .add(self.seek_speed, F32)
+      .add(self.tip_definition, Struct())
+      .add(self.blowout_offset, F32)
+      .add(self.blowout_speed, F32)
+      .add(self.enable_tadm, PaddedBool)
+      .add(self.dispenser_volume, F32)
+      .add(self.dispenser_speed, F32)
+    )
 
-@dataclass
-class PrepDropTips(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.tip_positions):
+      return None
+    return _plr_channel_index(int(self.tip_positions[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepDropTips(PrepCommand[None]):
   """Drop tips (cmd=12, dest=Pipettor)."""
 
   command_id = 12
@@ -1491,9 +2354,32 @@ class PrepDropTips(PrepCommand):
   seek_speed: F32
   tip_roll_off_distance: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_positions, StructArray())
+      .add(self.final_z, F32)
+      .add(self.seek_speed, F32)
+      .add(self.tip_roll_off_distance, F32)
+    )
 
-@dataclass
-class MphPickupTips(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.tip_positions):
+      return None
+    return _plr_channel_index(int(self.tip_positions[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphPickupTips(PrepCommand[None]):
   """Pick up tips via MPH coordinator (iface=1 id=9, dest=MphRoot.MPH).
 
   Resolved introspection signature:
@@ -1518,9 +2404,28 @@ class MphPickupTips(PrepCommand):
   dispenser_speed: F32
   tip_mask: U32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_position, Struct())
+      .add(self.final_z, F32)
+      .add(self.seek_speed, F32)
+      .add(self.tip_definition, Struct())
+      .add(self.enable_tadm, PaddedBool)
+      .add(self.dispenser_volume, F32)
+      .add(self.dispenser_speed, F32)
+      .add(self.tip_mask, U32)
+    )
 
-@dataclass
-class MphMoveToPosition(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class MphMoveToPosition(PrepCommand[None]):
   """Move MPH gantry to absolute XYZ on IMph (cmd=17, dest=MphRoot.MPH).
 
   Wire matches vendor ``MoveToPosition(positionX, positionY, positionZ)`` as three
@@ -1535,9 +2440,18 @@ class MphMoveToPosition(PrepCommand):
   y_position: F32
   z_position: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.x_position, F32).add(self.y_position, F32).add(self.z_position, F32)
 
-@dataclass
-class MphMoveToPositionViaLane(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class MphMoveToPositionViaLane(PrepCommand[None]):
   """Move MPH gantry to absolute XYZ via lane (cmd=18, dest=MphRoot.MPH).
 
   Same payload as :class:`MphMoveToPosition`; vendor ``MoveToPositionViaLane``.
@@ -1549,9 +2463,18 @@ class MphMoveToPositionViaLane(PrepCommand):
   y_position: F32
   z_position: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.x_position, F32).add(self.y_position, F32).add(self.z_position, F32)
 
-@dataclass
-class MphDropTips(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class MphDropTips(PrepCommand[None]):
   """Drop tips via MPH coordinator (iface=1 id=12, dest=MphRoot.MPH).
 
   Resolved introspection signature:
@@ -1568,9 +2491,24 @@ class MphDropTips(PrepCommand):
   seek_speed: F32
   tip_roll_off_distance: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_position, Struct())
+      .add(self.final_z, F32)
+      .add(self.seek_speed, F32)
+      .add(self.tip_roll_off_distance, F32)
+    )
 
-@dataclass
-class MphAspirateNoLldMonitoring(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class MphAspirateNoLldMonitoring(PrepCommand[None]):
   """Aspirate without LLD via MPH coordinator (cmd=1, dest=MphRoot.MPH).
 
   One AspirateParametersNoLldAndMonitoring struct per active probe — each with
@@ -1582,9 +2520,26 @@ class MphAspirateNoLldMonitoring(PrepCommand):
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   aspirate_parameters: Annotated[list[AspirateParametersNoLldAndMonitoring], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class MphDispenseNoLld(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphDispenseNoLld(PrepCommand[None]):
   """Dispense without LLD via MPH coordinator (cmd=5, dest=MphRoot.MPH).
 
   One DispenseParametersNoLld struct per active probe — each with its own
@@ -1595,9 +2550,26 @@ class MphDispenseNoLld(PrepCommand):
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   dispense_parameters: Annotated[list[DispenseParametersNoLld], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.dispense_parameters, StructArray())
 
-@dataclass
-class MphAspirateNoLldMonitoring2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.dispense_parameters):
+      return None
+    return _plr_channel_index(int(self.dispense_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphAspirateNoLldMonitoring2(PrepCommand[None]):
   """Aspirate V2 with liquid-following via MPH coordinator (cmd=29, dest=MphRoot.MPH).
 
   Uses ``AspirateParametersNoLldAndMonitoring2`` which includes a
@@ -1609,9 +2581,26 @@ class MphAspirateNoLldMonitoring2(PrepCommand):
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   aspirate_parameters: Annotated[list[AspirateParametersNoLldAndMonitoring2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class MphDispenseNoLld2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphDispenseNoLld2(PrepCommand[None]):
   """Dispense V2 without LLD via MPH coordinator (cmd=33, dest=MphRoot.MPH).
 
   Uses ``DispenseParametersNoLld2`` which includes a ``ContainerDescription``
@@ -1623,81 +2612,234 @@ class MphDispenseNoLld2(PrepCommand):
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   dispense_parameters: Annotated[list[DispenseParametersNoLld2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.dispense_parameters, StructArray())
 
-@dataclass
-class MphAspirateTadm(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.dispense_parameters):
+      return None
+    return _plr_channel_index(int(self.dispense_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphAspirateTadm(PrepCommand[None]):
   """Aspirate with TADM, no LLD via MPH coordinator (cmd=2, dest=MphRoot.MPH)."""
 
   command_id = 2
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   aspirate_parameters: Annotated[list[AspirateParametersNoLldAndTadm], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class MphAspirateWithLld(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphAspirateWithLld(PrepCommand[None]):
   """Aspirate with LLD and monitoring via MPH coordinator (cmd=3, dest=MphRoot.MPH)."""
 
   command_id = 3
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   aspirate_parameters: Annotated[list[AspirateParametersLldAndMonitoring], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class MphAspirateWithLldTadm(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphAspirateWithLldTadm(PrepCommand[None]):
   """Aspirate with LLD and TADM via MPH coordinator (cmd=4, dest=MphRoot.MPH)."""
 
   command_id = 4
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   aspirate_parameters: Annotated[list[AspirateParametersLldAndTadm], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class MphDispenseWithLld(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphDispenseWithLld(PrepCommand[None]):
   """Dispense with LLD via MPH coordinator (cmd=6, dest=MphRoot.MPH)."""
 
   command_id = 6
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   dispense_parameters: Annotated[list[DispenseParametersLld], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.dispense_parameters, StructArray())
 
-@dataclass
-class MphAspirateTadm2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.dispense_parameters):
+      return None
+    return _plr_channel_index(int(self.dispense_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphAspirateTadm2(PrepCommand[None]):
   """Aspirate V2 with TADM, no LLD via MPH coordinator (cmd=30, dest=MphRoot.MPH)."""
 
   command_id = 30
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   aspirate_parameters: Annotated[list[AspirateParametersNoLldAndTadm2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class MphAspirateWithLld2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphAspirateWithLld2(PrepCommand[None]):
   """Aspirate V2 with LLD and monitoring via MPH coordinator (cmd=31, dest=MphRoot.MPH)."""
 
   command_id = 31
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   aspirate_parameters: Annotated[list[AspirateParametersLldAndMonitoring2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class MphAspirateWithLldTadm2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphAspirateWithLldTadm2(PrepCommand[None]):
   """Aspirate V2 with LLD and TADM via MPH coordinator (cmd=32, dest=MphRoot.MPH)."""
 
   command_id = 32
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   aspirate_parameters: Annotated[list[AspirateParametersLldAndTadm2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class MphDispenseWithLld2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class MphDispenseWithLld2(PrepCommand[None]):
   """Dispense V2 with LLD via MPH coordinator (cmd=34, dest=MphRoot.MPH)."""
 
   command_id = 34
   firmware_path = "MLPrepRoot.MphRoot.MPH"
   dispense_parameters: Annotated[list[DispenseParametersLld2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.dispense_parameters, StructArray())
 
-@dataclass
-class PrepPickUpToolById(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.dispense_parameters):
+      return None
+    return _plr_channel_index(int(self.dispense_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepPickUpToolById(PrepCommand[None]):
   """Pick up tool by tip-definition ID (cmd=14, dest=Pipettor)."""
 
   command_id = 14
@@ -1711,9 +2853,28 @@ class PrepPickUpToolById(PrepCommand):
   tool_x_radius: F32
   tool_y_radius: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_definition_id, PaddedU8)
+      .add(self.tool_position_x, F32)
+      .add(self.tool_position_z, F32)
+      .add(self.front_channel_position_y, F32)
+      .add(self.rear_channel_position_y, F32)
+      .add(self.tool_seek, F32)
+      .add(self.tool_x_radius, F32)
+      .add(self.tool_y_radius, F32)
+    )
 
-@dataclass
-class PrepPickUpTool(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepPickUpTool(PrepCommand[None]):
   """Pick up tool by tip-definition struct (cmd=15, dest=Pipettor)."""
 
   command_id = 15
@@ -1727,17 +2888,45 @@ class PrepPickUpTool(PrepCommand):
   tool_x_radius: F32
   tool_y_radius: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.tip_definition, Struct())
+      .add(self.tool_position_x, F32)
+      .add(self.tool_position_z, F32)
+      .add(self.front_channel_position_y, F32)
+      .add(self.rear_channel_position_y, F32)
+      .add(self.tool_seek, F32)
+      .add(self.tool_x_radius, F32)
+      .add(self.tool_y_radius, F32)
+    )
 
-@dataclass
-class PrepDropTool(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepDropTool(PrepCommand[None]):
   """Drop tool (cmd=16, dest=Pipettor)."""
 
   command_id = 16
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepPickUpPlate(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepPickUpPlate(PrepCommand[None]):
   """Pick up plate (cmd=17, dest=Pipettor)."""
 
   command_id = 17
@@ -1749,9 +2938,26 @@ class PrepPickUpPlate(PrepCommand):
   grip_distance: F32
   grip_height: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.plate_top_center, Struct())
+      .add(self.plate, Struct())
+      .add(self.clearance_y, F32)
+      .add(self.grip_speed_y, F32)
+      .add(self.grip_distance, F32)
+      .add(self.grip_height, F32)
+    )
 
-@dataclass
-class PrepDropPlate(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepDropPlate(PrepCommand[None]):
   """Drop plate (cmd=18, dest=Pipettor)."""
 
   command_id = 18
@@ -1760,9 +2966,23 @@ class PrepDropPlate(PrepCommand):
   clearance_y: F32
   acceleration_scale_x: PaddedU8
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.plate_top_center, Struct())
+      .add(self.clearance_y, F32)
+      .add(self.acceleration_scale_x, PaddedU8)
+    )
 
-@dataclass
-class PrepMovePlate(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepMovePlate(PrepCommand[None]):
   """Move plate to position (cmd=19, dest=Pipettor)."""
 
   command_id = 19
@@ -1770,9 +2990,18 @@ class PrepMovePlate(PrepCommand):
   plate_top_center: Annotated[XYZCoord, Struct()]
   acceleration_scale_x: PaddedU8
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.plate_top_center, Struct()).add(self.acceleration_scale_x, PaddedU8)
 
-@dataclass
-class PrepTransferPlate(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepTransferPlate(PrepCommand[None]):
   """Transfer plate from source to destination (cmd=20, dest=Pipettor)."""
 
   command_id = 20
@@ -1786,13 +3015,41 @@ class PrepTransferPlate(PrepCommand):
   grip_height: F32
   acceleration_scale_x: PaddedU8
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.plate_source_top_center, Struct())
+      .add(self.plate_destination_top_center, Struct())
+      .add(self.plate, Struct())
+      .add(self.clearance_y, F32)
+      .add(self.grip_speed_y, F32)
+      .add(self.grip_distance, F32)
+      .add(self.grip_height, F32)
+      .add(self.acceleration_scale_x, PaddedU8)
+    )
 
-@dataclass
-class PrepReleasePlate(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepReleasePlate(PrepCommand[None]):
   """Release plate / open gripper (cmd=21, dest=Pipettor)."""
 
   command_id = 21
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
 
 
 # CORE gripper tool definition for PrepPickUpTool (struct); matches instrument id=11.
@@ -1807,17 +3064,26 @@ CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS = TipPickupParameters(
 )
 
 
-@dataclass
-class PrepEmptyDispenser(PrepCommand):
+@dataclass(frozen=True)
+class PrepEmptyDispenser(PrepCommand[None]):
   """Empty dispenser (cmd=23, dest=Pipettor)."""
 
   command_id = 23
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   channels: EnumArray
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channels, EnumArray)
 
-@dataclass
-class PrepMoveToPosition(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepMoveToPosition(PrepCommand[None]):
   """Move pipettor gantry to position (cmd=26, dest=PipettorRoot only).
 
   Payload is :class:`GantryMoveXYZParameters` with ``FrontChannel`` / ``RearChannel``
@@ -1829,9 +3095,18 @@ class PrepMoveToPosition(PrepCommand):
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   move_parameters: Annotated[GantryMoveXYZParameters, Struct()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.move_parameters, Struct())
 
-@dataclass
-class PrepMoveToPositionViaLane(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepMoveToPositionViaLane(PrepCommand[None]):
   """Move pipettor gantry via lane (cmd=27, dest=PipettorRoot only).
 
   Same constraints as :class:`PrepMoveToPosition`. MPH: use
@@ -1842,9 +3117,18 @@ class PrepMoveToPositionViaLane(PrepCommand):
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   move_parameters: Annotated[GantryMoveXYZParameters, Struct()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.move_parameters, Struct())
 
-@dataclass
-class PrepGetPositions(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepGetPositions(PrepStatusRequest["PrepGetPositions.Response"]):
   """GetPositions (cmd=25, dest=Pipettor).
 
   Returns the current XYZ position of each channel as a StructArray of
@@ -1858,27 +3142,62 @@ class PrepGetPositions(PrepStatusRequest):
   class Response:
     positions: Annotated[list[ChannelXYZPositionParameters], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepMoveZUpToSafe(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetPositions.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepMoveZUpToSafe(PrepCommand[None]):
   """Move Z axes up to safe height (cmd=28, dest=Pipettor)."""
 
   command_id = 28
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   channels: EnumArray
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channels, EnumArray)
 
-@dataclass
-class PrepZSeekLldPosition(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepZSeekLldPosition(PrepCommand[None]):
   """Z-seek LLD position (cmd=29, dest=Pipettor)."""
 
   command_id = 29
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   seek_parameters: Annotated[list[LLDChannelSeekParameters], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.seek_parameters, StructArray())
 
-@dataclass
-class PrepCreateTadmLimitCurve(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.seek_parameters):
+      return None
+    return _plr_channel_index(int(self.seek_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepCreateTadmLimitCurve(PrepCommand[None]):
   """Create TADM limit curve (cmd=31, dest=Pipettor)."""
 
   command_id = 31
@@ -1888,27 +3207,60 @@ class PrepCreateTadmLimitCurve(PrepCommand):
   lower_limit: Annotated[list[LimitCurveEntry], StructArray()]
   upper_limit: Annotated[list[LimitCurveEntry], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.channel, U32)
+      .add(self.name, Str)
+      .add(self.lower_limit, StructArray())
+      .add(self.upper_limit, StructArray())
+    )
 
-@dataclass
-class PrepEraseTadmLimitCurves(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepEraseTadmLimitCurves(PrepCommand[None]):
   """Erase TADM limit curves for a channel (cmd=32, dest=Pipettor)."""
 
   command_id = 32
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   channel: U32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channel, U32)
 
-@dataclass
-class PrepGetTadmLimitCurveNames(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepGetTadmLimitCurveNames(PrepCommand[None]):
   """Get TADM limit curve names for a channel (cmd=33, dest=Pipettor)."""
 
   command_id = 33
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   channel: U32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channel, U32)
 
-@dataclass
-class PrepGetTadmLimitCurveInfo(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepGetTadmLimitCurveInfo(PrepCommand[None]):
   """Get TADM limit curve info (cmd=34, dest=Pipettor)."""
 
   command_id = 34
@@ -1916,77 +3268,206 @@ class PrepGetTadmLimitCurveInfo(PrepCommand):
   channel: U32
   name: Str
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channel, U32).add(self.name, Str)
 
-@dataclass
-class PrepRetrieveTadmData(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepRetrieveTadmData(PrepCommand[None]):
   """Retrieve TADM data for a channel (cmd=35, dest=Pipettor)."""
 
   command_id = 35
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   channel: U32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channel, U32)
 
-@dataclass
-class PrepResetTadmFifo(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepResetTadmFifo(PrepCommand[None]):
   """Reset TADM FIFO (cmd=36, dest=Pipettor)."""
 
   command_id = 36
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   channels: EnumArray
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channels, EnumArray)
 
-@dataclass
-class PrepAspirateNoLldMonitoringV2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepAspirateNoLldMonitoringV2(PrepCommand[None]):
   """Aspirate v2 without LLD or monitoring (cmd=38, dest=Pipettor)."""
 
   command_id = 38
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   aspirate_parameters: Annotated[list[AspirateParametersNoLldAndMonitoring2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class PrepAspirateTadmV2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepAspirateTadmV2(PrepCommand[None]):
   """Aspirate v2 with TADM, no LLD (cmd=39, dest=Pipettor)."""
 
   command_id = 39
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   aspirate_parameters: Annotated[list[AspirateParametersNoLldAndTadm2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class PrepAspirateWithLldV2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepAspirateWithLldV2(PrepCommand[None]):
   """Aspirate v2 with LLD and monitoring (cmd=40, dest=Pipettor)."""
 
   command_id = 40
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   aspirate_parameters: Annotated[list[AspirateParametersLldAndMonitoring2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class PrepAspirateWithLldTadmV2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepAspirateWithLldTadmV2(PrepCommand[None]):
   """Aspirate v2 with LLD and TADM (cmd=41, dest=Pipettor)."""
 
   command_id = 41
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   aspirate_parameters: Annotated[list[AspirateParametersLldAndTadm2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.aspirate_parameters, StructArray())
 
-@dataclass
-class PrepDispenseNoLldV2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.aspirate_parameters):
+      return None
+    return _plr_channel_index(int(self.aspirate_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepDispenseNoLldV2(PrepCommand[None]):
   """Dispense v2 without LLD (cmd=42, dest=Pipettor)."""
 
   command_id = 42
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   dispense_parameters: Annotated[list[DispenseParametersNoLld2], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.dispense_parameters, StructArray())
 
-@dataclass
-class PrepDispenseWithLldV2(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.dispense_parameters):
+      return None
+    return _plr_channel_index(int(self.dispense_parameters[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepDispenseWithLldV2(PrepCommand[None]):
   """Dispense v2 with LLD (cmd=43, dest=Pipettor)."""
 
   command_id = 43
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   dispense_parameters: Annotated[list[DispenseParametersLld2], StructArray()]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.dispense_parameters, StructArray())
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.dispense_parameters):
+      return None
+    return _plr_channel_index(int(self.dispense_parameters[entry_index].channel), entry_index)
 
 
 # =============================================================================
@@ -1994,8 +3475,8 @@ class PrepDispenseWithLldV2(PrepCommand):
 # =============================================================================
 
 
-@dataclass
-class PrepInitialize(PrepCommand):
+@dataclass(frozen=True)
+class PrepInitialize(PrepCommand[None]):
   """Initialize MLPrep (cmd=1, dest=MLPrep)."""
 
   command_id = 1
@@ -2003,9 +3484,18 @@ class PrepInitialize(PrepCommand):
   smart: PaddedBool
   tip_drop_params: Annotated[InitTipDropParameters, Struct()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.smart, PaddedBool).add(self.tip_drop_params, Struct())
 
-@dataclass
-class PrepGetIsInitialized(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepGetIsInitialized(PrepStatusRequest["PrepGetIsInitialized.Response"]):
   """Query whether MLPrep is initialized. Firmware yaml: [1:2] GetIsInitialized(void) -> value: bool."""
 
   command_id = 2
@@ -2016,43 +3506,88 @@ class PrepGetIsInitialized(PrepStatusRequest):
   class Response:
     value: PaddedBool
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepPark(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetIsInitialized.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepPark(PrepCommand[None]):
   """Park MLPrep (cmd=3, dest=MLPrep)."""
 
   command_id = 3
   firmware_path = "MLPrepRoot.MLPrep"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepSpread(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepSpread(PrepCommand[None]):
   """Spread channels (cmd=4, dest=MLPrep)."""
 
   command_id = 4
   firmware_path = "MLPrepRoot.MLPrep"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepAddTipAndNeedleDefinition(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepAddTipAndNeedleDefinition(PrepCommand[None]):
   """Add tip/needle definition (cmd=12, dest=MLPrep)."""
 
   command_id = 12
   firmware_path = "MLPrepRoot.MLPrep"
   tip_definition: Annotated[TipDefinition, Struct()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.tip_definition, Struct())
 
-@dataclass
-class PrepRemoveTipAndNeedleDefinition(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepRemoveTipAndNeedleDefinition(PrepCommand[None]):
   """Remove tip/needle definition by ID (cmd=13, dest=MLPrep)."""
 
   command_id = 13
   firmware_path = "MLPrepRoot.MLPrep"
   id_: WEnum
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.id_, WEnum)
 
-@dataclass
-class PrepReadStorage(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepReadStorage(PrepCommand[None]):
   """Read from instrument storage (cmd=14, dest=MLPrep)."""
 
   command_id = 14
@@ -2060,9 +3595,18 @@ class PrepReadStorage(PrepCommand):
   offset: U32
   length: U32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.offset, U32).add(self.length, U32)
 
-@dataclass
-class PrepWriteStorage(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepWriteStorage(PrepCommand[None]):
   """Write to instrument storage (cmd=15, dest=MLPrep)."""
 
   command_id = 15
@@ -2070,50 +3614,104 @@ class PrepWriteStorage(PrepCommand):
   offset: U32
   data: U8Array
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.offset, U32).add(self.data, U8Array)
 
-@dataclass
-class PrepPowerDownRequest(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepPowerDownRequest(PrepCommand[None]):
   """Request power down (cmd=17, dest=MLPrep)."""
 
   command_id = 17
   firmware_path = "MLPrepRoot.MLPrep"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepConfirmPowerDown(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepConfirmPowerDown(PrepCommand[None]):
   """Confirm power down (cmd=18, dest=MLPrep)."""
 
   command_id = 18
   firmware_path = "MLPrepRoot.MLPrep"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepCancelPowerDown(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepCancelPowerDown(PrepCommand[None]):
   """Cancel power down (cmd=19, dest=MLPrep)."""
 
   command_id = 19
   firmware_path = "MLPrepRoot.MLPrep"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepRemoveChannelPower(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepRemoveChannelPower(PrepCommand[None]):
   """Remove channel power for head swap (cmd=23, dest=MLPrep)."""
 
   command_id = 23
   firmware_path = "MLPrepRoot.MLPrep"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepRestoreChannelPower(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepRestoreChannelPower(PrepCommand[None]):
   """Restore channel power after head swap (cmd=24, dest=MLPrep)."""
 
   command_id = 24
   firmware_path = "MLPrepRoot.MLPrep"
   delay_ms: U32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.delay_ms, U32)
 
-@dataclass
-class PrepSetDeckLight(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepSetDeckLight(PrepCommand[None]):
   """Set deck LED colour (cmd=25, dest=MLPrep)."""
 
   command_id = 25
@@ -2123,9 +3721,24 @@ class PrepSetDeckLight(PrepCommand):
   green: PaddedU8
   blue: PaddedU8
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.white, PaddedU8)
+      .add(self.red, PaddedU8)
+      .add(self.green, PaddedU8)
+      .add(self.blue, PaddedU8)
+    )
 
-@dataclass
-class PrepGetDeckLight(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepGetDeckLight(PrepStatusRequest["PrepGetDeckLight.Response"]):
   """Get deck LED colour (cmd=26, dest=MLPrep)."""
 
   command_id = 26
@@ -2138,9 +3751,18 @@ class PrepGetDeckLight(PrepStatusRequest):
     green: PaddedU8
     blue: PaddedU8
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepSuspendedPark(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetDeckLight.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepSuspendedPark(PrepCommand[None]):
   """Suspended park / move to load position (cmd=29, dest=MLPrep).
 
   Reuses :class:`GantryMoveXYZParameters` on the **MLPrep** coordinator, not
@@ -2152,34 +3774,70 @@ class PrepSuspendedPark(PrepCommand):
   firmware_path = "MLPrepRoot.MLPrep"
   move_parameters: Annotated[GantryMoveXYZParameters, Struct()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.move_parameters, Struct())
 
-@dataclass
-class PrepMethodBegin(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepMethodBegin(PrepCommand[None]):
   """Begin method (cmd=30, dest=MLPrep)."""
 
   command_id = 30
   firmware_path = "MLPrepRoot.MLPrep"
   automatic_pause: PaddedBool
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.automatic_pause, PaddedBool)
 
-@dataclass
-class PrepMethodEnd(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepMethodEnd(PrepCommand[None]):
   """End method (cmd=31, dest=MLPrep)."""
 
   command_id = 31
   firmware_path = "MLPrepRoot.MLPrep"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepMethodAbort(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepMethodAbort(PrepCommand[None]):
   """Abort method (cmd=33, dest=MLPrep)."""
 
   command_id = 33
   firmware_path = "MLPrepRoot.MLPrep"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepIsParked(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepIsParked(PrepStatusRequest["PrepIsParked.Response"]):
   """Query parked status (cmd=34, dest=MLPrep). Firmware yaml: IsParked(void) -> parked: bool."""
 
   command_id = 34
@@ -2189,9 +3847,18 @@ class PrepIsParked(PrepStatusRequest):
   class Response:
     value: PaddedBool
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepIsSpread(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepIsParked.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepIsSpread(PrepStatusRequest["PrepIsSpread.Response"]):
   """Query spread status (cmd=35, dest=MLPrep). Same HOI pattern as :class:`PrepIsParked`."""
 
   command_id = 35
@@ -2200,6 +3867,15 @@ class PrepIsSpread(PrepStatusRequest):
   @dataclass(frozen=True)
   class Response:
     value: PaddedBool
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepIsSpread.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
 
 
 # -----------------------------------------------------------------------------
@@ -2220,6 +3896,19 @@ class _DeckSiteDefinitionWire:
   width: F32
   height: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.id, U32)
+      .add(self.left_bottom_front_x, F32)
+      .add(self.left_bottom_front_y, F32)
+      .add(self.left_bottom_front_z, F32)
+      .add(self.length, F32)
+      .add(self.width, F32)
+      .add(self.height, F32)
+    )
+
 
 @dataclass
 class _CalibrationSiteDefinitionWire:
@@ -2238,6 +3927,20 @@ class _CalibrationSiteDefinitionWire:
   height: F32
   post: PaddedBool
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.id, U32)
+      .add(self.left_bottom_front_x, F32)
+      .add(self.left_bottom_front_y, F32)
+      .add(self.left_bottom_front_z, F32)
+      .add(self.length, F32)
+      .add(self.width, F32)
+      .add(self.height, F32)
+      .add(self.post, PaddedBool)
+    )
+
 
 @dataclass
 class _ChannelHardwareConfigWire:
@@ -2245,6 +3948,10 @@ class _ChannelHardwareConfigWire:
 
   channel: WEnum  # ChannelIndex
   hardware: WEnum  # Hardware type enum (interface 2, id 1)
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return params.add(self.channel, WEnum).add(self.hardware, WEnum)
 
 
 @dataclass
@@ -2262,6 +3969,21 @@ class _ChannelCalibrationValuesWire:
   z_tip_height: F32
   core_ii: PaddedBool
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.index, WEnum)
+      .add(self.y_offset, F32)
+      .add(self.z_offset, F32)
+      .add(self.squeeze_position, U32)
+      .add(self.z_touchoff, U32)
+      .add(self.pressure_shift, U32)
+      .add(self.pressure_monitoring_shift, U32)
+      .add(self.dispenser_return_distance, F32)
+      .add(self.z_tip_height, F32)
+      .add(self.core_ii, PaddedBool)
+    )
+
 
 @dataclass
 class _WasteSiteDefinitionWire:
@@ -2274,6 +3996,17 @@ class _WasteSiteDefinitionWire:
   z_position: F32
   z_seek: F32
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.index, WEnum)
+      .add(self.x_position, I8)
+      .add(self.y_position, U16)
+      .add(self.z_position, F32)
+      .add(self.z_seek, F32)
+    )
+
 
 # -----------------------------------------------------------------------------
 # Config queries (MLPrep / DeckConfiguration) for _get_hardware_config
@@ -2281,8 +4014,8 @@ class _WasteSiteDefinitionWire:
 # -----------------------------------------------------------------------------
 
 
-@dataclass
-class PrepGetIsEnclosurePresent(PrepStatusRequest):
+@dataclass(frozen=True)
+class PrepGetIsEnclosurePresent(PrepStatusRequest["PrepGetIsEnclosurePresent.Response"]):
   """GetIsEnclosurePresent (cmd=21, dest=MLPrep). Firmware yaml: -> value: bool."""
 
   command_id = 21
@@ -2293,9 +4026,18 @@ class PrepGetIsEnclosurePresent(PrepStatusRequest):
   class Response:
     value: PaddedBool
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetSafeSpeedsEnabled(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetIsEnclosurePresent.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetSafeSpeedsEnabled(PrepStatusRequest["PrepGetSafeSpeedsEnabled.Response"]):
   """GetSafeSpeedsEnabled (cmd=28, dest=MLPrep). Firmware yaml: -> value: bool."""
 
   command_id = 28
@@ -2306,9 +4048,18 @@ class PrepGetSafeSpeedsEnabled(PrepStatusRequest):
   class Response:
     value: PaddedBool
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetDefaultTraverseHeight(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetSafeSpeedsEnabled.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetDefaultTraverseHeight(PrepStatusRequest["PrepGetDefaultTraverseHeight.Response"]):
   """GetDefaultTraverseHeight (cmd=10, dest=MLPrep). Returns F32."""
 
   command_id = 10
@@ -2319,9 +4070,18 @@ class PrepGetDefaultTraverseHeight(PrepStatusRequest):
   class Response:
     value: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetTipAndNeedleDefinitions(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetDefaultTraverseHeight.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetTipAndNeedleDefinitions(PrepStatusRequest["PrepGetTipAndNeedleDefinitions.Response"]):
   """GetTipAndNeedleDefinitions (cmd=11, dest=MLPrep).
 
   Returns the list of tip/needle definitions registered on the instrument.
@@ -2337,9 +4097,18 @@ class PrepGetTipAndNeedleDefinitions(PrepStatusRequest):
   class Response:
     definitions: Annotated[list[TipDefinition], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetDeckBounds(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetTipAndNeedleDefinitions.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetDeckBounds(PrepStatusRequest["PrepGetDeckBounds.Response"]):
   """GetDeckBounds (cmd=1, dest=DeckConfiguration). Returns 6× F32 (min/max x,y,z)."""
 
   command_id = 1
@@ -2355,9 +4124,20 @@ class PrepGetDeckBounds(PrepStatusRequest):
     min_z: F32
     max_z: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetCalibrationSiteDefinitions(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetDeckBounds.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetCalibrationSiteDefinitions(
+  PrepStatusRequest["PrepGetCalibrationSiteDefinitions.Response"]
+):
   """GetCalibrationSiteDefinitions (cmd=3, dest=DeckConfiguration).
 
   Response is a STRUCTURE_ARRAY of CalibrationSiteDefinition structs:
@@ -2371,9 +4151,18 @@ class PrepGetCalibrationSiteDefinitions(PrepStatusRequest):
   class Response:
     sites: Annotated[list[_CalibrationSiteDefinitionWire], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetDeckSiteDefinitions(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetCalibrationSiteDefinitions.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetDeckSiteDefinitions(PrepStatusRequest["PrepGetDeckSiteDefinitions.Response"]):
   """GetDeckSiteDefinitions (cmd=7, dest=DeckConfiguration).
 
   Response is a STRUCTURE_ARRAY of DeckSiteDefinition structs:
@@ -2389,9 +4178,18 @@ class PrepGetDeckSiteDefinitions(PrepStatusRequest):
   class Response:
     sites: Annotated[list[_DeckSiteDefinitionWire], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetWasteSiteDefinitions(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetDeckSiteDefinitions.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetWasteSiteDefinitions(PrepStatusRequest["PrepGetWasteSiteDefinitions.Response"]):
   """GetWasteSiteDefinitions (cmd=12, dest=DeckConfiguration).
 
   Response is a STRUCTURE_ARRAY of WasteSiteDefinition structs:
@@ -2407,9 +4205,18 @@ class PrepGetWasteSiteDefinitions(PrepStatusRequest):
   class Response:
     sites: Annotated[list[_WasteSiteDefinitionWire], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetChannelBounds(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetWasteSiteDefinitions.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetChannelBounds(PrepStatusRequest["PrepGetChannelBounds.Response"]):
   """GetChannelBounds (cmd=10, dest=PipettorService).
 
   Returns per-channel movement bounds (x_min, x_max, y_min, y_max, z_min, z_max)
@@ -2423,9 +4230,18 @@ class PrepGetChannelBounds(PrepStatusRequest):
   class Response:
     bounds: Annotated[list[ChannelBoundsParameters], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetPresentChannels(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetChannelBounds.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetPresentChannels(PrepStatusRequest["PrepGetPresentChannels.Response"]):
   """GetPresentChannels (cmd=17, dest=MLPrepService).
 
   Returns a list of enum values (iface=1, id=5): which channels are present.
@@ -2441,52 +4257,106 @@ class PrepGetPresentChannels(PrepStatusRequest):
   class Response:
     channels: EnumArray  # list of ints: map to ChannelIndex for present channels
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetPresentChannels.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
 
 # -----------------------------------------------------------------------------
 # MLPrepCalibration commands
 # -----------------------------------------------------------------------------
 
 
-@dataclass
-class PrepBeginCalibration(PrepCommand):
+@dataclass(frozen=True)
+class PrepBeginCalibration(PrepCommand[None]):
   """BeginCalibration (cmd=1, dest=MLPrepCalibration). Enter calibration mode."""
 
   command_id = 1
   firmware_path = "MLPrepRoot.MLPrepCalibration"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepCancelCalibration(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepCancelCalibration(PrepCommand[None]):
   """CancelCalibration (cmd=2, dest=MLPrepCalibration). Cancel active calibration session."""
 
   command_id = 2
   firmware_path = "MLPrepRoot.MLPrepCalibration"
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepEndCalibration(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepEndCalibration(PrepCommand[None]):
   """EndCalibration (cmd=3, dest=MLPrepCalibration). End calibration and store results with timestamp."""
 
   command_id = 3
   firmware_path = "MLPrepRoot.MLPrepCalibration"
   date_time: Annotated[HoiDateTime, Struct()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.date_time, Struct())
 
-@dataclass
-class PrepResetCalibration(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepResetCalibration(PrepCommand[None]):
   """ResetCalibration (cmd=4, dest=MLPrepCalibration). Reset calibration data, optionally storing."""
 
   command_id = 4
   firmware_path = "MLPrepRoot.MLPrepCalibration"
   store: PaddedBool
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.store, PaddedBool)
 
-@dataclass
-class PrepCalibrationInitialize(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepCalibrationInitialize(PrepCommand[None]):
   """CalibrationInitialize (cmd=5, dest=MLPrepCalibration). Initialize calibration hardware."""
 
   command_id = 5
   firmware_path = "MLPrepRoot.MLPrepCalibration"
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
 
 
 @dataclass
@@ -2528,9 +4398,21 @@ class NeedleDefinition:
       tip_mask=0,
     )
 
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
+      .add(self.z_start, F32)
+      .add(self.z_stop, F32)
+      .add(self.tip_definition, Struct())
+      .add(self.tip_mask, U32)
+    )
 
-@dataclass
-class PrepSelfCalibrate(PrepCommand):
+
+@dataclass(frozen=True)
+class PrepSelfCalibrate(PrepCommand[None]):
   """SelfCalibrate (cmd=6, dest=MLPrepCalibration).
 
   Runs a full self-calibration sequence. Set individual booleans to select
@@ -2547,9 +4429,26 @@ class PrepSelfCalibrate(PrepCommand):
   touchoff: PaddedBool
   needle: Annotated[NeedleDefinition, Struct()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.site_index, U32)
+      .add(self.channels, WEnum)
+      .add(self.axis, PaddedBool)
+      .add(self.pressure, PaddedBool)
+      .add(self.touchoff, PaddedBool)
+      .add(self.needle, Struct())
+    )
 
-@dataclass
-class PrepCalibrateXAxis(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepCalibrateXAxis(PrepCommand["PrepCalibrateXAxis.Response"]):
   """CalibrateXAxis (cmd=7, dest=MLPrepCalibration). Returns offset: F32."""
 
   command_id = 7
@@ -2561,9 +4460,18 @@ class PrepCalibrateXAxis(PrepCommand):
   class Response:
     offset: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.site_index, U32).add(self.channel, WEnum)
 
-@dataclass
-class PrepCalibrateYAxis(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepCalibrateXAxis.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepCalibrateYAxis(PrepCommand["PrepCalibrateYAxis.Response"]):
   """CalibrateYAxis (cmd=8, dest=MLPrepCalibration). Returns offset: F32."""
 
   command_id = 8
@@ -2575,9 +4483,18 @@ class PrepCalibrateYAxis(PrepCommand):
   class Response:
     offset: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.site_index, U32).add(self.channel, WEnum)
 
-@dataclass
-class PrepCalibrateZAxis(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepCalibrateYAxis.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepCalibrateZAxis(PrepCommand["PrepCalibrateZAxis.Response"]):
   """CalibrateZAxis (cmd=9, dest=MLPrepCalibration). Returns offset: F32."""
 
   command_id = 9
@@ -2589,9 +4506,18 @@ class PrepCalibrateZAxis(PrepCommand):
   class Response:
     offset: F32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.site_index, U32).add(self.channel, WEnum)
 
-@dataclass
-class PrepCalibrateSqueeze(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepCalibrateZAxis.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepCalibrateSqueeze(PrepCommand["PrepCalibrateSqueeze.Response"]):
   """CalibrateSqueeze (cmd=14, dest=MLPrepCalibration). Returns position: U32."""
 
   command_id = 14
@@ -2602,9 +4528,18 @@ class PrepCalibrateSqueeze(PrepCommand):
   class Response:
     position: U32
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channel, WEnum)
 
-@dataclass
-class PrepCalibrateSqueezeTips(PrepCommand):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepCalibrateSqueeze.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepCalibrateSqueezeTips(PrepCommand["PrepCalibrateSqueezeTips.Response"]):
   """CalibrateSqueezeTips (cmd=15, dest=MLPrepCalibration).
 
   Takes per-channel TipPositionParameters (same struct as pick_up_tips) and
@@ -2619,9 +4554,26 @@ class PrepCalibrateSqueezeTips(PrepCommand):
   class Response:
     positions: U32Array
 
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channels, StructArray())
 
-@dataclass
-class PrepGetCalibrationValues(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepCalibrateSqueezeTips.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+  uses_physical_channels = True
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map the firmware result ordinal to the requested PLR channel."""
+    if entry_index >= len(self.channels):
+      return None
+    return _plr_channel_index(int(self.channels[entry_index].channel), entry_index)
+
+
+@dataclass(frozen=True)
+class PrepGetCalibrationValues(PrepStatusRequest["PrepGetCalibrationValues.Response"]):
   """GetCalibrationValues (cmd=16, dest=MLPrepCalibration).
 
   Returns independentOffsetX (F32), mphOffsetX (F32), and per-channel
@@ -2637,9 +4589,20 @@ class PrepGetCalibrationValues(PrepStatusRequest):
     mph_offset_x: F32
     channel_values: Annotated[list[_ChannelCalibrationValuesWire], StructArray()]
 
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
 
-@dataclass
-class PrepGetChannelHardwareConfiguration(PrepStatusRequest):
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetCalibrationValues.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepGetChannelHardwareConfiguration(
+  PrepStatusRequest["PrepGetChannelHardwareConfiguration.Response"]
+):
   """GetChannelHardwareConfiguration (cmd=24, dest=MLPrepCalibration).
 
   Response is a StructArray of ChannelHardwareConfig: Channel (enum) + Hardware (enum).
@@ -2651,3 +4614,12 @@ class PrepGetChannelHardwareConfiguration(PrepStatusRequest):
   @dataclass(frozen=True)
   class Response:
     channels: Annotated[list[_ChannelHardwareConfigWire], StructArray()]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepGetChannelHardwareConfiguration.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)

@@ -4,11 +4,14 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import IOBase
-from typing import Iterator, Optional, cast
+from typing import Collection, Iterator, Optional, cast
 
 from pylabrobot.events import emit_event
+from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
+_SERIAL_IMPORT_ERROR: Optional[ImportError] = None
 try:
   import serial
   import serial.tools.list_ports
@@ -18,10 +21,30 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
-
 logger = logging.getLogger(__name__)
+
+
+def find_serial_ports(vid_pid_pairs: Collection[tuple[int, int]]) -> list[str]:
+  """Return serial ports matching any of the supplied USB VID/PID pairs.
+
+  Args:
+    vid_pid_pairs: USB vendor/product identifier pairs to match.
+
+  Raises:
+    RuntimeError: If pyserial is not installed.
+  """
+  if not HAS_SERIAL:
+    raise RuntimeError(
+      "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+      f"Import error: {_SERIAL_IMPORT_ERROR}"
+    )
+
+  identifiers = set(vid_pid_pairs)
+  return [
+    str(port.device)
+    for port in serial.tools.list_ports.comports()
+    if (port.vid, port.pid) in identifiers
+  ]
 
 
 @dataclass
@@ -148,6 +171,39 @@ class Serial(IOBase):
     loop = asyncio.get_running_loop()
     self._executor = ThreadPoolExecutor(max_workers=1)
 
+    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    try:
+      resolved_port = await asyncio.shield(setup_future)
+      self._port = resolved_port
+    except BaseException as exc:
+      if isinstance(exc, asyncio.CancelledError):
+        try:
+          await setup_future
+        except BaseException:
+          pass
+      if self._ser is not None:
+        try:
+          await loop.run_in_executor(self._executor, self._ser.close)
+        except Exception:
+          logger.warning("Failed to close serial port after setup failure", exc_info=True)
+        self._ser = None
+      self._shutdown_executor()
+      raise
+
+    assert self._ser is not None
+
+  def _shutdown_executor(self) -> None:
+    if self._executor is not None:
+      # the worker is idle here, so this does not block the event loop
+      self._executor.shutdown(wait=False, cancel_futures=True)
+      self._executor = None
+
+  def _setup_sync(self) -> str:
+    """Resolve the port and open the connection. Runs on the executor that owns all device calls.
+
+    Returns the resolved port.
+    """
+
     # 1. VID:PID specified - port maybe
     if self._vid is not None and self._pid is not None:
       matching_ports = [
@@ -184,8 +240,8 @@ class Serial(IOBase):
         "Please specify the correct port address explicitly (e.g. /dev/ttyUSB0 or COM3)."
       )
 
-    def _open_serial() -> serial.Serial:
-      return serial.Serial(
+    try:
+      self._ser = serial.Serial(
         port=candidate_port,
         baudrate=self.baudrate,
         bytesize=self.bytesize,
@@ -197,22 +253,13 @@ class Serial(IOBase):
         dsrdtr=self.dsrdtr,
         xonxoff=self.xonxoff,
       )
-
-    try:
-      self._ser = await loop.run_in_executor(self._executor, _open_serial)
-
-    except serial.SerialException as e:
+    except serial.SerialException:
       logger.error(
         f"Could not connect to device '{self.human_readable_device_name}', is it in use by a different notebook/process?"
       )
-      if self._executor is not None:
-        self._executor.shutdown(wait=True)
-        self._executor = None
-      raise e
+      raise
 
-    assert self._ser is not None
-
-    self._port = candidate_port
+    return candidate_port
 
   async def stop(self):
     """Close the serial device."""
@@ -224,9 +271,7 @@ class Serial(IOBase):
         raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
       await loop.run_in_executor(self._executor, self._ser.close)
 
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+    self._shutdown_executor()
 
   async def write(self, data: bytes):
     """Write data to the serial device."""

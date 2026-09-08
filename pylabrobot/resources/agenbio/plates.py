@@ -58,6 +58,7 @@ def agenbio_96_wellplate_Ub_2200uL(name: str, lid: Optional[Lid] = None) -> Plat
       dz=3.8,  # measured
       item_dx=9,
       item_dy=9,
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -108,6 +109,7 @@ def agenbio_4_troughplate_75mL_Vb(name: str, lid: Optional[Lid] = None) -> Plate
       dz=0.9,  # measured
       item_dx=INNER_WELL_WIDTH + 1,  # 1 mm wall thickness
       item_dy=INNER_WELL_LENGTH,
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -182,6 +184,7 @@ def agenbio_1_troughplate_190mL_Fl(name: str, lid: Optional[Lid] = None) -> Plat
       dz=5.88,
       item_dx=None,  # single column
       item_dy=None,  # single row
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -232,6 +235,7 @@ def agenbio_1_troughplate_100mL_Fl(name: str, lid: Optional[Lid] = None) -> Plat
       dz=5.88,
       item_dx=None,  # single column
       item_dy=None,  # single row
+      name_prefix=name,
       **well_kwargs,
     ),
   )

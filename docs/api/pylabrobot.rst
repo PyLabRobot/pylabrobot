@@ -10,6 +10,7 @@ Subpackages
     :maxdepth: 1
 
     pylabrobot.config
+    pylabrobot.generic
     pylabrobot.resources
     pylabrobot.utils
 
@@ -32,7 +33,10 @@ Manufacturers
     pylabrobot.kbioscience
     pylabrobot.kbiosystems
     pylabrobot.mettler_toledo
+    pylabrobot.micronic
     pylabrobot.molecular_devices
+    pylabrobot.opentrons
     pylabrobot.qinstruments
+    pylabrobot.revvity
     pylabrobot.sartorius
     pylabrobot.thermo_fisher

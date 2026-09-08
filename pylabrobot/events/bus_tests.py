@@ -170,3 +170,52 @@ class TestEventedOperation(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(events[1].data["error_type"], "RuntimeError")
     self.assertEqual(events[1].context["operation_id"], events[0].context["operation_id"])
+
+  async def test_evented_operation_forwards_positional_and_keyword_calls_unchanged(self):
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    context_calls: list[tuple[int, int, str, dict[str, object]]] = []
+
+    def context_factory(
+      value: int,
+      scale: int = 2,
+      *,
+      mode: str = "normal",
+      **backend_kwargs: object,
+    ) -> dict:
+      context_calls.append((value, scale, mode, backend_kwargs))
+      return {
+        "value": value,
+        "scale": scale,
+        "mode": mode,
+        "backend_kwargs": backend_kwargs,
+      }
+
+    @evented_operation("device.action", context_factory)
+    async def action(
+      value: int,
+      scale: int = 2,
+      *,
+      mode: str = "normal",
+      **backend_kwargs: object,
+    ) -> int:
+      return value * scale
+
+    with use_event_bus(event_bus):
+      self.assertEqual(await action(3, 4, mode="fast", retries=1), 12)
+      self.assertEqual(
+        await action(value=3, scale=4, mode="fast", retries=1),
+        12,
+      )
+
+    self.assertEqual(
+      context_calls,
+      [
+        (3, 4, "fast", {"retries": 1}),
+        (3, 4, "fast", {"retries": 1}),
+      ],
+    )
+    started_events = [event for event in events if event.name == "device.action.started"]
+    self.assertEqual(started_events[0].data, started_events[1].data)

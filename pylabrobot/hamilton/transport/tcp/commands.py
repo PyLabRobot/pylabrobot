@@ -1,20 +1,14 @@
-"""Command layer for Hamilton TCP.
-
-TCPCommand base: build_parameters() returns HoiParams; interpret_response()
-auto-decodes success responses via nested Response dataclasses (wire-type
-annotations and parse_into_struct). Wire → HoiParams → Packets → Messages → Commands.
-"""
+"""Immutable Hamilton requests with explicit wire encoding and typed response decoding."""
 
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass
-from typing import Any, ClassVar, Optional
+from dataclasses import dataclass
+from typing import ClassVar, Generic, Optional, TypeVar
 
 from pylabrobot.hamilton.transport.tcp.messages import (
   CommandMessage,
   CommandResponse,
   HoiParams,
-  interpret_hoi_success_payload,
   log_hoi_result_entries,
   split_hoi_params_after_warning_prefix,
 )
@@ -22,160 +16,54 @@ from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import HamiltonProtocol
 from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
 
+ResponseT = TypeVar("ResponseT", covariant=True)
 
-class TCPCommand:
-  """Base class for Hamilton TCP commands.
 
-  Preferred usage: define commands as ``@dataclass`` subclasses with
-  ``Annotated`` wire-type fields.  ``build_parameters()`` and
-  ``interpret_response()`` are handled automatically by the base class.
+@dataclass(frozen=True)
+class TCPCommand(Generic[ResponseT]):
+  """A reusable request, independent of connection identity and sequence allocation.
 
-  Example::
-
-      @dataclass
-      class MyCommand(TCPCommand):
-          protocol = HamiltonProtocol.OBJECT_DISCOVERY
-          interface_id = 0
-          command_id = 42
-
-          dest: Address          # infrastructure field — not serialised
-          value: Annotated[int, I32]   # wire field — serialised in order
-
-          @dataclass
-          class Response:
-              result: Annotated[int, U32]
+  Define subclasses as frozen dataclasses. Encode parameters explicitly in
+  ``build_parameters`` and decode the success payload in ``parse_response_parameters``.
+  The action on the request determines whether it queries or changes device state.
   """
 
-  # Class-level attributes that subclasses must override
-  # Not ClassVar: subclasses may redeclare these as per-instance dataclass fields
-  # when the value varies per command instance rather than per type (see
-  # PrepStatusRequest, which carries command_id on the instance).
-  protocol: Optional[HamiltonProtocol] = None
-  interface_id: Optional[int] = None
-  command_id: Optional[int] = None
-
-  # Nested dataclass describing the success payload, shadowed by subclasses that
-  # declare one. None means the command decodes its own response via
-  # parse_response_parameters().
-  Response: ClassVar[Optional[type]] = None
-
-  # Whether STATUS_EXCEPTION entries map onto PLR channel indices. Commands that
-  # carry per-channel wire parameters set this so the client raises
-  # ChannelizedError; everything else raises HoiError rather than attributing an
-  # instrument-wide fault to a synthetic ch0.
+  dest: Address
+  protocol: ClassVar[HamiltonProtocol] = HamiltonProtocol.OBJECT_DISCOVERY
+  interface_id: ClassVar[Optional[int]] = None
+  command_id: ClassVar[Optional[int]] = None
   uses_physical_channels: ClassVar[bool] = False
-
-  # Action configuration (can be overridden by subclasses, per type or per instance)
-  action_code: int = 3  # Default: COMMAND_REQUEST
-  harp_protocol: int = 2  # Default: HOI2
-  ip_protocol: int = 6  # Default: OBJECT_DISCOVERY
-
-  def __init__(self, dest: Address):
-    """Initialize TCP command.
-
-    Args:
-      dest: Destination address for this command
-    """
-    if self.protocol is None:
-      raise ValueError(f"{self.__class__.__name__} must define protocol")
-    if self.interface_id is None:
-      raise ValueError(f"{self.__class__.__name__} must define interface_id")
-    if self.command_id is None:
-      raise ValueError(f"{self.__class__.__name__} must define command_id")
-
-    self.dest = dest
-    self.dest_address = dest  # Alias for compatibility
-    self.sequence_number = 0
-    self.source_address: Optional[Address] = None
+  action_code: ClassVar[int] = 3
+  harp_protocol: ClassVar[int] = 2
+  ip_protocol: ClassVar[int] = 6
 
   def build_parameters(self) -> HoiParams:
-    """Build HOI parameters for this command.
-
-    Default: serializes all ``Annotated`` wire-type fields on ``self`` via
-    ``HoiParams.from_struct``.  On non-dataclass subclasses ``from_struct``
-    finds no fields and returns an empty ``HoiParams``, preserving the old
-    behaviour.  Override only when the wire layout cannot be expressed with
-    ``Annotated`` field declarations.
-
-    Returns:
-      HoiParams object with command parameters
-    """
-    if is_dataclass(self):
-      return HoiParams.from_struct(self)
+    """Encode request parameters; the default request has no parameters."""
     return HoiParams()
 
-  def get_log_params(self) -> dict:
-    """Get parameters to log for this command.
-
-    Reads the declared dataclass fields. Non-dataclass subclasses declare no
-    fields and log nothing, matching ``build_parameters``.
-
-    Subclasses can override to customize formatting (e.g., unit conversions,
-    array truncation).
-
-    Returns:
-      Dictionary of parameter names to values
-    """
-    if not is_dataclass(self):
-      return {}
-    exclude = {"dest", "dest_address"}
-    return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in exclude}
-
-  def build(
-    self, src: Optional[Address] = None, seq: Optional[int] = None, response_required: bool = True
-  ) -> bytes:
-    """Build complete Hamilton message using CommandMessage.
-
-    Args:
-      src: Source address (uses self.source_address if None)
-      seq: Sequence number (uses self.sequence_number if None)
-      response_required: Whether a response is expected
-
-    Returns:
-      Complete packet bytes ready to send over TCP
-    """
-    # Use instance attributes if not provided
-    source = src if src is not None else self.source_address
-    sequence = seq if seq is not None else self.sequence_number
-
-    if source is None:
-      raise ValueError("Source address not set - backend should set this before building")
-
-    # Ensure required attributes are set (they should be by subclasses)
-    if self.interface_id is None:
-      raise ValueError(f"{self.__class__.__name__} must define interface_id")
-    if self.command_id is None:
-      raise ValueError(f"{self.__class__.__name__} must define command_id")
-
-    # Build parameters using command-specific logic
-    params = self.build_parameters()
-
-    # Create CommandMessage and set parameters directly
-    # This avoids wasteful serialization/parsing round-trip
-    msg = CommandMessage(
+  def build(self, src: Address, seq: int, response_required: bool = True) -> bytes:
+    """Encode this request with the source and sequence supplied by its session."""
+    if self.interface_id is None or self.command_id is None:
+      raise ValueError(f"{type(self).__name__} must define interface_id and command_id")
+    return CommandMessage(
       dest=self.dest,
       interface_id=self.interface_id,
       method_id=self.command_id,
-      params=params,
+      params=self.build_parameters(),
       action_code=self.action_code,
       harp_protocol=self.harp_protocol,
       ip_protocol=self.ip_protocol,
-    )
-
-    # Build final packet
-    return msg.build(source, sequence, harp_response_required=response_required)
+    ).build(src, seq, harp_response_required=response_required)
 
   def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
     """Map a ``HcResultEntry`` to a 0-indexed PLR channel, or ``None`` to skip.
 
-    Default: the entry's position in the HoiResult — firmware populates arrays
-    in active-channel order. ``NimbusCommand`` / ``PrepCommand`` override this
-    to translate the active-channel ordinal into the caller's 0-indexed channel
-    via ``channels_involved`` bitmask or per-channel struct-array reflection.
+    The default is the entry's position in the HoiResult. Commands with channel
+    selections override this to map active-channel ordinals to PLR channels.
     """
     return entry_index
 
-  def interpret_response(self, response: CommandResponse) -> Any:
+  def interpret_response(self, response: CommandResponse) -> ResponseT:
     """Pure decoder for a success response — never raises on channel errors.
 
     For ``STATUS_WARNING`` / ``COMMAND_WARNING`` frames, strips the leading
@@ -185,21 +73,19 @@ class TCPCommand:
     dataclass directly — the firmware emits exactly the fields declared in
     the interface yaml, with no HoiResult trailer. HoiResult only rides on
     warning (prefix) or exception (separate payload, handled in
-    ``send_command``) frames.
+    ``execute``) frames.
 
-    Fatal (non-success, non-warning) entries from a warning frame surface
-    through ``fatal_entries_by_channel`` and are lifted into a
-    ``ChannelizedError`` by the backend — this decoder stays pure.
+    The session checks fatal entries before calling the decoder.
     """
     eff, _prefix = self._strip_warning_prefix(response)
-    return interpret_hoi_success_payload(self, eff)
+    return self.parse_response_parameters(eff)
 
   def fatal_entries_by_channel(self, response: CommandResponse) -> dict[int, HcResultEntry]:
     """Return fatal entries keyed by 0-indexed PLR channel.
 
     Only non-success, non-warning entries from a warning-frame prefix are
     included; warnings remain log-only. Exception frames are handled
-    separately in ``send_command`` via :func:`~pylabrobot.hamilton.transport.tcp.hoi_error.parse_hamilton_error_entry`.
+    separately in ``execute`` via :func:`~pylabrobot.hamilton.transport.tcp.hoi_error.parse_hamilton_error_entry`.
 
     ``entry_index`` passed to ``_channel_index_for_entry`` is the position of
     the entry in the *original* entries list (i.e. active-channel ordinal),
@@ -225,31 +111,23 @@ class TCPCommand:
     return eff, prefix_entries
 
   @classmethod
-  def parse_response_parameters(cls, data: bytes) -> Optional[dict]:
-    """Parse response parameters from HOI payload.
-
-    Override this method in subclasses to parse command-specific responses.
-
-    Args:
-      data: Raw bytes from HOI fragments field
-
-    Returns:
-      Dictionary with parsed response data, or None if no data to extract
-    """
-    return None
+  def parse_response_parameters(cls, data: bytes) -> ResponseT:
+    """Decode success parameters; subclasses must declare their response type."""
+    raise NotImplementedError(f"{cls.__name__} must implement parse_response_parameters")
 
 
-def hamilton_error_for_entry(entry: HcResultEntry, description: str) -> Exception:
-  """Wrap an ``HcResultEntry`` in a ``RuntimeError`` using a pre-resolved description.
+class HoiEntryError(RuntimeError):
+  """One firmware result with its original structured entry."""
 
-  ``description`` is sourced from the device itself via Interface 0 method 5
-  (``EnumInfo``) — see ``HamiltonTCPClient._describe_entry``. The returned
-  exception has ``.entry`` attached so callers can dispatch on
-  ``entry.result`` / ``entry.interface_id`` / ``entry.address``.
-  """
-  err = RuntimeError(
-    f"{description} (HcResult=0x{entry.result:04X}) "
-    f"at {entry.address} iface={entry.interface_id} action={entry.action_id}"
-  )
-  err.entry = entry  # type: ignore[attr-defined]
-  return err
+  def __init__(self, entry: HcResultEntry, description: str):
+    """Preserve the wire entry alongside its offline description."""
+    self.entry = entry
+    super().__init__(
+      f"{description} (HcResult=0x{entry.result:04X}) "
+      f"at {entry.address} iface={entry.interface_id} action={entry.action_id}"
+    )
+
+
+def hamilton_error_for_entry(entry: HcResultEntry, description: str) -> HoiEntryError:
+  """Wrap a firmware entry without performing additional I/O."""
+  return HoiEntryError(entry, description)

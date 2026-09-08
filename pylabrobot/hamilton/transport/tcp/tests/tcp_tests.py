@@ -13,11 +13,10 @@ import asyncio
 import struct
 import unittest
 from dataclasses import dataclass
-from typing import Annotated, cast
+from typing import Annotated, Awaitable, Callable, Optional, cast
 from unittest.mock import AsyncMock
 
 import pylabrobot.hamilton.transport.tcp.introspection as introspection_mod
-from pylabrobot.hamilton.nimbus.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.hoi_error import (
   HoiError,
@@ -64,6 +63,7 @@ from pylabrobot.hamilton.transport.tcp.protocol import (
   RegistrationActionCode,
   RegistrationOptionType,
 )
+from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import (
   I32,
@@ -78,7 +78,104 @@ from pylabrobot.hamilton.transport.tcp.wire_types import (
   StrArray,
   decode_fragment,
 )
+from pylabrobot.io.socket import Socket
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
+
+
+class _MemorySocket(Socket):
+  """Exercise real framing against an in-memory stream, with controllable writes."""
+
+  def __init__(self) -> None:
+    """Construct a socket that never opens a network connection."""
+    super().__init__("test", "127.0.0.1", 0)
+    self.stream = asyncio.StreamReader()
+    self._reader = self.stream
+    self.writes: list[HarpPacket] = []
+    self.on_write: Optional[Callable[[HarpPacket], Awaitable[None]]] = None
+    self.closed = False
+
+  async def setup(self) -> None:
+    """Keep setup entirely in memory."""
+
+  async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
+    """Record a request and let a test decide when its write completes."""
+    request = HarpPacket.unpack(IpPacket.unpack(data).payload)
+    self.writes.append(request)
+    if self.on_write is not None:
+      await self.on_write(request)
+
+  async def stop(self) -> None:
+    """Record closure and wake any stream reader."""
+    self.closed = True
+    self.stream.feed_eof()
+
+  def feed(self, response: CommandResponse) -> None:
+    """Deliver a frame through the production parser."""
+    self.stream.feed_data(IpPacket(protocol=6, payload=response.harp.pack()).pack())
+
+
+def _response(
+  source: Address = Address(1, 1, 257),
+  sequence: int = 1,
+  action: int = Hoi2Action.COMMAND_RESPONSE,
+  destination: Address = Address(2, 1, 65535),
+  params: Optional[bytes] = None,
+) -> CommandResponse:
+  """Build a response with explicit correlation fields."""
+  hoi = HoiPacket(
+    interface_id=1,
+    action_code=action,
+    action_id=0,
+    params=HoiParams().add(1, I32).build() if params is None else params,
+  )
+  harp = HarpPacket(
+    src=source, dst=destination, seq=sequence, protocol=2, action_code=4, payload=hoi.pack()
+  )
+  return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
+
+
+class _UnusedExecutor:
+  """Discovery-only tests replace all wire-facing methods."""
+
+  def require_active(self) -> None:
+    """The test fixture remains active."""
+
+  async def execute(self, command, *, read_timeout=None):
+    raise AssertionError("unexpected execution")
+
+  async def exchange(self, command, *, read_timeout=None):
+    raise AssertionError("unexpected exchange")
+
+
+class _SessionTest(unittest.IsolatedAsyncioTestCase):
+  """Provide real sessions with memory-only I/O and deterministic scheduling."""
+
+  def make_client(self) -> tuple[HamiltonTCPClient, _MemorySocket]:
+    """Start the reader without performing a hardware handshake."""
+    client = HamiltonTCPClient("127.0.0.1", 0)
+    io = _MemorySocket()
+    client._session = TCPSession(io)
+    client._session.client_address = Address(2, 1, 65535)
+    client._session.state = SessionState.CONNECTING
+    client._session.start_reader()
+    self.addAsyncCleanup(client.stop)
+    return client, io
+
+  async def wait_until(self, predicate: Callable[[], bool]) -> None:
+    """Yield until a test-observable protocol transition occurs."""
+
+    async def wait() -> None:
+      """Poll only in-memory state while yielding to protocol tasks."""
+      while not predicate():
+        await asyncio.sleep(0)
+
+    await asyncio.wait_for(wait(), timeout=1)
+
+  def send(self, client: HamiltonTCPClient, timeout: float = 1) -> asyncio.Task:
+    """Start a command using production transaction handling."""
+    return asyncio.create_task(
+      client.exchange(TestCommandSerialization._Cmd(Address(1, 1, 257)), read_timeout=timeout)
+    )
 
 
 @dataclass
@@ -258,14 +355,18 @@ class TestTCPCommandBehavior(unittest.TestCase):
       interface_id = 0
       command_id = 1
 
-    with self.assertRaises(ValueError):
-      Cmd(Address(1, 1, 257)).build()
+    with self.assertRaises(TypeError):
+      Cmd(Address(1, 1, 257)).build()  # type: ignore[call-arg]
 
   def test_interpret_response_auto_decodes_nested_response(self):
-    class Cmd(TCPCommand):
+    class Cmd(TCPCommand["Cmd.Response"]):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 1
       command_id = 0
+
+      @classmethod
+      def parse_response_parameters(cls, data: bytes) -> Cmd.Response:
+        return parse_into_struct(HoiParamsParser(data), cls.Response)
 
       @dataclass(frozen=True)
       class Response:
@@ -312,18 +413,15 @@ class TestTransportApiAlignment(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(got, Address(1, 1, 999))
 
-  async def test_send_query_returns_hoi_payload_tuple(self):
+  async def test_exchange_returns_complete_terminal_frame(self):
     class Cmd(TCPCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 0
       command_id = 1
 
-    class FakeClient(HamiltonTCPClient):
-      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-        del data, timeout
-
-      async def _read_one_message(self, timeout=None):  # type: ignore[override]
-        del timeout
+    class FakeSession(TCPSession):
+      async def exchange(self, command, *, read_timeout=None):  # type: ignore[override]
+        del command, read_timeout
         payload = HoiParams().add(123, I32).build()
         hoi = HoiPacket(
           interface_id=0, action_code=Hoi2Action.COMMAND_RESPONSE, action_id=1, params=payload
@@ -338,12 +436,14 @@ class TestTransportApiAlignment(unittest.IsolatedAsyncioTestCase):
         )
         return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
 
-    client = FakeClient(host="127.0.0.1", port=0)
-    client.client_address = Address(2, 1, 65535)
-    raw = await client.send_query(Cmd(Address(1, 1, 257)))
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client._session = FakeSession(_MemorySocket())
+    client._session.state = SessionState.READY
+    client._session.client_address = Address(2, 1, 65535)
+    raw = await client.exchange(Cmd(Address(1, 1, 257)))
     assert raw is not None
-    self.assertIsInstance(raw, tuple)
-    self.assertEqual(raw[0], HoiParams().add(123, I32).build())
+    self.assertIsInstance(raw, CommandResponse)
+    self.assertEqual(raw.hoi.params, HoiParams().add(123, I32).build())
 
   async def test_get_firmware_tree_uses_cache_and_refresh(self):
     registry = ObjectRegistry()
@@ -355,8 +455,7 @@ class TestTransportApiAlignment(unittest.IsolatedAsyncioTestCase):
     intro = HamiltonIntrospection(
       registry=registry,
       global_object_addresses=[],
-      send_discovery_command=_unused,
-      send_query=_unused,
+      executor=_UnusedExecutor(),
     )
     counts = {"obj": 0, "sub": 0}
     root = Address(1, 1, 100)
@@ -407,6 +506,7 @@ class TestTransportApiAlignment(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_firmware_tree_flat_delegates_to_flatten(self):
     client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client._session.state = SessionState.READY
     a0 = Address(1, 1, 20)
     o0 = ObjectInfo(name="only", version="v", method_count=0, subobject_count=0, address=a0)
     root = FirmwareTreeNode(path="Only", address=a0, object_info=o0, children=[])
@@ -421,36 +521,6 @@ class TestTransportApiAlignment(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(got[0][0], "Only")
     self.assertEqual(got[0][1], a0)
     self.assertIs(got[0][2], o0)
-
-
-class TestHcResultHelperUsesIntrospection(unittest.IsolatedAsyncioTestCase):
-  async def test_describe_entry_routes_to_introspection(self):
-    client = HamiltonTCPClient(host="127.0.0.1", port=0)
-    entry = HcResultEntry(1, 1, 257, 1, 6, 0xF08)
-    client.introspection.get_interface_name = AsyncMock(return_value="ITest")  # type: ignore[method-assign]
-    client.introspection.get_hc_result_text = AsyncMock(  # type: ignore[method-assign]
-      return_value="Simulated"
-    )
-
-    iface_name, desc = await client._describe_entry(entry)
-    self.assertEqual(iface_name, "ITest")
-    self.assertEqual(desc, "Simulated")
-
-  async def test_format_entry_context_uses_method_lookup_from_introspection(self):
-    client = HamiltonTCPClient(host="127.0.0.1", port=0)
-    addr = Address(1, 1, 257)
-    client.registry.register(
-      "Root.Channel",
-      ObjectInfo(name="Channel", version="", method_count=0, subobject_count=0, address=addr),
-    )
-    method = MethodInfo(interface_id=1, call_type=0, method_id=6, name="DoThing")
-    client.introspection.get_method_by_id = AsyncMock(return_value=method)  # type: ignore[method-assign]
-    entry = HcResultEntry(1, 1, 257, 1, 6, 0xF08)
-
-    context = await client._format_entry_context(entry)
-    assert context is not None
-    self.assertIn("path=Root.Channel", context)
-    self.assertIn("DoThing(void) -> void", context)
 
 
 class TestWarningAndExceptionSemantics(unittest.TestCase):
@@ -509,7 +579,7 @@ class TestErrorEntryChannelDetection(unittest.TestCase):
   class _Ap:
     channel: int
 
-  @dataclass
+  @dataclass(frozen=True)
   class _CmdPrep(TCPCommand):
     protocol = HamiltonProtocol.OBJECT_DISCOVERY
     interface_id = 1
@@ -518,30 +588,24 @@ class TestErrorEntryChannelDetection(unittest.TestCase):
     dest: Address
     aspirate_parameters: list
 
-    def __post_init__(self):
-      super().__init__(self.dest)
-
   def test_true_when_command_declares_physical_channels(self):
     c = TestErrorEntryChannelDetection._CmdPrep(
       Address(1, 1, 1), aspirate_parameters=[TestErrorEntryChannelDetection._Ap(0)]
     )
     self.assertTrue(c.uses_physical_channels)
 
-  @dataclass
+  @dataclass(frozen=True)
   class _CmdVoid(TCPCommand):
     protocol = HamiltonProtocol.OBJECT_DISCOVERY
     interface_id = 1
     command_id = 35
     dest: Address
 
-    def __post_init__(self):
-      super().__init__(self.dest)
-
   def test_false_by_default_for_void_command(self):
     c = TestErrorEntryChannelDetection._CmdVoid(Address(1, 1, 1))
     self.assertFalse(c.uses_physical_channels)
 
-  @dataclass
+  @dataclass(frozen=True)
   class _CmdNimbus(TCPCommand):
     protocol = HamiltonProtocol.OBJECT_DISCOVERY
     interface_id = 1
@@ -550,9 +614,6 @@ class TestErrorEntryChannelDetection(unittest.TestCase):
     dest: Address
     channels_involved: tuple
 
-    def __post_init__(self):
-      super().__init__(self.dest)
-
   def test_true_when_channels_involved_command_declares_it(self):
     c = TestErrorEntryChannelDetection._CmdNimbus(Address(1, 1, 1), (1, 0))
     self.assertTrue(c.uses_physical_channels)
@@ -560,16 +621,13 @@ class TestErrorEntryChannelDetection(unittest.TestCase):
   def test_carrying_per_channel_fields_alone_does_not_enable_it(self):
     """A command with channel-shaped fields that does not declare the flag stays False."""
 
-    @dataclass
+    @dataclass(frozen=True)
     class _CmdUndeclared(TCPCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 1
       command_id = 1
       dest: Address
       channels_involved: tuple
-
-      def __post_init__(self):
-        super().__init__(self.dest)
 
     self.assertFalse(_CmdUndeclared(Address(1, 1, 1), (1, 0)).uses_physical_channels)
 
@@ -586,22 +644,16 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
     entry = HcResultEntry(1, 1, 5376, 1, 35, 0x0206)
     err_params = HoiParams().add(self._format_wire_entry(entry), Str).build()
 
-    @dataclass
+    @dataclass(frozen=True)
     class CmdVoid(TCPCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 1
       command_id = 35
       dest: Address
 
-      def __post_init__(self):
-        super().__init__(self.dest)
-
-    class FakeClient(HamiltonTCPClient):
-      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-        del data, timeout
-
-      async def _read_one_message(self, timeout=None):  # type: ignore[override]
-        del timeout
+    class FakeSession(TCPSession):
+      async def exchange(self, command, *, read_timeout=None):  # type: ignore[override]
+        del command, read_timeout
         hoi = HoiPacket(
           interface_id=1,
           action_code=Hoi2Action.STATUS_EXCEPTION,
@@ -618,14 +670,16 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
         )
         return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
 
-    client = FakeClient(host="127.0.0.1", port=0)
-    client.client_address = Address(2, 1, 65535)
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client._session = FakeSession(_MemorySocket())
+    client._session.state = SessionState.READY
+    client._session.client_address = Address(2, 1, 65535)
     client.introspection.get_interface_name = AsyncMock(return_value="MLPrep")  # type: ignore[method-assign]
     client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
 
     cmd = CmdVoid(Address(1, 1, 5376))
     with self.assertRaises(HoiError) as ctx:
-      await client.send_command(cmd)
+      await client.execute(cmd)
     self.assertIn(0, ctx.exception.exceptions)
     self.assertEqual(ctx.exception.entries[0].result, 0x0206)
 
@@ -633,7 +687,7 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
     entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
     err_params = HoiParams().add(self._format_wire_entry(entry), Str).build()
 
-    @dataclass
+    @dataclass(frozen=True)
     class CmdPick(TCPCommand):
       protocol = HamiltonProtocol.OBJECT_DISCOVERY
       interface_id = 1
@@ -642,15 +696,9 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
       dest: Address
       channels_involved: tuple
 
-      def __post_init__(self):
-        super().__init__(self.dest)
-
-    class FakeClient(HamiltonTCPClient):
-      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-        del data, timeout
-
-      async def _read_one_message(self, timeout=None):  # type: ignore[override]
-        del timeout
+    class FakeSession(TCPSession):
+      async def exchange(self, command, *, read_timeout=None):  # type: ignore[override]
+        del command, read_timeout
         hoi = HoiPacket(
           interface_id=1,
           action_code=Hoi2Action.STATUS_EXCEPTION,
@@ -667,510 +715,529 @@ class TestSendCommandStatusException(unittest.IsolatedAsyncioTestCase):
         )
         return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
 
-    client = FakeClient(host="127.0.0.1", port=0)
-    client.client_address = Address(2, 1, 65535)
+    client = HamiltonTCPClient(host="127.0.0.1", port=0)
+    client._session = FakeSession(_MemorySocket())
+    client._session.state = SessionState.READY
+    client._session.client_address = Address(2, 1, 65535)
     client.introspection.get_interface_name = AsyncMock(return_value="Pipette")  # type: ignore[method-assign]
     client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
 
     cmd = CmdPick(Address(1, 1, 257), (1, 0))
     with self.assertRaises(ChannelizedError) as ctx:
-      await client.send_command(cmd)
+      await client.execute(cmd)
     self.assertIn(0, ctx.exception.errors)
     self.assertEqual(len(ctx.exception.kwargs["hoi_entries"]), 1)
     self.assertIn(0, ctx.exception.kwargs["hoi_exceptions"])
 
 
-class TestCommandSerialization(unittest.IsolatedAsyncioTestCase):
-  """One command in flight at a time, and enrichment must not deadlock against the lock."""
+class TestCommandSerialization(_SessionTest):
+  """Serialize exchanges and preserve firmware errors without diagnostic queries."""
 
-  @staticmethod
-  def _ok_response(src: Address) -> CommandResponse:
-    hoi = HoiPacket(
-      interface_id=1,
-      action_code=Hoi2Action.COMMAND_RESPONSE,
-      action_id=0,
-      params=HoiParams().add(1, I32).build(),
-    )
-    harp = HarpPacket(
-      src=src, dst=Address(2, 1, 65535), seq=1, protocol=2, action_code=4, payload=hoi.pack()
-    )
-    return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
-
-  @dataclass
+  @dataclass(frozen=True)
   class _Cmd(TCPCommand):
     protocol = HamiltonProtocol.OBJECT_DISCOVERY
     interface_id = 1
     command_id = 1
     dest: Address
 
-    def __post_init__(self):
-      super().__init__(self.dest)
-
   async def test_concurrent_commands_do_not_interleave_on_the_wire(self):
-    events: list[str] = []
+    client, io = self.make_client()
+    first = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    second = self.send(client)
+    for _ in range(10):
+      await asyncio.sleep(0)
+    self.assertEqual(len(io.writes), 1)
+    io.feed(_response(sequence=1))
+    await first
+    await self.wait_until(lambda: len(io.writes) == 2)
+    io.feed(_response(sequence=2))
+    await second
+    self.assertEqual(client._session.state, SessionState.READY)
 
-    class FakeClient(HamiltonTCPClient):
-      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-        del data, timeout
-        events.append("write")
+  async def test_firmware_error_does_not_issue_diagnostic_queries(self):
+    client, io = self.make_client()
+    error = HoiParams().add("0x0001.0x0001.0x0101:0x01,0x0006,0x0F08", Str).build()
 
-      async def _read_one_message(self, timeout=None):  # type: ignore[override]
-        del timeout
-        # Yield control so an unserialized second command could interleave here.
-        await asyncio.sleep(0)
-        events.append("read")
-        return TestCommandSerialization._ok_response(Address(1, 1, 257))
-
-    client = FakeClient(host="127.0.0.1", port=0)
-    client.client_address = Address(2, 1, 65535)
-
-    await asyncio.gather(
-      client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))),
-      client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))),
-    )
-
-    self.assertEqual(events, ["write", "read", "write", "read"])
-
-  async def test_error_enrichment_reentrancy_does_not_deadlock(self):
-    """Error enrichment sends introspection commands through the same lock.
-
-    Holding the transaction lock across enrichment would deadlock here rather
-    than raising, so this asserts the lock is released before decoding.
-    """
-    entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
-    err_params = (
-      HoiParams()
-      .add(
-        f"0x{entry.module_id:04X}.0x{entry.node_id:04X}.0x{entry.object_id:04X}:"
-        f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}",
-        Str,
+    async def respond(request: HarpPacket) -> None:
+      """Fail the request and detect any unexpected follow-up queries."""
+      io.feed(
+        _response(
+          sequence=request.seq,
+          action=Hoi2Action.STATUS_EXCEPTION if request.seq == 1 else Hoi2Action.COMMAND_RESPONSE,
+          params=error if request.seq == 1 else None,
+        )
       )
-      .build()
-    )
 
-    class FakeClient(HamiltonTCPClient):
-      reads = 0
+    io.on_write = respond
 
-      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-        del data, timeout
-
-      async def _read_one_message(self, timeout=None):  # type: ignore[override]
-        del timeout
-        FakeClient.reads += 1
-        # Only the first command fails; the introspection round-trips that
-        # enrichment issues afterwards succeed.
-        if FakeClient.reads > 1:
-          return TestCommandSerialization._ok_response(Address(1, 1, 257))
-        hoi = HoiPacket(
-          interface_id=1,
-          action_code=Hoi2Action.STATUS_EXCEPTION,
-          action_id=0,
-          params=err_params,
-        )
-        harp = HarpPacket(
-          src=Address(1, 1, 257),
-          dst=Address(2, 1, 65535),
-          seq=1,
-          protocol=2,
-          action_code=4,
-          payload=hoi.pack(),
-        )
-        return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
-
-    client = FakeClient(host="127.0.0.1", port=0)
-    client.client_address = Address(2, 1, 65535)
-
-    # Real introspection round-trips: each re-enters _transact and takes the lock.
-    async def _get_interface_name(addr, iface_id):
-      del addr, iface_id
-      await client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
+    async def get_interface_name(addr, iface_id):
+      await client.exchange(self._Cmd(Address(1, 1, 257)))
       return "Pipette"
 
-    client.introspection.get_interface_name = _get_interface_name  # type: ignore[method-assign]
+    client.introspection.get_interface_name = get_interface_name  # type: ignore[method-assign]
     client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
-
     with self.assertRaises(HoiError):
-      await asyncio.wait_for(
-        client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
-      )
+      await asyncio.wait_for(client.execute(self._Cmd(Address(1, 1, 257))), timeout=1)
+    self.assertEqual(len(io.writes), 1)
+    self.assertEqual(client._session.state, SessionState.READY)
 
 
-class TestConnectionLifecycle(unittest.IsolatedAsyncioTestCase):
-  """No command is ever transmitted twice, and a session leaves no state behind."""
+class TestConnectionLifecycle(_SessionTest):
+  """Uncertain execution never triggers another write or an implicit reconnect."""
 
   async def test_read_failure_does_not_retransmit_the_command(self):
-    """The regression this transport exists to avoid: a timed-out read re-running a motion.
-
-    The write may already have reached the instrument, so the command must be
-    written exactly once and the failure surfaced to the caller.
-    """
-    writes: list[bytes] = []
-
-    class FakeClient(HamiltonTCPClient):
-      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-        del timeout
-        writes.append(data)
-
-      async def _read_one_message(self, timeout=None):  # type: ignore[override]
-        del timeout
-        raise TimeoutError("device did not answer")
-
-    client = FakeClient(host="127.0.0.1", port=0)
-    client.client_address = Address(2, 1, 65535)
-
-    with self.assertRaises(TimeoutError):
-      await client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257)))
-
-    self.assertEqual(len(writes), 1)
+    client, io = self.make_client()
+    with self.assertRaises(asyncio.TimeoutError):
+      await self.send(client, timeout=0.01)
+    self.assertEqual(len(io.writes), 1)
+    self.assertFalse(client.is_connected)
+    with self.assertRaises(ConnectionError):
+      await self.send(client)
+    self.assertEqual(len(io.writes), 1)
 
   async def test_connection_errors_do_not_retransmit_either(self):
     for exc in (ConnectionResetError("reset"), BrokenPipeError("pipe"), OSError("io")):
       with self.subTest(exc=type(exc).__name__):
-        writes: list[bytes] = []
+        client, io = self.make_client()
 
-        class FakeClient(HamiltonTCPClient):
-          async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-            del timeout
-            writes.append(data)
+        async def fail_write(request: HarpPacket) -> None:
+          """Represent a failure after a request may have reached the peer."""
+          raise exc
 
-          async def _read_one_message(self, timeout=None, _exc=exc):  # type: ignore[override]
-            del timeout
-            raise _exc
-
-        client = FakeClient(host="127.0.0.1", port=0)
-        client.client_address = Address(2, 1, 65535)
-
+        io.on_write = fail_write
         with self.assertRaises(type(exc)):
-          await client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257)))
-        self.assertEqual(len(writes), 1)
+          await self.send(client)
+        with self.assertRaises(ConnectionError):
+          await self.send(client)
+        self.assertEqual(len(io.writes), 1)
 
   async def test_io_on_a_disconnected_client_names_setup(self):
     client = HamiltonTCPClient(host="127.0.0.1", port=0)
     self.assertFalse(client.is_connected)
-    for op in (client.write(b"x"), client.read(1), client.read_exact(1)):
+    for op in (client._write_handshake(b"x"), client._read_exact_handshake(1)):
       with self.assertRaises(ConnectionError) as ctx:
         await op
       self.assertIn("setup()", str(ctx.exception))
 
   async def test_setup_twice_without_stop_is_refused(self):
-    client = HamiltonTCPClient(host="127.0.0.1", port=0)
-    client._connected = True
-    with self.assertRaises(RuntimeError) as ctx:
+    client, _ = self.make_client()
+    with self.assertRaisesRegex(RuntimeError, "stop"):
       await client.setup()
-    self.assertIn("stop()", str(ctx.exception))
 
-  def test_clearing_session_state_drops_everything_scoped_to_the_session(self):
-    client = HamiltonTCPClient(host="127.0.0.1", port=0)
-    client._client_id = 5
-    client.client_address = Address(2, 5, 65535)
-    client._sequence_numbers[Address(1, 1, 257)] = 42
-    client._instrument_addresses["arm"] = Address(1, 1, 257)
-    client._global_object_addresses = [Address(1, 1, 1)]
+  async def test_setup_on_uncertain_session_requires_stop(self):
+    client, io = self.make_client()
+    with self.assertRaises(asyncio.TimeoutError):
+      await self.send(client, timeout=0.01)
+    with self.assertRaisesRegex(RuntimeError, "stop"):
+      await client.setup()
+    self.assertEqual(len(io.writes), 1)
+
+  async def test_fresh_session_drops_all_old_identity_and_discovery_state(self):
+    client, io = self.make_client()
+    old = client._session
+    old.client_id = 5
+    client._session.client_address = Address(2, 5, 65535)
+    old.sequence_numbers[Address(1, 1, 257)] = 42
+    old.global_object_addresses.append(Address(1, 1, 1))
     client.registry.set_root_address(Address(1, 1, 1))
     client.registry.register(
       "root", ObjectInfo("root", "", method_count=0, subobject_count=0, address=Address(1, 1, 1))
     )
-
-    client._clear_session_state_for_setup()
-
-    self.assertIsNone(client._client_id)
+    previous_introspection = client.introspection
+    await client.stop()
+    fresh_io = _MemorySocket()
+    fresh = TCPSession(fresh_io)
+    client._create_session = lambda: fresh  # type: ignore[method-assign]
+    client._initialize_connection = AsyncMock()  # type: ignore[method-assign]
+    client._register_client = AsyncMock()  # type: ignore[method-assign]
+    client._discover_root = AsyncMock()  # type: ignore[method-assign]
+    client._discover_globals = AsyncMock()  # type: ignore[method-assign]
+    await client.setup()
+    self.assertTrue(io.closed)
+    self.assertIs(client._session, fresh)
+    self.assertIsNone(fresh.client_id)
     self.assertIsNone(client.client_address)
-    self.assertEqual(client._sequence_numbers, {})
-    self.assertEqual(client._instrument_addresses, {})
+    self.assertEqual(fresh.sequence_numbers, {})
     self.assertEqual(list(client.global_object_addresses), [])
     self.assertIsNone(client.registry.get_root_address())
     self.assertIsNone(client.registry.address_for("root"))
-    self.assertIsNone(client.registry.path(Address(1, 1, 1)))
+    self.assertIsNot(client.introspection, previous_introspection)
+    assert old.reader_task is not None
+    self.assertTrue(old.reader_task.done())
 
-  def test_sequence_numbers_restart_after_a_session_ends(self):
-    client = HamiltonTCPClient(host="127.0.0.1", port=0)
-    dest = Address(1, 1, 257)
-    first = [client._allocate_sequence_number(dest) for _ in range(3)]
-    client._clear_session_state_for_setup()
-    self.assertEqual(client._allocate_sequence_number(dest), first[0])
-
-
-class TestErrorEnrichmentRecursion(unittest.IsolatedAsyncioTestCase):
-  """A device that fails its own introspection queries must not recurse."""
-
-  async def test_device_failing_every_request_still_raises_once(self):
-    """Every read returns STATUS_EXCEPTION, including enrichment's own queries.
-
-    Enrichment asks the device for interface and method names; those queries hit
-    the same failure, which would enrich again. Without the re-entrancy guard this
-    recurses until the interpreter aborts (55 reads before RecursionError).
-    """
-    entry = HcResultEntry(1, 1, 257, 1, 6, 0x0F08)
-    err_params = (
-      HoiParams()
-      .add(
-        f"0x{entry.module_id:04X}.0x{entry.node_id:04X}.0x{entry.object_id:04X}:"
-        f"0x{entry.interface_id:02X},0x{entry.action_id:04X},0x{entry.result:04X}",
-        Str,
-      )
-      .build()
-    )
-    reads = 0
-
-    class FakeClient(HamiltonTCPClient):
-      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-        del data, timeout
-
-      async def _read_one_message(self, timeout=None):  # type: ignore[override]
-        del timeout
-        nonlocal reads
-        reads += 1
-        hoi = HoiPacket(
-          interface_id=1,
-          action_code=Hoi2Action.STATUS_EXCEPTION,
-          action_id=0,
-          params=err_params,
-        )
-        harp = HarpPacket(
-          src=Address(1, 1, 257),
-          dst=Address(2, 1, 65535),
-          seq=1,
-          protocol=2,
-          action_code=4,
-          payload=hoi.pack(),
-        )
-        return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
-
-    client = FakeClient(host="127.0.0.1", port=0)
-    client.client_address = Address(2, 1, 65535)
-
-    # Real introspection, deliberately not stubbed: enrichment issues real queries.
-    with self.assertRaises(HoiError) as ctx:
-      await asyncio.wait_for(
-        client.send_command(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=10
-      )
-
-    self.assertEqual(ctx.exception.entries[0].result, 0x0F08)
-    # Bounded work: the failing command plus enrichment's first query, no cascade.
-    self.assertLessEqual(reads, 5)
-
-  async def test_guard_is_released_so_later_errors_still_enrich(self):
-    """The re-entrancy guard must not leak across commands."""
-    from pylabrobot.hamilton.transport.tcp import tcp as tcp_module
-
-    self.assertFalse(tcp_module._enriching.get())
-    client = HamiltonTCPClient(host="127.0.0.1", port=0)
-    client.introspection.get_interface_name = AsyncMock(return_value="Pipette")  # type: ignore[method-assign]
-    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
-
-    entry = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4E)
-    iface, _desc = await client._describe_entry(entry)
-    self.assertEqual(iface, "Pipette")
-    self.assertFalse(tcp_module._enriching.get())
-
-    # Second call still enriches rather than falling back to terse text.
-    iface2, _desc2 = await client._describe_entry(entry)
-    self.assertEqual(iface2, "Pipette")
-
-
-class TestBackgroundReader(unittest.IsolatedAsyncioTestCase):
-  """The reader owns the socket for the session and routes frames by kind."""
-
-  @staticmethod
-  def _frame(action_code: int, src: Address, seq: int = 1) -> CommandResponse:
-    hoi = HoiPacket(
-      interface_id=1,
-      action_code=action_code,
-      action_id=0,
-      params=HoiParams().add(1, I32).build(),
-    )
-    harp = HarpPacket(
-      src=src, dst=Address(2, 1, 65535), seq=seq, protocol=2, action_code=4, payload=hoi.pack()
-    )
-    return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
-
-  def _make_client(self, frames: list):
-    """Client whose reader consumes *frames*, then blocks as an idle socket would."""
-    queue: asyncio.Queue = asyncio.Queue()
-    for f in frames:
-      queue.put_nowait(f)
-
-    class FakeClient(HamiltonTCPClient):
-      writes = 0
-
-      async def write(self, data: bytes, timeout=None):  # type: ignore[override]
-        del data, timeout
-        FakeClient.writes += 1
-
-      async def _read_one_message(self, timeout=None):  # type: ignore[override]
-        del timeout
-        message = await queue.get()
-        if isinstance(message, BaseException):
-          raise message
-        if message.hoi.action_code == Hoi2Action.EVENT:
-          self._dispatch_event(message)
-        return message
-
-    client = FakeClient(host="127.0.0.1", port=0)
-    client.client_address = Address(2, 1, 65535)
-    client._connected = True
-    client._reader_task = asyncio.create_task(client._reader_loop())
-    self.addAsyncCleanup(client.stop)
-    return client, queue
-
-  @staticmethod
-  async def _await_registered(client) -> None:
-    """Block until a command has registered its pending response.
-
-    Frames must only be fed once the command is waiting. Queueing them earlier
-    is a race: the reader may drain them first and correctly drop them as
-    unmatched, after which the command waits forever. Whether that happened
-    varied by Python version, so it is made explicit here.
-    """
-    for _ in range(1000):
-      if client._pending_response is not None:
-        return
-      await asyncio.sleep(0)
-    raise AssertionError("command never registered a pending response")
-
-  async def test_events_arriving_between_commands_reach_subscribers(self):
-    seen: list = []
-    client, queue = self._make_client([self._frame(Hoi2Action.EVENT, Address(1, 1, 257))])
-    client.on_event(seen.append)
-
-    # No command is in flight; the reader still has to observe the event.
-    del queue
-    for _ in range(10):
-      if seen:
-        break
-      await asyncio.sleep(0)
-
-    self.assertEqual(len(seen), 1)
-    self.assertEqual(seen[0].hoi.action_code, Hoi2Action.EVENT)
-
-  async def test_ack_is_skipped_and_terminal_frame_is_delivered(self):
-    client, queue = self._make_client([])
-    task = asyncio.ensure_future(
-      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
-    )
-    await self._await_registered(client)
-
-    queue.put_nowait(self._frame(Hoi2Action.COMMAND_ACK, Address(1, 1, 257)))
-    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
-
-    self.assertIsNotNone(await asyncio.wait_for(task, timeout=5))
-
-  async def test_unmatched_late_frame_is_not_given_to_the_next_command(self):
-    """A response arriving with no command waiting must be dropped, not queued."""
-    late = self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 999), seq=99)
-    client, queue = self._make_client([late])
-
-    # Let the reader consume the stale frame while nothing is awaiting it.
-    for _ in range(100):
-      if queue.empty():
-        break
-      await asyncio.sleep(0)
-    self.assertTrue(queue.empty(), "reader never consumed the stale frame")
-
-    # The next command must wait for its own response, not inherit the stale one.
+  async def test_sequence_wraps_only_in_a_usable_session(self):
+    client, io = self.make_client()
+    client._session.sequence_numbers[Address(1, 1, 257)] = 254
+    for write_count, sequence in enumerate((255, 0, 1), start=1):
+      task = self.send(client)
+      await self.wait_until(lambda: len(io.writes) == write_count)
+      self.assertEqual(io.writes[-1].seq, sequence)
+      io.feed(_response(sequence=sequence))
+      await task
     with self.assertRaises(asyncio.TimeoutError):
-      await asyncio.wait_for(
-        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=0.25
-      )
-
-    # ...and still completes when its own response does arrive.
-    task = asyncio.ensure_future(
-      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
-    )
-    await self._await_registered(client)
-    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
-    self.assertIsNotNone(await asyncio.wait_for(task, timeout=5))
-
-  async def test_harp_control_frame_without_hoi_body_is_skipped(self):
-    """The device sends a HARP control frame (options, no HOI body) after registration.
-
-    Captured from an MLPrep at 127.0.0.1:2000. It has no HOI header at all, so
-    parsing it as a command response raises; the reader must skip it.
-    """
-    control = bytes.fromhex(
-      "24000630000000000000000002000600ffff0100020020000a00010801000100ffff04020000"
-    )
-    harp = HarpPacket.unpack(IpPacket.unpack(control).payload)
-    self.assertEqual(harp.protocol, 2)
-    self.assertEqual(harp.payload, b"")
-    self.assertEqual(len(harp.options), 10)
-
-    class FakeClient(HamiltonTCPClient):
-      async def read_exact(self, num_bytes: int, timeout=None):  # type: ignore[override]
-        del timeout
-        return control[:num_bytes] if num_bytes == 2 else control[2 : 2 + num_bytes]
-
-    client = FakeClient(host="127.0.0.1", port=0)
-    client._connected = True
-    self.assertIsNone(await client._read_one_message())
-
-  async def test_reader_survives_an_unparsable_frame(self):
-    """A malformed frame is skipped; the next command still gets its response."""
-    client, queue = self._make_client([])
-    task = asyncio.ensure_future(
-      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
-    )
-    await self._await_registered(client)
-
-    queue.put_nowait(ValueError("Not enough data for u8 at offset 0"))
-    queue.put_nowait(self._frame(Hoi2Action.COMMAND_RESPONSE, Address(1, 1, 257)))
-
-    self.assertIsNotNone(await asyncio.wait_for(task, timeout=5))
-    self.assertTrue(client._is_reader_running())
-
-  async def test_reader_failure_fails_the_waiting_command(self):
-    """A dead reader must surface on the waiting command instead of hanging it."""
-
-    class Boom(Exception):
-      pass
-
-    client, queue = self._make_client([])
-    task = asyncio.ensure_future(
-      client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257)))
-    )
-    for _ in range(10):
-      if client._pending_response is not None:
-        break
-      await asyncio.sleep(0)
-
-    queue.put_nowait(Boom())  # _read_one_message raises when the reader dequeues this
-
-    with self.assertRaises(Boom):
-      await asyncio.wait_for(task, timeout=5)
-
-  async def test_command_after_reader_death_reports_the_connection(self):
-    class Boom(Exception):
-      pass
-
-    client, queue = self._make_client([])
-    queue.put_nowait(Boom())
-    for _ in range(10):
-      if client._reader_task is not None and client._reader_task.done():
-        break
-      await asyncio.sleep(0)
-
+      await self.send(client, timeout=0.01)
+    writes = len(io.writes)
     with self.assertRaises(ConnectionError):
-      await asyncio.wait_for(
-        client.send_query(TestCommandSerialization._Cmd(Address(1, 1, 257))), timeout=5
+      await self.send(client)
+    self.assertEqual(len(io.writes), writes)
+
+  async def test_failed_setup_closes_its_socket_and_reader(self):
+    client = HamiltonTCPClient("127.0.0.1", 0)
+    io = _MemorySocket()
+    session = TCPSession(io)
+    client._create_session = lambda: session  # type: ignore[method-assign]
+    client._initialize_connection = AsyncMock(side_effect=ValueError("bad handshake"))  # type: ignore[method-assign]
+    with self.assertRaisesRegex(ValueError, "bad handshake"):
+      await client.setup()
+    self.assertTrue(io.closed)
+    self.assertEqual(session.state, SessionState.CLOSED)
+    self.assertFalse(client.is_connected)
+
+
+class TestBackgroundReader(_SessionTest):
+  """Exercise response routing and failure races through framed memory I/O."""
+
+  async def test_wrong_sequence_cannot_complete_waiting_command(self):
+    """A stale response arriving during another transaction cannot answer it."""
+    client, io = self.make_client()
+    task = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    io.feed(_response(sequence=99))
+    for _ in range(10):
+      await asyncio.sleep(0)
+    self.assertFalse(task.done(), "A mismatched response completed the command")
+    io.feed(_response(sequence=1))
+    self.assertEqual((await task).harp.seq, 1)
+
+  async def test_wrong_addresses_ack_and_nonterminal_actions_cannot_complete(self):
+    client, io = self.make_client()
+    task = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    for message in (
+      _response(source=Address(1, 1, 999)),
+      _response(destination=Address(2, 99, 65535)),
+      _response(action=Hoi2Action.COMMAND_ACK),
+      _response(action=Hoi2Action.COMMAND_REQUEST),
+      _response(action=Hoi2Action.UPSTREAM_SYSTEM_EVENT),
+      _response(action=15),
+    ):
+      io.feed(message)
+    for _ in range(20):
+      await asyncio.sleep(0)
+    self.assertFalse(task.done())
+    io.feed(_response())
+    await task
+
+  async def test_all_terminal_actions_complete_the_matching_transaction(self):
+    client, io = self.make_client()
+    for sequence, action in enumerate(
+      (
+        Hoi2Action.COMMAND_RESPONSE,
+        Hoi2Action.STATUS_RESPONSE,
+        Hoi2Action.COMMAND_EXCEPTION,
+        Hoi2Action.STATUS_EXCEPTION,
+        Hoi2Action.INVALID_ACTION_RESPONSE,
+        Hoi2Action.COMMAND_WARNING,
+        Hoi2Action.STATUS_WARNING,
+      ),
+      start=1,
+    ):
+      with self.subTest(action=action):
+        task = self.send(client)
+        await self.wait_until(lambda: len(io.writes) == sequence)
+        io.feed(_response(sequence=sequence, action=action))
+        self.assertEqual((await task).hoi.action_code, action)
+        self.assertEqual(client._session.state, SessionState.READY)
+
+  async def test_response_before_write_completion_is_retained(self):
+    client, io = self.make_client()
+    write_finished = asyncio.Event()
+
+    async def write(request: HarpPacket) -> None:
+      """Deliver a terminal response while drain is still blocked."""
+      io.feed(_response(sequence=request.seq))
+      await write_finished.wait()
+
+    io.on_write = write
+    task = self.send(client)
+    await self.wait_until(
+      lambda: client._session.pending is not None and client._session.pending.response.done()
+    )
+    self.assertFalse(task.done())
+    write_finished.set()
+    await task
+    self.assertEqual(len(io.writes), 1)
+
+  async def test_stop_during_write_wakes_the_caller(self):
+    """Shutdown must not leave the caller blocked in an unfinished drain."""
+    client, io = self.make_client()
+    gate = asyncio.Event()
+
+    async def write(request: HarpPacket) -> None:
+      """Hold the write open until shutdown cancels it."""
+      await gate.wait()
+
+    io.on_write = write
+    task = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    await client.stop()
+    try:
+      await self.wait_until(task.done)
+      with self.assertRaises(ConnectionError):
+        await task
+    finally:
+      task.cancel()
+      await asyncio.gather(task, return_exceptions=True)
+
+  async def test_reader_failure_during_write_wakes_the_caller(self):
+    """The reader's failure must also interrupt a blocked write."""
+    client, io = self.make_client()
+    gate = asyncio.Event()
+
+    async def write(request: HarpPacket) -> None:
+      """Hold drain while the peer disconnects."""
+      await gate.wait()
+
+    io.on_write = write
+    task = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    io.stream.set_exception(ConnectionResetError("peer disconnected"))
+    await self.wait_until(task.done)
+    with self.assertRaisesRegex(ConnectionResetError, "peer disconnected"):
+      await task
+    self.assertEqual(client._session.state, SessionState.UNCERTAIN)
+
+  async def test_matching_response_recorded_before_zero_deadline_wins(self):
+    """A deadline cannot overwrite a response already handed to the transaction."""
+    client, io = self.make_client()
+
+    async def write(request: HarpPacket) -> None:
+      """Record the response before drain completes and the deadline is armed."""
+      client._session.deliver(_response(sequence=request.seq))
+
+    io.on_write = write
+    await self.send(client, timeout=0)
+    self.assertEqual(client._session.state, SessionState.READY)
+
+  async def test_write_failure_after_response_does_not_resurrect_connection(self):
+    """Known completion does not make a failed socket usable again."""
+    client, io = self.make_client()
+
+    async def write(request: HarpPacket) -> None:
+      """Deliver the response before drain reports a broken connection."""
+      client._session.deliver(_response(sequence=request.seq))
+      raise BrokenPipeError("drain failed")
+
+    io.on_write = write
+    with self.assertRaises(BrokenPipeError):
+      await self.send(client)
+    with self.assertRaises(ConnectionError):
+      await self.send(client)
+    self.assertEqual(len(io.writes), 1)
+    self.assertEqual(client._session.state, SessionState.UNCERTAIN)
+
+  async def test_ack_does_not_satisfy_response_deadline(self):
+    client, io = self.make_client()
+
+    async def write(request: HarpPacket) -> None:
+      """Acknowledge receipt without reporting completion."""
+      client._session.deliver(_response(sequence=request.seq, action=Hoi2Action.COMMAND_ACK))
+
+    io.on_write = write
+    with self.assertRaises(asyncio.TimeoutError):
+      await self.send(client, timeout=0)
+    self.assertEqual(client._session.state, SessionState.UNCERTAIN)
+
+  async def test_build_failure_does_not_poison_session_or_write(self):
+    client, io = self.make_client()
+
+    class BadCommand(TCPCommand[None]):
+      interface_id = 1
+      command_id = 1
+
+      def build_parameters(self) -> HoiParams:
+        raise ValueError("invalid parameter")
+
+    command = BadCommand(Address(1, 1, 257))
+    with self.assertRaises(ValueError):
+      await client.exchange(command)
+    self.assertEqual(io.writes, [])
+    self.assertIsNone(client._session.pending)
+    self.assertEqual(client._session.state, SessionState.READY)
+
+  async def test_raw_io_cannot_bypass_transaction_owner(self):
+    client, io = self.make_client()
+    for op in (client._write_handshake(b"x"), client._read_exact_handshake(1)):
+      with self.assertRaises(RuntimeError):
+        await op
+    self.assertEqual(io.writes, [])
+
+  async def test_timeout_rejects_queued_command_and_discards_late_response(self):
+    client, io = self.make_client()
+    first = self.send(client, timeout=0.01)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    second = self.send(client)
+    with self.assertRaises(asyncio.TimeoutError):
+      await first
+    io.feed(_response(sequence=1))
+    with self.assertRaises(ConnectionError):
+      await second
+    self.assertEqual(len(io.writes), 1)
+    self.assertEqual(client._session.state, SessionState.UNCERTAIN)
+    self.assertIsNone(client._session.pending)
+
+  async def test_cancellation_waiting_for_lock_does_not_disturb_owner(self):
+    client, io = self.make_client()
+    first = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    second = self.send(client)
+    await asyncio.sleep(0)
+    second.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await second
+    io.feed(_response())
+    await first
+    self.assertEqual(len(io.writes), 1)
+    self.assertEqual(client._session.state, SessionState.READY)
+
+  async def test_cancellation_during_write_or_response_wait_prevents_further_writes(self):
+    for during_write in (True, False):
+      with self.subTest(during_write=during_write):
+        client, io = self.make_client()
+        gate = asyncio.Event()
+
+        async def write(request: HarpPacket) -> None:
+          """Optionally hold the write open until cancellation."""
+          if during_write:
+            await gate.wait()
+
+        io.on_write = write
+        first = self.send(client)
+        await self.wait_until(lambda: len(io.writes) == 1)
+        second = self.send(client)
+        first.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+          await first
+        with self.assertRaises(ConnectionError):
+          await second
+        self.assertEqual(len(io.writes), 1)
+        self.assertEqual(client._session.state, SessionState.UNCERTAIN)
+
+  async def test_cancellation_after_recorded_response_preserves_known_completion(self):
+    client, io = self.make_client()
+    task = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    # Deliver and cancel in the same loop turn before the owner can resume.
+    client._session.deliver(_response())
+    task.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await task
+    self.assertEqual(client._session.state, SessionState.READY)
+    self.assertIsNone(client._session.pending)
+
+  async def test_reader_failure_and_stop_fail_waiters_and_queued_callers(self):
+    for stop in (False, True):
+      with self.subTest(stop=stop):
+        client, io = self.make_client()
+        first = self.send(client)
+        await self.wait_until(lambda: len(io.writes) == 1)
+        second = self.send(client)
+        if stop:
+          await client.stop()
+        else:
+          io.stream.set_exception(ConnectionResetError("connection reset"))
+        for task in (first, second):
+          with self.assertRaises(ConnectionError):
+            await task
+        self.assertEqual(len(io.writes), 1)
+        self.assertFalse(client.is_connected)
+        self.assertIsNone(client._session.pending)
+
+  async def test_old_session_cannot_complete_or_clear_new_transaction(self):
+    client, old_io = self.make_client()
+    old = client._session
+    first = self.send(client)
+    await self.wait_until(lambda: len(old_io.writes) == 1)
+    # Arrange the stop failure and replacement before old transaction cleanup runs.
+    old.fail(ConnectionError("stopped"))
+    old.state = SessionState.CLOSED
+    new_io = _MemorySocket()
+    fresh = TCPSession(new_io)
+    fresh.client_address = Address(2, 1, 65535)
+    fresh.state = SessionState.CONNECTING
+    fresh.start_reader()
+    client._session = fresh
+    self.addAsyncCleanup(old.stop)
+    second = self.send(client)
+    await self.wait_until(lambda: len(new_io.writes) == 1)
+    old.deliver(_response())
+    old.fail(ConnectionError("late reader failure"))
+    with self.assertRaises(ConnectionError):
+      await first
+    self.assertIsNotNone(fresh.pending)
+    self.assertFalse(second.done())
+    new_io.feed(_response())
+    await second
+
+  async def test_duplicate_response_cannot_answer_next_command(self):
+    client, io = self.make_client()
+    first = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    io.feed(_response())
+    await first
+    second = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 2)
+    io.feed(_response(sequence=1))
+    for _ in range(10):
+      await asyncio.sleep(0)
+    self.assertFalse(second.done())
+    io.feed(_response(sequence=2))
+    await second
+
+  async def test_idle_reader_and_partial_frames_survive_request_timeout(self):
+    client, io = self.make_client()
+    client._read_timeout = 0.01
+    # Feed only the length prefix, leaving the idle reader inside a partial frame.
+    data = IpPacket(protocol=6, payload=_response().harp.pack()).pack()
+    io.stream.feed_data(data[:2])
+    await asyncio.sleep(0.03)
+    self.assertTrue(client.is_connected)
+    task = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    io.stream.feed_data(data[2:])
+    await task
+
+  async def test_captured_prep_response_matches_session_identity(self):
+    """A recorded Prep reply echoes the request sequence and reverses its addresses."""
+    client, io = self.make_client()
+    address = Address(1, 1, 0xC000)
+    client._session.client_address = Address(2, 4, 65535)
+    client._session.sequence_numbers[address] = 61
+    task = asyncio.create_task(
+      client.exchange(TestCommandSerialization._Cmd(address), read_timeout=1)
+    )
+    await self.wait_until(lambda: len(io.writes) == 1)
+    io.stream.feed_data(
+      bytes.fromhex(
+        "2e00063000000100010000c002000400ffff3e0002012a0000000000030109000001"
+        "0f000a0050525042443133393400"
       )
+    )
+    received = await task
+    self.assertEqual(HoiParamsParser(received.hoi.params).parse_next()[1], "PRPBD1394")
 
-
-class TestHcResultDescriptionNimbusTable(unittest.IsolatedAsyncioTestCase):
-  """NIMBUS_ERROR_CODES keys use interface_id in the 4th slot; describe_entry must match that."""
-
-  async def test_lookup_uses_interface_id_not_method_id(self):
-    class _NimbusClient(HamiltonTCPClient):
-      _ERROR_CODES = NIMBUS_ERROR_CODES
-
-    client = _NimbusClient(host="127.0.0.1", port=0)
-    client.introspection.get_interface_name = AsyncMock(return_value="Pipette")  # type: ignore[method-assign]
-    client.introspection.get_hc_result_text = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    entry = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4E)
-    _iface, desc = await client._describe_entry(entry)
-    self.assertIn("Tip Detected Not Correct Tip", desc)
-    entry_b = HcResultEntry(0x0001, 0x0001, 0x0110, 1, 6, 0x0F4B)
-    _iface_b, desc_b = await client._describe_entry(entry_b)
-    self.assertIn("No Tip Picked Up", desc_b)
+  async def test_malformed_and_control_frames_do_not_desynchronize_reader(self):
+    client, io = self.make_client()
+    task = self.send(client)
+    await self.wait_until(lambda: len(io.writes) == 1)
+    io.stream.feed_data(bytes.fromhex("010000"))
+    io.stream.feed_data(
+      bytes.fromhex("24000630000000000000000002000600ffff0100020020000a00010801000100ffff04020000")
+    )
+    io.feed(_response())
+    await task
+    self.assertEqual(client._session.state, SessionState.READY)
 
 
 class TestCountedFlatArrayDecode(unittest.TestCase):
@@ -1239,15 +1306,6 @@ class TestIntrospectionTypeGridInvariants(unittest.TestCase):
 
 
 class TestIntrospectionTypeSetsAndClassification(unittest.TestCase):
-  @staticmethod
-  def _ids_for_flag(flag: str) -> tuple[int, ...]:
-    """Collect all IDs from rows matching a boolean flag (is_struct_kind, is_enum_kind, etc.)."""
-    ids: list[int] = []
-    for row in introspection_mod._HOI_TYPE_ROWS:
-      if getattr(row, flag):
-        ids.extend(tid for tid in row.ids if tid != 0)
-    return tuple(ids)
-
   def test_complex_method_and_struct_sets_are_disjoint(self):
     self.assertTrue(
       introspection_mod._COMPLEX_METHOD_TYPE_IDS.isdisjoint(
@@ -1357,8 +1415,7 @@ class TestHamiltonIntrospectionLazyCaches(unittest.IsolatedAsyncioTestCase):
     self.intro = HamiltonIntrospection(
       registry=ObjectRegistry(),
       global_object_addresses=[],
-      send_discovery_command=_should_not_be_called,
-      send_query=_should_not_be_called,
+      executor=_UnusedExecutor(),
     )
 
   async def test_second_ensure_method_table_skips_get_method(self):
@@ -1463,6 +1520,64 @@ class TestHamiltonIntrospectionLazyCaches(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(text1, "SomethingFailed")
     self.assertEqual(text2, "SomethingFailed")
     self.assertEqual(self.intro.get_enums.call_count, 1)
+
+
+class TestEmptyChildSlots(unittest.IsolatedAsyncioTestCase):
+  """Empty firmware slots are skipped during tree and path discovery."""
+
+  async def test_tree_does_not_query_zero_address(self) -> None:
+    """Tree discovery skips an empty slot and retains the populated child."""
+    await self._check_empty_child_slot("tree")
+
+  async def test_path_does_not_query_zero_address(self) -> None:
+    """Path discovery skips an empty slot and resolves the populated child."""
+    await self._check_empty_child_slot("path")
+
+  async def _check_empty_child_slot(self, operation: str) -> None:
+    """Replay the empty-slot response while retaining a later populated slot."""
+    client = HamiltonTCPClient("127.0.0.1", 0)
+    client._session.state = SessionState.READY
+    intro = client.introspection
+    parent = Address(1, 236, 48896)
+    empty_slot_index = 4
+    recorded_response = bytes.fromhex(
+      "3200063000000100ec0000bf02000600ffff0f0002012e0000000000000103000003"
+      "050002000000050002000000050002000000"
+    )
+    child = Address(1, 236, 256)
+    client.registry.set_root_address(parent)
+    objects = {
+      parent: ObjectInfo("Channel Root", "", 6, 6, parent),
+      child: ObjectInfo("Channel", "", 1, 0, child),
+    }
+    calls = []
+
+    async def get_object(address: Address) -> ObjectInfo:
+      """Reject attempts to query firmware metadata at the zero address."""
+      calls.append(address)
+      return objects[address]
+
+    async def get_subobject(address: Address, subobject_index: int) -> Address:
+      """Use the captured response at slot four and another child at slot five."""
+      if subobject_index == empty_slot_index:
+        return await original_get_subobject(address, subobject_index)
+      return child
+
+    original_get_subobject = intro.get_subobject_address
+    response = CommandResponse.from_bytes(recorded_response)
+    client._session.exchange = AsyncMock(return_value=response)  # type: ignore[method-assign]
+    intro.get_object = get_object  # type: ignore[method-assign]
+    intro.get_subobject_address = get_subobject  # type: ignore[method-assign]
+    intro.get_supported_interface0_method_ids = AsyncMock(  # type: ignore[method-assign]
+      side_effect=lambda address: {1, 3} if address == parent else {1}
+    )
+    if operation == "tree":
+      tree = await intro.get_firmware_tree()
+      self.assertEqual([node.address for node in tree.children], [child])
+    else:
+      self.assertEqual(await intro.resolve_path("Channel Root.Channel"), child)
+    self.assertNotIn(Address(0, 0, 0), calls)
+    client._session.exchange.assert_awaited_once()
 
 
 if __name__ == "__main__":

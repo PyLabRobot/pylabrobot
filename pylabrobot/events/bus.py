@@ -314,6 +314,13 @@ def evented_operation(
 
   The wrapper is a no-op when no listener is installed, preserving normal PLR performance and
   behaviour. Nested resource and transport events inherit the generated operation context.
+
+  This helper deliberately forwards the decorated method's original ``*args`` and ``**kwargs``
+  directly to ``context_factory``. Use it only when the event context is a simple projection of
+  invocation arguments and pre-operation resource state, and keep the factory's calling signature
+  aligned with the decorated method. For context that depends on validation, normalization,
+  derived values, hardware responses, or final state, construct an :func:`event_operation`
+  explicitly inside the method instead.
   """
 
   def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:

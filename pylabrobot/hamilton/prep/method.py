@@ -25,15 +25,15 @@ class PrepMethodLifecycle:
 
   async def begin(self, automatic_pause: bool = False) -> None:
     """Signal the start of a liquid-handling method."""
-    await self._driver.send_command(PrepCmd.PrepMethodBegin(automatic_pause=automatic_pause))
+    await self._driver.execute(PrepCmd.PrepMethodBegin(automatic_pause=automatic_pause))
 
   async def end(self) -> None:
     """Signal the end of a liquid-handling method."""
-    await self._driver.send_command(PrepCmd.PrepMethodEnd())
+    await self._driver.execute(PrepCmd.PrepMethodEnd())
 
   async def abort(self) -> None:
     """Abort the current method."""
-    await self._driver.send_command(PrepCmd.PrepMethodAbort())
+    await self._driver.execute(PrepCmd.PrepMethodAbort())
 
   @asynccontextmanager
   async def run(self, automatic_pause: bool = False) -> AsyncIterator["PrepMethodLifecycle"]:

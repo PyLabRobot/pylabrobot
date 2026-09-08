@@ -17,6 +17,7 @@ contributing-to-docs
 device-driver-guide
 device-registry
 event-bus
+event-schemas
 ```
 
 <hr>

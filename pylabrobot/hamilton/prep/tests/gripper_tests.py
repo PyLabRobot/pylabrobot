@@ -18,13 +18,13 @@ from pylabrobot.resources.hamilton import HamiltonCoreGrippers, PrepDeck
 
 def _record_send(prep: Prep) -> list[Any]:
   captured: list[Any] = []
-  orig_send = prep.client.send_command
+  orig_send = prep.client.execute
 
   async def recording(command, **kw):
     captured.append(command)
     return await orig_send(command, **kw)
 
-  prep.client.send_command = recording  # type: ignore[method-assign, assignment]
+  prep.client.execute = recording  # type: ignore[method-assign, assignment]
   return captured
 
 

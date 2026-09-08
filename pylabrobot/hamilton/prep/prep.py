@@ -29,7 +29,7 @@ class Prep:
 
   Setup constructs peers (``channels``, ``head8``, ``method``, ``calibration``,
   gripper factory) directly. Firmware paths live on each :class:`PrepCommand`
-  subclass and are resolved JIT by :meth:`PrepClient.send_command`.
+  subclass and are resolved JIT by :meth:`PrepClient.execute`.
   """
 
   def __init__(
@@ -115,7 +115,7 @@ class Prep:
         logger.info("MLPrep already initialized, skipping Initialize")
         return
 
-    await self.client.send_command(
+    await self.client.execute(
       PrepCmd.PrepInitialize(
         smart=smart,
         tip_drop_params=PrepCmd.InitTipDropParameters(
@@ -216,40 +216,40 @@ class Prep:
   # -- Motion, power, lights (MLPrep via client transport) --------------------
 
   async def park(self) -> None:
-    await self.client.send_command(PrepCmd.PrepPark())
+    await self.client.execute(PrepCmd.PrepPark())
 
   async def spread(self) -> None:
-    await self.client.send_command(PrepCmd.PrepSpread())
+    await self.client.execute(PrepCmd.PrepSpread())
 
   async def is_parked(self) -> bool:
-    result = await self.client.send_command(PrepCmd.PrepIsParked())
+    result = await self.client.execute(PrepCmd.PrepIsParked())
     if result is None:
       return False
     return bool(result.value)
 
   async def is_spread(self) -> bool:
-    result = await self.client.send_command(PrepCmd.PrepIsSpread())
+    result = await self.client.execute(PrepCmd.PrepIsSpread())
     if result is None:
       return False
     return bool(result.value)
 
   async def power_down_request(self) -> None:
-    await self.client.send_command(PrepCmd.PrepPowerDownRequest())
+    await self.client.execute(PrepCmd.PrepPowerDownRequest())
 
   async def confirm_power_down(self) -> None:
-    await self.client.send_command(PrepCmd.PrepConfirmPowerDown())
+    await self.client.execute(PrepCmd.PrepConfirmPowerDown())
 
   async def cancel_power_down(self) -> None:
-    await self.client.send_command(PrepCmd.PrepCancelPowerDown())
+    await self.client.execute(PrepCmd.PrepCancelPowerDown())
 
   async def get_deck_light(self) -> Tuple[int, int, int, int]:
-    result = await self.client.send_command(PrepCmd.PrepGetDeckLight())
+    result = await self.client.execute(PrepCmd.PrepGetDeckLight())
     if result is None:
       raise ValueError("No response from GetDeckLight.")
     return (result.white, result.red, result.green, result.blue)
 
   async def set_deck_light(self, white: int, red: int, green: int, blue: int) -> None:
-    await self.client.send_command(
+    await self.client.execute(
       PrepCmd.PrepSetDeckLight(white=white, red=red, green=green, blue=blue)
     )
 

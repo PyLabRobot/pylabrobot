@@ -19,13 +19,13 @@ def test_firmware_string_queries_send_status_requests(command_id, interface_id):
   client = PrepClient(host="127.0.0.1")
   address = Address(1, 1, 0x100)
   payload = b"\x0f\x00\x08\x00PREP123\x00"
-  client.send_query = AsyncMock(return_value=(payload,))  # type: ignore[method-assign]
+  client.execute = AsyncMock(return_value=payload)  # type: ignore[method-assign]
 
   result = asyncio.run(client._query_firmware_string(address, command_id, interface_id))
 
   assert result == "PREP123"
-  client.send_query.assert_awaited_once()
-  command = client.send_query.call_args.args[0]
+  client.execute.assert_awaited_once()
+  command = client.execute.call_args.args[0]
   assert command.dest == address
   assert command.command_id == command_id
   assert command.interface_id == interface_id
@@ -150,7 +150,7 @@ def test_prep_device_wires_calibration_after_setup():
   asyncio.run(_run())
 
 
-def test_send_command_surfaces_clear_error_for_unresolvable_path():
+def test_execute_surfaces_clear_error_for_unresolvable_path():
   async def _run() -> None:
     deck = STARLetDeck()
     p = Prep(deck=deck, chatterbox=True)
@@ -167,7 +167,7 @@ def test_send_command_surfaces_clear_error_for_unresolvable_path():
     p.client.resolve_path = _fake_resolve  # type: ignore[assignment]
 
     with pytest.raises(RuntimeError, match="firmware path"):
-      await p.client.send_command(PrepCmd.PrepPark())
+      await p.client.execute(PrepCmd.PrepPark())
     await p.stop()
 
   asyncio.run(_run())

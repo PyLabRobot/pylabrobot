@@ -44,7 +44,6 @@ def test_channels_attach_bounds_even_when_empty_offline():
     assert p.channels is not None
     assert isinstance(p.channels, PrepChannels)
     for ch in p.channels.channels:
-      assert hasattr(ch, "bounds")
       assert ch.bounds is None
     await p.stop()
 

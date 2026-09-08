@@ -17,24 +17,24 @@ from pylabrobot.resources import Coordinate, ResourceHolder
 logger = logging.getLogger(__name__)
 
 
-def _loader_load_event_context(loader: "Access2") -> dict:
-  plate = loader.resource
+def _loader_load_event_context(self: "Access2") -> dict:
+  plate = self.resource
   return {
-    "device": resource_reference(loader),
+    "device": resource_reference(self),
     "resources": [] if plate is None else [resource_reference(plate)],
-    "source": resource_reference(loader),
-    "destination": resource_reference(loader._vspin.at_bucket),
+    "source": resource_reference(self),
+    "destination": resource_reference(self._vspin.at_bucket),
   }
 
 
-def _loader_unload_event_context(loader: "Access2") -> dict:
-  bucket = loader._vspin.at_bucket
+def _loader_unload_event_context(self: "Access2") -> dict:
+  bucket = self._vspin.at_bucket
   plate = None if bucket is None else bucket.resource
   return {
-    "device": resource_reference(loader),
+    "device": resource_reference(self),
     "resources": [] if plate is None else [resource_reference(plate)],
     "source": resource_reference(bucket),
-    "destination": resource_reference(loader),
+    "destination": resource_reference(self),
   }
 
 

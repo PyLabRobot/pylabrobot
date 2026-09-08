@@ -57,6 +57,7 @@ def cor_falcon_96_wellplate_275uL_Fb(name: str, lid: Optional[Lid] = None) -> Pl
       compute_height_from_volume=lambda liquid_volume: compute_height_from_volume_conical_frustum(
         liquid_volume, BOTTOM_RADIUS, TOP_RADIUS
       ),
+      name_prefix=name,
     ),
   )
 
@@ -105,6 +106,7 @@ def cor_falcon_96_wellplate_250uL_Rb(name: str, lid: Optional[Lid] = None) -> Pl
       dz=1.80,  # calibrated manually by z-stepping down using a pipette.
       item_dx=8.99,  # measured
       item_dy=8.99,  # measured
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -158,6 +160,7 @@ def cor_falcon_96_wellplate_340uL_Fb_black(name: str, lid: Optional[Lid] = None)
       dz=6.7,  # calculated from spec, manually calibrated
       item_dx=9,
       item_dy=9,
+      name_prefix=name,
       **well_kwargs,
     ),
   )

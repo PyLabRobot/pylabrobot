@@ -352,7 +352,7 @@ def _absolute_z_from_well(
   Returns:
     _WellGeometry with well_bottom, liquid_surface, top_of_well, z_air.
   """
-  if not hasattr(resource, "get_size_z"):
+  if not isinstance(resource, Container):
     raise ValueError(
       "Resource must have get_size_z() to derive absolute Z (e.g. a Well or Container). "
       "Pass z_minimum, z_fluid, z_air explicitly for this operation."
@@ -533,50 +533,28 @@ async def request_channel_bounds(client: "PrepClient") -> List[PrepChannelBounds
   empty channels; with a tip attached the effective Z minimum is higher.
   """
   try:
-    raw = await client.send_query(PrepCmd.PrepGetChannelBounds())
-  except RuntimeError:
+    response = await client.execute(PrepCmd.PrepGetChannelBounds())
+  except KeyError:
     return []
-  if raw is None:
-    return []
-
-  # Parse per-channel bounds from raw response.
-  # Each channel block: channel_enum (u32 at 0x20), then 6× f32 (at 0x28):
-  # x_min, x_max, y_min, y_max, z_min, z_max
-  data = raw[0]
-  _CHANNEL_ENUM_TO_IDX = {v: k for k, v in _CHANNEL_INDEX.items()}
+  channel_indices = {int(value): index for index, value in _CHANNEL_INDEX.items()}
   indexed: list[tuple[int, PrepChannelBounds]] = []
-
-  i = 0
-  while i < len(data) - 20:
-    if data[i] == 0x20 and data[i + 1] == 0x00 and data[i + 2] == 0x04:
-      ch_val = _struct.unpack_from("<I", data, i + 4)[0]
-      ch_idx = _CHANNEL_ENUM_TO_IDX.get(ch_val)
-
-      j = i + 8
-      floats: List[float] = []
-      while len(floats) < 6 and j < len(data) - 7:
-        if data[j] == 0x28 and data[j + 1] == 0x00:
-          floats.append(_struct.unpack_from("<f", data, j + 4)[0])
-          j += 8
-        else:
-          j += 1
-
-      if ch_idx is not None and len(floats) == 6:
-        bounds: PrepChannelBounds = {
-          "x_min": floats[0],
-          "x_max": floats[1],
-          "y_min": floats[2],
-          "y_max": floats[3],
-          "z_min": floats[4],
-          "z_max": floats[5],
-        }
-        indexed.append((ch_idx, bounds))
-      i = j
-    else:
-      i += 1
-
-  indexed.sort(key=lambda pair: pair[0])
-  return [bounds for _, bounds in indexed]
+  for bounds in response.bounds:
+    index = channel_indices.get(int(bounds.channel))
+    if index is not None:
+      indexed.append(
+        (
+          index,
+          {
+            "x_min": bounds.x_min,
+            "x_max": bounds.x_max,
+            "y_min": bounds.y_min,
+            "y_max": bounds.y_max,
+            "z_min": bounds.z_min,
+            "z_max": bounds.z_max,
+          },
+        )
+      )
+  return [bounds for _, bounds in sorted(indexed, key=lambda pair: pair[0])]
 
 
 # ---------------------------------------------------------------------------
@@ -659,10 +637,7 @@ async def build_prep_channels(
     logger.warning("Failed to query channel bounds: %s", e)
     bounds_list = []
 
-  def _drive_addr(attr: str, i: int) -> Optional[Address]:
-    if drive_map is None:
-      return None
-    seq = getattr(drive_map, attr)
+  def _drive_addr(seq: List[Address], i: int) -> Optional[Address]:
     return seq[i] if i < len(seq) else None
 
   channels: List[PrepPIPChannel] = []
@@ -671,9 +646,9 @@ async def build_prep_channels(
       PrepPIPChannel(
         index=i,
         client=client,
-        sleeve_sensor=_drive_addr("sleeve_sensor_addrs", i),
-        zdrive=_drive_addr("zdrive_addrs", i),
-        node_info=_drive_addr("node_info_addrs", i),
+        sleeve_sensor=_drive_addr(drive_map.sleeve_sensor_addrs, i),
+        zdrive=_drive_addr(drive_map.zdrive_addrs, i),
+        node_info=_drive_addr(drive_map.node_info_addrs, i),
         bounds=bounds_list[i] if i < len(bounds_list) else None,
       )
     )
@@ -1127,7 +1102,7 @@ class PrepChannels:
     queue_tip_pickups(tip_intents)
 
     async def _send() -> None:
-      await self._client.send_command(
+      await self._client.execute(
         PrepCmd.PrepPickUpTips(
           tip_positions=tip_positions,
           final_z=resolved_final_z,
@@ -1226,7 +1201,7 @@ class PrepChannels:
     queue_tip_drops(tip_intents)
 
     async def _send() -> None:
-      await self._client.send_command(
+      await self._client.execute(
         PrepCmd.PrepDropTips(
           tip_positions=tip_positions,
           final_z=resolved_final_z,
@@ -1642,7 +1617,7 @@ class PrepChannels:
     cmd_cls = self._ASPIRATE_CMD[(effective_lld, is_tadm, use_v2)]
     assembler = self._assemble_aspirate_v2 if use_v2 else self._assemble_aspirate_v1
     params = [assembler(k, effective_lld, is_tadm) for k in kits]
-    await self._client.send_command(
+    await self._client.execute(
       cmd_cls(aspirate_parameters=params),  # type: ignore[arg-type]
       read_timeout=read_timeout if effective_lld else None,
     )
@@ -1831,7 +1806,7 @@ class PrepChannels:
     cmd_cls = self._DISPENSE_CMD[(effective_lld, use_v2)]
     assembler = self._assemble_dispense_v2 if use_v2 else self._assemble_dispense_v1
     params = [assembler(k, effective_lld) for k in kits]
-    await self._client.send_command(
+    await self._client.execute(
       cmd_cls(dispense_parameters=params),  # type: ignore[arg-type]
       read_timeout=read_timeout if effective_lld else None,
     )
@@ -2128,7 +2103,7 @@ class PrepChannels:
       List of Coordinate, one per channel.
     """
     try:
-      resp_obj = await self._client.send_command(PrepCmd.PrepGetPositions())
+      resp_obj = await self._client.execute(PrepCmd.PrepGetPositions())
     except (HoiError, ChannelizedError):
       return []
     if not isinstance(resp_obj, PrepCmd.PrepGetPositions.Response):
@@ -2266,13 +2241,11 @@ class PrepChannels:
     if channel_idx < len(tip_presence) and tip_presence[channel_idx]:
       # Query firmware for the held tip definition to get tip length
       pipettor_addr = await self._client.resolve_path(PIPETTOR_OBJECT_PATH)
-      raw = await self._client.send_query(
-        PrepCmd.PrepProbeRequest(dest=pipettor_addr, command_id=13)
-      )
+      raw = await self._client.execute(PrepCmd.PrepProbeRequest(dest=pipettor_addr, command_id=13))
       if raw is not None:
         import struct as _struct
 
-        data = raw[0]
+        data = raw
         # TipDefinition struct: default_values, id, volume(F32), length(F32), ...
         # The second F32 is the tip extension length
         f32_count = 0
@@ -2368,7 +2341,6 @@ class PrepChannels:
     Returns:
       List of bools, one per channel (index 0=rearmost). True if tip detected.
     """
-    import struct as _struct
 
     drive_map = await self.discover_channel_drives()
     if not drive_map.sleeve_sensor_addrs:
@@ -2376,11 +2348,11 @@ class PrepChannels:
 
     results: list[bool] = []
     for addr in drive_map.sleeve_sensor_addrs:
-      raw = await self._client.send_query(PrepCmd.PrepProbeRequest(dest=addr, command_id=15))
-      if raw is None or len(raw[0]) < 8:
+      raw = await self._client.execute(PrepCmd.PrepProbeRequest(dest=addr, command_id=15))
+      if raw is None or len(raw) < 8:
         results.append(False)
       else:
-        val = _struct.unpack_from("<I", raw[0], 4)[0]
+        val = _struct.unpack_from("<I", raw, 4)[0]
         results.append(bool(val))
 
     return results
@@ -2484,7 +2456,7 @@ class PrepChannels:
       f"channel index out of range (valid: 0..{self.num_channels - 1})"
     )
     channel_enums = [_CHANNEL_INDEX[ch] for ch in channels]
-    await self._client.send_command(PrepCmd.PrepMoveZUpToSafe(channels=channel_enums))
+    await self._client.execute(PrepCmd.PrepMoveZUpToSafe(channels=channel_enums))
 
   async def move_to_position(
     self,
@@ -2537,11 +2509,9 @@ class PrepChannels:
     move_parameters = _build_pipettor_gantry_move_parameters(x, channels, y, z)
 
     if via_lane:
-      await self._client.send_command(
-        PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
-      )
+      await self._client.execute(PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters))
     else:
-      await self._client.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+      await self._client.execute(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
 
   async def stop(self) -> None:
     self.setup_finished = False

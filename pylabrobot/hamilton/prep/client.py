@@ -1,57 +1,69 @@
-"""PrepClient: Hamilton TCP client for Hamilton Prep liquid handlers (Nimbus-style layout).
-
-Transport-only: opens TCP, discovers the firmware root, and resolves one bootstrap
-handle — :attr:`PrepClient.mlprep_address` (``MLPrepRoot.MLPrep``). Everything
-else uses :meth:`HamiltonTCPClient.resolve_path`, which consults the introspection
-registry (cache-hot after the first hit).
-
-**JIT command targets.** Concrete :class:`~pylabrobot.hamilton.prep.prep_commands.PrepCommand`
-subclasses declare ``firmware_path``; :meth:`PrepClient._send_raw` resolves
-that path when ``dest`` is the unresolved sentinel. No parallel path tables on
-backends.
-
-**Bootstrap info.** :class:`~pylabrobot.hamilton.prep.info.PrepInstrumentInfo`
-resolves a small set of diagnostic paths (see ``PrepInstrumentInfo._paths``)
-during setup via the same ``resolve_path`` cache.
-
-**Channel topology** (per-channel drive addresses) is discovered in
-:mod:`~pylabrobot.hamilton.prep.channels` by walking the tree
-from ``MLPrepRoot``, not via a separate registry.
-"""
+"""Prep connection and immutable request binding to discovered firmware objects."""
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Optional, TypeVar, Union
 
 from pylabrobot.hamilton.prep.error_tables import PREP_ERROR_CODES
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
+from pylabrobot.hamilton.transport.tcp.messages import (
+  CommandMessage,
+  CommandResponse,
+  HoiParamsParser,
+)
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
+from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
 
 from . import prep_commands as PrepCmd
 from .prep_commands import _UNRESOLVED, PrepCommand
 
-logger = logging.getLogger(__name__)
-
 _EXPECTED_ROOT = "MLPrepRoot"
-
-# Canonical firmware path strings (single source for client, chatterbox, probes).
 MLPREP_OBJECT_PATH = "MLPrepRoot.MLPrep"
 PIPETTOR_OBJECT_PATH = "MLPrepRoot.PipettorRoot.Pipettor"
 MPH_OBJECT_PATH = "MLPrepRoot.MphRoot.MPH"
+ResultT = TypeVar("ResultT")
+
+
+@dataclass(frozen=True)
+class _ResolvedPrepCommand(TCPCommand[bytes]):
+  """Bind a reusable Prep request to one connection's discovered destination."""
+
+  request: PrepCommand[object]
+
+  def build(self, src: Address, seq: int, response_required: bool = True) -> bytes:
+    """Encode the original request at its resolved destination."""
+    request = self.request
+    if request.interface_id is None or request.command_id is None:
+      raise ValueError(f"{type(request).__name__} must define interface_id and command_id")
+    return CommandMessage(
+      dest=self.dest,
+      interface_id=request.interface_id,
+      method_id=request.command_id,
+      params=request.build_parameters(),
+      action_code=request.action_code,
+      harp_protocol=request.harp_protocol,
+      ip_protocol=request.ip_protocol,
+    ).build(src, seq, harp_response_required=response_required)
+
+  @property
+  def uses_physical_channels(self) -> bool:  # type: ignore[override]
+    """Preserve the device request's error attribution."""
+    return self.request.uses_physical_channels
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map result ordinals through the original channel selection."""
+    return self.request._channel_index_for_entry(entry_index, entry)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> bytes:
+    """Preserve the checked payload for the original request to decode."""
+    return data
 
 
 class PrepClient(HamiltonTCPClient):
-  """Hamilton TCP client for Prep: connection, MLPrep bootstrap, firmware string decode.
-
-  Instrument-wide motion, power, and deck-light entry points live on
-  :class:`~pylabrobot.hamilton.prep.prep.Prep` and
-  :class:`~pylabrobot.hamilton.prep.method.PrepMethodLifecycle`.
-  Pipettor, calibration, and MPH traffic goes through :class:`PrepCommand` plus
-  :meth:`send_command` / :meth:`resolve_path`, or through peers that build those
-  commands.
-  """
+  """Hamilton TCP client with Prep discovery and firmware-path request binding."""
 
   _ERROR_CODES = PREP_ERROR_CODES
 
@@ -72,114 +84,86 @@ class PrepClient(HamiltonTCPClient):
     )
     self._mlprep_address: Optional[Address] = None
 
-  # ---------------------------------------------------------------------------
-  # Lifecycle
-  # ---------------------------------------------------------------------------
-
-  async def setup(self):
+  async def setup(self) -> None:
+    """Connect, verify the instrument identity, and resolve the MLPrep object."""
     await super().setup()
-
-    root = await self.discovered_root_name()
-    if root != _EXPECTED_ROOT:
-      raise RuntimeError(
-        f"Expected root '{_EXPECTED_ROOT}' (Prep), but discovered '{root}'. Wrong instrument?"
-      )
-
-    self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
+    self._mlprep_address = None
+    try:
+      root = await self.discovered_root_name()
+      if root != _EXPECTED_ROOT:
+        raise RuntimeError(
+          f"Expected root '{_EXPECTED_ROOT}' (Prep), but discovered '{root}'. Wrong instrument?"
+        )
+      self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
+    except BaseException:
+      await self.stop()
+      raise
 
   async def stop(self) -> None:
-    await super().stop()
-    self._mlprep_address = None
-
-  # ---------------------------------------------------------------------------
-  # MLPrep root handle (resolved in :meth:`setup`)
-  # ---------------------------------------------------------------------------
+    """Close the connection and discard its bootstrap address."""
+    try:
+      await super().stop()
+    finally:
+      self._mlprep_address = None
 
   @property
   def mlprep_address(self) -> Address:
-    """Address of ``MLPrepRoot.MLPrep``. Raises if :meth:`setup` has not run."""
+    """Address of MLPrep in the current connection."""
     if self._mlprep_address is None:
       raise RuntimeError("MLPrep address not resolved. Call setup() first.")
     return self._mlprep_address
 
-  # ---------------------------------------------------------------------------
-  # JIT firmware-path resolution for PrepCommand.dest
-  # ---------------------------------------------------------------------------
+  async def _resolve_command(
+    self, command: TCPCommand[ResultT]
+  ) -> Union[TCPCommand[ResultT], _ResolvedPrepCommand]:
+    """Resolve a fixed firmware path without modifying the caller's request."""
+    self._session.require_active()
+    if not isinstance(command, PrepCommand) or command.dest != _UNRESOLVED:
+      return command
+    path = command.firmware_path
+    if path is None:
+      raise RuntimeError(
+        f"{type(command).__name__} has no firmware_path declared and no explicit dest= supplied."
+      )
+    try:
+      address = await self.resolve_path(path)
+    except KeyError as exc:
+      raise RuntimeError(
+        f"Cannot send {type(command).__name__}: firmware path {path!r} did not resolve ({exc})."
+      ) from exc
+    return _ResolvedPrepCommand(dest=address, request=command)
 
-  async def _send_raw(
-    self,
-    command: TCPCommand,
-    *,
-    return_raw: bool,
-    raise_on_error: bool,
-    read_timeout: Optional[float] = None,
-  ) -> Any:
-    if isinstance(command, PrepCommand) and command.dest == _UNRESOLVED:
-      path = type(command).firmware_path
-      if path is None:
-        raise RuntimeError(
-          f"{type(command).__name__} has no firmware_path declared and no "
-          "explicit dest= supplied at construction. Polymorphic-dest commands "
-          "must pass dest= to send_query or send_command."
-        )
-      try:
-        addr = await self.resolve_path(path)
-      except KeyError as exc:
-        raise RuntimeError(
-          f"Cannot send {type(command).__name__}: firmware path "
-          f"{path!r} did not resolve on this instrument ({exc})."
-        ) from exc
-      command.dest = addr
-      command.dest_address = addr
-    return await super()._send_raw(
-      command,
-      return_raw=return_raw,
-      raise_on_error=raise_on_error,
-      read_timeout=read_timeout,
-    )
+  async def execute(
+    self, command: TCPCommand[ResultT], *, read_timeout: Optional[float] = None
+  ) -> ResultT:
+    """Resolve the request target, execute once, and decode its typed response."""
+    resolved = await self._resolve_command(command)
+    if isinstance(resolved, _ResolvedPrepCommand):
+      data = await super().execute(resolved, read_timeout=read_timeout)
+      return command.parse_response_parameters(data)
+    return await super().execute(command, read_timeout=read_timeout)
 
-  # ---------------------------------------------------------------------------
-  # Discovery
-  # ---------------------------------------------------------------------------
+  async def exchange(
+    self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
+  ) -> CommandResponse:
+    """Resolve the target and return the full terminal frame for protocol inspection."""
+    return await super().exchange(await self._resolve_command(command), read_timeout=read_timeout)
 
   async def discovered_root_name(self) -> str:
+    """Read the discovered firmware root's name."""
     roots = self.get_root_object_addresses()
     if not roots:
       raise RuntimeError("No root objects discovered. Call setup() first.")
-    info = await self.introspection.get_object(roots[0])
-    name = info.name
-    if not isinstance(name, str):
-      raise RuntimeError(f"Unexpected root name type: {type(name).__name__}")
-    return name
-
-  # ---------------------------------------------------------------------------
-  # Firmware string queries (transport: raw HOI decode + status query)
-  # ---------------------------------------------------------------------------
-
-  @staticmethod
-  def _decode_firmware_string(raw: Optional[tuple]) -> Optional[str]:
-    """Decode a string from a raw HOI response (Hamilton string wire format)."""
-    if raw is None:
-      return None
-    data: bytes = raw[0]
-    i = 0
-    while i < len(data) - 3:
-      if data[i] == 0x0F and data[i + 1] in (0x00, 0x01):
-        slen = int.from_bytes(data[i + 2 : i + 4], "little")
-        if slen > 0 and i + 4 + slen <= len(data):
-          return data[i + 4 : i + 4 + slen].decode("utf-8", errors="replace").rstrip("\x00")
-      i += 1
-    return None
+    return (await self.introspection.get_object(roots[0])).name
 
   async def _query_firmware_string(
     self, addr: Address, cmd_id: int, iface_id: int = 3
   ) -> Optional[str]:
-    """Send a status query and decode the string response."""
-    raw_resp: object = await self.send_query(
+    """Execute a status query and decode its string fragment."""
+    data = await self.execute(
       PrepCmd.PrepProbeRequest(dest=addr, command_id=cmd_id, interface_id=iface_id)
     )
-    if raw_resp is None:
-      return self._decode_firmware_string(None)
-    if not isinstance(raw_resp, tuple):
-      return None
-    return self._decode_firmware_string(raw_resp)
+    for _, value in HoiParamsParser(data).parse_all():
+      if isinstance(value, str):
+        return value.rstrip("\x00")
+    return None

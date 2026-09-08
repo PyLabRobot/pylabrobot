@@ -71,7 +71,7 @@ class PrepGripper:
     )
     grip_distance = clearance_y + squeeze_mm
 
-    await self._client.send_command(
+    await self._client.execute(
       PrepCmd.PrepPickUpPlate(
         plate_top_center=plate_top_center,
         plate=plate_dims,
@@ -105,7 +105,7 @@ class PrepGripper:
       y_position=location.y,
       z_position=location.z,
     )
-    await self._client.send_command(
+    await self._client.execute(
       PrepCmd.PrepDropPlate(
         plate_top_center=plate_top_center,
         clearance_y=clearance_y,
@@ -131,7 +131,7 @@ class PrepGripper:
       y_position=location.y,
       z_position=location.z,
     )
-    await self._client.send_command(
+    await self._client.execute(
       PrepCmd.PrepMovePlate(
         plate_top_center=plate_top_center,
         acceleration_scale_x=acceleration_scale_x,
@@ -140,7 +140,7 @@ class PrepGripper:
 
   async def release_plate(self) -> None:
     """Open the CoRe gripper and release whatever is held (PrepReleasePlate, cmd=21)."""
-    await self._client.send_command(PrepCmd.PrepReleasePlate())
+    await self._client.execute(PrepCmd.PrepReleasePlate())
 
   async def pick_up_tool(
     self,
@@ -173,7 +173,7 @@ class PrepGripper:
         z=traverse_h,
         use_channels=[0, 1],
       )
-    await self._client.send_command(
+    await self._client.execute(
       PrepCmd.PrepPickUpTool(
         tip_definition=tip_definition,
         tool_position_x=tool_position_x,
@@ -191,7 +191,7 @@ class PrepGripper:
     """Drop CoRe gripper tool (PrepDropTool, cmd=16)."""
     if move_to_safe_z_first:
       await self._channels.move_channels_to_safe_z()
-    await self._client.send_command(PrepCmd.PrepDropTool())
+    await self._client.execute(PrepCmd.PrepDropTool())
 
 
 class PrepGripperArm:

@@ -15,6 +15,7 @@ from typing import (
   TypeVar,
 )
 
+from pylabrobot.hamilton.protocol.text.framing import to_list
 from pylabrobot.io.usb import USB
 from pylabrobot.legacy.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -138,39 +139,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     return self.id_ % 10000
 
   def _to_list(self, val: List[T], tip_pattern: List[bool]) -> List[T]:
-    """Convert a list of values to a list of values with the correct length.
-
-    This is roughly one-hot encoding. STAR expects a value for a list parameter at the position
-    for the corresponding channel. If `tip_pattern` is False, there, the value itself is ignored,
-    but it must be present.
-
-    Args:
-      val: A list of values, exactly one for each channel that is involved in the operation.
-      tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
-
-    Returns:
-      A list of values with the correct length. Each value that is not involved in the operation
-      is set to the first value in `val`, which is ignored by STAR.
-    """
-
-    # use the default value if a channel is not involved, otherwise use the value in val
-    assert len(val) > 0
-    assert len(val) <= len(tip_pattern)
-
-    result: List[T] = []
-    arg_index = 0
-    for channel_involved in tip_pattern:
-      if channel_involved:
-        if arg_index >= len(val):
-          raise ValueError(f"Too few values for tip pattern {tip_pattern}: {val}")
-        result.append(val[arg_index])
-        arg_index += 1
-      else:
-        # this value will be ignored, so just use a value we know is valid
-        result.append(val[0])
-    if arg_index < len(val):
-      raise ValueError(f"Too many values for tip pattern {tip_pattern}: {val}")
-    return result
+    """One-hot encode a per-channel list; see `pylabrobot.hamilton.protocol.text.framing`."""
+    return to_list(val, tip_pattern)
 
   def _assemble_command(
     self,

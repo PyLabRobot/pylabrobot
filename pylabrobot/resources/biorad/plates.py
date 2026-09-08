@@ -32,6 +32,7 @@ def biorad_384_wellplate_50uL_Vb(name: str) -> Plate:
       bottom_type=WellBottomType.V,
       material_z_thickness=1,  # measured
       cross_section_type=CrossSectionType.CIRCLE,
+      name_prefix=name,
     ),
   )
 

@@ -7,8 +7,11 @@ the [forum](https://discuss.pylabrobot.org).
 ```{device-table}
 ```
 
-An asterisk after a device name marks a note about the models that entry covers; hover it to read
-the note.
+Some registry entries cover several hardware models. Click one of those device rows to reveal its
+models, or select **Show models** to display all model sub-rows. Each model has its own support
+status. Model names are always included in search; when a text search leaves 10 or fewer devices,
+matching model sub-rows appear automatically. An asterisk after a device name marks an additional
+note; hover it to read the note.
 
 ## Reading the table
 

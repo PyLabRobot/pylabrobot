@@ -688,11 +688,11 @@ class PrepHead8:
       via_lane: Use lane-aware move when True.
     """
     if via_lane:
-      await self._client.send_command(
+      await self._client.execute(
         PrepCmd.MphMoveToPositionViaLane(x_position=x, y_position=y, z_position=z)
       )
     else:
-      await self._client.send_command(
+      await self._client.execute(
         PrepCmd.MphMoveToPosition(x_position=x, y_position=y, z_position=z)
       )
 
@@ -773,7 +773,7 @@ class PrepHead8:
     queue_tip_pickups(tip_intents)
 
     async def _send() -> None:
-      await self._client.send_command(
+      await self._client.execute(
         PrepCmd.MphPickupTips(
           tip_position=tip_position,
           final_z=resolved_final_z,
@@ -842,7 +842,7 @@ class PrepHead8:
     queue_tip_drops(tip_intents)
 
     async def _send() -> None:
-      await self._client.send_command(
+      await self._client.execute(
         PrepCmd.MphDropTips(
           tip_position=tip_position,
           final_z=resolved_final_z,
@@ -1059,7 +1059,7 @@ class PrepHead8:
     queue_volume_transfers(volume_intents)
 
     async def _send() -> None:
-      await self._client.send_command(
+      await self._client.execute(
         cmd_cls(aspirate_parameters=[param_struct]),  # type: ignore[arg-type]
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
@@ -1267,7 +1267,7 @@ class PrepHead8:
     queue_volume_transfers(volume_intents)
 
     async def _send() -> None:
-      await self._client.send_command(
+      await self._client.execute(
         cmd_cls(dispense_parameters=[param_struct]),  # type: ignore[arg-type]
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
@@ -1291,14 +1291,14 @@ class PrepHead8:
     if not self.channels:
       raise RuntimeError("MPH channels not populated; call build_prep_channels first.")
 
-    addr = getattr(self.channels[0], "sleeve_sensor", None)
+    addr = self.channels[0].sleeve_sensor
     if addr is None:
       return [None] * NUM_PROBES
 
-    raw = await self._client.send_query(PrepCmd.PrepProbeRequest(dest=addr, command_id=15))
-    if raw is None or len(raw[0]) < 8:
+    raw = await self._client.execute(PrepCmd.PrepProbeRequest(dest=addr, command_id=15))
+    if raw is None or len(raw) < 8:
       result = False
     else:
-      val = _struct.unpack_from("<I", raw[0], 4)[0]
+      val = _struct.unpack_from("<I", raw, 4)[0]
       result = bool(val)
     return [result] * NUM_PROBES
