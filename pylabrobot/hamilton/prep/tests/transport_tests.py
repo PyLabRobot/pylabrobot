@@ -212,3 +212,26 @@ class TestPrepTransport(_SessionTest):
         dict(x_min=1, x_max=2, y_min=3, y_max=4, z_min=5, z_max=6),
       ],
     )
+
+  async def test_reconnection_during_path_resolution_cannot_send_an_old_address(self):
+    for raw in (False, True):
+      client, io = self.make_client()
+      fresh_sockets: list[_MemorySocket] = []
+
+      async def resolve(path: str) -> Address:
+        """Replace the session while a firmware-path lookup is in flight."""
+        await client.stop()
+        fresh = self.start_session(client, Address(1, 2, 300))
+        fresh.on_write = AsyncMock(side_effect=AssertionError("stale address reached new session"))
+        fresh_sockets.append(fresh)
+        return Address(1, 1, 257)
+
+      client.resolve_path = resolve  # type: ignore[method-assign]
+      with self.assertRaises(ConnectionError):
+        if raw:
+          await client.exchange(C.PrepPark())
+        else:
+          await client.execute(C.PrepPark())
+      self.assertTrue(io.closed)
+      self.assertEqual(fresh_sockets[0].writes, [])
+      self.assertEqual(client.connection_info.state, SessionState.READY)

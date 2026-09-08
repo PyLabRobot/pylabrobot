@@ -137,17 +137,19 @@ class PrepClient(HamiltonTCPClient):
     self, command: TCPCommand[ResultT], *, read_timeout: Optional[float] = None
   ) -> ResultT:
     """Resolve the request target, execute once, and decode its typed response."""
+    session = self._session
     resolved = await self._resolve_command(command)
     if isinstance(resolved, _ResolvedPrepCommand):
-      data = await super().execute(resolved, read_timeout=read_timeout)
+      data = await session.execute(resolved, read_timeout=read_timeout)
       return command.parse_response_parameters(data)
-    return await super().execute(command, read_timeout=read_timeout)
+    return await session.execute(command, read_timeout=read_timeout)
 
   async def exchange(
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
   ) -> CommandResponse:
     """Resolve the target and return the full terminal frame for protocol inspection."""
-    return await super().exchange(await self._resolve_command(command), read_timeout=read_timeout)
+    session = self._session
+    return await session.exchange(await self._resolve_command(command), read_timeout=read_timeout)
 
   async def discovered_root_name(self) -> str:
     """Read the discovered firmware root's name."""
