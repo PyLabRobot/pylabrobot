@@ -53,7 +53,7 @@
     "capabilities": [
       "centrifuging"
     ],
-    "status": "full",
+    "status": "basic",
     "api": "pylabrobot.agilent.vspin.Access2",
     "api_version": "v1",
     "code_slug": "agilent/vspin",
