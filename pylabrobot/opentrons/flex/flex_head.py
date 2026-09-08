@@ -561,9 +561,9 @@ class _FlexHead:
   def _require_itemized_parent(item: Resource) -> ItemizedResource:
     """Return ``item.parent``, asserted to be an addressable-by-name container."""
     parent = item.parent
-    assert isinstance(
-      parent, ItemizedResource
-    ), f"'{item.name}' has no itemized parent resource (rack/plate)."
+    assert isinstance(parent, ItemizedResource), (
+      f"'{item.name}' has no itemized parent resource (rack/plate)."
+    )
     return parent
 
   @staticmethod
