@@ -354,24 +354,32 @@ class Resource(SerializableMixin):
     if self.location is None:
       raise NoLocationError(f"Resource '{self.name}' has no location.")
 
-    rotated_anchor = Coordinate(
-      *matrix_vector_multiply_3x3(
-        self.get_absolute_rotation().get_rotation_matrix(),
-        self.get_anchor(x=x, y=y, z=z).vector(),
-      )
-    )
+    # 1. Collect the chain this resource is positioned through, topmost first
+    chain: List[Resource] = [self]
+    while chain[-1].parent is not None and chain[-1].parent.location is not None:
+      chain.append(chain[-1].parent)
+    chain.reverse()
 
-    if self.parent is None or self.parent.location is None:
-      return self.location + rotated_anchor
+    # 2a. Seed the accumulators at the top of the chain. Ancestors above where the walk stops may
+    # carry no location yet still rotate what hangs from them, so the rotation is taken from the
+    # whole tree rather than from the chain.
+    rotation = chain[0].get_absolute_rotation()
+    matrix = rotation.get_rotation_matrix()
+    position = cast(Coordinate, chain[0].location)
 
-    parent_pos = self.parent.get_absolute_location()
-    rotated_location = Coordinate(
-      *matrix_vector_multiply_3x3(
-        self.parent.get_absolute_rotation().get_rotation_matrix(),
-        self.location.vector(),
+    # 2b. Accumulate each child's offset in its parent's frame
+    for parent, child in zip(chain, chain[1:]):
+      anchor, location = parent.get_anchor(), cast(Coordinate, child.location)
+      position += Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector())) + Coordinate(
+        *matrix_vector_multiply_3x3(matrix, location.vector())
       )
-    )
-    return parent_pos + rotated_location + rotated_anchor
+      if child.rotation.x or child.rotation.y or child.rotation.z:
+        rotation = rotation + child.rotation
+        matrix = rotation.get_rotation_matrix()
+
+    # 3. Apply the requested anchor
+    anchor = self.get_anchor(x=x, y=y, z=z)
+    return position + Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector()))
 
   def get_location_wrt(
     self, other: Resource, x: str = "l", y: str = "f", z: str = "b"
