@@ -596,7 +596,7 @@
     "api_version": "v1",
     "code_slug": "high_res/micro_serve",
     "doc_slug": "high_res/micro-serve/hello-world",
-    "notes": "Queries, homing, carousel, empty handoff, measurement, manual access, and single-plate barcode/count verified; loaded handoffs and multi-plate scans unverified."
+    "notes": "Single-plate preparation/retraction, barcode/count, measurement, and basic motion verified; external handoffs, multi-plate scans, and fault recovery unverified."
   },
   {
     "id": "highres-microspin",

@@ -127,9 +127,13 @@ automatically replays a plate transfer.
 
 Homing, all fourteen carousel positions, repeated requests, empty receiving-position preparation,
 retraction, and subsequent rotation were verified on firmware 2.7.0.756. The diagrams also include
-unloading, robot transfers, multi-plate scanning, and recovery paths that remain unverified on hardware.
+external robot transfers, multi-plate scanning, and recovery paths that remain unverified on hardware.
 Stack-height measurement, retraction after measurement, and manual access followed by homing
 were also captured. Single-plate barcode scanning and repeated active counts passed with temporary
 geometry, followed by retraction and restoration of the saved dimensions. A separate barcode
 geometry-error capture validates the failure path.
+Loaded load/unload/angle-variant preparation and retraction also passed without external pickup or
+placement. The angle variant returned no report on this controller; `None` remains `None` on repeat.
+Scanning can finish with a different carousel stacker selected, so subsequent operations use fresh
+status and explicit targets.
 See [protocol and validation](protocol.md) for the captures and exact limits.

@@ -34,9 +34,9 @@ physical test on this device. The API PDF's measurement examples also serve as p
 | `setstackerdimensions` | `stackers[i].set_dimensions(d)` | Existing geometry written and verified on hardware |
 | `home` | `home()` | Hardware captures, including return from manual access |
 | `spin` | `stackers[i].move_to()` | All fourteen positions verified |
-| `load` | `stackers[i].prepare_for_load(d)` | Empty receiving position verified; plate placement unverified |
-| `unload` | `stackers[i].prepare_for_unload(d)` | Simulated |
-| `unloadangle` | `stackers[i].prepare_for_unload_with_angle(d)` | Simulated; raw angle report has unspecified unit |
+| `load` | `stackers[i].prepare_for_load(d)` | Empty and single-plate preparation/retraction captured; external placement unverified |
+| `unload` | `stackers[i].prepare_for_unload(d)` | Single-plate preparation/retraction captured; external pickup unverified |
+| `unloadangle` | `stackers[i].prepare_for_unload_with_angle(d)` | Single-plate preparation/retraction captured; controller supplied no angle report, returned as `None` |
 | `retract` | `retract()` | Empty loader verified |
 | `readbarcodestacker` | `stackers[i].scan_barcodes(d)` | Empty and single-plate scans and geometry-error path captured; multi-plate scans unverified |
 | `countplates` | `stackers[i].count_plates(d)` | Empty and repeated single-plate counts captured; multi-plate counting unverified |
@@ -44,8 +44,8 @@ physical test on this device. The API PDF's measurement examples also serve as p
 | `calculateplatedimensions` | `calculate_plate_dimensions(count)` | API example and simulated sequence |
 | `setplatecount` | `stackers[i].set_plate_count(count)` | Hardware capture of 1 → 0 → 1 and repeated target; verified readback |
 | `manual` | `enter_manual_mode()` | Hardware capture, including repeated owned request; requires retraction before access |
-| `clearabort` | `clear_abort()` | Simulated; does not resolve an interrupted handoff |
-| `estoprecover` | `recover_from_estop()` | Simulated; physical recovery may move axes |
+| `clearabort` | `clear_abort()` | Command acknowledgements captured with no active fault; actual abort recovery unverified |
+| `estoprecover` | `recover_from_estop()` | Already-ready no-op captured; physical recovery remains simulated and may move axes |
 | `laser` | `set_barcode_laser(enabled)` | Hardware on/on/off command capture; no firmware optical-state readback |
 
 ## Equivalent functions
@@ -104,6 +104,15 @@ settings use different scales. Public physical units cannot be established from 
 The `manual` command clears homing and the selected stacker but can leave mode Ready in the status
 reply. The driver checks the acknowledged transition and resulting sensors, and retains ownership
 for repeated manual requests. An arbitrary unhomed machine is not assumed to be in manual mode.
+
+The documented `unloadangle` example includes a numeric reply, but the tested controller completed
+the operation without supplying one. The method returns `None` in this case. A separate
+`getangle` query returned `0.0000`; its freshness and unit are unverified, so it is not substituted
+for the missing report. Repeated owned preparations preserve the original result.
+
+A scan of stacker 5 completed with stacker 12 selected and the loader retracted. Scanning does
+not guarantee that the scanned stacker remains at the transfer position. Subsequent motion uses
+fresh status and an explicit target rather than assuming the scan's final position.
 
 ## Completing hardware validation
 

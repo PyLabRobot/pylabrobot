@@ -171,10 +171,10 @@ class HighResMicroServe:
 
   Communication, homing, all carousel positions, empty receiving-position
   preparation/retraction, stack-height measurement, manual access, and laser
-  command exchanges were checked on firmware 2.7.0.756. A single-plate barcode
-  scan and repeated active counts also passed. Transfers with plates,
-  multi-plate counting/scanning, plate-dimension calculation, and physical
-  fault recovery remain unverified.
+  command exchanges were checked on firmware 2.7.0.756. Single-plate barcode
+  scans, repeated active counts, and loaded preparation/retraction also passed.
+  External plate pickup/placement, multi-plate counting/scanning, plate-dimension
+  calculation, and physical fault recovery remain unverified.
   """
 
   def __init__(
@@ -202,7 +202,7 @@ class HighResMicroServe:
     self._lock = asyncio.Lock()
     self._connected = False
     self._last_command_id: Optional[int] = None
-    self._prepared: Optional[Tuple[str, int]] = None
+    self._prepared: Optional[Tuple[str, int, Tuple[str, ...]]] = None
     self._unresolved_preparation: Optional[MicroServeUnresolvedPreparation] = None
     self._unresolved_operation: Optional[str] = None
     self._manual_mode = False
@@ -236,7 +236,7 @@ class HighResMicroServe:
       self._connected = True
       logger.info("Connected to MicroServe")
       logger.warning(
-        "MicroServe transfers with plates, multi-plate counting/scanning, plate-dimension "
+        "MicroServe external plate pickup/placement, multi-plate counting/scanning, plate-dimension "
         "calculation, and physical fault recovery are unverified; validate before use"
       )
 
@@ -673,7 +673,7 @@ class HighResMicroServe:
       self._require_idle(status)
       if status.stacker != pending.stacker or not status.loader_extended:
         raise RuntimeError(f"Prepared transfer position cannot be confirmed: {status.raw}")
-      self._prepared = (pending.direction, pending.stacker)
+      self._prepared = (pending.direction, pending.stacker, ())
       self._unresolved_preparation = None
       logger.info("Reconciled MicroServe preparation %s", record.command)
 
@@ -857,10 +857,11 @@ class MicroServeStacker:
       status = await self._device._status()
       self._device._require_idle(status)
       at_target = status.stacker == self.index and status.loader_extended
-      if at_target and self._device._prepared == (direction, self.index):
+      prepared = self._device._prepared
+      if at_target and prepared is not None and prepared[:2] == (direction, self.index):
         if (await self._device._dimensions())[self.index]._wire() != dimensions._wire():
           raise RuntimeError("Retract the loader before changing geometry at the transfer position")
-        return await self._device._command("getangle") if direction == "unloadangle" else ()
+        return prepared[2]
       if status.plate_sensor_blocked or not status.loader_retracted:
         raise RuntimeError("Finish the current robot handoff and retract before preparing another")
       await self._set_dimensions(dimensions)
@@ -881,7 +882,7 @@ class MicroServeStacker:
           command_id if command_id is not None else self._device.last_command_id,
         )
         raise
-      self._device._prepared = (direction, self.index)
+      self._device._prepared = (direction, self.index, lines)
       return lines
 
   async def prepare_for_load(self, dimensions: MicroServePlateDimensions) -> None:
@@ -901,21 +902,28 @@ class MicroServeStacker:
     """
     await self._prepare("unload", dimensions)
 
-  async def prepare_for_unload_with_angle(self, dimensions: MicroServePlateDimensions) -> str:
+  async def prepare_for_unload_with_angle(
+    self, dimensions: MicroServePlateDimensions
+  ) -> Optional[str]:
     """Present a plate for picking and return the firmware's angle report as text.
 
     The firmware documentation does not define the angle unit. Do not assume
-    degrees or radians. Repeating this owned preparation queries the cached
-    angle without moving another plate. Retract after the robot clears the nest.
+    degrees or radians. Return None when the command supplies no angle report,
+    as observed on firmware 2.7.0.756. Repeated requests retain the original
+    report without moving another plate or substituting a potentially stale
+    ``getangle`` value. A reconciled preparation has no recovered angle report.
+    Retract after the robot clears the nest.
     """
-    return "\n".join(await self._prepare("unloadangle", dimensions))
+    return "\n".join(await self._prepare("unloadangle", dimensions)) or None
 
   async def scan_barcodes(self, dimensions: MicroServePlateDimensions) -> Tuple[str, ...]:
     """Move the barcode reader and return the controller's unmodified data lines.
 
     Barcode output formatting is firmware-dependent. Geometry is applied before
     scanning; the robot must be clear and the loader retracted. This operation
-    moves hardware even though its purpose is reading barcodes.
+    moves hardware even though its purpose is reading barcodes. Inspect status
+    afterward: the loader can be extended and the selected carousel stacker can
+    differ from the scanned index.
     """
     async with self._device._lock:
       self._device._require_resolved_preparation()

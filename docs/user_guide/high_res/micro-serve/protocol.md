@@ -68,9 +68,9 @@ phase, rather than restarting on each data line.
 | `home()` | `home` | API §5.11; operation notes for manual mode | Homing verified; manual-mode recovery simulated |
 | `stackers[i].move_to()` | `spin i` | API §5.22 | All fourteen positions and repeated targets verified |
 | `stackers[i].set_dimensions(d)` | `setstackerdimensions i PH SH PT` | API §5.21 | Existing geometry written and read back at stacker 2 |
-| `stackers[i].prepare_for_load(d)` | geometry, then `load i` | API §5.14, §5.21; commissioning page | Empty stacker 2 and repeated preparation verified |
-| `stackers[i].prepare_for_unload(d)` | geometry, then `unload i` | API §5.24, §5.21; commissioning page | Simulated only |
-| `retract()` | `retract` | API §5.17 | Empty loader and repeated retraction verified using home sensors |
+| `stackers[i].prepare_for_load(d)` | geometry, then `load i` | API §5.14, §5.21; commissioning page | Empty and single-plate preparation/retraction verified; no external placement |
+| `stackers[i].prepare_for_unload(d)` | geometry, then `unload i` | API §5.24, §5.21; commissioning page | Single-plate preparation/retraction verified; no external pickup |
+| `retract()` | `retract` | API §5.17 | Empty and single-plate loader retraction verified using home sensors |
 | `stackers[i].scan_barcodes(d)` | geometry, then `readbarcodestacker i` | Firmware help; operation notes | Single-plate scan verified; returns raw data lines |
 | `reconcile_preparation()` | `commandstat id`, `status` | API §5.3, §5.23 | Query primitives verified; recovery scenario simulated |
 
@@ -150,7 +150,7 @@ that caused the initial retraction check to fail. The captures verify that repea
 preparation, and retraction requests do not send additional motion commands. Simulated tests cover
 timeout, cancellation, reply mismatch, unresolved preparation, and sensor disagreement.
 
-**Plate transfer, unloading, multi-plate counting/scanning, and physical fault recovery remain unverified.** Setup
+**External plate pickup/placement, multi-plate counting/scanning, and physical fault recovery remain unverified.** Setup
 warns about these limits. Empty-machine tests do not establish pickup height with a plate, gripper
 clearance, plate compatibility, or E-stop recovery. Those need a separate physical validation with
 known plates and robot clearance.
@@ -182,3 +182,24 @@ The cached count for the loaded stacker was explicitly changed 1 → 0 → 1, re
 write, and restored to one; a repeated target skipped the write. These checks left geometry
 unchanged and added no errors. Barcode methods preserve these complete data lines, including
 the `BARCODES! Count:` prefix; an empty-stack report is not an empty Python tuple.
+
+Two `recover_from_estop()` calls on an already homed, idle, ready machine were confirmed to send
+only status queries. Two `clear_abort()` calls with no active fault received successful
+acknowledgements. Status, geometry, and the error log were unchanged. These checks validate the
+ready-state guard and command exchange, not recovery from a physical E-stop or active abort.
+
+Single-plate `unload`, `unloadangle`, and `load` preparation/retraction cycles were captured with
+the approved temporary geometry. Repeated preparations sent no additional transfer command, each
+cycle retained an active count of one, and the barcode remained `codex`. Nobody removed or added
+a plate. The saved geometry was restored afterward. These cycles validate loaded positioning and
+retraction, not an external robot handoff or independent plate dimensions.
+
+`unloadangle` supplied no data before its successful completion frame. The Python method returns
+`None` for a missing report and preserves that result on repeated requests. A separately queried
+cached angle is not evidence that this operation measured an angle. Reconciliation can restore
+the handoff but cannot recover a missing original angle report.
+
+The final barcode scan selected stacker 12 while scanning stacker 5. Its completion confirmed
+idle, ready status with the loader retracted, so this is not rejected as a transfer-target error.
+Callers must query current status or explicitly move to a stacker after scanning. A separate,
+guarded move returned the carousel to stacker 5, with the laser commanded off and no new errors.

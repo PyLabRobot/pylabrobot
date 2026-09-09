@@ -40,8 +40,10 @@ stack pitch, and well thickness as described in the hello-world guide. Do not su
 5. Prepare one plate for unloading, inspect its support and pickup position, then repeat the
    preparation and confirm no second plate is fetched. The operator removes the presented plate,
    withdraws, and explicitly retracts the loader.
-6. Repeat using angle-reporting preparation. Record the raw angle; establish its unit before
-   using it to command a robot rotation. A repeated preparation must only query the cached angle.
+6. Repeat using angle-reporting preparation. Record the raw angle if provided; establish its unit
+   before using it to command a robot rotation. The tested controller supplies no angle, returned
+   as `None`. A repeated preparation must preserve the original report without fetching another
+   plate or substituting a potentially stale cached angle.
 7. Repeat until the test stack is empty. Compare counts, sensors, errors, and geometry against
    the expected end state. Verify a final carousel move with the loader retracted.
 

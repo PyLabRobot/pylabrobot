@@ -281,8 +281,8 @@ class MicroServeCapabilityTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.io.writes.count(b"laser on\n"), 2)
     self.assertEqual(self.io.writes.count(b"laser off\n"), 1)
 
-  async def test_angle_preparation_repeat_queries_angle_without_unloading_again(self) -> None:
-    """An angle request cannot fetch a second plate after an owned preparation."""
+  async def test_angle_preparation_repeat_preserves_original_report(self) -> None:
+    """A repeated request neither fetches a second plate nor substitutes a cached angle."""
     self.io.add("status", status())
     self.io.add("setstackerdimensions 2 11000 10000 10000")
     self.io.add("dimstatus", *DIMENSIONS)
@@ -290,7 +290,6 @@ class MicroServeCapabilityTests(unittest.IsolatedAsyncioTestCase):
     self.io.add("status", status(stacker=2, extended=True))
     self.io.add("status", status(stacker=2, extended=True))
     self.io.add("dimstatus", *DIMENSIONS)
-    self.io.add("getangle", "0.1013")
     self.assertEqual(
       await self.driver.stackers[2].prepare_for_unload_with_angle(GEOMETRY), "0.1013"
     )
@@ -298,6 +297,31 @@ class MicroServeCapabilityTests(unittest.IsolatedAsyncioTestCase):
       await self.driver.stackers[2].prepare_for_unload_with_angle(GEOMETRY), "0.1013"
     )
     self.assertEqual(self.io.writes.count(b"unloadangle 2\n"), 1)
+    self.assertNotIn(b"getangle\n", self.io.writes)
+
+  async def test_missing_angle_report_stays_missing_on_repeat(self) -> None:
+    """Firmware can successfully present a plate without returning an angle value."""
+    self.io.add("status", status())
+    self.io.add("setstackerdimensions 2 11000 10000 10000")
+    self.io.add("dimstatus", *DIMENSIONS)
+    self.io.add("unloadangle 2")
+    self.io.add("status", status(stacker=2, extended=True))
+    self.io.add("status", status(stacker=2, extended=True))
+    self.io.add("dimstatus", *DIMENSIONS)
+    self.assertIsNone(await self.driver.stackers[2].prepare_for_unload_with_angle(GEOMETRY))
+    self.assertIsNone(await self.driver.stackers[2].prepare_for_unload_with_angle(GEOMETRY))
+    self.assertNotIn(b"getangle\n", self.io.writes)
+
+  async def test_reconciliation_does_not_invent_an_angle_report(self) -> None:
+    """A command record establishes completion but cannot reconstruct missing angle data."""
+    self.driver._unresolved_preparation = MicroServeUnresolvedPreparation("unloadangle", 2, 50)
+    self.io.add("commandstat 50", "   50 OK!  - unloadangle 2")
+    self.io.add("status", status(stacker=2, extended=True))
+    await self.driver.reconcile_preparation()
+    self.io.add("status", status(stacker=2, extended=True))
+    self.io.add("dimstatus", *DIMENSIONS)
+    self.assertIsNone(await self.driver.stackers[2].prepare_for_unload_with_angle(GEOMETRY))
+    self.assertNotIn(b"getangle\n", self.io.writes)
 
 
 class MicroServeDiagnosticCaptureTests(unittest.IsolatedAsyncioTestCase):
@@ -479,6 +503,78 @@ class MicroServeDiagnosticCaptureTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(await driver.request_dimensions(), geometry)
       self.assertEqual(await driver.stackers[5].request_plate_count(), 1)
       self.assertEqual(await driver.request_errors(), errors)
+      with self.assertRaises(IndexError):
+        reader.next_command()
+    finally:
+      await driver.stop()
+
+  async def test_ready_state_recovery_guards_capture(self) -> None:
+    """An already-ready recovery request sends no recovery motion command."""
+    driver = HighResMicroServe("10.253.253.253")
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "recovery_guards.json"))
+    driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
+    await driver.setup()
+    try:
+      self.assertIn("HRB-2008-10558", await driver.request_version())
+      before = await driver.request_status()
+      geometry = await driver.request_dimensions()
+      errors = await driver.request_errors()
+      await driver.recover_from_estop()
+      await driver.recover_from_estop()
+      await driver.clear_abort()
+      await driver.clear_abort()
+      self.assertEqual(await driver.request_status(), before)
+      self.assertEqual(await driver.request_dimensions(), geometry)
+      self.assertEqual(await driver.request_errors(), errors)
+      with self.assertRaises(IndexError):
+        reader.next_command()
+    finally:
+      await driver.stop()
+
+  async def test_loaded_preparation_cycles_preserve_the_single_plate(self) -> None:
+    """Replay loaded preparation/retraction, missing angle data, and scan repositioning."""
+    driver = HighResMicroServe("10.253.253.253")
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "loaded_cycles.json"))
+    driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
+    await driver.setup()
+    try:
+      self.assertIn("HRB-2008-10558", await driver.request_version())
+      self.assertTrue((await driver.request_status()).loader_retracted)
+      saved = (await driver.request_dimensions())[5]
+      errors = await driver.request_errors()
+      dimensions = MicroServePlateDimensions(13.629, 13.629, 13.629)
+      stacker = driver.stackers[5]
+      barcode = await stacker.scan_barcodes(dimensions)
+      self.assertEqual(barcode, ('BARCODES! Count: 1, "codex"',))
+      await driver.retract()
+      for name, prepare in (
+        ("unload", stacker.prepare_for_unload),
+        ("unloadangle", stacker.prepare_for_unload_with_angle),
+        ("load", stacker.prepare_for_load),
+      ):
+        with self.subTest(operation=name):
+          self.assertIsNone(await prepare(dimensions))
+          prepared = await driver.request_status()
+          self.assertTrue(prepared.loader_extended)
+          self.assertEqual(prepared.stacker, 5)
+          self.assertIsNone(await prepare(dimensions))
+          if name == "unloadangle":
+            # This separate cached query does not establish a fresh angle report.
+            self.assertEqual(await driver.request_plate_angle(), "0.0000")
+          await driver.retract()
+          self.assertTrue((await driver.request_status()).loader_retracted)
+          self.assertEqual(await stacker.count_plates(dimensions), 1)
+          await driver.retract()
+      self.assertEqual(await stacker.scan_barcodes(dimensions), barcode)
+      await driver.retract()
+      await stacker.set_dimensions(saved)
+      self.assertEqual((await driver.request_dimensions())[5], saved)
+      final = await driver.request_status()
+      self.assertEqual(final.stacker, 12)
+      self.assertTrue(final.loader_retracted)
+      self.assertEqual(await driver.request_errors(), errors)
+      self.assertIsNone(driver.unresolved_preparation)
+      self.assertIsNone(driver.unresolved_operation)
       with self.assertRaises(IndexError):
         reader.next_command()
     finally:
