@@ -364,21 +364,26 @@ class Resource(SerializableMixin):
     # carry no location yet still rotate what hangs from them, so the rotation is taken from the
     # whole tree rather than from the chain.
     rotation = chain[0].get_absolute_rotation()
-    matrix = rotation.get_rotation_matrix()
+    matrix = rotation.get_rotation_matrix() if (rotation.x or rotation.y or rotation.z) else None
     position = cast(Coordinate, chain[0].location)
 
     # 2b. Accumulate each child's offset in its parent's frame
     for parent, child in zip(chain, chain[1:]):
       anchor, location = parent.get_anchor(), cast(Coordinate, child.location)
-      position += Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector())) + Coordinate(
-        *matrix_vector_multiply_3x3(matrix, location.vector())
-      )
+      if matrix is None:
+        position += anchor + location
+      else:
+        position += Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector())) + Coordinate(
+          *matrix_vector_multiply_3x3(matrix, location.vector())
+        )
       if child.rotation.x or child.rotation.y or child.rotation.z:
         rotation = rotation + child.rotation
         matrix = rotation.get_rotation_matrix()
 
     # 3. Apply the requested anchor
     anchor = self.get_anchor(x=x, y=y, z=z)
+    if matrix is None:
+      return position + anchor
     return position + Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector()))
 
   def get_location_wrt(
