@@ -2,16 +2,20 @@
 
 See the [state machine](state-machine.md) for connection, plate-handoff, and recovery diagrams.
 
-The implementation follows documentation served by the MicroServe itself:
+The implementation follows documentation served by the MicroServe itself. To consult these sources,
+connect to the controller as described in the [hello-world guide](hello-world.ipynb), then open its
+address in a browser. These documents are available on the device and are not hosted by PyLabRobot.
 
-- [MicroServe API, revision 756, May 29, 2020](http://10.253.253.253/support_files/files/MicroServe_API.pdf).
-- [Operation notes](http://10.253.253.253/) and the illustrated plate-dimension instructions.
-- The `info all` and `help` replies from firmware 2.7.0.756.
-- The [REST command catalog](http://10.253.253.253:9095/MicroServe/AvailableCommands) and
-  [commissioning page](http://10.253.253.253/commissioning.html).
+| Source | Location on the connected controller |
+| --- | --- |
+| MicroServe API, revision 756, May 29, 2020 | Web interface: Support Files → `MicroServe_API.pdf` (`/support_files/files/MicroServe_API.pdf`, HTTP port 80) |
+| Operation notes and illustrated plate dimensions | Web interface home page (`/`, HTTP port 80) |
+| Firmware 2.7.0.756 command help | `info all` and `help` over TCP port 1000 |
+| REST command catalog | `/MicroServe/AvailableCommands`, HTTP port 9095 |
+| Commissioning instructions | `/commissioning.html`, HTTP port 80 |
 
-These links require a direct connection to the controller. The factory's API and firmware help
-define the wire commands; no vendor DLL is needed to run the driver.
+The factory's API and firmware help define the wire commands; no vendor DLL is needed to run the
+driver.
 
 ## Framing
 

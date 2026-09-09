@@ -4,8 +4,6 @@
 :maxdepth: 1
 
 lid-valet/hello-world
-micro-serve/hello-world
-micro-serve/state-machine
-micro-serve/protocol
+micro-serve/index
 sample-storage/index
 ```
