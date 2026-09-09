@@ -1,0 +1,1053 @@
+import asyncio
+import unittest
+from inspect import isabstract
+from typing import List, Optional, TypeVar, cast
+from unittest.mock import AsyncMock, patch
+
+from pylabrobot.events import EventBus, PLREvent, use_event_bus
+from pylabrobot.hettich.centrifuge import (
+  ACK,
+  ENQ,
+  EOT,
+  ETX,
+  MIKRO_220_ROBOTIC_ROTORS,
+  NAK,
+  STX,
+  HettichCentrifugeError,
+  HettichCommandError,
+  HettichCommunicationError,
+  HettichCooledRoboticCentrifuge,
+  HettichMikro220RoboticCentrifuge,
+  HettichRoboticCentrifuge,
+  HettichRotanta460RoboticCentrifuge,
+  HettichRotina380RoboticCentrifuge,
+  HettichRotina380RRoboticCentrifuge,
+)
+from pylabrobot.io.serial import Serial
+
+
+def enquiry_reply(parameter: str, value: int, address: str = "]") -> bytes:
+  body = bytes([STX]) + parameter.encode("ascii") + f"={value:04X}".encode("ascii") + bytes([ETX])
+  return bytes([ord(address)]) + body + bytes([HettichRoboticCentrifuge._bcc(body[1:])])
+
+
+HettichCentrifugeT = TypeVar("HettichCentrifugeT", bound=HettichRoboticCentrifuge)
+
+
+def make_model_device(
+  replies: List[bytes],
+  device_class: type[HettichCentrifugeT],
+  connected: bool = True,
+  **kwargs,
+) -> HettichCentrifugeT:
+  io = AsyncMock(spec=Serial)
+  io.port = "FAKE"
+  pending = list(replies)
+  rx = bytearray()
+
+  async def write(data: bytes) -> None:
+    if data != bytes([EOT]) and pending:
+      rx.extend(pending.pop(0))
+
+  async def read(num_bytes: int = 1) -> bytes:
+    output = bytes(rx[:num_bytes])
+    del rx[:num_bytes]
+    return output
+
+  io.write.side_effect = write
+  io.read.side_effect = read
+  with patch("pylabrobot.hettich.centrifuge.Serial", return_value=io):
+    device = device_class(port="FAKE", timeout=0.2, poll_interval=0, **kwargs)
+  if connected:
+    device._machine.set_connection("connected")
+  return device
+
+
+def make_device(
+  replies: List[bytes], rotor_catalog_number: Optional[str] = "2334", **kwargs
+) -> HettichMikro220RoboticCentrifuge:
+  return make_model_device(
+    replies, HettichMikro220RoboticCentrifuge, rotor_catalog_number=rotor_catalog_number, **kwargs
+  )
+
+
+def writes(device: HettichRoboticCentrifuge) -> AsyncMock:
+  return cast(AsyncMock, device.io.write)
+
+
+def telegrams(device: HettichRoboticCentrifuge) -> List[bytes]:
+  return [call.args[0] for call in writes(device).call_args_list if call.args[0] != bytes([EOT])]
+
+
+def telegram_parameters(device: HettichRoboticCentrifuge) -> List[bytes]:
+  """Return each ENQUIRY or SELECT parameter from recorded wire frames."""
+  return [frame[3:8] if frame[2] == STX else frame[2:7] for frame in telegrams(device)]
+
+
+class HettichAsyncTestCase(unittest.IsolatedAsyncioTestCase):
+  """Run mocked protocol exchanges without real communication delays."""
+
+  def setUp(self) -> None:
+    """Advance virtual time on sleeps without delaying the test suite."""
+    self.now = 0.0
+    original_sleep = asyncio.sleep
+
+    async def sleep(delay: float) -> None:
+      """Advance the clock and let concurrent callers run."""
+      self.now += delay
+      await original_sleep(0)
+
+    self.monotonic = patch("pylabrobot.hettich.centrifuge.monotonic", side_effect=lambda: self.now)
+    self.sleep = patch("pylabrobot.hettich.centrifuge.asyncio.sleep", side_effect=sleep)
+    self.monotonic.start()
+    self.sleep.start()
+    self.addCleanup(self.monotonic.stop)
+    self.addCleanup(self.sleep.stop)
+
+  def schedule_spin_states(self, device: HettichRoboticCentrifuge, times: list[float]) -> None:
+    """Schedule status replies relative to the elapsed-time query at target speed."""
+    original_write = writes(device).side_effect
+    pending = list(times)
+    timer_requested_at = None
+
+    async def write(data: bytes) -> None:
+      """Advance virtual time when a scheduled phase is observed."""
+      nonlocal timer_requested_at
+      if data == device._build_enquiry("00602"):
+        timer_requested_at = self.now
+      elif data == device._build_enquiry("00634") and timer_requested_at is not None and pending:
+        self.now = max(self.now, timer_requested_at + pending.pop(0))
+      await original_write(data)
+
+    writes(device).side_effect = write
+
+
+class HettichEnquiryTimingTests(HettichAsyncTestCase):
+  """Verify protocol timing with a virtual clock and a mocked serial transport."""
+
+  def record_transmissions(self, device: HettichRoboticCentrifuge) -> list[tuple[bytes, float]]:
+    """Record transmission times and simulate 100 ms spent receiving each reply."""
+    transmissions: list[tuple[bytes, float]] = []
+    original_write = writes(device).side_effect
+
+    async def write(data: bytes) -> None:
+      """Timestamp the telegram and its terminating EOT."""
+      if data == bytes([EOT]):
+        self.now += 0.1
+      transmissions.append((data, self.now))
+      await original_write(data)
+
+    writes(device).side_effect = write
+    return transmissions
+
+  def assert_enquiries_spaced(self, transmissions: list[tuple[bytes, float]]) -> None:
+    """Require 400 ms after the previous enquiry's completion before the next."""
+    last_end = None
+    enquiry = False
+    for frame, timestamp in transmissions:
+      if frame == bytes([EOT]):
+        if enquiry:
+          last_end = timestamp
+        enquiry = False
+      else:
+        enquiry = frame[-1] == ENQ
+        if enquiry and last_end is not None:
+          self.assertGreaterEqual(timestamp - last_end, 0.4 - 1e-9)
+
+  async def test_status_speed_and_elapsed_queries_are_spaced(self) -> None:
+    """Every query is spaced even when callers disable motion polling delays."""
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x01E8),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00604", 2000),
+        enquiry_reply("00602", 12),
+      ]
+    )
+    transmissions = self.record_transmissions(device)
+
+    await device.request_status()
+    self.assertEqual(await device.request_speed(), 2000)
+    self.assertEqual(await device.request_elapsed_time(), 12)
+
+    self.assert_enquiries_spaced(transmissions)
+
+  async def test_retries_and_fault_queries_are_spaced(self) -> None:
+    """Corrupt replies and NAK handling must respect the same enquiry interval."""
+    corrupt = bytearray(enquiry_reply("00604", 500))
+    corrupt[-1] ^= 1
+    device = make_device([bytes(corrupt), bytes([ord("]"), NAK]), enquiry_reply("00685", 0x0080)])
+    transmissions = self.record_transmissions(device)
+
+    with self.assertRaises(HettichCommandError):
+      await device.request_speed()
+
+    self.assertEqual(telegram_parameters(device), [b"00604", b"00604", b"00685"])
+    self.assert_enquiries_spaced(transmissions)
+
+  async def test_concurrent_queries_are_spaced_under_the_transaction_lock(self) -> None:
+    """Independent callers share one enquiry schedule."""
+    device = make_device([enquiry_reply("00604", 500), enquiry_reply("00602", 12)])
+    transmissions = self.record_transmissions(device)
+
+    self.assertEqual(
+      await asyncio.gather(device.request_speed(), device.request_elapsed_time()), [500, 12]
+    )
+
+    self.assert_enquiries_spaced(transmissions)
+
+  async def test_select_is_not_delayed_and_idle_time_counts_toward_spacing(self) -> None:
+    """Emergency STOP writes need no extra delay and an idle bus needs no extra sleep."""
+    device = make_device(
+      [enquiry_reply("00604", 500), bytes([ord("]"), ACK]), enquiry_reply("00604", 0)]
+    )
+    transmissions = self.record_transmissions(device)
+
+    await device.request_speed()
+    ready_at = self.now
+    await device._select_parameter("00521", 1)
+    stop_time = next(t for frame, t in transmissions if frame == device._build_select("00521", 1))
+    self.assertEqual(stop_time, ready_at)
+    self.now += 1
+    ready_at = self.now
+    await device.request_speed()
+    self.assertEqual(transmissions[-2][1], ready_at)
+
+
+class HettichFrameTests(unittest.TestCase):
+  def setUp(self) -> None:
+    self.device = make_device([], rotor_catalog_number=None)
+
+  def test_build_enquiry_matches_manual_example(self) -> None:
+    self.assertEqual(
+      self.device._build_enquiry("00604"),
+      bytes([0x04, 0x5D, 0x30, 0x30, 0x36, 0x30, 0x34, 0x05]),
+    )
+
+  def test_transaction_lock_is_created_lazily(self) -> None:
+    self.assertIsNone(self.device._transaction_lock)
+
+  def test_build_select_matches_manual_example(self) -> None:
+    self.assertEqual(
+      self.device._build_select("00603", 1500),
+      bytes(
+        [
+          0x04,
+          0x5D,
+          0x02,
+          0x30,
+          0x30,
+          0x36,
+          0x30,
+          0x33,
+          0x3D,
+          0x30,
+          0x35,
+          0x44,
+          0x43,
+          0x03,
+          0x09,
+        ]
+      ),
+    )
+
+  def test_parse_enquiry_matches_manual_example(self) -> None:
+    reply = bytes(
+      [0x5D, 0x02, 0x30, 0x30, 0x36, 0x30, 0x34, 0x3D, 0x30, 0x31, 0x46, 0x34, 0x03, 0x7F]
+    )
+    self.assertEqual(self.device._parse_enquiry_reply(reply, "00604"), 500)
+
+  def test_rejects_invalid_address_and_short_timeout(self) -> None:
+    with self.assertRaises(ValueError):
+      HettichMikro220RoboticCentrifuge(port="FAKE", address="a")
+    with self.assertRaises(ValueError):
+      HettichMikro220RoboticCentrifuge(port="FAKE", timeout=0.1)
+
+  def test_protocol_and_cooled_bases_are_abstract(self) -> None:
+    self.assertTrue(isabstract(HettichRoboticCentrifuge))
+    self.assertTrue(isabstract(HettichCooledRoboticCentrifuge))
+    self.assertFalse(isabstract(HettichMikro220RoboticCentrifuge))
+    self.assertFalse(isabstract(HettichRotanta460RoboticCentrifuge))
+    self.assertFalse(isabstract(HettichRotina380RoboticCentrifuge))
+    self.assertFalse(isabstract(HettichRotina380RRoboticCentrifuge))
+
+  def test_mikro_220_robotic_rotor_table(self) -> None:
+    self.assertEqual(set(MIKRO_220_ROBOTIC_ROTORS), {"2334", "2394"})
+    self.assertEqual(MIKRO_220_ROBOTIC_ROTORS["2334"].maximum_speed, 13_000)
+    self.assertEqual(MIKRO_220_ROBOTIC_ROTORS["2334"].maximum_rcf, 18_327)
+    self.assertEqual(MIKRO_220_ROBOTIC_ROTORS["2334"].maximum_volume, 2_000)
+    self.assertEqual(MIKRO_220_ROBOTIC_ROTORS["2394"].maximum_speed, 13_000)
+    self.assertEqual(MIKRO_220_ROBOTIC_ROTORS["2394"].maximum_rcf, 18_516)
+
+  def test_rotor_specification_converts_between_speed_and_rcf(self) -> None:
+    rotor = MIKRO_220_ROBOTIC_ROTORS["2394"]
+    self.assertEqual(rotor.rpm_to_g(13_000), 18_516)
+    self.assertEqual(rotor.rpm_to_g(6_500), 4_629)
+    self.assertEqual(rotor.g_to_rpm(18_516), 13_000)
+    self.assertEqual(rotor.g_to_rpm(4_629), 6_500)
+
+  def test_rotor_specification_rejects_values_above_limits(self) -> None:
+    rotor = MIKRO_220_ROBOTIC_ROTORS["2394"]
+    with self.assertRaisesRegex(ValueError, "13000 rpm"):
+      rotor.rpm_to_g(13_001)
+    with self.assertRaisesRegex(ValueError, "18516"):
+      rotor.g_to_rpm(18_517)
+
+  def test_device_uses_configured_rotor_specification(self) -> None:
+    device = make_device([], rotor_catalog_number="2334")
+    self.assertIs(device.rotor_specification, MIKRO_220_ROBOTIC_ROTORS["2334"])
+    self.assertEqual(device.rpm_to_g(13_000), 18_327)
+    self.assertEqual(device.g_to_rpm(18_327), 13_000)
+
+  def test_device_requires_known_rotor_for_rcf_conversion(self) -> None:
+    with self.assertRaisesRegex(ValueError, "unsupported rotor catalog"):
+      make_device([], rotor_catalog_number="unknown")
+    with self.assertRaisesRegex(HettichCentrifugeError, "rotor_catalog_number"):
+      self.device.rpm_to_g(1_000)
+
+
+class HettichProtocolTests(HettichAsyncTestCase):
+  async def test_setup_is_read_only_and_records_identity(self) -> None:
+    device = make_model_device(
+      [
+        enquiry_reply("00685", 0x0001),
+        enquiry_reply("00600", 0x1234),
+        enquiry_reply("00537", 0xC901),
+        enquiry_reply("00636", 0x0112),
+      ],
+      HettichRotanta460RoboticCentrifuge,
+      connected=False,
+    )
+    with patch("pylabrobot.hettich.centrifuge.logger.warning") as warning:
+      await device.setup()
+    self.assertEqual(device.device_type, "ROTANTA 460 R POS")
+    self.assertEqual(device.software_version, "01.12")
+    warning.assert_called_once()
+    self.assertEqual(
+      telegram_parameters(device),
+      [b"00685", b"00600", b"00537", b"00636"],
+    )
+    self.assertTrue(all(frame[-1] == ENQ for frame in telegrams(device)))
+
+  async def test_setup_recognizes_mikro_220_hardware_code(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00685", 0x0000),
+        enquiry_reply("00600", 0x1234),
+        enquiry_reply("00537", 0xE800),
+        enquiry_reply("00636", 0x0121),
+      ],
+      connected=False,
+    )
+    with patch("pylabrobot.hettich.centrifuge.logger.warning") as warning:
+      await device.setup()
+    self.assertEqual(device.device_type, "MIKRO 220 POS")
+    self.assertEqual(device.software_version, "01.21")
+    warning.assert_not_called()
+
+  async def test_setup_rejects_unknown_e8_code_without_family_fallback(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00685", 0x0000),
+        enquiry_reply("00600", 0x1234),
+        enquiry_reply("00537", 0xE8FF),
+      ],
+      connected=False,
+    )
+
+    with self.assertRaisesRegex(HettichCentrifugeError, "unknown type 0xE8FF"):
+      await device.setup()
+
+    cast(AsyncMock, device.io.stop).assert_awaited_once()
+
+  async def test_setup_rejects_a_different_known_model(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00685", 0x0000),
+        enquiry_reply("00600", 0x1234),
+        enquiry_reply("00537", 0xC901),
+      ],
+      connected=False,
+    )
+
+    with self.assertRaisesRegex(HettichCentrifugeError, "ROTANTA 460 R POS"):
+      await device.setup()
+
+    cast(AsyncMock, device.io.stop).assert_awaited_once()
+
+  async def test_temperature_is_available_on_refrigerated_model(self) -> None:
+    device = make_model_device(
+      [enquiry_reply("00619", 70)],
+      HettichRotanta460RoboticCentrifuge,
+    )
+    self.assertEqual(await device.request_temperature(), 10.0)
+
+  async def test_enquiry_retries_after_bad_checksum(self) -> None:
+    corrupt = bytearray(enquiry_reply("00604", 500))
+    corrupt[-1] ^= 0x01
+    device = make_device([bytes(corrupt), enquiry_reply("00604", 500)])
+    self.assertEqual(await device.request_speed(), 500)
+    self.assertEqual(len(telegrams(device)), 2)
+
+  async def test_enquiry_fails_after_three_timeouts(self) -> None:
+    device = make_device([b"", b"", b""])
+    with self.assertRaises(HettichCommunicationError):
+      await device.request_speed()
+    self.assertEqual(len(telegrams(device)), 3)
+
+  async def test_nak_reads_and_decodes_siof(self) -> None:
+    device = make_device(
+      [
+        bytes([ord("]"), NAK]),
+        enquiry_reply("00685", 0x0080),
+      ]
+    )
+    with self.assertRaisesRegex(HettichCommandError, "improper value or command not allowed"):
+      await device._select_parameter("00603", 0xFFFF)
+    self.assertEqual(telegram_parameters(device), [b"00603", b"00685"])
+
+  async def test_request_status_decodes_both_state_words(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x01E4),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+    status = await device.request_status()
+    self.assertEqual(status.phase, "accelerating")
+    self.assertTrue(status.status_changed)
+    self.assertTrue(status.can_start)
+    self.assertEqual(status.program_number, 1)
+    self.assertEqual(status.rotor_number, 9)
+    self.assertEqual(status.key_lock, "remote")
+    self.assertTrue(status.lid_closed)
+
+  async def test_open_hatch_is_noop_when_already_open(self) -> None:
+    device = make_device([enquiry_reply("00528", 0xA000)])
+    await device.open_hatch()
+    self.assertEqual(telegram_parameters(device), [b"00528"])
+
+  async def test_open_hatch_moves_and_waits_for_open_sensor(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00528", 0xA000),
+      ]
+    )
+
+    await device.open_hatch()
+
+    frames = telegrams(device)
+    self.assertEqual(frames[3], device._build_select("00526", 0x0060))
+
+  async def test_close_hatch_moves_and_waits_for_both_closed_sensors(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00528", 0xA000),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00528", 0x1800),
+      ]
+    )
+
+    await device.close_hatch()
+
+    frames = telegrams(device)
+    self.assertEqual(frames[3], device._build_select("00526", 0x0070))
+
+  async def test_move_to_position_requires_closed_main_lid(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00524", 0x1801),
+        enquiry_reply("00528", 0x2004),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA092),
+      ]
+    )
+
+    with self.assertRaisesRegex(HettichCentrifugeError, "main centrifuge lid"):
+      await device.move_to_position(2)
+
+    self.assertTrue(all(frame[-1] == ENQ for frame in telegrams(device)))
+
+  async def test_move_to_position_allows_closed_loading_hatch(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00524", 0x1801),
+        enquiry_reply("00528", 0x1804),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00528", 0x1803),
+        enquiry_reply("00528", 0x1806),
+      ]
+    )
+
+    await device.move_to_position(2, speed="slow")
+
+    frames = telegrams(device)
+    self.assertEqual(frames[4], device._build_select("00524", 0x1802))
+    self.assertEqual(frames[5], device._build_select("00526", 0x0001))
+    self.assertEqual(telegram_parameters(device)[-2:], [b"00528", b"00528"])
+
+  async def test_end_positioning_is_idempotent_and_can_end_active_mode(self) -> None:
+    inactive = make_device([enquiry_reply("00528", 0x1800)])
+    await inactive.end_positioning()
+    self.assertEqual(telegram_parameters(inactive), [b"00528"])
+
+    active = make_device(
+      [
+        enquiry_reply("00528", 0x1802),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00528", 0x1800),
+      ]
+    )
+    await active.end_positioning()
+    self.assertEqual(telegrams(active)[3], active._build_select("00526", 0x0080))
+
+  async def test_select_program_is_idempotent_and_selects_a_different_program(self) -> None:
+    current = make_device(
+      [
+        enquiry_reply("00634", 0x0262),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+    await current.select_program(2)
+    self.assertEqual(telegram_parameters(current), [b"00634", b"00635"])
+
+    different = make_device(
+      [
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        bytes([ord("]"), ACK]),
+      ]
+    )
+    await different.select_program(2)
+    self.assertEqual(telegrams(different)[-1], different._build_select("00523", 0x0204))
+
+  async def test_live_value_requests_use_their_protocol_parameters(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00604", 500),
+        enquiry_reply("00605", 13_000),
+        enquiry_reply("00602", 17),
+      ]
+    )
+
+    self.assertEqual(await device.request_speed(), 500)
+    self.assertEqual(await device.request_maximum_speed(), 13_000)
+    self.assertEqual(await device.request_elapsed_time(), 17)
+    self.assertEqual(telegram_parameters(device), [b"00604", b"00605", b"00602"])
+
+  async def test_private_start_spin_checks_state_and_sets_parameters(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+      ]
+    )
+    await device._start_spin(run_time=30, speed=2000)
+    frames = telegrams(device)
+    self.assertEqual(
+      telegram_parameters(device),
+      [b"00634", b"00635", b"00528", b"00605", b"00601", b"00603", b"00522", b"00521"],
+    )
+    self.assertEqual(frames[-4], device._build_select("00601", 30))
+    self.assertEqual(frames[-3], device._build_select("00603", 2000))
+    self.assertEqual(frames[-2], device._build_select("00522", 1))
+    self.assertEqual(frames[-1], device._build_select("00521", 2))
+
+  async def test_private_start_spin_rejects_speed_above_rotor_limit(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+      ]
+    )
+    with self.assertRaisesRegex(ValueError, "5000 rpm"):
+      await device._start_spin(run_time=30, speed=5001)
+    self.assertNotIn(b"00521", telegram_parameters(device))
+
+  async def test_private_start_spin_rejects_non_remote_key_position(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA293),
+      ]
+    )
+    with self.assertRaisesRegex(HettichCentrifugeError, "LOCK 2"):
+      await device._start_spin(run_time=30, speed=500)
+    self.assertNotIn(b"00521", telegram_parameters(device))
+
+  async def test_private_start_spin_ends_positioning_before_start(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1802),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00605", 5000),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+      ]
+    )
+    await device._start_spin(run_time=30, speed=2000)
+    parameters = telegram_parameters(device)
+    self.assertLess(parameters.index(b"00526"), parameters.index(b"00521"))
+    self.assertEqual(parameters.count(b"00634"), 2)
+
+  async def test_private_wait_for_standstill_observes_motion_before_returning(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00634", 0x01E4),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+    status = await device._wait_for_standstill(timeout=1, motion_observed=False)
+    self.assertEqual(status.phase, "standstill")
+    self.assertEqual(telegram_parameters(device).count(b"00634"), 3)
+
+  async def test_spin_counts_duration_from_target_speed(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00634", 0x01E4),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00604", 2100),
+        enquiry_reply("00634", 0x01E8),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00604", 2000),
+        enquiry_reply("00602", 12),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00634", 0x01F0),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+
+    self.schedule_spin_states(device, [30, 40])
+    await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
+
+    frames = telegrams(device)
+    run_time_frames = [
+      frame for frame in frames if (frame[3:8] if frame[2] == STX else frame[2:7]) == b"00601"
+    ]
+    self.assertEqual(
+      run_time_frames,
+      [device._build_select("00601", 60), device._build_select("00601", 42)],
+    )
+    self.assertEqual(telegram_parameters(device).count(b"00522"), 2)
+
+  async def test_spin_rejects_impossible_target_duration_before_motion(self) -> None:
+    device = make_device([enquiry_reply("00614", 30)])
+
+    with self.assertRaisesRegex(ValueError, "59969 seconds"):
+      await device.spin(g=device.rpm_to_g(2_000), duration=59_970)
+
+    self.assertEqual(telegram_parameters(device), [b"00614"])
+    self.assertNotIn(b"00521", telegram_parameters(device))
+
+  async def test_spin_stops_after_lost_start_acknowledgements(self) -> None:
+    """A lost START reply must not leave a potentially running rotor unattended."""
+    ack = bytes([ord("]"), ACK])
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+        ack,
+        ack,
+        ack,
+        b"",
+        b"",
+        b"",
+        enquiry_reply("00634", 0x01E4),
+        enquiry_reply("00635", 0xA292),
+        ack,
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+
+    with self.assertRaisesRegex(HettichCommunicationError, "SELECT 00521 failed"):
+      await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
+
+    self.assertEqual(telegrams(device).count(device._build_select("00521", 2)), 3)
+    self.assertIn(device._build_select("00521", 1), telegrams(device))
+    self.assertEqual(telegram_parameters(device)[-2:], [b"00634", b"00635"])
+
+  async def test_spin_stops_when_cancelled_while_awaiting_start_reply(self) -> None:
+    """Cancellation during START must stop the rotor and still propagate cancellation."""
+    ack = bytes([ord("]"), ACK])
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+        ack,
+        ack,
+        ack,
+        ack,
+        enquiry_reply("00634", 0x01E4),
+        enquiry_reply("00635", 0xA292),
+        ack,
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+    start_sent = asyncio.Event()
+    original_read = cast(AsyncMock, device.io.read).side_effect
+
+    async def read(num_bytes: int = 1) -> bytes:
+      """Suspend delivery of the START reply until the spin task is cancelled."""
+      reply = cast(bytes, await original_read(num_bytes))
+      if telegrams(device)[-1] == device._build_select("00521", 2):
+        start_sent.set()
+        await asyncio.Event().wait()
+      return reply
+
+    cast(AsyncMock, device.io.read).side_effect = read
+    task = asyncio.create_task(device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60))
+    await asyncio.wait_for(start_sent.wait(), timeout=1)
+    task.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await task
+
+    self.assertIn(device._build_select("00521", 1), telegrams(device))
+    self.assertEqual(telegram_parameters(device)[-2:], [b"00634", b"00635"])
+
+  async def test_spin_preflight_failure_does_not_stop_an_existing_run(self) -> None:
+    """Rejecting an already running machine must not interrupt its existing cycle."""
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x01E8),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+    with self.assertRaisesRegex(HettichCentrifugeError, "standstill"):
+      await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
+
+    self.assertEqual(telegram_parameters(device), [b"00614", b"00634", b"00635"])
+
+  async def test_stop_spin_is_noop_at_standstill(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+    await device.stop_spin()
+    self.assertNotIn(b"00521", telegram_parameters(device))
+
+  async def test_stop_spin_sends_emergency_stop_and_waits_for_standstill(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00634", 0x01E8),
+        enquiry_reply("00635", 0xA292),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ]
+    )
+
+    await device.stop_spin(timeout=1)
+
+    self.assertEqual(telegrams(device)[2], device._build_select("00521", 0x0001))
+
+
+class HettichSpinCompletionTests(HettichAsyncTestCase):
+  """Distinguish completed timed runs from early stops without operating hardware."""
+
+  async def check_cycle(self, phases: list[tuple[int, float]], interrupted: bool) -> None:
+    """Run a complete mocked spin and check its result and lifecycle events."""
+    ack = bytes([ord("]"), ACK])
+    replies = [
+      enquiry_reply("00614", 30),
+      enquiry_reply("00634", 0x0162),
+      enquiry_reply("00635", 0xA292),
+      enquiry_reply("00528", 0x1800),
+      enquiry_reply("00605", 5000),
+      ack,
+      ack,
+      ack,
+      ack,
+      enquiry_reply("00634", 0x01E8),
+      enquiry_reply("00635", 0xA292),
+      enquiry_reply("00604", 2000),
+      enquiry_reply("00602", 12),
+      ack,
+      ack,
+    ]
+    for phase, _ in phases:
+      replies.extend([enquiry_reply("00634", phase), enquiry_reply("00635", 0xA292)])
+    # Failure cleanup verifies that the rotor is already stopped.
+    replies.extend([enquiry_reply("00634", 0x01E2), enquiry_reply("00635", 0xA292)])
+    device = make_device(replies)
+    self.schedule_spin_states(device, [when for _, when in phases])
+    events: list[PLREvent] = []
+    bus = EventBus()
+    bus.subscribe(events.append)
+
+    with use_event_bus(bus):
+      if interrupted:
+        with self.assertRaisesRegex(HettichCentrifugeError, "interrupted"):
+          await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
+      else:
+        await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
+
+    terminal = "failed" if interrupted else "completed"
+    self.assertEqual(
+      [event.name for event in events], ["centrifuge.spin.started", f"centrifuge.spin.{terminal}"]
+    )
+    self.assertNotIn(device._build_select("00521", 1), telegrams(device))
+    self.assertEqual(
+      telegram_parameters(device).count(b"00634"), 2 + len(phases) + int(interrupted)
+    )
+    self.assertGreaterEqual(self.now, phases[-1][1])
+
+  async def test_early_braking_stays_interrupted_after_a_long_run_down(self) -> None:
+    """Braking time cannot satisfy the requested time at speed."""
+    await self.check_cycle([(0x01F0, 5), (0x01F0, 35), (0x01E2, 40)], interrupted=True)
+
+  async def test_early_standstill_is_interrupted_when_braking_was_not_polled(self) -> None:
+    """A short run-down between polls must also report interruption."""
+    await self.check_cycle([(0x01E2, 5)], interrupted=True)
+
+  async def test_complete_cycle_succeeds_with_delayed_polling(self) -> None:
+    """Observing braking after the programmed end remains a successful cycle."""
+    await self.check_cycle([(0x01E8, 20), (0x01F0, 32), (0x01E2, 40)], interrupted=False)
+
+  async def test_timer_rounding_near_the_requested_end_is_allowed(self) -> None:
+    """A subsecond difference due to the integer device timer is not an interruption."""
+    await self.check_cycle([(0x01F0, 29.1), (0x01E2, 40)], interrupted=False)
+
+
+class HettichForceTests(HettichAsyncTestCase):
+  """Verify force-based spin requests against the RPM sent to the controller."""
+
+  async def test_spin_converts_force_and_preserves_requested_event_value(self) -> None:
+    """Catalog and live-limit conversions both keep the requested RCF in events."""
+    for catalog, g, rpm in (("2394", 4629.25, 6500), (None, 500.0, 2500)):
+      with self.subTest(catalog=catalog):
+        replies = [enquiry_reply("00614", 30)]
+        if catalog is None:
+          replies.extend([enquiry_reply("00605", 5000), enquiry_reply("00608", 2000)])
+        replies.extend(
+          [
+            enquiry_reply("00634", 0x0162),
+            enquiry_reply("00635", 0xA292),
+            enquiry_reply("00528", 0x1800),
+            enquiry_reply("00605", 13000 if catalog is not None else 5000),
+            b"]\x06",
+            b"]\x06",
+            b"]\x06",
+            b"]\x06",
+            enquiry_reply("00634", 0x01E8),
+            enquiry_reply("00635", 0xA292),
+            enquiry_reply("00604", rpm),
+            enquiry_reply("00602", 12),
+            b"]\x06",
+            b"]\x06",
+            enquiry_reply("00634", 0x01F0),
+            enquiry_reply("00635", 0xA292),
+            enquiry_reply("00634", 0x01E2),
+            enquiry_reply("00635", 0xA292),
+          ]
+        )
+        device = make_device(replies, rotor_catalog_number=catalog)
+        self.schedule_spin_states(device, [30, 40])
+        events: list[PLREvent] = []
+        bus = EventBus()
+        bus.subscribe(events.append)
+        with use_event_bus(bus):
+          await device.spin(g=g, duration=30, timeout=60)
+
+        self.assertIn(device._build_select("00603", rpm), telegrams(device))
+        self.assertEqual(
+          [event.name for event in events], ["centrifuge.spin.started", "centrifuge.spin.completed"]
+        )
+        self.assertEqual(events[0].data["relative_centrifugal_force"], g)
+        self.assertNotIn("speed_rpm", events[0].data)
+        self.assertFalse(device.state.recovery_required)
+
+  async def test_spin_rejects_invalid_force_without_communicating(self) -> None:
+    """Nonpositive and nonfinite RCF cannot cause device changes."""
+    for g in (0, -1, float("nan"), float("inf"), -float("inf")):
+      with self.subTest(g=g):
+        device = make_device([])
+        with self.assertRaisesRegex(ValueError, "finite, positive"):
+          await device.spin(g=g, duration=30)
+        self.assertEqual(telegrams(device), [])
+        self.assertFalse(device.state.recovery_required)
+
+  async def test_spin_checks_catalog_force_limits_before_actuation(self) -> None:
+    """Excessive force and force below the minimum RPM are rejected without SELECT."""
+    for g in (18516.1, 0.0001):
+      with self.subTest(g=g):
+        device = make_device([enquiry_reply("00614", 30)], rotor_catalog_number="2394")
+        with self.assertRaises(ValueError):
+          await device.spin(g=g, duration=30, timeout=60)
+        self.assertEqual(telegram_parameters(device), [b"00614"])
+        self.assertFalse(device.state.recovery_required)
+
+  async def test_spin_checks_live_force_limits_without_a_catalog(self) -> None:
+    """Models without a catalog must still enforce the controller's RCF limit."""
+    device = make_model_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00605", 5000),
+        enquiry_reply("00608", 2000),
+      ],
+      HettichRotanta460RoboticCentrifuge,
+    )
+    with self.assertRaisesRegex(ValueError, "2000 × g"):
+      await device.spin(g=2001, duration=30, timeout=60)
+    self.assertTrue(all(frame[-1] == ENQ for frame in telegrams(device)))
+
+  async def test_spin_rejects_invalid_live_conversion_limits(self) -> None:
+    """A zero RCF limit cannot be used to derive an RPM."""
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00605", 5000),
+        enquiry_reply("00608", 0),
+      ],
+      rotor_catalog_number=None,
+    )
+    with self.assertRaisesRegex(HettichCentrifugeError, "invalid rotor limits"):
+      await device.spin(g=500, duration=30, timeout=60)
+    self.assertTrue(all(frame[-1] == ENQ for frame in telegrams(device)))
+
+  async def test_catalog_conversion_still_checks_the_live_speed_limit(self) -> None:
+    """A configured catalog does not override the installed rotor's speed limit."""
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+      ],
+      rotor_catalog_number="2394",
+    )
+    with self.assertRaisesRegex(ValueError, "5000 rpm"):
+      await device.spin(g=4629, duration=30, timeout=60)
+    self.assertTrue(all(frame[-1] == ENQ for frame in telegrams(device)))
+
+
+class HettichEventTests(HettichAsyncTestCase):
+  async def test_spin_uses_vspin_event_name_and_field_conventions(self) -> None:
+    device = make_device(
+      [
+        enquiry_reply("00614", 30),
+        enquiry_reply("00634", 0x0162),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00528", 0x1800),
+        enquiry_reply("00605", 5000),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00634", 0x01E8),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00604", 2000),
+        enquiry_reply("00602", 12),
+        bytes([ord("]"), ACK]),
+        bytes([ord("]"), ACK]),
+        enquiry_reply("00634", 0x01F0),
+        enquiry_reply("00635", 0xA292),
+        enquiry_reply("00634", 0x01E2),
+        enquiry_reply("00635", 0xA292),
+      ],
+      name="hettich_centrifuge",
+      rotor_catalog_number="2334",
+    )
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    self.schedule_spin_states(device, [30, 40])
+    with use_event_bus(event_bus):
+      await device.spin(g=device.rpm_to_g(2000), duration=30, timeout=60)
+
+    self.assertEqual(
+      [event.name for event in events],
+      ["centrifuge.spin.started", "centrifuge.spin.completed"],
+    )
+    started, completed = events
+    self.assertEqual(started.context["operation_id"], completed.context["operation_id"])
+    self.assertEqual(started.data["device"]["name"], "hettich_centrifuge")
+    self.assertEqual(started.data["resources"], [])
+    self.assertEqual(started.data["bucket_resources"], [])
+    self.assertNotIn("speed_rpm", started.data)
+    self.assertEqual(started.data["duration"], 30)
+    self.assertAlmostEqual(
+      cast(float, started.data["relative_centrifugal_force"]),
+      device.rpm_to_g(2000),
+    )
+    self.assertNotIn("speed", started.data)
+    self.assertNotIn("duration_seconds", started.data)
+
+  async def test_spin_failure_emits_requested_parameters(self) -> None:
+    device = make_device([], name="hettich_centrifuge")
+    events: list[PLREvent] = []
+    event_bus = EventBus()
+    event_bus.subscribe(events.append)
+
+    with use_event_bus(event_bus):
+      with self.assertRaisesRegex(ValueError, "duration"):
+        await device.spin(g=device.rpm_to_g(2000), duration=0)
+
+    self.assertEqual(
+      [event.name for event in events],
+      ["centrifuge.spin.started", "centrifuge.spin.failed"],
+    )
+    started, failed = events
+    self.assertEqual(started.context["operation_id"], failed.context["operation_id"])
+    self.assertNotIn("speed_rpm", started.data)
+    self.assertEqual(started.data["duration"], 0)
+    self.assertEqual(started.data["relative_centrifugal_force"], device.rpm_to_g(2000))
+    self.assertEqual(failed.data["error_type"], "ValueError")
+
+
+if __name__ == "__main__":
+  unittest.main()

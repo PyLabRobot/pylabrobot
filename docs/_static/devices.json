@@ -527,16 +527,26 @@
     "oem": "https://www.hamiltoncompany.com/microlab-vantage"
   },
   {
-    "id": "hettich-rotanta-460",
+    "id": "hettich-robotic-centrifuges",
     "vendor": "Hettich",
-    "name": "ROTANTA 460 Robotic",
+    "name": "Robotic centrifuges",
+    "models": [
+      {"name": "MIKRO 220 Robotic", "status": "full"},
+      {"name": "ROTANTA 460 Robotic", "status": "wip"},
+      {"name": "ROTINA 380 Robotic", "status": "wip"},
+      {"name": "ROTINA 380 R Robotic", "status": "wip"}
+    ],
     "kind": "centrifuge",
     "capabilities": [
       "centrifuging"
     ],
     "status": "wip",
+    "api": "pylabrobot.hettich.HettichRoboticCentrifuge",
+    "api_version": "v1",
+    "code_slug": "hettich/centrifuge",
+    "doc_slug": "hettich/mikro-220/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.hettichlab.com/products/centrifuges/automated-centrifuges/rotanta-460-robotic/"
+    "notes": "Only MIKRO 220 Robotic has been hardware-validated with this driver. ROTANTA 460 Robotic, ROTINA 380 Robotic, and ROTINA 380 R Robotic have model-specific protocol configurations but have not been verified on hardware."
   },
   {
     "id": "hettich-sbs-300r",
