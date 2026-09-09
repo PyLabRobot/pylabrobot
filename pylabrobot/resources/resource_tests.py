@@ -4,7 +4,7 @@ import re
 import unittest
 import unittest.mock
 from collections import OrderedDict
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from pylabrobot.legacy.centrifuge.centrifuge import Centrifuge, Loader
 from pylabrobot.legacy.centrifuge.chatterbox import (
@@ -24,6 +24,7 @@ from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip import Tip
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 
 def _make_test_deck() -> Deck:
@@ -378,6 +379,64 @@ class TestResource(unittest.TestCase):
     self.assertAlmostEqual(r.get_absolute_size_x(), 200)
     self.assertAlmostEqual(r.get_absolute_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(20, 10, 10))
+
+  def test_absolute_location_through_a_rotated_chain(self):
+    parent = Resource("parent", size_x=200, size_y=100, size_z=100, rotation=Rotation(z=90))
+    parent.location = Coordinate(10, 20, 0)
+    child = Resource("child", size_x=20, size_y=20, size_z=20, rotation=Rotation(z=90))
+    parent.assign_child_resource(child, location=Coordinate(30, 0, 0))
+    grandchild = Resource("grandchild", size_x=10, size_y=10, size_z=10)
+    child.assign_child_resource(grandchild, location=Coordinate(5, 0, 0))
+
+    # Each level turns what it carries, so the child's 30 mm along its parent's x lands 30 mm
+    # along the deck's y, and the grandchild's 5 mm comes back on itself through two turns.
+    self.assertEqual(parent.get_absolute_location(), Coordinate(10, 20, 0))
+    self.assertEqual(child.get_absolute_location(), Coordinate(10, 50, 0))
+    self.assertEqual(grandchild.get_absolute_location(), Coordinate(5, 50, 0))
+    self.assertEqual(grandchild.get_absolute_location(x="c", y="c", z="c"), Coordinate(0, 45, 5))
+    self.assertEqual(grandchild.get_absolute_location(x="r", y="b", z="t"), Coordinate(-5, 40, 10))
+
+  def test_absolute_location_matches_level_by_level_composition(self):
+    """Walking the chain must give what composing one level at a time gives."""
+
+    def level_by_level(resource: Resource, x="l", y="f", z="b") -> Coordinate:
+      turned_anchor = Coordinate(
+        *matrix_vector_multiply_3x3(
+          resource.get_absolute_rotation().get_rotation_matrix(),
+          resource.get_anchor(x=x, y=y, z=z).vector(),
+        )
+      )
+      here = cast(Coordinate, resource.location)
+      parent = resource.parent
+      if parent is None or parent.location is None:
+        return here + turned_anchor
+      turned_location = Coordinate(
+        *matrix_vector_multiply_3x3(
+          parent.get_absolute_rotation().get_rotation_matrix(), here.vector()
+        )
+      )
+      return level_by_level(parent) + turned_location + turned_anchor
+
+    for angles in ((0, 0, 0), (0, 0, 90), (0, 0, 37.5), (0, 0, 270)):
+      for hangs_from_a_placeless_parent in (False, True):
+        with self.subTest(angles=angles, hung=hangs_from_a_placeless_parent):
+          top = Resource("top", size_x=200, size_y=100, size_z=100, rotation=Rotation(*angles))
+          top.location = Coordinate(11, 22, 33)
+          if hangs_from_a_placeless_parent:
+            # A resource whose parent carries no location is where the walk stops, but the
+            # rotation still comes from above it.
+            placeless = Resource("placeless", size_x=1, size_y=1, size_z=1, rotation=Rotation(z=90))
+            top.parent = placeless
+            placeless.children.append(top)
+          node = top
+          for level in range(3):
+            child = Resource(
+              f"level_{level}", size_x=20, size_y=10, size_z=5, rotation=Rotation(*angles)
+            )
+            node.assign_child_resource(child, location=Coordinate(7, -3, 2))
+            node = child
+          for anchors in (("l", "f", "b"), ("c", "c", "c"), ("r", "b", "t")):
+            self.assertEqual(node.get_absolute_location(*anchors), level_by_level(node, *anchors))
 
 
 class TestResourceCallback(unittest.TestCase):
