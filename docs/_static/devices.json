@@ -584,6 +584,21 @@
     "oem": "https://www.highres.com/lab-instruments/lid-management"
   },
   {
+    "id": "highres-microserve",
+    "vendor": "HighRes Biosolutions",
+    "name": "MicroServe",
+    "kind": "storage",
+    "capabilities": [
+      "storage"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.high_res.HighResMicroServe",
+    "api_version": "v1",
+    "code_slug": "high_res/micro_serve",
+    "doc_slug": "high_res/micro-serve/hello-world",
+    "notes": "Homing, carousel, and empty load/retract verified on firmware 2.7.0.756; plate transfers and barcode scans unverified."
+  },
+  {
     "id": "highres-microspin",
     "vendor": "HighRes Biosolutions",
     "name": "MicroSpin",
