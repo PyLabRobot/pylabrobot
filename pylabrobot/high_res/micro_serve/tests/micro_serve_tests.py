@@ -481,9 +481,10 @@ class MicroServeTests(unittest.IsolatedAsyncioTestCase):
     self.io.add("setstackerdimensions 0 11000 10000 10000")
     self.io.add("dimstatus", *DIMENSIONS)
     self.io.add("readbarcodestacker 0", '0: "EXAMPLE"')
+    self.io.add("status", status())
     result = await self.driver.stackers[0].scan_barcodes(GEOMETRY)
     self.assertEqual(result, ('0: "EXAMPLE"',))
-    self.assertGreater(self.io.read_timeouts[-1], 290)
+    self.assertGreater(max(self.io.read_timeouts), 290)
 
 
 class MicroServeCaptureTests(unittest.IsolatedAsyncioTestCase):

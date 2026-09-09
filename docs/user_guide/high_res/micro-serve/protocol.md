@@ -1,6 +1,8 @@
 # MicroServe protocol and validation
 
 See the [state machine](state-machine.md) for connection, plate-handoff, and recovery diagrams.
+The [capability audit](capabilities.md) covers every advertised TCP command and remaining
+maintenance gaps; the [hardware procedure](validation.md) describes pending supervised tests.
 
 The implementation follows documentation served by the MicroServe itself. To consult these sources,
 connect to the controller as described in the [hello-world guide](hello-world.ipynb), then open its
@@ -77,7 +79,7 @@ the order plate height, stack pitch, plate thickness. Height includes the lid wh
 Cached counts do not measure the physical stack. `countplates`, `measurestacker`, and barcode scans
 perform motion and must not be included in a read-only verification run.
 
-The public API does not expose relative jogs, toggles, calibration changes, or arbitrary commands.
+The public API does not expose relative jogs, toggles, arbitrary settings changes, or arbitrary commands.
 The firmware also advertises maintenance operations; listing them does not establish a validated
 physical sequence or calibrated travel limits for the Python driver.
 
@@ -116,6 +118,20 @@ operator has inspected the machine and the robot is clear.
 Only this driver should control the MicroServe during a handoff. Command IDs reset on controller
 restart. Reconnecting does not home, clear an abort, or infer success from the beam signal.
 
+Measurements and barcode scans verify homed, idle, ready-mode status after completion. They do
+not promise a retracted loader: `measurestacker` leaves it extended on the tested firmware.
+Inspect the result and explicitly retract before another stacker operation. Failed or interrupted
+measurements and scans retain `unresolved_operation`, which survives reconnection and blocks new
+motion until inspected retraction. Read-only diagnostics remain available.
+
+`enter_manual_mode()` requires a clear, retracted loader and verifies the manual transition before returning.
+On firmware that leaves mode Ready stale, this means an acknowledged manual command followed by
+unhomed, unselected, idle, retracted status. That owned transition makes repeated requests idempotent.
+`home()` returns from manual access. `clear_abort()` clears the abort latch and checks status;
+`recover_from_estop()` invokes firmware recovery only when the machine is not already homed and
+ready. Recovery can move axes and never resolves an uncertain plate handoff by itself. Physical
+fault transitions and their mode spellings still require validation.
+
 The controller exposes axis jogs, but its documentation does not specify the complete sensor-driven
 transfer sequence needed to reconstruct load/unload from those jogs. The driver uses the documented
 load/unload operations for that sequence, while managing geometry, command ownership, state checks,
@@ -138,3 +154,18 @@ timeout, cancellation, reply mismatch, unresolved preparation, and sensor disagr
 warns about these limits. Empty-machine tests do not establish pickup height with a plate, gripper
 clearance, plate compatibility, or E-stop recovery. Those need a separate physical validation with
 known plates and robot clearance.
+
+On September 9, 2026, measurements of stackers 0–4 returned 0.059–0.086 mm and a user-loaded
+single plate was located in stacker 5 with a 13.629 mm measurement. Measurements left the loader
+extended; explicit retraction was verified between stackers. These readings were not compared
+with an independent dimensional measurement.
+
+A barcode scan with the saved 11/10/10 mm geometry failed with `Invalid plate count, check plate
+dimensions`. The driver retained an unresolved operation and the diagnostic reply. That capture
+verifies error handling, not successful barcode support. No transfer geometry was inferred from
+this failure.
+
+Manual access, repeated manual requests, return to homed/ready operation, and laser on/on/off
+command exchanges were also captured. No additional errors appeared and plate geometry remained
+unchanged. There is no laser-state readback, so the command capture does not independently verify
+optical output.

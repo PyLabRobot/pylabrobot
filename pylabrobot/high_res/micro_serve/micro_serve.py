@@ -119,7 +119,7 @@ class MicroServeMotorInfo:
 class MicroServeUnresolvedPreparation:
   """A load/unload whose completion or final position could not be confirmed."""
 
-  direction: Literal["load", "unload"]
+  direction: Literal["load", "unload", "unloadangle"]
   stacker: int
   command_id: Optional[int]
 
@@ -169,9 +169,11 @@ class HighResMicroServe:
   be repeated until its result is reconciled or the handoff explicitly ended
   by retraction. The plate-detection beam is not used to infer occupancy.
 
-  Communication, homing, all carousel positions, and empty receiving-position
-  preparation/retraction were checked on firmware 2.7.0.756. Transfers with
-  plates, barcode scanning, and physical fault recovery remain unverified.
+  Communication, homing, all carousel positions, empty receiving-position
+  preparation/retraction, stack-height measurement, manual access, and laser
+  command exchanges were checked on firmware 2.7.0.756. Transfers with plates,
+  counting, plate-dimension calculation, successful barcode scanning, and
+  physical fault recovery remain unverified.
   """
 
   def __init__(
@@ -201,6 +203,8 @@ class HighResMicroServe:
     self._last_command_id: Optional[int] = None
     self._prepared: Optional[Tuple[str, int]] = None
     self._unresolved_preparation: Optional[MicroServeUnresolvedPreparation] = None
+    self._unresolved_operation: Optional[str] = None
+    self._manual_mode = False
     self.stackers = tuple(MicroServeStacker(self, index) for index in range(14))
 
   @property
@@ -212,6 +216,11 @@ class HighResMicroServe:
   def unresolved_preparation(self) -> Optional[MicroServeUnresolvedPreparation]:
     """The load/unload that requires reconciliation before another preparation."""
     return self._unresolved_preparation
+
+  @property
+  def unresolved_operation(self) -> Optional[str]:
+    """Measurement or barcode command requiring inspection and explicit retraction."""
+    return self._unresolved_operation
 
   async def setup(self) -> None:
     """Connect without homing, clearing faults, or changing settings."""
@@ -226,8 +235,8 @@ class HighResMicroServe:
       self._connected = True
       logger.info("Connected to MicroServe")
       logger.warning(
-        "MicroServe transfers with plates, barcode scanning, and physical fault recovery "
-        "are unverified; validate before use"
+        "MicroServe transfers with plates, counting, plate-dimension calculation, successful "
+        "barcode scanning, and physical fault recovery are unverified; validate before use"
       )
 
   async def stop(self) -> None:
@@ -239,6 +248,7 @@ class HighResMicroServe:
     """Invalidate the session and close its transport."""
     self._connected = False
     self._prepared = None
+    self._manual_mode = False
     await self.io.stop()
 
   async def _command(self, command: str, timeout: Optional[float] = None) -> Tuple[str, ...]:
@@ -310,6 +320,51 @@ class HighResMicroServe:
     """Read homing, carousel, loader, and sensor state without motion."""
     async with self._lock:
       return await self._status()
+
+  async def request_variable_status(self) -> str:
+    """Read the compact firmware state report, which omits sensors and positions."""
+    async with self._lock:
+      return "\n".join(await self._command("varstatus"))
+
+  async def request_limits(self) -> str:
+    """Read the firmware's native axis-limit report for diagnostics.
+
+    Firmware 2.7.0.756 returns implausible values in this report. Do not use it
+    to establish permissible travel or convert its values into physical units.
+    """
+    async with self._lock:
+      return "\n".join(await self._command("limits"))
+
+  async def request_plate_angle(self) -> str:
+    """Read the last computed plate angle as text; firmware does not document its unit.
+
+    This is a cached measurement, not a live measurement of the current plate.
+    """
+    async with self._lock:
+      return "\n".join(await self._command("getangle"))
+
+  async def request_home_offset(self, address: int) -> str:
+    """Read a motor controller's native home-offset report without moving it.
+
+    ``address`` is a Copley address (0–3), not a ``homesel`` axis number.
+    The report retains the firmware's motor label and undocumented native unit.
+    """
+    if isinstance(address, bool) or not isinstance(address, int) or not 0 <= address <= 3:
+      raise ValueError("address must be an integer from 0 through 3")
+    async with self._lock:
+      return "\n".join(await self._command(f"queryhomeoffset {address}"))
+
+  async def request_command_help(self, command: str) -> Tuple[str, ...]:
+    """Read firmware help for a command name without executing that command."""
+    if re.fullmatch(r"[a-zA-Z]+", command) is None:
+      raise ValueError("command must contain only ASCII letters")
+    async with self._lock:
+      return await self._command(f"help {command}")
+
+  async def request_command_catalog(self) -> Tuple[str, ...]:
+    """Read user and maintenance command descriptions directly from firmware."""
+    async with self._lock:
+      return await self._command("info all")
 
   async def request_version(self) -> str:
     """Return the human-readable controller identification report."""
@@ -446,6 +501,122 @@ class HighResMicroServe:
     async with self._lock:
       return await self._dimensions()
 
+  async def set_barcode_laser(self, enabled: bool) -> None:
+    """Set the barcode laser on or off without moving its axis.
+
+    The controller acknowledges the requested state but exposes no laser-state
+    readback. Observe the scanner to verify it; do not look into its beam.
+    """
+    if not isinstance(enabled, bool):
+      raise ValueError("enabled must be a boolean")
+    async with self._lock:
+      self._require_idle(await self._status(), homed=False)
+      logger.info("Setting MicroServe barcode laser %s", "on" if enabled else "off")
+      await self._command(f"laser {'on' if enabled else 'off'}")
+
+  async def enter_manual_mode(self) -> None:
+    """Retract the axes and release the carousel for manual access.
+
+    Finish any robot handoff and retract the loader first. Keep the robot clear.
+    Call ``home()`` to return to automatic operation after manual access.
+    Firmware can retain mode Ready after manual access. In that case an
+    acknowledged manual command plus unhomed/unselected status establishes
+    ownership; an arbitrary unhomed machine is not assumed to be released.
+    """
+    async with self._lock:
+      self._require_resolved_preparation()
+      status = await self._status()
+      if status.busy or status.mode not in ("ready", "manual"):
+        raise RuntimeError(f"MicroServe cannot enter manual mode: {status.raw}")
+      if not status.loader_retracted or status.plate_sensor_blocked:
+        raise RuntimeError("Clear the transfer position and retract before manual access")
+      if status.mode == "manual" or (
+        self._manual_mode and not status.homed and status.stacker is None
+      ):
+        return
+      logger.info("Releasing MicroServe carousel for manual access")
+      self._manual_mode = False
+      await self._command("manual")
+      status = await self._status()
+      manual_state = status.mode == "manual" or (
+        status.mode == "ready" and not status.homed and status.stacker is None
+      )
+      if status.busy or not manual_state or not status.loader_retracted:
+        raise RuntimeError(f"Manual mode was not confirmed: {status.raw}")
+      self._prepared = None
+      self._manual_mode = True
+
+  async def clear_abort(self) -> None:
+    """Clear the firmware abort latch after the operator resolves its cause.
+
+    This does not home or reconcile an interrupted handoff. It can enable later
+    motion, so inspect the machine and clear the robot before calling it.
+    """
+    async with self._lock:
+      status = await self._status()
+      if status.busy:
+        raise RuntimeError("Wait for the running command before clearing an abort")
+      logger.info("Clearing MicroServe abort latch")
+      await self._command("clearabort")
+      status = await self._status()
+      if status.busy or status.mode not in ("ready", "manual"):
+        raise RuntimeError(f"Abort clearance was not confirmed: {status.raw}")
+
+  async def recover_from_estop(self) -> None:
+    """Run firmware E-stop recovery after inspection and release of the E-stop.
+
+    Recovery can move hardware. Check plate support and robot clearance first.
+    A homed, idle, ready machine needs no recovery. An unresolved handoff stays
+    unresolved; inspect and retract it explicitly before another preparation.
+    """
+    async with self._lock:
+      status = await self._status()
+      if status.busy:
+        raise RuntimeError("Wait for firmware recovery or the running command to finish")
+      if status.mode == "ready" and status.homed:
+        return
+      if status.mode in ("ready", "manual"):
+        raise RuntimeError("Use home() to leave manual mode or home an unhomed machine")
+      logger.info("Recovering MicroServe from E-stop")
+      self._prepared = None
+      await self._command("estoprecover")
+      self._require_idle(await self._status())
+
+  async def calculate_plate_dimensions(self, count: int) -> MicroServePlateDimensions:
+    """Measure plate geometry using the manufacturer's four-stacker procedure.
+
+    Firmware instructions specify stacker 1 empty, one upside-down plate in
+    stacker 2, one upright plate in stacker 3, and ``count`` plates (at least
+    three) in stacker 4. Confirm this arrangement and clear the robot first.
+    This moves the carousel and loader. Returned dimensions are in millimeters;
+    inspect them before supplying them to a transfer or barcode operation.
+    """
+    self._validate_count(count, "count")
+    if count < 3:
+      raise ValueError("count must be at least three")
+    async with self._lock:
+      self._require_resolved_preparation()
+      status = await self._status()
+      self._require_idle(status)
+      if not status.loader_retracted or status.plate_sensor_blocked:
+        raise RuntimeError("Clear the transfer position and retract before measuring dimensions")
+      logger.info("Measuring MicroServe plate dimensions with %d stacked plates", count)
+      lines = await self._measurement(f"calculateplatedimensions {count}")
+      values = {}
+      for line in lines:
+        match = re.fullmatch(r"(Plate Height|Plate Thickness|Stack Height):\s*(\d+)", line.strip())
+        if match is not None:
+          if match[1] in values:
+            raise MicroServeProtocolError(f"Duplicate dimension in measurement: {lines!r}")
+          values[match[1]] = int(match[2]) / 1000
+      if set(values) != {"Plate Height", "Plate Thickness", "Stack Height"}:
+        raise MicroServeProtocolError(f"Incomplete plate-dimension measurement: {lines!r}")
+      return MicroServePlateDimensions(
+        height=values["Plate Height"],
+        stack_height=values["Stack Height"],
+        thickness=values["Plate Thickness"],
+      )
+
   @staticmethod
   def _require_idle(status: MicroServeStatus, homed: bool = True) -> None:
     """Reject motion in an unknown, busy, or inappropriate operating state."""
@@ -454,11 +625,31 @@ class HighResMicroServe:
 
   def _require_resolved_preparation(self) -> None:
     """Block new motion when the previous transfer preparation is uncertain."""
+    if self._unresolved_operation is not None:
+      raise RuntimeError(
+        f"Operation {self._unresolved_operation!r} is unresolved. Inspect the machine, "
+        "then explicitly retract before another motion."
+      )
     if self._unresolved_preparation is not None:
       raise RuntimeError(
         "A transfer preparation is unresolved. Inspect the machine and call "
         "reconcile_preparation(), or explicitly retract to end the handoff."
       )
+
+  async def _measurement(self, command: str) -> Tuple[str, ...]:
+    """Run a measurement with final-state verification while holding the lock.
+
+    Interrupted or failed motion stays unresolved across reconnects. Retraction
+    after inspection ends that uncertainty; the command is never replayed.
+    """
+    self._prepared = None
+    try:
+      lines = await self._command(command, timeout=self.scan_timeout)
+      self._require_idle(await self._status())
+      return lines
+    except BaseException:
+      self._unresolved_operation = command
+      raise
 
   async def reconcile_preparation(self) -> None:
     """Confirm an interrupted preparation using read-only command and status queries.
@@ -496,10 +687,12 @@ class HighResMicroServe:
       if status.busy or status.mode not in ("ready", "manual"):
         raise RuntimeError(f"MicroServe cannot home in this state: {status.raw}")
       if status.homed and status.mode == "ready":
+        self._manual_mode = False
         return
       if status.plate_sensor_blocked:
         raise RuntimeError("Clear the plate-detection beam before homing")
       logger.info("Homing MicroServe")
+      self._manual_mode = False
       await self._command("home")
       self._require_idle(await self._status())
       self._prepared = None
@@ -517,6 +710,7 @@ class HighResMicroServe:
       if status.loader_retracted:
         self._prepared = None
         self._unresolved_preparation = None
+        self._unresolved_operation = None
         return
       logger.info("Retracting MicroServe loader")
       await self._command("retract")
@@ -526,6 +720,7 @@ class HighResMicroServe:
         raise RuntimeError(f"Loader did not retract: {status.raw}")
       self._prepared = None
       self._unresolved_preparation = None
+      self._unresolved_operation = None
 
 
 class MicroServeStacker:
@@ -550,13 +745,73 @@ class MicroServeStacker:
   async def request_plate_count(self) -> int:
     """Read this stacker's cached approximate count without physical measurement."""
     async with self._device._lock:
-      lines = await self._device._command(f"getplatecounts {self.index}")
-      if len(lines) != 1:
-        raise MicroServeProtocolError(f"Invalid plate count reply: {lines!r}")
-      match = re.fullmatch(rf"{self.index}: (\d+)", lines[0])
-      if match is None:
-        raise MicroServeProtocolError(f"Invalid plate count reply: {lines!r}")
-      return int(match[1])
+      return await self._plate_count()
+
+  async def _plate_count(self) -> int:
+    """Read this stacker's cached count while holding the controller lock."""
+    lines = await self._device._command(f"getplatecounts {self.index}")
+    if len(lines) != 1:
+      raise MicroServeProtocolError(f"Invalid plate count reply: {lines!r}")
+    match = re.fullmatch(rf"{self.index}: (\d+)", lines[0])
+    if match is None:
+      raise MicroServeProtocolError(f"Invalid plate count reply: {lines!r}")
+    return int(match[1])
+
+  async def set_plate_count(self, count: int) -> None:
+    """Set and verify the cached count after manually inspecting this stacker.
+
+    This changes bookkeeping only; it neither measures nor moves plates.
+    """
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+      raise ValueError("count must be a nonnegative integer")
+    async with self._device._lock:
+      self._device._require_resolved_preparation()
+      self._device._require_idle(await self._device._status(), homed=False)
+      if await self._plate_count() == count:
+        return
+      logger.info("Setting MicroServe stacker %d cached plate count to %d", self.index, count)
+      await self._device._command(f"setplatecount {self.index} {count}")
+      if await self._plate_count() != count:
+        raise MicroServeProtocolError(f"Stacker {self.index} did not accept the plate count")
+
+  async def count_plates(self, dimensions: MicroServePlateDimensions) -> int:
+    """Physically measure this stacker and return its updated approximate count.
+
+    This moves the carousel and loader. The result depends on plate geometry
+    and calibration; it is not a barcode inventory. Keep the robot clear.
+    """
+    async with self._device._lock:
+      await self._require_measurement_position()
+      await self._set_dimensions(dimensions)
+      logger.info("Counting plates in MicroServe stacker %d", self.index)
+      await self._device._measurement(f"countplates {self.index}")
+      return await self._plate_count()
+
+  async def _require_measurement_position(self) -> None:
+    """Require a resolved handoff and a clear, retracted loader before measurement."""
+    self._device._require_resolved_preparation()
+    status = await self._device._status()
+    self._device._require_idle(status)
+    if not status.loader_retracted or status.plate_sensor_blocked:
+      raise RuntimeError("Clear the transfer position and retract before measuring a stacker")
+
+  async def measure_height(self) -> float:
+    """Move the loader to measure this stacker's contents; return millimeters.
+
+    The measurement is relative to the calibrated detection beam. Small
+    negative results on an empty stacker are retained for calibration diagnosis.
+    Keep the robot clear. No plate dimensions are changed by the driver.
+    """
+    async with self._device._lock:
+      await self._require_measurement_position()
+      logger.info("Measuring MicroServe stacker %d height", self.index)
+      lines = await self._device._measurement(f"measurestacker {self.index}")
+      if len(lines) != 1 or re.fullmatch(r"[+-]?\d+(?:\.\d+)?", lines[0].strip()) is None:
+        raise MicroServeProtocolError(f"Invalid stack-height measurement: {lines!r}")
+      result = float(lines[0]) / 1000
+      if not math.isfinite(result):
+        raise MicroServeProtocolError(f"Nonfinite stack-height measurement: {lines!r}")
+      return result
 
   async def _set_dimensions(self, dimensions: MicroServePlateDimensions) -> None:
     """Apply and verify geometry while holding the device's operation lock."""
@@ -593,8 +848,8 @@ class MicroServeStacker:
         raise RuntimeError(f"Carousel did not reach stacker {self.index}: {status.raw}")
 
   async def _prepare(
-    self, direction: Literal["load", "unload"], dimensions: MicroServePlateDimensions
-  ) -> None:
+    self, direction: Literal["load", "unload", "unloadangle"], dimensions: MicroServePlateDimensions
+  ) -> Tuple[str, ...]:
     """Apply geometry and reach the requested transfer state without blind retries."""
     async with self._device._lock:
       self._device._require_resolved_preparation()
@@ -604,7 +859,7 @@ class MicroServeStacker:
       if at_target and self._device._prepared == (direction, self.index):
         if (await self._device._dimensions())[self.index]._wire() != dimensions._wire():
           raise RuntimeError("Retract the loader before changing geometry at the transfer position")
-        return
+        return await self._device._command("getangle") if direction == "unloadangle" else ()
       if status.plate_sensor_blocked or not status.loader_retracted:
         raise RuntimeError("Finish the current robot handoff and retract before preparing another")
       await self._set_dimensions(dimensions)
@@ -612,7 +867,7 @@ class MicroServeStacker:
       command_id = None
       self._device._prepared = None
       try:
-        await self._device._command(f"{direction} {self.index}")
+        lines = await self._device._command(f"{direction} {self.index}")
         command_id = self._device.last_command_id
         status = await self._device._status()
         self._device._require_idle(status)
@@ -626,6 +881,7 @@ class MicroServeStacker:
         )
         raise
       self._device._prepared = (direction, self.index)
+      return lines
 
   async def prepare_for_load(self, dimensions: MicroServePlateDimensions) -> None:
     """Present an empty receiving position for the robot to place a plate.
@@ -644,6 +900,15 @@ class MicroServeStacker:
     """
     await self._prepare("unload", dimensions)
 
+  async def prepare_for_unload_with_angle(self, dimensions: MicroServePlateDimensions) -> str:
+    """Present a plate for picking and return the firmware's angle report as text.
+
+    The firmware documentation does not define the angle unit. Do not assume
+    degrees or radians. Repeating this owned preparation queries the cached
+    angle without moving another plate. Retract after the robot clears the nest.
+    """
+    return "\n".join(await self._prepare("unloadangle", dimensions))
+
   async def scan_barcodes(self, dimensions: MicroServePlateDimensions) -> Tuple[str, ...]:
     """Move the barcode reader and return the controller's unmodified data lines.
 
@@ -659,6 +924,4 @@ class MicroServeStacker:
         raise RuntimeError("Clear the transfer position and retract before scanning barcodes")
       await self._set_dimensions(dimensions)
       logger.info("Scanning MicroServe stacker %d", self.index)
-      return await self._device._command(
-        f"readbarcodestacker {self.index}", timeout=self._device.scan_timeout
-      )
+      return await self._device._measurement(f"readbarcodestacker {self.index}")

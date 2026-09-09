@@ -10,11 +10,11 @@ digraph microserve_activity {
   idle [pos="5,8!", label="RETRACTED / IDLE",
         penwidth=2, fillcolor="#dcfce7", color="#16a34a"];
   positioning [pos="0.5,10!", label="POSITIONING\nmove_to()"];
-  scanning [pos="9.5,10!", label="SCANNING\nscan_barcodes(d)"];
+  scanning [pos="9.5,10!", label="MEASURING / SCANNING\nmeasure_height() · count_plates(d)\nscan_barcodes(d)"];
   position_check [pos="2,8.8!", shape=plain, fontsize=12, fontcolor="#475569",
                   label="target + sensors\nconfirmed"];
   scan_check [pos="8,8.8!", shape=plain, fontsize=12, fontcolor="#475569",
-              label="inspect status after completion\nconfirm retraction"];
+              label="idle verified; inspect loader\nretract before next operation"];
   preparing_load [pos="2,5.2!", label="PREPARING TO LOAD\nprepare_for_load(d)\napply geometry · load(i)"];
   preparing_unload [pos="8,5.2!", label="PREPARING TO UNLOAD\nprepare_for_unload(d)\napply geometry · unload(i)"];
   receiving [pos="2,2.4!", label="READY TO RECEIVE\nowned load handoff",

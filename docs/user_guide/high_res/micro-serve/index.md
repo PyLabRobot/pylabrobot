@@ -10,4 +10,6 @@ plate handoffs and recovery; the protocol reference describes commands and valid
 hello-world
 state-machine
 protocol
+capabilities
+validation
 ```
