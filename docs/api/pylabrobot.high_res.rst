@@ -13,7 +13,7 @@ pylabrobot.high_res package
     HighResLidValet
     HighResLidValetError
 
-.. currentmodule:: pylabrobot.high_res.micro_serve
+.. currentmodule:: pylabrobot.high_res.micro_serve.micro_serve
 
 .. autosummary::
   :toctree: _autosummary

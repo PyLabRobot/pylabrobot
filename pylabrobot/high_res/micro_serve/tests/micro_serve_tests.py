@@ -6,7 +6,7 @@ from collections import deque
 from pathlib import Path
 from typing import Deque, List, Optional, Tuple, Union
 
-from pylabrobot.high_res.micro_serve import (
+from pylabrobot.high_res.micro_serve.micro_serve import (
   HighResMicroServe,
   MicroServeError,
   MicroServePlateDimensions,
@@ -492,7 +492,7 @@ class MicroServeCaptureTests(unittest.IsolatedAsyncioTestCase):
   async def test_homing_capture(self) -> None:
     """Replay the transition from unhomed to homed at stacker zero."""
     driver = HighResMicroServe(host="10.253.253.253")
-    reader = CaptureReader(str(Path(__file__).with_name("micro_serve_home_capture.json")))
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "home.json"))
     driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
     await driver.setup()
     try:
@@ -513,7 +513,7 @@ class MicroServeCaptureTests(unittest.IsolatedAsyncioTestCase):
   async def test_all_carousel_positions_capture(self) -> None:
     """Replay all fourteen positions, repeated targets, and reconnection."""
     driver = HighResMicroServe(host="10.253.253.253")
-    reader = CaptureReader(str(Path(__file__).with_name("micro_serve_carousel_capture.json")))
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "carousel.json"))
     driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
     await driver.setup()
     try:
@@ -545,7 +545,7 @@ class MicroServeCaptureTests(unittest.IsolatedAsyncioTestCase):
   async def test_empty_load_retract_with_stale_firmware_loader_flag(self) -> None:
     """Actual retraction succeeds although firmware leaves loaderStatus Extended."""
     driver = HighResMicroServe(host="10.253.253.253")
-    reader = CaptureReader(str(Path(__file__).with_name("micro_serve_empty_load_capture.json")))
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "empty_load.json"))
     driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
     await driver.setup()
     try:
@@ -569,7 +569,7 @@ class MicroServeCaptureTests(unittest.IsolatedAsyncioTestCase):
   async def test_empty_cycle_and_rotation_after_retraction_capture(self) -> None:
     """Replay a complete empty handoff and subsequent rotation with a stale loader field."""
     driver = HighResMicroServe(host="10.253.253.253")
-    reader = CaptureReader(str(Path(__file__).with_name("micro_serve_empty_cycle_capture.json")))
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "empty_cycle.json"))
     driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
     await driver.setup()
     try:
@@ -605,7 +605,7 @@ class MicroServeCaptureTests(unittest.IsolatedAsyncioTestCase):
   async def test_device_native_read_only_capture(self) -> None:
     """Exercise all implemented queries without opening a network connection."""
     driver = HighResMicroServe(host="10.253.253.253")
-    reader = CaptureReader(str(Path(__file__).with_name("micro_serve_query_capture.json")))
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "query.json"))
     driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
     await driver.setup()
     try:

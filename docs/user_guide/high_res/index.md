@@ -5,6 +5,7 @@
 
 lid-valet/hello-world
 micro-serve/hello-world
+micro-serve/state-machine
 micro-serve/protocol
 sample-storage/index
 ```

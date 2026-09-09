@@ -1,0 +1,41 @@
+digraph microserve_activity {
+  graph [bgcolor="#f8fafc", pad=0.3, layout=neato, overlap=true, splines=true,
+         outputorder=edgesfirst];
+  node [shape=box, style="rounded,filled", fillcolor="#ede9fe", color="#8b5cf6",
+        fontcolor="#0f172a", fontname="Helvetica", fontsize=16, pin=true,
+        margin="0.18,0.13"];
+  edge [color="#475569", fontcolor="#475569", fontname="Helvetica", fontsize=12,
+        arrowsize=0.8, penwidth=1.3];
+
+  idle [pos="5,8!", label="RETRACTED / IDLE",
+        penwidth=2, fillcolor="#dcfce7", color="#16a34a"];
+  positioning [pos="0.5,10!", label="POSITIONING\nmove_to()"];
+  scanning [pos="9.5,10!", label="SCANNING\nscan_barcodes(d)"];
+  position_check [pos="2,8.8!", shape=plain, fontsize=12, fontcolor="#475569",
+                  label="target + sensors\nconfirmed"];
+  scan_check [pos="8,8.8!", shape=plain, fontsize=12, fontcolor="#475569",
+              label="inspect status after completion\nconfirm retraction"];
+  preparing_load [pos="2,5.2!", label="PREPARING TO LOAD\nprepare_for_load(d)\napply geometry · load(i)"];
+  preparing_unload [pos="8,5.2!", label="PREPARING TO UNLOAD\nprepare_for_unload(d)\napply geometry · unload(i)"];
+  receiving [pos="2,2.4!", label="READY TO RECEIVE\nowned load handoff",
+             fillcolor="#dcfce7", color="#16a34a"];
+  presenting [pos="8,2.4!", label="READY FOR PICKUP\nowned unload handoff",
+              fillcolor="#dcfce7", color="#16a34a"];
+  retracting [pos="5,0!", label="RETRACTING\nretract() · robot clear\nspatula + effectuator"];
+
+  idle -> positioning;
+  positioning -> idle;
+  idle -> scanning;
+  scanning -> idle [style=dashed];
+  idle -> preparing_load;
+  idle -> preparing_unload;
+  preparing_load -> receiving [xlabel="command + target +\nextension confirmed"];
+  preparing_unload -> presenting [xlabel="command + target +\nextension confirmed"];
+  receiving -> receiving [xlabel="robot places plate\nand withdraws", color="#0369a1",
+                          fontcolor="#0369a1", style=dashed];
+  presenting -> presenting [xlabel="robot picks plate\nand withdraws", color="#0369a1",
+                            fontcolor="#0369a1", style=dashed];
+  receiving -> retracting;
+  presenting -> retracting;
+  retracting -> idle [xlabel="both home sensors ON\nlock released", penwidth=1.6];
+}

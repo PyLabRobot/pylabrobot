@@ -1,5 +1,7 @@
 # MicroServe protocol and validation
 
+See the [state machine](state-machine.md) for connection, plate-handoff, and recovery diagrams.
+
 The implementation follows documentation served by the MicroServe itself:
 
 - [MicroServe API, revision 756, May 29, 2020](http://10.253.253.253/support_files/files/MicroServe_API.pdf).
