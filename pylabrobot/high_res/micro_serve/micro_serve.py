@@ -171,9 +171,10 @@ class HighResMicroServe:
 
   Communication, homing, all carousel positions, empty receiving-position
   preparation/retraction, stack-height measurement, manual access, and laser
-  command exchanges were checked on firmware 2.7.0.756. Transfers with plates,
-  counting, plate-dimension calculation, successful barcode scanning, and
-  physical fault recovery remain unverified.
+  command exchanges were checked on firmware 2.7.0.756. A single-plate barcode
+  scan and repeated active counts also passed. Transfers with plates,
+  multi-plate counting/scanning, plate-dimension calculation, and physical
+  fault recovery remain unverified.
   """
 
   def __init__(
@@ -235,8 +236,8 @@ class HighResMicroServe:
       self._connected = True
       logger.info("Connected to MicroServe")
       logger.warning(
-        "MicroServe transfers with plates, counting, plate-dimension calculation, successful "
-        "barcode scanning, and physical fault recovery are unverified; validate before use"
+        "MicroServe transfers with plates, multi-plate counting/scanning, plate-dimension "
+        "calculation, and physical fault recovery are unverified; validate before use"
       )
 
   async def stop(self) -> None:

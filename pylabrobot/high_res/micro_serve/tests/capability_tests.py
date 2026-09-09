@@ -418,3 +418,68 @@ class MicroServeDiagnosticCaptureTests(unittest.IsolatedAsyncioTestCase):
         reader.next_command()
     finally:
       await driver.stop()
+
+  async def test_single_plate_scan_and_repeated_count_capture(self) -> None:
+    """Replay barcode discovery, two physical counts, and restoration of saved geometry."""
+    driver = HighResMicroServe("10.253.253.253")
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "single_plate_scan_count.json"))
+    driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
+    await driver.setup()
+    try:
+      self.assertIn("HRB-2008-10558", await driver.request_version())
+      self.assertTrue((await driver.request_status()).loader_retracted)
+      saved = (await driver.request_dimensions())[5]
+      errors = await driver.request_errors()
+      single_plate = MicroServePlateDimensions(13.629, 13.629, 13.629)
+      self.assertEqual(
+        await driver.stackers[5].scan_barcodes(single_plate), ('BARCODES! Count: 1, "codex"',)
+      )
+      self.assertTrue((await driver.request_status()).loader_extended)
+      await driver.retract()
+      for _ in range(2):
+        self.assertEqual(await driver.stackers[5].count_plates(single_plate), 1)
+        self.assertTrue((await driver.request_status()).loader_extended)
+        await driver.retract()
+      self.assertTrue((await driver.request_status()).loader_retracted)
+      await driver.retract()
+      await driver.stackers[5].set_dimensions(saved)
+      self.assertEqual((await driver.request_dimensions())[5], saved)
+      self.assertTrue((await driver.request_status()).loader_retracted)
+      self.assertEqual(await driver.request_errors(), errors)
+      self.assertIsNone(driver.unresolved_operation)
+      with self.assertRaises(IndexError):
+        reader.next_command()
+    finally:
+      await driver.stop()
+
+  async def test_empty_scan_count_and_cached_count_write_capture(self) -> None:
+    """Replay zero-count scan output and bookkeeping writes without changing geometry."""
+    driver = HighResMicroServe("10.253.253.253")
+    reader = CaptureReader(str(Path(__file__).parent / "captures" / "empty_scan_count.json"))
+    driver.io = SocketValidator(reader, "HighRes MicroServe", host="10.253.253.253", port=1000)
+    await driver.setup()
+    try:
+      self.assertIn("HRB-2008-10558", await driver.request_version())
+      self.assertTrue((await driver.request_status()).loader_retracted)
+      geometry = await driver.request_dimensions()
+      errors = await driver.request_errors()
+      self.assertEqual(await driver.stackers[5].request_plate_count(), 1)
+      await driver.stackers[5].set_plate_count(0)
+      await driver.stackers[5].set_plate_count(1)
+      await driver.stackers[5].set_plate_count(1)
+      self.assertEqual(await driver.stackers[0].scan_barcodes(geometry[0]), ("BARCODES! Count: 0",))
+      self.assertTrue((await driver.request_status()).loader_extended)
+      await driver.retract()
+      self.assertEqual(await driver.stackers[0].count_plates(geometry[0]), 0)
+      await driver.retract()
+      await driver.stackers[5].move_to()
+      final = await driver.request_status()
+      self.assertEqual(final.stacker, 5)
+      self.assertTrue(final.loader_retracted)
+      self.assertEqual(await driver.request_dimensions(), geometry)
+      self.assertEqual(await driver.stackers[5].request_plate_count(), 1)
+      self.assertEqual(await driver.request_errors(), errors)
+      with self.assertRaises(IndexError):
+        reader.next_command()
+    finally:
+      await driver.stop()

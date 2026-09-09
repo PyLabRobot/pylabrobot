@@ -71,7 +71,7 @@ phase, rather than restarting on each data line.
 | `stackers[i].prepare_for_load(d)` | geometry, then `load i` | API §5.14, §5.21; commissioning page | Empty stacker 2 and repeated preparation verified |
 | `stackers[i].prepare_for_unload(d)` | geometry, then `unload i` | API §5.24, §5.21; commissioning page | Simulated only |
 | `retract()` | `retract` | API §5.17 | Empty loader and repeated retraction verified using home sensors |
-| `stackers[i].scan_barcodes(d)` | geometry, then `readbarcodestacker i` | Firmware help; operation notes | Simulated only; returns raw data lines |
+| `stackers[i].scan_barcodes(d)` | geometry, then `readbarcodestacker i` | Firmware help; operation notes | Single-plate scan verified; returns raw data lines |
 | `reconcile_preparation()` | `commandstat id`, `status` | API §5.3, §5.23 | Query primitives verified; recovery scenario simulated |
 
 Stacker indices are 0–13. Geometry is provided in millimeters and encoded as whole micrometers in
@@ -150,7 +150,7 @@ that caused the initial retraction check to fail. The captures verify that repea
 preparation, and retraction requests do not send additional motion commands. Simulated tests cover
 timeout, cancellation, reply mismatch, unresolved preparation, and sensor disagreement.
 
-**Plate transfer, unloading, barcode scans, and physical fault recovery remain unverified.** Setup
+**Plate transfer, unloading, multi-plate counting/scanning, and physical fault recovery remain unverified.** Setup
 warns about these limits. Empty-machine tests do not establish pickup height with a plate, gripper
 clearance, plate compatibility, or E-stop recovery. Those need a separate physical validation with
 known plates and robot clearance.
@@ -169,3 +169,16 @@ Manual access, repeated manual requests, return to homed/ready operation, and la
 command exchanges were also captured. No additional errors appeared and plate geometry remained
 unchanged. There is no laser-state readback, so the command capture does not independently verify
 optical output.
+
+An operator-approved single-plate test used the measured 13.629 mm thickness with provisional
+height and pitch also set to 13.629 mm. It returned `BARCODES! Count: 1, "codex"`, followed by
+two active counts of one. Scanning and counting left the loader extended; explicit retraction
+was verified between operations. The saved 11/10/10 mm geometry was restored and no additional
+errors appeared. This test validates one-plate scanning/counting, not transfer geometry or
+multi-plate stack pitch. Do not use these provisional dimensions as a plate definition.
+
+An empty-stacker scan returned `BARCODES! Count: 0`, and active counting returned zero.
+The cached count for the loaded stacker was explicitly changed 1 → 0 → 1, read back after each
+write, and restored to one; a repeated target skipped the write. These checks left geometry
+unchanged and added no errors. Barcode methods preserve these complete data lines, including
+the `BARCODES! Count:` prefix; an empty-stack report is not an empty Python tuple.

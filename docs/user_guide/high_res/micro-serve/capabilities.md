@@ -38,11 +38,11 @@ physical test on this device. The API PDF's measurement examples also serve as p
 | `unload` | `stackers[i].prepare_for_unload(d)` | Simulated |
 | `unloadangle` | `stackers[i].prepare_for_unload_with_angle(d)` | Simulated; raw angle report has unspecified unit |
 | `retract` | `retract()` | Empty loader verified |
-| `readbarcodestacker` | `stackers[i].scan_barcodes(d)` | Geometry-error path captured; successful scans unverified |
-| `countplates` | `stackers[i].count_plates(d)` | Simulated; moves hardware, then reads the updated count |
+| `readbarcodestacker` | `stackers[i].scan_barcodes(d)` | Empty and single-plate scans and geometry-error path captured; multi-plate scans unverified |
+| `countplates` | `stackers[i].count_plates(d)` | Empty and repeated single-plate counts captured; multi-plate counting unverified |
 | `measurestacker` | `stackers[i].measure_height()` | Empty and single-plate hardware captures; returns millimeters; accuracy not independently checked |
 | `calculateplatedimensions` | `calculate_plate_dimensions(count)` | API example and simulated sequence |
-| `setplatecount` | `stackers[i].set_plate_count(count)` | Simulated; verified bookkeeping write |
+| `setplatecount` | `stackers[i].set_plate_count(count)` | Hardware capture of 1 → 0 → 1 and repeated target; verified readback |
 | `manual` | `enter_manual_mode()` | Hardware capture, including repeated owned request; requires retraction before access |
 | `clearabort` | `clear_abort()` | Simulated; does not resolve an interrupted handoff |
 | `estoprecover` | `recover_from_estop()` | Simulated; physical recovery may move axes |
