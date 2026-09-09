@@ -364,7 +364,7 @@ class Resource(SerializableMixin):
     # carry no location yet still rotate what hangs from them, so the rotation is taken from the
     # whole tree rather than from the chain.
     rotation = chain[0].get_absolute_rotation()
-    matrix = rotation.get_rotation_matrix() if (rotation.x or rotation.y or rotation.z) else None
+    matrix = None if rotation.is_identity() else rotation.get_rotation_matrix()
     position = cast(Coordinate, chain[0].location)
 
     # 2b. Accumulate each child's offset in its parent's frame
@@ -376,7 +376,7 @@ class Resource(SerializableMixin):
         position += Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector())) + Coordinate(
           *matrix_vector_multiply_3x3(matrix, location.vector())
         )
-      if child.rotation.x or child.rotation.y or child.rotation.z:
+      if not child.rotation.is_identity():
         rotation = rotation + child.rotation
         matrix = rotation.get_rotation_matrix()
 
@@ -891,11 +891,9 @@ class Resource(SerializableMixin):
       self._state_updated()
 
   def rotate(self, x: float = 0, y: float = 0, z: float = 0):
-    """Rotate counter-clockwise by the given number of degrees."""
+    """Rotate counter-clockwise around the parent-coordinate axes by the given degrees."""
 
-    self.rotation.x = (self.rotation.x + x) % 360
-    self.rotation.y = (self.rotation.y + y) % 360
-    self.rotation.z = (self.rotation.z + z) % 360
+    self.rotation._prepend(Rotation(x=x, y=y, z=z))
     # Rotation is part of the resource's state; notify subscribers (e.g. the
     # Visualizer) so they can re-render.
     self._state_updated()
