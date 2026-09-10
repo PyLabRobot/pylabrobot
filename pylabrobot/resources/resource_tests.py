@@ -344,7 +344,7 @@ class TestResource(unittest.TestCase):
     far_end = Coordinate(100, 0, 0)
 
     before = bar.get_absolute_location() + far_end
-    bar.rotate(z=90, reference=far_end)
+    bar.rotate_to(z=90, reference=far_end)
     carried = matrix_vector_multiply_3x3(
       bar.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
     )
@@ -365,17 +365,7 @@ class TestResource(unittest.TestCase):
     bar.rotate(z=30)
     self.assertEqual(bar.rotation.z, 60)
 
-  def test_rotate_to_leaves_an_axis_it_was_not_given(self):
-    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
-    parent.location = Coordinate.zero()
-    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
-    parent.assign_child_resource(bar, location=Coordinate.zero())
-
-    bar.rotate(x=15, z=40)
-    bar.rotate_to(z=90)
-    self.assertEqual((bar.rotation.x, bar.rotation.z), (15, 90))
-
-  def test_rotate_to_lands_on_any_axis_it_is_given(self):
+  def test_rotate_to_sets_one_axis_normalized_and_leaves_the_others(self):
     for axis in ("x", "y", "z"):
       for start in ((0, 0, 15), (90, 0, 90), (15, 90, 200)):
         parent = Resource("parent", size_x=500, size_y=500, size_z=10)
@@ -383,12 +373,17 @@ class TestResource(unittest.TestCase):
         bar = Resource("bar", size_x=100, size_y=10, size_z=10)
         parent.assign_child_resource(bar, location=Coordinate.zero())
         bar.rotate(x=start[0], y=start[1], z=start[2])
+        was = {name: getattr(bar.rotation, name) for name in ("x", "y", "z")}
+
         bar.rotate_to(
-          x=30.0 if axis == "x" else None,
-          y=30.0 if axis == "y" else None,
-          z=30.0 if axis == "z" else None,
+          x=390.0 if axis == "x" else None,
+          y=390.0 if axis == "y" else None,
+          z=390.0 if axis == "z" else None,
         )
-        self.assertAlmostEqual(getattr(bar.rotation, axis) % 360, 30, places=9)
+
+        for name in ("x", "y", "z"):
+          expected = 30.0 if name == axis else was[name]
+          self.assertAlmostEqual(getattr(bar.rotation, name), expected, places=9)
 
   def test_rotate_keeps_every_axis_normalized(self):
     resource = Resource("resource", size_x=10, size_y=10, size_z=10)
@@ -413,7 +408,7 @@ class TestResource(unittest.TestCase):
       return bar.get_absolute_location() + Coordinate(*carried)
 
     before = where()
-    bar.rotate(z=90, reference=far_end)
+    bar.rotate_to(z=90, reference=far_end)
     self.assertEqual(where(), before)
 
   def test_rotate_to_turns_about_a_reference_point(self):
