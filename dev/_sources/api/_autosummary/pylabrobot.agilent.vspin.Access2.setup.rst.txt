@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2.setup
+======================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2.setup

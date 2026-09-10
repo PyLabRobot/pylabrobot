@@ -934,6 +934,14 @@ the same lifecycle meaning.</p>
 </tr>
 </thead>
 <tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.setup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>Modern <code class="docutils literal notranslate"><span class="pre">Access2.setup()</span></code> initializes and homes the loader through its driver.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.stop</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>Modern <code class="docutils literal notranslate"><span class="pre">Access2.stop()</span></code> closes the loader transport.</p></td>
+</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
 <td><p>Transfers the staging plate into the selected centrifuge bucket.</p></td>
@@ -1333,6 +1341,14 @@ one is assigned at operation start.</p>
 </tr>
 </thead>
 <tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.setup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>Modern <code class="docutils literal notranslate"><span class="pre">VSpin.setup()</span></code> connects, initializes, homes, and positions the centrifuge.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.stop</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>Modern <code class="docutils literal notranslate"><span class="pre">VSpin.stop()</span></code> closes the transport; this is not a controlled rotor stop.</p></td>
+</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">bucket_resources</span></code>, <code class="docutils literal notranslate"><span class="pre">relative_centrifugal_force</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, <code class="docutils literal notranslate"><span class="pre">acceleration_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">deceleration_fraction</span></code></p></td>
 <td><p>Describes one requested spin cycle.</p></td>
@@ -1340,6 +1356,11 @@ one is assigned at operation start.</p>
 </tbody>
 </table>
 </div>
+<p>The modern Agilent setup/stop operations use the usual <code class="docutils literal notranslate"><span class="pre">started</span></code> then <code class="docutils literal notranslate"><span class="pre">completed</span></code> or <code class="docutils literal notranslate"><span class="pre">failed</span></code>
+lifecycle. VSpin uses <code class="docutils literal notranslate"><span class="pre">device_reference(self,</span> <span class="pre">name=self.name)</span></code>; Access2 uses
+<code class="docutils literal notranslate"><span class="pre">resource_reference(self)</span></code>. These device-only payloads have no legacy <code class="docutils literal notranslate"><span class="pre">backend</span></code> field.
+Instrument the public frontends only; direct Access2 driver lifecycle methods remain undecorated.
+<code class="docutils literal notranslate"><span class="pre">machine.setup</span></code> and <code class="docutils literal notranslate"><span class="pre">machine.stop</span></code> belong to <code class="docutils literal notranslate"><span class="pre">legacy.machines.Machine</span></code> and its backend schema.</p>
 <p><code class="docutils literal notranslate"><span class="pre">resources</span></code> contains directly loaded resources only. Empty buckets are not represented.
 <code class="docutils literal notranslate"><span class="pre">bucket_resources</span></code> preserves the association between each loaded resource and its holder:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>

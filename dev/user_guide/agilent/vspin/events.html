@@ -771,9 +771,10 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="vspin-and-access2-events">
 <h1>VSpin and Access2 events<a class="headerlink" href="#vspin-and-access2-events" title="Link to this heading">#</a></h1>
-<p>Each listed semantic operation emits <code class="docutils literal notranslate"><span class="pre">started</span></code>, <code class="docutils literal notranslate"><span class="pre">completed</span></code>, or <code class="docutils literal notranslate"><span class="pre">failed</span></code> lifecycle records. The
-modern Agilent frontends and the resource-aware legacy <code class="docutils literal notranslate"><span class="pre">Centrifuge</span></code> and <code class="docutils literal notranslate"><span class="pre">Loader</span></code> frontends use the
-same canonical operation names and payload semantics.</p>
+<p>Each listed semantic operation emits <code class="docutils literal notranslate"><span class="pre">started</span></code> followed by either <code class="docutils literal notranslate"><span class="pre">completed</span></code> or <code class="docutils literal notranslate"><span class="pre">failed</span></code>.
+The modern Agilent frontends and resource-aware legacy <code class="docutils literal notranslate"><span class="pre">Centrifuge</span></code> and <code class="docutils literal notranslate"><span class="pre">Loader</span></code> frontends
+share spin and transfer schemas. The setup/stop operations below belong to the modern
+Agilent frontends; legacy machine lifecycle events retain their separate schema.</p>
 <section id="vspin-centrifuge">
 <h2>VSpin centrifuge<a class="headerlink" href="#vspin-centrifuge" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -783,12 +784,21 @@ same canonical operation names and payload semantics.</p>
 </tr>
 </thead>
 <tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.setup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.stop</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, loaded <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">bucket_resources</span></code>, <code class="docutils literal notranslate"><span class="pre">relative_centrifugal_force</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, <code class="docutils literal notranslate"><span class="pre">acceleration_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">deceleration_fraction</span></code></p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">VSpin.setup()</span></code> connects, initializes, homes, and positions the centrifuge. <code class="docutils literal notranslate"><span class="pre">VSpin.stop()</span></code>
+closes its transport; it is not <code class="docutils literal notranslate"><span class="pre">stop_spin()</span></code> or an emergency stop. Both lifecycle operations
+identify the VSpin with <code class="docutils literal notranslate"><span class="pre">device_reference(self,</span> <span class="pre">name=self.name)</span></code>, without a legacy <code class="docutils literal notranslate"><span class="pre">backend</span></code> field.</p>
 <p><code class="docutils literal notranslate"><span class="pre">resources</span></code> includes each plate currently loaded in a VSpin bucket when the spin starts.
 <code class="docutils literal notranslate"><span class="pre">bucket_resources</span></code> preserves which physical bucket holds each plate. The event reports the
 requested cycle parameters. <code class="docutils literal notranslate"><span class="pre">relative_centrifugal_force</span></code> is the dimensionless multiple of
@@ -805,6 +815,12 @@ frontend call’s success or failure lifecycle.</p>
 </tr>
 </thead>
 <tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.setup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.stop</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">device</span></code>, moved <code class="docutils literal notranslate"><span class="pre">resources</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">destination</span></code></p></td>
 </tr>
@@ -817,6 +833,11 @@ frontend call’s success or failure lifecycle.</p>
 <p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code> moves a plate from the Access2 staging holder to the VSpin bucket at the
 load position. <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.unload</span></code> moves a plate in the reverse direction. <code class="docutils literal notranslate"><span class="pre">source</span></code> and
 <code class="docutils literal notranslate"><span class="pre">destination</span></code> are the actual PLR holders involved in the transfer.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">loader.setup()</span></code> and <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">loader.stop()</span></code> on the <code class="docutils literal notranslate"><span class="pre">Access2</span></code> frontend. They delegate
+to <code class="docutils literal notranslate"><span class="pre">Access2Driver.setup()</span></code> and <code class="docutils literal notranslate"><span class="pre">Access2Driver.stop()</span></code> with unchanged hardware behavior, and
+identify the Access2 holder with <code class="docutils literal notranslate"><span class="pre">resource_reference(self)</span></code>. Direct driver methods remain
+available but emit no semantic setup/stop events, preventing duplicate lifecycles. These
+frontend events do not use <code class="docutils literal notranslate"><span class="pre">machine.setup</span></code>/<code class="docutils literal notranslate"><span class="pre">machine.stop</span></code> or require a <code class="docutils literal notranslate"><span class="pre">backend</span></code> field.</p>
 </section>
 </section>
 

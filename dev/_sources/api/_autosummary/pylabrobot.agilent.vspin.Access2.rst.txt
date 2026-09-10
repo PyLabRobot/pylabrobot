@@ -79,6 +79,8 @@ pylabrobot.agilent.vspin.Access2
       ~Access2.serialize
       ~Access2.serialize_all_state
       ~Access2.serialize_state
+      ~Access2.setup
+      ~Access2.stop
       ~Access2.unassign
       ~Access2.unassign_child_resource
       ~Access2.unload

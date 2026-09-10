@@ -857,6 +857,8 @@ stores these as separate lifecycle dimensions: <code class="docutils literal not
 ready to move. Ordinary VSpin commands require initialization and homing to be complete,
 <code class="docutils literal notranslate"><span class="pre">activity</span> <span class="pre">==</span> <span class="pre">IDLE</span></code>, and <code class="docutils literal notranslate"><span class="pre">recovery_required</span> <span class="pre">==</span> <span class="pre">False</span></code>, followed by the command’s physical
 checks.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">loader.setup()</span></code> and <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">loader.stop()</span></code> on the Access2 frontend to include
+semantic lifecycle events while delegating to the existing driver methods.</p>
 <p>For Access2, initialization and homing are read from controller status. Its semantic
 state records connection, operation, recovery, and the last confirmed teachpoint.</p>
 <p><code class="docutils literal notranslate"><span class="pre">stop()</span></code> closes the transport and invalidates session-scoped position knowledge.
