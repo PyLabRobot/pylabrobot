@@ -8,7 +8,7 @@ fit a different one and the point moves with it.
 `MechanicalGripper` spans that offset, flange to grip centre, which is why it is a `Link`.
 """
 
-from typing import Optional, Tuple, cast
+from typing import Optional, Sequence, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.manipulator import Link
@@ -28,11 +28,11 @@ class MechanicalGripper(Link):
     self,
     name: str,
     length: float,
-    body: Coordinate,
+    body: Resource,
     body_location: Coordinate,
-    finger: Coordinate,
+    fingers: Sequence[Resource],
     finger_location: Coordinate,
-    pad: Coordinate,
+    pads: Sequence[Resource],
     pad_location: Coordinate,
     jaw_range: Tuple[float, float],
     jaw_width: Optional[float] = None,
@@ -43,13 +43,13 @@ class MechanicalGripper(Link):
     Args:
       name: what to call this one.
       length: the joint it turns on to the grip centre, in mm.
-      body: how big the body is, in mm.
+      body: the material around the span.
       body_location: where it sits, from the joint this gripper turns on.
-      finger: how big one finger is, in mm. There are two, either side of the span.
+      fingers: the two jaws, either side of the span.
       finger_location: where a finger sits along and above the span. Its Y is `jaw_width`'s, so
         what stands here for it is not used.
-      pad: how big the pad on a finger's end is, in mm.
-      pad_location: where it sits, from the finger it is fixed to.
+      pads: what each finger meets the resource with, in the same order as `fingers`.
+      pad_location: where a pad sits, from the finger it is fixed to.
       jaw_range: how far apart the fingers stand, closed and open, in mm.
       jaw_width: how far apart they stand to begin with, in mm. Where a gripper is known to come
         up at a particular width - the one it homes at, say - that is what to build it at, so the
@@ -62,57 +62,39 @@ class MechanicalGripper(Link):
     if not low <= self._jaw_width <= high:
       raise ValueError(f"the jaws open {low} to {high} mm, so cannot start at {self._jaw_width}")
 
-    self.body = Resource(
-      name=f"{name}_body",
-      size_x=body.x,
-      size_y=body.y,
-      size_z=body.z,
-      category="body",
-      model=f"{model}_body" if model else None,
-    )
-    self.assign_child_resource(self.body, location=body_location)
-
-    # A finger has a size and no place of its own: `jaw_width` decides where it stands, and
-    # `_place_the_fingers` is what puts it there.
-    self.fingers = [
-      Resource(
-        name=f"{name}_finger_{side}",
-        size_x=finger.x,
-        size_y=finger.y,
-        size_z=finger.z,
-        category="finger",
-        model=f"{model}_finger" if model else None,
+    # Two of each, and one pad per finger: a gripper closes two jaws, and zipping a short list
+    # against a long one would drop material without saying so.
+    if len(fingers) != 2 or len(pads) != len(fingers):
+      raise ValueError(
+        f"a mechanical gripper has two fingers and a pad on each, not {len(fingers)} and {len(pads)}"
       )
-      for side in ("left", "right")
-    ]
+
+    self.body = body
+    self.assign_child_resource(body, location=body_location)
+
+    # A finger has a place along the span and above it, and no Y of its own: `jaw_width` decides
+    # how far apart the two stand, and `_place_the_fingers` is what puts them there.
+    self.fingers = list(fingers)
     for jaw in self.fingers:
       self.assign_child_resource(
         jaw, location=Coordinate(finger_location.x, 0.0, finger_location.z)
       )
 
-    self.pads = []
-    for jaw in self.fingers:
-      face = Resource(
-        name=f"{jaw.name}_pad",
-        size_x=pad.x,
-        size_y=pad.y,
-        size_z=pad.z,
-        category="pad",
-        model=f"{jaw.model}_pad" if jaw.model else None,
-      )
+    self.pads = list(pads)
+    for jaw, face in zip(self.fingers, self.pads):
       jaw.assign_child_resource(face, location=pad_location)
-      self.pads.append(face)
 
     self._place_the_fingers()
 
   @property
   def tool_center_point(self) -> Coordinate:
-    """The tool center point: where this tool is programmed against, as an offset from where it is
-    mounted.
+    """Where this tool is programmed against, as an offset from where it is mounted.
 
-    A gripper's far joint carries nothing, so what sits there is the point it grips at.
+    A link spans the interface it is bolted to and the point its work happens at; for a gripper
+    that far point is the centre between the pads, which is what a move is aimed at. The fingers
+    reach past it - material overhangs the span, and the span is what the kinematics use.
 
-    In PyLabRobot a tool center point is always this offset - a property of the tool, which changes
+    In PyLabRobot a tool centre point is always this offset - a property of the tool, which changes
     when a different one is fitted and not when the arm moves. Robot controllers also use the term
     for where that point currently is in the robot's frame; here that is a location, and something
     an arm answers rather than a tool.
@@ -120,7 +102,7 @@ class MechanicalGripper(Link):
     Returns:
       The grip centre, from the joint this gripper turns on.
     """
-    return self.far_joint
+    return Coordinate(self.get_size_x(), 0.0, 0.0)
 
   @property
   def jaw_width(self) -> float:
