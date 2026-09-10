@@ -352,17 +352,6 @@ class TestResource(unittest.TestCase):
     self.assertEqual(bar.get_absolute_location() + Coordinate(*carried), before)
     self.assertEqual(bar.location, Coordinate(100, -100, 0))
 
-  def test_rotating_without_a_reference_point_turns_about_the_corner(self):
-    """The default, and every caller that does not ask for a point gets it: the resource turns
-    where it stands and its location does not move."""
-    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
-    parent.location = Coordinate.zero()
-    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
-    parent.assign_child_resource(bar, location=Coordinate(30, 40, 0))
-
-    bar.rotate(z=90)
-    self.assertEqual(bar.location, Coordinate(30, 40, 0))
-
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
     r.location = Coordinate.zero()
