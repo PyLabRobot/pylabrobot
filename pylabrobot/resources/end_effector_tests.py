@@ -3,7 +3,6 @@ from typing import cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
-from pylabrobot.resources.resource import Resource
 
 # A gripper with every part a different size, so a part placed by the wrong measurement lands
 # somewhere this notices.
@@ -73,7 +72,7 @@ class TestPads(unittest.TestCase):
     outside, since a finger's own origin is a corner rather than its middle - and a gripper whose
     two pads face opposite ways grips nothing where the model says it does."""
     g = gripper()
-    left, right = (cast(Coordinate, cast(Resource, finger.pad).location) for finger in g.fingers)
+    left, right = (cast(Coordinate, pad.location) for pad in g.pads)
     self.assertEqual(left, right)
 
     finger_thickness, pad_thickness = FINGER[1], PAD[1]

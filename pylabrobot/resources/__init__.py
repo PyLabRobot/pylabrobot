@@ -23,7 +23,7 @@ from .coordinate import Coordinate
 from .corning import *
 from .deck import Deck
 from .diy import *
-from .end_effector import Finger, MechanicalGripper
+from .end_effector import MechanicalGripper
 from .eppendorf import *
 from .errors import ResourceNotFoundError
 from .greiner import *

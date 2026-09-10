@@ -12,32 +12,6 @@ from typing import Optional, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.manipulator import Link, bolt_on
-from pylabrobot.resources.resource import Resource
-
-
-class Finger(Resource):
-  """One jaw of a gripper: what closes onto a resource, carrying the pad that touches it.
-
-  A body and its pad, and no more than that yet. Two things it will carry once there is something
-  to read them from: which of its faces makes contact, so a grip can be stated against the surface
-  that holds rather than against the finger's own corner, and what the finger senses, since a
-  gripper that reports force reports it per finger.
-  """
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    category: str = "finger",
-    model: Optional[str] = None,
-  ):
-    super().__init__(
-      name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category, model=model
-    )
-    self.pad: Optional[Resource] = None
-    """What meets the resource, when the finger has one bolted to it."""
 
 
 class MechanicalGripper(Link):
@@ -81,18 +55,18 @@ class MechanicalGripper(Link):
       raise ValueError(f"the jaws open {low} to {high} mm, so cannot start at {self._jaw_width}")
 
     self.body = bolt_on(self, "body", body)
-    self.fingers = [
-      cast(Finger, bolt_on(self, f"finger_{side}", finger, of=Finger)) for side in ("left", "right")
+    self.fingers = [bolt_on(self, f"finger_{side}", finger) for side in ("left", "right")]
+    self.pads = [
+      bolt_on(on, "pad", (pad[0], pad[1], pad[2], pad[3] - finger[3], pad[4] - finger[4]))
+      for on in self.fingers
     ]
-    for on in self.fingers:
-      on.pad = bolt_on(on, "pad", (pad[0], pad[1], pad[2], pad[3] - finger[3], pad[4] - finger[4]))
+    for on in self.pads:
       # A pad is fixed to its finger, centred in the finger's thickness, so it sits the same way
       # on both of them. `bolt_on` centres material across a link, and a finger is not a link: its
       # own origin is a corner, so centring there leaves one pad inside the jaws and the other
       # outside them.
-      where = cast(Coordinate, on.pad.location)
-      on.pad.location = Coordinate(where.x, (finger[1] - pad[1]) / 2, where.z)
-    self.pads = [cast(Resource, on.pad) for on in self.fingers]
+      where = cast(Coordinate, on.location)
+      on.location = Coordinate(where.x, (finger[1] - pad[1]) / 2, where.z)
     self._place_the_fingers()
 
   @property
