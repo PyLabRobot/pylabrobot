@@ -1,5 +1,5 @@
 import random
-from typing import List, Literal, Optional, Union, cast
+from typing import Any, List, Literal, Mapping, Optional, Union, cast
 
 from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.legacy.machines import Machine
@@ -21,29 +21,33 @@ class NoFreeSiteError(Exception):
   pass
 
 
-def _fetch_plate_event_context(incubator: "Incubator", plate_name: str, **_: object) -> dict:
+def _fetch_plate_event_context(
+  self: "Incubator", plate_name: str, **backend_kwargs: object
+) -> dict:
   try:
-    site = incubator.get_site_by_plate_name(plate_name)
+    site = self.get_site_by_plate_name(plate_name)
     plate = site.resource
   except ResourceNotFoundError:
     site = None
     plate = None
   return {
-    "device": resource_reference(incubator),
+    "device": resource_reference(self),
     "resources": [] if plate is None else [resource_reference(plate)],
     "source": resource_reference(site),
-    "destination": resource_reference(incubator.loading_tray),
+    "destination": resource_reference(self.loading_tray),
   }
 
 
 def _take_in_plate_event_context(
-  incubator: "Incubator", site: Union[PlateHolder, Literal["random", "smallest"]], **_: object
+  self: "Incubator",
+  site: Union[PlateHolder, Literal["random", "smallest"]],
+  **backend_kwargs: object,
 ) -> dict:
-  plate = incubator.loading_tray.resource
+  plate = self.loading_tray.resource
   return {
-    "device": resource_reference(incubator),
+    "device": resource_reference(self),
     "resources": [] if plate is None else [resource_reference(plate)],
-    "source": resource_reference(incubator.loading_tray),
+    "source": resource_reference(self.loading_tray),
     "destination": resource_reference(site) if isinstance(site, PlateHolder) else site,
   }
 
@@ -61,6 +65,7 @@ class Incubator(Machine, Resource):
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     Machine.__init__(self, backend=backend)
     self.backend: IncubatorBackend = backend  # fix type
@@ -73,6 +78,7 @@ class Incubator(Machine, Resource):
       rotation=rotation,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self.loading_tray = PlateHolder(
       name=self.name + "_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
@@ -238,4 +244,5 @@ class Incubator(Machine, Resource):
       rotation=cast(Optional[Rotation], deserialize(data.get("rotation"))),
       category=data.get("category"),
       model=data.get("model"),
+      metadata=data.get("metadata"),
     )

@@ -1,7 +1,7 @@
 import textwrap
 import unittest
 
-from pylabrobot.resources import TipRack
+from pylabrobot.resources import Deck, TipRack
 from pylabrobot.resources.corning import (
   cor_96_wellplate_360uL_Fb,
 )
@@ -93,6 +93,30 @@ class HamiltonDeckTests(unittest.TestCase):
     self.assertEqual(len(tip_racks), 6)  # 5 added 300 uL racks + the built-in teaching rack
     self.assertEqual(len(matches), 5)
     self.assertNotIn("teaching_tip_rack", {tr.name for tr in matches})
+
+  def test_get_trash_area96_survives_serialization_round_trip(self):
+    """`serialize()` encodes the 96 trash as a child and sets `with_trash96=False`, so the
+    rebuilt deck never runs the `with_trash96` branch in `__init__`. `get_trash_area96()` must
+    still resolve it from the child tree rather than raising."""
+    deck = self.build_layout()
+    original_location = deck.get_trash_area96().get_location_wrt(deck)
+
+    deck2 = Deck.deserialize(deck.serialize())
+
+    self.assertIn("trash_core96", [child.name for child in deck2.children])
+    self.assertEqual(deck2.get_trash_area96().get_location_wrt(deck2), original_location)
+
+  def test_get_trash_area96_raises_after_clear_include_trash(self):
+    """`clear(include_trash=True)` unassigns the 96 trash, so `get_trash_area96()` must raise
+    rather than hand back the now-orphaned resource."""
+    deck = self.build_layout()
+    deck.get_trash_area96()  # resolves while still assigned
+
+    deck.clear(include_trash=True)
+
+    self.assertNotIn("trash_core96", [child.name for child in deck.children])
+    with self.assertRaises(RuntimeError):
+      deck.get_trash_area96()
 
   def test_assign_gigantic_resource(self):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")

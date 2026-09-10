@@ -16,6 +16,27 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def _cancel_and_wait(task: asyncio.Task[None]) -> None:
+  """Cancel and join a task without replacing the error that triggered cleanup.
+
+  A further cancellation of the caller is propagated after the task finishes.
+  Waiting for completion separately from reading the exception distinguishes
+  caller cancellation from the task's expected cancellation during cleanup.
+  """
+  task.cancel()
+  caller_cancelled = False
+  while not task.done():
+    try:
+      await asyncio.wait({task})
+    except asyncio.CancelledError:
+      caller_cancelled = True
+      task.cancel()
+  if not task.cancelled():
+    task.exception()
+  if caller_cancelled:
+    raise asyncio.CancelledError()
+
+
 @dataclass
 class SocketCommand(Command):
   data: str
@@ -37,6 +58,7 @@ class Socket(IOBase):
     write_timeout: float = 30,
     ssl_context: Optional[ssl.SSLContext] = None,
     server_hostname: Optional[str] = None,
+    source_ip: Optional[str] = None,
   ):
     self.human_readable_device_name = human_readable_device_name
     self._host = host
@@ -47,6 +69,7 @@ class Socket(IOBase):
     self._write_timeout = write_timeout
     self._ssl_context = ssl_context
     self._server_hostname = server_hostname
+    self._source_ip = source_ip
     self._unique_id = f"{self._host}:{self._port}"
     self._read_lock = asyncio.Lock()
     self._write_lock = asyncio.Lock()
@@ -59,11 +82,13 @@ class Socket(IOBase):
     await self._connect()
 
   async def _connect(self):
+    local_addr = (self._source_ip, 0) if self._source_ip is not None else None
     self._reader, self._writer = await asyncio.open_connection(
       host=self._host,
       port=self._port,
       ssl=self._ssl_context,
       server_hostname=self._server_hostname,
+      local_addr=local_addr,
     )
 
   async def stop(self):
@@ -97,6 +122,7 @@ class Socket(IOBase):
       "type": "Socket",
       "read_timeout": self._read_timeout,
       "write_timeout": self._write_timeout,
+      "source_ip": self._source_ip,
     }
 
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
@@ -118,15 +144,24 @@ class Socket(IOBase):
           data=data.hex(),
         )
       )
+      drain_task = asyncio.create_task(self._writer.drain())
       try:
-        await asyncio.wait_for(self._writer.drain(), timeout=timeout)
-        return
+        if timeout <= 0:
+          raise asyncio.TimeoutError()
+        # Keep caller cancellation distinct from completion of the drain task.
+        # wait_for() can swallow cancellation when its inner task has finished.
+        done, _ = await asyncio.wait({drain_task}, timeout=timeout)
+        if not done:
+          raise asyncio.TimeoutError()
+        drain_task.result()
       except asyncio.TimeoutError as exc:
         logger.error("write timeout: %r", exc)
         raise TimeoutError(f"Timeout while writing to socket after {timeout} seconds") from exc
       except (ConnectionResetError, OSError) as e:
         logger.error("write error: %r", e)
         raise
+      finally:
+        await _cancel_and_wait(drain_task)
 
   async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
     """Wrapper around StreamReader.read with lock and io logging.

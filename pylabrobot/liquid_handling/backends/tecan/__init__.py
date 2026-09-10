@@ -7,4 +7,4 @@ warnings.warn(
   stacklevel=2,
 )
 
-from pylabrobot.legacy.liquid_handling.backends.tecan import *  # noqa: F401,F403,E402
+from pylabrobot.legacy.liquid_handling.backends.tecan import *  # noqa: E402

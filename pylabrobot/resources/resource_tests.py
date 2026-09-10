@@ -1,13 +1,30 @@
+import json
 import math
+import re
 import unittest
 import unittest.mock
+from collections import OrderedDict
+from typing import Any, Dict, cast
 
-from .barcode import Barcode
-from .coordinate import Coordinate
-from .deck import Deck
-from .errors import ResourceNotFoundError
-from .resource import Resource
-from .rotation import Rotation
+from pylabrobot.legacy.centrifuge.centrifuge import Centrifuge, Loader
+from pylabrobot.legacy.centrifuge.chatterbox import (
+  CentrifugeChatterboxBackend,
+  LoaderChatterboxBackend,
+)
+from pylabrobot.legacy.liquid_handling.backends import LiquidHandlerChatterboxBackend
+from pylabrobot.legacy.liquid_handling.liquid_handler import LiquidHandler
+from pylabrobot.legacy.storage.chatterbox import IncubatorChatterboxBackend
+from pylabrobot.legacy.storage.incubator import Incubator
+from pylabrobot.resources import resource as resource_module
+from pylabrobot.resources.barcode import Barcode
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.errors import ResourceNotFoundError
+from pylabrobot.resources.plate_adapter import PlateAdapter
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.resources.tip import Tip
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 
 def _make_test_deck() -> Deck:
@@ -363,6 +380,64 @@ class TestResource(unittest.TestCase):
     self.assertAlmostEqual(r.get_absolute_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(20, 10, 10))
 
+  def test_absolute_location_through_a_rotated_chain(self):
+    parent = Resource("parent", size_x=200, size_y=100, size_z=100, rotation=Rotation(z=90))
+    parent.location = Coordinate(10, 20, 0)
+    child = Resource("child", size_x=20, size_y=20, size_z=20, rotation=Rotation(z=90))
+    parent.assign_child_resource(child, location=Coordinate(30, 0, 0))
+    grandchild = Resource("grandchild", size_x=10, size_y=10, size_z=10)
+    child.assign_child_resource(grandchild, location=Coordinate(5, 0, 0))
+
+    # Each level turns what it carries, so the child's 30 mm along its parent's x lands 30 mm
+    # along the deck's y, and the grandchild's 5 mm comes back on itself through two turns.
+    self.assertEqual(parent.get_absolute_location(), Coordinate(10, 20, 0))
+    self.assertEqual(child.get_absolute_location(), Coordinate(10, 50, 0))
+    self.assertEqual(grandchild.get_absolute_location(), Coordinate(5, 50, 0))
+    self.assertEqual(grandchild.get_absolute_location(x="c", y="c", z="c"), Coordinate(0, 45, 5))
+    self.assertEqual(grandchild.get_absolute_location(x="r", y="b", z="t"), Coordinate(-5, 40, 10))
+
+  def test_absolute_location_matches_level_by_level_composition(self):
+    """Walking the chain must give what composing one level at a time gives."""
+
+    def level_by_level(resource: Resource, x="l", y="f", z="b") -> Coordinate:
+      turned_anchor = Coordinate(
+        *matrix_vector_multiply_3x3(
+          resource.get_absolute_rotation().get_rotation_matrix(),
+          resource.get_anchor(x=x, y=y, z=z).vector(),
+        )
+      )
+      here = cast(Coordinate, resource.location)
+      parent = resource.parent
+      if parent is None or parent.location is None:
+        return here + turned_anchor
+      turned_location = Coordinate(
+        *matrix_vector_multiply_3x3(
+          parent.get_absolute_rotation().get_rotation_matrix(), here.vector()
+        )
+      )
+      return level_by_level(parent) + turned_location + turned_anchor
+
+    for angles in ((0, 0, 0), (0, 0, 90), (0, 0, 37.5), (0, 0, 270)):
+      for hangs_from_a_placeless_parent in (False, True):
+        with self.subTest(angles=angles, hung=hangs_from_a_placeless_parent):
+          top = Resource("top", size_x=200, size_y=100, size_z=100, rotation=Rotation(*angles))
+          top.location = Coordinate(11, 22, 33)
+          if hangs_from_a_placeless_parent:
+            # A resource whose parent carries no location is where the walk stops, but the
+            # rotation still comes from above it.
+            placeless = Resource("placeless", size_x=1, size_y=1, size_z=1, rotation=Rotation(z=90))
+            top.parent = placeless
+            placeless.children.append(top)
+          node = top
+          for level in range(3):
+            child = Resource(
+              f"level_{level}", size_x=20, size_y=10, size_z=5, rotation=Rotation(*angles)
+            )
+            node.assign_child_resource(child, location=Coordinate(7, -3, 2))
+            node = child
+          for anchors in (("l", "f", "b"), ("c", "c", "c"), ("r", "b", "t")):
+            self.assertEqual(node.get_absolute_location(*anchors), level_by_level(node, *anchors))
+
 
 class TestResourceCallback(unittest.TestCase):
   def setUp(self) -> None:
@@ -413,10 +488,20 @@ class TestResourceCallback(unittest.TestCase):
     self.r.assign_child_resource(self.child, location=Coordinate.zero())
     self.child.unassign()
 
-    self.assertEqual(self.child._did_assign_resource_callbacks, [])
-    self.assertEqual(self.child._did_unassign_resource_callbacks, [])
-    self.assertEqual(self.child._will_assign_resource_callbacks, [])
-    self.assertEqual(self.child._will_unassign_resource_callbacks, [])
+    # Its own handlers stay; what must go is the parent's, which is what carried an event up.
+
+    self.assertNotIn(
+      self.r._call_did_assign_resource_callbacks, self.child._did_assign_resource_callbacks
+    )
+    self.assertNotIn(
+      self.r._call_did_unassign_resource_callbacks, self.child._did_unassign_resource_callbacks
+    )
+    self.assertNotIn(
+      self.r._call_will_assign_resource_callbacks, self.child._will_assign_resource_callbacks
+    )
+    self.assertNotIn(
+      self.r._call_will_unassign_resource_callbacks, self.child._will_unassign_resource_callbacks
+    )
 
   def test_did_assign_is_passed_up_the_chain(self):
     mock_function = unittest.mock.Mock()
@@ -708,3 +793,533 @@ class TestAssignChildByAnchor(unittest.TestCase):
     with self.assertRaises(ValueError) as context:
       self.parent.assign_child_by_anchor(child, parent_anchor="ccb", child_anchor="ccbb")
     self.assertIn("must be exactly 3 characters", str(context.exception))
+
+
+class TestResourceMetadata(unittest.TestCase):
+  """Tests for Resource.metadata and the find_resources/find_resource query API."""
+
+  def _sample_tree(self):
+    """Build a small deck tree shared by several find_resources tests.
+
+    Returns (deck, plate, well, trough, waste). ``plate`` contains ``well``;
+    ``trough`` and ``waste`` are direct children of ``deck``.
+    """
+    deck = Resource("deck", size_x=100, size_y=100, size_z=10)
+    plate = Resource(
+      "plate1",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      category="plate",
+      model="m1",
+      metadata={"liquid": "water", "concentration_mM": 100, "is_clean": True, "pH": 7.0},
+    )
+    well = Resource("well1", size_x=1, size_y=1, size_z=1)
+    trough = Resource(
+      "trough1",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      category="trough",
+      model="m2",
+      metadata={"liquid": "buffer", "concentration_mM": 50, "is_clean": False},
+    )
+    waste = Resource(
+      "waste1",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      category="waste",
+      metadata={"liquid": "water", "concentration_mM": 0},
+    )
+    deck.assign_child_resource(plate, location=Coordinate(0, 0, 0))
+    plate.assign_child_resource(well, location=Coordinate(0, 0, 0))
+    deck.assign_child_resource(trough, location=Coordinate(20, 0, 0))
+    deck.assign_child_resource(waste, location=Coordinate(40, 0, 0))
+    return deck, plate, well, trough, waste
+
+  def _resource_factoryies_with_meta(self, meta):
+    from pylabrobot.resources.carrier import (
+      Carrier,
+      MFXCarrier,
+      PlateCarrier,
+      PlateHolder,
+      TipCarrier,
+      TroughCarrier,
+      TubeCarrier,
+    )
+    from pylabrobot.resources.container import Container
+    from pylabrobot.resources.itemized_resource import ItemizedResource
+    from pylabrobot.resources.lid import Lid
+    from pylabrobot.resources.plate import Plate
+    from pylabrobot.resources.resource_holder import ResourceHolder
+    from pylabrobot.resources.resource_stack import ResourceStack
+    from pylabrobot.resources.tecan.tecan_resource import TecanResource
+    from pylabrobot.resources.tip_rack import TipRack, TipSpot
+
+    return {
+      "Carrier": lambda: Carrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "TipCarrier": lambda: TipCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "PlateCarrier": lambda: PlateCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "MFXCarrier": lambda: MFXCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "TubeCarrier": lambda: TubeCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "TroughCarrier": lambda: TroughCarrier("c", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "PlateHolder": lambda: PlateHolder(
+        "ph", size_x=10, size_y=10, size_z=10, pedestal_size_z=5, metadata=meta
+      ),
+      "Container": lambda: Container("cont", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "Deck": lambda: Deck(name="d", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "ItemizedResource": lambda: ItemizedResource(
+        "ir", size_x=10, size_y=10, size_z=10, ordering=OrderedDict(), metadata=meta
+      ),
+      "Lid": lambda: Lid("lid", size_x=10, size_y=10, size_z=10, nesting_z_height=0, metadata=meta),
+      "Plate": lambda: Plate(
+        "p", size_x=10, size_y=10, size_z=10, ordering=OrderedDict(), metadata=meta
+      ),
+      "PlateAdapter": lambda: PlateAdapter(
+        "pa",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        dx=1,
+        dy=1,
+        dz=1,
+        adapter_hole_size_x=1,
+        adapter_hole_size_y=1,
+        metadata=meta,
+      ),
+      "ResourceHolder": lambda: ResourceHolder(
+        "rh", size_x=10, size_y=10, size_z=10, metadata=meta
+      ),
+      "ResourceStack": lambda: ResourceStack("rs", direction="z", metadata=meta),
+      "TecanResource": lambda: TecanResource("tr", size_x=10, size_y=10, size_z=10, metadata=meta),
+      "TipSpot": lambda: TipSpot(
+        "ts",
+        size_x=10,
+        size_y=10,
+        make_tip=lambda name: Tip(
+          name=name, has_filter=False, maximal_volume=10, fitting_depth=1, total_tip_length=10
+        ),
+        metadata=meta,
+      ),
+      "TipRack": lambda: TipRack(
+        "tr", size_x=10, size_y=10, size_z=10, ordering=OrderedDict(), metadata=meta
+      ),
+      "Centrifuge": lambda: Centrifuge(
+        backend=CentrifugeChatterboxBackend(),
+        name="cent",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        metadata=meta,
+      ),
+      "Loader": lambda: Loader(
+        backend=LoaderChatterboxBackend(),
+        centrifuge=Centrifuge(
+          backend=CentrifugeChatterboxBackend(), name="cent", size_x=10, size_y=10, size_z=10
+        ),
+        name="loader",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        child_location=Coordinate(0, 0, 0),
+        metadata=meta,
+      ),
+      "Incubator": lambda: Incubator(
+        backend=IncubatorChatterboxBackend(),
+        name="inc",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        racks=[
+          PlateCarrier(
+            "pc0",
+            size_x=10,
+            size_y=10,
+            size_z=10,
+            metadata=dict(is_child_of_parent_with=meta),
+          ),
+        ],
+        loading_tray_location=Coordinate(0, 0, 0),
+        metadata=meta,
+      ),
+      "LiquidHandler": lambda: LiquidHandler(
+        backend=LiquidHandlerChatterboxBackend(),
+        deck=Deck(size_x=10, size_y=10, size_z=10),
+        name="lh",
+        metadata=meta,
+      ),
+    }
+
+  def test_metadata_init_and_equality(self):
+    r1 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 1, "is_clean": True})
+    r2 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 1, "is_clean": True})
+    r3 = Resource("r1", size_x=10, size_y=10, size_z=10, metadata={"a": 2, "is_clean": True})
+
+    self.assertEqual(r1.metadata, {"a": 1, "is_clean": True})
+    self.assertEqual(r1, r2)
+    self.assertNotEqual(r1, r3)
+
+  def test_metadata_default_is_empty_and_per_instance(self):
+    r1 = Resource("r1", size_x=1, size_y=1, size_z=1)
+    r2 = Resource("r2", size_x=1, size_y=1, size_z=1)
+    self.assertEqual(r1.metadata, {})
+    r1.metadata["k"] = "v"
+    self.assertEqual(r2.metadata, {})
+
+  def test_metadata_shallow_copy_semantics(self):
+    # metadata.copy() decouples top-level keys from the caller's dict, but nested
+    # containers are shared. This pins the documented shallow-copy behavior.
+    original: dict[str, Any] = {"top": "v", "nested": [1, 2]}
+    r = Resource("r", size_x=1, size_y=1, size_z=1, metadata=original)
+
+    original["top"] = "changed"
+    self.assertEqual(r.metadata["top"], "v")  # top-level key isolated
+
+    original["nested"].append(3)
+    self.assertEqual(r.metadata["nested"], [1, 2, 3])  # nested value shared
+
+  def test_metadata_kwarg_reaches_resource_for_every_subclass(self):
+    meta = {"k": "v"}
+    factories = self._resource_factoryies_with_meta(meta)
+    for name, make in factories.items():
+      with self.subTest(name):
+        self.assertEqual(make().metadata, meta)
+
+  def test_metadata_serialization_deserialization(self):
+    meta = {"string": "hello", "int": 42, "bool": False, "list": [1, 2, 3], "nested": {"k": "v"}}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized = r.serialize()
+    self.assertEqual(serialized["metadata"], meta)
+
+    deserialized = Resource.deserialize(serialized)
+    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized, r)
+
+  def test_metadata_serialize_copy_isolation(self):
+    meta = {"key": "val", "nested": [1, 2]}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized = r.serialize()
+    serialized["metadata"]["key"] = "modified"
+    self.assertEqual(r.metadata["key"], "val")
+
+  def test_metadata_copy_isolation(self):
+    meta = {"key": "val"}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    r_copy = r.copy()
+    r_copy.metadata["key"] = "modified"
+    self.assertEqual(r.metadata["key"], "val")
+
+  def test_metadata_black_box_roundtrip_tighter(self):
+    class CustomObj:
+      def __init__(self, value: int):
+        self.value = value
+
+      def __eq__(self, other: Any) -> bool:
+        return isinstance(other, CustomObj) and self.value == other.value
+
+    custom_obj = CustomObj(42)
+    meta: Dict[str, Any] = {
+      "custom_obj": custom_obj,
+      "tuple": (1, 2, 3),
+      "none": None,
+      "nested_dict": {"inner_custom": CustomObj(99)},
+    }
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized = r.serialize()
+    self.assertEqual(serialized["metadata"], meta)
+
+    deserialized = Resource.deserialize(serialized)
+    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized, r)
+
+    r_copy = r.copy()
+    self.assertEqual(r_copy.metadata, meta)
+    self.assertEqual(r_copy, r)
+
+  def test_metadata_type_key_serialization_deserialization(self):
+    meta = {"type": "reagent", "nested": {"type": "custom_type"}}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized = r.serialize()
+    self.assertEqual(serialized["metadata"], meta)
+
+    deserialized = Resource.deserialize(serialized)
+    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized, r)
+
+  def test_metadata_json_roundtrip(self):
+    meta = {"type": "reagent", "nested": {"type": "custom_type"}, "count": 42}
+    r = Resource("res", size_x=10, size_y=10, size_z=10, metadata=meta)
+    serialized_json = json.dumps(r.serialize())
+    deserialized = Resource.deserialize(json.loads(serialized_json))
+    self.assertEqual(deserialized.metadata, meta)
+    self.assertEqual(deserialized, r)
+    self.assertIsNot(deserialized.metadata, meta)
+
+  def test_deserialize_without_metadata_key_is_backward_compatible(self):
+    # Resources serialized before metadata existed have no "metadata" key.
+    data = Resource("r", size_x=1, size_y=1, size_z=1, metadata={"key": "value"}).serialize()
+    del data["metadata"]
+    restored = Resource.deserialize(data)
+    self.assertEqual(restored.metadata, {})
+
+  def test_deserialize_non_dict_metadata_raises(self):
+    data = Resource("r", size_x=1, size_y=1, size_z=1).serialize()
+    data["metadata"] = ["not", "a", "dict"]
+    with self.assertRaises(TypeError):
+      Resource.deserialize(data)
+
+  def test_subclass_deserialize_and_copy_preserves_metadata(self):
+    meta = {"key": "val", "num": 42}
+
+    factories = self._resource_factoryies_with_meta(meta)
+    for name, make in factories.items():
+      with self.subTest(name):
+        r = make()
+        self.assertEqual(r.metadata, meta)
+        if name == "Loader":
+          # Loader doesn't expose metadata at the top-level
+          self.assertEqual(r.serialize()["resource"]["metadata"], meta)
+        else:
+          self.assertEqual(r.serialize()["metadata"], meta)
+        if name == "ResourceStack":
+          with self.assertRaises(
+            TypeError
+          ):  # unrelated to metadata: ResourceStack.copy() is broken
+            r.copy()
+        else:
+          r_copy = r.copy()
+          self.assertEqual(r_copy.metadata, meta)
+          self.assertEqual(r_copy.name, r.name)
+          self.assertEqual(r_copy, r)
+
+  def test_deserialize_same_named_class_via_module_alias(self):
+    # Simulate a class imported under two module paths: find_subclass returns a
+    # same-named class that is NOT a subclass of the cls deserialize was called
+    # on. issubclass() is False, so deserialization is rejected.
+    # (Unusual class names avoid polluting the global Resource subclass registry
+    # under a common name.)
+    class _AliasProbe(Resource):
+      pass
+
+    class _AliasProbeSibling(Resource):  # sibling, not a subclass of _AliasProbe
+      pass
+
+    _AliasProbeSibling.__name__ = "_AliasProbe"
+
+    data = _AliasProbe("f", size_x=1, size_y=1, size_z=1).serialize()
+    with unittest.mock.patch.object(
+      resource_module, "find_subclass", return_value=_AliasProbeSibling
+    ):
+      with self.assertRaises(AssertionError):
+        _AliasProbe.deserialize(data)
+
+  def test_deserialize_rejects_class_with_different_name(self):
+    class _RejectProbe(Resource):
+      pass
+
+    class _UnrelatedProbe:  # different name -> neither issubclass nor name match
+      pass
+
+    data = _RejectProbe("f", size_x=1, size_y=1, size_z=1).serialize()
+    with unittest.mock.patch.object(resource_module, "find_subclass", return_value=_UnrelatedProbe):
+      with self.assertRaises(AssertionError):
+        _RejectProbe.deserialize(data)
+
+  def test_find_resources_metadata(self):
+    deck, plate, well, trough, waste = self._sample_tree()
+
+    # Strict value equality via metadata=
+    self.assertEqual(deck.find_resources(metadata={"liquid": "water"}), [plate, waste])
+    self.assertEqual(deck.find_resources(metadata={"is_clean": True}), [plate])
+    self.assertEqual(deck.find_resources(metadata={"is_clean": False}), [trough])
+
+    # Key presence check via has_metadata
+    self.assertEqual(deck.find_resources(has_metadata="pH"), [plate])
+    self.assertEqual(
+      set(deck.find_resources(has_metadata=["liquid", "concentration_mM"])), {plate, trough, waste}
+    )
+
+    # Callable predicate on metadata.get(key)
+    self.assertEqual(
+      deck.find_resources(metadata={"concentration_mM": lambda v: v is not None and v > 20}),
+      [plate, trough],
+    )
+    self.assertEqual(
+      deck.find_resources(metadata={"pH": lambda v: v is not None and v == 7.0}), [plate]
+    )
+    self.assertEqual(
+      set(deck.find_resources(metadata={"pH": lambda v: v is None})), {deck, well, trough, waste}
+    )
+
+    # Top-level attribute matchers (name, type, model, category)
+    self.assertEqual(deck.find_resources(name="plate1"), [plate])
+    self.assertEqual(deck.find_resources(name=re.compile(r"^(plate|trough)")), [plate, trough])
+    self.assertEqual(deck.find_resources(category="plate"), [plate])
+    self.assertEqual(deck.find_resources(model="m2"), [trough])
+    self.assertEqual(set(deck.find_resources(type=Resource)), {deck, plate, well, trough, waste})
+
+    # Custom predicate fn
+    self.assertEqual(
+      deck.find_resources(
+        fn=lambda r: r.get_size_x() == 10 and r.metadata.get("concentration_mM") == 100
+      ),
+      [plate],
+    )
+
+    # find_resource singular
+    self.assertEqual(deck.find_resource(name="trough1"), trough)
+    self.assertIsNone(deck.find_resource(name="nonexistent"))
+
+    # Non-recursive search
+    self.assertEqual(deck.find_resources(name="plate1", recursive=False), [plate])
+    self.assertEqual(deck.find_resources(name="well1", recursive=False), [])
+    self.assertEqual(deck.find_resources(name="well1", recursive=True), [well])
+
+  def test_find_resources_type_matcher_variants(self):
+    # Unusual class names avoid polluting the global Resource subclass registry.
+    class _TypeAlpha(Resource):
+      pass
+
+    class _TypeBeta(Resource):
+      pass
+
+    deck = Resource("deck", size_x=10, size_y=10, size_z=10)
+    alpha = _TypeAlpha("alpha", size_x=1, size_y=1, size_z=1)
+    beta = _TypeBeta("beta", size_x=1, size_y=1, size_z=1)
+    deck.assign_child_resource(alpha, location=Coordinate(0, 0, 0))
+    deck.assign_child_resource(beta, location=Coordinate(5, 0, 0))
+
+    self.assertEqual(deck.find_resources(type=_TypeAlpha), [alpha])  # class
+    self.assertEqual(
+      deck.find_resources(type=(_TypeAlpha, _TypeBeta)), [alpha, beta]
+    )  # tuple of classes
+    self.assertEqual(deck.find_resources(type=_TypeBeta.__name__), [beta])  # class name string
+    self.assertEqual(
+      deck.find_resources(type=re.compile(r"_TypeA")), [alpha]
+    )  # regex on class name
+    self.assertEqual(
+      deck.find_resources(type=lambda k: issubclass(k, _TypeBeta)), [beta]
+    )  # callable receives the resource class
+
+  def test_find_resources_attribute_callable_receives_attribute_value(self):
+    deck, plate, well, trough, waste = self._sample_tree()
+    # A callable for a (non-type) top-level attribute receives the attribute value.
+    self.assertEqual(deck.find_resources(model=lambda m: m == "m2"), [trough])
+    self.assertEqual(
+      set(deck.find_resources(name=lambda n: n.endswith("1"))), {plate, well, trough, waste}
+    )
+
+  def test_find_resources_all_filters_combined(self):
+    deck, plate, _well, _trough, _waste = self._sample_tree()
+    result = deck.find_resources(
+      fn=lambda r: r.get_size_x() == 10,
+      has_metadata="is_clean",
+      metadata={"liquid": "water"},
+      category="plate",
+    )
+    self.assertEqual(result, [plate])
+
+  def test_callable_metadata_value_is_treated_as_predicate(self):
+    # A callable stored AS a metadata value cannot be matched by equality:
+    # passing it as the matcher invokes it as a predicate. Use an identity
+    # predicate to match such values.
+    def handler(x):
+      return x  # truthy for the stored object, falsy (None) when key absent
+
+    deck = Resource("deck", size_x=10, size_y=10, size_z=10)
+    child = Resource("child", size_x=1, size_y=1, size_z=1, metadata={"cb": handler})
+    deck.assign_child_resource(child, location=Coordinate(0, 0, 0))
+
+    # cb=handler runs handler(metadata.get("cb")); for child that is
+    # handler(handler) -> truthy, so it "matches" -- the documented footgun.
+    self.assertEqual(deck.find_resources(metadata={"cb": handler}), [child])
+    # Identity match via an explicit predicate is the correct approach.
+    self.assertEqual(deck.find_resources(metadata={"cb": lambda v: v is handler}), [child])
+
+  def test_find_resource_returns_first_match_or_self(self):
+    deck, plate, _well, _trough, waste = self._sample_tree()
+    # Two resources match; the first encountered (self is checked first) is returned.
+    self.assertEqual(deck.find_resources(metadata={"liquid": "water"}), [plate, waste])
+    self.assertEqual(deck.find_resource(metadata={"liquid": "water"}), plate)
+    # The search includes self, so an unfiltered/self-matching query can return it.
+    self.assertIs(deck.find_resource(type=Resource), deck)
+    self.assertIsNone(deck.find_resource(name="does-not-exist"))
+
+  def test_find_resources_no_criteria_returns_self_and_descendants(self):
+    deck, plate, well, trough, waste = self._sample_tree()
+    # No criteria: self is first, followed by get_all_children() order (direct
+    # children before deeper descendants), so `well` (under `plate`) comes last.
+    self.assertEqual(deck.find_resources(), [deck, plate, trough, waste, well])
+    # Non-recursive: self plus direct children only.
+    self.assertEqual(deck.find_resources(recursive=False), [deck, plate, trough, waste])
+
+
+class TestNameIndex(unittest.TestCase):
+  """Names are unique across a tree, and the tree remembers which it holds rather than re-reading
+  itself on every assignment. Anything remembered can go stale, so these check it does not."""
+
+  def block(self, name: str) -> Resource:
+    return Resource(name=name, size_x=10, size_y=10, size_z=10)
+
+  def test_a_duplicate_name_is_refused(self):
+    root = self.block("root")
+    root.assign_child_resource(self.block("a"), location=Coordinate.zero())
+    with self.assertRaises(ValueError):
+      root.assign_child_resource(self.block("a"), location=Coordinate.zero())
+
+  def test_a_duplicate_deep_in_the_arriving_subtree_is_refused(self):
+    root = self.block("root")
+    holder = self.block("holder")
+    holder.assign_child_resource(self.block("buried"), location=Coordinate.zero())
+    root.assign_child_resource(holder, location=Coordinate.zero())
+
+    other = self.block("other")
+    other.assign_child_resource(self.block("buried"), location=Coordinate.zero())
+    with self.assertRaises(ValueError):
+      root.assign_child_resource(other, location=Coordinate.zero())
+
+  def test_unassigning_frees_the_name(self):
+    root = self.block("root")
+    plate = self.block("plate")
+    root.assign_child_resource(plate, location=Coordinate.zero())
+    root.unassign_child_resource(plate)
+    root.assign_child_resource(self.block("plate"), location=Coordinate.zero())
+
+  def test_a_subtree_takes_its_names_with_it(self):
+    """The names beneath a resource leave the tree with it, and arrive in whatever tree takes it."""
+    first, second = self.block("first"), self.block("second")
+    holder = self.block("holder")
+    holder.assign_child_resource(self.block("carried"), location=Coordinate.zero())
+    first.assign_child_resource(holder, location=Coordinate.zero())
+
+    # while it is in the first tree, the second knows nothing of what it carries
+    second.assign_child_resource(self.block("carried"), location=Coordinate.zero())
+
+    first.unassign_child_resource(holder)
+    # and now the name it carries collides with the one already there
+    with self.assertRaises(ValueError):
+      second.assign_child_resource(holder, location=Coordinate.zero())
+
+  def test_moving_between_parents_goes_through_the_old_one(self):
+    """A resource is moved by taking it off one parent and putting it on another, in that order.
+
+    Handing it straight to the new parent is refused, because the name is checked while the old
+    parent still holds it. Long-standing behaviour, unrelated to the index, and worth pinning: it is
+    why a plate changing carriers reaches a subscriber as an unassignment and an assignment.
+    """
+    root = self.block("root")
+    left, right = self.block("left"), self.block("right")
+    root.assign_child_resource(left, location=Coordinate.zero())
+    root.assign_child_resource(right, location=Coordinate.zero())
+
+    plate = self.block("plate")
+    left.assign_child_resource(plate, location=Coordinate.zero())
+
+    with self.assertRaises(ValueError):
+      right.assign_child_resource(plate, location=Coordinate.zero())
+
+    left.unassign_child_resource(plate)
+    right.assign_child_resource(plate, location=Coordinate.zero())
+    self.assertIs(plate.parent, right)
+    self.assertEqual(root.get_resource("plate"), plate)

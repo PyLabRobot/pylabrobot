@@ -2597,6 +2597,68 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(result[1], 0 - well_b.get_absolute_location("c", "c", "cavity_bottom").z)
 
 
+class TestChatterboxLastLLDHeights(unittest.IsolatedAsyncioTestCase):
+  """The chatterbox's last-LLD query reports the heights its simulated sensing produced.
+
+  `STARChatterboxBackend` simulates sensing in `_run_lld_on_channel_batch`, computing absolute
+  heights from each container's volume tracker. `request_pip_height_last_lld` must report those
+  same heights, under the base method's contract: one absolute height (mm) per channel, indexed
+  by physical channel index.
+  """
+
+  PROBE_VOLUME = 150.0  # uL
+
+  async def asyncSetUp(self):
+    self.backend = STARChatterboxBackend()
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(self.backend, deck=self.deck)
+
+    self.tip_car = TIP_CAR_480_A00(name="tip carrier")
+    self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    self.deck.assign_child_resource(self.tip_car, rails=1)
+
+    self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
+    self.deck.assign_child_resource(self.plt_car, rails=9)
+
+    await self.lh.setup()
+
+  async def asyncTearDown(self):
+    await self.lh.stop()
+
+  async def test_reports_no_measurement_before_any_lld(self):
+    heights = await self.backend.request_pip_height_last_lld()
+
+    self.assertEqual(len(heights), self.backend.num_channels)
+    self.assertTrue(all(isinstance(h, float) for h in heights))
+    self.assertEqual(heights, [0.0] * self.backend.num_channels)
+
+  async def test_latches_simulated_height_at_physical_channel(self):
+    # Channel 3, not 0: `_run_lld_on_channel_batch` keys its result by job index
+    # (`batch.indices`), but the query is indexed by physical channel (`batch.channels`).
+    # With a single job on channel 0 the two coincide and the distinction goes untested.
+    channel = 3
+    well = self.plate.get_item("D1")
+    await self.lh.pick_up_tips(self.tip_rack["D1"], use_channels=[channel])
+    well.tracker.set_volume(self.PROBE_VOLUME)
+
+    await self.backend.probe_liquid_heights(containers=[well], use_channels=[channel])
+
+    expected = well.get_absolute_location(
+      "c", "c", "cavity_bottom"
+    ).z + well.compute_height_from_volume(self.PROBE_VOLUME)
+    heights = await self.backend.request_pip_height_last_lld()
+
+    self.assertEqual(len(heights), self.backend.num_channels)
+    self.assertAlmostEqual(heights[channel], expected)
+    # Channels that did not probe still report no measurement. Index 0 in particular is where
+    # the measurement would land if job indices were mistaken for physical channel indices.
+    self.assertEqual(
+      [h for i, h in enumerate(heights) if i != channel],
+      [0.0] * (self.backend.num_channels - 1),
+    )
+
+
 class TestXArmGeometry(unittest.IsolatedAsyncioTestCase):
   """setup() resolves QM/RU/UA firmware onto the X-drive DriveConfigurations."""
 

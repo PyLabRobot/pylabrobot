@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from pylabrobot.serializer import serialize
 from pylabrobot.utils.interpolation import interpolate_1d
@@ -29,6 +29,7 @@ class Container(Liddable, Resource):
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones: Optional[List[Tuple[Coordinate, Coordinate]]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Create a new container.
 
@@ -52,6 +53,7 @@ class Container(Liddable, Resource):
       size_z=size_z,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self._material_z_thickness = material_z_thickness
     self.height_volume_data = (

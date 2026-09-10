@@ -109,6 +109,11 @@ class TestRegistry(unittest.TestCase):
       [{**MINIMAL, "api_version": "v9"}],
       [{**MINIMAL, "capabilities": "shaking"}],
       [{**MINIMAL, "capabilities": ["teleportation"]}],
+      [{**MINIMAL, "models": "model-a"}],
+      [{**MINIMAL, "models": [1]}],
+      [{**MINIMAL, "models": [{"name": ""}]}],
+      [{**MINIMAL, "models": [{"name": "model-a", "status": "nope"}]}],
+      [{**MINIMAL, "models": [{"name": "model-a", "bogus": True}]}],
       [{**MINIMAL, "manager": "rickwierenga"}],
       [{**MINIMAL, "bogus": 1}],
       ["not an object"],
@@ -136,6 +141,29 @@ class TestRendering(unittest.TestCase):
     self.assertIn("Curiox", html)
     self.assertIn("HT2000", html)
     self.assertIn("plate washing", html)
+
+  def test_card_contains_models(self):
+    device = Device(
+      {
+        **self.device,
+        "models": [{"name": "HT2000"}, {"name": "HT2100", "status": "wip"}],
+      }
+    )
+    for styles in (None, INLINE):
+      with self.subTest(inline=styles is INLINE):
+        html = render_card(device, _no_link, _no_link, styles)
+        table = html.split('<table class="plr-device-card__models"', 1)[1].split("</table>")[0]
+        self.assertIn(">Models</caption>", table)
+        self.assertIn('scope="col"', table)
+        self.assertIn(">Model</th>", table)
+        self.assertIn(">Support</th>", table)
+        rows = table.split("<tbody>")[1].split("</tr>")
+        self.assertIn(">HT2000</th>", rows[0])
+        self.assertIn("plr-device-status--mostly", rows[0])
+        self.assertIn(">Mostly</span>", rows[0])
+        self.assertIn(">HT2100</th>", rows[1])
+        self.assertIn("plr-device-status--wip", rows[1])
+        self.assertIn(">WIP</span>", rows[1])
 
   def test_card_links_only_what_resolves(self):
     html = render_card(self.device, _no_link, _no_link)
@@ -176,6 +204,16 @@ class TestRendering(unittest.TestCase):
     self.assertNotIn("[docs]", md)
     self.assertNotIn("[code]", md)
 
+  def test_markdown_card_contains_models(self):
+    device = Device(
+      {
+        **self.device,
+        "models": [{"name": "HT2000"}, {"name": "HT2100", "status": "wip"}],
+      }
+    )
+    md = render_card_markdown(device, _no_link, _no_link)
+    self.assertIn("Models: HT2000 (Mostly), HT2100 (WIP)", md)
+
   def test_inline_styles_only_when_asked(self):
     self.assertNotIn("padding:0.9rem", render_card(self.device, _no_link, _no_link))
     self.assertIn("padding:0.9rem", render_card(self.device, _no_link, _no_link, INLINE))
@@ -210,6 +248,48 @@ class TestRendering(unittest.TestCase):
     html = render_table(self.devices, _no_link, _no_link, "t")
     for field in set(re.findall(r'data-field="(\w+)"', html)):
       self.assertIn(f'data-{field}="', html)
+
+  def test_table_models_are_searchable_and_toggleable(self):
+    html = render_table(self.devices, _no_link, _no_link, "t")
+    model_count = sum(max(1, len(device.get("models", []))) for device in self.devices)
+    device = next(device for device in self.devices if device.get("models"))
+    model = device["models"][0]
+    device_id = device["id"]
+    model_name = model["name"]
+    model_status = model.get("status", device["status"])
+    self.assertIn(f"Search {model_count} models", html)
+    self.assertIn("Show models", html)
+    self.assertIn('class="plr-device-row-toggle"', html)
+    self.assertIn('aria-expanded="false"', html)
+    self.assertIn('data-has-models="true"', html)
+    self.assertIn(
+      f'<tr class="plr-device-model-row" data-device-id="{device_id}"', html
+    )
+    self.assertIn(
+      '<td class="plr-device-model-name" colspan="3"><span class="plr-device-model">'
+      '<span class="plr-device-model__arrow" aria-hidden="true">↳</span>'
+      f'<span class="plr-device-model__label">{model_name}</span>',
+      html,
+    )
+    self.assertIn(
+      '<td class="plr-device-model-status"><span class="plr-tip"', html
+    )
+    device_row = next(
+      line for line in html.splitlines() if f'id="device-{device_id}"' in line
+    )
+    self.assertIn(model_name.lower(), device_row.split('data-search="', 1)[1].split('"', 1)[0])
+
+    model_row = next(
+      line
+      for line in html.splitlines()
+      if f'data-device-id="{device_id}"' in line and f">{model_name}</span>" in line
+    )
+    model_search = model_row.split('data-search="', 1)[1].split('"', 1)[0]
+    self.assertIn(f"plr-device-status--{model_status}", model_row)
+    self.assertIn(model_name.lower(), model_search)
+    self.assertIn(model_status.lower(), model_search)
+    if len(device["models"]) > 1:
+      self.assertNotIn(device["models"][1]["name"].lower(), model_search)
 
   def test_empty_table(self):
     self.assertIn("No devices match", render_table([], _no_link, _no_link, "t"))

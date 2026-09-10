@@ -28,6 +28,17 @@ Use `set_default_event_bus()` when one process-wide bus is appropriate. `use_eve
 preferred for a bounded protocol or task because it is context-local and composes safely with
 async tasks.
 
+## Forward events to external services
+
+Subscribers can format and forward selected events to external logging, monitoring, or
+notification services. EventBus itself remains transport-independent: integrations such as Slack
+live in application code and choose which semantic or diagnostic events they need.
+
+The [Slack notifications cookbook](../../cookbook/slack_notifications.ipynb) demonstrates a small
+subscriber that forwards completed and failed semantic operations to a Slack webhook. It also
+shows how to keep the synchronous subscriber fast by submitting network work to a background
+thread.
+
 ## Event shape
 
 Every event has the following JSON-ready representation:
@@ -78,7 +89,7 @@ batch identifiers that PLR itself cannot know.
 from pylabrobot.events import event_context
 
 with use_event_bus(event_bus), event_context(run_id="run-42", batch_id="batch-2"):
-  await incubator.fetch_plate_to_loading_tray(site)
+  await incubator.fetch_plate_to_loading_tray("plate_1")
 ```
 
 The values are inherited by nested PLR events. Keep this context application-specific; device
@@ -99,28 +110,40 @@ diagnostic events preserve controller and transport activity for debugging.
 
 ## Current event coverage
 
-EventBus adoption is incremental. The initial implementation instruments the following public
+EventBus adoption is incremental. The current implementation instruments the following public
 frontends. Each listed semantic operation emits `started`, `completed`, and `failed` lifecycle
 events.
 
-| Frontend | Operations |
+| Frontend | Canonical semantic operations |
 | --- | --- |
 | `legacy.machines.Machine` | `machine.setup`, `machine.stop` |
 | `legacy.storage.Incubator` | `incubator.fetch_plate`, `incubator.take_in_plate` |
+| `high_res.sample_storage.HighResSampleStorage` | incubator fetch/take-in/nest transfer; temperature, humidity, CO2, and O2 control when supported |
 | `legacy.liquid_handling.LiquidHandler` | resource pickup/move/drop; tip pickup/drop; 96-head tip pickup/drop; aspirate; dispense |
+| `legacy.plate_reading.PlateReader` | open/close; luminescence, absorbance, and fluorescence reads |
+| `legacy.plate_reading.Imager` | `imager.capture` |
+| `legacy.plate_reading.ImageReader` | inherited PlateReader and Imager operations, without duplicate lifecycle records |
+| `legacy.thermocycling.Thermocycler` | lid open/close; block/lid temperature set/deactivate; protocol submission |
 | `legacy.shaking.Shaker` | `shaker.shake`, `shaker.stop_shaking` |
 | `legacy.temperature_controlling.TemperatureController` | set temperature, wait for temperature, deactivate |
-| `agilent.vspin.VSpin` | `centrifuge.spin` |
-| `agilent.vspin.Access2` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
+| `legacy.centrifuge.Centrifuge` | `centrifuge.spin` |
+| `legacy.centrifuge.Loader` | `centrifuge_loader.load`, `centrifuge_loader.unload` |
+| `agilent.vspin.VSpin` | `centrifuge.setup`, `centrifuge.stop`, `centrifuge.spin` |
+| `agilent.vspin.Access2` | `centrifuge_loader.setup`, `centrifuge_loader.stop`, `centrifuge_loader.load`, `centrifuge_loader.unload` |
 | `brooks.precise_flex.PreciseFlex` | lifecycle, fault/home/freedrive, joint/cartesian/rail/gripper motion, pick/drop, park |
+| `manual_operator.ManualOperator` | arbitrary acknowledged manual actions; resource moves |
 
 Detailed operation references:
 
 - [Machine lifecycle](event-bus/machine-lifecycle.md)
 - [Incubator](event-bus/incubator.md)
 - [LiquidHandler](event-bus/liquid-handler.md)
-- [Shaker and temperature controller](event-bus/thermal-and-shaking.md)
+- [Shaker and environmental controllers](event-bus/thermal-and-shaking.md)
+- [HighRes sample storage](../high_res/sample-storage/events.md)
+- [VSpin centrifuge and Access2 loader](../agilent/vspin/events.md)
 - [Diagnostic transports](event-bus/diagnostic-transports.md)
+- [Canonical schema for every operation above](../../contributor_guide/event-schemas.md)
+- [Manual operator actions](manual-operator.md#eventbus-integration)
 
 ```{toctree}
 :hidden:
@@ -136,8 +159,8 @@ event-bus/diagnostic-transports
 
 ### Incubator
 
-`incubator.fetch_plate` and `incubator.take_in_plate` include `device`, the moved plate in
-`resources`, and physical `source` and `destination` resource references.
+`incubator.fetch_plate`, `incubator.take_in_plate`, and `incubator.transfer_plate` include `device`,
+the moved plate in `resources`, and physical `source` and `destination` resource references.
 
 ### LiquidHandler
 
@@ -147,11 +170,28 @@ operated resources plus `liquid_operations`, one record per channel, with `chann
 `resource`, optional owning `plate`, and `volume`. Tip events similarly include direct tip
 locations and per-channel `tip_operations`.
 
-### Shaker and TemperatureController
+### PlateReader and Imager
+
+Plate-reader measurement events identify the directly selected wells, the requested modality
+settings, and bounded record counts without including returned measurement data. `imager.capture`
+records the resolved target and JSON-ready exposure, focus, and gain settings; software-auto
+retries remain inside one lifecycle and image data is excluded. `ImageReader` inherits both event
+families without double instrumentation.
+
+### Thermocycler
+
+Thermocycler events cover the seven primitive lid, thermal-control, and protocol-submission
+operations. Zoned setpoints use `target_temperatures`. Protocol events contain counts and volume
+metadata rather than the full profile, and completion means backend submission returned rather
+than physical execution finished.
+
+### Shaker and environmental controllers
 
 Shaker events include `speed_rpm` and optional `duration`. Temperature-controller events include
-`target_temperature` where applicable. Both frontends are `ResourceHolder`s: when a
-resource is loaded at operation start, it is included as the direct resource in `resources`.
+`target_temperature` where applicable. The legacy shaker and temperature frontends are
+`ResourceHolder`s: when a resource is loaded at operation start, it is included as the direct
+resource in `resources`. HighRes sample-store humidity and gas targets are fractions and use an
+empty `resources` list because the controller acts on the store environment rather than one plate.
 
 ### Brooks PreciseFlex
 
@@ -160,7 +200,15 @@ serialized `Coordinate` in `target.location`; joint targets use axis-name-to-val
 `pick` and `drop` describe controller actions. A resource-aware wrapper should emit the separate
 resource-transfer event when it has PLR resource context.
 
+### Agilent BenchCel
+
+`benchcel.downstack`, `benchcel.upstack`, and `benchcel.move_plate_between_stacks` include the
+BenchCel in `device`, the directly moved plate in `resources`, and the actual PLR stack or loading
+tray holders in `source` and `destination`.
+
 ## More detail
 
 The [EventBus contributor guide](../../contributor_guide/event-bus.md) defines the stable naming,
-resource, and test conventions for driver authors adding coverage.
+resource, and test conventions for driver authors adding coverage. The
+[Event Schema Registry](../../contributor_guide/event-schemas.md) defines canonical operation names
+and payload fields.

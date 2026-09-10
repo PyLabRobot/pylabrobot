@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import statistics
 import time
@@ -125,7 +126,13 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     """Execute a measurement: start background read, scan plate, collect results.
 
     This is the shared orchestration for all measurement types.
+
+    Cleanup commands are sent immediately after scanning while the interrupt
+    endpoint is still active.  Over USBIP the interrupt endpoint goes stale if
+    left unread for >2 s, so deferring cleanup until after the background reader
+    is stopped causes 15+ second hangs per command.
     """
+
     bg_task, stop_event, results = await self.reader.start_background_read(device)
 
     if bg_task is None or stop_event is None or results is None:
@@ -134,11 +141,27 @@ class ExperimentalSparkBackend(PlateReaderBackend):
     try:
       await self.measurement_control.prepare_instrument(measure_reference=True)
       await self.scan_plate_range(plate, wells, z)
+
+      # The interrupt endpoint is hot right now (just received RespReady for
+      # the SCAN command).  Send cleanup commands NOW, before any idle gap
+      # that would let the endpoint go stale.
+      await self.data_control.turn_all_interval_messages_off()
+      await self.measurement_control.end_measurement()
+
+      # Smart drain: wait for remaining bulk data packets.
+      # Exit early once no new packets arrive for 0.5 s (after a 2 s minimum).
+      drain_start = time.monotonic()
+      last_count = len(results)
+      while time.monotonic() - drain_start < 5.0:
+        await asyncio.sleep(0.5)
+        current_count = len(results)
+        if current_count > last_count:
+          last_count = current_count
+        elif time.monotonic() - drain_start > 2.0:
+          break
     finally:
       stop_event.set()
       await bg_task
-      await self.data_control.turn_all_interval_messages_off()
-      await self.measurement_control.end_measurement()
 
     return results
 
