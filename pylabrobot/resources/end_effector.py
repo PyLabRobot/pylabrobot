@@ -1,8 +1,11 @@
-"""End-effectors: what an arm carries at its wrist, and the parts they are made of.
+"""End-effectors: what is fitted at an arm's mechanical interface, and the parts they are made of.
 
-A mechanical gripper takes hold by closing onto a resource and lets go by opening. It is a link,
-because that is what it is on an arm: it spans the joint it turns on to the point it grips at,
-which is its tool centre point.
+An end-effector - equally a tool, or end-of-arm tooling - is what an arm carries at its wrist
+flange so that it can do its task. Its tool centre point is the point a move is programmed
+against, stated as an offset from that flange, and it belongs to the tool rather than to the arm:
+fit a different one and the point moves with it.
+
+`MechanicalGripper` spans that offset, flange to grip centre, which is why it is a `Link`.
 """
 
 from typing import Optional, Tuple, cast
