@@ -5,43 +5,43 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.resource import Resource
 
-# A gripper with every part a different size, so a part placed by the wrong measurement lands
-# somewhere this notices.
-LENGTH = 100.0
-BODY_X, BODY_Y, BODY_Z = 50.0, 80.0, 20.0
-FINGER_X, FINGER_Y, FINGER_Z = 30.0, 6.0, 8.0
-PAD_X, PAD_Y, PAD_Z = 10.0, 4.0, 12.0
-BODY_LOCATION = Coordinate(-10.0, -40.0, 0.0)
-FINGER_LOCATION = Coordinate(60.0, 0.0, 4.0)
-PAD_LOCATION = Coordinate(25.0, 1.0, -10.0)
-
-
-JAW_RANGE = (20.0, 90.0)
+# A gripper that exists: every measurement here is a Hamilton iSWAP's, so the fixture is a
+# shape that could be built rather than one chosen to make the arithmetic easy. No two of the
+# nine dimensions are equal, so a part placed by the wrong measurement lands where these notice.
+LENGTH = 137.7
+BODY_LOCATION = Coordinate(-13.0, -45.0, -1.3)
+FINGER_LOCATION = Coordinate(6.5, 0.0, 4.0)
+PAD_LOCATION = Coordinate(109.0, 1.5, -17.0)
+# What the gripper drive's own travel comes to, closed and open.
+JAW_RANGE = (70.844, 133.706)
 
 
 def gripper(**overrides) -> MechanicalGripper:
+  body = Resource(name="demo_body", size_x=59.0, size_y=90.0, size_z=20.3, category="body")
+
+  fingers = [
+    Resource(
+      name=f"demo_finger_{side}",
+      size_x=135.0,
+      size_y=7.0,
+      size_z=8.0,
+      category="finger",
+    )
+    for side in ("left", "right")
+  ]
+  pads = [
+    Resource(name=f"demo_finger_{side}_pad", size_x=37.0, size_y=4.0, size_z=17.0, category="pad")
+    for side in ("left", "right")
+  ]
+
   return MechanicalGripper(
-    name="g",
+    name="demo_gripper",
     length=LENGTH,
-    body=Resource(name="g_body", size_x=BODY_X, size_y=BODY_Y, size_z=BODY_Z, category="body"),
+    body=body,
     body_location=BODY_LOCATION,
-    fingers=[
-      Resource(
-        name=f"g_finger_{side}",
-        size_x=FINGER_X,
-        size_y=FINGER_Y,
-        size_z=FINGER_Z,
-        category="finger",
-      )
-      for side in ("left", "right")
-    ],
+    fingers=fingers,
     finger_location=FINGER_LOCATION,
-    pads=[
-      Resource(
-        name=f"g_finger_{side}_pad", size_x=PAD_X, size_y=PAD_Y, size_z=PAD_Z, category="pad"
-      )
-      for side in ("left", "right")
-    ],
+    pads=pads,
     pad_location=PAD_LOCATION,
     jaw_range=JAW_RANGE,
     **overrides,
@@ -55,7 +55,7 @@ class TestTheSpan(unittest.TestCase):
     """A gripper spans the interface it is bolted to and the point it grips at, so its tool
     centre point is simply its length along that span. The fingers reach past it."""
     g = gripper()
-    self.assertEqual(g.tool_center_point, Coordinate(100.0, 0.0, 0.0))
+    self.assertEqual(g.tool_center_point, Coordinate(LENGTH, 0.0, 0.0))
 
 
 class TestJaws(unittest.TestCase):
@@ -65,7 +65,7 @@ class TestJaws(unittest.TestCase):
     """Measured centre to centre between the two fingers, symmetrically about the span, so a width
     applied to one finger only, or applied twice to one side, fails this."""
     g = gripper()
-    for width in (90.0, 40.0, 20.0):
+    for width in (133.706, 100.0, 70.844):
       g.jaw_width = width
       left, right = g.fingers
       centres = [
@@ -82,13 +82,13 @@ class TestJaws(unittest.TestCase):
     g = gripper()
     with self.assertRaises(ValueError):
       g.jaw_width = 5.0
-    self.assertEqual(g.jaw_width, 90.0)
+    self.assertEqual(g.jaw_width, JAW_RANGE[1])
 
   def test_a_gripper_starts_open_unless_told_otherwise(self):
     """Open is the safe assumption for a model nothing has read yet, and a gripper known to home
     at a width is built at it instead."""
-    self.assertEqual(gripper().jaw_width, 90.0)
-    self.assertEqual(gripper(jaw_width=35.0).jaw_width, 35.0)
+    self.assertEqual(gripper().jaw_width, JAW_RANGE[1])
+    self.assertEqual(gripper(jaw_width=100.0).jaw_width, 100.0)
 
 
 class TestPads(unittest.TestCase):
@@ -100,10 +100,10 @@ class TestPads(unittest.TestCase):
     outside, since a finger's own origin is a corner rather than its middle - and a gripper whose
     two pads face opposite ways grips nothing where the model says it does."""
     g = gripper()
-    left, right = (cast(Coordinate, pad.location) for pad in g.pads)
-    finger_thickness, pad_thickness = FINGER_Y, PAD_Y
-    self.assertGreaterEqual(left.y, 0.0)
-    self.assertLessEqual(left.y + pad_thickness, finger_thickness)
+    for jaw, face in zip(g.fingers, g.pads):
+      sits_at = cast(Coordinate, face.location).y
+      self.assertGreaterEqual(sits_at, 0.0)
+      self.assertLessEqual(sits_at + face.get_size_y(), jaw.get_size_y())
 
 
 if __name__ == "__main__":
