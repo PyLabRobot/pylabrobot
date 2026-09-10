@@ -66,6 +66,10 @@ class MicroServeResourceTests(unittest.TestCase):
     stack.metadata["inventory_source"] = "operator"
     stack.assign_child_resource(plate("bottom"))
     stack.assign_child_resource(plate("top"))
+    self.assertEqual(
+      {key: stack.serialize()[key] for key in ("size_x", "size_y", "size_z")},
+      {"size_x": 0, "size_y": 0, "size_z": 0},
+    )
     root = Resource("deck", 1000, 1000, 0)
     root.assign_child_resource(stack, Coordinate(100, 200, 0))
     restored_root = Resource.deserialize(json.loads(json.dumps(root.serialize())))

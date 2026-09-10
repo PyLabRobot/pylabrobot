@@ -791,14 +791,21 @@ class MicroServeStacker(ResourceStack):
     metadata: Optional[Mapping[str, Any]] = None,
     category: str = "resource_group",
     model: Optional[str] = None,
+    size_x: float = 0,
+    size_y: float = 0,
+    size_z: float = 0,
   ) -> None:
     """Create a vertical plate stack, optionally bound to a controller.
 
     Deserialized stacks are detached. Pass all fourteen as ``stackers`` to
     ``HighResMicroServe`` to bind them without opening a hardware connection.
+    Size fields support PLR resource deserialization and must be zero; actual
+    stack dimensions are calculated from its children by ``ResourceStack``.
     """
     if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < 14:
       raise ValueError("Stacker index must be an integer from 0 through 13")
+    if (size_x, size_y, size_z) != (0, 0, 0):
+      raise ValueError("Stack sizes are calculated from plates; fixed size fields must be zero")
     self._controller = device
     self._index = index
     super().__init__(
@@ -820,8 +827,6 @@ class MicroServeStacker(ResourceStack):
   def serialize(self) -> dict:
     """Save inventory and index without sockets, controller ownership, or handoff state."""
     data = super().serialize()
-    for key in ("size_x", "size_y", "size_z"):
-      data.pop(key)
     data["index"] = self.index
     return data
 
