@@ -375,6 +375,47 @@ class TestResource(unittest.TestCase):
     bar.rotate_to(z=90)
     self.assertEqual((bar.rotation.x, bar.rotation.z), (15, 90))
 
+  def test_rotate_to_lands_on_any_axis_it_is_given(self):
+    for axis in ("x", "y", "z"):
+      for start in ((0, 0, 15), (90, 0, 90), (15, 90, 200)):
+        parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+        parent.location = Coordinate.zero()
+        bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+        parent.assign_child_resource(bar, location=Coordinate.zero())
+        bar.rotate(x=start[0], y=start[1], z=start[2])
+        bar.rotate_to(
+          x=30.0 if axis == "x" else None,
+          y=30.0 if axis == "y" else None,
+          z=30.0 if axis == "z" else None,
+        )
+        self.assertAlmostEqual(getattr(bar.rotation, axis) % 360, 30, places=9)
+
+  def test_rotate_keeps_every_axis_normalized(self):
+    resource = Resource("resource", size_x=10, size_y=10, size_z=10)
+    resource.rotate(x=350, y=350, z=350)
+    resource.rotate(x=20, y=20, z=20)
+    for axis in (resource.rotation.x, resource.rotation.y, resource.rotation.z):
+      self.assertGreaterEqual(axis, 0)
+      self.assertLess(axis, 360)
+
+  def test_a_pivot_inside_a_turned_parent_still_holds(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+    parent.assign_child_resource(bar, location=Coordinate(30, 40, 0))
+    parent.rotate(z=90)
+    far_end = Coordinate(100, 0, 0)
+
+    def where() -> Coordinate:
+      carried = matrix_vector_multiply_3x3(
+        bar.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
+      )
+      return bar.get_absolute_location() + Coordinate(*carried)
+
+    before = where()
+    bar.rotate(z=90, reference=far_end)
+    self.assertEqual(where(), before)
+
   def test_rotate_to_turns_about_a_reference_point(self):
     parent = Resource("parent", size_x=500, size_y=500, size_z=10)
     parent.location = Coordinate.zero()

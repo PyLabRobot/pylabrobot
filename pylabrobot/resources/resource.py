@@ -892,44 +892,22 @@ class Resource(SerializableMixin):
     if changed and self.parent is not None:
       self._state_updated()
 
-  def rotate(
-    self,
-    x: float = 0,
-    y: float = 0,
-    z: float = 0,
-    reference: Optional[Coordinate] = None,
-  ):
-    """Rotate counter-clockwise around the parent-coordinate axes by the given degrees.
+  def _turn(self, rotation: Rotation, reference: Optional[Coordinate]) -> None:
+    """Take `rotation` as this resource's own, leaving `reference` where it was."""
+    pivot = reference if self.location is not None else None
+    before = self.get_absolute_rotation().get_rotation_matrix() if pivot is not None else None
+    # In place, so anything holding this `Rotation` keeps it, and normalised as `_prepend` does.
+    self.rotation.x = rotation.x % 360
+    self.rotation.y = rotation.y % 360
+    self.rotation.z = rotation.z % 360
 
-    A resource turns about its own left front bottom corner. `reference` names a different point
-    to turn about - a hinge, a joint, an axis the part really pivots on - and the resource is
-    moved as it turns by however far the turn carried that point, which leaves the point where it
-    was and the resource swinging on it. Left about the corner when None, which is what every
-    caller that does not ask for one gets.
-
-    Args:
-      x: degrees to turn about X.
-      y: degrees to turn about Y.
-      z: degrees to turn about Z.
-      reference: the point to turn about, from this resource's left front bottom corner. Its own
-        corner when None.
-    """
-    # Only a turn about another point needs to know which way this was already facing, and
-    # building a rotation matrix is twelve trigonometry calls: without a reference this stays out
-    # of the way, since `rotate` is on the path every placement takes.
-    turning_on = reference if self.location is not None else None
-    before = self.get_absolute_rotation().get_rotation_matrix() if turning_on is not None else None
-
-    self.rotation._prepend(Rotation(x=x, y=y, z=z))
-
-    if turning_on is not None and before is not None:
+    if pivot is not None and before is not None:
       after = self.get_absolute_rotation().get_rotation_matrix()
-      was = matrix_vector_multiply_3x3(before, turning_on.vector())
-      now = matrix_vector_multiply_3x3(after, turning_on.vector())
+      was = matrix_vector_multiply_3x3(before, pivot.vector())
+      now = matrix_vector_multiply_3x3(after, pivot.vector())
       carried = Coordinate(was[0] - now[0], was[1] - now[1], was[2] - now[2])
-      # `location` is measured in the parent's frame while `reference` is in this resource's, so
-      # what the turn carried has to be taken back through the parent's own rotation. A rotation
-      # matrix inverts by transposing.
+      # `carried` is in this resource's frame, `location` in the parent's. A rotation matrix
+      # inverts by transposing.
       parent = self.parent
       if parent is not None:
         turned = parent.get_absolute_rotation().get_rotation_matrix()
@@ -940,9 +918,20 @@ class Resource(SerializableMixin):
         )
       self.location = cast(Coordinate, self.location) + carried
 
-    # Rotation is part of the resource's state; notify subscribers (e.g. the
-    # Visualizer) so they can re-render.
     self._state_updated()
+
+  def rotate(
+    self, x: float = 0, y: float = 0, z: float = 0, reference: Optional[Coordinate] = None
+  ):
+    """Rotate counter-clockwise around the parent-coordinate axes by the given degrees.
+
+    Args:
+      x: degrees to turn about X.
+      y: degrees to turn about Y.
+      z: degrees to turn about Z.
+      reference: the point to turn about. This resource's own corner when None.
+    """
+    self._turn(Rotation(x=x, y=y, z=z) + self.rotation, reference)
 
   def rotate_to(
     self,
@@ -951,23 +940,21 @@ class Resource(SerializableMixin):
     z: Optional[float] = None,
     reference: Optional[Coordinate] = None,
   ):
-    """Rotate counter-clockwise to the given number of degrees.
-
-    A go-to where `rotate` is a move-by: told the same angle twice, this lands in the same place
-    both times. The angles are in the parent's frame, as `rotation` is - `get_absolute_rotation`
-    is what composes the chain to the root.
+    """Rotate counter-clockwise to the given degrees, where `rotate` turns by them.
 
     Args:
       x: degrees to point along about X. Left where it is when None.
       y: degrees to point along about Y. Left where it is when None.
       z: degrees to point along about Z. Left where it is when None.
-      reference: the point to turn about, as `rotate` takes it.
+      reference: the point to turn about. This resource's own corner when None.
     """
-    self.rotate(
-      x=0 if x is None else x - self.rotation.x,
-      y=0 if y is None else y - self.rotation.y,
-      z=0 if z is None else z - self.rotation.z,
-      reference=reference,
+    self._turn(
+      Rotation(
+        x=self.rotation.x if x is None else x,
+        y=self.rotation.y if y is None else y,
+        z=self.rotation.z if z is None else z,
+      ),
+      reference,
     )
 
   def copy(self) -> Self:
