@@ -29,11 +29,11 @@ class MechanicalGripper(Link):
     name: str,
     length: float,
     body: Coordinate,
-    body_at: Coordinate,
+    body_location: Coordinate,
     finger: Coordinate,
-    finger_at: Coordinate,
+    finger_location: Coordinate,
     pad: Coordinate,
-    pad_at: Coordinate,
+    pad_location: Coordinate,
     jaw_range: Tuple[float, float],
     jaw_width: Optional[float] = None,
     category: str = "mechanical_gripper",
@@ -43,9 +43,13 @@ class MechanicalGripper(Link):
     Args:
       name: what to call this one.
       length: the joint it turns on to the grip centre, in mm.
-      body: the body's size, how far along the link it starts, and how far above it stands, in mm.
-      finger: the same for one finger. There are two, either side of the span.
-      pad: the same for the pad on a finger's end, measured from the joint as the rest are.
+      body: how big the body is, in mm.
+      body_location: where it sits, from the joint this gripper turns on.
+      finger: how big one finger is, in mm. There are two, either side of the span.
+      finger_location: where a finger sits along and above the span. Its Y is `jaw_width`'s, so
+        what stands here for it is not used.
+      pad: how big the pad on a finger's end is, in mm.
+      pad_location: where it sits, from the finger it is fixed to.
       jaw_range: how far apart the fingers stand, closed and open, in mm.
       jaw_width: how far apart they stand to begin with, in mm. Where a gripper is known to come
         up at a particular width - the one it homes at, say - that is what to build it at, so the
@@ -66,7 +70,7 @@ class MechanicalGripper(Link):
       category="body",
       model=f"{model}_body" if model else None,
     )
-    self.assign_child_resource(self.body, location=body_at)
+    self.assign_child_resource(self.body, location=body_location)
 
     # A finger has a size and no place of its own: `jaw_width` decides where it stands, and
     # `_place_the_fingers` is what puts it there.
@@ -82,7 +86,9 @@ class MechanicalGripper(Link):
       for side in ("left", "right")
     ]
     for jaw in self.fingers:
-      self.assign_child_resource(jaw, location=Coordinate(finger_at.x, 0.0, finger_at.z))
+      self.assign_child_resource(
+        jaw, location=Coordinate(finger_location.x, 0.0, finger_location.z)
+      )
 
     self.pads = []
     for jaw in self.fingers:
@@ -94,7 +100,7 @@ class MechanicalGripper(Link):
         category="pad",
         model=f"{jaw.model}_pad" if jaw.model else None,
       )
-      jaw.assign_child_resource(face, location=pad_at)
+      jaw.assign_child_resource(face, location=pad_location)
       self.pads.append(face)
 
     self._place_the_fingers()
