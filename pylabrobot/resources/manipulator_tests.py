@@ -1,7 +1,7 @@
 import unittest
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.manipulator import Link, bolt_on
+from pylabrobot.resources.manipulator import Link
 from pylabrobot.resources.resource import Resource
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
@@ -58,28 +58,6 @@ class TestLink(unittest.TestCase):
 
     with self.assertRaises(RuntimeError):
       Link(name="loose", length=100.0).turn_to(0)
-
-
-class TestBoltOn(unittest.TestCase):
-  """Material hung on a link, which carries none of its own."""
-
-  def test_a_part_is_centred_across_the_link_and_stands_where_it_says(self):
-    """A link is a line through its joints, so material is centred across it in Y and offset along
-    and above it by what the part states. Its category is what the part is, and its model is named
-    after the link's, so two of the same part on one link are one model mounted twice."""
-    link = Link(name="link", length=100.0, model="a_link")
-    part = bolt_on(link, "shell", (40.0, 12.0, 5.0, 7.0, 3.0))
-
-    self.assertEqual(part.location, Coordinate(7.0, -6.0, 3.0))
-    self.assertEqual(
-      (part.name, part.category, part.model), ("link_shell", "shell", "a_link_shell")
-    )
-
-  def test_a_link_with_no_model_gives_its_parts_none(self):
-    """There is nothing to name them after, and a part carrying a model nothing describes is worse
-    than one carrying none."""
-    part = bolt_on(Link(name="link", length=100.0), "shell", (40.0, 12.0, 5.0, 0.0, 0.0))
-    self.assertIsNone(part.model)
 
 
 if __name__ == "__main__":

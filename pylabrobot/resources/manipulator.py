@@ -6,7 +6,7 @@ overhang either joint without the kinematics noticing. That is the split every r
 makes, and it is what lets one length stand for the geometry and another for the part.
 """
 
-from typing import Optional, Tuple, Type
+from typing import Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -78,42 +78,3 @@ class Link(Resource):
     # Anything watching the model - a viewer, a collision check - learns of a joint moving here or
     # not at all.
     self._state_updated()
-
-
-def bolt_on(
-  link: Resource,
-  what: str,
-  part: Tuple[float, float, float, float, float],
-  of: Type[Resource] = Resource,
-) -> Resource:
-  """Hang material on a link, centred across it and standing where the part says.
-
-  The part is a model in its own right, named for the link it hangs on and what it is: a link is a
-  line through its joints and carries no material itself, so anything to be said about the material
-  - what it is made of, what it looks like - is said about the part rather than about the link.
-  Two parts that are the same thing on either side of a span share the name, because they are one
-  model mounted twice: the category is what the part is, where the name distinguishes the copies.
-  A link with no model of its own has nothing to name its parts after, and they get none either.
-
-  Args:
-    link: the link it is bolted to.
-    what: what the part is, which names it and gives it a category.
-    part: its size, how far along the link it starts from the joint, and how far above the link
-      it stands. A link is a line through the joints, so the material around it is rarely centred
-      on it: an arm that steps down to its gripper hangs each part at its own height.
-    of: what to make it, for material that is more than a box.
-
-  Returns:
-    The part.
-  """
-  category = what.split("_")[0]
-  made = of(
-    name=f"{link.name}_{what}",
-    size_x=part[0],
-    size_y=part[1],
-    size_z=part[2],
-    category=category,
-    model=f"{link.model}_{category}" if link.model else None,
-  )
-  link.assign_child_resource(made, location=Coordinate(part[3], -part[1] / 2, part[4]))
-  return made

@@ -11,7 +11,8 @@ fit a different one and the point moves with it.
 from typing import Optional, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.manipulator import Link, bolt_on
+from pylabrobot.resources.manipulator import Link
+from pylabrobot.resources.resource import Resource
 
 
 class MechanicalGripper(Link):
@@ -54,19 +55,57 @@ class MechanicalGripper(Link):
     if not low <= self._jaw_width <= high:
       raise ValueError(f"the jaws open {low} to {high} mm, so cannot start at {self._jaw_width}")
 
-    self.body = bolt_on(self, "body", body)
-    self.fingers = [bolt_on(self, f"finger_{side}", finger) for side in ("left", "right")]
-    self.pads = [
-      bolt_on(on, "pad", (pad[0], pad[1], pad[2], pad[3] - finger[3], pad[4] - finger[4]))
-      for on in self.fingers
-    ]
-    for on in self.pads:
-      # A pad is fixed to its finger, centred in the finger's thickness, so it sits the same way
-      # on both of them. `bolt_on` centres material across a link, and a finger is not a link: its
-      # own origin is a corner, so centring there leaves one pad inside the jaws and the other
-      # outside them.
-      where = cast(Coordinate, on.location)
-      on.location = Coordinate(where.x, (finger[1] - pad[1]) / 2, where.z)
+    # A link is a line through its joints, so material on it straddles that line: centred across
+    # the link in Y, and standing where the part says along it and above it.
+    body_x, body_y, body_z, body_along, body_above = body
+    self.body = Resource(
+      name=f"{name}_body",
+      size_x=body_x,
+      size_y=body_y,
+      size_z=body_z,
+      category="body",
+      model=f"{model}_body" if model else None,
+    )
+    self.assign_child_resource(self.body, location=Coordinate(body_along, -body_y / 2, body_above))
+
+    finger_x, finger_y, finger_z, finger_along, finger_above = finger
+    self.fingers = []
+    for side in ("left", "right"):
+      jaw = Resource(
+        name=f"{name}_finger_{side}",
+        size_x=finger_x,
+        size_y=finger_y,
+        size_z=finger_z,
+        category="finger",
+        model=f"{model}_finger" if model else None,
+      )
+      self.assign_child_resource(
+        jaw, location=Coordinate(finger_along, -finger_y / 2, finger_above)
+      )
+      self.fingers.append(jaw)
+
+    # A pad is fixed to its finger and centred in the finger's own thickness, which is a different
+    # rule: a finger's origin is a corner rather than a line through it, so straddling it would
+    # leave one pad inside the jaws and the other outside.
+    pad_x, pad_y, pad_z, pad_along, pad_above = pad
+    self.pads = []
+    for jaw in self.fingers:
+      face = Resource(
+        name=f"{jaw.name}_pad",
+        size_x=pad_x,
+        size_y=pad_y,
+        size_z=pad_z,
+        category="pad",
+        model=f"{jaw.model}_pad" if jaw.model else None,
+      )
+      jaw.assign_child_resource(
+        face,
+        location=Coordinate(
+          pad_along - finger_along, (finger_y - pad_y) / 2, pad_above - finger_above
+        ),
+      )
+      self.pads.append(face)
+
     self._place_the_fingers()
 
   @property
