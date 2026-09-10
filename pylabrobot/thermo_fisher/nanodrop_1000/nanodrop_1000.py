@@ -36,9 +36,14 @@ class ThermoFisherNanoDrop1000:
   @classmethod
   def _configure_usb_device(cls, device) -> None:
     device.set_configuration()
-    device.clear_halt(cls.EP_OUT)
-    device.clear_halt(cls.EP_IN_HEAVY)
-    device.clear_halt(cls.EP_IN_COMM)
+    # clear_halt is not universally safe: on macOS libusb raises "Entity not found"
+    # for an endpoint that is not actually halted, and seabreeze (the reference
+    # Ocean Optics stack) does not call it at all. Best-effort per endpoint.
+    for ep in (cls.EP_OUT, cls.EP_IN_HEAVY, cls.EP_IN_COMM):
+      try:
+        device.clear_halt(ep)
+      except Exception:
+        logger.debug("clear_halt(0x%02x) failed; continuing", ep, exc_info=True)
 
   async def setup(self):
     """Initializes the USB connection."""
@@ -62,6 +67,12 @@ class ThermoFisherNanoDrop1000:
         # Ensure lamp and magnet are off before disconnect
         await self.send_command([0x03, 0x00])
         await self.send_command([0x0F, 0x00])
+        # The command-based lamp-off ([0x03, 0x00]) is unreliable on this firmware and
+        # intermittently leaves the lamp on. A USB reset clears the lamp latch
+        # deterministically, as the original driver did. Done at teardown only, so the
+        # re-enumeration a reset triggers is harmless here.
+        if self.io.dev is not None:
+          await asyncio.to_thread(self.io.dev.reset)
       except Exception:
         logger.warning("Failed to power down the NanoDrop cleanly", exc_info=True)
       await self.io.stop()
