@@ -19,6 +19,7 @@ from typing import (
   Any,
   Awaitable,
   Callable,
+  Coroutine,
   Dict,
   Iterator,
   List,
@@ -309,7 +310,7 @@ def event_operation(
 
 def evented_operation(
   name: str, context_factory: OperationContextFactory
-) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
+) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Coroutine[Any, Any, Any]]]:
   """Decorate an async frontend call with correlated lifecycle events.
 
   The wrapper is a no-op when no listener is installed, preserving normal PLR performance and
@@ -323,7 +324,7 @@ def evented_operation(
   explicitly inside the method instead.
   """
 
-  def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+  def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Coroutine[Any, Any, Any]]:
     @wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
       if not is_event_bus_active():
