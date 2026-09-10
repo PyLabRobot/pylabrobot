@@ -46,4 +46,4 @@ administrator Command Prompt:
 reg delete "HKLM\SYSTEM\CurrentControlSet\Control\usbflags\245710020002" /v SkipBOSDescriptorQuery /f
 ```
 
-Continue with the [NanoDrop 1000 hello world](hello-world.md).
+Continue with the [NanoDrop 1000 hello world](hello-world.ipynb).
