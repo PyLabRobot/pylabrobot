@@ -161,6 +161,8 @@ These are state-transition records rather than semantic operation lifecycles.
 
 | Operation | Fields | Notes |
 | --- | --- | --- |
+| `centrifuge_loader.setup` | `device` | Modern `Access2.setup()` initializes and homes the loader through its driver. |
+| `centrifuge_loader.stop` | `device` | Modern `Access2.stop()` closes the loader transport. |
 | `centrifuge_loader.load` | `device`, `resources`, `source`, `destination` | Transfers the staging plate into the selected centrifuge bucket. |
 | `centrifuge_loader.unload` | `device`, `resources`, `source`, `destination` | Transfers the selected bucket plate onto the staging holder. |
 
@@ -330,7 +332,15 @@ one is assigned at operation start.
 
 | Operation | Fields | Notes |
 | --- | --- | --- |
+| `centrifuge.setup` | `device` | Modern `VSpin.setup()` connects, initializes, homes, and positions the centrifuge. |
+| `centrifuge.stop` | `device` | Modern `VSpin.stop()` closes the transport; this is not a controlled rotor stop. |
 | `centrifuge.spin` | `device`, `resources`, `bucket_resources`, `relative_centrifugal_force`, `duration`, `acceleration_fraction`, `deceleration_fraction` | Describes one requested spin cycle. |
+
+The modern Agilent setup/stop operations use the usual `started` then `completed` or `failed`
+lifecycle. VSpin uses `device_reference(self, name=self.name)`; Access2 uses
+`resource_reference(self)`. These device-only payloads have no legacy `backend` field.
+Instrument the public frontends only; direct Access2 driver lifecycle methods remain undecorated.
+`machine.setup` and `machine.stop` belong to `legacy.machines.Machine` and its backend schema.
 
 `resources` contains directly loaded resources only. Empty buckets are not represented.
 `bucket_resources` preserves the association between each loaded resource and its holder:

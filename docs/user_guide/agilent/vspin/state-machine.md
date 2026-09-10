@@ -73,6 +73,9 @@ ready to move. Ordinary VSpin commands require initialization and homing to be c
 `activity == IDLE`, and `recovery_required == False`, followed by the command's physical
 checks.
 
+Use `await loader.setup()` and `await loader.stop()` on the Access2 frontend to include
+semantic lifecycle events while delegating to the existing driver methods.
+
 For Access2, initialization and homing are read from controller status. Its semantic
 state records connection, operation, recovery, and the last confirmed teachpoint.
 
