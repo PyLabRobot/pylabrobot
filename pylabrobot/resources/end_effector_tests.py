@@ -5,14 +5,11 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.resource import Resource
 
-# A gripper that exists: every measurement here is a Hamilton iSWAP's, so the fixture is a
-# shape that could be built rather than one chosen to make the arithmetic easy. No two of the
-# nine dimensions are equal, so a part placed by the wrong measurement lands where these notice.
+# Measured off a Hamilton iSWAP.
 LENGTH = 137.7
 BODY_LOCATION = Coordinate(-13.0, -45.0, -1.3)
 FINGER_LOCATION = Coordinate(6.5, 0.0, 4.0)
 PAD_LOCATION = Coordinate(109.0, 1.5, -17.0)
-# What the gripper drive's own travel comes to, closed and open.
 JAW_RANGE = (70.844, 133.706)
 
 
@@ -34,36 +31,28 @@ def gripper(**overrides) -> MechanicalGripper:
     for side in ("left", "right")
   ]
 
-  return MechanicalGripper(
+  arguments = dict(
     name="demo_gripper",
     length=LENGTH,
     body=body,
     body_location=BODY_LOCATION,
     fingers=fingers,
     finger_location=FINGER_LOCATION,
+    jaw_range=JAW_RANGE,
     pads=pads,
     pad_location=PAD_LOCATION,
-    jaw_range=JAW_RANGE,
-    **overrides,
   )
+  return MechanicalGripper(**{**arguments, **overrides})
 
 
 class TestTheSpan(unittest.TestCase):
-  """A gripper is a link: it spans the joint it turns on to the point it grips at."""
-
   def test_the_grip_centre_sits_at_the_end_of_the_span(self):
-    """A gripper spans the interface it is bolted to and the point it grips at, so its tool
-    centre point is simply its length along that span. The fingers reach past it."""
     g = gripper()
     self.assertEqual(g.tool_center_point, Coordinate(LENGTH, 0.0, 0.0))
 
 
 class TestJaws(unittest.TestCase):
-  """How wide the jaws stand is state, not shape."""
-
   def test_a_width_stands_the_fingers_that_far_apart(self):
-    """Measured centre to centre between the two fingers, symmetrically about the span, so a width
-    applied to one finger only, or applied twice to one side, fails this."""
     g = gripper()
     for width in (133.706, 100.0, 70.844):
       g.jaw_width = width
@@ -75,30 +64,32 @@ class TestJaws(unittest.TestCase):
       self.assertAlmostEqual(centres[0] + centres[1], 0.0)
 
   def test_the_jaws_refuse_a_width_they_do_not_reach(self):
-    """At construction and afterwards alike: a model claiming a width the drive cannot reach would
-    put the fingers where the arm cannot."""
     with self.assertRaises(ValueError):
       gripper(jaw_width=200.0)
     g = gripper()
+    before = g.jaw_width
     with self.assertRaises(ValueError):
       g.jaw_width = 5.0
-    self.assertEqual(g.jaw_width, JAW_RANGE[1])
+    self.assertEqual(g.jaw_width, before)
 
   def test_a_gripper_starts_open_unless_told_otherwise(self):
-    """Open is the safe assumption for a model nothing has read yet, and a gripper known to home
-    at a width is built at it instead."""
     self.assertEqual(gripper().jaw_width, JAW_RANGE[1])
     self.assertEqual(gripper(jaw_width=100.0).jaw_width, 100.0)
 
 
 class TestPads(unittest.TestCase):
-  """What actually touches the resource."""
+  def test_a_gripper_can_have_bare_fingers(self):
+    g = gripper(pads=None, pad_location=None)
+    self.assertEqual(g.pads, [])
+    self.assertEqual([jaw.children for jaw in g.fingers], [[], []])
 
-  def test_a_pad_sits_the_same_way_on_both_fingers(self):
-    """A pad is fixed to its finger, so it sits identically on each. Centring it across the finger
-    the way material is centred across a link would put one pad inside the jaws and the other
-    outside, since a finger's own origin is a corner rather than its middle - and a gripper whose
-    two pads face opposite ways grips nothing where the model says it does."""
+  def test_pads_and_their_location_go_together(self):
+    with self.assertRaises(ValueError):
+      gripper(pad_location=None)
+    with self.assertRaises(ValueError):
+      gripper(pads=None)
+
+  def test_a_pad_sits_inside_its_finger(self):
     g = gripper()
     for jaw, face in zip(g.fingers, g.pads):
       sits_at = cast(Coordinate, face.location).y
