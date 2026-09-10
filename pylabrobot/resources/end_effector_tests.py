@@ -8,14 +8,12 @@ from pylabrobot.resources.resource import Resource
 # A gripper with every part a different size, so a part placed by the wrong measurement lands
 # somewhere this notices.
 LENGTH = 100.0
-BODY_SIZE, BODY_LOCATION = (50.0, 80.0, 20.0), Coordinate(-10.0, -40.0, 0.0)
-FINGER_SIZE, FINGER_LOCATION = (30.0, 6.0, 8.0), Coordinate(60.0, 0.0, 4.0)
-PAD_SIZE, PAD_LOCATION = (10.0, 4.0, 12.0), Coordinate(25.0, 1.0, -10.0)
-
-
-def part(name: str, size, category: str) -> Resource:
-  """One piece of the gripper's material, which the caller builds and the gripper only places."""
-  return Resource(name=name, size_x=size[0], size_y=size[1], size_z=size[2], category=category)
+BODY_X, BODY_Y, BODY_Z = 50.0, 80.0, 20.0
+FINGER_X, FINGER_Y, FINGER_Z = 30.0, 6.0, 8.0
+PAD_X, PAD_Y, PAD_Z = 10.0, 4.0, 12.0
+BODY_LOCATION = Coordinate(-10.0, -40.0, 0.0)
+FINGER_LOCATION = Coordinate(60.0, 0.0, 4.0)
+PAD_LOCATION = Coordinate(25.0, 1.0, -10.0)
 
 
 JAW_RANGE = (20.0, 90.0)
@@ -25,11 +23,25 @@ def gripper(**overrides) -> MechanicalGripper:
   return MechanicalGripper(
     name="g",
     length=LENGTH,
-    body=part("g_body", BODY_SIZE, "body"),
+    body=Resource(name="g_body", size_x=BODY_X, size_y=BODY_Y, size_z=BODY_Z, category="body"),
     body_location=BODY_LOCATION,
-    fingers=[part(f"g_finger_{side}", FINGER_SIZE, "finger") for side in ("left", "right")],
+    fingers=[
+      Resource(
+        name=f"g_finger_{side}",
+        size_x=FINGER_X,
+        size_y=FINGER_Y,
+        size_z=FINGER_Z,
+        category="finger",
+      )
+      for side in ("left", "right")
+    ],
     finger_location=FINGER_LOCATION,
-    pads=[part(f"g_finger_{side}_pad", PAD_SIZE, "pad") for side in ("left", "right")],
+    pads=[
+      Resource(
+        name=f"g_finger_{side}_pad", size_x=PAD_X, size_y=PAD_Y, size_z=PAD_Z, category="pad"
+      )
+      for side in ("left", "right")
+    ],
     pad_location=PAD_LOCATION,
     jaw_range=JAW_RANGE,
     **overrides,
@@ -89,7 +101,7 @@ class TestPads(unittest.TestCase):
     two pads face opposite ways grips nothing where the model says it does."""
     g = gripper()
     left, right = (cast(Coordinate, pad.location) for pad in g.pads)
-    finger_thickness, pad_thickness = FINGER_SIZE[1], PAD_SIZE[1]
+    finger_thickness, pad_thickness = FINGER_Y, PAD_Y
     self.assertGreaterEqual(left.y, 0.0)
     self.assertLessEqual(left.y + pad_thickness, finger_thickness)
 
