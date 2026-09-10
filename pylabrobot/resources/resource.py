@@ -944,6 +944,32 @@ class Resource(SerializableMixin):
     # Visualizer) so they can re-render.
     self._state_updated()
 
+  def rotate_to(
+    self,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+    z: Optional[float] = None,
+    reference: Optional[Coordinate] = None,
+  ):
+    """Rotate counter-clockwise to the given number of degrees.
+
+    A go-to where `rotate` is a move-by: told the same angle twice, this lands in the same place
+    both times. The angles are in the parent's frame, as `rotation` is - `get_absolute_rotation`
+    is what composes the chain to the root.
+
+    Args:
+      x: degrees to point along about X. Left where it is when None.
+      y: degrees to point along about Y. Left where it is when None.
+      z: degrees to point along about Z. Left where it is when None.
+      reference: the point to turn about, as `rotate` takes it.
+    """
+    self.rotate(
+      x=0 if x is None else x - self.rotation.x,
+      y=0 if y is None else y - self.rotation.y,
+      z=0 if z is None else z - self.rotation.z,
+      reference=reference,
+    )
+
   def copy(self) -> Self:
     resource_copy = self.__class__.deserialize(self.serialize(), allow_marshal=True)
     resource_copy.load_all_state(self.serialize_all_state())

@@ -352,6 +352,42 @@ class TestResource(unittest.TestCase):
     self.assertEqual(bar.get_absolute_location() + Coordinate(*carried), before)
     self.assertEqual(bar.location, Coordinate(100, -100, 0))
 
+  def test_rotate_to_goes_to_an_angle_where_rotate_moves_by_one(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+    parent.assign_child_resource(bar, location=Coordinate.zero())
+
+    bar.rotate_to(z=30)
+    bar.rotate_to(z=30)
+    self.assertEqual(bar.rotation.z, 30)
+
+    bar.rotate(z=30)
+    self.assertEqual(bar.rotation.z, 60)
+
+  def test_rotate_to_leaves_an_axis_it_was_not_given(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+    parent.assign_child_resource(bar, location=Coordinate.zero())
+
+    bar.rotate(x=15, z=40)
+    bar.rotate_to(z=90)
+    self.assertEqual((bar.rotation.x, bar.rotation.z), (15, 90))
+
+  def test_rotate_to_turns_about_a_reference_point(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+    parent.assign_child_resource(bar, location=Coordinate.zero())
+    far_end = Coordinate(100, 0, 0)
+
+    bar.rotate_to(z=90, reference=far_end)
+    carried = matrix_vector_multiply_3x3(
+      bar.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
+    )
+    self.assertEqual(bar.get_absolute_location() + Coordinate(*carried), far_end)
+
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
     r.location = Coordinate.zero()
