@@ -364,7 +364,9 @@ class Resource(SerializableMixin):
     # carry no location yet still rotate what hangs from them, so the rotation is taken from the
     # whole tree rather than from the chain.
     rotation = chain[0].get_absolute_rotation()
-    matrix = None if rotation.is_identity() else rotation.get_rotation_matrix()
+    matrix = (
+      None if rotation._quaternion == (1.0, 0.0, 0.0, 0.0) else rotation.get_rotation_matrix()
+    )
     position = cast(Coordinate, chain[0].location)
 
     # 2b. Accumulate each child's offset in its parent's frame
@@ -376,7 +378,7 @@ class Resource(SerializableMixin):
         position += Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector())) + Coordinate(
           *matrix_vector_multiply_3x3(matrix, location.vector())
         )
-      if not child.rotation.is_identity():
+      if child.rotation._quaternion != (1.0, 0.0, 0.0, 0.0):
         rotation = rotation + child.rotation
         matrix = rotation.get_rotation_matrix()
 

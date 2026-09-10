@@ -126,13 +126,6 @@ class Rotation(SerializableMixin):
       [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
     ]
 
-  def is_identity(self) -> bool:
-    """Return whether this rotation leaves coordinates unchanged."""
-    _, x, y, z = self._quaternion
-    return math.isclose(x, 0.0, abs_tol=1e-12) and math.isclose(
-      y, 0.0, abs_tol=1e-12
-    ) and math.isclose(z, 0.0, abs_tol=1e-12)
-
   def serialize(self) -> dict:
     """Serialize using the public Euler-angle representation."""
     return {"x": self.x, "y": self.y, "z": self.z, "type": self.__class__.__name__}

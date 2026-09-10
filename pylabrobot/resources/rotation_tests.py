@@ -49,11 +49,6 @@ class TestRotation(unittest.TestCase):
       rotation.get_rotation_matrix(), Rotation(x=10, y=20, z=30).get_rotation_matrix()
     )
 
-  def test_is_identity(self):
-    self.assertTrue(Rotation().is_identity())
-    self.assertTrue(Rotation(z=360).is_identity())
-    self.assertFalse(Rotation(z=90).is_identity())
-
   def test_serialize_preserves_euler_shape(self):
     rotation = Rotation(x=-180, y=100, z=270)
 
