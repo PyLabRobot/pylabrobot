@@ -43,18 +43,6 @@ class Link(Resource):
       name=name, size_x=length, size_y=0.0, size_z=0.0, category=category, model=model
     )
 
-  @property
-  def far_joint(self) -> Coordinate:
-    """The joint this link carries, in its own frame.
-
-    Where the next link is placed, since a child is placed in its parent's own frame and the
-    parent's rotation is applied on top of that.
-
-    Returns:
-      The far joint, from this link's near one.
-    """
-    return Coordinate(self.get_size_x(), 0.0, 0.0)
-
   def turn_to(self, angle: float, about: Optional[Coordinate] = None) -> None:
     """Point the link along `angle`, turning on the joint it is mounted on.
 

@@ -18,15 +18,16 @@ class TestLink(unittest.TestCase):
     first = Link(name="first", length=100.0)
     second = Link(name="second", length=50.0)
     base.assign_child_resource(first, location=Coordinate(0, 0, 0))
-    first.assign_child_resource(second, location=first.far_joint)
+    first.assign_child_resource(second, location=Coordinate(first.get_size_x(), 0, 0))
 
-    self.assertEqual(second.get_absolute_location() + second.far_joint, Coordinate(150, 0, 0))
+    far_end = Coordinate(second.get_size_x(), 0, 0)
+    self.assertEqual(second.get_absolute_location() + far_end, Coordinate(150, 0, 0))
 
     second.turn_to(90)
     # Through the link's own rotation rather than a vector worked out here, so the test exercises
     # the turn instead of restating its answer.
     carried = matrix_vector_multiply_3x3(
-      second.get_absolute_rotation().get_rotation_matrix(), second.far_joint.vector()
+      second.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
     )
     end = second.get_absolute_location() + Coordinate(*carried)
     self.assertEqual(end, Coordinate(100, 50, 0))
