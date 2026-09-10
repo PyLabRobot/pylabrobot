@@ -142,6 +142,11 @@ class _PositionAlignmentError(RuntimeError):
   """Raised when a completed rotor move settles outside its target tolerance."""
 
 
+def _vspin_lifecycle_event_context(self: "VSpin") -> dict[str, object]:
+  """Identify the centrifuge whose connection lifecycle is changing."""
+  return {"device": device_reference(self, name=self.name)}
+
+
 def _vspin_event_context(
   self: "VSpin",
   g: float = 500,
@@ -302,6 +307,7 @@ class VSpin:
         if activity is not None:
           self._set_activity(VSpinActivity.IDLE)
 
+  @evented_operation("centrifuge.setup", _vspin_lifecycle_event_context)
   async def setup(self) -> None:
     """Connect, initialize, home, and place the VSpin in its safe setup position."""
     async with self._command_scope("set up VSpin", require_ready=False) as transition:
@@ -460,6 +466,7 @@ class VSpin:
 
     await self._lock_door(transition=transition)
 
+  @evented_operation("centrifuge.stop", _vspin_lifecycle_event_context)
   async def stop(self) -> None:
     """Close the VSpin transport and invalidate session-scoped state."""
     async with self._command_scope("stop VSpin", require_ready=False):

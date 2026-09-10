@@ -13,7 +13,9 @@ from pylabrobot.agilent.vspin._state import (
   TransferPhase,
   TransferProgress,
 )
-from pylabrobot.agilent.vspin.access2 import Access2Driver
+from pylabrobot.agilent.vspin.access2 import Access2, Access2Driver
+from pylabrobot.agilent.vspin.vspin import VSpin
+from pylabrobot.events import EventBus, PLREvent, resource_reference, use_event_bus
 from pylabrobot.io.binary import Writer
 
 _READY_FLAGS = protocol.STATUS_INITIALIZED | protocol.STATUS_HOMED
@@ -228,16 +230,51 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
         _ScriptStep(protocol.build_get_status(), _short_status_data()),
       ]
     )
-    driver, io = self._make_driver(steps)
+    for use_frontend in (False, True):
+      with self.subTest(use_frontend=use_frontend):
+        driver, io = self._make_driver(steps)
+        with patch("pylabrobot.agilent.vspin.vspin.FTDI", autospec=True):
+          vspin = VSpin(name="centrifuge", device_id="test")
+        loader = Access2(name="loader", device_id="test", vspin=vspin)
+        loader.driver = driver
+        events: list[PLREvent] = []
+        event_bus = EventBus()
+        event_bus.subscribe(events.append)
 
-    await driver.setup()
+        with use_event_bus(event_bus):
+          if use_frontend:
+            await loader.setup()
+          else:
+            await driver.setup()
 
-    io.assert_complete(self)
-    self.assertTrue(io.setup_called)
-    self.assertEqual(io.baudrate, 115384)
-    self.assertEqual(driver.state.connection, ConnectionState.CONNECTED)
-    self.assertEqual(driver.state.operation, Access2Activity.IDLE)
-    self.assertEqual(driver.state.last_teachpoint, protocol.TEACHPOINT_PARK)
+          io.assert_complete(self)
+          self.assertTrue(io.setup_called)
+          self.assertEqual(io.baudrate, 115384)
+          self.assertEqual(driver.state.connection, ConnectionState.CONNECTED)
+          self.assertEqual(driver.state.operation, Access2Activity.IDLE)
+          self.assertEqual(driver.state.last_teachpoint, protocol.TEACHPOINT_PARK)
+
+          if use_frontend:
+            await loader.stop()
+          else:
+            await driver.stop()
+
+        self.assertTrue(io.stopped)
+        self.assertEqual(driver.state.connection, ConnectionState.DISCONNECTED)
+        self.assertIsNone(driver.state.last_teachpoint)
+        self.assertEqual(
+          [event.name for event in events],
+          [
+            "centrifuge_loader.setup.started",
+            "centrifuge_loader.setup.completed",
+            "centrifuge_loader.stop.started",
+            "centrifuge_loader.stop.completed",
+          ]
+          if use_frontend
+          else [],
+        )
+        for event in events:
+          self.assertEqual(event.data, {"device": resource_reference(loader)})
 
   async def test_complete_home_ftdi_transcript(self):
     steps = [

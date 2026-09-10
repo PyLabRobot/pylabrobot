@@ -20,7 +20,7 @@ from pylabrobot.agilent.vspin._state import (
 from pylabrobot.agilent.vspin.access2 import Access2
 from pylabrobot.agilent.vspin.errors import CentrifugeDoorError
 from pylabrobot.agilent.vspin.vspin import VSpin
-from pylabrobot.events import EventBus, PLREvent, use_event_bus
+from pylabrobot.events import EventBus, PLREvent, resource_reference, use_event_bus
 from pylabrobot.io.binary import Writer
 from pylabrobot.resources import Coordinate, Resource
 
@@ -184,6 +184,80 @@ class TestVSpinEvents(unittest.IsolatedAsyncioTestCase):
     self.vspin_ftdi = patch("pylabrobot.agilent.vspin.vspin.FTDI", autospec=True)
     self.vspin_ftdi.start()
     self.addCleanup(self.vspin_ftdi.stop)
+
+  async def test_setup_lifecycle_events(self):
+    """Report one correlated lifecycle and preserve the original failure."""
+    for error in (None, RuntimeError("setup failed")):
+      with self.subTest(error=error):
+        vspin = VSpin(name="centrifuge", device_id="test")
+        operation = AsyncMock(side_effect=error)
+        vspin._setup = operation  # type: ignore[method-assign]
+        events: list[PLREvent] = []
+        event_bus = EventBus()
+        event_bus.subscribe(events.append)
+
+        with use_event_bus(event_bus):
+          if error is None:
+            await vspin.setup()
+          else:
+            with self.assertRaises(RuntimeError) as raised:
+              await vspin.setup()
+            self.assertIs(raised.exception, error)
+
+        operation.assert_awaited_once()
+        self.assertEqual(
+          [event.name for event in events],
+          [
+            "centrifuge.setup.started",
+            "centrifuge.setup." + ("completed" if error is None else "failed"),
+          ],
+        )
+        started, terminal = events
+        self.assertEqual(started.data, {"device": {"name": "centrifuge", "type": "VSpin"}})
+        self.assertEqual(terminal.data["device"], started.data["device"])
+        self.assertEqual(started.context["operation"], "centrifuge.setup")
+        self.assertEqual(started.context["operation_id"], terminal.context["operation_id"])
+        self.assertNotIn("backend", terminal.data)
+        if error is not None:
+          self.assertEqual(terminal.data["error_type"], "RuntimeError")
+          self.assertEqual(terminal.data["error_message"], str(error))
+
+  async def test_stop_lifecycle_events(self):
+    """Report one correlated lifecycle and preserve the original failure."""
+    for error in (None, RuntimeError("stop failed")):
+      with self.subTest(error=error):
+        vspin = VSpin(name="centrifuge", device_id="test")
+        operation = AsyncMock(side_effect=error)
+        vspin._stop = operation  # type: ignore[method-assign]
+        events: list[PLREvent] = []
+        event_bus = EventBus()
+        event_bus.subscribe(events.append)
+
+        with use_event_bus(event_bus):
+          if error is None:
+            await vspin.stop()
+          else:
+            with self.assertRaises(RuntimeError) as raised:
+              await vspin.stop()
+            self.assertIs(raised.exception, error)
+
+        operation.assert_awaited_once()
+        self.assertEqual(
+          [event.name for event in events],
+          [
+            "centrifuge.stop.started",
+            "centrifuge.stop." + ("completed" if error is None else "failed"),
+          ],
+        )
+        started, terminal = events
+        self.assertEqual(started.data, {"device": {"name": "centrifuge", "type": "VSpin"}})
+        self.assertEqual(terminal.data["device"], started.data["device"])
+        self.assertEqual(started.context["operation"], "centrifuge.stop")
+        self.assertEqual(started.context["operation_id"], terminal.context["operation_id"])
+        self.assertNotIn("backend", terminal.data)
+        if error is not None:
+          self.assertEqual(terminal.data["error_type"], "RuntimeError")
+          self.assertEqual(terminal.data["error_message"], str(error))
 
   async def test_spin_emits_loaded_bucket_resources_and_parameters(self):
     vspin = VSpin(name="centrifuge", device_id="test")
@@ -1776,6 +1850,78 @@ class TestAccess2Events(unittest.IsolatedAsyncioTestCase):
     self.loader = Access2(name="loader", device_id="test", vspin=self.vspin)
     self.loader.driver.load = AsyncMock()  # type: ignore[method-assign]
     self.loader.driver.unload = AsyncMock()  # type: ignore[method-assign]
+
+  async def test_setup_lifecycle_events(self):
+    """Report one correlated lifecycle and preserve the original failure."""
+    for error in (None, RuntimeError("setup failed")):
+      with self.subTest(error=error):
+        operation = AsyncMock(side_effect=error)
+        self.loader.driver.setup = operation  # type: ignore[method-assign]
+        events: list[PLREvent] = []
+        event_bus = EventBus()
+        event_bus.subscribe(events.append)
+
+        with use_event_bus(event_bus):
+          if error is None:
+            await self.loader.setup()
+          else:
+            with self.assertRaises(RuntimeError) as raised:
+              await self.loader.setup()
+            self.assertIs(raised.exception, error)
+
+        operation.assert_awaited_once()
+        self.assertEqual(
+          [event.name for event in events],
+          [
+            "centrifuge_loader.setup.started",
+            "centrifuge_loader.setup." + ("completed" if error is None else "failed"),
+          ],
+        )
+        started, terminal = events
+        self.assertEqual(started.data, {"device": resource_reference(self.loader)})
+        self.assertEqual(terminal.data["device"], started.data["device"])
+        self.assertEqual(started.context["operation"], "centrifuge_loader.setup")
+        self.assertEqual(started.context["operation_id"], terminal.context["operation_id"])
+        self.assertNotIn("backend", terminal.data)
+        if error is not None:
+          self.assertEqual(terminal.data["error_type"], "RuntimeError")
+          self.assertEqual(terminal.data["error_message"], str(error))
+
+  async def test_stop_lifecycle_events(self):
+    """Report one correlated lifecycle and preserve the original failure."""
+    for error in (None, RuntimeError("stop failed")):
+      with self.subTest(error=error):
+        operation = AsyncMock(side_effect=error)
+        self.loader.driver.stop = operation  # type: ignore[method-assign]
+        events: list[PLREvent] = []
+        event_bus = EventBus()
+        event_bus.subscribe(events.append)
+
+        with use_event_bus(event_bus):
+          if error is None:
+            await self.loader.stop()
+          else:
+            with self.assertRaises(RuntimeError) as raised:
+              await self.loader.stop()
+            self.assertIs(raised.exception, error)
+
+        operation.assert_awaited_once()
+        self.assertEqual(
+          [event.name for event in events],
+          [
+            "centrifuge_loader.stop.started",
+            "centrifuge_loader.stop." + ("completed" if error is None else "failed"),
+          ],
+        )
+        started, terminal = events
+        self.assertEqual(started.data, {"device": resource_reference(self.loader)})
+        self.assertEqual(terminal.data["device"], started.data["device"])
+        self.assertEqual(started.context["operation"], "centrifuge_loader.stop")
+        self.assertEqual(started.context["operation_id"], terminal.context["operation_id"])
+        self.assertNotIn("backend", terminal.data)
+        if error is not None:
+          self.assertEqual(terminal.data["error_type"], "RuntimeError")
+          self.assertEqual(terminal.data["error_message"], str(error))
 
   async def test_load_emits_loader_to_bucket_transfer(self):
     plate = Resource("plate_1", size_x=1, size_y=1, size_z=1)

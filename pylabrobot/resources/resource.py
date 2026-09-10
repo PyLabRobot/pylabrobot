@@ -364,7 +364,9 @@ class Resource(SerializableMixin):
     # carry no location yet still rotate what hangs from them, so the rotation is taken from the
     # whole tree rather than from the chain.
     rotation = chain[0].get_absolute_rotation()
-    matrix = rotation.get_rotation_matrix() if (rotation.x or rotation.y or rotation.z) else None
+    matrix = (
+      None if rotation._quaternion == (1.0, 0.0, 0.0, 0.0) else rotation.get_rotation_matrix()
+    )
     position = cast(Coordinate, chain[0].location)
 
     # 2b. Accumulate each child's offset in its parent's frame
@@ -376,7 +378,7 @@ class Resource(SerializableMixin):
         position += Coordinate(*matrix_vector_multiply_3x3(matrix, anchor.vector())) + Coordinate(
           *matrix_vector_multiply_3x3(matrix, location.vector())
         )
-      if child.rotation.x or child.rotation.y or child.rotation.z:
+      if child.rotation._quaternion != (1.0, 0.0, 0.0, 0.0):
         rotation = rotation + child.rotation
         matrix = rotation.get_rotation_matrix()
 
@@ -897,7 +899,7 @@ class Resource(SerializableMixin):
     z: float = 0,
     reference: Optional[Coordinate] = None,
   ):
-    """Rotate counter-clockwise by the given number of degrees.
+    """Rotate counter-clockwise around the parent-coordinate axes by the given degrees.
 
     A resource turns about its own left front bottom corner. `reference` names a different point
     to turn about - a hinge, a joint, an axis the part really pivots on - and the resource is
@@ -918,9 +920,7 @@ class Resource(SerializableMixin):
     turning_on = reference if self.location is not None else None
     before = self.get_absolute_rotation().get_rotation_matrix() if turning_on is not None else None
 
-    self.rotation.x = (self.rotation.x + x) % 360
-    self.rotation.y = (self.rotation.y + y) % 360
-    self.rotation.z = (self.rotation.z + z) % 360
+    self.rotation._prepend(Rotation(x=x, y=y, z=z))
 
     if turning_on is not None and before is not None:
       after = self.get_absolute_rotation().get_rotation_matrix()

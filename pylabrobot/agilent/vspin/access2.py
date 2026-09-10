@@ -93,6 +93,11 @@ def _transfer_route(
   raise ValueError(f"Invalid transfer direction: {direction}")
 
 
+def _loader_lifecycle_event_context(self: "Access2") -> dict[str, object]:
+  """Identify the loader whose connection lifecycle is changing."""
+  return {"device": resource_reference(self)}
+
+
 def _loader_load_event_context(self: "Access2", **parameters: float | str) -> dict:
   plate = self.resource
   return {
@@ -972,6 +977,16 @@ class Access2(ResourceHolder):
     )
     self.driver: Access2Driver = driver
     self._vspin = vspin
+
+  @evented_operation("centrifuge_loader.setup", _loader_lifecycle_event_context)
+  async def setup(self) -> None:
+    """Connect, initialize, home, and park the loader through its driver."""
+    await self.driver.setup()
+
+  @evented_operation("centrifuge_loader.stop", _loader_lifecycle_event_context)
+  async def stop(self) -> None:
+    """Close the loader transport and invalidate session-scoped driver state."""
+    await self.driver.stop()
 
   def _teachpoint_for_bucket(self, bucket: ResourceHolder) -> int:
     """Map a VSpin bucket resource to its Access2 protocol teachpoint."""
