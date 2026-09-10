@@ -8,6 +8,7 @@ plate handoffs and recovery; the protocol reference describes commands and valid
 :maxdepth: 1
 
 hello-world
+inventory
 state-machine
 protocol
 capabilities

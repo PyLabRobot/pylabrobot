@@ -5,9 +5,10 @@ import logging
 import math
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 
 from pylabrobot.io import Socket
+from pylabrobot.resources import Coordinate, Plate, Resource, ResourceStack
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,26 @@ class MicroServePlateDimensions:
   def _wire(self) -> str:
     """Encode dimensions in the order and units required by the controller."""
     return " ".join(str(round(v * 1000)) for v in (self.height, self.stack_height, self.thickness))
+
+  @classmethod
+  def from_plate(
+    cls, plate: Plate, *, thickness: float, stack_height: Optional[float] = None
+  ) -> "MicroServePlateDimensions":
+    """Use a plate's height and pitch, with an explicitly measured support thickness.
+
+    Supply ``stack_height`` for lidded plates or when ``stacking_z_height`` is
+    unknown. The pitch must describe the actual combination of plate and lid.
+    """
+    height = plate.get_size_z()
+    if plate.lid is not None:
+      height += plate.lid.get_size_z() - plate.lid.nesting_z_height
+      if stack_height is None:
+        raise ValueError("Supply the measured stacking pitch for lidded plates")
+    if stack_height is None:
+      stack_height = plate.stacking_z_height
+    if stack_height is None:
+      raise ValueError("Supply stack_height or define plate.stacking_z_height")
+    return cls(height=height, stack_height=stack_height, thickness=thickness)
 
 
 @dataclass(frozen=True)
@@ -184,6 +205,9 @@ class HighResMicroServe:
     ack_timeout: float = 10.0,
     command_timeout: float = 120.0,
     scan_timeout: float = 300.0,
+    *,
+    name: str = "microserve",
+    stackers: Optional[Sequence["MicroServeStacker"]] = None,
   ) -> None:
     """Configure the connection and timeouts in seconds without opening it."""
     for timeout in (ack_timeout, command_timeout, scan_timeout):
@@ -206,7 +230,26 @@ class HighResMicroServe:
     self._unresolved_preparation: Optional[MicroServeUnresolvedPreparation] = None
     self._unresolved_operation: Optional[str] = None
     self._manual_mode = False
-    self.stackers = tuple(MicroServeStacker(self, index) for index in range(14))
+    self._transfer_inventory: Tuple[Resource, ...] = ()
+    self._confirmed_transfer: Optional[Tuple[str, int, Plate]] = None
+    if stackers is None:
+      self.stackers = tuple(
+        MicroServeStacker(self, index, name=f"{name}_stacker_{index}") for index in range(14)
+      )
+    else:
+      configured = tuple(stackers)
+      if len(configured) != 14 or any(
+        not isinstance(stack, MicroServeStacker) or stack.index != index
+        for index, stack in enumerate(configured)
+      ):
+        raise ValueError("Supply fourteen MicroServeStackers ordered by index 0 through 13")
+      if any(stack._controller is not None for stack in configured):
+        raise ValueError("Supplied stackers must be detached from a controller")
+      if len({stack.name for stack in configured}) != 14:
+        raise ValueError("Stacker names must be unique")
+      self.stackers = configured
+      for stack in self.stackers:
+        stack._controller = self
 
   @property
   def last_command_id(self) -> Optional[int]:
@@ -724,19 +767,148 @@ class HighResMicroServe:
       self._unresolved_operation = None
 
 
-class MicroServeStacker:
+class MicroServeStacker(ResourceStack):
   """One of the fourteen stackers, accessed through ``device.stackers[index]``.
 
   Stacker indices are zero-based. Preparation methods position a plate or an
   empty receiving location for an external robot; they do not operate the robot.
+
+  Children represent the expected inventory, bottom to top. Constructor
+  ``resources`` are supplied top to bottom, following ``ResourceStack``. Counts,
+  scans, preparation, and retraction never infer or change this inventory.
+  Resource coordinates describe the stack, not a calibrated robot handoff.
+  Each physical stack must use one compatible plate geometry; resource assignment
+  does not certify plate compatibility or the carousel's physical capacity.
   """
 
-  def __init__(self, device: HighResMicroServe, index: int) -> None:
-    """Associate this stacker with its controller and zero-based index."""
+  def __init__(
+    self,
+    device: Optional[HighResMicroServe] = None,
+    index: int = 0,
+    *,
+    name: Optional[str] = None,
+    resources: Optional[List[Resource]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+    category: str = "resource_group",
+    model: Optional[str] = None,
+  ) -> None:
+    """Create a vertical plate stack, optionally bound to a controller.
+
+    Deserialized stacks are detached. Pass all fourteen as ``stackers`` to
+    ``HighResMicroServe`` to bind them without opening a hardware connection.
+    """
     if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < 14:
       raise ValueError("Stacker index must be an integer from 0 through 13")
-    self._device = device
+    self._controller = device
     self._index = index
+    super().__init__(
+      name=name or f"microserve_stacker_{index}",
+      direction="z",
+      resources=resources,
+      metadata=metadata,
+    )
+    self.category = category
+    self.model = model
+
+  @property
+  def _device(self) -> HighResMicroServe:
+    """Require a live controller binding for hardware operations."""
+    if self._controller is None:
+      raise RuntimeError("Attach this stacker through HighResMicroServe(stackers=...) first")
+    return self._controller
+
+  def serialize(self) -> dict:
+    """Save inventory and index without sockets, controller ownership, or handoff state."""
+    data = super().serialize()
+    for key in ("size_x", "size_y", "size_z"):
+      data.pop(key)
+    data["index"] = self.index
+    return data
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    """Accept plates only; physical compatibility still requires validated geometry."""
+    if not isinstance(resource, Plate):
+      raise TypeError("MicroServe stackers can contain only Plate resources")
+
+  def assign_child_resource(
+    self, resource: Resource, location: Optional[Coordinate] = None, reassign: bool = True
+  ) -> None:
+    """Record a plate on top, without moving hardware or changing firmware counts."""
+    self.check_can_drop_resource_here(resource, reassign=reassign)
+    if resource.parent is self and reassign and self.get_top_item() is resource:
+      return
+    super().assign_child_resource(resource, location=location, reassign=reassign)
+
+  def unassign_child_resource(self, resource: Resource) -> None:
+    """Remove the expected top plate from inventory, without moving hardware."""
+    if not self.children or self.children[-1] is not resource:
+      raise ValueError("Only the top plate can be removed from a MicroServe stacker")
+    super().unassign_child_resource(resource)
+
+  def get_top_item(self) -> Plate:
+    """Return the expected accessible plate, raising ValueError for an empty stack."""
+    return cast(Plate, super().get_top_item())
+
+  async def confirm_plate_loaded(self, plate: Plate) -> None:
+    """Record a successful external placement during this stacker's prepared load.
+
+    Call only after the robot or operator confirms placement. This performs no
+    hardware operation. Repeating with the same plate records it only once.
+    A robot that already assigned the plate to this stack is also supported.
+    """
+    await self._confirm_transfer("load", plate)
+
+  async def confirm_plate_unloaded(self, plate: Plate) -> None:
+    """Record a successful external pickup during this stacker's prepared unload.
+
+    Call only after confirmed pickup. The plate is detached if still on this
+    stack; an assignment already made by the robot to its destination is kept.
+    This performs no hardware operation and never removes a second plate on repeat.
+    """
+    await self._confirm_transfer("unload", plate)
+
+  async def _confirm_transfer(self, direction: Literal["load", "unload"], plate: Plate) -> None:
+    """Commit one explicitly confirmed plate transfer under the controller lock."""
+    if not isinstance(plate, Plate):
+      raise TypeError("A transfer requires a Plate resource")
+    device = self._device
+    async with device._lock:
+      device._require_resolved_preparation()
+      prepared = device._prepared
+      allowed = ("load",) if direction == "load" else ("unload", "unloadangle")
+      if prepared is None or prepared[0] not in allowed or prepared[1] != self.index:
+        raise RuntimeError("Confirm the transfer before retracting its owned preparation")
+      confirmed = device._confirmed_transfer
+      if confirmed is not None:
+        if confirmed[0] != direction or confirmed[1] != self.index or confirmed[2] is not plate:
+          raise RuntimeError("A plate transfer has already been confirmed for this preparation")
+      before = device._transfer_inventory
+      if direction == "load":
+        if any(item is plate for item in before):
+          raise ValueError("The plate was already in this stack before preparation")
+        after = (*before, plate)
+      else:
+        if not before or before[-1] is not plate:
+          raise ValueError("The plate must be the top plate recorded before preparation")
+        after = before[:-1]
+      current = tuple(self.children)
+      unchanged = len(current) == len(before) and all(a is b for a, b in zip(current, before))
+      transferred = len(current) == len(after) and all(a is b for a, b in zip(current, after))
+      if confirmed is not None:
+        if not transferred:
+          raise RuntimeError("Inventory changed after confirmation; inspect before continuing")
+        return
+      if not unchanged and not transferred:
+        raise RuntimeError("Inventory changed during the handoff; reconcile it after inspection")
+      if unchanged:
+        if direction == "load":
+          self.assign_child_resource(plate)
+        else:
+          self.unassign_child_resource(plate)
+      device._confirmed_transfer = (direction, self.index, plate)
+      logger.info(
+        "Confirmed MicroServe stacker %d %s of plate %s", self.index, direction, plate.name
+      )
 
   @property
   def index(self) -> int:
@@ -867,6 +1039,8 @@ class MicroServeStacker:
       await self._set_dimensions(dimensions)
       logger.info("Preparing MicroServe stacker %d for %s", self.index, direction)
       command_id = None
+      self._device._transfer_inventory = tuple(self.children)
+      self._device._confirmed_transfer = None
       self._device._prepared = None
       try:
         lines = await self._device._command(f"{direction} {self.index}")
@@ -889,7 +1063,8 @@ class MicroServeStacker:
     """Present an empty receiving position for the robot to place a plate.
 
     Repeating this call in the same verified transfer state does not move the
-    device again. After placing the plate, clear the robot and call ``retract()``.
+    device again. After confirmed placement, use ``confirm_plate_loaded(plate)``
+    to update inventory, clear the robot, and call ``retract()``.
     """
     await self._prepare("load", dimensions)
 
@@ -898,7 +1073,8 @@ class MicroServeStacker:
 
     A confirmed preparation is not repeated before retraction, even if the
     robot has already removed the plate. After the robot clears the device,
-    call ``retract()`` to end the handoff.
+    use ``confirm_plate_unloaded(plate)`` to update inventory and call ``retract()``
+    to end the handoff. Preparation itself never removes a resource.
     """
     await self._prepare("unload", dimensions)
 

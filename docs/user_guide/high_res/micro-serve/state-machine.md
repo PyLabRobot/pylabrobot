@@ -39,6 +39,21 @@ The robot's action does not clear ownership, and a change in the plate-detection
 authorize another plate fetch. Retraction ends the handoff. An extended loader whose preparation
 is not owned by this driver cannot be adopted by calling prepare again.
 
+## Resource inventory during a handoff
+
+Each stacker is a vertical PLR `ResourceStack`. Its expected plate inventory is
+independent of the motion state above. Preparation snapshots the current plate
+order and leaves it unchanged. After a successful external pickup or placement,
+`confirm_plate_unloaded(plate)` or `confirm_plate_loaded(plate)` records that one
+transfer. Repeats for the same plate preserve inventory; a second plate in the
+same handoff is rejected. Confirm before retracting.
+
+If the robot already updated the resource tree, confirmation checks the expected
+result and preserves the robot's assignment. Retraction, counts, scans, and
+reconnects never infer an inventory change. An interrupted preparation retains
+its original expected order for confirmation after successful reconciliation.
+See [plate inventory](inventory.md) for initialization, geometry, and recovery.
+
 ## Connection and homing
 
 ```{graphviz} images/lifecycle.dot
