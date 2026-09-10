@@ -28,9 +28,12 @@ class MechanicalGripper(Link):
     self,
     name: str,
     length: float,
-    body: Tuple[float, float, float, float, float],
-    finger: Tuple[float, float, float, float, float],
-    pad: Tuple[float, float, float, float, float],
+    body: Coordinate,
+    body_at: Coordinate,
+    finger: Coordinate,
+    finger_at: Coordinate,
+    pad: Coordinate,
+    pad_at: Coordinate,
     jaw_range: Tuple[float, float],
     jaw_width: Optional[float] = None,
     category: str = "mechanical_gripper",
@@ -55,55 +58,43 @@ class MechanicalGripper(Link):
     if not low <= self._jaw_width <= high:
       raise ValueError(f"the jaws open {low} to {high} mm, so cannot start at {self._jaw_width}")
 
-    # A link is a line through its joints, so material on it straddles that line: centred across
-    # the link in Y, and standing where the part says along it and above it.
-    body_x, body_y, body_z, body_along, body_above = body
     self.body = Resource(
       name=f"{name}_body",
-      size_x=body_x,
-      size_y=body_y,
-      size_z=body_z,
+      size_x=body.x,
+      size_y=body.y,
+      size_z=body.z,
       category="body",
       model=f"{model}_body" if model else None,
     )
-    self.assign_child_resource(self.body, location=Coordinate(body_along, -body_y / 2, body_above))
+    self.assign_child_resource(self.body, location=body_at)
 
-    finger_x, finger_y, finger_z, finger_along, finger_above = finger
-    self.fingers = []
-    for side in ("left", "right"):
-      jaw = Resource(
+    # A finger has a size and no place of its own: `jaw_width` decides where it stands, and
+    # `_place_the_fingers` is what puts it there.
+    self.fingers = [
+      Resource(
         name=f"{name}_finger_{side}",
-        size_x=finger_x,
-        size_y=finger_y,
-        size_z=finger_z,
+        size_x=finger.x,
+        size_y=finger.y,
+        size_z=finger.z,
         category="finger",
         model=f"{model}_finger" if model else None,
       )
-      self.assign_child_resource(
-        jaw, location=Coordinate(finger_along, -finger_y / 2, finger_above)
-      )
-      self.fingers.append(jaw)
+      for side in ("left", "right")
+    ]
+    for jaw in self.fingers:
+      self.assign_child_resource(jaw, location=Coordinate(finger_at.x, 0.0, finger_at.z))
 
-    # A pad is fixed to its finger and centred in the finger's own thickness, which is a different
-    # rule: a finger's origin is a corner rather than a line through it, so straddling it would
-    # leave one pad inside the jaws and the other outside.
-    pad_x, pad_y, pad_z, pad_along, pad_above = pad
     self.pads = []
     for jaw in self.fingers:
       face = Resource(
         name=f"{jaw.name}_pad",
-        size_x=pad_x,
-        size_y=pad_y,
-        size_z=pad_z,
+        size_x=pad.x,
+        size_y=pad.y,
+        size_z=pad.z,
         category="pad",
         model=f"{jaw.model}_pad" if jaw.model else None,
       )
-      jaw.assign_child_resource(
-        face,
-        location=Coordinate(
-          pad_along - finger_along, (finger_y - pad_y) / 2, pad_above - finger_above
-        ),
-      )
+      jaw.assign_child_resource(face, location=pad_at)
       self.pads.append(face)
 
     self._place_the_fingers()
@@ -139,7 +130,10 @@ class MechanicalGripper(Link):
     self._place_the_fingers()
 
   def _place_the_fingers(self) -> None:
-    """Stand the fingers either side of the span, as far apart as the jaws are open."""
+    """Stand the fingers either side of the span, as far apart as the jaws are open.
+
+    A finger is the one part of a gripper whose Y is not fixed: the jaw width owns it outright.
+    """
     for finger, side in zip(self.fingers, (1.0, -1.0)):
       here = cast(Coordinate, finger.location)
       finger.location = Coordinate(

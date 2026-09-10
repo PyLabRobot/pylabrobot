@@ -7,15 +7,24 @@ from pylabrobot.resources.end_effector import MechanicalGripper
 # A gripper with every part a different size, so a part placed by the wrong measurement lands
 # somewhere this notices.
 LENGTH = 100.0
-BODY = (50.0, 80.0, 20.0, -10.0, 0.0)
-FINGER = (30.0, 6.0, 8.0, 60.0, 4.0)
-PAD = (10.0, 4.0, 12.0, 85.0, -6.0)
+BODY, BODY_AT = Coordinate(50.0, 80.0, 20.0), Coordinate(-10.0, -40.0, 0.0)
+FINGER, FINGER_AT = Coordinate(30.0, 6.0, 8.0), Coordinate(60.0, 0.0, 4.0)
+PAD, PAD_AT = Coordinate(10.0, 4.0, 12.0), Coordinate(25.0, 1.0, -10.0)
 JAW_RANGE = (20.0, 90.0)
 
 
 def gripper(**overrides) -> MechanicalGripper:
   return MechanicalGripper(
-    name="g", length=LENGTH, body=BODY, finger=FINGER, pad=PAD, jaw_range=JAW_RANGE, **overrides
+    name="g",
+    length=LENGTH,
+    body=BODY,
+    body_at=BODY_AT,
+    finger=FINGER,
+    finger_at=FINGER_AT,
+    pad=PAD,
+    pad_at=PAD_AT,
+    jaw_range=JAW_RANGE,
+    **overrides,
   )
 
 
@@ -75,7 +84,7 @@ class TestPads(unittest.TestCase):
     left, right = (cast(Coordinate, pad.location) for pad in g.pads)
     self.assertEqual(left, right)
 
-    finger_thickness, pad_thickness = FINGER[1], PAD[1]
+    finger_thickness, pad_thickness = FINGER.y, PAD.y
     self.assertGreaterEqual(left.y, 0.0)
     self.assertLessEqual(left.y + pad_thickness, finger_thickness)
 
