@@ -1,26 +1,25 @@
 """The moving mechanism of an arm: the links its joints turn between.
 
-A manipulator is a chain of links and powered joints. A link is one rigid member of that chain,
-and nothing else: the material bolted around it hangs off as children of its own, so the shape can
-overhang either joint without the kinematics noticing. That is the split every robot description
-makes, and it is what lets one length stand for the geometry and another for the part.
+A manipulator is a chain of links and powered joints. A link is one rigid member of that chain and
+nothing else: geometry is attached as children with their own origins - the separation a robot
+description draws between a link's frame and its visual geometry - so material may extend past
+either joint without entering the kinematics.
 """
 
 from typing import Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.rotation import Rotation
 
 
 class Link(Resource):
-  """The span between the joint a link turns on and the joint it carries.
+  """One of the rigid pieces an arm is built from, joined to its neighbours by joints.
 
-  A line, not a body: its length is the distance between two joints and it has no width or depth,
-  so the joint it turns on is its own origin and turning it needs nothing taken out. The material
-  around it hangs off as children with their own offsets, which is how a robot description keeps a
-  link's frame apart from the shape bolted to it - the shape can overhang either joint without the
-  kinematics noticing.
+  What sets the reach is the distance between a link's joints, not the shape of the piece, so the
+  material is attached as children with their own origins and may overhang a joint at either end.
+
+  `joint` is where the joint it turns on sits within the link, which `turn_to` pivots about. It
+  needs no particular place: a link is not obliged to put its own origin there.
 
   Unrotated it lies along +X.
   """
@@ -29,6 +28,7 @@ class Link(Resource):
     self,
     name: str,
     length: float,
+    joint: Optional[Coordinate] = None,
     category: str = "link",
     model: Optional[str] = None,
   ):
@@ -36,33 +36,24 @@ class Link(Resource):
     Args:
       name: what to call this one.
       length: joint to joint, in mm.
+      joint: where the joint this link turns on sits within it. Its own origin when None.
       category: what kind of resource this is.
       model: which link this is.
     """
     super().__init__(
       name=name, size_x=length, size_y=0.0, size_z=0.0, category=category, model=model
     )
+    self.joint = joint if joint is not None else Coordinate.zero()
 
-  def turn_to(self, angle: float, about: Optional[Coordinate] = None) -> None:
-    """Point the link along `angle`, turning on the joint it is mounted on.
-
-    Absolute, unlike `rotate`, which turns by an amount: a link driven to the same angle twice
-    lands in the same place both times. The joint is the link's own origin, so turning does not
-    move it and nothing has to be taken out.
+  def turn_to(self, angle: float) -> None:
+    """Point the link along `angle`, pivoting on `joint`.
 
     Args:
-      angle: the deck angle to point along, in degrees.
-      about: where the joint sits, in the frame this link is placed in. Left where it is when None.
+      angle: the angle to point along, in its parent's frame, in degrees.
 
     Raises:
-      RuntimeError: If the link is not placed and no joint is given.
+      RuntimeError: If the link has not been placed, so there is nothing for it to turn in.
     """
-    if about is not None:
-      self.location = about
     if self.location is None:
-      raise RuntimeError(f"{self.name} is not on a joint, so there is nothing for it to turn on")
-    self.rotation = Rotation(z=angle)
-    # `rotation` is a plain attribute, unlike `location`, so nothing hears about it being set.
-    # Anything watching the model - a viewer, a collision check - learns of a joint moving here or
-    # not at all.
-    self._state_updated()
+      raise RuntimeError(f"{self.name} is not placed, so there is nothing for it to turn in")
+    self.rotate_to(z=angle, reference=self.joint)
