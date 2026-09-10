@@ -17,7 +17,10 @@ pylabrobot.resources.Rotation
    
       ~Rotation.pitch
       ~Rotation.roll
+      ~Rotation.x
+      ~Rotation.y
       ~Rotation.yaw
+      ~Rotation.z
    
    
 
