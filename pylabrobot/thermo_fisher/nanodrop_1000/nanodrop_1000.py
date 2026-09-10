@@ -133,9 +133,7 @@ class ThermoFisherNanoDrop1000:
   def _calculate_x_axis(self) -> List[float]:
     c0, c1 = self.coefficients.get(1, 0), self.coefficients.get(2, 0)
     c2, c3 = self.coefficients.get(3, 0), self.coefficients.get(4, 0)
-    return [
-      c0 + (c1 * pixel) + (c2 * (pixel**2)) + (c3 * (pixel**3)) for pixel in range(2048)
-    ]
+    return [c0 + (c1 * pixel) + (c2 * (pixel**2)) + (c3 * (pixel**3)) for pixel in range(2048)]
 
   async def get_raw_spectrum(self) -> List[float]:
     await self.flush_heavy()

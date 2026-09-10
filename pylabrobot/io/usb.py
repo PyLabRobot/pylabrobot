@@ -50,7 +50,7 @@ class USB(IOBase):
     human_readable_device_name: str,
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
-    packet_read_timeout: int = 3,
+    packet_read_timeout: float = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
     configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
