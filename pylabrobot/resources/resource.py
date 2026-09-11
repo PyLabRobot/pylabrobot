@@ -904,16 +904,20 @@ class Resource(SerializableMixin):
     now = matrix_vector_multiply_3x3(after, pivot_coordinate.vector())
     shift = Coordinate(was[0] - now[0], was[1] - now[1], was[2] - now[2])
     # `shift` is in this resource's frame, `location` in the parent's. A rotation matrix
-    # inverts by transposing.
+    # inverts by transposing. A parent with no location of its own is where
+    # `get_absolute_location` stops walking, so `location` is read in absolute axes from there
+    # and needs no conversion.
     parent = self.parent
-    if parent is not None:
+    if parent is not None and parent.location is not None:
       turned = parent.get_absolute_rotation().get_rotation_matrix()
       shift = Coordinate(
         *matrix_vector_multiply_3x3(
           [[turned[j][i] for j in range(3)] for i in range(3)], shift.vector()
         )
       )
-    self.location = cast(Coordinate, self.location) + shift
+    # Straight onto the field: the caller fires one `_state_updated` for the whole turn, and
+    # going through the setter would fire a second carrying the same final state.
+    self._location = cast(Coordinate, self.location) + shift
 
   def rotate(
     self,
@@ -930,11 +934,18 @@ class Resource(SerializableMixin):
       z: degrees to turn about Z.
       pivot_coordinate: what to turn about, in this resource's own frame. Its own origin when
         None, which is what a resource turns about when nothing is said. Given one, `location`
-        carries by however far the turn moved it, so it ends where it began. A pivot is held by
-        moving `location`, so a resource that has none turns about its origin either way.
+        carries by however far the turn moved it, so it ends where it began.
+
+    Raises:
+      NoLocationError: If a pivot is given for a resource with no location. A pivot is held by
+        moving `location`, so there is nothing to hold it with.
     """
-    holding = pivot_coordinate is not None and self.location is not None
-    before = self.get_absolute_rotation().get_rotation_matrix() if holding else None
+    if pivot_coordinate is not None and self.location is None:
+      raise NoLocationError(f"Resource '{self.name}' has no location, so a pivot cannot be held.")
+
+    before = (
+      self.get_absolute_rotation().get_rotation_matrix() if pivot_coordinate is not None else None
+    )
 
     self.rotation._prepend(Rotation(x=x, y=y, z=z))
 
@@ -959,9 +970,16 @@ class Resource(SerializableMixin):
       y: the angle about Y to sit at, in degrees. Left where it is when None.
       z: the angle about Z to sit at, in degrees. Left where it is when None.
       pivot_coordinate: what to turn about, as `rotate` takes it.
+
+    Raises:
+      NoLocationError: If a pivot is given for a resource with no location, as `rotate` raises.
     """
-    holding = pivot_coordinate is not None and self.location is not None
-    before = self.get_absolute_rotation().get_rotation_matrix() if holding else None
+    if pivot_coordinate is not None and self.location is None:
+      raise NoLocationError(f"Resource '{self.name}' has no location, so a pivot cannot be held.")
+
+    before = (
+      self.get_absolute_rotation().get_rotation_matrix() if pivot_coordinate is not None else None
+    )
 
     self.rotation.x = self.rotation.x if x is None else x % 360
     self.rotation.y = self.rotation.y if y is None else y % 360

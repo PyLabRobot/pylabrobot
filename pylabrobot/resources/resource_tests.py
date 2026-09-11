@@ -19,7 +19,7 @@ from pylabrobot.resources import resource as resource_module
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
-from pylabrobot.resources.errors import ResourceNotFoundError
+from pylabrobot.resources.errors import NoLocationError, ResourceNotFoundError
 from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
@@ -400,14 +400,21 @@ class TestResource(unittest.TestCase):
             return bar.get_absolute_location() + Coordinate(*carried)
 
           before = where()
-          angles = {name: (angle if name == axis else None) for name in ("x", "y", "z")}
+          x = angle if axis == "x" else None
+          y = angle if axis == "y" else None
+          z = angle if axis == "z" else None
           if turn == "rotate":
-            angles = {name: (degrees or 0) for name, degrees in angles.items()}
-          getattr(bar, turn)(**angles, pivot_coordinate=joint)
+            bar.rotate(x=x or 0.0, y=y or 0.0, z=z or 0.0, pivot_coordinate=joint)
+          else:
+            bar.rotate_to(x=x, y=y, z=z, pivot_coordinate=joint)
 
           after = where()
           for was, now in zip((before.x, before.y, before.z), (after.x, after.y, after.z)):
             self.assertAlmostEqual(was, now, places=9)
+          # Holding the pivot still is not enough: the turn has to have happened.
+          reached = (bar.rotation.x, bar.rotation.y, bar.rotation.z)
+          self.assertAlmostEqual(reached["xyz".index(axis)], angle % 360, places=9)
+          self.assertEqual(sum(1 for turned in reached if turned != 0), 1)
 
   def test_a_pivot_turns_by_an_amount_and_goes_to_an_angle(self):
     """`rotate` carries the pivot on each turn; `rotate_to` holds it where a repeat changes nothing."""
@@ -430,13 +437,41 @@ class TestResource(unittest.TestCase):
     plate.rotate_to(z=180, pivot_coordinate=centre)
     self.assertEqual((plate.rotation.z, plate.location), (180, where))
 
-  def test_an_unplaced_resource_turns_about_its_origin_whatever_pivot_it_is_given(self):
-    """A pivot is held by moving `location`, so one with none turns as it would without a pivot."""
-    for turn in ("rotate", "rotate_to"):
-      loose = Resource("loose", size_x=100, size_y=10, size_z=10)
-      getattr(loose, turn)(z=90, pivot_coordinate=Coordinate(50, 5, 5))
-      self.assertEqual(loose.rotation.z, 90)
-      self.assertIsNone(loose.location)
+  def test_a_pivot_needs_a_location_to_be_held_by(self):
+    """A pivot is held by moving `location`, so one with none cannot honour the request."""
+    joint = Coordinate(50, 5, 5)
+    with self.assertRaises(NoLocationError):
+      Resource("loose", size_x=100, size_y=10, size_z=10).rotate(z=90, pivot_coordinate=joint)
+    with self.assertRaises(NoLocationError):
+      Resource("loose", size_x=100, size_y=10, size_z=10).rotate_to(z=90, pivot_coordinate=joint)
+
+    # Without a pivot an unplaced resource turns about its origin, as it always has.
+    loose = Resource("loose", size_x=100, size_y=10, size_z=10)
+    loose.rotate(z=90)
+    self.assertEqual(loose.rotation.z, 90)
+
+  def test_a_pivot_holds_under_an_unlocated_parent_that_a_rotated_ancestor_carries(self):
+    """`location` is read in absolute axes from where the location chain stops, not in a parent's."""
+    grandparent = Resource("grandparent", size_x=500, size_y=500, size_z=10)
+    grandparent.location = Coordinate.zero()
+    grandparent.rotate(z=30)
+    parent = Resource("parent", size_x=300, size_y=300, size_z=10)
+    grandparent.assign_child_resource(parent, location=None)
+    plate = Resource("plate", size_x=100, size_y=50, size_z=10)
+    parent.assign_child_resource(plate, location=Coordinate(200, 300, 0))
+    centre = Coordinate(50, 25, 0)
+
+    def where() -> Coordinate:
+      carried = matrix_vector_multiply_3x3(
+        plate.get_absolute_rotation().get_rotation_matrix(), centre.vector()
+      )
+      return plate.get_absolute_location() + Coordinate(*carried)
+
+    before = where()
+    plate.rotate(z=90, pivot_coordinate=centre)
+    after = where()
+    for was, now in zip((before.x, before.y, before.z), (after.x, after.y, after.z)):
+      self.assertAlmostEqual(was, now, places=3)
 
   def test_rotated_carries_the_pivot_and_leaves_the_original(self):
     parent = Resource("parent", size_x=500, size_y=500, size_z=10)
