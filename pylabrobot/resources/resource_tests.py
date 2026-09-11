@@ -365,6 +365,89 @@ class TestResource(unittest.TestCase):
           expected = 30.0 if name == axis else was[name]
           self.assertAlmostEqual(getattr(bar.rotation, name), expected, places=9)
 
+  def test_a_pivot_inside_a_turned_parent_still_holds(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+    parent.assign_child_resource(bar, location=Coordinate(30, 40, 0))
+    parent.rotate(z=90)
+    far_end = Coordinate(100, 0, 0)
+
+    def where() -> Coordinate:
+      carried = matrix_vector_multiply_3x3(
+        bar.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
+      )
+      return bar.get_absolute_location() + Coordinate(*carried)
+
+    before = where()
+    bar.rotate_to(z=90, pivot_coordinate=far_end)
+    self.assertEqual(where(), before)
+
+  def test_a_pivot_holds_about_every_axis(self):
+    for turn in ("rotate", "rotate_to"):
+      for axis in ("x", "y", "z"):
+        for angle in (30.0, 90.0, 200.0):
+          parent = Resource("parent", size_x=500, size_y=500, size_z=500)
+          parent.location = Coordinate.zero()
+          bar = Resource("bar", size_x=100, size_y=10, size_z=10)
+          parent.assign_child_resource(bar, location=Coordinate(7, 11, 13))
+          joint = Coordinate(100, 5, 5)
+
+          def where(bar=bar, joint=joint) -> Coordinate:
+            carried = matrix_vector_multiply_3x3(
+              bar.get_absolute_rotation().get_rotation_matrix(), joint.vector()
+            )
+            return bar.get_absolute_location() + Coordinate(*carried)
+
+          before = where()
+          angles = {name: (angle if name == axis else None) for name in ("x", "y", "z")}
+          if turn == "rotate":
+            angles = {name: (degrees or 0) for name, degrees in angles.items()}
+          getattr(bar, turn)(**angles, pivot_coordinate=joint)
+
+          after = where()
+          for was, now in zip((before.x, before.y, before.z), (after.x, after.y, after.z)):
+            self.assertAlmostEqual(was, now, places=9)
+
+  def test_a_pivot_turns_by_an_amount_and_goes_to_an_angle(self):
+    """`rotate` carries the pivot on each turn; `rotate_to` holds it where a repeat changes nothing."""
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    plate = Resource("plate", size_x=100, size_y=50, size_z=10)
+    parent.assign_child_resource(plate, location=Coordinate(200, 300, 0))
+    centre = Coordinate(50, 25, 0)
+
+    plate.rotate(z=90, pivot_coordinate=centre)
+    self.assertEqual(plate.rotation.z, 90)
+    self.assertEqual(plate.location, Coordinate(275, 275, 0))
+
+    plate.rotate(z=90, pivot_coordinate=centre)
+    self.assertEqual(plate.rotation.z, 180)
+    # The centre is still at (250, 325, 0), so the corner the location names has swung again.
+    self.assertEqual(plate.location, Coordinate(300, 350, 0))
+
+    where = plate.location
+    plate.rotate_to(z=180, pivot_coordinate=centre)
+    self.assertEqual((plate.rotation.z, plate.location), (180, where))
+
+  def test_a_pivot_needs_the_resource_to_be_placed(self):
+    for turn in ("rotate", "rotate_to"):
+      loose = Resource("loose", size_x=100, size_y=10, size_z=10)
+      with self.assertRaises(ValueError):
+        getattr(loose, turn)(z=90, pivot_coordinate=Coordinate(50, 5, 5))
+
+  def test_rotated_carries_the_pivot_and_leaves_the_original(self):
+    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
+    parent.location = Coordinate.zero()
+    plate = Resource("plate", size_x=100, size_y=50, size_z=10)
+    parent.assign_child_resource(plate, location=Coordinate(200, 300, 0))
+
+    turned = plate.rotated(z=90, pivot_coordinate=Coordinate(50, 25, 0))
+
+    self.assertEqual(turned.location, Coordinate(275, 275, 0))
+    self.assertEqual(plate.location, Coordinate(200, 300, 0))
+    self.assertEqual(plate.rotation.z, 0)
+
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
     r.location = Coordinate.zero()

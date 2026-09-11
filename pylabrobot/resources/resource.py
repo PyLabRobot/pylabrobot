@@ -892,10 +892,62 @@ class Resource(SerializableMixin):
     if changed and self.parent is not None:
       self._state_updated()
 
-  def rotate(self, x: float = 0, y: float = 0, z: float = 0):
-    """Rotate counter-clockwise around the parent-coordinate axes by the given degrees."""
+  def _apply_pivot_shift(self, before: List[List[float]], pivot_coordinate: Coordinate) -> None:
+    """Shift `location` so `pivot_coordinate` ends where it was before this resource turned.
+
+    Args:
+      before: this resource's absolute rotation matrix, from before the turn.
+      pivot_coordinate: what to hold still, in this resource's own frame.
+    """
+    after = self.get_absolute_rotation().get_rotation_matrix()
+    was = matrix_vector_multiply_3x3(before, pivot_coordinate.vector())
+    now = matrix_vector_multiply_3x3(after, pivot_coordinate.vector())
+    shift = Coordinate(was[0] - now[0], was[1] - now[1], was[2] - now[2])
+    # `shift` is in this resource's frame, `location` in the parent's. A rotation matrix
+    # inverts by transposing.
+    parent = self.parent
+    if parent is not None:
+      turned = parent.get_absolute_rotation().get_rotation_matrix()
+      shift = Coordinate(
+        *matrix_vector_multiply_3x3(
+          [[turned[j][i] for j in range(3)] for i in range(3)], shift.vector()
+        )
+      )
+    self.location = cast(Coordinate, self.location) + shift
+
+  def rotate(
+    self,
+    x: float = 0,
+    y: float = 0,
+    z: float = 0,
+    pivot_coordinate: Optional[Coordinate] = None,
+  ):
+    """Rotate counter-clockwise around the parent-coordinate axes by the given degrees.
+
+    Args:
+      x: degrees to turn about X.
+      y: degrees to turn about Y.
+      z: degrees to turn about Z.
+      pivot_coordinate: what to turn about, in this resource's own frame. Its own origin when
+        None, which is what a resource turns about when nothing is said. Given one, `location`
+        carries by however far the turn moved it, so it ends where it began.
+
+    Raises:
+      ValueError: If a pivot is given for a resource that is not placed, where there is no
+        location to carry.
+    """
+    if pivot_coordinate is not None and self.location is None:
+      raise ValueError(f"{self.name} is not placed, so there is nothing for it to turn in")
+
+    before = (
+      self.get_absolute_rotation().get_rotation_matrix() if pivot_coordinate is not None else None
+    )
 
     self.rotation._prepend(Rotation(x=x, y=y, z=z))
+
+    if pivot_coordinate is not None and before is not None:
+      self._apply_pivot_shift(before, pivot_coordinate)
+
     # Rotation is part of the resource's state; notify subscribers (e.g. the
     # Visualizer) so they can re-render.
     self._state_updated()
@@ -905,6 +957,7 @@ class Resource(SerializableMixin):
     x: Optional[float] = None,
     y: Optional[float] = None,
     z: Optional[float] = None,
+    pivot_coordinate: Optional[Coordinate] = None,
   ):
     """Set the rotation about each axis, where `rotate` turns by an amount instead.
 
@@ -912,10 +965,26 @@ class Resource(SerializableMixin):
       x: the angle about X to sit at, in degrees. Left where it is when None.
       y: the angle about Y to sit at, in degrees. Left where it is when None.
       z: the angle about Z to sit at, in degrees. Left where it is when None.
+      pivot_coordinate: what to turn about, as `rotate` takes it.
+
+    Raises:
+      ValueError: If a pivot is given for a resource that is not placed, where there is no
+        location to carry.
     """
+    if pivot_coordinate is not None and self.location is None:
+      raise ValueError(f"{self.name} is not placed, so there is nothing for it to turn in")
+
+    before = (
+      self.get_absolute_rotation().get_rotation_matrix() if pivot_coordinate is not None else None
+    )
+
     self.rotation.x = self.rotation.x if x is None else x % 360
     self.rotation.y = self.rotation.y if y is None else y % 360
     self.rotation.z = self.rotation.z if z is None else z % 360
+
+    if pivot_coordinate is not None and before is not None:
+      self._apply_pivot_shift(before, pivot_coordinate)
+
     self._state_updated()
 
   def copy(self) -> Self:
@@ -923,11 +992,24 @@ class Resource(SerializableMixin):
     resource_copy.load_all_state(self.serialize_all_state())
     return resource_copy
 
-  def rotated(self, x: float = 0, y: float = 0, z: float = 0) -> Self:
-    """Return a copy of this resource rotated by the given number of degrees."""
+  def rotated(
+    self,
+    x: float = 0,
+    y: float = 0,
+    z: float = 0,
+    pivot_coordinate: Optional[Coordinate] = None,
+  ) -> Self:
+    """Return a copy of this resource rotated by the given number of degrees.
+
+    Args:
+      x: degrees to turn about X.
+      y: degrees to turn about Y.
+      z: degrees to turn about Z.
+      pivot_coordinate: what to turn about, as `rotate` takes it.
+    """
 
     new_resource = self.copy()
-    new_resource.rotate(x=x, y=y, z=z)
+    new_resource.rotate(x=x, y=y, z=z, pivot_coordinate=pivot_coordinate)
     return new_resource
 
   def at(self, location: Coordinate) -> Self:
