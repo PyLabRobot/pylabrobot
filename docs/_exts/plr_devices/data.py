@@ -85,7 +85,7 @@ STATUS_LABELS = {
 }
 
 STATUS_DESCRIPTIONS = {
-  "wip": "Work in progress.",
+  "wip": "Work in progress, including models awaiting initial hardware verification.",
   "basic": "Core functionality is available.",
   "mostly": "Most capabilities are available, but some known commands are still missing.",
   "full": "Comprehensive support (at least 90% of capabilities), with documentation.",
@@ -110,6 +110,7 @@ OPTIONAL_FIELDS = (
   "manager",
   "oem",
   "notes",
+  "needs_hardware_testing",
 )
 
 _ALL_FIELDS = set(REQUIRED_FIELDS) | set(OPTIONAL_FIELDS)
@@ -176,6 +177,9 @@ def _validate(device: Any, index: int, seen_ids: Dict[str, int], path: Path) -> 
       f"{where} ({device_id}): api_version {api_version!r} is not one of {', '.join(API_VERSIONS)}"
     )
 
+  if "needs_hardware_testing" in device and not isinstance(device["needs_hardware_testing"], bool):
+    raise DeviceRegistryError(f"{where} ({device_id}): needs_hardware_testing must be a boolean")
+
   for field in ("manager", "oem"):
     value = device.get(field)
     if value is not None and not str(value).startswith(("http://", "https://")):
@@ -199,13 +203,15 @@ def _validate(device: Any, index: int, seen_ids: Dict[str, int], path: Path) -> 
     model_where = f"{where} ({device_id}) models[{model_index}]"
     if not isinstance(model, dict):
       raise DeviceRegistryError(f"{model_where}: model must be an object")
-    unknown_model_fields = sorted(set(model) - {"name", "status"})
+    unknown_model_fields = sorted(set(model) - {"name", "status", "needs_hardware_testing"})
     if unknown_model_fields:
       raise DeviceRegistryError(
         f"{model_where}: unknown field(s): {', '.join(unknown_model_fields)}"
       )
     if not isinstance(model.get("name"), str) or not model["name"]:
       raise DeviceRegistryError(f"{model_where}: name must be a non-empty string")
+    if "needs_hardware_testing" in model and not isinstance(model["needs_hardware_testing"], bool):
+      raise DeviceRegistryError(f"{model_where}: needs_hardware_testing must be a boolean")
     model_status = model.get("status")
     if model_status is not None and model_status not in STATUSES:
       raise DeviceRegistryError(
@@ -259,12 +265,31 @@ def get_device(app, device_id: str) -> Optional[Device]:
   return None
 
 
+def needs_hardware_testing(device: Device, model: Optional[Dict[str, Any]] = None) -> bool:
+  """Whether a device or model needs testing; models inherit the device flag by default."""
+  if model is not None:
+    return bool(model.get("needs_hardware_testing", device.get("needs_hardware_testing", False)))
+  if device.get("models"):
+    return any(needs_hardware_testing(device, entry) for entry in device["models"])
+  return bool(device.get("needs_hardware_testing", False))
+
+
 def filter_devices(devices: Sequence[Device], filters: Dict[str, str]) -> List[Device]:
   """Keep devices matching every filter."""
 
   def matches(device: Device, field: str, wanted: str) -> bool:
+    if field == "needs_hardware_testing":
+      return needs_hardware_testing(device) == (wanted.lower() == "true")
     if field == "capabilities":
       return wanted.lower() in {c.lower() for c in device.get("capabilities", [])}
     return str(device.get(field, "")).lower() == wanted.lower()
 
-  return [d for d in devices if all(matches(d, f, w) for f, w in filters.items() if w)]
+  selected = [d for d in devices if all(matches(d, f, w) for f, w in filters.items() if w)]
+  if filters.get("needs_hardware_testing", "").lower() == "true":
+    # Keep the full registry intact for other tables and cards in the same build.
+    return [
+      Device({**d, "models": [m for m in d["models"] if needs_hardware_testing(d, m)]})
+      if d.get("models") else d
+      for d in selected
+    ]
+  return selected
