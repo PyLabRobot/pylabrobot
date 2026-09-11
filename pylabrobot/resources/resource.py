@@ -930,22 +930,15 @@ class Resource(SerializableMixin):
       z: degrees to turn about Z.
       pivot_coordinate: what to turn about, in this resource's own frame. Its own origin when
         None, which is what a resource turns about when nothing is said. Given one, `location`
-        carries by however far the turn moved it, so it ends where it began.
-
-    Raises:
-      ValueError: If a pivot is given for a resource that is not placed, where there is no
-        location to carry.
+        carries by however far the turn moved it, so it ends where it began. A pivot is held by
+        moving `location`, so a resource that has none turns about its origin either way.
     """
-    if pivot_coordinate is not None and self.location is None:
-      raise ValueError(f"{self.name} is not placed, so there is nothing for it to turn in")
-
-    before = (
-      self.get_absolute_rotation().get_rotation_matrix() if pivot_coordinate is not None else None
-    )
+    holding = pivot_coordinate is not None and self.location is not None
+    before = self.get_absolute_rotation().get_rotation_matrix() if holding else None
 
     self.rotation._prepend(Rotation(x=x, y=y, z=z))
 
-    if pivot_coordinate is not None and before is not None:
+    if before is not None and pivot_coordinate is not None:
       self._apply_pivot_shift(before, pivot_coordinate)
 
     # Rotation is part of the resource's state; notify subscribers (e.g. the
@@ -966,23 +959,15 @@ class Resource(SerializableMixin):
       y: the angle about Y to sit at, in degrees. Left where it is when None.
       z: the angle about Z to sit at, in degrees. Left where it is when None.
       pivot_coordinate: what to turn about, as `rotate` takes it.
-
-    Raises:
-      ValueError: If a pivot is given for a resource that is not placed, where there is no
-        location to carry.
     """
-    if pivot_coordinate is not None and self.location is None:
-      raise ValueError(f"{self.name} is not placed, so there is nothing for it to turn in")
-
-    before = (
-      self.get_absolute_rotation().get_rotation_matrix() if pivot_coordinate is not None else None
-    )
+    holding = pivot_coordinate is not None and self.location is not None
+    before = self.get_absolute_rotation().get_rotation_matrix() if holding else None
 
     self.rotation.x = self.rotation.x if x is None else x % 360
     self.rotation.y = self.rotation.y if y is None else y % 360
     self.rotation.z = self.rotation.z if z is None else z % 360
 
-    if pivot_coordinate is not None and before is not None:
+    if before is not None and pivot_coordinate is not None:
       self._apply_pivot_shift(before, pivot_coordinate)
 
     self._state_updated()

@@ -430,11 +430,13 @@ class TestResource(unittest.TestCase):
     plate.rotate_to(z=180, pivot_coordinate=centre)
     self.assertEqual((plate.rotation.z, plate.location), (180, where))
 
-  def test_a_pivot_needs_the_resource_to_be_placed(self):
+  def test_an_unplaced_resource_turns_about_its_origin_whatever_pivot_it_is_given(self):
+    """A pivot is held by moving `location`, so one with none turns as it would without a pivot."""
     for turn in ("rotate", "rotate_to"):
       loose = Resource("loose", size_x=100, size_y=10, size_z=10)
-      with self.assertRaises(ValueError):
-        getattr(loose, turn)(z=90, pivot_coordinate=Coordinate(50, 5, 5))
+      getattr(loose, turn)(z=90, pivot_coordinate=Coordinate(50, 5, 5))
+      self.assertEqual(loose.rotation.z, 90)
+      self.assertIsNone(loose.location)
 
   def test_rotated_carries_the_pivot_and_leaves_the_original(self):
     parent = Resource("parent", size_x=500, size_y=500, size_z=10)
