@@ -8,11 +8,13 @@ fit a different one and the point moves with it.
 `MechanicalGripper` spans that offset, flange to grip centre, which is why it is a `Link`.
 """
 
-from typing import Optional, Sequence, Tuple, cast
+from typing import Any, Dict, Optional, Sequence, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.manipulator import Link
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.serializer import deserialize
 
 
 class MechanicalGripper(Link):
@@ -109,4 +111,56 @@ class MechanicalGripper(Link):
       )
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "jaw_range": list(self.jaw_range)}
+    return {
+      **super().serialize(),
+      "jaw_range": list(self.jaw_range),
+      "tool_center_point": self.tool_center_point.serialize(),
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "MechanicalGripper":
+    """Rebuild a gripper, taking its own parts back out of its children.
+
+    Its body and its two fingers are constructor arguments rather than children assigned after the
+    fact, so they are read off the front of `children`, in the order `__init__` put them there.
+    Anything after them is what the gripper was holding.
+    """
+    children = data["children"]
+    body, *fingers = (
+      Resource.deserialize(child, allow_marshal=allow_marshal) for child in children[:3]
+    )
+    pads = [pad for finger in fingers for pad in list(finger.children)]
+    for pad in pads:
+      pad.unassign()
+
+    def where(child: dict) -> Coordinate:
+      return cast(Coordinate, deserialize(child["location"], allow_marshal=allow_marshal))
+
+    gripper = cls(
+      name=data["name"],
+      length=data["length"],
+      body=body,
+      body_location=where(children[0]),
+      fingers=fingers,
+      finger_location=where(children[1]),
+      jaw_range=(data["jaw_range"][0], data["jaw_range"][1]),
+      pads=pads or None,
+      pad_location=where(children[1]["children"][0]) if pads else None,
+      category=data.get("category", "mechanical_gripper"),
+      model=data.get("model"),
+    )
+    rotation = data.get("rotation")
+    if rotation is not None:
+      gripper.rotation = cast(Rotation, deserialize(rotation, allow_marshal=allow_marshal))
+    for child in children[3:]:
+      gripper.assign_child_resource(
+        Resource.deserialize(child, allow_marshal=allow_marshal), location=where(child)
+      )
+    return gripper
+
+  def serialize_state(self) -> Dict[str, Any]:
+    return {**super().serialize_state(), "jaw_width": self.jaw_width}
+
+  def load_state(self, state: Dict[str, Any]) -> None:
+    super().load_state(state)
+    self.jaw_width = state["jaw_width"]

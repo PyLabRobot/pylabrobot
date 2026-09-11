@@ -35,3 +35,9 @@ class Link(Resource):
     super().__init__(
       name=name, size_x=length, size_y=0.0, size_z=0.0, category=category, model=model
     )
+
+  def serialize(self) -> dict:
+    serialized = super().serialize()
+    for key in ("size_x", "size_y", "size_z"):
+      serialized.pop(key, None)
+    return {**serialized, "length": self.get_size_x()}

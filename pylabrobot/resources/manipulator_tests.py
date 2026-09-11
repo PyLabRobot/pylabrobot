@@ -29,6 +29,12 @@ class TestLink(unittest.TestCase):
     first.rotate_to(z=90)
     self.assertEqual(far_end(), Coordinate(-50, 100, 0))
 
+  def test_a_link_comes_back_the_length_it_went_in(self):
+    link = Link(name="link", length=137.7, model="demo")
+    back = Link.deserialize(link.serialize())
+    self.assertEqual(back.get_size_x(), 137.7)
+    self.assertEqual(back.model, "demo")
+
 
 if __name__ == "__main__":
   unittest.main()

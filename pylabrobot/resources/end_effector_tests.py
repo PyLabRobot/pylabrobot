@@ -98,5 +98,19 @@ class TestPads(unittest.TestCase):
       self.assertLessEqual(sits_at + face.get_size_y(), jaw.get_size_y())
 
 
+class TestRoundTrip(unittest.TestCase):
+  def test_a_gripper_comes_back_with_its_parts_and_its_width(self):
+    g = gripper(jaw_width=100.0)
+    back = MechanicalGripper.deserialize(g.serialize())
+    back.load_all_state(g.serialize_all_state())
+
+    self.assertEqual(back.tool_center_point, g.tool_center_point)
+    self.assertEqual(back.jaw_range, g.jaw_range)
+    self.assertEqual(back.jaw_width, 100.0)
+    self.assertEqual(cast(Coordinate, back.body.location), BODY_LOCATION)
+    self.assertEqual([pad.location for pad in back.pads], [PAD_LOCATION] * 2)
+    self.assertEqual([pad.parent for pad in back.pads], back.fingers)
+
+
 if __name__ == "__main__":
   unittest.main()
