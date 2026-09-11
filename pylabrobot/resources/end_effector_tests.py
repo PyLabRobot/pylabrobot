@@ -33,7 +33,7 @@ def gripper(**overrides) -> MechanicalGripper:
 
   arguments = dict(
     name="demo_gripper",
-    length=LENGTH,
+    tool_center_point=Coordinate(LENGTH, 0.0, 0.0),
     body=body,
     body_location=BODY_LOCATION,
     fingers=fingers,
@@ -50,8 +50,9 @@ class TestTheSpan(unittest.TestCase):
     self.assertEqual(gripper().tool_center_point, Coordinate(LENGTH, 0.0, 0.0))
 
   def test_a_tool_can_grip_below_where_it_is_mounted(self):
-    g = gripper(tool_center_point_z=-13.0)
+    g = gripper(tool_center_point=Coordinate(LENGTH, 0.0, -13.0))
     self.assertEqual(g.tool_center_point, Coordinate(LENGTH, 0.0, -13.0))
+    self.assertEqual(g.get_size_x(), LENGTH)
 
 
 class TestJaws(unittest.TestCase):
@@ -106,7 +107,7 @@ class TestPads(unittest.TestCase):
 
 class TestRoundTrip(unittest.TestCase):
   def test_a_gripper_comes_back_with_its_parts_and_its_width(self):
-    g = gripper(jaw_width=100.0, tool_center_point_z=-13.0)
+    g = gripper(jaw_width=100.0, tool_center_point=Coordinate(LENGTH, 0.0, -13.0))
     back = MechanicalGripper.deserialize(g.serialize())
     back.load_all_state(g.serialize_all_state())
 
