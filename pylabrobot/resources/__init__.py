@@ -23,6 +23,7 @@ from .coordinate import Coordinate
 from .corning import *
 from .deck import Deck
 from .diy import *
+from .end_effector import MechanicalGripper
 from .eppendorf import *
 from .errors import ResourceNotFoundError
 from .greiner import *
@@ -30,6 +31,7 @@ from .hamilton import *
 from .itemized_resource import ItemizedResource
 from .lid import Lid, Liddable
 from .liquid import Liquid
+from .manipulator import LinkBody
 from .nest import *
 from .opentrons import *
 from .perkin_elmer import *
