@@ -2051,5 +2051,26 @@
     "doc_slug": "ufactory/xarm6/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.ufactory.cc/xarm-collaborative-robot/"
+  },
+  {
+    "id": "li-cor-odyssey-classic",
+    "vendor": "LI-COR",
+    "name": "Odyssey Classic",
+    "models": [
+      {
+        "name": "9120",
+        "status": "wip"
+      }
+    ],
+    "kind": "imager",
+    "capabilities": [
+      "fluorescence"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.li_cor.OdysseyClassic",
+    "api_version": "v1",
+    "code_slug": "li_cor/odyssey",
+    "doc_slug": "li_cor/odyssey/hello-world",
+    "notes": "HTTP scan control and TIFF retrieval; port pending hardware verification."
   }
 ]
