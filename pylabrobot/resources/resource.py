@@ -905,39 +905,17 @@ class Resource(SerializableMixin):
     x: Optional[float] = None,
     y: Optional[float] = None,
     z: Optional[float] = None,
-    reference: Optional[Coordinate] = None,
   ):
-    """Rotate counter-clockwise to the given degrees, where `rotate` turns by them.
+    """Set the rotation about each axis, where `rotate` turns by an amount instead.
 
     Args:
-      x: degrees to point along about X. Left where it is when None.
-      y: degrees to point along about Y. Left where it is when None.
-      z: degrees to point along about Z. Left where it is when None.
-      reference: the point to turn about. This resource's own corner when None.
+      x: the angle about X to sit at, in degrees. Left where it is when None.
+      y: the angle about Y to sit at, in degrees. Left where it is when None.
+      z: the angle about Z to sit at, in degrees. Left where it is when None.
     """
-    pivot = reference if self.location is not None else None
-    before = self.get_absolute_rotation().get_rotation_matrix() if pivot is not None else None
-
     self.rotation.x = self.rotation.x if x is None else x % 360
     self.rotation.y = self.rotation.y if y is None else y % 360
     self.rotation.z = self.rotation.z if z is None else z % 360
-
-    if pivot is not None and before is not None:
-      after = self.get_absolute_rotation().get_rotation_matrix()
-      was = matrix_vector_multiply_3x3(before, pivot.vector())
-      now = matrix_vector_multiply_3x3(after, pivot.vector())
-      carried = Coordinate(was[0] - now[0], was[1] - now[1], was[2] - now[2])
-      # `carried` is in this resource's frame, `location` in the parent's.
-      parent = self.parent
-      if parent is not None:
-        turned = parent.get_absolute_rotation().get_rotation_matrix()
-        carried = Coordinate(
-          *matrix_vector_multiply_3x3(
-            [[turned[j][i] for j in range(3)] for i in range(3)], carried.vector()
-          )
-        )
-      self.location = cast(Coordinate, self.location) + carried
-
     self._state_updated()
 
   def copy(self) -> Self:

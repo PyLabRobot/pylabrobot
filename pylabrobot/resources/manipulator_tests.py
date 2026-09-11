@@ -23,31 +23,11 @@ class TestLink(unittest.TestCase):
 
     self.assertEqual(far_end(), Coordinate(150, 0, 0))
 
-    second.turn_to(90)
+    second.rotate_to(z=90)
     self.assertEqual(far_end(), Coordinate(100, 50, 0))
 
-    first.turn_to(90)
+    first.rotate_to(z=90)
     self.assertEqual(far_end(), Coordinate(-50, 100, 0))
-
-  def test_turning_to_an_angle_is_absolute(self):
-    base = Resource(name="base", size_x=500, size_y=500, size_z=0)
-    link = Link(name="link", length=100.0)
-    base.assign_child_resource(link, location=Coordinate(0, 0, 0))
-
-    link.turn_to(30)
-    link.turn_to(30)
-    self.assertEqual(link.rotation.z, 30)
-
-    link.rotate(z=30)
-    self.assertEqual(link.rotation.z, 60)
-
-  def test_an_unplaced_link_has_nothing_to_turn_in(self):
-    base = Resource(name="base", size_x=500, size_y=500, size_z=0)
-    link = Link(name="link", length=100.0)
-    base.assign_child_resource(link, location=Coordinate(0, 0, 0))
-
-    with self.assertRaises(RuntimeError):
-      Link(name="loose", length=100.0).turn_to(0)
 
 
 if __name__ == "__main__":

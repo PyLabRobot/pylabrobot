@@ -373,50 +373,6 @@ class TestResource(unittest.TestCase):
       self.assertGreaterEqual(axis, 0)
       self.assertLess(axis, 360)
 
-  def test_a_pivot_inside_a_turned_parent_still_holds(self):
-    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
-    parent.location = Coordinate.zero()
-    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
-    parent.assign_child_resource(bar, location=Coordinate(30, 40, 0))
-    parent.rotate(z=90)
-    far_end = Coordinate(100, 0, 0)
-
-    def where() -> Coordinate:
-      carried = matrix_vector_multiply_3x3(
-        bar.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
-      )
-      return bar.get_absolute_location() + Coordinate(*carried)
-
-    before = where()
-    bar.rotate_to(z=90, reference=far_end)
-    self.assertEqual(where(), before)
-
-  def test_a_pivot_holds_about_every_axis(self):
-    for axis in ("x", "y", "z"):
-      for angle in (30.0, 90.0, 200.0):
-        parent = Resource("parent", size_x=500, size_y=500, size_z=500)
-        parent.location = Coordinate.zero()
-        bar = Resource("bar", size_x=100, size_y=10, size_z=10)
-        parent.assign_child_resource(bar, location=Coordinate(7, 11, 13))
-        joint = Coordinate(100, 5, 5)
-
-        def where() -> Coordinate:
-          carried = matrix_vector_multiply_3x3(
-            bar.get_absolute_rotation().get_rotation_matrix(), joint.vector()
-          )
-          return bar.get_absolute_location() + Coordinate(*carried)
-
-        before = where()
-        bar.rotate_to(
-          x=angle if axis == "x" else None,
-          y=angle if axis == "y" else None,
-          z=angle if axis == "z" else None,
-          reference=joint,
-        )
-        after = where()
-        for was, now in zip((before.x, before.y, before.z), (after.x, after.y, after.z)):
-          self.assertAlmostEqual(was, now, places=9)
-
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
     r.location = Coordinate.zero()
