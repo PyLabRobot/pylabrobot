@@ -1439,6 +1439,28 @@ class TestHamiltonIntrospectionLazyCaches(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(gm.call_count, 2)
     r3 = await self.intro.ensure_method_table(self.addr)
     self.assertIs(r1, r3)
+    self.assertIs(await self.intro.get_method_by_name(self.addr, "a"), r1[0])
+    self.assertIs(await self.intro.get_method_by_name(self.addr, "b"), r1[1])
+    self.assertEqual(gm.call_count, 2)
+
+  async def test_named_method_lookup_accepts_paths_and_requires_unique_names(self):
+    """Named lookup is scoped to an object and rejects missing or ambiguous methods."""
+    info = ObjectInfo("Sensor", "", 3, 0, self.addr)
+    self.intro._registry.register("Root.Sensor", info)
+    method = MethodInfo(7, 0, 42, "ReadState")
+    self.intro.get_object = AsyncMock(return_value=info)  # type: ignore[method-assign]
+    self.intro.get_method = AsyncMock(  # type: ignore[method-assign]
+      side_effect=[
+        method,
+        MethodInfo(2, 0, 13, "ReadVersion"),
+        MethodInfo(4, 0, 9, "ReadVersion"),
+      ]
+    )
+    self.assertIs(await self.intro.get_method_by_name("Root.Sensor", "ReadState"), method)
+    for name, count in (("Missing", 0), ("ReadVersion", 2)):
+      with self.subTest(name=name):
+        with self.assertRaisesRegex(RuntimeError, f"{name!r}.*found {count}"):
+          await self.intro.get_method_by_name(self.addr, name)
 
   async def test_lazy_signature_loads_only_referenced_iface(self):
     st = StructInfo(struct_id=0, name="TipParams", fields={}, interface_id=1)
