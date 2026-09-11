@@ -8,6 +8,7 @@ fit a different one and the point moves with it.
 `MechanicalGripper` spans that offset, flange to grip centre, which is why it is a `LinkBody`.
 """
 
+import math
 from typing import Any, Dict, Optional, Sequence, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
@@ -108,7 +109,7 @@ class MechanicalGripper(LinkBody):
   @property
   def length(self) -> float:
     """The joint this gripper turns on to the point it grips at, in mm."""
-    return self.span_to(self._tool_center_point)
+    return math.dist(self._tool_center_point.vector(), self.proximal_joint.vector())
 
   @property
   def jaw_width(self) -> float:

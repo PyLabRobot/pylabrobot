@@ -56,23 +56,12 @@ class LinkBody(Resource):
     self.proximal_joint = proximal_joint
     self.distal_joint = distal_joint
 
-  def span_to(self, point: Coordinate) -> float:
-    """How far `point` is from the joint this member turns on, in mm.
-
-    Args:
-      point: somewhere in this member's own frame.
-
-    Returns:
-      The length of a link running from this member's joint to there.
-    """
-    return math.dist(point.vector(), self.proximal_joint.vector())
-
   @property
   def length(self) -> Optional[float]:
     """How long the link is, joint to joint, in mm. None on a member that ends the chain."""
     if self.distal_joint is None:
       return None
-    return self.span_to(self.distal_joint)
+    return math.dist(self.distal_joint.vector(), self.proximal_joint.vector())
 
   def serialize(self) -> dict:
     return {
