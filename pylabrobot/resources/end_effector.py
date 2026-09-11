@@ -5,29 +5,37 @@ flange so that it can do its task. Its tool centre point is the point a move is 
 against, stated as an offset from that flange, and it belongs to the tool rather than to the arm:
 fit a different one and the point moves with it.
 
-`MechanicalGripper` spans that offset, flange to grip centre, which is why it is a `Link`.
+`MechanicalGripper` spans that offset, flange to grip centre, which is why it is a `LinkBody`.
 """
 
 from typing import Any, Dict, Optional, Sequence, Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.manipulator import Link
+from pylabrobot.resources.manipulator import LinkBody
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import deserialize
 
 
-class MechanicalGripper(Link):
+class MechanicalGripper(LinkBody):
   """A gripper that holds by closing two fingers on what it takes.
 
-  A link: it spans the joint it turns on to the point it grips at, which is `tool_center_point`.
-  Its body, its two fingers and a pad on each are material bolted to that span. The gap between
-  the fingers is state rather than shape, so `jaw_width` moves them.
+  A member that ends the chain: nothing attaches past a tool, so it has no distal joint. What sits
+  at the far end of its span is `tool_center_point`, the point it grips at. Its body, its two
+  fingers and a pad on each are material bolted to it.
+
+  The gap between the fingers is state rather than shape, so `jaw_width` moves them. That is why
+  the member is sized to its body alone: a box drawn around the fingers would change size every
+  time the jaws did. The fingers reach past it.
   """
 
   def __init__(
     self,
     name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    proximal_joint: Coordinate,
     tool_center_point: Coordinate,
     body: Resource,
     body_location: Coordinate,
@@ -43,9 +51,13 @@ class MechanicalGripper(Link):
     """
     Args:
       name: what to call this one.
-      tool_center_point: the joint it turns on to the point it grips at, in mm.
+      size_x: how far the body reaches along X, in mm.
+      size_y: how far it reaches along Y, in mm.
+      size_z: how far it reaches along Z, in mm.
+      proximal_joint: where the joint this gripper turns on sits within it.
+      tool_center_point: the point it grips at, from this gripper's own origin.
       body: the material around the span.
-      body_location: where it sits, from the joint this gripper turns on.
+      body_location: where it sits, from this gripper's own origin.
       fingers: the two jaws, either side of the span.
       finger_location: where a finger sits along and above the span. Its Y is `jaw_width`'s.
       jaw_range: the gap between the fingers, closed and open, in mm.
@@ -54,7 +66,16 @@ class MechanicalGripper(Link):
       pad_location: where a pad sits, from the finger it is fixed to. Given with `pads`.
       jaw_width: the gap to begin with, in mm. Open, when not given.
     """
-    super().__init__(name=name, length=tool_center_point.x, category=category, model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      proximal_joint=proximal_joint,
+      distal_joint=None,
+      category=category,
+      model=model,
+    )
     if len(fingers) != 2:
       raise ValueError(f"a gripper has two fingers, not {len(fingers)}")
     if (pads is None) != (pad_location is None):
@@ -88,6 +109,11 @@ class MechanicalGripper(Link):
     return self._tool_center_point
 
   @property
+  def length(self) -> float:
+    """The joint this gripper turns on to the point it grips at, in mm."""
+    return self.span_to(self._tool_center_point)
+
+  @property
   def jaw_width(self) -> float:
     """The gap between the fingers' facing surfaces, in mm: what fits between them."""
     return self._jaw_width
@@ -105,8 +131,8 @@ class MechanicalGripper(Link):
     for finger, side in zip(self.fingers, (1.0, -1.0)):
       here = cast(Coordinate, finger.location)
       # A resource sits at its lowest-y corner: the facing surface on the +Y side, the back of the
-      # finger on the -Y side.
-      facing = side * self._jaw_width / 2.0
+      # finger on the -Y side. They straddle the span, which is the joint's Y and not the origin's.
+      facing = self.proximal_joint.y + side * self._jaw_width / 2.0
       finger.location = Coordinate(
         here.x, facing if side > 0 else facing - finger.get_size_y(), here.z
       )
@@ -139,6 +165,12 @@ class MechanicalGripper(Link):
 
     gripper = cls(
       name=data["name"],
+      size_x=data["size_x"],
+      size_y=data["size_y"],
+      size_z=data["size_z"],
+      proximal_joint=cast(
+        Coordinate, deserialize(data["proximal_joint"], allow_marshal=allow_marshal)
+      ),
       tool_center_point=cast(
         Coordinate, deserialize(data["tool_center_point"], allow_marshal=allow_marshal)
       ),

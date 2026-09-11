@@ -31,7 +31,7 @@ from .hamilton import *
 from .itemized_resource import ItemizedResource
 from .lid import Lid, Liddable
 from .liquid import Liquid
-from .manipulator import Link
+from .manipulator import LinkBody
 from .nest import *
 from .opentrons import *
 from .perkin_elmer import *
