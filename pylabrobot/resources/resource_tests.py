@@ -393,7 +393,7 @@ class TestResource(unittest.TestCase):
           parent.assign_child_resource(bar, location=Coordinate(7, 11, 13))
           joint = Coordinate(100, 5, 5)
 
-          def where(bar=bar, joint=joint) -> Coordinate:
+          def where(bar: Resource = bar, joint: Coordinate = joint) -> Coordinate:
             carried = matrix_vector_multiply_3x3(
               bar.get_absolute_rotation().get_rotation_matrix(), joint.vector()
             )
