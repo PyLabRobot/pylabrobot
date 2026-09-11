@@ -1,10 +1,19 @@
 import unittest
-from typing import cast
+from typing import Tuple, cast
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.end_effector_tests import gripper as demo_gripper
 from pylabrobot.resources.manipulator import LinkBody
 from pylabrobot.resources.resource import Resource
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
+
+
+def absolute(resource: Resource, point: Coordinate) -> Coordinate:
+  """Where `point` in `resource`'s own frame sits on the deck, in mm."""
+  carried = matrix_vector_multiply_3x3(
+    resource.get_absolute_rotation().get_rotation_matrix(), point.vector()
+  )
+  return resource.get_absolute_location() + Coordinate(*carried)
 
 
 def straight_member(name: str, length: float, inset: Coordinate) -> LinkBody:
@@ -103,6 +112,81 @@ class TestLinkBody(unittest.TestCase):
     )
     back = LinkBody.deserialize(member.serialize())
     self.assertIsNone(back.distal_joint)
+
+
+class TestAnAssembledArm(unittest.TestCase):
+  """A member and the tool it carries, placed on a deck and turned joint by joint.
+
+  The two are built in separate modules and every other test exercises them apart, so this is
+  the only place the whole chain's absolute geometry is pinned.
+  """
+
+  def arm(self):
+    deck = Resource("deck", size_x=1000, size_y=1000, size_z=10)
+    deck.location = Coordinate.zero()
+    forearm = LinkBody(
+      name="forearm",
+      size_x=220.0,
+      size_y=40.0,
+      size_z=20.0,
+      proximal_joint=Coordinate(10.0, 20.0, 10.0),
+      distal_joint=Coordinate(210.0, 20.0, 10.0),
+    )
+    deck.assign_child_resource(forearm, location=Coordinate(100.0, 100.0, 0.0))
+
+    hand = demo_gripper()
+    # The tool's own joint lands on the member's far joint. That is what mounting means.
+    forearm.assign_child_resource(
+      hand, location=cast(Coordinate, forearm.distal_joint) - hand.proximal_joint
+    )
+    return forearm, hand
+
+  def wrist(self, forearm: LinkBody, hand) -> Tuple[Coordinate, Coordinate]:
+    """Where the wrist is, read off each side of the joint independently."""
+    return (
+      absolute(forearm, cast(Coordinate, forearm.distal_joint)),
+      absolute(hand, hand.proximal_joint),
+    )
+
+  def test_the_tool_hangs_where_the_member_ends(self):
+    forearm, hand = self.arm()
+    from_member, from_tool = self.wrist(forearm, hand)
+    self.assertEqual(from_member, Coordinate(310, 120, 10))
+    self.assertEqual(from_member, from_tool)
+    self.assertEqual(absolute(hand, hand.tool_center_point), Coordinate(447.7, 120, 10))
+
+  def test_the_tool_rides_the_member_it_is_mounted_on(self):
+    forearm, hand = self.arm()
+    forearm.rotate_to(z=90, pivot_coordinate=forearm.proximal_joint)
+
+    from_member, from_tool = self.wrist(forearm, hand)
+    self.assertEqual(from_member, Coordinate(110, 320, 10))
+    self.assertEqual(from_member, from_tool)
+    # The tool did not turn on its own joint, so it swung round with the member carrying it.
+    self.assertEqual(absolute(hand, hand.tool_center_point), Coordinate(110, 457.7, 10))
+
+  def test_the_tool_also_turns_on_its_own_joint(self):
+    forearm, hand = self.arm()
+    forearm.rotate_to(z=90, pivot_coordinate=forearm.proximal_joint)
+    hand.rotate_to(z=90, pivot_coordinate=hand.proximal_joint)
+
+    from_member, from_tool = self.wrist(forearm, hand)
+    # The wrist is the fixed point of the tool's own turn, so it has not moved.
+    self.assertEqual(from_member, Coordinate(110, 320, 10))
+    self.assertEqual(from_member, from_tool)
+    # Two right angles, so the grip centre now points back the way the member came.
+    self.assertEqual(absolute(hand, hand.tool_center_point), Coordinate(-27.7, 320, 10))
+
+  def test_the_fingers_travel_with_the_tool(self):
+    forearm, hand = self.arm()
+    at_rest = [absolute(finger, Coordinate.zero()) for finger in hand.fingers]
+    self.assertEqual(at_rest[0], Coordinate(316.5, 186.853, 14))
+    self.assertEqual(at_rest[1], Coordinate(316.5, 46.147, 14))
+
+    forearm.rotate_to(z=90, pivot_coordinate=forearm.proximal_joint)
+    turned = [absolute(finger, Coordinate.zero()) for finger in hand.fingers]
+    self.assertEqual(turned[0], Coordinate(43.147, 326.5, 14))
+    self.assertEqual(turned[1], Coordinate(183.853, 326.5, 14))
 
 
 if __name__ == "__main__":
