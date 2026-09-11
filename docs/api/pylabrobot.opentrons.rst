@@ -1,7 +1,7 @@
 .. currentmodule:: pylabrobot.opentrons
 
 pylabrobot.opentrons package
-=============================
+============================
 
 ``OT2`` owns the connection, active run, deck, and mounted pipettes. Use
 ``connect()`` for health and discovery queries without starting a run or moving
@@ -57,3 +57,41 @@ resource tracking and retraction to traversal height.
     OpentronsCommandError
     OpentronsCommandTimeout
     OpentronsProtocolError
+
+Flex
+----
+
+.. currentmodule:: pylabrobot.opentrons.flex
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    Flex
+
+Heads
+-----
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_head
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    FlexHead1
+    FlexHead8
+    FlexHead96
+
+Gripper
+-------
+
+.. currentmodule:: pylabrobot.opentrons.flex.flex_gripper
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    FlexGripper

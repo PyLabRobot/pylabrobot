@@ -45,6 +45,9 @@ Accleration = "Accleration"
 Tranformation = "Tranformation"
 tranformation = "tranformation"
 
+# "unparseable" is an accepted English variant used by the Opentrons version parser.
+unparseable = "unparseable"
+
 [files]
 extend-exclude = [
     "*.ipynb"
