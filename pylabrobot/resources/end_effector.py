@@ -32,9 +32,6 @@ class MechanicalGripper(LinkBody):
   def __init__(
     self,
     name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
     proximal_joint: Coordinate,
     tool_center_point: Coordinate,
     body: Resource,
@@ -51,15 +48,13 @@ class MechanicalGripper(LinkBody):
     """
     Args:
       name: what to call this one.
-      size_x: how far the body reaches along X, in mm.
-      size_y: how far it reaches along Y, in mm.
-      size_z: how far it reaches along Z, in mm.
       proximal_joint: where the joint this gripper turns on sits within it.
       tool_center_point: the point it grips at, from this gripper's own origin.
-      body: the material around the span.
+      body: the material around the span, which is also what sizes this member.
       body_location: where it sits, from this gripper's own origin.
       fingers: the two jaws, either side of the span.
-      finger_location: where a finger sits along and above the span. Its Y is `jaw_width`'s.
+      finger_location: where a finger sits along and above the span. Its Y is not used: the
+        jaws straddle `tool_center_point`, and `jaw_width` sets how far apart.
       jaw_range: the gap between the fingers, closed and open, in mm.
       pads: what each finger meets the resource with, in the same order as `fingers`. A gripper
         whose fingers meet it themselves has none.
@@ -68,9 +63,11 @@ class MechanicalGripper(LinkBody):
     """
     super().__init__(
       name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
+      # A tool is sized to its body, since the fingers move and a box around them would resize
+      # with the jaws. The body states that box, so it is not asked for a second time.
+      size_x=body.get_size_x(),
+      size_y=body.get_size_y(),
+      size_z=body.get_size_z(),
       proximal_joint=proximal_joint,
       distal_joint=None,
       category=category,
@@ -127,19 +124,24 @@ class MechanicalGripper(LinkBody):
     self._place_the_fingers()
 
   def _place_the_fingers(self) -> None:
-    """Stand the fingers either side of the span, leaving `jaw_width` of gap between them."""
+    """Stand the fingers either side of the grip centre, leaving `jaw_width` of gap between them."""
     for finger, side in zip(self.fingers, (1.0, -1.0)):
       here = cast(Coordinate, finger.location)
       # A resource sits at its lowest-y corner: the facing surface on the +Y side, the back of the
-      # finger on the -Y side. They straddle the span, which is the joint's Y and not the origin's.
-      facing = self.proximal_joint.y + side * self._jaw_width / 2.0
+      # finger on the -Y side. They close on what is at the grip centre, so they straddle the tool
+      # centre point rather than the joint or the member's own middle.
+      facing = self._tool_center_point.y + side * self._jaw_width / 2.0
       finger.location = Coordinate(
         here.x, facing if side > 0 else facing - finger.get_size_y(), here.z
       )
 
   def serialize(self) -> dict:
+    serialized = super().serialize()
+    # Nothing attaches past a tool, so the key its base emits has nothing to say and
+    # `__init__` has nowhere to put it.
+    serialized.pop("distal_joint", None)
     return {
-      **super().serialize(),
+      **serialized,
       "jaw_range": list(self.jaw_range),
       "tool_center_point": self.tool_center_point.serialize(),
     }
@@ -165,9 +167,6 @@ class MechanicalGripper(LinkBody):
 
     gripper = cls(
       name=data["name"],
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data["size_z"],
       proximal_joint=cast(
         Coordinate, deserialize(data["proximal_joint"], allow_marshal=allow_marshal)
       ),

@@ -9,16 +9,18 @@ from pylabrobot.resources.resource import Resource
 # Measured off a Hamilton iSWAP. The origin is the body's corner, and the joint sits inside it.
 LENGTH = 137.7
 BODY_SIZE = (59.0, 90.0, 20.3)
-PROXIMAL_JOINT = Coordinate(13.0, 45.0, 1.3)
+# The joint deliberately sits off the body's own middle, 45.0, so that a test cannot pass by
+# reading one when it means the other.
+PROXIMAL_JOINT = Coordinate(13.0, 38.0, 1.3)
 BODY_LOCATION = Coordinate(0.0, 0.0, 0.0)
-FINGER_LOCATION = Coordinate(19.5, 45.0, 5.3)
+FINGER_LOCATION = Coordinate(19.5, 38.0, 5.3)
 PAD_LOCATION = Coordinate(109.0, 1.5, -17.0)
 JAW_RANGE = (70.844, 133.706)
 
 
-def tcp(z: float = 0.0) -> Coordinate:
-  """The grip centre `LENGTH` along the span from the joint, and `z` above the joint."""
-  return Coordinate(PROXIMAL_JOINT.x + LENGTH, PROXIMAL_JOINT.y, PROXIMAL_JOINT.z + z)
+def tcp(z: float = 0.0, y: float = 0.0) -> Coordinate:
+  """The grip centre `LENGTH` along the span from the joint, and `y`/`z` off it."""
+  return Coordinate(PROXIMAL_JOINT.x + LENGTH, PROXIMAL_JOINT.y + y, PROXIMAL_JOINT.z + z)
 
 
 def gripper(**overrides) -> MechanicalGripper:
@@ -47,9 +49,6 @@ def gripper(**overrides) -> MechanicalGripper:
 
   arguments = dict(
     name="demo_gripper",
-    size_x=BODY_SIZE[0],
-    size_y=BODY_SIZE[1],
-    size_z=BODY_SIZE[2],
     proximal_joint=PROXIMAL_JOINT,
     tool_center_point=tcp(),
     body=body,
@@ -81,8 +80,16 @@ class TestTheSpan(unittest.TestCase):
   def test_the_member_is_sized_to_its_body_not_to_its_fingers(self):
     g = gripper()
     self.assertEqual((g.get_size_x(), g.get_size_y(), g.get_size_z()), BODY_SIZE)
+    # The body states that box once: the member is not told its own size a second time.
+    self.assertEqual(
+      (g.body.get_size_x(), g.body.get_size_y(), g.body.get_size_z()),
+      (g.get_size_x(), g.get_size_y(), g.get_size_z()),
+    )
     # The fingers are longer than the body they hang from, and reach past it.
     self.assertGreater(g.fingers[0].get_size_x(), g.get_size_x())
+
+  def test_nothing_past_a_tool_means_no_joint_in_its_payload(self):
+    self.assertNotIn("distal_joint", gripper().serialize())
 
 
 class TestJaws(unittest.TestCase):
@@ -96,8 +103,9 @@ class TestJaws(unittest.TestCase):
         cast(Coordinate, right.location).y + right.get_size_y(),
       ]
       self.assertAlmostEqual(faces[0] - faces[1], width)
-      # They straddle the span, which sits at the joint's Y rather than at the origin.
-      self.assertAlmostEqual(faces[0] + faces[1], 2 * PROXIMAL_JOINT.y)
+      # They straddle the grip centre, which is neither the member's middle nor its origin.
+      self.assertAlmostEqual(faces[0] + faces[1], 2 * tcp().y)
+      self.assertNotAlmostEqual(tcp().y, g.get_size_y() / 2.0)
 
   def test_the_jaws_refuse_a_width_they_do_not_reach(self):
     with self.assertRaises(ValueError):
@@ -107,6 +115,27 @@ class TestJaws(unittest.TestCase):
     with self.assertRaises(ValueError):
       g.jaw_width = 5.0
     self.assertEqual(g.jaw_width, before)
+
+  def test_the_jaws_close_on_the_grip_centre_not_on_the_joint(self):
+    """A tool that grips off to one side stands its fingers there, not over its own mounting."""
+    g = gripper(tool_center_point=tcp(y=-18.0))
+    left, right = g.fingers
+    faces = [
+      cast(Coordinate, left.location).y,
+      cast(Coordinate, right.location).y + right.get_size_y(),
+    ]
+    self.assertAlmostEqual(faces[0] + faces[1], 2 * (PROXIMAL_JOINT.y - 18.0))
+    self.assertAlmostEqual(faces[0] - faces[1], g.jaw_width)
+
+  def test_the_jaws_keep_the_reach_and_height_they_were_given(self):
+    """`jaw_width` moves the fingers across the span and must leave X and Z alone."""
+    g = gripper()
+    for width in (133.706, 100.0, 70.844):
+      g.jaw_width = width
+      for finger in g.fingers:
+        here = cast(Coordinate, finger.location)
+        self.assertAlmostEqual(here.x, FINGER_LOCATION.x)
+        self.assertAlmostEqual(here.z, FINGER_LOCATION.z)
 
   def test_a_gripper_starts_open_unless_told_otherwise(self):
     self.assertEqual(gripper().jaw_width, JAW_RANGE[1])
