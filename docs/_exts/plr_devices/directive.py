@@ -68,6 +68,7 @@ class DeviceTable(Directive):
     "status": directives.unchanged,
     "search": directives.unchanged,
     "filters": directives.unchanged,
+    "needs-hardware-testing": directives.flag,
   }
 
   def run(self):
@@ -80,6 +81,8 @@ class DeviceTable(Directive):
     }
     node["search"] = _flag(self.options.get("search"))
     node["filters_ui"] = _flag(self.options.get("filters"))
+    if "needs-hardware-testing" in self.options:
+      node["filters"]["needs_hardware_testing"] = "true"
     return [node]
 
 

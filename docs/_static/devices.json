@@ -231,13 +231,14 @@
   },
   {
     "id": "big-bear-orbital-shaker",
+    "needs_hardware_testing": true,
     "vendor": "BigBear",
     "name": "Orbital Shaker",
     "kind": "shaker",
     "capabilities": [
       "shaking"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.big_bear.BigBearOrbitalShaker",
     "api_version": "v1",
     "code_slug": "big_bear",
@@ -344,6 +345,7 @@
   },
   {
     "id": "cole-parmer-genogrinder",
+    "needs_hardware_testing": true,
     "vendor": "Cole Parmer",
     "name": "GenoGrinder",
     "kind": "shaker",
@@ -351,7 +353,7 @@
       "shaking",
       "grinding"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.cole_parmer.GenoGrinder",
     "api_version": "v1",
     "code_slug": "cole_parmer",
@@ -384,13 +386,14 @@
   },
   {
     "id": "curiox-ht2000",
+    "needs_hardware_testing": true,
     "vendor": "Curiox",
     "name": "HT2000",
     "kind": "plate washer",
     "capabilities": [
       "plate washing"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.curiox.CurioxHT2000",
     "api_version": "v1",
     "code_slug": "curiox",
@@ -553,6 +556,7 @@
   },
   {
     "id": "highres-ambistore",
+    "needs_hardware_testing": true,
     "vendor": "HighRes Biosolutions",
     "name": "AmbiStore",
     "kind": "storage",
@@ -618,6 +622,7 @@
   },
   {
     "id": "highres-tundrastore",
+    "needs_hardware_testing": true,
     "vendor": "HighRes Biosolutions",
     "name": "TundraStore",
     "kind": "storage",
@@ -705,9 +710,9 @@
     "vendor": "Inheco",
     "name": "Thermoshake",
     "models": [
-      {"name": "Thermoshake", "status": "full"},
-      {"name": "Thermoshake AC", "status": "wip"},
-      {"name": "Thermoshake RM", "status": "wip"}
+      {"name": "Thermoshake", "status": "wip", "needs_hardware_testing": true},
+      {"name": "Thermoshake AC", "status": "wip", "needs_hardware_testing": true},
+      {"name": "Thermoshake RM", "status": "wip", "needs_hardware_testing": false}
     ],
     "kind": "heater shaker",
     "capabilities": [
@@ -715,7 +720,7 @@
       "active cooling",
       "shaking"
     ],
-    "status": "full",
+    "status": "wip",
     "api": "pylabrobot.inheco.inheco_thermoshake",
     "api_version": "v1",
     "code_slug": "inheco",
@@ -726,13 +731,14 @@
   },
   {
     "id": "kbioscience-kube",
+    "needs_hardware_testing": true,
     "vendor": "KBioscience",
     "name": "KUBE",
     "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.kbioscience.KBioscienceKUBE",
     "api_version": "v1",
     "code_slug": "kbioscience",
@@ -745,9 +751,9 @@
     "vendor": "KBiosystems",
     "name": "Ultraseal",
     "models": [
-      {"name": "Ultraseal ePRO", "status": "mostly"},
-      {"name": "Ultraseal PRO", "status": "mostly"},
-      {"name": "Ultraseal XT PRO", "status": "mostly"}
+      {"name": "Ultraseal ePRO", "status": "wip", "needs_hardware_testing": true},
+      {"name": "Ultraseal PRO", "status": "mostly", "needs_hardware_testing": false},
+      {"name": "Ultraseal XT PRO", "status": "wip", "needs_hardware_testing": true}
     ],
     "kind": "sealer",
     "capabilities": [
@@ -794,6 +800,7 @@
   },
   {
     "id": "mettler-toledo-mt-sics",
+    "needs_hardware_testing": true,
     "vendor": "Mettler Toledo",
     "name": "MT-SICS scales and weigh modules",
     "models": [
@@ -1292,7 +1299,7 @@
       {"name": "WXS205", "status": "wip"},
       {"name": "WXS205DU", "status": "wip"},
       {"name": "WXS205S/15", "status": "wip"},
-      {"name": "WXS205SDU/15", "status": "full"},
+      {"name": "WXS205SDU/15", "status": "full", "needs_hardware_testing": false},
       {"name": "WXS205SDUV/15", "status": "wip"},
       {"name": "WXS205SV/15", "status": "wip"},
       {"name": "WXS26", "status": "wip"},
@@ -1844,13 +1851,14 @@
   },
   {
     "id": "sartorius-entris2",
+    "needs_hardware_testing": true,
     "vendor": "Sartorius",
     "name": "Entris II",
     "kind": "scale",
     "capabilities": [
       "weighing"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.sartorius.SartoriusEntris2",
     "api_version": "v1",
     "code_slug": "sartorius",
@@ -1903,18 +1911,19 @@
   },
   {
     "id": "thermo-fisher-alps",
+    "needs_hardware_testing": true,
     "vendor": "Thermo Fisher",
     "name": "ALPS",
     "models": [
-      {"name": "ALPS 300", "status": "mostly"},
-      {"name": "ALPS 3000", "status": "mostly"},
-      {"name": "ALPS 5000", "status": "mostly"}
+      {"name": "ALPS 300", "status": "wip"},
+      {"name": "ALPS 3000", "status": "wip"},
+      {"name": "ALPS 5000", "status": "wip"}
     ],
     "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.thermo_fisher.alps",
     "api_version": "v1",
     "code_slug": "thermo_fisher/alps",
