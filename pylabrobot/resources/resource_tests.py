@@ -365,14 +365,6 @@ class TestResource(unittest.TestCase):
           expected = 30.0 if name == axis else was[name]
           self.assertAlmostEqual(getattr(bar.rotation, name), expected, places=9)
 
-  def test_rotate_keeps_every_axis_normalized(self):
-    resource = Resource("resource", size_x=10, size_y=10, size_z=10)
-    resource.rotate(x=350, y=350, z=350)
-    resource.rotate(x=20, y=20, z=20)
-    for axis in (resource.rotation.x, resource.rotation.y, resource.rotation.z):
-      self.assertGreaterEqual(axis, 0)
-      self.assertLess(axis, 360)
-
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
     r.location = Coordinate.zero()

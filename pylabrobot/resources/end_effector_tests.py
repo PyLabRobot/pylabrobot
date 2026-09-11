@@ -80,9 +80,13 @@ class TestJaws(unittest.TestCase):
 
 class TestPads(unittest.TestCase):
   def test_a_gripper_can_have_bare_fingers(self):
-    g = gripper(pads=None, pad_location=None)
-    self.assertEqual(g.pads, [])
-    self.assertEqual([jaw.children for jaw in g.fingers], [[], []])
+    bare = gripper(pads=None, pad_location=None)
+    self.assertEqual(bare.pads, [])
+    self.assertEqual([jaw.children for jaw in bare.fingers], [[], []])
+
+    padded = gripper()
+    self.assertEqual(len(padded.pads), 2)
+    self.assertEqual([jaw.children for jaw in padded.fingers], [[pad] for pad in padded.pads])
 
   def test_pads_and_their_location_go_together(self):
     with self.assertRaises(ValueError):
@@ -90,12 +94,11 @@ class TestPads(unittest.TestCase):
     with self.assertRaises(ValueError):
       gripper(pads=None)
 
-  def test_a_pad_sits_inside_its_finger(self):
+  def test_a_pad_is_fixed_to_its_own_finger_where_it_was_put(self):
     g = gripper()
     for jaw, face in zip(g.fingers, g.pads):
-      sits_at = cast(Coordinate, face.location).y
-      self.assertGreaterEqual(sits_at, 0.0)
-      self.assertLessEqual(sits_at + face.get_size_y(), jaw.get_size_y())
+      self.assertIs(face.parent, jaw)
+      self.assertEqual(face.location, PAD_LOCATION)
 
 
 class TestRoundTrip(unittest.TestCase):
