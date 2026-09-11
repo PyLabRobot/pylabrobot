@@ -52,16 +52,17 @@ class TestTheSpan(unittest.TestCase):
 
 
 class TestJaws(unittest.TestCase):
-  def test_a_width_stands_the_fingers_that_far_apart(self):
+  def test_a_width_is_the_gap_the_fingers_leave_between_them(self):
     g = gripper()
     for width in (133.706, 100.0, 70.844):
       g.jaw_width = width
       left, right = g.fingers
-      centres = [
-        cast(Coordinate, finger.location).y + finger.get_size_y() / 2 for finger in (left, right)
+      faces = [
+        cast(Coordinate, left.location).y,
+        cast(Coordinate, right.location).y + right.get_size_y(),
       ]
-      self.assertAlmostEqual(centres[0] - centres[1], width)
-      self.assertAlmostEqual(centres[0] + centres[1], 0.0)
+      self.assertAlmostEqual(faces[0] - faces[1], width)
+      self.assertAlmostEqual(faces[0] + faces[1], 0.0)
 
   def test_the_jaws_refuse_a_width_they_do_not_reach(self):
     with self.assertRaises(ValueError):

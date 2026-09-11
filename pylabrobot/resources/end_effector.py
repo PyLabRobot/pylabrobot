@@ -19,9 +19,8 @@ class MechanicalGripper(Link):
   """A gripper that holds by closing two fingers on what it takes.
 
   A link: it spans the joint it turns on to the point it grips at, which is `tool_center_point`.
-  Its body, its two fingers and a pad on each are material bolted to that span; a gripper whose
-  fingers meet the resource themselves carries no pads. How far apart the fingers stand is state
-  rather than shape, so `jaw_width` moves them.
+  Its body, its two fingers and a pad on each are material bolted to that span. The gap between
+  the fingers is state rather than shape, so `jaw_width` moves them.
   """
 
   def __init__(
@@ -47,13 +46,11 @@ class MechanicalGripper(Link):
       body_location: where it sits, from the joint this gripper turns on.
       fingers: the two jaws, either side of the span.
       finger_location: where a finger sits along and above the span. Its Y is `jaw_width`'s.
-      jaw_range: how far apart the fingers stand, closed and open, in mm.
+      jaw_range: the gap between the fingers, closed and open, in mm.
       pads: what each finger meets the resource with, in the same order as `fingers`. A gripper
         whose fingers meet it themselves has none.
       pad_location: where a pad sits, from the finger it is fixed to. Given with `pads`.
-      jaw_width: how far apart they stand to begin with, in mm. Where a gripper is known to come
-        up at a particular width - the one it homes at, say - that is what to build it at, so the
-        model does not start out claiming a width nothing has read. Open, when not given.
+      jaw_width: the gap to begin with, in mm. Open, when not given.
     """
     super().__init__(name=name, length=length, category=category, model=model)
     if len(fingers) != 2:
@@ -89,7 +86,7 @@ class MechanicalGripper(Link):
 
   @property
   def jaw_width(self) -> float:
-    """How far apart the fingers stand, in mm."""
+    """The gap between the fingers' facing surfaces, in mm: what fits between them."""
     return self._jaw_width
 
   @jaw_width.setter
@@ -101,11 +98,14 @@ class MechanicalGripper(Link):
     self._place_the_fingers()
 
   def _place_the_fingers(self) -> None:
-    """Stand the fingers either side of the span, as far apart as the jaws are open."""
+    """Stand the fingers either side of the span, leaving `jaw_width` of gap between them."""
     for finger, side in zip(self.fingers, (1.0, -1.0)):
       here = cast(Coordinate, finger.location)
+      # A resource sits at its lowest-y corner: the facing surface on the +Y side, the back of the
+      # finger on the -Y side.
+      facing = side * self._jaw_width / 2.0
       finger.location = Coordinate(
-        here.x, side * self._jaw_width / 2.0 - finger.get_size_y() / 2.0, here.z
+        here.x, facing if side > 0 else facing - finger.get_size_y(), here.z
       )
 
   def serialize(self) -> dict:
