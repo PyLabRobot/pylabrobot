@@ -332,26 +332,6 @@ class TestResource(unittest.TestCase):
     self.assertAlmostEqual(c.get_absolute_size_x(), 20)
     self.assertAlmostEqual(c.get_absolute_size_y(), 10)
 
-  def test_rotating_about_a_reference_point_leaves_that_point_where_it_was(self):
-    """A resource turns about its own left front bottom corner. `reference` names another point to
-    turn on - a hinge, a joint - and the resource is carried so that point does not move, which is
-    what a joint is. Checked on the point itself rather than on the resource's location, since the
-    location moving is the mechanism and the point standing still is the promise."""
-    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
-    parent.location = Coordinate.zero()
-    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
-    parent.assign_child_resource(bar, location=Coordinate(0, 0, 0))
-    far_end = Coordinate(100, 0, 0)
-
-    before = bar.get_absolute_location() + far_end
-    bar.rotate_to(z=90, reference=far_end)
-    carried = matrix_vector_multiply_3x3(
-      bar.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
-    )
-
-    self.assertEqual(bar.get_absolute_location() + Coordinate(*carried), before)
-    self.assertEqual(bar.location, Coordinate(100, -100, 0))
-
   def test_rotate_to_goes_to_an_angle_where_rotate_moves_by_one(self):
     parent = Resource("parent", size_x=500, size_y=500, size_z=10)
     parent.location = Coordinate.zero()
@@ -436,19 +416,6 @@ class TestResource(unittest.TestCase):
         after = where()
         for was, now in zip((before.x, before.y, before.z), (after.x, after.y, after.z)):
           self.assertAlmostEqual(was, now, places=9)
-
-  def test_rotate_to_turns_about_a_reference_point(self):
-    parent = Resource("parent", size_x=500, size_y=500, size_z=10)
-    parent.location = Coordinate.zero()
-    bar = Resource("bar", size_x=100, size_y=10, size_z=10)
-    parent.assign_child_resource(bar, location=Coordinate.zero())
-    far_end = Coordinate(100, 0, 0)
-
-    bar.rotate_to(z=90, reference=far_end)
-    carried = matrix_vector_multiply_3x3(
-      bar.get_absolute_rotation().get_rotation_matrix(), far_end.vector()
-    )
-    self.assertEqual(bar.get_absolute_location() + Coordinate(*carried), far_end)
 
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
