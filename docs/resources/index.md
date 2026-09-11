@@ -75,6 +75,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <!-- Container subtree -->
   <tr><td>├── <a href="container/container.html">Container</a></td></tr>
   <tr><td>│   ├── <a href="container/petri-dish/petri-dish.html">PetriDish</a></td></tr>
+  <tr><td>│   ├── <a href="container/trash/trash.html">Trash</a></td></tr>
   <tr><td>│   ├── <a href="container/trough/trough.html">Trough</a></td></tr>
   <tr><td>│   ├── <a href="container/tube/tube.html">Tube</a></td></tr>
   <tr><td>│   └── <a href="container/well/well.html">Well</a></td></tr>
