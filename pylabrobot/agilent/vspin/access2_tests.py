@@ -3,7 +3,11 @@ from __future__ import annotations
 import dataclasses
 import unittest
 from collections import deque
+from typing import Any
 from unittest.mock import AsyncMock, call, patch
+
+import anyio
+import pytest
 
 from pylabrobot.agilent.vspin import _access2_protocol as protocol
 from pylabrobot.agilent.vspin._state import (
@@ -12,11 +16,16 @@ from pylabrobot.agilent.vspin._state import (
   TransferDirection,
   TransferPhase,
   TransferProgress,
+  VSpinHomingState,
+  VSpinInitializationState,
 )
 from pylabrobot.agilent.vspin.access2 import Access2, Access2Driver
 from pylabrobot.agilent.vspin.vspin import VSpin
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import EventBus, PLREvent, resource_reference, use_event_bus
 from pylabrobot.io.binary import Writer
+from pylabrobot.resources import Coordinate, Resource
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 _READY_FLAGS = protocol.STATUS_INITIALIZED | protocol.STATUS_HOMED
 
@@ -76,10 +85,11 @@ class _ScriptStep:
   result: int = 0
 
 
-class _ScriptedFTDI:
+class _ScriptedFTDI(HasLifespan):
   """Validate writes and replay partial FTDI reads from a fixed script."""
 
   def __init__(self, steps: list[_ScriptStep], max_read_size: int = 3):
+    super().__init__()
     self._steps = deque(steps)
     self._response = bytearray()
     self._max_read_size = max_read_size
@@ -88,10 +98,13 @@ class _ScriptedFTDI:
     self.baudrate: int | None = None
     self.writes: list[bytes] = []
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("Scripted FTDI does not accept options")
     self.setup_called = True
+    stack.push_shielded_async_callback(self._close)
 
-  async def stop(self) -> None:
+  async def _close(self) -> None:
     self.stopped = True
 
   async def set_baudrate(self, baudrate: int) -> None:
@@ -123,6 +136,281 @@ class _ScriptedFTDI:
     test.assertEqual(bytes(self._response), b"")
 
 
+class _TaskGroupAccess2FTDI(_ScriptedFTDI):
+  """Represent the task group owned by the real FTDI lifespan."""
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    group = await stack.enter_task_group()
+    stack.callback(group.cancel_scope.cancel)
+    await super()._enter_lifespan(stack, **kwargs)
+
+  async def _close(self) -> None:
+    await anyio.sleep(0)
+    await super()._close()
+
+
+class _PausedAccess2FTDI(_ScriptedFTDI):
+  """Pause between a header fragment and the remainder of a controller reply."""
+
+  def __init__(self, steps: list[_ScriptStep], *, pause_on_write: int = 1) -> None:
+    super().__init__(steps, max_read_size=2)
+    self.pause_on_write = pause_on_write
+    self.header_started = anyio.Event()
+    self.release_header = anyio.Event()
+
+  async def read(self, length: int) -> bytes:
+    if len(self.writes) == self.pause_on_write and not self.header_started.is_set():
+      self.header_started.set()
+      await self.release_header.wait()
+    return await super().read(length)
+
+
+class TestScopedAccess2Transactions(AnyioTestBase):
+  @pytest.mark.parametrize("direction", ["load", "unload"])
+  @pytest.mark.parametrize("confirmed", [True, False])
+  async def test_cancelled_final_status_publishes_confirmed_plate_before_interrupting(
+    self, direction: str, confirmed: bool
+  ) -> None:
+    """Publish confirmed transfers; keep uncertain plates with their source."""
+    with (
+      patch("pylabrobot.agilent.vspin.vspin.FTDI"),
+      patch("pylabrobot.agilent.vspin.access2.FTDI"),
+    ):
+      vspin = VSpin(name="centrifuge")
+      loader = Access2(name="loader", device_id="test", vspin=vspin)
+    vspin.io = _ScriptedFTDI([])  # type: ignore[assignment]
+    vspin._setup = AsyncMock()  # type: ignore[method-assign]
+    io = _PausedAccess2FTDI(
+      [
+        _ScriptStep(protocol.build_get_status(), _short_status_data()),
+        _ScriptStep(
+          protocol.build_get_status(), _short_status_data(_READY_FLAGS if confirmed else 0)
+        ),
+      ],
+      pause_on_write=2,
+    )
+    loader.driver.io = io  # type: ignore[assignment]
+    loader.driver._initialize = AsyncMock()  # type: ignore[method-assign]
+    loader.driver._move_axis_to_position = AsyncMock()  # type: ignore[method-assign]
+    loader.driver._move_to_teachpoint = AsyncMock()  # type: ignore[method-assign]
+    loader.driver._close_gripper = AsyncMock()  # type: ignore[method-assign]
+    loader.driver.request_sensor_values = AsyncMock(  # type: ignore[method-assign]
+      return_value=protocol.STATUS_OPTICAL_PLATE_SENSOR
+    )
+    vspin.request_door_open = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    vspin.request_bucket_locked = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    vspin._request_rotor_safe_to_access = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    plate = Resource("plate", size_x=1, size_y=1, size_z=1)
+    source = loader if direction == "load" else vspin.bucket1
+    destination = vspin.bucket1 if direction == "load" else loader
+    expected_holder = destination if confirmed else source
+    source.assign_child_resource(plate, location=Coordinate.zero())
+    scopes: list[anyio.CancelScope] = []
+    cancelled = anyio.Event()
+
+    async def transfer() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        try:
+          if confirmed:
+            await (loader.load() if direction == "load" else loader.unload())
+          else:
+            with pytest.raises(RuntimeError, match="not initialized and homed"):
+              await (loader.load() if direction == "load" else loader.unload())
+          await anyio.lowlevel.checkpoint()
+        except anyio.get_cancelled_exc_class():
+          assert plate.parent is expected_holder
+          assert not vspin._command_lock.locked()
+          cancelled.set()
+          raise
+
+    async with vspin, loader:
+      vspin._state = dataclasses.replace(
+        vspin.state,
+        initialization=VSpinInitializationState.INITIALIZED,
+        homing=VSpinHomingState.HOMED,
+      )
+      vspin._at_bucket = vspin.bucket1
+      _mark_driver_ready(loader.driver)
+      async with anyio.create_task_group() as group:
+        group.start_soon(transfer)
+        await io.header_started.wait()
+        assert plate.parent is source
+        scopes[0].cancel()
+        await anyio.lowlevel.checkpoint()
+        assert not cancelled.is_set()
+        io.release_header.set()
+      assert cancelled.is_set()
+      assert plate.parent is expected_holder
+      assert loader.driver.state.recovery_required is not confirmed
+      assert vspin.state.recovery_required is not confirmed
+      assert not io._steps
+
+  async def test_prewrite_cancellation_sends_no_access2_frame(self) -> None:
+    """An already cancelled command does not start an FTDI frame."""
+    with patch("pylabrobot.agilent.vspin.access2.FTDI"):
+      driver = Access2Driver(device_id="test", timeout=1)
+    io = _ScriptedFTDI([])
+    driver.io = io  # type: ignore[assignment]
+    async with io:
+      with anyio.CancelScope() as scope:
+        scope.cancel()
+        await driver.send_command(protocol.build_ping())
+      assert io.writes == []
+
+  async def test_frontend_scoped_events_close_driver_without_entering_vspin(self) -> None:
+    """Loader emits one correlated setup/stop pair and owns only its driver."""
+    with (
+      patch("pylabrobot.agilent.vspin.access2.FTDI"),
+      patch("pylabrobot.agilent.vspin.vspin.FTDI"),
+    ):
+      vspin = VSpin(name="centrifuge")
+      loader = Access2(name="loader", device_id="test", vspin=vspin)
+    io = _ScriptedFTDI([])
+    loader.driver.io = io  # type: ignore[assignment]
+    loader.driver._initialize = AsyncMock()  # type: ignore[method-assign]
+    events: list[PLREvent] = []
+    bus = EventBus()
+    bus.subscribe(events.append)
+
+    with use_event_bus(bus):
+      async with loader:
+        assert loader.driver.is_active
+        assert io.is_active
+        assert not vspin.is_active
+
+    assert not io.is_active
+    assert loader.driver.state.connection is ConnectionState.DISCONNECTED
+    assert [event.name for event in events] == [
+      "centrifuge_loader.setup.started",
+      "centrifuge_loader.setup.completed",
+      "centrifuge_loader.stop.started",
+      "centrifuge_loader.stop.completed",
+    ]
+    for start, end in ((events[0], events[1]), (events[2], events[3])):
+      assert start.context["operation_id"] == end.context["operation_id"]
+      assert start.data["device"] == resource_reference(loader)
+
+  async def test_loader_exit_closes_driver_task_group_in_scope_order(self) -> None:
+    with (
+      patch("pylabrobot.agilent.vspin.access2.FTDI"),
+      patch("pylabrobot.agilent.vspin.vspin.FTDI"),
+    ):
+      vspin = VSpin(name="centrifuge")
+      loader = Access2(name="loader", device_id="test", vspin=vspin)
+    io = _TaskGroupAccess2FTDI([])
+    loader.driver.io = io  # type: ignore[assignment]
+    loader.driver._initialize = AsyncMock()  # type: ignore[method-assign]
+
+    async with loader:
+      assert io.is_active
+    assert not io.is_active
+    assert not loader.driver.is_active
+    assert io.stopped
+
+  async def test_cancelled_loader_closes_ftdi_task_group_and_transport(self) -> None:
+    with (
+      patch("pylabrobot.agilent.vspin.access2.FTDI"),
+      patch("pylabrobot.agilent.vspin.vspin.FTDI"),
+    ):
+      vspin = VSpin(name="centrifuge")
+      loader = Access2(name="loader", device_id="test", vspin=vspin)
+    io = _TaskGroupAccess2FTDI([])
+    loader.driver.io = io  # type: ignore[assignment]
+    loader.driver._initialize = AsyncMock()  # type: ignore[method-assign]
+
+    with anyio.CancelScope() as scope:
+      async with loader:
+        scope.cancel()
+        await anyio.sleep_forever()
+    assert scope.cancel_called
+    assert not io.is_active
+    assert not loader.driver.is_active
+    assert io.stopped
+
+  async def test_cancelled_partial_header_drains_frame_before_next_request(self) -> None:
+    """The next request cannot steal a cancelled command's body or CRC."""
+    first = protocol.build_ping()
+    second = protocol.build_get_status()
+    io = _PausedAccess2FTDI(
+      [
+        _ScriptStep(first),
+        _ScriptStep(second, _short_status_data()),
+      ]
+    )
+    with patch("pylabrobot.agilent.vspin.access2.FTDI"):
+      driver = Access2Driver(device_id="test", timeout=1)
+    driver.io = io  # type: ignore[assignment]
+    cancelled = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def ping() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        try:
+          await driver.send_command(first)
+        except anyio.get_cancelled_exc_class():
+          cancelled.set()
+          raise
+
+    async with io:
+      async with anyio.create_task_group() as group:
+        group.start_soon(ping)
+        await io.header_started.wait()
+        scopes[0].cancel()
+        group.start_soon(driver.request_status)
+        await anyio.lowlevel.checkpoint()
+        assert io.writes == [protocol.build_ftdi_frame(first)]
+        assert not cancelled.is_set()
+        io.release_header.set()
+      assert cancelled.is_set()
+      assert io.writes == [protocol.build_ftdi_frame(first), protocol.build_ftdi_frame(second)]
+      assert not io._steps
+
+  async def test_cancelled_first_transfer_motion_stops_before_source_approach(self) -> None:
+    """Only the dispatched motion and its terminal status are consumed on cancellation."""
+    axis_move = protocol.build_move_axis_to_position(
+      protocol.AXIS_GRIPPER, 0, protocol.PROFILE_DYNAMIC_EMPTY, protocol.SPEED_FAST
+    )
+    io = _PausedAccess2FTDI(
+      [
+        _ScriptStep(protocol.build_get_status(), _short_status_data()),
+        _ScriptStep(axis_move),
+        _ScriptStep(protocol.build_get_status(), _full_status_data(gripper_position=0)),
+      ],
+      pause_on_write=2,
+    )
+    with patch("pylabrobot.agilent.vspin.access2.FTDI"):
+      driver = Access2Driver(device_id="test", timeout=1)
+    driver.io = io  # type: ignore[assignment]
+    _mark_driver_ready(driver)
+    cancelled = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def transfer() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        try:
+          await driver.load()
+        except anyio.get_cancelled_exc_class():
+          cancelled.set()
+          raise
+
+    async with io:
+      async with anyio.create_task_group() as group:
+        group.start_soon(transfer)
+        await io.header_started.wait()
+        scopes[0].cancel()
+        assert not cancelled.is_set()
+        io.release_header.set()
+      assert cancelled.is_set()
+      assert len(io.writes) == 3
+      assert driver.state.recovery_required
+      assert driver.state.last_teachpoint == protocol.TEACHPOINT_PARK
+      assert isinstance(driver.state.operation, TransferProgress)
+      assert driver.state.operation.phase is TransferPhase.APPROACHING_SOURCE
+
+
 class Access2TransportTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.ftdi_patch = patch("pylabrobot.agilent.vspin.access2.FTDI", autospec=True)
@@ -151,9 +439,33 @@ class Access2TransportTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_partial_header_times_out_with_context(self):
-    self.io.read = AsyncMock(side_effect=[b"\x11\x05", b""])
+    self.driver.timeout = 0.01
+    responses = iter([b"\x11\x05"])
+
+    async def read(count: int) -> bytes:
+      try:
+        return next(responses)
+      except StopIteration:
+        await anyio.sleep_forever()
+        raise AssertionError("unreachable")
+
+    self.io.read = AsyncMock(side_effect=read)
 
     with self.assertRaisesRegex(TimeoutError, "2 of 5 expected bytes"):
+      await self.driver._read_frame()
+
+  async def test_frame_timeout_covers_header_and_body_together(self):
+    """A body cannot restart a nearly expired frame deadline."""
+    self.driver.timeout = 0.02
+    response = protocol.build_ftdi_frame(bytes(4))
+    chunks = iter((response[:5], response[5:]))
+
+    async def delayed_read(count: int) -> bytes:
+      await anyio.sleep(0.015)
+      return next(chunks)
+
+    self.io.read = AsyncMock(side_effect=delayed_read)
+    with self.assertRaisesRegex(TimeoutError, "of .*expected bytes"):
       await self.driver._read_frame()
 
   async def test_connected_transport_does_not_imply_controller_readiness(self):
@@ -190,7 +502,7 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
     self.addCleanup(self.ftdi_patch.stop)
 
   def _make_driver(
-    self, steps: list[_ScriptStep], *, timeout: int = 60
+    self, steps: list[_ScriptStep], *, timeout: float = 60
   ) -> tuple[Access2Driver, _ScriptedFTDI]:
     driver = Access2Driver(device_id="test", timeout=timeout)
     io = _ScriptedFTDI(steps)
@@ -242,22 +554,13 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
         event_bus.subscribe(events.append)
 
         with use_event_bus(event_bus):
-          if use_frontend:
-            await loader.setup()
-          else:
-            await driver.setup()
-
-          io.assert_complete(self)
-          self.assertTrue(io.setup_called)
-          self.assertEqual(io.baudrate, 115384)
-          self.assertEqual(driver.state.connection, ConnectionState.CONNECTED)
-          self.assertEqual(driver.state.operation, Access2Activity.IDLE)
-          self.assertEqual(driver.state.last_teachpoint, protocol.TEACHPOINT_PARK)
-
-          if use_frontend:
-            await loader.stop()
-          else:
-            await driver.stop()
+          async with loader if use_frontend else driver:
+            io.assert_complete(self)
+            self.assertTrue(io.setup_called)
+            self.assertEqual(io.baudrate, 115384)
+            self.assertEqual(driver.state.connection, ConnectionState.CONNECTED)
+            self.assertEqual(driver.state.operation, Access2Activity.IDLE)
+            self.assertEqual(driver.state.last_teachpoint, protocol.TEACHPOINT_PARK)
 
         self.assertTrue(io.stopped)
         self.assertEqual(driver.state.connection, ConnectionState.DISCONNECTED)
@@ -301,6 +604,22 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
       await driver.home()
 
     io.assert_complete(self)
+
+  async def test_homing_status_stall_reports_last_status(self):
+    driver, _ = self._make_driver([], timeout=0.15)
+
+    async def status_then_stall() -> protocol.Access2Status:
+      if not first_status.is_set():
+        first_status.set()
+        return _status(flags=protocol.STATUS_INITIALIZED)
+      await anyio.sleep_forever()
+      raise AssertionError("unreachable")
+
+    first_status = anyio.Event()
+    driver.request_status = status_then_stall  # type: ignore[method-assign]
+    with anyio.fail_after(0.5):
+      with self.assertRaisesRegex(TimeoutError, "last status was 0x01"):
+        await driver._wait_until_homed()
 
   async def test_complete_park_ftdi_transcript(self):
     steps = [
@@ -473,7 +792,7 @@ class Access2ScriptedFTDITests(unittest.IsolatedAsyncioTestCase):
     ]
     driver, io = self._make_driver(steps)
 
-    with patch("pylabrobot.agilent.vspin.access2.asyncio.sleep", new=AsyncMock()):
+    with patch("pylabrobot.agilent.vspin.access2._MOTION_POLL_INTERVAL", 0):
       await driver._move_axis_to_position(protocol.AXIS_GRIPPER, 5.68)
 
     io.assert_complete(self)
@@ -945,14 +1264,6 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
       TransferPhase.MOVING_TO_DESTINATION,
     )
 
-  async def test_stop_invalidates_connection_and_teachpoint(self):
-    self.driver.io.stop = AsyncMock()  # type: ignore[method-assign]
-
-    await self.driver.stop()
-
-    self.assertEqual(self.driver.state.connection, ConnectionState.DISCONNECTED)
-    self.assertIsNone(self.driver.state.last_teachpoint)
-
   async def test_setup_opens_gripper_with_default_position_and_profile(self):
     driver = Access2Driver(device_id="test")
     driver.io.setup = AsyncMock()  # type: ignore[method-assign]
@@ -965,7 +1276,8 @@ class Access2WorkflowTests(unittest.IsolatedAsyncioTestCase):
     driver._move_axis_to_position = AsyncMock()  # type: ignore[method-assign]
     driver._move_to_teachpoint = AsyncMock()  # type: ignore[method-assign]
 
-    await driver.setup()
+    async with driver:
+      pass
 
     driver._move_axis_to_position.assert_awaited_once_with(  # type: ignore[attr-defined]
       protocol.AXIS_GRIPPER,

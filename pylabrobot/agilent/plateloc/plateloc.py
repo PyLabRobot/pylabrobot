@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import logging
 import re
-import time
 from typing import Literal, Optional, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 try:
@@ -94,7 +95,7 @@ class PlateLocSerialProfile:
     return cls(**data)
 
 
-class PlateLoc:
+class PlateLoc(HasLifespan):
   """Direct serial driver for the Agilent PlateLoc thermal microplate sealer."""
 
   def __init__(
@@ -110,6 +111,7 @@ class PlateLoc:
         "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
         f"Import error: {_SERIAL_IMPORT_ERROR}"
       )
+    super().__init__()
     if isinstance(profile, dict):
       profile = PlateLocSerialProfile.deserialize(profile)
     self.profile = profile or PlateLocSerialProfile()
@@ -117,6 +119,7 @@ class PlateLoc:
     self._connected = False
     self._target_temperature: Optional[float] = None
     self._stage_position: Optional[Literal["open", "closed"]] = None
+    self._cycle_active = False
     self.io = Serial(
       human_readable_device_name="Agilent PlateLoc Sealer",
       port=port,
@@ -127,7 +130,6 @@ class PlateLoc:
       parity=self.profile.parity,
       stopbits=self.profile.stopbits,
       write_timeout=self.profile.write_timeout,
-      timeout=self.profile.timeout,
       rtscts=self.profile.rtscts,
       dsrdtr=self.profile.dsrdtr,
       xonxoff=self.profile.xonxoff,
@@ -143,15 +145,17 @@ class PlateLoc:
     """Whether :meth:`setup` has completed without a subsequent :meth:`stop`."""
     return self._connected
 
-  async def setup(self) -> None:
-    """Open the serial connection."""
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport for one PlateLoc session."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.callback(self._mark_disconnected)
+    await anyio.lowlevel.checkpoint()
     self._connected = True
     logger.info("[PlateLoc %s] connected", self.port)
 
-  async def stop(self) -> None:
-    """Close the serial connection."""
-    await self.io.stop()
+  def _mark_disconnected(self) -> None:
+    """Clear session state while the serial lifespan unwinds."""
     self._connected = False
     logger.info("[PlateLoc %s] disconnected", self.port)
 
@@ -168,7 +172,7 @@ class PlateLoc:
     await self.io.write(f"{command}{self.profile.command_terminator}".encode("ascii"))
 
     if self.profile.read_delay > 0:
-      await asyncio.sleep(self.profile.read_delay)
+      await anyio.sleep(self.profile.read_delay)
 
     return await self._read_response(timeout=timeout, required=required)
 
@@ -178,20 +182,19 @@ class PlateLoc:
     required: bool = True,
   ) -> Optional[str]:
     """Read one carriage-return-terminated response."""
-    deadline = time.monotonic() + (
-      timeout if timeout is not None else self.profile.response_timeout
-    )
     chunks = bytearray()
-    while time.monotonic() < deadline:
-      remaining = deadline - time.monotonic()
-      with self.io.temporary_timeout(max(0.01, min(0.1, remaining))):
-        chunk = await self.io.read(1)
-      if chunk:
+    with anyio.move_on_after(timeout if timeout is not None else self.profile.response_timeout):
+      while True:
+        if chunks:
+          with anyio.move_on_after(0.1) as gap:
+            chunk = await self.io.read(1)
+          if gap.cancel_called:
+            break
+        else:
+          chunk = await self.io.read(1)
         chunks.extend(chunk)
         if chunks.endswith(self.profile.response_terminator):
           break
-      elif len(chunks) > 0:
-        break
 
     if len(chunks) == 0:
       if required:
@@ -241,10 +244,37 @@ class PlateLoc:
     self._target_temperature = float(target_temperature)
     return response
 
+  async def _start_cycle_and_reconcile(self) -> str:
+    """Mark the cycle active with its start write and reconcile its acknowledgement.
+
+    The write is the mutation boundary: once the frame reaches the transport the sealer
+    has accepted the cycle, so the cycle is marked active with the write and the
+    acknowledgement is reconciled under the same shield. A negative acknowledgement is a
+    device-side rejection, so it releases the mark again.
+
+    Returns:
+      The raw cycle-start acknowledgement.
+
+    Raises:
+      PlateLocError: If the sealer rejects the cycle-start frame.
+    """
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      self._cycle_active = True
+      try:
+        response = await self._send("GO 00")
+      except PlateLocError:
+        self._cycle_active = False
+        raise
+    await anyio.lowlevel.checkpoint()
+    return response
+
   async def stop_cycle(self) -> str:
     """Stop the active sealing cycle."""
     logger.info("[PlateLoc %s] stopping sealing cycle", self.port)
-    return await self._send("AC 00")
+    response = await self._send("AC 00")
+    self._cycle_active = False
+    return response
 
   async def _apply_seal(self) -> str:
     """Apply the current seal."""
@@ -290,21 +320,30 @@ class PlateLoc:
     logger.info("[PlateLoc %s] setting sealing time to %.2f s", self.port, duration)
     await self._send(f"SS 0.{sealing_time_deciseconds:02d}")
     logger.info("[PlateLoc %s] starting sealing cycle", self.port)
-    response = await self._send("GO 00")
-    deadline = time.monotonic() + self.timeout
-    while not await self.request_cycle_complete():
-      remaining = deadline - time.monotonic()
-      if remaining <= 0:
+    try:
+      response = await self._start_cycle_and_reconcile()
+      if self.timeout <= 0:
+        timed_out = not await self.request_cycle_complete()
+      else:
+        with anyio.move_on_after(self.timeout) as scope:
+          while not await self.request_cycle_complete():
+            await anyio.sleep(max(self.profile.cycle_poll_interval, 0))
+        timed_out = scope.cancelled_caught
+      if timed_out:
         raise TimeoutError("Timeout while waiting for PlateLoc cycle to complete")
-      await asyncio.sleep(min(max(self.profile.cycle_poll_interval, 0), remaining))
-    return response
+      self._cycle_active = False
+      return response
+    finally:
+      if self._cycle_active:
+        with anyio.CancelScope(shield=True):
+          await self.stop_cycle()
 
   async def open(self) -> str:
     """Move the plate stage to its open position."""
     logger.info("[PlateLoc %s] moving stage out", self.port)
     response = await self._send("SO 00")
     if self.profile.stage_move_delay > 0:
-      await asyncio.sleep(self.profile.stage_move_delay)
+      await anyio.sleep(self.profile.stage_move_delay)
     self._stage_position = "open"
     return response
 
@@ -313,7 +352,7 @@ class PlateLoc:
     logger.info("[PlateLoc %s] moving stage in", self.port)
     response = await self._send("SI 00")
     if self.profile.stage_move_delay > 0:
-      await asyncio.sleep(self.profile.stage_move_delay)
+      await anyio.sleep(self.profile.stage_move_delay)
     self._stage_position = "closed"
     return response
 

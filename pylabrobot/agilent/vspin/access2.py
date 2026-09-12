@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import logging
 import math
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Literal
+from typing import Any, AsyncIterator, Literal
+
+import anyio
 
 from pylabrobot.agilent.vspin import _access2_protocol as protocol
 from pylabrobot.agilent.vspin._state import (
@@ -25,7 +26,8 @@ from pylabrobot.agilent.vspin.errors import (
   NotAtBucketError,
 )
 from pylabrobot.agilent.vspin.vspin import VSpin
-from pylabrobot.events import evented_operation, resource_reference
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.events import LifespanEventInfo, evented_operation, resource_reference
 from pylabrobot.io.ftdi import FTDI, is_ftdi_transport_error
 from pylabrobot.resources import Coordinate, ResourceHolder
 
@@ -93,7 +95,7 @@ def _transfer_route(
   raise ValueError(f"Invalid transfer direction: {direction}")
 
 
-def _loader_lifecycle_event_context(self: "Access2") -> dict[str, object]:
+def _loader_lifecycle_event_context(self: "Access2") -> dict[str, Any]:
   """Identify the loader whose connection lifecycle is changing."""
   return {"device": resource_reference(self)}
 
@@ -121,13 +123,13 @@ def _loader_unload_event_context(self: "Access2", **parameters: float | str) -> 
   }
 
 
-class Access2Driver:
+class Access2Driver(HasLifespan):
   """FTDI driver for the Agilent Access2 centrifuge loader."""
 
   def __init__(
     self,
     device_id: str,
-    timeout: int = 60,
+    timeout: float = 60,
   ):
     """
     Args:
@@ -138,9 +140,24 @@ class Access2Driver:
     super().__init__()
     self.io = FTDI(human_readable_device_name="Agilent Access2 Loader", device_id=device_id)
     self.timeout = timeout
-    self._command_lock = asyncio.Lock()
-    self._operation_lock = asyncio.Lock()
+    self._command_lock = anyio.Lock()
+    self._operation_lock = anyio.Lock()
     self._state = Access2MachineState()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own FTDI while initializing the Access2 controller."""
+    await super()._enter_lifespan(stack)
+    self._state = dataclasses.replace(self._state, connection=ConnectionState.CONNECTING)
+    try:
+      await stack.enter_async_context(self.io.lifespan())
+    except BaseException:
+      self._record_disconnected()
+      raise
+    stack.callback(self._record_disconnected)
+    self._state = dataclasses.replace(self._state, connection=ConnectionState.CONNECTED)
+    await self.io.set_baudrate(115384)
+    async with self._operation_scope(Access2Activity.INITIALIZING) as transition:
+      await self._initialize(transition=transition)
 
   @property
   def state(self) -> Access2MachineState:
@@ -196,27 +213,27 @@ class Access2Driver:
       operation=dataclasses.replace(transfer, phase=phase),
     )
 
-  async def _read_exact(self, length: int) -> bytes:
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + self.timeout
-    response = bytearray()
+  async def _read_exact(self, length: int, response: bytearray) -> None:
+    """Append up to the requested total length while the frame owns its deadline."""
     while len(response) < length:
-      chunk = await self.io.read(length - len(response))
-      if chunk:
-        response.extend(chunk)
-        continue
-      if loop.time() >= deadline:
-        raise TimeoutError(
-          f"Access2 sent {len(response)} of {length} expected bytes within "
-          f"{self.timeout} seconds: {bytes(response).hex()}"
-        )
-      await asyncio.sleep(0)
-    return bytes(response)
+      response.extend(await self.io.read(length - len(response)))
 
   async def _read_frame(self) -> bytes:
-    header = await self._read_exact(5)
-    inner_length = protocol.parse_ftdi_header(header)
-    return header + await self._read_exact(inner_length + 2)
+    response = bytearray()
+    total_length = 5
+    with anyio.move_on_after(self.timeout):
+      await self._read_exact(total_length, response)
+      inner_length = protocol.parse_ftdi_header(bytes(response))
+      total_length += inner_length + 2
+      await self._read_exact(total_length, response)
+    if len(response) < total_length:
+      header_length = 5 if total_length > 5 else 0
+      raise TimeoutError(
+        f"Access2 sent {len(response) - header_length} of "
+        f"{total_length - header_length} expected bytes within "
+        f"{self.timeout} seconds: {bytes(response).hex()}"
+      )
+    return bytes(response)
 
   async def send_command(
     self, command: bytes, raise_on_error: bool = True
@@ -226,84 +243,66 @@ class Access2Driver:
     logger.debug("[loader] Sending %s", frame.hex())
     try:
       async with self._command_lock:
-        written = await self.io.write(frame)
-        if written != len(frame):
-          raise RuntimeError(f"Access2 wrote {written} of {len(frame)} command bytes")
-        response_frame = await self._read_frame()
+        await anyio.lowlevel.checkpoint()
+        with anyio.CancelScope(shield=True):
+          written = await self.io.write(frame)
+          if written != len(frame):
+            raise RuntimeError(f"Access2 wrote {written} of {len(frame)} command bytes")
+          response_frame = await self._read_frame()
+          logger.debug("[loader] Received %s", response_frame.hex())
+          response = protocol.parse_ftdi_reply(response_frame, request_id=command[0])
+          if raise_on_error and response.result != 0:
+            raise protocol.Access2ProtocolError(
+              f"Access2 command 0x{command[0]:02x} returned result 0x{response.result:02x}; "
+              f"response data: {response.data.hex()}"
+            )
+        await anyio.lowlevel.checkpoint()
+        return response
     except BaseException as error:
       if is_ftdi_transport_error(error):
         self._record_disconnected()
       raise
-    logger.debug("[loader] Received %s", response_frame.hex())
-    response = protocol.parse_ftdi_reply(response_frame, request_id=command[0])
-    if raise_on_error and response.result != 0:
-      raise protocol.Access2ProtocolError(
-        f"Access2 command 0x{command[0]:02x} returned result 0x{response.result:02x}; "
-        f"response data: {response.data.hex()}"
-      )
-    return response
 
-  async def setup(self) -> None:
-    """Connect, initialize, home, open, and park the Access2 loader."""
-    logger.debug("[loader] setup")
-    async with self._operation_scope(Access2Activity.INITIALIZING) as transition:
-      if self._state.recovery_required:
-        raise RuntimeError("Access2 requires recovery during setup")
-      self._state = dataclasses.replace(self._state, connection=ConnectionState.CONNECTING)
-      try:
-        await self.io.setup()
-      except BaseException:
-        self._record_disconnected()
-        raise
-      self._state = dataclasses.replace(self._state, connection=ConnectionState.CONNECTED)
-      await self.io.set_baudrate(115384)
+  async def _initialize(self, *, transition: TransitionToken) -> None:
+    """Check, home, open and park using the controller's verified status."""
+    if self._state.recovery_required:
+      raise RuntimeError("Access2 requires recovery during setup")
+    self._raise_on_fault(await self.request_status(), operation="setup precondition")
 
-      self._raise_on_fault(await self.request_status(), operation="setup precondition")
-
-      await self.send_command(protocol.build_ping())
-      transition.mark_actuated()
-      await self.send_command(protocol.build_initialize())
-      self._state = dataclasses.replace(
-        self._state,
-        operation=Access2Activity.HOMING,
-        last_teachpoint=None,
-      )
-      transition.mark_actuated(position_uncertain=True)
-      await self._home()
-      transition.confirm_position()
-      self._state = dataclasses.replace(self._state, operation=Access2Activity.MOVING)
-      transition.mark_actuated()
-      await self._move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        _DEFAULT_GRIPPER_OPEN_POSITION,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
-        speed=protocol.SPEED_FAST,
-      )
-      self._state = dataclasses.replace(self._state, last_teachpoint=None)
-      transition.mark_actuated(position_uncertain=True)
-      await self._move_to_teachpoint(
-        protocol.TEACHPOINT_PARK,
-        0,
-        15,
-        profile=protocol.PROFILE_DYNAMIC_EMPTY,
-        speed=protocol.SPEED_FAST,
-      )
-      self._state = dataclasses.replace(
-        self._state,
-        last_teachpoint=protocol.TEACHPOINT_PARK,
-      )
-      transition.confirm_position()
-      await self._require_ready(operation="setup postcondition")
-
-  async def stop(self) -> None:
-    """Close the Access2 transport and invalidate session-scoped state."""
-    logger.debug("[loader] stop")
-    async with self._operation_lock:
-      self._state = dataclasses.replace(self._state, connection=ConnectionState.DISCONNECTING)
-      try:
-        await self.io.stop()
-      finally:
-        self._record_disconnected()
+    await self.send_command(protocol.build_ping())
+    transition.mark_actuated()
+    await self.send_command(protocol.build_initialize())
+    self._state = dataclasses.replace(
+      self._state,
+      operation=Access2Activity.HOMING,
+      last_teachpoint=None,
+    )
+    transition.mark_actuated(position_uncertain=True)
+    await self._home()
+    transition.confirm_position()
+    self._state = dataclasses.replace(self._state, operation=Access2Activity.MOVING)
+    transition.mark_actuated()
+    await self._move_axis_to_position(
+      protocol.AXIS_GRIPPER,
+      _DEFAULT_GRIPPER_OPEN_POSITION,
+      profile=protocol.PROFILE_DYNAMIC_EMPTY,
+      speed=protocol.SPEED_FAST,
+    )
+    self._state = dataclasses.replace(self._state, last_teachpoint=None)
+    transition.mark_actuated(position_uncertain=True)
+    await self._move_to_teachpoint(
+      protocol.TEACHPOINT_PARK,
+      0,
+      15,
+      profile=protocol.PROFILE_DYNAMIC_EMPTY,
+      speed=protocol.SPEED_FAST,
+    )
+    self._state = dataclasses.replace(
+      self._state,
+      last_teachpoint=protocol.TEACHPOINT_PARK,
+    )
+    transition.confirm_position()
+    await self._require_ready(operation="setup postcondition")
 
   async def request_status(self) -> protocol.Access2Status:
     logger.debug("[loader] request_status")
@@ -352,8 +351,11 @@ class Access2Driver:
 
   async def _home(self) -> protocol.Access2Status:
     logger.debug("[loader] home")
-    await self.send_command(protocol.build_home())
-    return await self._wait_until_homed()
+    await anyio.lowlevel.checkpoint()
+    with anyio.fail_after(self.timeout + 1, shield=True):
+      await self.send_command(protocol.build_home())
+      status = await self._wait_until_homed()
+    return status
 
   async def home(self) -> None:
     """Home all Access2 axes and wait for the controller to confirm completion."""
@@ -372,20 +374,20 @@ class Access2Driver:
       transition.confirm_position()
 
   async def _wait_until_homed(self) -> protocol.Access2Status:
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + self.timeout
-    status = await self.request_status()
-    while True:
-      self._raise_on_fault(status, operation="homing")
-      if status.homed:
-        return status
-      if loop.time() >= deadline:
-        raise TimeoutError(
-          f"Access2 did not report homed within {self.timeout} seconds; "
-          f"last status was 0x{status.access2_status:02x}"
-        )
-      await asyncio.sleep(0.1)
-      status = await self.request_status()
+    status: protocol.Access2Status | None = None
+    with anyio.move_on_after(max(self.timeout, 0.01)):
+      while True:
+        status = await self.request_status()
+        self._raise_on_fault(status, operation="homing")
+        if status.homed:
+          return status
+        if self.timeout <= 0:
+          break
+        await anyio.sleep(0.1)
+    last_status = "unknown" if status is None else f"0x{status.access2_status:02x}"
+    raise TimeoutError(
+      f"Access2 did not report homed within {self.timeout} seconds; last status was {last_status}"
+    )
 
   @staticmethod
   def _axis_name(axis: int) -> str:
@@ -431,48 +433,47 @@ class Access2Driver:
     target_position: float | None = None,
   ) -> protocol.Access2Status:
     """Wait for full status to confirm that the selected axes finished moving."""
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + self.timeout
-    status = await self.request_status()
-    while True:
-      self._raise_on_fault(status, operation=operation)
-      if not status.initialized or not status.homed:
-        raise RuntimeError(
-          f"Access2 lost initialized/homed state during {operation}: "
-          f"status 0x{status.access2_status:02x}"
-        )
-
-      axis_details: list[str] = []
-      motion_done = True
-      for axis in axes:
-        axis_status = status.axis_status(axis)
-        if axis_status is None:
+    axis_details: list[str] = []
+    with anyio.move_on_after(max(self.timeout, 0.01)):
+      while True:
+        status = await self.request_status()
+        self._raise_on_fault(status, operation=operation)
+        if not status.initialized or not status.homed:
           raise RuntimeError(
-            f"Access2 cannot confirm {operation}: full axis status was not returned"
+            f"Access2 lost initialized/homed state during {operation}: "
+            f"status 0x{status.access2_status:02x}"
           )
-        axis_details.append(f"{self._axis_name(axis)}=0x{axis_status:02x}")
-        motion_done = motion_done and bool(axis_status & protocol.AXIS_STATUS_MOVE_DONE)
 
-      position_matches = True
-      if target_axis is not None and target_position is not None:
-        position = status.axis_position(target_axis)
-        if position is None:
-          raise RuntimeError(
-            f"Access2 cannot confirm {operation}: full axis position was not returned"
-          )
-        axis_details.append(f"{self._axis_name(target_axis)}={position:.3f} mm")
-        position_matches = abs(position - target_position) <= _AXIS_POSITION_TOLERANCE
+        axis_details = []
+        motion_done = True
+        for axis in axes:
+          axis_status = status.axis_status(axis)
+          if axis_status is None:
+            raise RuntimeError(
+              f"Access2 cannot confirm {operation}: full axis status was not returned"
+            )
+          axis_details.append(f"{self._axis_name(axis)}=0x{axis_status:02x}")
+          motion_done = motion_done and bool(axis_status & protocol.AXIS_STATUS_MOVE_DONE)
 
-      if motion_done and position_matches:
-        return status
-      if loop.time() >= deadline:
-        details = ", ".join(axis_details)
-        raise TimeoutError(
-          f"Access2 did not complete {operation} within {self.timeout} seconds; "
-          f"last status: {details}"
-        )
-      await asyncio.sleep(_MOTION_POLL_INTERVAL)
-      status = await self.request_status()
+        position_matches = True
+        if target_axis is not None and target_position is not None:
+          position = status.axis_position(target_axis)
+          if position is None:
+            raise RuntimeError(
+              f"Access2 cannot confirm {operation}: full axis position was not returned"
+            )
+          axis_details.append(f"{self._axis_name(target_axis)}={position:.3f} mm")
+          position_matches = abs(position - target_position) <= _AXIS_POSITION_TOLERANCE
+
+        if motion_done and position_matches:
+          return status
+        if self.timeout <= 0:
+          break
+        await anyio.sleep(_MOTION_POLL_INTERVAL)
+    details = ", ".join(axis_details) if axis_details else "no status received"
+    raise TimeoutError(
+      f"Access2 did not complete {operation} within {self.timeout} seconds; last status: {details}"
+    )
 
   async def _move_to_teachpoint(
     self,
@@ -482,19 +483,15 @@ class Access2Driver:
     profile: int = protocol.PROFILE_DYNAMIC_EMPTY,
     speed: int = protocol.SPEED_SLOW,
   ) -> None:
-    await self.send_command(
-      protocol.build_move_to_teachpoint(
-        teachpoint,
-        z_offset,
-        plate_height,
-        profile,
-        speed,
+    await anyio.lowlevel.checkpoint()
+    with anyio.fail_after(self.timeout + 1, shield=True):
+      await self.send_command(
+        protocol.build_move_to_teachpoint(teachpoint, z_offset, plate_height, profile, speed)
       )
-    )
-    await self._wait_until_motion_complete(
-      (protocol.AXIS_Y, protocol.AXIS_Z),
-      operation=f"move to teachpoint {teachpoint}",
-    )
+      await self._wait_until_motion_complete(
+        (protocol.AXIS_Y, protocol.AXIS_Z),
+        operation=f"move to teachpoint {teachpoint}",
+      )
 
   async def _move_axis_to_position(
     self,
@@ -503,13 +500,15 @@ class Access2Driver:
     profile: int = protocol.PROFILE_DYNAMIC_EMPTY,
     speed: int = protocol.SPEED_SLOW,
   ) -> None:
-    await self.send_command(protocol.build_move_axis_to_position(axis, position, profile, speed))
-    await self._wait_until_motion_complete(
-      (axis,),
-      operation=f"{self._axis_name(axis)} move to {position:.3f} mm",
-      target_axis=axis,
-      target_position=position,
-    )
+    await anyio.lowlevel.checkpoint()
+    with anyio.fail_after(self.timeout + 1, shield=True):
+      await self.send_command(protocol.build_move_axis_to_position(axis, position, profile, speed))
+      await self._wait_until_motion_complete(
+        (axis,),
+        operation=f"{self._axis_name(axis)} move to {position:.3f} mm",
+        target_axis=axis,
+        target_position=position,
+      )
 
   async def _jog_axis(
     self,
@@ -518,11 +517,13 @@ class Access2Driver:
     profile: int = protocol.PROFILE_DYNAMIC_EMPTY,
     speed: int = protocol.SPEED_SLOW,
   ) -> None:
-    await self.send_command(protocol.build_jog_axis(axis, displacement, profile, speed))
-    await self._wait_until_motion_complete(
-      (axis,),
-      operation=f"{self._axis_name(axis)} jog by {displacement:.3f} mm",
-    )
+    await anyio.lowlevel.checkpoint()
+    with anyio.fail_after(self.timeout + 1, shield=True):
+      await self.send_command(protocol.build_jog_axis(axis, displacement, profile, speed))
+      await self._wait_until_motion_complete(
+        (axis,),
+        operation=f"{self._axis_name(axis)} jog by {displacement:.3f} mm",
+      )
 
   async def _tighten_grip(self) -> None:
     """Move the gripper one relative step toward a tighter grip."""
@@ -561,19 +562,17 @@ class Access2Driver:
     unobstructed close position or plate-sensor-backed contact past the close
     threshold.
     """
-    response = await self.send_command(
-      protocol.build_move_axis_to_position(
-        protocol.AXIS_GRIPPER,
-        gripper_closed_position,
-        protocol.PROFILE_DYNAMIC_EMPTY,
-        speed,
-      ),
-      raise_on_error=False,
-    )
-    status = await self._wait_until_motion_complete(
-      (protocol.AXIS_GRIPPER,),
-      operation="close gripper",
-    )
+    await anyio.lowlevel.checkpoint()
+    with anyio.fail_after(self.timeout + 1, shield=True):
+      response = await self.send_command(
+        protocol.build_move_axis_to_position(
+          protocol.AXIS_GRIPPER, gripper_closed_position, protocol.PROFILE_DYNAMIC_EMPTY, speed
+        ),
+        raise_on_error=False,
+      )
+      status = await self._wait_until_motion_complete(
+        (protocol.AXIS_GRIPPER,), operation="close gripper"
+      )
     if not self._gripper_is_closed(
       status,
       gripper_closed_position=gripper_closed_position,
@@ -762,6 +761,7 @@ class Access2Driver:
         speed=gripper_open_speed_code,
       )
 
+      await anyio.lowlevel.checkpoint()
       self._state = dataclasses.replace(self._state, last_teachpoint=None)
       transition.mark_actuated(position_uncertain=True)
       await self._move_to_teachpoint(
@@ -774,6 +774,7 @@ class Access2Driver:
       transition.confirm_position()
       self._set_transfer_phase(TransferPhase.AT_SOURCE)
 
+      await anyio.lowlevel.checkpoint()
       sensor_values = await self.request_sensor_values()
       if not sensor_values & protocol.STATUS_OPTICAL_PLATE_SENSOR:
         raise RuntimeError(f"no plate found on {route.source_name}")
@@ -787,6 +788,7 @@ class Access2Driver:
       )
       self._set_transfer_phase(TransferPhase.HOLDING)
 
+      await anyio.lowlevel.checkpoint()
       self._set_transfer_phase(TransferPhase.MOVING_TO_DESTINATION)
       self._state = dataclasses.replace(self._state, last_teachpoint=None)
       transition.mark_actuated(position_uncertain=True)
@@ -804,6 +806,7 @@ class Access2Driver:
       transition.confirm_position()
       self._set_transfer_phase(TransferPhase.AT_DESTINATION)
 
+      await anyio.lowlevel.checkpoint()
       self._set_transfer_phase(TransferPhase.RELEASING)
       transition.mark_actuated()
       await self._move_axis_to_position(
@@ -813,6 +816,7 @@ class Access2Driver:
         speed=gripper_release_speed_code,
       )
 
+      await anyio.lowlevel.checkpoint()
       self._set_transfer_phase(TransferPhase.RETURNING_TO_PARK)
       self._state = dataclasses.replace(self._state, last_teachpoint=None)
       transition.mark_actuated(position_uncertain=True)
@@ -827,7 +831,9 @@ class Access2Driver:
         last_teachpoint=protocol.TEACHPOINT_PARK,
       )
       transition.confirm_position()
-      await self._require_ready(operation="transfer postcondition")
+      await anyio.lowlevel.checkpoint()
+      with anyio.fail_after(2 * self.timeout + 1, shield=True):
+        await self._require_ready(operation="transfer postcondition")
 
   async def load(
     self,
@@ -940,7 +946,7 @@ class Access2Driver:
     )
 
 
-class Access2(ResourceHolder):
+class Access2(ResourceHolder, HasLifespan):
   """Agilent Access2 centrifuge loader."""
 
   def __init__(
@@ -975,18 +981,20 @@ class Access2(ResourceHolder):
       category="loader",
       child_location=Coordinate.zero(),
     )
+    HasLifespan.__init__(self)
     self.driver: Access2Driver = driver
     self._vspin = vspin
 
-  @evented_operation("centrifuge_loader.setup", _loader_lifecycle_event_context)
-  async def setup(self) -> None:
-    """Connect, initialize, home, and park the loader through its driver."""
-    await self.driver.setup()
+  def _lifespan_event_info(self, **kwargs: Any) -> LifespanEventInfo:
+    """Describe entry and exit of the owned loader driver."""
+    return LifespanEventInfo(
+      "centrifuge_loader.setup", "centrifuge_loader.stop", _loader_lifecycle_event_context(self)
+    )
 
-  @evented_operation("centrifuge_loader.stop", _loader_lifecycle_event_context)
-  async def stop(self) -> None:
-    """Close the loader transport and invalidate session-scoped driver state."""
-    await self.driver.stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the loader driver while leaving the VSpin lifespan borrowed."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.driver.lifespan())
 
   def _teachpoint_for_bucket(self, bucket: ResourceHolder) -> int:
     """Map a VSpin bucket resource to its Access2 protocol teachpoint."""
@@ -1016,9 +1024,14 @@ class Access2(ResourceHolder):
     gripper_release_speed: Access2Speed,
   ) -> None:
     """Reserve VSpin and ask Access2Driver to perform one physical transfer."""
+    if not self.is_active or not self._vspin.is_active:
+      raise RuntimeError("Access2 and its VSpin must both have active lifespans")
     if self.driver.state.recovery_required:
       raise RuntimeError("Access2 requires recovery")
     bucket_teachpoint = self._teachpoint_for_bucket(bucket)
+    plate = self.resource if direction is TransferDirection.INTO_CENTRIFUGE else bucket.resource
+    if plate is None:
+      raise RuntimeError("Transfer source has no plate")
     async with self._vspin.reserve_transfer(bucket) as vspin_transition:
       try:
         if direction is TransferDirection.INTO_CENTRIFUGE:
@@ -1059,6 +1072,10 @@ class Access2(ResourceHolder):
         if self.driver.state.recovery_required:
           vspin_transition.mark_actuated()
         raise
+      if direction is TransferDirection.INTO_CENTRIFUGE:
+        bucket.assign_child_resource(plate, location=Coordinate.zero())
+      else:
+        self.assign_child_resource(plate)
 
   @evented_operation("centrifuge_loader.load", _loader_load_event_context)
   async def load(
@@ -1127,8 +1144,6 @@ class Access2(ResourceHolder):
       gripper_release_speed=gripper_release_speed,
     )
 
-    bucket.assign_child_resource(self.resource, location=Coordinate.zero())
-
   @evented_operation("centrifuge_loader.unload", _loader_unload_event_context)
   async def unload(
     self,
@@ -1193,5 +1208,3 @@ class Access2(ResourceHolder):
       gripper_close_speed=gripper_close_speed,
       gripper_release_speed=gripper_release_speed,
     )
-
-    self.assign_child_resource(bucket.resource)
