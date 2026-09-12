@@ -7,58 +7,22 @@ NumPy only when requested.
 
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
 import ctypes
 import ctypes.util
-import functools
 import os
-import queue
 import struct
 import sys
-import threading
 import time
 import zlib
 from array import array
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Protocol, Tuple, TypeVar
+from typing import Any, AsyncContextManager, Callable, Optional, Protocol, Tuple, TypeVar
+
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 
 _T = TypeVar("_T")
-
-
-class _SerializedDaemonExecutor:
-  """One serialized daemon worker for native calls that Python cannot cancel."""
-
-  def __init__(self):
-    self._queue: "queue.Queue[Optional[tuple[concurrent.futures.Future[Any], Callable[[], Any]]]]" = queue.Queue()
-    self._closed = False
-    self._thread = threading.Thread(target=self._run, name="celigo-camera", daemon=True)
-    self._thread.start()
-
-  def submit(self, function: Callable[[], _T]) -> "concurrent.futures.Future[_T]":
-    if self._closed:
-      raise RuntimeError("camera executor is shut down")
-    future: "concurrent.futures.Future[_T]" = concurrent.futures.Future()
-    self._queue.put((future, function))
-    return future
-
-  def shutdown(self) -> None:
-    if not self._closed:
-      self._closed = True
-      self._queue.put(None)
-
-  def _run(self) -> None:
-    while True:
-      work = self._queue.get()
-      if work is None:
-        return
-      future, function = work
-      if not future.set_running_or_notify_cancel():
-        continue
-      try:
-        future.set_result(function())
-      except BaseException as exc:
-        future.set_exception(exc)
 
 
 LUCAM_PROP_EXPOSURE = 20
@@ -254,9 +218,9 @@ class CeligoCamera(Protocol):
   @property
   def is_open(self) -> bool: ...
 
-  async def setup(self) -> None: ...
+  def lifespan(self, **kwargs: Any) -> AsyncContextManager[HasLifespan]: ...
 
-  async def stop(self) -> None: ...
+  async def restart_stream(self) -> None: ...
 
   async def set_exposure(self, exposure_ms: float) -> float: ...
 
@@ -273,7 +237,7 @@ class CeligoCamera(Protocol):
   async def capture(self, flush_frames: int = 2) -> CameraFrame: ...
 
 
-class LumeneraCamera:
+class LumeneraCamera(HasLifespan):
   """Lumenera camera connected to a Celigo, accessed through ``liblucamapi``."""
 
   def __init__(
@@ -283,16 +247,16 @@ class LumeneraCamera:
     library: Optional[Any] = None,
     sdk_call_timeout: float = 30.0,
   ):
+    super().__init__()
     if sdk_call_timeout <= 0:
       raise ValueError("sdk_call_timeout must be positive")
     self.camera_index = camera_index
     self.sdk_library = sdk_library or os.environ.get("LUCAM_SDK_LIBRARY")
     self._lib = library
     self.sdk_call_timeout = sdk_call_timeout
-    self._executor: Optional[_SerializedDaemonExecutor] = _SerializedDaemonExecutor()
     self._handle: Optional[int] = None
     self._streaming = False
-    self._pending_cleanup: Optional[concurrent.futures.Future[Any]] = None
+    self._lock = anyio.Lock()
     self.width = 0
     self.height = 0
     self.x_offset = 0
@@ -304,69 +268,41 @@ class LumeneraCamera:
 
   @property
   def is_open(self) -> bool:
-    return self._handle is not None and self._pending_cleanup is None
-
-  @functools.cached_property
-  def _lock(self) -> asyncio.Lock:
-    return asyncio.Lock()
-
-  def _queue_deferred_close(
-    self, executor: _SerializedDaemonExecutor
-  ) -> concurrent.futures.Future[Any]:
-    cleanup = executor.submit(self._stop_sync)
-    self._pending_cleanup = cleanup
-
-    def shutdown_worker(_future: concurrent.futures.Future[Any]) -> None:
-      executor.shutdown()
-      if self._executor is executor:
-        self._executor = None
-
-    cleanup.add_done_callback(shutdown_worker)
-    return cleanup
+    return self._handle is not None
 
   async def _run_blocking(self, function: Callable[..., _T], *args: Any) -> _T:
-    """Run one SDK call without using asyncio's process-wide default executor.
+    """Join an in-flight native call before delivering cancellation or timeout."""
+    started = anyio.current_time()
+    result = await anyio.to_thread.run_sync(function, *args)
+    if anyio.current_time() - started > self.sdk_call_timeout:
+      raise CameraError(f"Lumenera SDK call exceeded {self.sdk_call_timeout:g} seconds")
+    return result
 
-    Some Python runtimes do not reliably shut down their default executor when the
-    event loop runs in debug mode. A small, owned executor avoids that lifecycle
-    coupling and also ensures that no Lumenera worker thread outlives the call.
-    """
-    pending_cleanup = self._pending_cleanup
-    if pending_cleanup is not None:
-      if not pending_cleanup.done():
-        raise CameraError(
-          "A timed-out Lumenera call is still running; the camera is poisoned until "
-          "its deferred close completes"
-        )
-      # Surface a deferred-close exception before accepting another SDK call.
-      pending_cleanup.result()
-      self._pending_cleanup = None
-    call = functools.partial(function, *args)
-    if self._executor is None:
-      self._executor = _SerializedDaemonExecutor()
-    executor = self._executor
-    worker = executor.submit(call)
-    deadline = asyncio.get_running_loop().time() + self.sdk_call_timeout
-    try:
-      while not worker.done():
-        remaining = deadline - asyncio.get_running_loop().time()
-        if remaining <= 0:
-          raise asyncio.TimeoutError
-        # Polling avoids relying on a cross-thread event-loop callback after a native
-        # call completes, which is unreliable on some embedded/diagnostic event loops.
-        await asyncio.sleep(min(0.005, remaining))
-      return worker.result()
-    except asyncio.CancelledError:
-      self._queue_deferred_close(executor)
-      raise
-    except asyncio.TimeoutError as exc:
-      # A running native call cannot be cancelled. Queue close on the same one-worker
-      # executor, so it runs after (never concurrently with) the abandoned call.
-      self._queue_deferred_close(executor)
-      raise CameraError(
-        f"Lumenera SDK call exceeded {self.sdk_call_timeout:g} second timeout; "
-        "camera close is queued behind the native call"
-      ) from exc
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the camera handle and stream until all SDK work has completed."""
+    await super()._enter_lifespan(stack)
+    await anyio.lowlevel.checkpoint()
+    async with self._lock:
+      with anyio.CancelScope(shield=True):
+        try:
+          await self._run_blocking(self._setup_sync)
+        finally:
+          if self._handle is not None:
+            stack.push_shielded_async_callback(self._close_camera)
+    await anyio.lowlevel.checkpoint()
+
+  async def _close_camera(self) -> None:
+    """Close the camera after all in-flight SDK calls have joined."""
+    async with self._lock:
+      await self._run_blocking(self._stop_sync)
+
+  async def restart_stream(self) -> None:
+    """Restart the owned camera stream without releasing its lifespan."""
+    async with self._lock:
+      with anyio.CancelScope(shield=True):
+        await self._run_blocking(self._stop_sync)
+        await self._run_blocking(self._setup_sync)
+      await anyio.lowlevel.checkpoint()
 
   def _load_library(self) -> Any:
     if self._lib is None:
@@ -487,18 +423,6 @@ class LumeneraCamera:
       self._stop_sync()
       raise
 
-  async def setup(self) -> None:
-    """Open the first camera and start its video stream."""
-    async with self._lock:
-      if not self.is_open:
-        try:
-          await self._run_blocking(self._setup_sync)
-        except BaseException:
-          if self._pending_cleanup is None and self._executor is not None:
-            self._executor.shutdown()
-            self._executor = None
-          raise
-
   def _update_frame_format_state(self, frame_format: _LucamFrameFormat, frame_rate: float) -> None:
     if frame_format.pixel_format not in (LUCAM_PF_8, LUCAM_PF_16):
       raise CameraError(
@@ -602,9 +526,11 @@ class LumeneraCamera:
     if width <= 0 or height <= 0:
       raise ValueError("camera width and height must be positive")
     async with self._lock:
-      return await self._run_blocking(
+      result = await self._run_blocking(
         self._set_frame_format_sync, width, height, x_offset, y_offset
       )
+      await anyio.lowlevel.checkpoint()
+      return result
 
   def _stop_sync(self) -> None:
     if self._lib is None or self._handle is None:
@@ -616,19 +542,9 @@ class LumeneraCamera:
     self._streaming = False
     self._handle = None
 
-  async def stop(self) -> None:
-    """Stop streaming and close the camera."""
-    async with self._lock:
-      try:
-        await self._run_blocking(self._stop_sync)
-      finally:
-        if self._pending_cleanup is None and self._executor is not None:
-          self._executor.shutdown()
-          self._executor = None
-
   def _require_handle(self) -> int:
     if self._handle is None:
-      raise CameraError("Camera is not open; call setup() first")
+      raise CameraError("Camera is not open; enter its lifespan first")
     return self._handle
 
   def _request_property_value_sync(self, property_id: int) -> float:
@@ -644,7 +560,9 @@ class LumeneraCamera:
 
   async def request_property_value(self, property_id: int) -> float:
     async with self._lock:
-      return await self._run_blocking(self._request_property_value_sync, property_id)
+      result = await self._run_blocking(self._request_property_value_sync, property_id)
+      await anyio.lowlevel.checkpoint()
+      return result
 
   def _set_property_sync(self, property_id: int, property_value: float) -> float:
     handle = self._require_handle()
@@ -662,6 +580,7 @@ class LumeneraCamera:
       self.exposure_ms = await self._run_blocking(
         self._set_property_sync, LUCAM_PROP_EXPOSURE, exposure_ms
       )
+      await anyio.lowlevel.checkpoint()
       return self.exposure_ms
 
   async def set_gain(self, gain: float) -> float:
@@ -669,6 +588,7 @@ class LumeneraCamera:
       raise ValueError("gain must be non-negative")
     async with self._lock:
       self.gain = await self._run_blocking(self._set_property_sync, LUCAM_PROP_GAIN, gain)
+      await anyio.lowlevel.checkpoint()
       return self.gain
 
   def _capture_sync(self, flush_frames: int) -> CameraFrame:
@@ -698,4 +618,6 @@ class LumeneraCamera:
     if flush_frames < 0:
       raise ValueError("flush_frames must be non-negative")
     async with self._lock:
-      return await self._run_blocking(self._capture_sync, flush_frames)
+      frame = await self._run_blocking(self._capture_sync, flush_frames)
+      await anyio.lowlevel.checkpoint()
+      return frame

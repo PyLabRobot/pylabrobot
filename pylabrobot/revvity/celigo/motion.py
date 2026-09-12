@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import math
 import struct
-import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, Tuple
+
+import anyio
 
 from pylabrobot.revvity.celigo.config import (
   AxisConfig,
@@ -325,14 +325,15 @@ class StepperMotor:
   async def wait_until_ready(self, timeout: Optional[float] = None) -> int:
     """Wait until the motor is ready and return its settled encoder position."""
     selected_timeout = self._controller.move_timeout if timeout is None else timeout
-    deadline = time.monotonic() + selected_timeout
-    while time.monotonic() < deadline:
-      response = await self.send_command(_EZ_QUERY_STATUS, execute=False)
-      if not response.ok:
-        raise CeligoError(f"motor {self.axis_index} reported error {response.error_code}")
-      if response.ready:
-        return await self.request_encoder_ticks()
-      await asyncio.sleep(0.05)
+    if selected_timeout > 0:
+      with anyio.move_on_after(selected_timeout):
+        while True:
+          response = await self.send_command(_EZ_QUERY_STATUS, execute=False)
+          if not response.ok:
+            raise CeligoError(f"motor {self.axis_index} reported error {response.error_code}")
+          if response.ready:
+            return await self.request_encoder_ticks()
+          await anyio.sleep(0.05)
     raise TimeoutError(f"motor {self.axis_index} not ready within timeout")
 
   async def _set_mode(self, motor_mode: int) -> None:
@@ -467,7 +468,7 @@ class Axis:
       except CeligoError as exc:
         last_error = exc
       if attempt < 4:
-        await asyncio.sleep(0.1)
+        await anyio.sleep(0.1)
     if response is None or not response.ok:
       raise CeligoError(
         f"motor {self.axis_index} initialization failed after five attempts"
@@ -534,18 +535,24 @@ class Axis:
       raise ValueError("homing distance must be positive")
     acceleration = self._rate_to_encoder_tick_rate(self.config.max_acceleration)
     direction = _EZ_MOVE_POSITIVE if positive else _EZ_MOVE_NEGATIVE
-    response = await self.motor.send_command(
-      f"{_EZ_SET_ACCELERATION}{acceleration}"
-      f"{_EZ_SET_VELOCITY}{velocity_ticks_per_second}"
-      f"{direction}{distance_ticks}"
-    )
-    if not response.ok:
-      raise CeligoError(f"motor {self.axis_index} homing move failed (code {response.error_code})")
     timeout = max(
       self._controller.move_timeout,
       distance_ticks / max(1, velocity_ticks_per_second) + 2.0,
     )
-    return await self.motor.wait_until_ready(timeout)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      response = await self.motor.send_command(
+        f"{_EZ_SET_ACCELERATION}{acceleration}"
+        f"{_EZ_SET_VELOCITY}{velocity_ticks_per_second}"
+        f"{direction}{distance_ticks}"
+      )
+      if not response.ok:
+        raise CeligoError(
+          f"motor {self.axis_index} homing move failed (code {response.error_code})"
+        )
+      position = await self.motor.wait_until_ready(timeout)
+    await anyio.lowlevel.checkpoint()
+    return position
 
   async def _home_to_encoder_index(
     self,
@@ -558,15 +565,21 @@ class Axis:
     await self.motor._set_mode(0)
     try:
       acceleration = self._rate_to_encoder_tick_rate(self.config.max_acceleration)
-      response = await self.motor.send_command(
-        f"{_EZ_SET_ACCELERATION}{acceleration}"
-        f"{_EZ_SET_VELOCITY}{velocity_ticks_per_second}"
-        f"{_EZ_SET_SPECIAL_MODE}{special_encoder_mode}"
-        f"{_EZ_HOME}{search_distance_ticks}"
-      )
-      if not response.ok:
-        raise CeligoError(f"motor {self.axis_index} index home failed (code {response.error_code})")
-      return await self.motor.wait_until_ready(timeout)
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        response = await self.motor.send_command(
+          f"{_EZ_SET_ACCELERATION}{acceleration}"
+          f"{_EZ_SET_VELOCITY}{velocity_ticks_per_second}"
+          f"{_EZ_SET_SPECIAL_MODE}{special_encoder_mode}"
+          f"{_EZ_HOME}{search_distance_ticks}"
+        )
+        if not response.ok:
+          raise CeligoError(
+            f"motor {self.axis_index} index home failed (code {response.error_code})"
+          )
+        position = await self.motor.wait_until_ready(timeout)
+      await anyio.lowlevel.checkpoint()
+      return position
     except BaseException:
       with contextlib.suppress(Exception):
         await complete_cleanup(self.motor._terminate())
@@ -601,15 +614,18 @@ class Axis:
     last_position: Optional[int] = None
     for attempt in range(3):
       try:
-        response = await self.motor.send_command(
-          f"{_EZ_SET_HOLD_CURRENT}{temporary_hold_current}"
-          f"{_EZ_SET_ACCELERATION}{acceleration}"
-          f"{_EZ_SET_VELOCITY}{selected_velocity}"
-          f"{_EZ_MOVE_ABSOLUTE}{target_encoder_ticks}"
-        )
-        if not response.ok:
-          raise CeligoError(f"motor {self.axis_index} move failed (code {response.error_code})")
-        last_position = await self.motor.wait_until_ready()
+        await anyio.lowlevel.checkpoint()
+        with anyio.CancelScope(shield=True):
+          response = await self.motor.send_command(
+            f"{_EZ_SET_HOLD_CURRENT}{temporary_hold_current}"
+            f"{_EZ_SET_ACCELERATION}{acceleration}"
+            f"{_EZ_SET_VELOCITY}{selected_velocity}"
+            f"{_EZ_MOVE_ABSOLUTE}{target_encoder_ticks}"
+          )
+          if not response.ok:
+            raise CeligoError(f"motor {self.axis_index} move failed (code {response.error_code})")
+          last_position = await self.motor.wait_until_ready()
+        await anyio.lowlevel.checkpoint()
       except BaseException as exc:
         with contextlib.suppress(Exception):
           await complete_cleanup(self.motor._terminate())
@@ -631,7 +647,10 @@ class Axis:
           "hold-current restore",
         )
       )
-      if abs(last_position - target_encoder_ticks) <= selected_tolerance:
+      if (
+        last_position is not None
+        and abs(last_position - target_encoder_ticks) <= selected_tolerance
+      ):
         return last_position
     raise CeligoError(
       f"motor {self.axis_index} stopped at {last_position}, target "
@@ -817,7 +836,7 @@ class LinearAxis(Axis):
         raise CeligoError(
           f"axis {self.name!r} stopped without activating its negative-limit sensor"
         )
-      await asyncio.sleep(0.05)
+      await anyio.sleep(0.05)
       await self._move_homing_relative_ticks(
         True,
         self.config.homing_short_move,
@@ -825,7 +844,7 @@ class LinearAxis(Axis):
       )
       if await self.request_limit_flags() & _LIMIT_OPTO_1:
         raise CeligoError(f"axis {self.name!r} negative-limit sensor did not clear after backoff")
-      await asyncio.sleep(0.05)
+      await anyio.sleep(0.05)
 
       if self.config.home_type.startswith("NormalWithHardstopCheck"):
         search_distance_ticks = 25000
@@ -888,10 +907,13 @@ class LinearAxis(Axis):
       f"{_EZ_MOVE_POSITIVE if distance_ticks > 0 else _EZ_MOVE_NEGATIVE}"
       f"{abs(distance_ticks)}"
     )
-    response = await self.motor.send_command(command_tokens)
-    if not response.ok:
-      raise CeligoError(f"axis {self.name} relative move error (code {response.error_code})")
-    await self.motor.wait_until_ready()
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      response = await self.motor.send_command(command_tokens)
+      if not response.ok:
+        raise CeligoError(f"axis {self.name} relative move error (code {response.error_code})")
+      await self.motor.wait_until_ready()
+    await anyio.lowlevel.checkpoint()
 
   def _limit_move_distance_ticks(self) -> int:
     """Return a relative distance guaranteed to exceed configured travel."""
@@ -1031,6 +1053,9 @@ class MagnificationChanger(FilterWheel):
       raise CeligoError(f"Unsupported magnification {logical_position}X")
     if logical_position not in self._instrument_config.channels_by_magnification:
       raise CeligoError(f"No illumination-channel calibration is loaded for {logical_position}X")
-    settled_ticks = await super().move_to(logical_position)
-    self._instrument_config.magnification = logical_position
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      settled_ticks = await super().move_to(logical_position)
+      self._instrument_config.magnification = logical_position
+    await anyio.lowlevel.checkpoint()
     return settled_ticks

@@ -343,15 +343,13 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
         set_analog_output_count=set_analog,
         set_digital_output=set_digital,
       ),
-      patch(
-        "pylabrobot.revvity.celigo.celigo.asyncio", wraps=asyncio, sleep=AsyncMock()
-      ) as mock_asyncio,
+      patch("pylabrobot.revvity.celigo.celigo.anyio.sleep", new_callable=AsyncMock) as sleep,
     ):
       await celigo._initialize_safe_outputs()
 
     self.assertEqual(analog, [(0, 0), (1, 0), (2, 4095), (3, 0)])
     self.assertEqual(digital, [(bit, bit == 7) for bit in range(12)])
-    mock_asyncio.sleep.assert_awaited_once_with(0.025)
+    sleep.assert_awaited_once_with(0.025)
     self.assertIsNone(celigo._fluorescence_on_since)
 
   async def test_initialization_replays_vendor_tokens(self):
@@ -978,33 +976,29 @@ class TestLumeneraCamera(unittest.IsolatedAsyncioTestCase):
   async def test_centered_roi_is_set_read_back_and_stream_restarted(self):
     library = _FakeLucamLibrary()
     camera = LumeneraCamera(library=library)
-    await camera.setup()
-    self.assertEqual(await camera.set_frame_format(2, 1), (2, 1))
-    self.assertEqual((camera.x_offset, camera.y_offset), (1, 1))
-    self.assertEqual(library.stream_operations, [1, 0, 1])
-    await camera.stop()
+    async with camera:
+      self.assertEqual(await camera.set_frame_format(2, 1), (2, 1))
+      self.assertEqual((camera.x_offset, camera.y_offset), (1, 1))
+      self.assertEqual(library.stream_operations, [1, 0, 1])
 
   async def test_sdk_capture_is_packaged(self):
     library = _FakeLucamLibrary()
     camera = LumeneraCamera(library=library)
-    await camera.setup()
-    await camera.set_exposure(2.5)
-    frame = await camera.capture(flush_frames=0)
-    self.assertEqual((frame.width, frame.height, frame.bit_depth), (4, 3, 8))
-    self.assertEqual(frame.data, bytes([7] * 12))
-    self.assertAlmostEqual(frame.exposure_ms, 2.5)
-    await camera.stop()
+    async with camera:
+      await camera.set_exposure(2.5)
+      frame = await camera.capture(flush_frames=0)
+      self.assertEqual((frame.width, frame.height, frame.bit_depth), (4, 3, 8))
+      self.assertEqual(frame.data, bytes([7] * 12))
+      self.assertAlmostEqual(frame.exposure_ms, 2.5)
     self.assertTrue(library.closed)
-    self.assertIsNone(camera._executor)
 
   async def test_capture_sleeps_only_between_flushed_frames(self):
     library = _FakeLucamLibrary()
     camera = LumeneraCamera(library=library)
-    await camera.setup()
-    with patch("pylabrobot.revvity.celigo.camera.time.sleep") as sleep:
-      await camera.capture(flush_frames=2)
-    self.assertEqual(sleep.call_count, 2)
-    await camera.stop()
+    async with camera:
+      with patch("pylabrobot.revvity.celigo.camera.time.sleep") as sleep:
+        await camera.capture(flush_frames=2)
+      self.assertEqual(sleep.call_count, 2)
 
   async def test_unsupported_pixel_format_closes_camera(self):
     library = _FakeLucamLibrary()
@@ -1021,12 +1015,12 @@ class TestLumeneraCamera(unittest.IsolatedAsyncioTestCase):
       patch.object(library, "LucamGetFormat", unsupported),
       self.assertRaisesRegex(Exception, "Unsupported Lumenera pixel format"),
     ):
-      await camera.setup()
+      async with camera:
+        pass
     self.assertTrue(library.closed)
     self.assertFalse(camera.is_open)
-    self.assertIsNone(camera._executor)
 
-  async def test_timed_out_setup_is_poisoned_and_deferred_close_cannot_reopen(self):
+  async def test_timed_out_setup_joins_native_call_before_close(self):
     started = threading.Event()
     release = threading.Event()
     library = _FakeLucamLibrary()
@@ -1037,24 +1031,21 @@ class TestLumeneraCamera(unittest.IsolatedAsyncioTestCase):
       return 1
 
     camera = LumeneraCamera(library=library, sdk_call_timeout=0.01)
-    with (
-      patch.object(library, "LucamCameraOpen", blocking_open),
-      self.assertRaisesRegex(CameraError, "close is queued"),
-    ):
-      await camera.setup()
+    timer = threading.Timer(0.03, release.set)
+    timer.start()
+    try:
+      with (
+        patch.object(library, "LucamCameraOpen", blocking_open),
+        self.assertRaisesRegex(CameraError, "exceeded"),
+      ):
+        async with camera:
+          pass
+    finally:
+      release.set()
+      timer.join()
     self.assertTrue(started.is_set())
     self.assertFalse(camera.is_open)
-    with self.assertRaisesRegex(CameraError, "poisoned"):
-      await camera.stop()
-    release.set()
-    for _ in range(100):
-      cleanup = camera._pending_cleanup
-      if cleanup is not None and cleanup.done():
-        break
-      await asyncio.sleep(0.001)
     self.assertTrue(library.closed)
-    self.assertFalse(camera.is_open)
-    self.assertIsNone(camera._executor)
 
 
 class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
@@ -1153,13 +1144,10 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
         fire_table_index=0,
       )
 
-    # Patch the module reference, not the shared asyncio.sleep used by other threads.
     with (
       patch.object(celigo, "send_command", send_command),
       patch.object(celigo.galvo, "request_controller_status", request_status),
-      patch(
-        "pylabrobot.revvity.celigo.galvo.asyncio", wraps=asyncio, sleep=AsyncMock()
-      ) as mock_asyncio,
+      patch("pylabrobot.revvity.celigo.galvo.anyio.sleep", new_callable=AsyncMock) as sleep,
     ):
       self.assertEqual(await celigo.galvo.move_both(1.0, 2.0), (1.0, 2.0))
 
@@ -1169,7 +1157,7 @@ class TestGalvoReliability(unittest.IsolatedAsyncioTestCase):
       [(0, 0), (1, 0)],
     )
     self.assertEqual(status_requests, 1)
-    mock_asyncio.sleep.assert_awaited_once_with(0.02)
+    sleep.assert_awaited_once_with(0.02)
 
 
 class _FocusCamera:

@@ -486,6 +486,7 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
     with (
       patch.object(self.celigo, "_move_to_scan_block", move_to_scan_block),
       patch.object(self.celigo, "_acquire_scan_position", acquire_scan_position),
+      patch("pylabrobot.revvity.celigo.celigo.anyio.current_time", side_effect=[100.0, 103.0]),
     ):
       result = await self.celigo._execute_scan_plan(
         plan,
@@ -495,6 +496,7 @@ class TestCeligoScanMethods(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(z_targets, [2.5, 2.7])
     self.assertEqual(reported, list(result.frames))
+    self.assertEqual(result.elapsed, timedelta(seconds=3))
 
   async def test_scan_is_plan_followed_by_execute(self):
     spec = ScanSpec.points([(5, 5)], channel="brightfield")
