@@ -9,6 +9,9 @@ from typing import Mapping, Optional
 from urllib.parse import parse_qs, urlsplit
 from xml.etree import ElementTree
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.http import HTTP, HTTPResponse
 
 from . import protocol
@@ -57,12 +60,13 @@ class OdysseyChatterbox(HTTP):
       "odyssey": {"test_scan": {700: _tiff(), 800: _tiff()}}
     }
 
-  async def setup(self) -> None:
-    """Enable the simulated connection."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own simulated connection state instead of entering the HTTP parent's admission scope."""
     self._connected = True
+    stack.callback(self._disconnect)
 
-  async def stop(self) -> None:
-    """Close the simulated connection."""
+  def _disconnect(self) -> None:
+    """Disable the simulated connection."""
     self._connected = False
 
   def _save_scan(self) -> None:
@@ -87,6 +91,7 @@ class OdysseyChatterbox(HTTP):
     """Handle a scan-control, status, or image request entirely in memory."""
     if not self._connected:
       raise RuntimeError("Odyssey chatterbox is not set up")
+    await anyio.lowlevel.checkpoint()
     parsed = urlsplit(path)
     query = {key: values[0] for key, values in parse_qs(parsed.query).items()}
     form = {key: values[0] for key, values in parse_qs((body or b"").decode()).items()}

@@ -1,11 +1,16 @@
-import asyncio
 import logging
-import time
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
-from pylabrobot.byonoy.driver import ABS96_ERROR_NAMES, ByonoyDevice, ByonoyDriver
+import anyio
+
+from pylabrobot.byonoy.driver import (
+  ABS96_ERROR_NAMES,
+  ByonoyDevice,
+  ByonoyDriver,
+)
 from pylabrobot.byonoy.results import AbsorbanceResult
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.resources import Coordinate, PlateHolder, Resource, ResourceHolder
 from pylabrobot.resources.barcode import Barcode
@@ -153,8 +158,10 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
     )
     self.available_wavelengths: List[float] = []
 
-  async def setup(self) -> None:
-    await super().setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Enter HID ownership, initialize measurements, and discover wavelengths."""
+    await super()._enter_lifespan(stack, **kwargs)
+    stack.callback(self._clear_available_wavelengths)
     await self.initialize_measurements()
     self.available_wavelengths = await self.request_available_absorbance_wavelengths()
     logger.info(
@@ -162,6 +169,10 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
       self.name,
       self.available_wavelengths,
     )
+
+  def _clear_available_wavelengths(self) -> None:
+    """Clear setup-derived wavelength state when the reader leaves its lifespan."""
+    self.available_wavelengths = []
 
   async def request_available_absorbance_wavelengths(self) -> List[float]:
     response = await self.send_command(
@@ -176,22 +187,22 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
     return [w for w in available_wavelengths if w != 0]
 
   async def _run_abs_measurement(self, signal_wl: int, reference_wl: int, is_reference: bool):
-    with self._measurement_in_flight(0x0320):
-      await self.send_command(
+    async with self._measurement_transaction(0x0320):
+      await self._send_command_locked(
         report_id=0x0010,
         payload=b"\x00" * 60,
         wait_for_response=False,
       )
 
       payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
-      await self.send_command(
+      await self._send_command_locked(
         report_id=0x0200,
         payload=payload2,
         wait_for_response=False,
       )
 
       payload3 = Writer().i16(signal_wl).i16(reference_wl).u8(int(is_reference)).u8(0).finish()
-      await self.send_command(
+      await self._send_command_locked(
         report_id=0x0320,
         payload=payload3,
         wait_for_response=False,
@@ -203,62 +214,61 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
       rows_by_seq: List[Optional[List[float]]] = []
       flags_by_seq: List[Optional[int]] = []
       expected_chunks: Optional[int] = None
-      t0 = time.time()
+      try:
+        with anyio.fail_after(self._measurement_read_timeout):
+          while True:
+            chunk = await self._read_report()
+            reader = Reader(chunk)
+            report_id = reader.u16()
 
-      while True:
-        if self._abort_requested:
-          logger.info("[%s] measurement aborted by cancel()", self.name)
-          raise asyncio.CancelledError("Absorbance measurement aborted via cancel().")
-        if time.time() - t0 > 120:
-          logger.error(
-            "[%s] measurement timed out after 120s (signal=%d nm, ref=%d nm)",
-            self.name,
-            signal_wl,
-            reference_wl,
-          )
-          raise TimeoutError("Measurement timeout.")
+            if report_id == 0x0500:
+              seq = reader.u8()
+              seq_len = reader.u8()
+              _ = reader.i16()  # signal_wl_nm
+              _ = reader.i16()  # reference_wl_nm
+              _ = reader.u32()  # duration_ms
+              row = [reader.f32() for _ in range(12)]
+              flags = reader.u8()
+              _ = reader.u8()  # progress (0..100 running %); not surfaced
 
-        chunk = await self.io.read(64, timeout=30)
-        if len(chunk) == 0:
-          continue
+              if seq_len == 0:
+                raise RuntimeError(f"{self.name} firmware sent chunk with seq_len=0")
+              if seq_len != 8:
+                raise RuntimeError(
+                  f"{self.name} absorbance read produced seq_len={seq_len} "
+                  "(expected exactly 8 chunks of 12 values)"
+                )
+              if expected_chunks is None:
+                expected_chunks = seq_len
+                rows_by_seq = [None] * seq_len
+                flags_by_seq = [None] * seq_len
+              elif seq_len != expected_chunks:
+                raise RuntimeError(
+                  f"{self.name} firmware changed seq_len mid-stream: {expected_chunks} → {seq_len}"
+                )
+              if not 0 <= seq < seq_len:
+                raise RuntimeError(f"{self.name} firmware sent seq={seq} (seq_len={seq_len})")
+              rows_by_seq[seq] = row
+              flags_by_seq[seq] = flags
 
-        reader = Reader(chunk)
-        report_id = reader.u16()
+              if all(r is not None for r in rows_by_seq):
+                break
+      except TimeoutError:
+        logger.error(
+          "[%s] measurement timed out after 120s (signal=%d nm, ref=%d nm)",
+          self.name,
+          signal_wl,
+          reference_wl,
+        )
+        raise TimeoutError("Measurement timeout.") from None
 
-        if report_id == 0x0500:
-          seq = reader.u8()
-          seq_len = reader.u8()
-          _ = reader.i16()  # signal_wl_nm
-          _ = reader.i16()  # reference_wl_nm
-          _ = reader.u32()  # duration_ms
-          row = [reader.f32() for _ in range(12)]
-          flags = reader.u8()
-          _ = reader.u8()  # progress (0..100 running %); not surfaced
-
-          if seq_len == 0:
-            raise RuntimeError(f"{self.name} firmware sent chunk with seq_len=0")
-          if expected_chunks is None:
-            expected_chunks = seq_len
-            rows_by_seq = [None] * seq_len
-            flags_by_seq = [None] * seq_len
-          elif seq_len != expected_chunks:
-            raise RuntimeError(
-              f"{self.name} firmware changed seq_len mid-stream: {expected_chunks} → {seq_len}"
-            )
-          if not 0 <= seq < seq_len:
-            raise RuntimeError(f"{self.name} firmware sent seq={seq} (seq_len={seq_len})")
-          rows_by_seq[seq] = row
-          flags_by_seq[seq] = flags
-
-          if all(r is not None for r in rows_by_seq):
-            break
+      status = await self._request_status_locked()
 
     if expected_chunks is None:
       raise RuntimeError(f"{self.name} absorbance read produced no chunks")
     chunk_flags: List[int] = [f for f in flags_by_seq if f is not None]
     rows: List[float] = [v for r in rows_by_seq if r is not None for v in r]
 
-    status = await self.request_status()
     if status.error_code != 0:
       raise RuntimeError(
         f"{self.name} firmware error after measurement (signal={signal_wl} nm, "
@@ -303,7 +313,11 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
       is_reference=False,
     )
 
-    matrix = reshape_2d(rows, (8, 12))
+    selected = {id(well) for well in wells}
+    masked = [
+      value if id(well) in selected else None for value, well in zip(rows, plate.get_all_items())
+    ]
+    matrix = reshape_2d(masked, (8, 12))
 
     return [
       AbsorbanceResult(

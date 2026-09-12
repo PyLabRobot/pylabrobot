@@ -1,16 +1,20 @@
-import asyncio
 import contextlib
 import enum
 import logging
-import time
-from abc import ABCMeta
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Literal, Optional, Tuple, cast
+from typing import AsyncIterator, Dict, List, Literal, Optional, Tuple, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
 
 logger = logging.getLogger(__name__)
+
+
+class ByonoyMeasurementCancelledError(Exception):
+  """Raised when a caller explicitly aborts an active Byonoy measurement."""
 
 
 class ByonoyDevice(enum.Enum):
@@ -167,8 +171,12 @@ ABS1_ERROR_NAMES: Dict[int, str] = {e.value: cast(str, e.name) for e in Abs1Stat
 _ACCEL_LSB_PER_G = 16384.0  # 14-bit signed @ ±2 g full scale
 
 
-class ByonoyDriver(metaclass=ABCMeta):
+class ByonoyDriver(HasLifespan):
   """Shared HID communication logic for Byonoy plate readers."""
+
+  _measurement_read_timeout = 120.0
+  _command_response_timeout = 120.0
+  _supported_reports_timeout = 30.0
 
   # Firmware error-code → name mapping. Default mirrors Byonoy's generic
   # Status::firmwareErrorId (only NO_ERROR is documented). Subclasses for
@@ -178,33 +186,40 @@ class ByonoyDriver(metaclass=ABCMeta):
 
   def __init__(self, pid: int, device_type: ByonoyDevice, name: str) -> None:
     super().__init__()
-    self.io = HID(human_readable_device_name=name, vid=0x16D0, pid=pid)
+    self.io = HID(human_readable_device_name=name, vid=0x16D0, pid=pid, max_input_report_size=64)
     self._device_type = device_type
-    self._abort_requested = False
     self._in_flight_trigger: Optional[int] = None
-    # Serializes write+response-sniff in send_command. Does NOT cover the
-    # measurement read loops in subclasses (which poll io.read directly so
-    # cancel() can still send the abort while they run).
-    self._io_lock = asyncio.Lock()
+    self._measurement_generation = 0
+    self._measurement_trigger_committed = False
+    self._abort_sent_for_trigger = False
+    self._measurement_scope: Optional[anyio.CancelScope] = None
+    self._transaction_lock = anyio.Lock()
+    self._abort_lock = anyio.Lock()
+    self._reply_synchronized = True
 
   @property
   def name(self) -> str:
     return self.io.human_readable_device_name
 
-  async def setup(self) -> None:
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the HID transport and abort an active measurement before it closes."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
+    self._reply_synchronized = True
+    stack.push_shielded_async_callback(self._abort_active_measurement, shield_timeout=30)
     logger.info("[%s] connected", self.name)
-
-  async def stop(self) -> None:
-    if self._in_flight_trigger is not None:
-      await self.cancel()
-    await self.io.stop()
-    logger.info("[%s] disconnected", self.name)
 
   def _assemble_command(self, report_id: int, payload: bytes, routing_info: bytes) -> bytes:
     packet = Writer().u16(report_id).raw_bytes(payload).finish()
     packet += b"\x00" * (62 - len(packet)) + routing_info
     return packet
+
+  async def _read_report(self) -> bytes:
+    """Read one whole HID report before decoding any device-specific fields."""
+    result = await self.io.read_to_boundary()
+    if not result.started_at_boundary or not result.ended_at_boundary:
+      raise RuntimeError("Incomplete Byonoy HID report")
+    return result.data
 
   async def send_command(
     self,
@@ -213,35 +228,74 @@ class ByonoyDriver(metaclass=ABCMeta):
     wait_for_response: bool = True,
     routing_info: bytes = b"\x00\x00",
   ) -> Optional[bytes]:
-    command = self._assemble_command(report_id, payload=payload, routing_info=routing_info)
-    async with self._io_lock:
-      await self.io.write(command)
-      if not wait_for_response:
-        return None
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    async with self._transaction_lock:
+      return await self._send_command_locked(
+        report_id,
+        payload,
+        wait_for_response=wait_for_response,
+        routing_info=routing_info,
+      )
 
-      t0 = time.time()
-      while True:
-        if time.time() - t0 > 120:
-          logger.error(
-            "[%s] timeout waiting for response to command 0x%04X after 120s",
-            self.name,
-            report_id,
-          )
-          raise TimeoutError("Reading data timed out after 2 minutes.")
-        response = await self.io.read(64, timeout=30)
-        if len(response) == 0:
-          continue
-        response_report_id = Reader(response).u16()
-        if report_id == response_report_id:
-          break
-      return response
+  async def _send_command_locked(
+    self,
+    report_id: int,
+    payload: bytes,
+    wait_for_response: bool = True,
+    routing_info: bytes = b"\x00\x00",
+  ) -> Optional[bytes]:
+    """Send one command while the caller owns the complete transaction lock."""
+    if not self._reply_synchronized:
+      raise RuntimeError("Byonoy reply boundary unknown; enter a new lifespan before sending")
+    command = self._assemble_command(report_id, payload=payload, routing_info=routing_info)
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    response: Optional[bytes] = None
+    with anyio.fail_after(150):
+      # The reply belongs to this transaction even if the caller cancels it.
+      with anyio.CancelScope(shield=True):
+        try:
+          await self.io.write(command)
+        except BaseException:
+          self._reply_synchronized = False
+          raise
+        if report_id == self._in_flight_trigger:
+          self._measurement_trigger_committed = True
+        if wait_for_response:
+          try:
+            with anyio.fail_after(self._command_response_timeout):
+              while True:
+                response = await self._read_report()
+                response_report_id = Reader(response).u16()
+                if report_id == response_report_id:
+                  break
+          except TimeoutError:
+            self._reply_synchronized = False
+            logger.error(
+              "[%s] timeout waiting for response to command 0x%04X after 120s",
+              self.name,
+              report_id,
+            )
+            raise TimeoutError("Reading data timed out after 2 minutes.") from None
+          except BaseException:
+            self._reply_synchronized = False
+            raise
+    await anyio.lowlevel.checkpoint()
+    return response
 
   async def request_status(self) -> ByonoyStatus:
     """Read REP_STATUS_IN (0x0300): init/slot/error/uptime/measuring/boot."""
-    response = await self.send_command(
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    async with self._transaction_lock:
+      return await self._request_status_locked()
+
+  async def _request_status_locked(self) -> ByonoyStatus:
+    """Read status while the caller owns the complete transaction lock."""
+    response = await self._send_command_locked(
       report_id=0x0300, payload=b"\x00" * 60, routing_info=b"\x80\x40"
     )
     assert response is not None
+    if len(response) < 11:
+      raise ValueError(f"{self.name} incomplete status report")
     r = Reader(response[2:])
     return ByonoyStatus(
       is_initialized=r.u8() != 0,
@@ -312,31 +366,68 @@ class ByonoyDriver(metaclass=ABCMeta):
     Reply is delivered in seq/seq_len chunks of up to 29 u16 ids; zero-valued
     entries are padding. Returns the deduplicated, ordered union.
     """
-    cmd = self._assemble_command(report_id=0x0010, payload=b"\x00" * 60, routing_info=b"\x80\x40")
-    await self.io.write(cmd)
-
-    seen: List[int] = []
-    t0 = time.time()
-    while True:
-      if time.time() - t0 > 30:
-        raise TimeoutError("Timed out reading supported reports.")
-      chunk = await self.io.read(64, timeout=10)
-      if len(chunk) == 0:
-        continue
-      r = Reader(chunk)
-      if r.u16() != 0x0010:
-        continue
-      seq = r.u8()
-      seq_len = r.u8()
-      ids = [r.u16() for _ in range(29)]
-      seen.extend(i for i in ids if i != 0)
-      if seq == seq_len - 1:
-        break
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    async with self._transaction_lock:
+      if not self._reply_synchronized:
+        raise RuntimeError("Byonoy reply boundary unknown; enter a new lifespan before sending")
+      cmd = self._assemble_command(report_id=0x0010, payload=b"\x00" * 60, routing_info=b"\x80\x40")
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.fail_after(40):
+        with anyio.CancelScope(shield=True):
+          try:
+            await self.io.write(cmd)
+          except BaseException:
+            self._reply_synchronized = False
+            raise
+          chunks_by_seq: List[Optional[List[int]]] = []
+          expected_chunks: Optional[int] = None
+          try:
+            with anyio.fail_after(self._supported_reports_timeout):
+              while True:
+                chunk = await self._read_report()
+                r = Reader(chunk)
+                if r.u16() != 0x0010:
+                  continue
+                seq = r.u8()
+                seq_len = r.u8()
+                ids = [r.u16() for _ in range(29)]
+                if seq_len == 0:
+                  raise RuntimeError(f"{self.name} supported reports sent seq_len=0")
+                if expected_chunks is None:
+                  expected_chunks = seq_len
+                  chunks_by_seq = [None] * seq_len
+                elif seq_len != expected_chunks:
+                  raise RuntimeError(
+                    f"{self.name} supported reports changed seq_len: {expected_chunks} to {seq_len}"
+                  )
+                if not 0 <= seq < seq_len:
+                  raise RuntimeError(
+                    f"{self.name} supported reports sent seq={seq} (seq_len={seq_len})"
+                  )
+                if chunks_by_seq[seq] is not None:
+                  raise RuntimeError(f"{self.name} supported reports sent duplicate seq={seq}")
+                chunks_by_seq[seq] = ids
+                if all(chunk_ids is not None for chunk_ids in chunks_by_seq):
+                  break
+          except TimeoutError:
+            self._reply_synchronized = False
+            if expected_chunks is not None:
+              missing = [i for i, ids in enumerate(chunks_by_seq) if ids is None]
+              raise RuntimeError(
+                f"{self.name} supported reports missing sequence indices: {missing}"
+              ) from None
+            raise TimeoutError("Timed out reading supported reports.") from None
+          except BaseException:
+            self._reply_synchronized = False
+            raise
+      await anyio.lowlevel.checkpoint()
     # Preserve order, drop dupes
     out: List[int] = []
-    for i in seen:
-      if i not in out:
-        out.append(i)
+    for chunk_ids in chunks_by_seq:
+      assert chunk_ids is not None
+      for report_id in chunk_ids:
+        if report_id != 0 and report_id not in out:
+          out.append(report_id)
     return out
 
   async def _read_data_field(self, field_index: int) -> object:
@@ -390,46 +481,104 @@ class ByonoyDriver(metaclass=ABCMeta):
       ref_number=await s(_DD_REF_NUMBER),
     )
 
-  @contextlib.contextmanager
-  def _measurement_in_flight(self, report_id: int) -> Iterator[None]:
+  @contextlib.asynccontextmanager
+  async def _measurement_transaction(self, report_id: int) -> AsyncIterator[None]:
     """Mark `report_id` as the in-flight measurement trigger for the duration
-    of the `with` block. Subclasses' read methods wrap their trigger + result
+    of the `async with` block. Subclasses' read methods wrap their trigger + result
     loop in this so `cancel()` can find the right report to abort and so a
     concurrent second read raises instead of corrupting the read buffer.
     """
-    if self._in_flight_trigger is not None:
-      raise RuntimeError(
-        f"Byonoy device busy: report 0x{self._in_flight_trigger:04X} already in "
-        f"flight; call cancel() before starting 0x{report_id:04X}."
-      )
-    # Entry-side reset is load-bearing for correctness; exit-side is hygiene
-    # so a between-reads inspection doesn't see stale True from a prior cancel.
-    self._in_flight_trigger = report_id
-    self._abort_requested = False
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    async with self._abort_lock:
+      if self._in_flight_trigger is not None:
+        raise RuntimeError(
+          f"Byonoy device busy: report 0x{self._in_flight_trigger:04X} already in "
+          f"flight; call cancel() before starting 0x{report_id:04X}."
+        )
+      self._measurement_generation += 1
+      generation = self._measurement_generation
+      self._in_flight_trigger = report_id
+      self._measurement_trigger_committed = False
+      self._abort_sent_for_trigger = False
+      scope = anyio.CancelScope()
+      self._measurement_scope = scope
     try:
-      yield
+      with scope:
+        async with self._transaction_lock:
+          try:
+            yield
+          except anyio.get_cancelled_exc_class():
+            if self._measurement_trigger_committed:
+              await self._abort_active_measurement()
+            raise
+          except TimeoutError:
+            if self._measurement_trigger_committed:
+              await self._abort_active_measurement()
+            raise
+      if scope.cancel_called:
+        raise ByonoyMeasurementCancelledError("Measurement aborted via cancel().")
     finally:
-      self._in_flight_trigger = None
-      self._abort_requested = False
+      if self._measurement_generation == generation:
+        self._in_flight_trigger = None
+        self._measurement_scope = None
+        self._measurement_trigger_committed = False
+        self._abort_sent_for_trigger = False
+
+  async def _abort_active_measurement(self) -> None:
+    """Send the existing firmware abort for the currently active report."""
+    report_id = self._in_flight_trigger
+    generation = self._measurement_generation
+    if report_id is None or not self._measurement_trigger_committed:
+      return
+    with anyio.fail_after(30, shield=True):
+      async with self._abort_lock:
+        if (
+          self._in_flight_trigger != report_id
+          or self._measurement_generation != generation
+          or not self._measurement_trigger_committed
+          or self._abort_sent_for_trigger
+        ):
+          return
+        await self._abort_active_measurement_locked(report_id, generation)
+
+  async def _abort_active_measurement_locked(self, report_id: int, generation: int) -> None:
+    """Send one abort while the caller owns the abort lock for this generation."""
+    self._abort_sent_for_trigger = True
+    payload = Writer().u16(report_id).raw_bytes(b"\x00" * 58).finish()
+    command = self._assemble_command(0x0060, payload=payload, routing_info=b"\x00\x00")
+    try:
+      await self.io.write(command)
+    except BaseException:
+      if self._measurement_generation == generation:
+        self._abort_sent_for_trigger = False
+      raise
+    logger.info("[%s] sent abort for in-flight report 0x%04X", self.name, report_id)
 
   async def cancel(self) -> None:
     """Abort the in-flight measurement via REP_ABORT_REPORT_OUT (0x0060).
 
-    Uses the report id tracked by the read method's `_measurement_in_flight`
+    Uses the report id tracked by the read method's `_measurement_transaction`
     context. If no measurement is in flight, this is a no-op.
 
-    Empirically the firmware stops emitting result chunks but sends no closing
-    notification, so we also raise `_abort_requested`; subclasses' read loops
-    poll the flag and bail out instead of waiting 120 s for the hard timeout.
+    The firmware sends no closing notification. Cancelling the measurement's
+    scope stops pre-trigger work without issuing a trigger, or wakes an active
+    reader and aborts after an already-committed trigger.
     """
+    await anyio.lowlevel.checkpoint_if_cancelled()
     report_id = self._in_flight_trigger
+    generation = self._measurement_generation
     if report_id is None:
       logger.info("[%s] cancel(): no measurement in flight; no-op", self.name)
       return
-    self._abort_requested = True
-    payload = Writer().u16(report_id).raw_bytes(b"\x00" * 58).finish()
-    await self.send_command(report_id=0x0060, payload=payload, wait_for_response=False)
-    logger.info("[%s] sent abort for in-flight report 0x%04X", self.name, report_id)
+    with anyio.fail_after(30, shield=True):
+      async with self._abort_lock:
+        if self._in_flight_trigger != report_id or self._measurement_generation != generation:
+          return
+        scope = self._measurement_scope
+        if scope is not None:
+          scope.cancel()
+        if self._measurement_trigger_committed and not self._abort_sent_for_trigger:
+          await self._abort_active_measurement_locked(report_id, generation)
 
   async def set_led_color(
     self,

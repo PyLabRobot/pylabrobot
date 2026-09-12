@@ -1,14 +1,16 @@
-import asyncio
 import logging
 import math
 from typing import List, Tuple
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.usb import USB
 
 logger = logging.getLogger(__name__)
 
 
-class ThermoFisherNanoDrop1000:
+class ThermoFisherNanoDrop1000(HasLifespan):
   VID = 0x2457
   PID = 0x1002
   EP_OUT = 0x02
@@ -16,17 +18,17 @@ class ThermoFisherNanoDrop1000:
   EP_IN_COMM = 0x87
 
   def __init__(self):
+    super().__init__()
     self.io = USB(
       id_vendor=self.VID,
       id_product=self.PID,
       human_readable_device_name="Thermo Fisher NanoDrop 1000",
       packet_read_timeout=0.05,
-      read_timeout=1,
       read_endpoint_address=self.EP_IN_COMM,
       write_endpoint_address=self.EP_OUT,
       configuration_callback=self._configure_usb_device,
     )
-    self._connected = False
+    self._command_lock = anyio.Lock()
 
     self.coefficients = {}
     self.dark_spectrum = None
@@ -39,53 +41,63 @@ class ThermoFisherNanoDrop1000:
     device.clear_halt(cls.EP_IN_HEAVY)
     device.clear_halt(cls.EP_IN_COMM)
 
-  async def setup(self):
-    """Initializes the USB connection."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own USB through initialization, acquisition and safety shutdown."""
+    await super()._enter_lifespan(stack)
     logger.info("Connecting to NanoDrop 1000")
-    await self.io.setup(empty_buffer=False)
-    self._connected = True
+    self._command_lock = anyio.Lock()
+    self.coefficients = {}
+    self.dark_spectrum = None
+    self.blank_spectrum = None
+    await stack.enter_async_context(self.io.lifespan(empty_buffer=False))
+    stack.callback(self.coefficients.clear)
+    stack.push_shielded_async_callback(self._power_down_magnet, shield_timeout=35)
+    stack.push_shielded_async_callback(self._power_down_lamp, shield_timeout=35)
 
     # Wake & Init
     await self.send_command([0x08])
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
     await self.send_command([0x01])
-    await asyncio.sleep(0.2)
+    await anyio.sleep(0.2)
 
     await self._download_all_coefficients()
 
-  async def stop(self):
-    """Safely powers down hardware and releases the USB port."""
-    if self._connected:
-      try:
-        # Ensure lamp and magnet are off before disconnect
-        await self.send_command([0x03, 0x00])
-        await self.send_command([0x0F, 0x00])
-      except Exception:
-        logger.warning("Failed to power down the NanoDrop cleanly", exc_info=True)
-      await self.io.stop()
-      self._connected = False
-      logger.info("NanoDrop 1000 disconnected")
+  async def _power_down_lamp(self) -> None:
+    """Switch off the lamp while USB remains owned."""
+    await self.send_command([0x03, 0x00])
 
-    self.coefficients = {}
+  async def _power_down_magnet(self) -> None:
+    """Release the magnet while USB remains owned."""
+    await self.send_command([0x0F, 0x00])
+
+  async def _write_command(self, payload: List[int]) -> None:
+    """Dispatch one command without abandoning a possibly committed write."""
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      with anyio.fail_after(35):
+        await self.io.write(bytes(payload))
 
   async def send_command(self, payload: List[int]):
     """Generic transport method for writing to the command mailbox."""
-    await self.io.write(bytes(payload))
+    async with self._command_lock:
+      await self._write_command(payload)
+    await anyio.lowlevel.checkpoint()
 
   async def read_comm(self, timeout=500) -> bytes:
     """Reads from the 64-byte text/status endpoint."""
-    return await self.io.read(timeout=timeout / 1000, size=64)
+    with anyio.fail_after(timeout / 1000):
+      return await self.io.read(size=64)
 
   async def read_heavy(self, packets=64, timeout=1000) -> bytearray:
     """Reads bulk interleaved blocks from the main camera endpoint."""
     data_buffer = bytearray()
-    for _ in range(packets):
-      packet = await self.io.read(
-        timeout=timeout / 1000,
-        size=64,
-        endpoint=self.EP_IN_HEAVY,
-      )
-      data_buffer.extend(packet)
+    packet_timeout = timeout / 1000
+    # Allow each packet its own wait, with one second for scheduling/assembly overhead.
+    with anyio.fail_after(packets * packet_timeout + 1):
+      for _ in range(packets):
+        with anyio.fail_after(packet_timeout):
+          packet = await self.io.read(size=64, endpoint=self.EP_IN_HEAVY)
+        data_buffer.extend(packet)
     return data_buffer
 
   async def flush_comm(self):
@@ -115,18 +127,24 @@ class ThermoFisherNanoDrop1000:
     await self.send_command([0x02, lsb, msb])
 
   async def _download_all_coefficients(self):
+    """Read the factory memory map using complete serialized command transactions."""
     logger.info("Downloading NanoDrop factory memory map")
     await self.flush_comm()
 
     for index in range(1, 15):
       if index == 5:
         continue
-      await self.send_command([0x05, index])
-      await asyncio.sleep(0.05)
       try:
-        data = await self.read_comm()
+        async with self._command_lock:
+          await anyio.lowlevel.checkpoint()
+          with anyio.CancelScope(shield=True):
+            with anyio.fail_after(33):
+              await self.io.write(bytes([0x05, index]))
+              await anyio.sleep(0.05)
+              data = await self.read_comm()
         text = bytearray(data[2:]).decode("ascii", errors="ignore").split("\x00")[0]
         self.coefficients[index] = float(text)
+        await anyio.lowlevel.checkpoint()
       except Exception:
         logger.warning("Failed to read coefficient index %d", index, exc_info=True)
 
@@ -136,10 +154,15 @@ class ThermoFisherNanoDrop1000:
     return [c0 + (c1 * pixel) + (c2 * (pixel**2)) + (c3 * (pixel**3)) for pixel in range(2048)]
 
   async def get_raw_spectrum(self) -> List[float]:
-    await self.flush_heavy()
-    await self.send_command([0x09])
-
-    data_buffer = await self.read_heavy()
+    """Acquire one complete spectrum from the heavy endpoint."""
+    async with self._command_lock:
+      await self.flush_heavy()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        with anyio.fail_after(100):
+          await self.io.write(b"\x09")
+          data_buffer = await self.read_heavy()
+    await anyio.lowlevel.checkpoint()
 
     pixels = []
     for i in range(0, 4096, 128):
@@ -161,21 +184,22 @@ class ThermoFisherNanoDrop1000:
     return raw_intensities
 
   async def take_blank(self, integration_ms=20):
-    await self._set_integration_time(integration_ms)
+    async with AsyncExitStackWithShielding() as stack:
+      stack.push_shielded_async_callback(self._power_down_magnet, shield_timeout=35)
+      stack.push_shielded_async_callback(self._power_down_lamp, shield_timeout=35)
+      await self._set_integration_time(integration_ms)
 
-    await self.set_lamp(False)
-    await self.set_magnet(True)
-    await asyncio.sleep(0.2)
-    logger.info("Acquiring dark baseline")
-    self.dark_spectrum = await self.get_raw_spectrum()
+      await self.set_lamp(False)
+      await self.set_magnet(True)
+      await anyio.sleep(0.2)
+      logger.info("Acquiring dark baseline")
+      self.dark_spectrum = await self.get_raw_spectrum()
 
-    await self.set_lamp(True)
-    await asyncio.sleep(0.2)
-    logger.info("Acquiring blank baseline")
-    self.blank_spectrum = await self.get_raw_spectrum()
+      await self.set_lamp(True)
+      await anyio.sleep(0.2)
+      logger.info("Acquiring blank baseline")
+      self.blank_spectrum = await self.get_raw_spectrum()
 
-    await self.set_lamp(False)
-    await self.set_magnet(False)
     logger.info("Blanking complete")
 
   async def measure_absorbance(self, integration_ms=20) -> Tuple[List[float], List[float]]:
@@ -186,16 +210,16 @@ class ThermoFisherNanoDrop1000:
     # Replace the static `integration_ms` with a loop that fires 8ms, 16ms, 32ms, etc.
     # and mathematically stitches the optimal exposures together.
 
-    await self._set_integration_time(integration_ms)
-    await self.set_magnet(True)
-    await self.set_lamp(True)
-    await asyncio.sleep(0.2)
+    async with AsyncExitStackWithShielding() as stack:
+      stack.push_shielded_async_callback(self._power_down_magnet, shield_timeout=35)
+      stack.push_shielded_async_callback(self._power_down_lamp, shield_timeout=35)
+      await self._set_integration_time(integration_ms)
+      await self.set_magnet(True)
+      await self.set_lamp(True)
+      await anyio.sleep(0.2)
 
-    logger.info("Measuring sample")
-    sample_spectrum = await self.get_raw_spectrum()
-
-    await self.set_lamp(False)
-    await self.set_magnet(False)
+      logger.info("Measuring sample")
+      sample_spectrum = await self.get_raw_spectrum()
 
     absorbance = [
       -math.log10(max(sample - dark, 1) / max(blank - dark, 1))

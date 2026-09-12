@@ -1,8 +1,8 @@
-import asyncio
 import logging
-import time
 from datetime import datetime
 from typing import List, Optional, Tuple
+
+import anyio
 
 from pylabrobot.byonoy.driver import (
   LUM96_PRESET_S,
@@ -105,15 +105,15 @@ class ByonoyLuminescence96(Resource, ByonoyDriver):
       sum(mask_bools),
     )
 
-    with self._measurement_in_flight(0x0340):
-      await self.send_command(
+    async with self._measurement_transaction(0x0340):
+      await self._send_command_locked(
         report_id=0x0010,
         payload=b"\x00" * 60,
         wait_for_response=False,
       )
 
       payload2 = Writer().u16(7).u8(0).raw_bytes(b"\x00" * 52).finish()
-      await self.send_command(
+      await self._send_command_locked(
         report_id=0x0200,
         payload=payload2,
         wait_for_response=False,
@@ -127,60 +127,56 @@ class ByonoyLuminescence96(Resource, ByonoyDriver):
         .u8(0)  # flags
         .finish()
       )
-      await self.send_command(
+      await self._send_command_locked(
         report_id=0x0340,
         payload=payload3,
         wait_for_response=False,
       )
 
-      t0 = time.time()
       # Index by seq so an out-of-order or dropped chunk surfaces as a None
       # slot instead of silently shifting subsequent rows into the wrong wells.
       rows_by_seq: List[Optional[List[float]]] = []
       flags_by_seq: List[Optional[int]] = []
       expected_chunks: Optional[int] = None
 
-      while True:
-        if self._abort_requested:
-          logger.info("[%s] read aborted by cancel()", self.name)
-          raise asyncio.CancelledError("Luminescence read aborted via cancel().")
-        if time.time() - t0 > 120:
-          logger.error("[%s] luminescence read timed out after 120s", self.name)
-          raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
+      try:
+        with anyio.fail_after(self._measurement_read_timeout):
+          while True:
+            chunk = await self._read_report()
+            reader = Reader(chunk)
+            report_id = reader.u16()
 
-        chunk = await self.io.read(64, timeout=2)
-        if len(chunk) == 0:
-          continue
+            if report_id == 0x0600:
+              seq = reader.u8()
+              seq_len = reader.u8()
+              _ = reader.u32()  # integration_time_us
+              _ = reader.u32()  # duration_ms
+              row = [reader.f32() for _ in range(12)]
+              flags = reader.u8()
+              _ = reader.u8()  # progress (0..100 running %); not surfaced
 
-        reader = Reader(chunk)
-        report_id = reader.u16()
+              if seq_len == 0:
+                raise RuntimeError(f"{self.name} firmware sent chunk with seq_len=0")
+              if expected_chunks is None:
+                expected_chunks = seq_len
+                rows_by_seq = [None] * seq_len
+                flags_by_seq = [None] * seq_len
+              elif seq_len != expected_chunks:
+                raise RuntimeError(
+                  f"{self.name} firmware changed seq_len mid-stream: {expected_chunks} → {seq_len}"
+                )
+              if not 0 <= seq < seq_len:
+                raise RuntimeError(f"{self.name} firmware sent seq={seq} (seq_len={seq_len})")
+              rows_by_seq[seq] = row
+              flags_by_seq[seq] = flags
 
-        if report_id == 0x0600:
-          seq = reader.u8()
-          seq_len = reader.u8()
-          _ = reader.u32()  # integration_time_us
-          _ = reader.u32()  # duration_ms
-          row = [reader.f32() for _ in range(12)]
-          flags = reader.u8()
-          _ = reader.u8()  # progress (0..100 running %); not surfaced
+              if all(r is not None for r in rows_by_seq):
+                break
+      except TimeoutError:
+        logger.error("[%s] luminescence read timed out after 120s", self.name)
+        raise TimeoutError("Reading luminescence data timed out after 2 minutes.") from None
 
-          if seq_len == 0:
-            raise RuntimeError(f"{self.name} firmware sent chunk with seq_len=0")
-          if expected_chunks is None:
-            expected_chunks = seq_len
-            rows_by_seq = [None] * seq_len
-            flags_by_seq = [None] * seq_len
-          elif seq_len != expected_chunks:
-            raise RuntimeError(
-              f"{self.name} firmware changed seq_len mid-stream: {expected_chunks} → {seq_len}"
-            )
-          if not 0 <= seq < seq_len:
-            raise RuntimeError(f"{self.name} firmware sent seq={seq} (seq_len={seq_len})")
-          rows_by_seq[seq] = row
-          flags_by_seq[seq] = flags
-
-          if all(r is not None for r in rows_by_seq):
-            break
+      status = await self._request_status_locked()
 
     if expected_chunks is None:
       raise RuntimeError(f"{self.name} luminescence read produced no chunks")
@@ -190,7 +186,6 @@ class ByonoyLuminescence96(Resource, ByonoyDriver):
     # Check firmware health before trusting the data. error_code is the
     # authoritative post-measurement status byte; per-chunk flags are
     # undocumented but a non-zero value means the firmware flagged the chunk.
-    status = await self.request_status()
     if status.error_code != 0:
       raise RuntimeError(
         f"{self.name} firmware error after read: "

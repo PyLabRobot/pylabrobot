@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import logging
 import math
@@ -12,6 +11,9 @@ from dataclasses import dataclass
 from typing import Callable, Literal, Optional, Union
 from urllib.parse import quote, urlencode, urljoin
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.http import HTTP, HTTPResponse
 
 from . import protocol
@@ -65,12 +67,12 @@ def normalize_state(raw: str) -> OdysseyState:
     raise OdysseyStatusError(f"Unknown Odyssey scanner state: {raw!r}") from error
 
 
-class OdysseyClassic:
+class OdysseyClassic(HasLifespan):
   """LI-COR Odyssey Classic infrared scanner using its embedded HTTP interface.
 
   Lengths, including resolution, are in millimeters. Credentials can be supplied explicitly or
   through ODYSSEY_USER / ODYSSEY_PASS. ODYSSEY_HOST supplies the host when omitted.
-  Pass an HTTP transport as ``io`` to use a simulated or recorded connection.
+  Pass an already-active HTTP transport as ``io`` to borrow a simulated or recorded connection.
   """
 
   def __init__(
@@ -82,6 +84,7 @@ class OdysseyClassic:
     timeout: float = 60,
     io: Optional[HTTP] = None,
   ) -> None:
+    super().__init__()
     self.host = host or os.environ.get("ODYSSEY_HOST", "")
     self.port = port
     self.timeout = timeout
@@ -89,6 +92,7 @@ class OdysseyClassic:
       raise ValueError("port must be between 1 and 65535")
     if not math.isfinite(timeout) or timeout <= 0:
       raise ValueError("timeout must be finite and greater than zero")
+    self._owns_io = io is None
     if io is None:
       if not self.host or any(part in self.host for part in ("://", "/", "?", "#")):
         raise ValueError("Provide an Odyssey hostname or IP address, without a URL scheme or path")
@@ -114,41 +118,28 @@ class OdysseyClassic:
 
   @property
   def connected(self) -> bool:
-    """Whether setup has opened and checked the transport."""
+    """Whether lifespan entry has checked the transport's status page."""
     return self._connected
 
-  async def setup(self) -> None:
-    """Open the HTTP transport and verify the authenticated status page."""
-    if self._connected:
-      return
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Check status while retaining ownership of the transport for this scope."""
+    await super()._enter_lifespan(stack)
     logger.warning(
       "Odyssey Classic port is untested on hardware; please report verification results"
     )
-    await self.io.setup()
+    if self._owns_io:
+      await stack.enter_async_context(self.io.lifespan())
+    elif not self.io.is_active:
+      raise RuntimeError("Injected Odyssey HTTP transport must already be active")
     self._connected = True
-    try:
-      await self.request_status()
-    except BaseException:
-      await self.stop()
-      raise
+    stack.callback(self._disconnect)
+    await self.request_status()
     logger.info("Connected to Odyssey at %s", self.io.base_url)
 
-  async def stop(self) -> None:
-    """Close the connection. Use stop_scan or cancel_scan to interrupt acquisition."""
-    try:
-      await self.io.stop()
-    finally:
-      self._connected = False
+  def _disconnect(self) -> None:
+    """Clear connection state without changing a scan in progress."""
+    self._connected = False
     logger.info("Disconnected from Odyssey at %s", self.io.base_url)
-
-  async def __aenter__(self) -> OdysseyClassic:
-    """Set up the instrument for an async context."""
-    await self.setup()
-    return self
-
-  async def __aexit__(self, exc_type, exc_value, traceback) -> None:
-    """Close the transport when leaving an async context."""
-    await self.stop()
 
   def serialize(self) -> dict:
     """Return connection settings, excluding credentials."""
@@ -165,7 +156,7 @@ class OdysseyClassic:
   ) -> HTTPResponse:
     """Exchange an Odyssey form or query and reject HTTP and firmware errors."""
     if not self._connected:
-      raise RuntimeError("Odyssey is not connected; call setup() first")
+      raise RuntimeError("Odyssey is not connected; enter its lifespan first")
     if params:
       path += ("&" if "?" in path else "?") + urlencode(params)
     body = urlencode(form).encode("ascii") if form is not None else None
@@ -252,6 +243,15 @@ class OdysseyClassic:
     if channel_800:
       form["chan800"] = "chan800"
     logger.info("Configuring Odyssey scan %s in %s", name, group)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      await self._configure_transaction(name, group, form, channel_700, channel_800)
+    await anyio.lowlevel.checkpoint()
+
+  async def _configure_transaction(
+    self, name: str, group: str, form: dict[str, str], channel_700: bool, channel_800: bool
+  ) -> None:
+    """Finish the firmware's finite initialization after configuration may have committed."""
     response = await self._request(
       "POST", protocol._CONFIGURE_URL_PATH, form=form, allow_redirects=False
     )
@@ -270,7 +270,7 @@ class OdysseyClassic:
       if step == 1 and response.status == 302:
         await self._follow_redirect(response, protocol._INITIALIZING_URL_PATH)
       else:
-        await asyncio.sleep(1)
+        await anyio.sleep(1)
     self._current_scan = (group, name)
     self._channels = tuple(
       ch for ch, enabled in ((700, channel_700), (800, channel_800)) if enabled
@@ -296,10 +296,16 @@ class OdysseyClassic:
   async def _scan_command(self, action: str) -> None:
     """Send a scan-console action once; state-changing requests are not retried."""
     logger.info("Odyssey scan command: %s", action)
-    response = await self._request(
-      "GET", protocol._COMMAND_URL_PATH, params={"action": action}, allow_redirects=False
-    )
-    self._check_scan_response(response)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      response = await self._request(
+        "GET", protocol._COMMAND_URL_PATH, params={"action": action}, allow_redirects=False
+      )
+      self._check_scan_response(response)
+      if action == "cancel":
+        self._current_scan = None
+        self._channels = ()
+    await anyio.lowlevel.checkpoint()
 
   async def start_scan(self) -> None:
     """Start a configured scan, or resume a paused scan."""
@@ -318,18 +324,19 @@ class OdysseyClassic:
   async def cancel_scan(self) -> None:
     """Abort acquisition and discard partial output."""
     await self._scan_command("cancel")
-    self._current_scan = None
-    self._channels = ()
 
   async def force_stop(self) -> None:
     """Stop a paused or stuck scanner through the status-page control."""
-    response = await self._request(
-      "POST",
-      protocol._STOP_FROM_STATUS_PATH,
-      form={"formContext": "1", "action": "Stop"},
-      allow_redirects=False,
-    )
-    self._check_scan_response(response)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      response = await self._request(
+        "POST",
+        protocol._STOP_FROM_STATUS_PATH,
+        form={"formContext": "1", "action": "Stop"},
+        allow_redirects=False,
+      )
+      self._check_scan_response(response)
+    await anyio.lowlevel.checkpoint()
 
   async def request_status(self) -> OdysseyStatus:
     """Read the status page, rejecting unknown states instead of reporting false completion."""
@@ -490,33 +497,26 @@ class OdysseyClassic:
       or poll_interval <= 0
     ):
       raise ValueError("timeout and poll_interval must be finite and positive")
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
     require_transition = require_fresh
-    while True:
-      remaining = deadline - loop.time()
-      if remaining <= 0:
-        raise TimeoutError(f"Scan did not complete within {timeout:g} s")
-      try:
-        reading = await asyncio.wait_for(self.request_status(), timeout=remaining)
-      except asyncio.TimeoutError as error:
-        raise TimeoutError(f"Scan did not complete within {timeout:g} s") from error
-      if loop.time() >= deadline:
-        raise TimeoutError(f"Scan did not complete within {timeout:g} s")
-      if on_progress is not None:
-        on_progress(reading)
-      if reading.state == "Failed":
-        raise OdysseyScanError("Odyssey reported a failed scan")
-      if reading.state not in _TERMINAL_STATES:
-        require_transition = False
-      elif not require_transition:
-        return reading
-      remaining = deadline - loop.time()
-      if remaining <= 0:
-        raise TimeoutError(
-          f"Scan did not complete within {timeout:g} s (last state={reading.state})"
-        )
-      await asyncio.sleep(min(poll_interval, remaining))
+    last_state: Optional[str] = None
+    try:
+      with anyio.fail_after(timeout):
+        while True:
+          reading = await self.request_status()
+          await anyio.lowlevel.checkpoint_if_cancelled()
+          last_state = reading.state
+          if on_progress is not None:
+            on_progress(reading)
+          if reading.state == "Failed":
+            raise OdysseyScanError("Odyssey reported a failed scan")
+          if reading.state not in _TERMINAL_STATES:
+            require_transition = False
+          elif not require_transition:
+            return reading
+          await anyio.sleep(poll_interval)
+    except TimeoutError as error:
+      suffix = f" (last state={last_state})" if last_state is not None else ""
+      raise TimeoutError(f"Scan did not complete within {timeout:g} s{suffix}") from error
 
   async def scan(
     self,

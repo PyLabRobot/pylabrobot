@@ -8,6 +8,9 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs
 
+import anyio
+import pytest
+
 from pylabrobot.io.http import HTTP, HTTPResponse
 from pylabrobot.li_cor import OdysseyChatterbox, OdysseyClassic
 from pylabrobot.li_cor.odyssey import (
@@ -15,9 +18,11 @@ from pylabrobot.li_cor.odyssey import (
   OdysseyImageError,
   OdysseyScanError,
   OdysseyStatusError,
+  protocol,
 )
 from pylabrobot.li_cor.odyssey.chatterbox import _tiff
 from pylabrobot.li_cor.odyssey.tagging import build_identity_description, tag_tiff_with_identity
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 try:
   from PIL import Image  # type: ignore[import-not-found]
@@ -27,15 +32,137 @@ except ImportError:
   HAS_PILLOW = False
 
 
+class TestOdysseyLifespan(AnyioTestBase):
+  async def test_owned_transport_closes_after_normal_exit_and_reopens(self):
+    class OfflineHTTP(HTTP):
+      async def request_raw(self, *args, **kwargs):
+        return HTTPResponse(200, b"Scanner Status: Idle", {})
+
+    with patch("pylabrobot.li_cor.odyssey.odyssey.HTTP", OfflineHTTP):
+      device = OdysseyClassic(host="odyssey.test", username="user", password="secret")
+    for _ in range(2):
+      async with device:
+        assert device.io.is_active
+        assert device.connected
+      assert not device.io.is_active
+      assert not device.connected
+
+  async def test_owned_cleanup_failure_keeps_body_error_as_context(self):
+    class FailingCloseHTTP(HTTP):
+      async def request_raw(self, *args, **kwargs):
+        return HTTPResponse(200, b"Scanner Status: Idle", {})
+
+      async def _close(self):
+        await super()._close()
+        raise OSError("close failed")
+
+    with patch("pylabrobot.li_cor.odyssey.odyssey.HTTP", FailingCloseHTTP):
+      device = OdysseyClassic(host="odyssey.test", username="user", password="secret")
+    with pytest.raises(OSError, match="close failed") as exc:
+      async with device:
+        raise ValueError("body failed")
+    assert isinstance(exc.value.__context__, ValueError)
+    assert not device.connected
+    assert not device.io.is_active
+
+  async def test_configuration_cancellation_finishes_initialization(self):
+    class CancelAfterConfigure(OdysseyChatterbox):
+      async def request_raw(self, method, path, body=None, *, headers=None, allow_redirects=True):
+        response = await super().request_raw(
+          method, path, body, headers=headers, allow_redirects=allow_redirects
+        )
+        if method == "POST" and path == protocol._CONFIGURE_URL_PATH:
+          scope.cancel()
+          await anyio.lowlevel.checkpoint()
+        return response
+
+    transport = CancelAfterConfigure()
+    device = OdysseyClassic(io=transport)
+    async with transport, device:
+      with patch("pylabrobot.li_cor.odyssey.odyssey.anyio.sleep", new_callable=AsyncMock):
+        with anyio.CancelScope() as scope:
+          await device.configure_scan(name="partial")
+      assert scope.cancel_called
+      assert transport.state == "Configured"
+      assert device._current_scan == ("odyssey", "partial")
+
+  async def test_command_cancellation_after_dispatch_reconciles_response(self):
+    class CancelAfterDispatch(OdysseyChatterbox):
+      async def request_raw(self, method, path, body=None, *, headers=None, allow_redirects=True):
+        response = await super().request_raw(
+          method, path, body, headers=headers, allow_redirects=allow_redirects
+        )
+        if "action=cancel" in path:
+          scope.cancel()
+          await anyio.lowlevel.checkpoint()
+        return response
+
+    transport = CancelAfterDispatch()
+    device = OdysseyClassic(io=transport)
+    async with transport, device:
+      device._current_scan = ("odyssey", "test_scan")
+      device._channels = (700, 800)
+      with anyio.CancelScope() as scope:
+        await device.cancel_scan()
+      assert scope.cancel_called
+      assert transport.state == "Idle"
+      assert device._current_scan is None
+      assert device._channels == ()
+
+  async def test_chatterbox_rejects_cancelled_request_before_mutation(self):
+    transport = OdysseyChatterbox()
+    async with transport:
+      with anyio.CancelScope() as scope:
+        scope.cancel()
+        await transport.request_raw("GET", f"{protocol._COMMAND_URL_PATH}?action=stop")
+      assert transport.state == "Idle"
+
+  async def test_chatterbox_borrowed_and_reusable(self):
+    transport = OdysseyChatterbox()
+    device = OdysseyClassic(io=transport)
+    with pytest.raises(RuntimeError):
+      async with device:
+        pass
+    async with transport:
+      for _ in range(2):
+        async with device:
+          assert device.connected
+          assert (await device.request_status()).state == "Idle"
+        assert transport.is_active
+        assert not device.connected
+    assert not transport.is_active
+
+  async def test_owned_transport_closes_after_status_failure(self):
+    class BrokenHTTP(HTTP):
+      async def request_raw(self, *args, **kwargs):
+        return HTTPResponse(401, b"unauthorized", {})
+
+    with patch("pylabrobot.li_cor.odyssey.odyssey.HTTP", BrokenHTTP):
+      device = OdysseyClassic(host="odyssey.test", username="user", password="secret")
+    transport = device.io
+    with pytest.raises(OdysseyError):
+      async with device:
+        pass
+    assert not transport.is_active
+    assert not device.connected
+
+  async def test_body_failure_does_not_close_borrowed_transport(self):
+    transport = OdysseyChatterbox()
+    async with transport:
+      with pytest.raises(ValueError):
+        async with OdysseyClassic(io=transport):
+          raise ValueError("body")
+      assert (await transport.request_raw("GET", protocol._STATUS_URL_PATH)).status == 200
+
+
 class OdysseyProtocolTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.io = MagicMock(spec=HTTP)
     self.io.base_url = "http://odyssey.test"
-    self.io.setup = AsyncMock()
-    self.io.stop = AsyncMock()
+    self.io.is_active = True
     self.io.request_raw = AsyncMock(return_value=self.response("<p>Scanner Status: Idle</p>"))
     self.device = OdysseyClassic(io=self.io)
-    await self.device.setup()
+    await self.device.__aenter__()
     self.io.request_raw.reset_mock()
 
   @staticmethod
@@ -43,11 +170,12 @@ class OdysseyProtocolTests(unittest.IsolatedAsyncioTestCase):
     return HTTPResponse(status, body.encode(), headers)
 
   async def asyncTearDown(self):
-    await self.device.stop()
+    if self.device.is_active:
+      await self.device.__aexit__(None, None, None)
 
   async def configure(self, **kwargs):
     self.io.request_raw.return_value = self.response("")
-    with patch("pylabrobot.li_cor.odyssey.odyssey.asyncio.sleep", new_callable=AsyncMock):
+    with patch("pylabrobot.li_cor.odyssey.odyssey.anyio.sleep", new_callable=AsyncMock):
       await self.device.configure_scan(**kwargs)
 
   async def test_configuration_encodes_units_and_runs_all_initialization_steps(self):
@@ -93,7 +221,7 @@ class OdysseyProtocolTests(unittest.IsolatedAsyncioTestCase):
       HTTPResponse(302, b"", {"location": "/console"}),
       self.response(""),
     ]
-    with patch("pylabrobot.li_cor.odyssey.odyssey.asyncio.sleep", new_callable=AsyncMock):
+    with patch("pylabrobot.li_cor.odyssey.odyssey.anyio.sleep", new_callable=AsyncMock):
       await self.device.configure_scan()
     calls = self.io.request_raw.call_args_list
     self.assertEqual(calls[1].args[1], "/prepare")
@@ -245,20 +373,19 @@ class OdysseyProtocolTests(unittest.IsolatedAsyncioTestCase):
         await self.device.download_channel("odyssey", "test", 700)
 
   async def test_stop_closes_connection_without_sending_scan_command(self):
-    await self.device.stop()
+    await self.device.__aexit__(None, None, None)
     self.io.request_raw.assert_not_awaited()
     self.assertFalse(self.device.connected)
     with self.assertRaises(RuntimeError):
       await self.device.list_groups()
 
-  async def test_setup_failure_closes_transport(self):
-    await self.device.stop()
+  async def test_status_failure_does_not_close_borrowed_transport(self):
+    await self.device.__aexit__(None, None, None)
     self.io.request_raw.return_value = self.response("unauthorized", 401)
-    self.io.stop.reset_mock()
     with self.assertRaises(OdysseyError):
-      await self.device.setup()
+      await self.device.__aenter__()
     self.assertFalse(self.device.connected)
-    self.io.stop.assert_awaited_once()
+    self.assertTrue(self.io.is_active)
 
   def test_credentials_stay_out_of_serialized_settings(self):
     device = OdysseyClassic(host="scanner", username="user", password="secret")
@@ -271,13 +398,15 @@ class OdysseyChatterboxTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.io = OdysseyChatterbox()
     self.device = OdysseyClassic(io=self.io)
-    await self.device.setup()
+    await self.io.__aenter__()
+    await self.device.__aenter__()
 
   async def asyncTearDown(self):
-    await self.device.stop()
+    await self.device.__aexit__(None, None, None)
+    await self.io.__aexit__(None, None, None)
 
   async def configure(self, **kwargs):
-    with patch("pylabrobot.li_cor.odyssey.odyssey.asyncio.sleep", new_callable=AsyncMock):
+    with patch("pylabrobot.li_cor.odyssey.odyssey.anyio.sleep", new_callable=AsyncMock):
       await self.device.configure_scan(**kwargs)
 
   async def test_full_scan_and_separate_downloads(self):
