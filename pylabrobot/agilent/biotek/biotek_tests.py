@@ -2,17 +2,32 @@
 
 
 import math
+import sys
 import unittest
 import unittest.mock
+from collections import deque
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Iterator
+from typing import Any, Awaitable, Callable, Iterator, Optional, cast
 
+import anyio
 import pytest
+
+if sys.version_info >= (3, 11):
+  from builtins import BaseExceptionGroup
+else:
+  from exceptiongroup import BaseExceptionGroup
 
 pytest.importorskip("pylibftdi")
 
+from pylabrobot.agilent.biotek.cytation import Cytation1, Cytation5
+from pylabrobot.agilent.biotek.cytation.microscope import CytationImagingConfig
 from pylabrobot.agilent.biotek.plate_reader_base import BioTekPlateReaderDriver
+from pylabrobot.agilent.biotek.synergy import SynergyH1
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 def _byte_iter(s: str) -> Iterator[bytes]:
@@ -20,11 +35,22 @@ def _byte_iter(s: str) -> Iterator[bytes]:
     yield c.encode()
 
 
-class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
+def _group_contains(group: BaseExceptionGroup, target: BaseException) -> bool:
+  """Return whether a nested task-group failure contains the original exception."""
+  for error in group.exceptions:
+    if error is target:
+      return True
+    if isinstance(error, BaseExceptionGroup) and _group_contains(error, target):
+      return True
+  return False
+
+
+class TestCytation5Backend(AnyioTestBase):
   """Tests for the Cytation5Backend."""
 
-  async def asyncSetUp(self):
-    self.backend = BioTekPlateReaderDriver()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    del kwargs
+    self.backend = BioTekPlateReaderDriver(timeout=0.1)
     self.backend.io = unittest.mock.MagicMock()
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()
@@ -38,6 +64,15 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.io.set_line_property = unittest.mock.AsyncMock()
     self.backend.io.set_flowctrl = unittest.mock.AsyncMock()
     self.backend.io.set_rts = unittest.mock.AsyncMock()
+    self.backend.io.device_id = "mock-biotek"
+
+    @asynccontextmanager
+    async def io_lifespan():
+      yield self.backend.io
+
+    self.backend.io.lifespan = io_lifespan
+    self.backend.request_firmware_version = unittest.mock.AsyncMock(return_value="2.07")  # type: ignore[method-assign]
+    await stack.enter_async_context(self.backend.lifespan())
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
     # Freeze the clock so the timestamp in the results is predictable.
@@ -47,25 +82,31 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       unittest.mock.Mock(now=unittest.mock.Mock(return_value=self.now)),
     )
     self._time_patcher.start()
-    self.addCleanup(self._time_patcher.stop)
+    stack.callback(self._time_patcher.stop)
 
   async def test_setup(self):
-    self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")
-    await self.backend.setup()
-    assert self.backend.io.setup.called
-    self.backend.io.usb_reset.assert_called_once()
-    self.backend.io.set_latency_timer.assert_called_with(16)
-    self.backend.io.set_baudrate.assert_called_with(9600)
-    # self.backend.io.set_line_property.assert_called_with(8, 2, 0)  #?
-    self.backend.io.set_flowctrl.assert_called_with(0x100)
-    self.backend.io.set_rts.assert_called_with(1)
-
-    await self.backend.stop()
-    assert self.backend.io.stop.called
+    backend, io = make_reader(Cytation1)
+    async with backend:
+      assert backend.version == "2.07"
+    assert io.events == [
+      "ftdi.enter",
+      "usb_reset",
+      "latency:16",
+      "baudrate:9600",
+      "line:8:2:0",
+      "flow:256",
+      "rts:True",
+      "ftdi.exit",
+    ]
 
   async def test_request_serial_number(self):
     self.backend.io.read.side_effect = _byte_iter("\x0600000000        0000\x03")
     assert await self.backend.request_serial_number() == "00000000"
+
+  async def test_request_firmware_version(self):
+    self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")
+    version = await BioTekPlateReaderDriver.request_firmware_version(self.backend)
+    assert version == "1.04"
 
   async def test_open(self):
     self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x03"]
@@ -198,11 +239,11 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [0.1255, 0.0742, 0.0747, 0.0694, 0.1004, 0.09, 0.0659, 0.0858, 0.0876, 0.0815, 0.098, 0.1329],
       [0.1427, 0.1174, 0.0684, 0.0657, 0.0732, 0.067, 0.0602, 0.079, 0.0667, 0.1103, 0.129, 0.1316],
     ]
-    self.assertEqual(len(resp), 1)
-    self.assertEqual(resp[0].wavelength, 580)
-    self.assertEqual(resp[0].data, expected_data)
-    self.assertEqual(resp[0].temperature, 23.6)
-    self.assertEqual(resp[0].timestamp, self.now)
+    assert len(resp) == 1
+    assert resp[0].wavelength == 580
+    assert resp[0].data == expected_data
+    assert resp[0].temperature == 23.6
+    assert resp[0].timestamp == self.now
 
   async def test_read_luminescence_partial(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -261,10 +302,10 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [0.0, 10.0, 9.0, None, None, None, None, None, None, None, None, None],
       [None, None, None, None, None, None, None, None, None, None, None, None],
     ]
-    self.assertEqual(len(resp), 1)
-    self.assertEqual(resp[0].data, expected_data)
-    self.assertEqual(resp[0].temperature, 23.6)
-    self.assertEqual(resp[0].timestamp, self.now)
+    assert len(resp) == 1
+    assert resp[0].data == expected_data
+    assert resp[0].temperature == 23.6
+    assert resp[0].timestamp == self.now
 
   async def test_read_fluorescence(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -325,12 +366,12 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [653.0, 783.0, 522.0, 536.0, 673.0, 858.0, 526.0, 627.0, 574.0, 1993.0, 712.0, 970.0],
       [1118.0, 742.0, 542.0, 555.0, 622.0, 688.0, 542.0, 697.0, 900.0, 3002.0, 607.0, 523.0],
     ]
-    self.assertEqual(len(resp), 1)
-    self.assertEqual(resp[0].excitation_wavelength, 485)
-    self.assertEqual(resp[0].emission_wavelength, 528)
-    self.assertEqual(resp[0].data, expected_data)
-    self.assertEqual(resp[0].temperature, 23.6)
-    self.assertEqual(resp[0].timestamp, self.now)
+    assert len(resp) == 1
+    assert resp[0].excitation_wavelength == 485
+    assert resp[0].emission_wavelength == 528
+    assert resp[0].data == expected_data
+    assert resp[0].temperature == 23.6
+    assert resp[0].timestamp == self.now
 
   async def test_parse_body_asterisks_as_nan(self):
     """Unmeasured wells return ******* which should be parsed as NaN."""
@@ -397,15 +438,16 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       for c in range(12):
         e, v = expected[r][c], result[r][c]
         if math.isnan(e):
-          self.assertTrue(v is not None and math.isnan(v), f"Expected NaN at ({r},{c}), got {v}")
+          assert v is not None and math.isnan(v), f"Expected NaN at ({r},{c}), got {v}"
         else:
-          self.assertEqual(v, e, f"Mismatch at ({r},{c})")
+          assert v == e, f"Mismatch at ({r},{c})"
 
 
-class TestBioTekLoadingTray(unittest.IsolatedAsyncioTestCase):
+class TestBioTekLoadingTray(AnyioTestBase):
   """The tray must send the plate geometry to the firmware before closing (tall-plate clearance)."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    del stack, kwargs
     self.manager = unittest.mock.Mock()
     self.backend = BioTekPlateReaderDriver(timeout=0.1)
     self.backend.set_slow_mode = unittest.mock.AsyncMock()  # type: ignore[method-assign]
@@ -420,7 +462,7 @@ class TestBioTekLoadingTray(unittest.IsolatedAsyncioTestCase):
     self.backend.set_plate.assert_awaited_once_with(self.plate)
     self.backend.send_command.assert_awaited_once_with("A")
     # set_plate must run before the close ("A") command.
-    self.assertEqual([call[0] for call in self.manager.mock_calls], ["set_plate", "send_command"])
+    assert [call[0] for call in self.manager.mock_calls] == ["set_plate", "send_command"]
 
   async def test_close_without_plate_skips_set_plate(self):
     await self.backend.close(plate=None)
@@ -434,3 +476,628 @@ class TestBioTekLoadingTray(unittest.IsolatedAsyncioTestCase):
   async def test_slow_mode_forwarded(self):
     await self.backend.open(slow=True)
     self.backend.set_slow_mode.assert_awaited_once_with(True)
+
+
+class RecordingFTDI(HasLifespan):
+  """Hardware-free FTDI resource that records reader lifecycle effects."""
+
+  def __init__(
+    self,
+    events: Optional[list[str]] = None,
+    *,
+    entry_error: Optional[BaseException] = None,
+    exit_error: Optional[BaseException] = None,
+  ) -> None:
+    super().__init__()
+    self.events = events if events is not None else []
+    self.entry_error = entry_error
+    self.exit_error = exit_error
+    self.device_id = "fake-biotek"
+    self.reads: deque[bytes | Callable[[], Awaitable[bytes]]] = deque()
+    self.writes: list[bytes] = []
+    self.block_write: Optional[bytes] = None
+    self.write_started = anyio.Event()
+    self.release_write = anyio.Event()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("RecordingFTDI does not accept lifespan options")
+    self.events.append("ftdi.enter")
+    stack.push_shielded_async_callback(self._close)
+    if self.entry_error is not None:
+      raise self.entry_error
+
+  async def _close(self) -> None:
+    await anyio.lowlevel.checkpoint()
+    self.events.append("ftdi.exit")
+    if self.exit_error is not None:
+      raise self.exit_error
+
+  async def usb_reset(self) -> None:
+    self.events.append("usb_reset")
+
+  async def set_latency_timer(self, value: int) -> None:
+    self.events.append(f"latency:{value}")
+
+  async def set_baudrate(self, value: int) -> None:
+    self.events.append(f"baudrate:{value}")
+
+  async def set_line_property(self, bits: int, stopbits: int, parity: int) -> None:
+    self.events.append(f"line:{bits}:{stopbits}:{parity}")
+
+  async def set_flowctrl(self, value: int) -> None:
+    self.events.append(f"flow:{value}")
+
+  async def set_rts(self, value: bool) -> None:
+    self.events.append(f"rts:{value}")
+
+  async def usb_purge_rx_buffer(self) -> None:
+    await anyio.lowlevel.checkpoint()
+
+  async def usb_purge_tx_buffer(self) -> None:
+    await anyio.lowlevel.checkpoint()
+
+  async def write(self, data: bytes) -> int:
+    self.writes.append(data)
+    self.events.append(f"write:{data.decode(errors='replace')}")
+    if data == self.block_write:
+      self.write_started.set()
+      await self.release_write.wait()
+    return len(data)
+
+  async def read(self, num_bytes: int = 1) -> bytes:
+    del num_bytes
+    await anyio.lowlevel.checkpoint()
+    if not self.reads:
+      return b""
+    effect = self.reads.popleft()
+    return await effect() if callable(effect) else effect
+
+
+def make_reader(
+  reader_type: type[BioTekPlateReaderDriver],
+) -> tuple[BioTekPlateReaderDriver, RecordingFTDI]:
+  with unittest.mock.patch("pylabrobot.agilent.biotek.plate_reader_base.FTDI"):
+    reader: BioTekPlateReaderDriver
+    if reader_type is Cytation1:
+      reader = Cytation1(name="reader")
+    elif reader_type is Cytation5:
+      reader = Cytation5(
+        name="reader",
+        use_cam=False,
+        imaging_config=CytationImagingConfig(filters=[], objectives=[]),
+      )
+    elif reader_type is SynergyH1:
+      reader = SynergyH1(name="reader")
+    else:
+      reader = BioTekPlateReaderDriver(timeout=0.1)
+  io = RecordingFTDI()
+  reader.io = cast(FTDI, io)
+  reader.request_firmware_version = unittest.mock.AsyncMock(return_value="2.07")  # type: ignore[method-assign]
+  return reader, io
+
+
+class RecordingShakeReader(BioTekPlateReaderDriver):
+  """Reader that keeps the real shaking control flow and records command boundaries."""
+
+  def __init__(self, events: list[str]) -> None:
+    with unittest.mock.patch("pylabrobot.agilent.biotek.plate_reader_base.FTDI"):
+      super().__init__(timeout=0.1)
+    self.events = events
+    self.block_command = False
+    self.command_started = anyio.Event()
+    self.block_operation = False
+    self.operation_started = anyio.Event()
+    self.release_operation = anyio.Event()
+    self.fail_operation = False
+    self.operation_error = RuntimeError("shake worker failed")
+    self.abort_failures = 0
+
+  async def request_firmware_version(self) -> str:
+    return "2.07"
+
+  async def send_command(
+    self,
+    command: str,
+    parameter: Optional[str] = None,
+    wait_for_response: bool = True,
+    timeout: Optional[float] = None,
+  ) -> Optional[bytes]:
+    del parameter, wait_for_response, timeout
+    self.events.append(f"command:{command}")
+    if self.block_command and command == "D":
+      self.command_started.set()
+      await anyio.sleep_forever()
+    if self.block_operation and command == "O":
+      self.operation_started.set()
+      await self.release_operation.wait()
+    if self.fail_operation and command == "O":
+      raise self.operation_error
+    if command == "x" and self.abort_failures:
+      self.abort_failures -= 1
+      raise RuntimeError("shake abort failed")
+    await anyio.lowlevel.checkpoint()
+    return b"\x060000\x03" if command == "O" else b"\x03"
+
+
+def make_shake_reader() -> tuple[RecordingShakeReader, RecordingFTDI]:
+  events: list[str] = []
+  reader = RecordingShakeReader(events)
+  io = RecordingFTDI(events)
+  reader.io = cast(FTDI, io)
+  return reader, io
+
+
+class TestBioTekLifecycle(AnyioTestBase):
+  async def test_synergy_reply_deadline_interrupts_blocked_read(self) -> None:
+    """The entire terminated reply has one caller-owned deadline."""
+    reader, io = make_reader(SynergyH1)
+
+    async def blocked_read() -> bytes:
+      await anyio.sleep_forever()
+      raise AssertionError("unreachable")
+
+    io.reads.append(blocked_read)
+    with anyio.fail_after(1):
+      with pytest.raises(TimeoutError, match="partial="):
+        await reader._read_until(b"\x03", timeout=0.01)
+
+  def test_concrete_readers_use_managed_lifecycle_methods(self) -> None:
+    for reader_type in (Cytation1, Cytation5, SynergyH1):
+      assert reader_type.__aenter__ is HasLifespan.__aenter__
+      assert reader_type.__aexit__ is HasLifespan.__aexit__
+      assert reader_type.setup is HasLifespan.setup
+      assert reader_type.stop is HasLifespan.stop
+
+  async def test_reader_lifecycle_matrix(self) -> None:
+    for reader_type in (Cytation1, Cytation5, SynergyH1):
+      reader, io = make_reader(reader_type)
+      body_error = RuntimeError("body failed")
+      with pytest.raises(RuntimeError, match="body failed") as error_info:
+        async with reader:
+          assert reader.is_active and io.is_active
+          raise body_error
+      assert error_info.value is body_error
+      assert io.events[-1] == "ftdi.exit"
+      assert not reader.is_active and not io.is_active
+
+      async with reader:
+        pass
+      assert io.events.count("ftdi.enter") == 2
+      assert io.events.count("ftdi.exit") == 2
+
+  async def test_entry_failure_rolls_back_ftdi(self) -> None:
+    reader, io = make_reader(Cytation1)
+    reader.request_firmware_version = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      side_effect=RuntimeError("firmware failed")
+    )
+
+    with pytest.raises(RuntimeError, match="firmware failed"):
+      async with reader:
+        pytest.fail("failed entry reached body")
+
+    assert io.events[-1] == "ftdi.exit"
+
+  async def test_body_cancellation_closes_ftdi(self) -> None:
+    reader, io = make_reader(SynergyH1)
+    entered = anyio.Event()
+
+    async def use_reader() -> None:
+      async with reader:
+        entered.set()
+        await anyio.sleep_forever()
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(use_reader)
+      await entered.wait()
+      task_group.cancel_scope.cancel()
+
+    assert io.events[-1] == "ftdi.exit"
+
+  async def test_rejects_lifespan_options_before_ftdi_entry(self) -> None:
+    reader, io = make_reader(Cytation1)
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+      async with reader.lifespan(unknown=True):
+        pytest.fail("invalid options reached body")
+    assert io.events == []
+
+  async def test_send_command_serializes_complete_transactions(self) -> None:
+    reader, io = make_reader(Cytation1)
+    io.block_write = b"A"
+    io.reads.extend([b"\x03", b"\x03"])
+
+    async with reader:
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(reader.send_command, "A")
+        await io.write_started.wait()
+        task_group.start_soon(reader.send_command, "B")
+        await anyio.sleep(0.01)
+        assert io.writes == [b"A"]
+        io.release_write.set()
+
+    assert io.writes[-2:] == [b"A", b"B"]
+
+  @pytest.mark.parametrize("write_phase", ["command", "parameter"])
+  async def test_cancellation_after_each_write_consumes_reply_before_next_command(
+    self, write_phase: str
+  ) -> None:
+    reader, io = make_reader(Cytation1)
+    response_started = anyio.Event()
+    release_response = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+    events: list[str] = []
+
+    async def blocked_response() -> bytes:
+      response_started.set()
+      await release_response.wait()
+      events.append("response.complete")
+      return b"\x03"
+
+    if write_phase == "command":
+      io.reads.extend([blocked_response, b"\x03"])
+      parameter = None
+    else:
+      io.reads.extend([b"\x06", blocked_response, b"\x03"])
+      parameter = "P"
+
+    async def first_command() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        try:
+          await reader.send_command("A", parameter)
+        except anyio.get_cancelled_exc_class():
+          events.append("cancelled")
+          raise
+
+    async with reader:
+      io.writes.clear()
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(first_command)
+        await response_started.wait()
+        scopes[0].cancel()
+        await anyio.lowlevel.checkpoint()
+        release_response.set()
+
+      assert await reader.send_command("B") == b"\x03"
+
+    expected_writes = [b"A", b"B"] if parameter is None else [b"A", b"P", b"B"]
+    assert io.writes == expected_writes
+    assert not io.reads
+    assert events == ["response.complete", "cancelled"]
+
+  async def test_no_io_after_exit(self) -> None:
+    reader, io = make_reader(Cytation1)
+    async with reader:
+      pass
+    writes_before = list(io.writes)
+    with pytest.raises(RuntimeError, match="not active"):
+      await reader.send_command("J")
+    assert io.writes == writes_before
+
+
+class RecordingMicroscope(HasLifespan):
+  def __init__(self, events: list[str], entry_error: Optional[BaseException] = None) -> None:
+    super().__init__()
+    self.events = events
+    self.entry_error = entry_error
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("RecordingMicroscope does not accept lifespan options")
+    self.events.append("microscope.enter")
+    stack.push_shielded_async_callback(self._close)
+    if self.entry_error is not None:
+      raise self.entry_error
+
+  async def _close(self) -> None:
+    self.events.append("microscope.exit")
+
+
+class TestCytation5Composition(AnyioTestBase):
+  async def test_enters_microscope_after_base_and_exits_it_before_ftdi(self) -> None:
+    reader, io = make_reader(Cytation5)
+    reader.microscope = RecordingMicroscope(io.events)  # type: ignore[assignment]
+
+    async with reader:
+      io.events.append("body")
+
+    assert io.events[-4:] == ["microscope.enter", "body", "microscope.exit", "ftdi.exit"]
+
+  async def test_microscope_entry_failure_rolls_back_base(self) -> None:
+    reader, io = make_reader(Cytation5)
+    failure = RuntimeError("microscope failed")
+    reader.microscope = RecordingMicroscope(io.events, entry_error=failure)  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="microscope failed") as error_info:
+      async with reader:
+        pytest.fail("failed entry reached body")
+
+    assert error_info.value is failure
+    assert io.events[-3:] == ["microscope.enter", "microscope.exit", "ftdi.exit"]
+
+
+class TestBioTekShaking(AnyioTestBase):
+  async def test_worker_waits_for_stop_or_program_expiry_without_polling(self) -> None:
+    reader, _ = make_shake_reader()
+    sleep_calls: list[float] = []
+    sleep = anyio.sleep
+
+    async def record_sleep(delay: float) -> None:
+      sleep_calls.append(delay)
+      await sleep(delay)
+
+    async with reader:
+      with unittest.mock.patch(
+        "pylabrobot.agilent.biotek.plate_reader_base.anyio.sleep", record_sleep
+      ):
+        await reader.shake(reader.ShakeType.ORBITAL, 3)
+        await anyio.lowlevel.checkpoint()
+        assert sleep_calls == []
+        await reader.stop_shaking()
+
+  async def test_shake_returns_after_worker_starts(self) -> None:
+    reader, _ = make_shake_reader()
+    async with reader:
+      await reader.shake(reader.ShakeType.ORBITAL, 3)
+      assert reader._shaking
+      assert reader.events[-2:] == ["command:D", "command:O"]
+      await reader.stop_shaking()
+
+  async def test_explicit_stop_aborts_and_joins_worker(self) -> None:
+    reader, _ = make_shake_reader()
+    async with reader:
+      await reader.shake(reader.ShakeType.LINEAR, 2)
+      await reader.stop_shaking()
+      assert reader._shaking is False
+      assert reader._shaking_task is None
+      assert reader.events[-1] == "command:x"
+
+  async def test_exit_aborts_worker_before_ftdi_close(self) -> None:
+    reader, _ = make_shake_reader()
+    async with reader:
+      await reader.shake(reader.ShakeType.LINEAR, 2)
+    assert reader.events[-2:] == ["command:x", "ftdi.exit"]
+
+  async def test_cancelled_shake_is_joined_on_exit(self) -> None:
+    reader, io = make_shake_reader()
+    reader.block_command = True
+    cancel_scope_ready = anyio.Event()
+    cancellation_seen = anyio.Event()
+    operation_finished = anyio.Event()
+    operation_scopes: list[anyio.CancelScope] = []
+
+    async def run_shake() -> None:
+      try:
+        with anyio.CancelScope() as operation_scope:
+          operation_scopes.append(operation_scope)
+          cancel_scope_ready.set()
+          try:
+            async with reader:
+              await reader.shake(reader.ShakeType.LINEAR, 2)
+          except anyio.get_cancelled_exc_class():
+            cancellation_seen.set()
+            raise
+      finally:
+        operation_finished.set()
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(run_shake)
+      await cancel_scope_ready.wait()
+      await reader.command_started.wait()
+      operation_scopes[0].cancel()
+      await operation_finished.wait()
+
+    assert cancellation_seen.is_set()
+    assert reader.events[-2:] == ["command:x", "ftdi.exit"]
+    assert reader._shaking_task is None
+    writes_before = list(io.writes)
+    with pytest.raises(RuntimeError, match="not active"):
+      await BioTekPlateReaderDriver.send_command(reader, "J")
+    assert io.writes == writes_before
+
+  async def test_worker_failure_reaches_owning_lifespan(self) -> None:
+    reader, _ = make_shake_reader()
+    reader.fail_operation = True
+
+    with pytest.raises(BaseExceptionGroup) as error_info:
+      async with reader:
+        await reader.shake(reader.ShakeType.LINEAR, 2)
+        await anyio.sleep_forever()
+
+    assert any(str(error) == "shake worker failed" for error in error_info.value.exceptions)
+    assert reader.events[-1] == "ftdi.exit"
+
+
+class TestBioTekShakingScope(AnyioTestBase):
+  async def test_scope_waits_for_first_confirmed_program_before_entering(self) -> None:
+    reader, _ = make_shake_reader()
+    reader.block_operation = True
+    entered = anyio.Event()
+    release_body = anyio.Event()
+
+    async def use_scope() -> None:
+      async with reader.shaking(reader.ShakeType.ORBITAL, 3):
+        entered.set()
+        await release_body.wait()
+
+    async with reader:
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(use_scope)
+        await reader.operation_started.wait()
+        assert not entered.is_set()
+        assert reader._shaking is None
+        reader.release_operation.set()
+        await entered.wait()
+        assert reader._shaking
+        release_body.set()
+
+    assert reader.events[-2:] == ["command:x", "ftdi.exit"]
+
+  async def test_scope_start_failure_reconciles_attempt_before_lifespan_failure(self) -> None:
+    reader, _ = make_shake_reader()
+    reader.fail_operation = True
+
+    with pytest.raises(BaseExceptionGroup) as error_info:
+      async with reader:
+        async with reader.shaking(reader.ShakeType.LINEAR, 2):
+          pytest.fail("failed shaking scope reached its body")
+
+    assert _group_contains(error_info.value, reader.operation_error)
+    assert reader.events[-2:] == ["command:x", "ftdi.exit"]
+    assert reader._shaking is False
+
+  async def test_scope_cancellation_aborts_and_joins_before_propagating(self) -> None:
+    reader, _ = make_shake_reader()
+    entered = anyio.Event()
+    cancelled = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def use_scope() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        try:
+          async with reader.shaking(reader.ShakeType.LINEAR, 2):
+            entered.set()
+            await anyio.sleep_forever()
+        except anyio.get_cancelled_exc_class():
+          assert reader.events[-1] == "command:x"
+          assert reader._shaking_task is None
+          cancelled.set()
+          raise
+
+    async with reader:
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(use_scope)
+        await entered.wait()
+        scopes[0].cancel()
+        await cancelled.wait()
+
+  async def test_nested_and_concurrent_scopes_reject_conflicting_parameters(self) -> None:
+    reader, _ = make_shake_reader()
+    entered = anyio.Event()
+    release = anyio.Event()
+    failures: list[RuntimeError] = []
+
+    async def hold_scope() -> None:
+      async with reader.shaking(reader.ShakeType.LINEAR, 2):
+        entered.set()
+        await release.wait()
+
+    async def enter_conflicting_scope() -> None:
+      try:
+        async with reader.shaking(reader.ShakeType.ORBITAL, 4):
+          pytest.fail("conflicting scope reached its body")
+      except RuntimeError as error:
+        failures.append(error)
+
+    async with reader:
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(hold_scope)
+        await entered.wait()
+        commands_before = list(reader.events)
+        with pytest.raises(RuntimeError, match="already scoped"):
+          async with reader.shaking(reader.ShakeType.LINEAR, 2):
+            pytest.fail("nested scope reached its body")
+        task_group.start_soon(enter_conflicting_scope)
+        await anyio.sleep(0)
+        assert reader.events == commands_before
+        release.set()
+
+    assert len(failures) == 1
+    assert "already scoped" in str(failures[0])
+
+  async def test_scope_rejects_preexisting_durable_shaking_without_stopping_it(self) -> None:
+    reader, _ = make_shake_reader()
+
+    async with reader:
+      await reader.shake(reader.ShakeType.LINEAR, 2)
+      commands_before = list(reader.events)
+      with pytest.raises(RuntimeError, match="already active"):
+        async with reader.shaking(reader.ShakeType.ORBITAL, 4):
+          pytest.fail("scope adopted durable shaking")
+      assert reader.events == commands_before
+      await reader.stop_shaking()
+
+  async def test_scope_guards_direct_shake_and_stop_transitions(self) -> None:
+    reader, _ = make_shake_reader()
+
+    async with reader:
+      async with reader.shaking(reader.ShakeType.LINEAR, 2):
+        commands_before = list(reader.events)
+        with pytest.raises(RuntimeError, match="scope"):
+          await reader.shake(reader.ShakeType.ORBITAL, 4)
+        with pytest.raises(RuntimeError, match="scope"):
+          await reader.stop_shaking()
+        assert reader.events == commands_before
+
+  async def test_failed_scope_abort_retains_retryable_state_for_direct_stop(self) -> None:
+    reader, _ = make_shake_reader()
+    reader.abort_failures = 1
+
+    async with reader:
+      with pytest.raises(RuntimeError, match="shake abort failed"):
+        async with reader.shaking(reader.ShakeType.LINEAR, 2):
+          pass
+      assert reader._shaking is None
+      assert reader._shaking_scope_token is None
+
+      await reader.stop_shaking()
+      assert reader._shaking is False
+
+    assert reader.events.count("command:x") == 2
+
+  async def test_failed_scope_join_retains_retryable_state_for_direct_stop(self) -> None:
+    reader, _ = make_shake_reader()
+
+    class FailFirstWait:
+      def __init__(self, event: anyio.Event) -> None:
+        self.event = event
+        self.failed = False
+
+      def set(self) -> None:
+        self.event.set()
+
+      def is_set(self) -> bool:
+        return self.event.is_set()
+
+      async def wait(self) -> None:
+        if not self.failed:
+          self.failed = True
+          raise RuntimeError("shake join failed")
+        await self.event.wait()
+
+    async with reader:
+      with pytest.raises(RuntimeError, match="shake join failed"):
+        async with reader.shaking(reader.ShakeType.LINEAR, 2):
+          assert reader._shaking_stopped is not None
+          reader._shaking_stopped = cast(anyio.Event, FailFirstWait(reader._shaking_stopped))
+      assert reader._shaking is None
+      assert reader._shaking_scope_token is None
+
+      await reader.stop_shaking()
+      assert reader._shaking is False
+      assert reader._shaking_task is None
+
+  async def test_parent_cleanup_invalidates_live_scope_before_ftdi_close(self) -> None:
+    reader, _ = make_shake_reader()
+    entered = anyio.Event()
+    release = anyio.Event()
+
+    async def use_scope() -> None:
+      async with reader.shaking(reader.ShakeType.LINEAR, 2):
+        entered.set()
+        await release.wait()
+
+    async with anyio.create_task_group() as task_group:
+      lifespan = reader.lifespan()
+      await lifespan.__aenter__()
+      task_group.start_soon(use_scope)
+      await entered.wait()
+      await lifespan.__aexit__(None, None, None)
+      assert reader.events[-2:] == ["command:x", "ftdi.exit"]
+      assert reader._shaking_task is None
+      assert reader._shaking_scope_token is None
+      abort_count = reader.events.count("command:x")
+      release.set()
+
+    assert reader.events.count("command:x") == abort_count

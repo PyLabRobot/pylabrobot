@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pylabrobot.agilent.biotek.cytation.base import _CytationBase
 from pylabrobot.agilent.biotek.cytation.microscope.microscope import (
   CytationImagingConfig,
   CytationMicroscope,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 
 
 class Cytation5(_CytationBase):
@@ -31,10 +32,7 @@ class Cytation5(_CytationBase):
       use_cam=use_cam,
     )
 
-  async def setup(self) -> None:
-    await super().setup()
-    await self.microscope._on_setup()
-
-  async def stop(self) -> None:
-    await self.microscope._on_stop()
-    await super().stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Enter the base reader before its owned microscope."""
+    await super()._enter_lifespan(stack, **kwargs)
+    await stack.enter_async_context(self.microscope.lifespan())

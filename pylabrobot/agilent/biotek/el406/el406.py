@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import asyncio
 import enum
 import logging
-import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Literal, NamedTuple, TypedDict, TypeVar
 
+import anyio
+
 from pylabrobot.agilent.biotek.el406.peristaltic_dispenser import PeristalticDispenser
 from pylabrobot.agilent.biotek.el406.plate_washer import PlateWasher
 from pylabrobot.agilent.biotek.el406.syringe_dispenser import SyringeDispenser
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Plate, PlateHolder
@@ -65,7 +66,7 @@ class DevicePollResult(NamedTuple):
   raw_response: bytes
 
 
-class EL406:
+class EL406(HasLifespan):
   """FTDI-based driver for the BioTek EL406 plate washer.
 
   Owns the USB connection, low-level protocol framing, command serialization,
@@ -82,7 +83,7 @@ class EL406:
     self.timeout = timeout
     self._device_id = device_id
     self.io = FTDI(human_readable_device_name="BioTek EL406", device_id=self._device_id)
-    self._command_lock: asyncio.Lock | None = None
+    self._command_lock: anyio.Lock | None = None
     self._in_batch: bool = False
     self._current_plate: Plate | None = None
 
@@ -122,29 +123,33 @@ class EL406:
     """Forget the loaded plate. Operations raise until :meth:`set_plate` is called again."""
     self._current_plate = None
 
-  async def setup(self, skip_reset: bool = False) -> None:
-    """Set up communication with the EL406.
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, *, skip_reset: bool = False
+  ) -> None:
+    """Own FTDI and set up communication with the EL406.
 
     Configures the FTDI USB interface with the correct parameters:
     - 38400 baud
     - 8 data bits, 2 stop bits, no parity (8N2)
     - No flow control (disabled)
 
-    If ``self.io`` is already set (e.g. injected mock for testing),
-    it is used as-is and ``setup()`` is not called on it again.
-
     Args:
-      skip_reset: If True, skip the instrument reset step during setup.
+      stack: Exit stack that owns the FTDI lifespan.
+      skip_reset: Skip resetting the device after connecting.
 
     Raises:
       RuntimeError: If pylibftdi is not installed or communication fails.
     """
-    self._command_lock = asyncio.Lock()
+    await super()._enter_lifespan(stack)
+    if not isinstance(skip_reset, bool):
+      raise TypeError("skip_reset must be a bool")
+
+    await stack.enter_async_context(self.io.lifespan())
+    self._command_lock = anyio.Lock()
+    stack.callback(self._clear_command_lock)
 
     logger.info("EL406Driver setting up")
     logger.info("  Timeout: %.1f seconds", self.timeout)
-
-    await self.io.setup()
 
     # Configure serial parameters
     logger.debug("Configuring serial parameters...")
@@ -161,7 +166,6 @@ class EL406:
       await self.io.set_dtr(True)
       logger.debug("  RTS and DTR enabled")
     except Exception as e:
-      await self.io.stop()
       raise EL406CommunicationError(
         f"Failed to configure FTDI device: {e}",
         operation="configure",
@@ -188,10 +192,9 @@ class EL406:
 
     logger.info("EL406Driver setup complete")
 
-  async def stop(self) -> None:
-    """Close the FTDI connection."""
-    logger.info("EL406Driver stopping")
-    await self.io.stop()
+  def _clear_command_lock(self) -> None:
+    """Mark command I/O unavailable before the FTDI lifespan closes."""
+    self._command_lock = None
 
   # ---------------------------------------------------------------------------
   # Low-level I/O
@@ -213,51 +216,24 @@ class EL406:
         original_error=e,
       ) from e
 
-  async def _wait_for_ack(self, timeout: float, t0: float) -> None:
-    """Poll device for ACK byte within the remaining timeout window.
-
-    Args:
-      timeout: Total timeout budget in seconds.
-      t0: Start timestamp (from ``time.monotonic()``).
-
-    Raises:
-      RuntimeError: If device sends NAK.
-      TimeoutError: If no ACK within timeout.
-    """
+  async def _wait_for_ack(self) -> None:
+    """Wait for ACK while the caller owns the reply deadline."""
     assert self.io is not None
-    while time.monotonic() - t0 < timeout:
+    while True:
       byte = await self.io.read(1)
-      if byte:
-        if byte[0] == 0x15:  # NAK
-          raise RuntimeError(
-            f"Device rejected command (NAK). Response: {byte!r}. "
-            "This may indicate an invalid command, bad parameters, or device busy state."
-          )
-        if byte[0] == 0x06:  # ACK
-          return
-      await asyncio.sleep(0.01)
-    raise TimeoutError("Timeout waiting for ACK")
+      if byte[0] == 0x15:  # NAK
+        raise RuntimeError(
+          f"Device rejected command (NAK). Response: {byte!r}. "
+          "This may indicate an invalid command, bad parameters, or device busy state."
+        )
+      if byte[0] == 0x06:  # ACK
+        return
 
-  async def _read_exact_bytes(self, count: int, timeout: float, t0: float) -> bytes:
-    """Read exactly *count* bytes from the device, polling until done or timeout.
-
-    Args:
-      count: Number of bytes to read.
-      timeout: Total timeout budget in seconds.
-      t0: Start timestamp (from ``time.monotonic()``).
-
-    Returns:
-      Bytes read (may be shorter than *count* if timeout is reached).
-    """
+  async def _read_exact_bytes(self, count: int, buf: bytearray) -> None:
+    """Append up to count bytes while the caller owns the whole reply deadline."""
     assert self.io is not None
-    buf = b""
-    while len(buf) < count and time.monotonic() - t0 < timeout:
-      chunk = await self.io.read(count - len(buf))
-      if chunk:
-        buf += chunk
-      else:
-        await asyncio.sleep(0.01)
-    return buf
+    while len(buf) < count:
+      buf.extend(await self.io.read(count - len(buf)))
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers."""
@@ -341,39 +317,43 @@ class EL406:
 
     async with self._command_lock:
       await self._purge_buffers()
-
-      # Send header and data separately
-      header = framed_message[:11]
-      data = framed_message[11:] if len(framed_message) > 11 else b""
-
-      await self._write_to_device(header)
-      logger.debug("Sent header: %s", header.hex())
-
-      if data:
-        await asyncio.sleep(0.001)  # Small delay between header and data
-        await self._write_to_device(data)
-        logger.debug("Sent data: %s", data.hex())
-      logger.debug("Sent framed: %s", framed_message.hex())
-
-      # Read full response: ACK + 11-byte header + variable data
-      await self._wait_for_ack(timeout, time.monotonic())
-      result = bytes([0x06])
-
-      # Fresh timestamp after ACK — header + data share a single timeout budget.
-      t0 = time.monotonic()
-      resp_header = await self._read_exact_bytes(11, timeout, t0)
-
-      if len(resp_header) == 11:
-        result += resp_header
-        # Parse data length from header bytes 7-8 (little-endian)
-        data_len = Reader(resp_header[7:]).u16()
-        response_data = await self._read_exact_bytes(data_len, timeout, t0)
-        result += response_data
-        logger.debug("Full response: %s (%d bytes)", result.hex(), len(result))
-      else:
-        logger.debug("ACK-only response (no frame): %s", result.hex())
-
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        result = await self._exchange_framed_command(framed_message, timeout)
+      await anyio.lowlevel.checkpoint()
       return result
+
+  async def _exchange_framed_command(self, framed_message: bytes, timeout: float) -> bytes:
+    """Exchange one framed command while the caller owns the command lock."""
+    header = framed_message[:11]
+    data = framed_message[11:] if len(framed_message) > 11 else b""
+
+    await self._write_to_device(header)
+    logger.debug("Sent header: %s", header.hex())
+
+    if data:
+      await anyio.sleep(0.001)
+      await self._write_to_device(data)
+      logger.debug("Sent data: %s", data.hex())
+    logger.debug("Sent framed: %s", framed_message.hex())
+
+    resp_header = bytearray()
+    data = bytearray()
+    ack_received = False
+    with anyio.move_on_after(timeout):
+      await self._wait_for_ack()
+      ack_received = True
+      await self._read_exact_bytes(11, resp_header)
+      data_len = Reader(resp_header[7:]).u16()
+      await self._read_exact_bytes(data_len, data)
+    if not ack_received:
+      raise TimeoutError("Timeout waiting for ACK")
+    result = b"\x06" + bytes(resp_header) + bytes(data)
+    if len(resp_header) == 11:
+      logger.debug("Full response: %s (%d bytes)", result.hex(), len(result))
+    else:
+      logger.debug("ACK-only response (no frame): %s", result.hex())
+    return result
 
   async def _send_action_command(
     self,
@@ -409,41 +389,48 @@ class EL406:
 
     async with self._command_lock:
       await self._purge_buffers()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        # Send header and data separately (matches _send_framed_command protocol)
+        header = framed_message[:11]
+        data = framed_message[11:] if len(framed_message) > 11 else b""
 
-      # Send header and data separately (matches _send_framed_command protocol)
-      header = framed_message[:11]
-      data = framed_message[11:] if len(framed_message) > 11 else b""
+        await self._write_to_device(header)
+        if data:
+          await anyio.sleep(0.001)
+          await self._write_to_device(data)
+        logger.debug("Sent action command: %s", framed_message.hex())
 
-      await self._write_to_device(header)
-      if data:
-        await asyncio.sleep(0.001)
-        await self._write_to_device(data)
-      logger.debug("Sent action command: %s", framed_message.hex())
+        header = bytearray()
+        data = bytearray()
+        ack_received = False
+        with anyio.move_on_after(timeout):
+          # Step 1: Wait for ACK (short timeout)
+          with anyio.fail_after(min(timeout, self.timeout)):
+            await self._wait_for_ack()
+          ack_received = True
+          logger.debug("Got ACK, waiting for completion...")
 
-      t0 = time.monotonic()
+          # Step 2: Wait for completion frame (11-byte header + data)
+          await self._read_exact_bytes(11, header)
+          data_len = Reader(header[7:]).u16()
+          await self._read_exact_bytes(data_len, data)
+        if not ack_received:
+          raise TimeoutError("Timeout waiting for ACK")
+        if len(header) < 11:
+          raise TimeoutError(f"Timeout waiting for completion header (got {len(header)} bytes)")
 
-      # Step 1: Wait for ACK (short timeout)
-      await self._wait_for_ack(min(timeout, self.timeout), t0)
-      logger.debug("Got ACK, waiting for completion...")
+        data_len = Reader(header[7:]).u16()
+        result = bytes(header + data)
 
-      # Step 2: Wait for completion frame (11-byte header + data)
-      header = await self._read_exact_bytes(11, timeout, t0)
-      if len(header) < 11:
-        raise TimeoutError(f"Timeout waiting for completion header (got {len(header)} bytes)")
+        logger.debug("Completion frame: %s (%d bytes)", result.hex(), len(result))
 
-      # Parse data length and read remaining data
-      data_len = Reader(header[7:]).u16()
-      data = await self._read_exact_bytes(data_len, timeout, t0)
+        # Parse and log result
+        cmd_echo = Reader(result[2:]).u16()
+        response_data = result[11 : 11 + data_len] if len(result) >= 11 + data_len else b""
+        logger.debug("  Command echo: 0x%04X, data: %s", cmd_echo, response_data.hex())
 
-      result = header + data
-
-      logger.debug("Completion frame: %s (%d bytes)", result.hex(), len(result))
-
-      # Parse and log result
-      cmd_echo = Reader(result[2:]).u16()
-      response_data = result[11 : 11 + data_len] if len(result) >= 11 + data_len else b""
-      logger.debug("  Command echo: 0x%04X, data: %s", cmd_echo, response_data.hex())
-
+      await anyio.lowlevel.checkpoint()
       return result
 
   async def _send_framed_query(
@@ -479,50 +466,53 @@ class EL406:
 
     async with self._command_lock:
       await self._purge_buffers()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        msg_header = framed_message[:11]
+        msg_data = framed_message[11:] if len(framed_message) > 11 else b""
 
-      # Split header and data
-      msg_header = framed_message[:11]
-      msg_data = framed_message[11:] if len(framed_message) > 11 else b""
+        await self._write_to_device(msg_header)
+        logger.debug("Sent query header 0x%04X: %s", command, msg_header.hex())
 
-      await self._write_to_device(msg_header)
-      logger.debug("Sent query header 0x%04X: %s", command, msg_header.hex())
+        if msg_data:
+          await anyio.sleep(0.001)
+          await self._write_to_device(msg_data)
+          logger.debug("Sent query data: %s", msg_data.hex())
 
-      if msg_data:
-        await asyncio.sleep(0.001)
-        await self._write_to_device(msg_data)
-        logger.debug("Sent query data: %s", msg_data.hex())
+        resp_header = bytearray()
+        response_data = bytearray()
+        ack_received = False
+        try:
+          with anyio.move_on_after(timeout):
+            await self._wait_for_ack()
+            ack_received = True
+            await self._read_exact_bytes(11, resp_header)
+            data_len = Reader(resp_header[7:]).u16()
+            await self._read_exact_bytes(data_len, response_data)
+        except RuntimeError as e:
+          raise RuntimeError(
+            f"Device rejected command 0x{command:04X} (NAK). Check command code and parameters."
+          ) from e
+        except TimeoutError as e:
+          raise TimeoutError(f"Timeout waiting for ACK (command 0x{command:04X})") from e
 
-      # Wait for ACK
-      try:
-        await self._wait_for_ack(timeout, time.monotonic())
-      except RuntimeError as e:
-        raise RuntimeError(
-          f"Device rejected command 0x{command:04X} (NAK). Check command code and parameters."
-        ) from e
-      except TimeoutError as e:
-        raise TimeoutError(f"Timeout waiting for ACK (command 0x{command:04X})") from e
+        if not ack_received:
+          raise TimeoutError(f"Timeout waiting for ACK (command 0x{command:04X})")
+        if len(resp_header) < 11:
+          raise TimeoutError(f"Timeout reading response header (got {len(resp_header)}/11 bytes)")
 
-      t0 = time.monotonic()
-      # Read 11-byte response header (shares timeout budget with data)
-      resp_header = await self._read_exact_bytes(11, timeout, t0)
-      if len(resp_header) < 11:
-        raise TimeoutError(f"Timeout reading response header (got {len(resp_header)}/11 bytes)")
+        logger.debug("Response header: %s", resp_header.hex())
+        data_len = Reader(resp_header[7:]).u16()
+        logger.debug("Response data length: %d", data_len)
 
-      logger.debug("Response header: %s", resp_header.hex())
+        if len(response_data) < data_len:
+          raise TimeoutError(
+            f"Timeout reading response data (got {len(response_data)}/{data_len} bytes)"
+          )
 
-      # Parse data length from header bytes 7-8 (little-endian)
-      data_len = Reader(resp_header[7:]).u16()
-      logger.debug("Response data length: %d", data_len)
-
-      # Read data bytes
-      response_data = await self._read_exact_bytes(data_len, timeout, t0)
-      if len(response_data) < data_len:
-        raise TimeoutError(
-          f"Timeout reading response data (got {len(response_data)}/{data_len} bytes)"
-        )
-
-      logger.debug("Response data: %s", response_data.hex())
-      return response_data
+        logger.debug("Response data: %s", response_data.hex())
+      await anyio.lowlevel.checkpoint()
+      return bytes(response_data)
 
   # ---------------------------------------------------------------------------
   # Polling
@@ -575,12 +565,13 @@ class EL406:
     Raises:
       TimeoutError: If the device stays busy beyond *timeout*.
     """
-    t0 = time.monotonic()
-    while time.monotonic() - t0 < timeout:
-      poll = await self._poll_device_state()
-      if poll.state != STATE_RUNNING:
-        return
-      await asyncio.sleep(poll_interval)
+    with anyio.move_on_after(timeout) as scope:
+      while True:
+        poll = await self._poll_device_state()
+        if poll.state != STATE_RUNNING:
+          return
+        await anyio.sleep(poll_interval)
+    assert scope.cancel_called
     raise TimeoutError(f"Device still busy (STATE_RUNNING) after {timeout}s waiting for readiness")
 
   async def _send_step_command(
@@ -614,7 +605,7 @@ class EL406:
       EL406DeviceError: If device reports an error during the step.
       RuntimeError: If device rejects command (NAK).
     """
-    if self.io is None:
+    if self.io is None or self._command_lock is None:
       raise RuntimeError("Device not initialized")
 
     if timeout is None:
@@ -625,45 +616,60 @@ class EL406:
     # 1. Wait for device to be ready (not RUNNING)
     await self._wait_until_ready(timeout=min(timeout, self.timeout))
 
-    # 2. Send the step command
-    logger.debug("Sending step command: %s", framed_message.hex())
-    response = await self._send_framed_command(framed_message, timeout=min(timeout, self.timeout))
-    logger.debug("Step command sent, got initial response: %s", response.hex())
+    acknowledged = False
+    try:
+      async with self._command_lock:
+        await self._purge_buffers()
+        await anyio.lowlevel.checkpoint()
+        with anyio.CancelScope(shield=True):
+          logger.debug("Sending step command: %s", framed_message.hex())
+          response = await self._exchange_framed_command(framed_message, min(timeout, self.timeout))
+          acknowledged = True
+          logger.debug("Step command sent, got initial response: %s", response.hex())
+        await anyio.lowlevel.checkpoint()
 
-    # 3. Initial delay before polling
-    await asyncio.sleep(0.5)
+      # 3. Initial delay before polling
+      await anyio.sleep(0.5)
 
-    # 4. Poll for completion
-    t0 = time.monotonic()
-    poll_count = 0
+      # 4. Poll for completion
+      poll_count = 0
+      logger.debug("Starting polling loop...")
 
-    logger.debug("Starting polling loop...")
+      with anyio.move_on_after(timeout) as scope:
+        while True:
+          await anyio.sleep(poll_interval)
+          poll_count += 1
 
-    while time.monotonic() - t0 < timeout:
-      await asyncio.sleep(poll_interval)
-      poll_count += 1
+          poll = await self._poll_device_state()
+          logger.debug("Poll #%d: %d bytes", poll_count, len(poll.raw_response))
 
-      poll = await self._poll_device_state()
-      logger.debug("Poll #%d: %d bytes", poll_count, len(poll.raw_response))
+          if poll.state in (STATE_INITIAL, STATE_STOPPED):
+            logger.debug("Step completed (state=%d) after %d polls", poll.state, poll_count)
+            if poll.validity != 0:
+              raise EL406DeviceError(poll.validity, get_error_message(poll.validity))
+            return poll.raw_response
 
-      if poll.state in (STATE_INITIAL, STATE_STOPPED):
-        logger.debug("Step completed (state=%d) after %d polls", poll.state, poll_count)
-        if poll.validity != 0:
-          raise EL406DeviceError(poll.validity, get_error_message(poll.validity))
-        return poll.raw_response
+          if poll.state == STATE_RUNNING:
+            logger.debug("Step in progress (state=Running), continuing poll...")
+          elif poll.state == STATE_PAUSED:
+            logger.warning("Step is paused (state=3)")
+          elif poll.status == 0:
+            # Unknown state with status=0 means done
+            logger.debug("Done (unknown state=%d, status=0)", poll.state)
+            return poll.raw_response
+          else:
+            logger.debug("Unknown state=%d, status=%d, continuing...", poll.state, poll.status)
 
-      if poll.state == STATE_RUNNING:
-        logger.debug("Step in progress (state=Running), continuing poll...")
-      elif poll.state == STATE_PAUSED:
-        logger.warning("Step is paused (state=3)")
-      elif poll.status == 0:
-        # Unknown state with status=0 means done
-        logger.debug("Done (unknown state=%d, status=0)", poll.state)
-        return poll.raw_response
-      else:
-        logger.debug("Unknown state=%d, status=%d, continuing...", poll.state, poll.status)
-
-    raise TimeoutError(f"Timeout waiting for step completion after {timeout}s")
+      assert scope.cancel_called
+      raise TimeoutError(f"Timeout waiting for step completion after {timeout}s")
+    except anyio.get_cancelled_exc_class():
+      if acknowledged:
+        with anyio.CancelScope(shield=True):
+          await self.abort()
+          await self._wait_until_ready(
+            timeout=min(timeout, self.timeout), poll_interval=poll_interval
+          )
+      raise
 
   # ---------------------------------------------------------------------------
   # Batch management
@@ -695,7 +701,8 @@ class EL406:
       yield
     finally:
       try:
-        await self.cleanup_after_protocol()
+        with anyio.CancelScope(shield=True):
+          await self.cleanup_after_protocol()
       finally:
         self._in_batch = False
 
