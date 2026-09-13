@@ -21,12 +21,14 @@ from pylabrobot.resources.trash import Trash
 class HamiltonSTARDeck(HamiltonDeck):
   """Base class for a Hamilton STAR(let) deck."""
 
+  _rails_beyond_tracks = 2
+
   def __init__(
     self,
-    num_tracks: int,
-    size_x: float,
-    size_y: float,
-    size_z: float,
+    num_tracks: Optional[int] = None,
+    size_x: Optional[float] = None,
+    size_y: Optional[float] = None,
+    size_z: Optional[float] = None,
     name="deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
@@ -38,14 +40,21 @@ class HamiltonSTARDeck(HamiltonDeck):
       Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
     ] = "1000uL-5mL-on-waste",
     model: Optional[str] = None,
+    num_rails: Optional[int] = None,
   ) -> None:
     """Create a new STAR(let) deck of the given size.
 
-    `with_trash` and `with_teaching_rack` require `with_waste_block` to be true.
+    `with_trash` and `with_teaching_rack` require `with_waste_block` to be true. `num_rails` is
+    deprecated: it counted two more than `num_tracks`.
     """
+
+    # Defaulted only so a deck saved with `num_rails` can leave out `num_tracks`, which comes first.
+    if size_x is None or size_y is None or size_z is None:
+      raise TypeError("size_x, size_y and size_z are required")
 
     super().__init__(
       num_tracks=num_tracks,
+      num_rails=None if num_rails is None else num_rails - self._rails_beyond_tracks,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
@@ -119,13 +128,13 @@ class HamiltonSTARDeck(HamiltonDeck):
         raise RuntimeError("Teaching rack cannot be created when no waste block is present.")
 
     if core_grippers == "1000uL-at-waste":  # "at waste"
-      x: float = 1338 if num_tracks == STAR_NUM_TRACKS else 798
+      x: float = 1338 if self.num_tracks == STAR_NUM_TRACKS else 798
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_at_waste(),
         location=Coordinate(x=x, y=105.550 - 26 - 9.5, z=205) - waste_block.location,
       )
     elif core_grippers == "1000uL-5mL-on-waste":  # "on waste"
-      x = 1337.5 if num_tracks == STAR_NUM_TRACKS else 797.5
+      x = 1337.5 if self.num_tracks == STAR_NUM_TRACKS else 797.5
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_5ml_on_waste(),
         location=Coordinate(x=x, y=125 - 18 - 21.5, z=205) - waste_block.location,

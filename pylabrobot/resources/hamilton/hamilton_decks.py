@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import warnings
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 from typing import Optional, cast
 
 from pylabrobot.resources.carrier import Carrier, ResourceHolder
@@ -121,16 +122,27 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
   def __init__(
     self,
-    size_x: float,
-    size_y: float,
-    size_z: float,
     num_tracks: Optional[int] = None,
+    size_x: Optional[float] = None,
+    size_y: Optional[float] = None,
+    size_z: Optional[float] = None,
     name: str = "deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
     num_rails: Optional[int] = None,
     model: Optional[str] = None,
   ):
+    # What `@abstractmethod` refused before either could be left to the other: a deck with neither.
+    if (
+      type(self).track_to_location is HamiltonDeck.track_to_location
+      and type(self).rails_to_location is HamiltonDeck.rails_to_location
+    ):
+      raise TypeError(f"{type(self).__name__} must implement track_to_location")
+
+    # First, where `num_rails` was. Defaulted only so `num_rails=` can be given in its place.
+    if size_x is None or size_y is None or size_z is None:
+      raise TypeError("size_x, size_y and size_z are required")
+
     super().__init__(
       name=name,
       size_x=size_x,
@@ -163,9 +175,10 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     fitted = any(child.category in _DEVICE_PARTS for child in self.children)
     self.model = (AUTOLOAD_BELT_MODEL if fitted else FRONT_PANEL_MODEL).format(frame=frame)
 
-  @abstractmethod
   def track_to_location(self, track: int) -> Coordinate:
     """Where a track starts on this deck.
+
+    A subclass implements this, or `rails_to_location` as it did before the rename.
 
     Args:
       track: the track, counted from 1.
@@ -173,6 +186,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     Returns:
       Its position, in this deck's own frame.
     """
+    return self.rails_to_location(track)
 
   def rails_to_location(self, rails: int) -> Coordinate:
     """Deprecated. Use `track_to_location`.
@@ -190,6 +204,21 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       stacklevel=2,
     )
     return self.track_to_location(rails)
+
+  # STAR decks counted two more rails than they have tracks, which is what `num_rails` said and
+  # what `rails=` placement was bounded by. Kept for those deprecated names only.
+  _rails_beyond_tracks = 0
+
+  @property
+  def num_rails(self) -> int:
+    """Deprecated. Use `num_tracks`, which a STAR deck counts two fewer of."""
+    warnings.warn(
+      "`num_rails` is deprecated, use `num_tracks`: a track is the part of the deck, and a rail is"
+      " part of a carrier.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.num_tracks + self._rails_beyond_tracks
 
   def compute_right_track_of_carrier(self, carrier: Carrier) -> int:
     """The last track a carrier covers, from where it sits on this deck.
@@ -497,6 +526,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     # TODO: many things here should be moved to Resource and Deck, instead of just STARLetDeck
 
+    # `rails=` keeps the bounds it had, so a layout that placed before still places.
+    beyond = 0
     if rails is not None:
       if track is not None:
         raise ValueError("pass track, not both track and rails")
@@ -507,9 +538,10 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         stacklevel=2,
       )
       track = rails
+      beyond = self._rails_beyond_tracks
 
-    if track is not None and not -4 <= track <= self.num_tracks:
-      raise ValueError(f"Track must be between -4 and {self.num_tracks}.")
+    if track is not None and not -4 <= track <= self.num_tracks + beyond:
+      raise ValueError(f"Track must be between -4 and {self.num_tracks + beyond}.")
 
     # Check if resource exists.
     if self.has_resource(resource.name):
@@ -542,7 +574,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       if resource_location is not None:  # collision detection
         if (
           resource_location.x + resource.get_absolute_size_x()
-          > self.track_to_location(self.num_tracks + 1).x
+          > self.track_to_location(self.num_tracks + 1 + beyond).x
           and track is not None
         ):
           raise ValueError(
@@ -727,3 +759,33 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     summary_ = "\n".join([line.rstrip() for line in summary_.split("\n")])
 
     return summary_
+
+
+# Names this module had before the STAR decks moved to `star_decks` and rails became tracks. Kept
+# importable, with the values they had, so code written against them keeps working.
+_MOVED = {
+  "HamiltonSTARDeck": "star_decks",
+  "STARDeck": "star_decks",
+  "STARLetDeck": "star_decks",
+  "hamilton_core_gripper_1000ul_at_waste": "core_grippers",
+  "hamilton_core_gripper_1000ul_5ml_on_waste": "core_grippers",
+}
+_OLD_CONSTANTS = {
+  "_RAILS_WIDTH": 22.5,
+  "STARLET_NUM_RAILS": 32,
+  "STARLET_SIZE_X": 1005,
+  "STARLET_SIZE_Y": 653.5,
+  "STARLET_SIZE_Z": 900,
+  "STAR_NUM_RAILS": 56,
+  "STAR_SIZE_X": 1545,
+  "STAR_SIZE_Y": 653.5,
+  "STAR_SIZE_Z": 900,
+}
+
+
+def __getattr__(name: str):
+  if name in _MOVED:
+    return getattr(importlib.import_module(f"pylabrobot.resources.hamilton.{_MOVED[name]}"), name)
+  if name in _OLD_CONSTANTS:
+    return _OLD_CONSTANTS[name]
+  raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

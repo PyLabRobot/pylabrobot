@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `LinkBody` (`pylabrobot.resources.LinkBody`): one rigid member of a manipulator, an ordinary resource whose origin is a corner and which carries its `proximal_joint` and `distal_joint` as coordinates within it. The link is the line between the two joints and `length` is the distance, `None` on a member that ends the chain. A member turns about its proximal joint rather than its origin. (#1249)
 - `MechanicalGripper` (`pylabrobot.resources.MechanicalGripper`): a `LinkBody` that ends the chain, holding what it takes between two fingers. Its far end is a `tool_center_point` rather than a joint, it is sized to its body because `jaw_width` moves the fingers, and the jaws straddle the grip centre. (#1249)
 
+### Changed
+
+- `HamiltonDeck` and `HamiltonSTARDeck`: `num_tracks` replaces `num_rails` and `track=` replaces `rails=`; the old names are deprecated but keep working, as do decks saved with `num_rails`. A STAR deck counts two fewer tracks than it counted rails (STARlet 30, STAR 54) at the same positions, so a count passed positionally to `HamiltonSTARDeck` is now read as tracks.
+
 ### Fixed
 
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).
