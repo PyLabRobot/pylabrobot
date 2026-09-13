@@ -424,10 +424,11 @@ class Pipettes:
   def _reference_anchor(self, resource: Resource) -> Coordinate:
     """Where on a channel's resource the drives report, from its left front bottom corner.
 
-    Along Z the drive reports the centre-centre-bottom of the tip mounting shaft, and the shaft
-    hangs below the body it is mounted on, so the point the drive names is the shaft's end rather
-    than the body's own bottom. Taken from the shaft where the channel carries one, so a shaft of
-    another length needs nothing changed here.
+    The drives report the centre-centre-bottom of the tip mounting shaft, on all three axes, and the
+    shaft hangs below the body it is mounted on, so the point the drive names is the shaft's end rather
+    than the body's own bottom. A channel carrying a shaft states that point as its `reference_point`,
+    so a shaft of another length needs nothing changed here; one that carries none falls back to its
+    anchors.
 
     Args:
       resource: the resource modelling the channel.
@@ -437,8 +438,13 @@ class Pipettes:
     """
     if isinstance(resource, NChannelPipette):
       return resource.reference_point
+    stated = getattr(resource, "reference_point", None)
+    if isinstance(stated, Coordinate):
+      return stated
     anchor = resource.get_anchor(
-      y=self.configuration.y_reference_anchor, z=self.configuration.z_reference_anchor
+      x=self.configuration.x_reference_anchor,
+      y=self.configuration.y_reference_anchor,
+      z=self.configuration.z_reference_anchor,
     )
     shaft = next(
       (child for child in resource.children if isinstance(child, TipMountingShaft)), None

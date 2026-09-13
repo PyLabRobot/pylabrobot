@@ -839,8 +839,9 @@ class PrepChannels:
   def _reference_anchor(self, resource: Resource) -> Coordinate:
     """Where on a channel's resource the reported positions refer to, from its left front bottom corner.
 
-    Along Z that is the end of the tip mounting shaft, which hangs below the channel's body, so it is
-    taken from the shaft where the channel carries one - as the STAR driver takes it.
+    The centre-centre-bottom of the tip mounting shaft, on all three axes: that is the point the Prep
+    reports and the one the arm's X marker stands on. A channel carrying a shaft states it as its
+    `reference_point`; one that carries none falls back to its own centre-centre-bottom.
 
     Args:
       resource: the resource modelling the channel.
@@ -848,7 +849,12 @@ class PrepChannels:
     Returns:
       The offset from the resource's corner to the point the positions refer to.
     """
-    anchor = resource.get_anchor(y=CHANNEL_Y_REFERENCE_ANCHOR, z=CHANNEL_Z_REFERENCE_ANCHOR)
+    stated = getattr(resource, "reference_point", None)
+    if isinstance(stated, Coordinate):
+      return stated
+    anchor = resource.get_anchor(
+      x=CHANNEL_X_REFERENCE_ANCHOR, y=CHANNEL_Y_REFERENCE_ANCHOR, z=CHANNEL_Z_REFERENCE_ANCHOR
+    )
     shaft = next(
       (child for child in resource.children if isinstance(child, TipMountingShaft)), None
     )
