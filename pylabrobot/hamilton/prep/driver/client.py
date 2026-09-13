@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, TypeVar, Union
 
-from pylabrobot.hamilton.prep.driver.errors import PREP_ERROR_CODES
+from pylabrobot.hamilton.prep.driver.errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.messages import (
   CommandMessage,
@@ -23,6 +23,17 @@ _EXPECTED_ROOT = "MLPrepRoot"
 MLPREP_OBJECT_PATH = "MLPrepRoot.MLPrep"
 PIPETTOR_OBJECT_PATH = "MLPrepRoot.PipettorRoot.Pipettor"
 MPH_OBJECT_PATH = "MLPrepRoot.MphRoot.MPH"
+MLPREP_SERVICE_OBJECT_PATH = "MLPrepRoot.MLPrepService"
+DECK_CONFIGURATION_OBJECT_PATH = "MLPrepRoot.MLPrepCalibration.DeckConfiguration"
+MLPREP_CPU_OBJECT_PATH = "MLPrepRoot.MLPrepCpu"
+MODULE_INFORMATION_OBJECT_PATH = "MLPrepRoot.PipettorRoot.ModuleInformation"
+# Everything `PrepDriver.discover` reads beyond MLPrep itself.
+DISCOVERY_OBJECT_PATHS = (
+  MLPREP_SERVICE_OBJECT_PATH,
+  DECK_CONFIGURATION_OBJECT_PATH,
+  MLPREP_CPU_OBJECT_PATH,
+  MODULE_INFORMATION_OBJECT_PATH,
+)
 ResultT = TypeVar("ResultT")
 
 
@@ -157,6 +168,45 @@ class PrepClient(HamiltonTCPClient):
     if not roots:
       raise RuntimeError("No root objects discovered. Call setup() first.")
     return (await self.introspection.get_object(roots[0])).name
+
+  async def request_by_name(self, dest: Union[Address, str], name: str) -> bytes:
+    """Send a status request to the method called `name`, at the ids this firmware declares for it.
+
+    Prep firmware versions do not keep a method at the same ids, and older ones lack some methods
+    altogether, so a method is found by name in the object's method table rather than by number.
+
+    Args:
+      dest: the object, by address or firmware path.
+      name: the method's exact firmware name.
+
+    Returns:
+      The reply's parameters, for the caller to decode.
+
+    Raises:
+      PrepMethodNotFoundError: If the object has no method of that name.
+      RuntimeError: If the object has the name on more than one interface, so the name alone does
+        not say which to send.
+    """
+    address = dest if isinstance(dest, Address) else await self.resolve_path(dest)
+    where = dest if isinstance(dest, str) else (self.registry.path(address) or str(address))
+    matches = [m for m in await self.introspection.ensure_method_table(address) if m.name == name]
+    if not matches:
+      raise PrepMethodNotFoundError(
+        f"this Prep's firmware has no {name!r} method on {where}; which methods exist, and at "
+        "which ids, differs between firmware versions"
+      )
+    if len(matches) > 1:
+      interfaces = sorted(m.interface_id for m in matches)
+      raise RuntimeError(
+        f"{name!r} is on more than one interface of {where} ({interfaces}), so the name does not "
+        "say which to send"
+      )
+    method = matches[0]
+    return await self.execute(
+      PrepCmd.PrepProbeRequest(
+        dest=address, command_id=method.method_id, interface_id=method.interface_id
+      )
+    )
 
   async def _query_firmware_string(
     self, addr: Address, cmd_id: int, iface_id: int = 3

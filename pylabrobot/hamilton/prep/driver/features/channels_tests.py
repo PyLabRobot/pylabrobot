@@ -18,15 +18,15 @@ def _run(coro):
   asyncio.run(coro)
 
 
-def test_channels_match_info_num_channels():
-  """PrepChannels.channels length matches info.config.num_channels on a default chatterbox."""
+def test_channels_match_configuration_num_channels():
+  """PrepChannels.channels length matches the configuration's num_channels on a default chatterbox."""
 
   async def _t():
     p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
     await p.setup()
     assert p.channels is not None
     assert isinstance(p.channels, PrepChannels)
-    assert len(p.channels.channels) == p.info.config.num_channels
+    assert len(p.channels.channels) == p.configuration.num_channels
     for i, ch in enumerate(p.channels.channels):
       assert isinstance(ch, PrepPIPChannel)
       assert ch.index == i

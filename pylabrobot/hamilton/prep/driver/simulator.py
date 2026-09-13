@@ -15,18 +15,20 @@ from pylabrobot.hamilton.transport.tcp.messages import CommandResponse, HoiParam
 from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, HoiPacket, IpPacket
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
-from pylabrobot.hamilton.transport.tcp.wire_types import StructArray
+from pylabrobot.hamilton.transport.tcp.wire_types import Str, StructArray
 from pylabrobot.io.socket import Socket
 
 from . import prep_commands as PrepCmd
 from .client import (
+  DISCOVERY_OBJECT_PATHS,
+  MLPREP_CPU_OBJECT_PATH,
   MLPREP_OBJECT_PATH,
   MPH_OBJECT_PATH,
   PIPETTOR_OBJECT_PATH,
   PrepClient,
   _ResolvedPrepCommand,
 )
-from .configuration import PrepInstrumentInfo
+from .configuration import DeviceConfiguration
 from .prep_commands import PrepCommand
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,9 @@ logger = logging.getLogger(__name__)
 _V2_PIPETTING_METHOD_IDS = frozenset(range(38, 44))
 # PrepHead8._probe_v2_support expects MPH interface 1 to expose these method IDs.
 _V2_MPH_METHOD_IDS = frozenset(range(29, 35))
+# Methods the driver finds by name, at the ids MLPrep Runtime V3.0.20 declares them on interface 1.
+_MLPREP_NAMED_METHODS = {"IsParked": 34, "IsSpread": 35}
+_PIPETTOR_NAMED_METHODS = {"GetTipDefinitionHeld": 13}
 
 
 class _PrepChatterboxIntrospection(HamiltonIntrospection):
@@ -59,21 +64,23 @@ class _PrepChatterboxIntrospection(HamiltonIntrospection):
       return stubs
     return await super().methods_for_interface(address, interface_id)
 
-
-class PrepChatterboxInstrumentInfo(PrepInstrumentInfo):
-  """Offline info: uses canned :class:`~prep_commands.InstrumentConfig` from the chatterbox client."""
-
-  async def _on_setup(self) -> None:
-    d = self._driver
-    assert isinstance(d, PrepChatterboxClient)
-    self._config = d._canned_config
+  async def ensure_method_table(self, address, *, _supported=None, _object_info=None):
+    self._executor.require_active()
+    addr = await self._resolve_target_address(address)
+    stubs = self._stub_methods_fn(addr, 1)
+    if stubs is not None:
+      return stubs
+    return await super().ensure_method_table(
+      address, _supported=_supported, _object_info=_object_info
+    )
 
 
 class PrepChatterboxClient(PrepClient):
   """Skips TCP; uses canned addresses so Prep channels can be exercised offline.
 
-  Canned firmware state (num_channels, has_mph, traverse height) lives on the
-  chatterbox client — :class:`PrepChatterboxInstrumentInfo` reads it for ``info.config``.
+  Canned firmware state lives on the chatterbox client as a :class:`DeviceConfiguration`, and the
+  session answers the configuration queries from it, so the driver reads it the way it reads a
+  physical device's. A declared configuration is passed as ``configuration``.
 
   Default ``use_v1_aspirate_dispense=False`` matches hardware: introspection stubs
   report v2 aspirate/dispense commands on the pipettor. Pass
@@ -86,16 +93,18 @@ class PrepChatterboxClient(PrepClient):
     has_mph: bool = True,
     default_traverse_height: float = 180.0,
     use_v1_aspirate_dispense: bool = False,
+    configuration: Optional[DeviceConfiguration] = None,
   ):
-    self._canned_config = PrepCmd.InstrumentConfig(
-      deck_bounds=None,
-      has_enclosure=False,
-      safe_speeds_enabled=True,
-      deck_sites=(),
-      waste_sites=(),
-      default_traverse_height=default_traverse_height,
-      num_channels=num_channels,
-      has_mph=has_mph,
+    self._canned_config = (
+      configuration
+      if configuration is not None
+      else DeviceConfiguration(
+        has_enclosure=False,
+        safe_speeds_enabled=True,
+        default_traverse_height=default_traverse_height,
+        num_channels=num_channels,
+        has_mph=has_mph,
+      )
     )
     self._pipettor_addr: Optional[Address] = None
     self._mph_addr: Optional[Address] = None
@@ -109,18 +118,33 @@ class PrepChatterboxClient(PrepClient):
     )
 
     def _stub_methods(addr: Address, interface_id: int) -> Optional[List[MethodInfo]]:
-      if interface_id == 1 and not self._use_v1_aspirate_dispense:
-        if self._pipettor_addr is not None and addr == self._pipettor_addr:
-          return [
+      if interface_id != 1:
+        return None
+      def named(methods: dict) -> List[MethodInfo]:
+        return [
+          MethodInfo(interface_id=1, call_type=0, method_id=mid, name=name)
+          for name, mid in methods.items()
+        ]
+      stubs: List[MethodInfo] = []
+      if self._pipettor_addr is not None and addr == self._pipettor_addr:
+        stubs += named(_PIPETTOR_NAMED_METHODS)
+        if not self._use_v1_aspirate_dispense:
+          stubs += [
             MethodInfo(interface_id=1, call_type=0, method_id=mid, name=f"v2_stub_{mid}")
             for mid in sorted(_V2_PIPETTING_METHOD_IDS)
           ]
-        if self._mph_addr is not None and addr == self._mph_addr:
-          return [
-            MethodInfo(interface_id=1, call_type=0, method_id=mid, name=f"v2_mph_stub_{mid}")
-            for mid in sorted(_V2_MPH_METHOD_IDS)
-          ]
-      return None
+      if (
+        self._mph_addr is not None
+        and addr == self._mph_addr
+        and not self._use_v1_aspirate_dispense
+      ):
+        stubs += [
+          MethodInfo(interface_id=1, call_type=0, method_id=mid, name=f"v2_mph_stub_{mid}")
+          for mid in sorted(_V2_MPH_METHOD_IDS)
+        ]
+      if self._mlprep_address is not None and addr == self._mlprep_address:
+        stubs += named(_MLPREP_NAMED_METHODS)
+      return stubs or None
 
     session.introspection = _PrepChatterboxIntrospection(
       registry=session.registry,
@@ -139,11 +163,11 @@ class PrepChatterboxClient(PrepClient):
     self._session.client_id = 1
     # Seed the introspection registry with every firmware path the codebase
     # may touch. The seed list is derived from the command aggregate
-    # (PrepCommand._ALL_PATHS) plus PrepInstrumentInfo._paths — new commands
+    # (PrepCommand._ALL_PATHS) plus the paths discovery reads — new commands
     # with new firmware_path values get chatterbox parity for free. Addresses
     # are assigned deterministically in sorted-path order so they're stable
     # across runs.
-    seed_paths = sorted(PrepCommand._ALL_PATHS | set(PrepInstrumentInfo._paths.values()))
+    seed_paths = sorted(PrepCommand._ALL_PATHS | set(DISCOVERY_OBJECT_PATHS))
     for idx, path in enumerate(seed_paths):
       leaf = path.rsplit(".", 1)[-1]
       addr = Address(1, 1, 256 + idx)
@@ -203,16 +227,39 @@ _CANNED_RESPONSES: dict[type[TCPCommand], HoiParams] = {
 }
 
 
+# Replies to the methods the driver finds by name, keyed by object path and the ids stubbed above.
+_NAMED_METHOD_RESPONSES: dict[tuple[str, int, int], HoiParams] = {
+  (MLPREP_OBJECT_PATH, 1, _MLPREP_NAMED_METHODS["IsParked"]): HoiParams().add(False, PrepCmd.PaddedBool),
+  (MLPREP_OBJECT_PATH, 1, _MLPREP_NAMED_METHODS["IsSpread"]): HoiParams().add(False, PrepCmd.PaddedBool),
+}
+
+
 class _PrepChatterboxSession(TCPSession):
   """Offline exchange using the same immutable requests and decoders as TCP."""
 
-  def __init__(self, io: Socket, config: PrepCmd.InstrumentConfig) -> None:
+  def __init__(self, io: Socket, config: DeviceConfiguration) -> None:
     """Use the configured instrument metadata for matching typed status replies."""
     super().__init__(io)
+    self._config = config
     self._responses = dict(_CANNED_RESPONSES)
-    self._responses[PrepCmd.PrepGetDefaultTraverseHeight] = HoiParams().add(
-      config.default_traverse_height, PrepCmd.F32
+    if config.default_traverse_height is not None:
+      self._responses[PrepCmd.PrepGetDefaultTraverseHeight] = HoiParams().add(
+        config.default_traverse_height, PrepCmd.F32
+      )
+    present = [PrepCmd.ChannelIndex.RearChannel, PrepCmd.ChannelIndex.FrontChannel][
+      : config.num_channels or 0
+    ]
+    if config.has_mph:
+      present.append(PrepCmd.ChannelIndex.MPHChannel)
+    self._responses[PrepCmd.PrepGetPresentChannels] = HoiParams().add(
+      [int(c) for c in present], PrepCmd.EnumArray
     )
+    if config.deck_bounds is not None:
+      bounds = config.deck_bounds
+      params = HoiParams()
+      for value in (bounds.min_x, bounds.max_x, bounds.min_y, bounds.max_y, bounds.min_z, bounds.max_z):
+        params.add(value, PrepCmd.F32)
+      self._responses[PrepCmd.PrepGetDeckBounds] = params
     self._responses[PrepCmd.PrepGetSafeSpeedsEnabled] = HoiParams().add(
       config.safe_speeds_enabled, PrepCmd.PaddedBool
     )
@@ -234,6 +281,20 @@ class _PrepChatterboxSession(TCPSession):
     request = command.request if isinstance(command, _ResolvedPrepCommand) else command
     logger.info("[Prep chatterbox] %s", type(request).__name__)
     payload = self._responses.get(type(request), HoiParams())
+    # Which device this is, from the configuration it stands in for: serial (9) and firmware (8).
+    if (
+      isinstance(request, PrepCmd.PrepProbeRequest)
+      and self.registry.path(request.dest) == MLPREP_CPU_OBJECT_PATH
+    ):
+      answer = {9: self._config.serial_number, 8: self._config.firmware_version}.get(request.command_id)
+      if answer is not None:
+        payload = HoiParams().add(answer, Str)
+    if isinstance(request, PrepCmd.PrepProbeRequest):
+      named = _NAMED_METHOD_RESPONSES.get(
+        (self.registry.path(request.dest), request.interface_id, request.command_id)
+      )
+      if named is not None:
+        payload = named
     action = (
       Hoi2Action.STATUS_RESPONSE
       if hoi.action_code == Hoi2Action.STATUS_REQUEST

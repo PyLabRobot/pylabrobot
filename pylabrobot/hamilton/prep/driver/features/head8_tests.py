@@ -40,7 +40,7 @@ def _make_deck():
 
 
 def _make_head8() -> PrepHead8:
-  return PrepHead8(client=None, info=None)  # type: ignore[arg-type]
+  return PrepHead8(client=None)  # type: ignore[arg-type]
 
 
 def _record_send(prep: PrepDriver) -> tuple[list[Any], Any]:

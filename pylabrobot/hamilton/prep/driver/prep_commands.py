@@ -401,22 +401,6 @@ def format_calibration_diff(diff: CalibrationValuesDiff) -> str:
   return "\n".join(lines)
 
 
-@dataclass(frozen=True)
-class InstrumentConfig:
-  """Instrument hardware configuration probed at setup."""
-
-  deck_bounds: Optional[DeckBounds]
-  has_enclosure: bool
-  safe_speeds_enabled: bool
-  deck_sites: Tuple[DeckSiteInfo, ...]
-  waste_sites: Tuple[WasteSiteInfo, ...]
-  default_traverse_height: Optional[float] = (
-    None  # None if probe failed; user can set via set_default_traverse_height
-  )
-  num_channels: Optional[int] = None  # 1 or 2 dual-channel pipettor; from GetPresentChannels
-  has_mph: Optional[bool] = None  # True if 8MPH present; from GetPresentChannels
-
-
 # =============================================================================
 # Inner parameter dataclasses (wire-type annotated, serialized via from_struct)
 # =============================================================================
@@ -3877,7 +3861,7 @@ class PrepIsSpread(PrepStatusRequest["PrepIsSpread.Response"]):
 
 
 # -----------------------------------------------------------------------------
-# Wire structs for config responses (used by nested Response and InstrumentConfig)
+# Wire structs for config responses (used by nested Response and DeviceConfiguration)
 # -----------------------------------------------------------------------------
 
 

@@ -28,7 +28,8 @@ from .. import prep_commands as PrepCmd
 if TYPE_CHECKING:
   from pylabrobot.resources.deck import Deck
   from ..client import PrepClient
-  from ..configuration import PrepInstrumentInfo
+  from ..configuration import DeviceConfiguration
+  from ..master import PrepDriver
 
 logger = logging.getLogger(__name__)
 
@@ -67,34 +68,49 @@ class PrepCalibration:
   """Calibration façade: firmware MLPrepCalibration object + DeckConfiguration site defs."""
 
   def __init__(
-    self, *, driver: "PrepClient", info: "PrepInstrumentInfo", deck: Optional["Deck"] = None
+    self,
+    *,
+    client: "PrepClient",
+    driver: Optional["PrepDriver"] = None,
+    deck: Optional["Deck"] = None,
   ) -> None:
+    self._client = client
     self._driver = driver
-    self._info = info
     self.deck = deck
     self._calibration_session_active: bool = False
 
   @property
   def client(self) -> "PrepClient":
-    """Alias for code that uses ``client.execute`` (driver is the TCP client)."""
-    return self._driver
+    """The TCP client calibration commands are sent through."""
+    return self._client
 
   @property
   def num_channels(self) -> int:
-    n = self._info.config.num_channels
+    n = self._configuration.num_channels
     if n is None:
       raise RuntimeError("Instrument config has no num_channels (finish PrepDriver.setup first).")
     return n
 
   @property
   def has_mph(self) -> bool:
-    h = self._info.config.has_mph
+    h = self._configuration.has_mph
     if h is None:
       raise RuntimeError("Instrument config has no has_mph (finish PrepDriver.setup first).")
     return h
 
   def _set_calibration_session_active(self, active: bool) -> None:
     self._calibration_session_active = active
+
+  @property
+  def _configuration(self) -> "DeviceConfiguration":
+    """The device's configuration, as the driver read it at setup.
+
+    Raises:
+      RuntimeError: If there is no driver, or it has not read one yet.
+    """
+    if self._driver is None or self._driver.configuration is None:
+      raise RuntimeError("no configuration read; have you called `prep.setup()`?")
+    return self._driver.configuration
 
   def _require_deck(self) -> "Deck":
     """The deck positions are measured from, which is what the firmware counts from.
@@ -125,7 +141,7 @@ class PrepCalibration:
 
   async def get_calibration_site_definitions(self) -> Tuple[PrepCmd.CalibrationSiteInfo, ...]:
     """Return calibration site definitions from DeckConfiguration (GetCalibrationSiteDefinitions, cmd=3)."""
-    result = await self._driver.execute(PrepCmd.PrepGetCalibrationSiteDefinitions())
+    result = await self._client.execute(PrepCmd.PrepGetCalibrationSiteDefinitions())
     if result is None or not result.sites:
       return ()
     return tuple(
@@ -144,31 +160,31 @@ class PrepCalibration:
 
   async def begin_calibration(self) -> None:
     """Enter calibration mode (BeginCalibration, cmd=1)."""
-    await self._driver.execute(PrepCmd.PrepBeginCalibration())
+    await self._client.execute(PrepCmd.PrepBeginCalibration())
 
   async def cancel_calibration(self) -> None:
     """Cancel an active calibration session (CancelCalibration, cmd=2)."""
-    await self._driver.execute(PrepCmd.PrepCancelCalibration())
+    await self._client.execute(PrepCmd.PrepCancelCalibration())
 
   async def end_calibration(self, date_time: Optional[PrepCmd.HoiDateTime] = None) -> None:
     """End calibration and store results with timestamp (EndCalibration, cmd=3)."""
     if date_time is None:
       date_time = PrepCmd.HoiDateTime.now()
-    await self._driver.execute(PrepCmd.PrepEndCalibration(date_time=date_time))
+    await self._client.execute(PrepCmd.PrepEndCalibration(date_time=date_time))
 
   async def reset_calibration(self, store: bool = False) -> None:
     """Reset calibration data (ResetCalibration, cmd=4)."""
-    await self._driver.execute(PrepCmd.PrepResetCalibration(store=store))
+    await self._client.execute(PrepCmd.PrepResetCalibration(store=store))
 
   async def calibration_initialize(self) -> None:
     """Initialize calibration hardware (CalibrationInitialize, cmd=5)."""
-    await self._driver.execute(PrepCmd.PrepCalibrationInitialize())
+    await self._client.execute(PrepCmd.PrepCalibrationInitialize())
 
   async def read_calibration_values(
     self, read_timeout: Optional[float] = None
   ) -> PrepCmd.CalibrationValues:
     """Read calibration values (GetCalibrationValues, cmd=16)."""
-    result = await self._driver.execute(
+    result = await self._client.execute(
       PrepCmd.PrepGetCalibrationValues(),
       read_timeout=read_timeout,
     )

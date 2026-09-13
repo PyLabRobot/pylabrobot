@@ -71,7 +71,8 @@ if TYPE_CHECKING:
   from pylabrobot.resources.deck import Deck
 
   from ..client import PrepClient
-  from ..configuration import PrepInstrumentInfo
+  from ..configuration import DeviceConfiguration
+  from ..master import PrepDriver
 
 logger = logging.getLogger(__name__)
 
@@ -454,7 +455,7 @@ async def discover_channel_drives(
   Uses ``get_subobject_address`` / ``get_object`` along the known path shape —
   no full-tree traversal. Pass ``root_name="MPH Channel Root"`` for the 8MPH
   head. For a full firmware-tree dump use
-  :meth:`PrepInstrumentInfo.get_firmware_tree`.
+  :meth:`PrepDriver.request_firmware_tree`.
   """
   intro = client.introspection
   try:
@@ -600,7 +601,7 @@ class PrepPIPChannel:
     Serial number is intentionally not exposed here — NodeInformation's
     GetSerialNumber endpoint is unpopulated on shipped instruments, and the
     canonical instrument serial (pipettor module) is already surfaced via
-    :meth:`PrepInstrumentInfo.get_device_serial_number`.
+    :meth:`PrepDriver.request_device_serial_number`.
     """
     if self.node_info is None:
       return None
@@ -614,22 +615,19 @@ class PrepPIPChannel:
 
 async def build_prep_channels(
   client: "PrepClient",
-  info: "PrepInstrumentInfo",
+  configuration: Optional["DeviceConfiguration"],
   *,
   root_name: str = "Channel Root",
   num_channels: Optional[int] = None,
 ) -> List[PrepPIPChannel]:
   """Build per-channel facades, resolve drive addresses, fetch bounds.
 
-  If ``num_channels`` is omitted, uses ``info.config.num_channels``.
+  If ``num_channels`` is omitted, uses the configuration's ``num_channels``.
   """
   drive_map = await discover_channel_drives(client, root_name=root_name)
 
-  if num_channels is None:
-    try:
-      num_channels = info.config.num_channels
-    except RuntimeError:
-      num_channels = None
+  if num_channels is None and configuration is not None:
+    num_channels = configuration.num_channels
   if num_channels is None:
     num_channels = drive_map.num_channels_discovered
 
@@ -772,7 +770,7 @@ class PrepChannels:
   """Dual-channel pipettor for Hamilton Prep.
 
   Narrow constructor: ``client`` (transport + JIT firmware-path resolve) and
-  ``info`` (instrument-wide metadata). ``self.channels`` is attached by
+  ``driver`` (whose ``configuration`` holds the instrument-wide metadata). ``self.channels`` is attached by
   :meth:`PrepDriver.setup` before :meth:`_on_setup`.
   """
 
@@ -783,13 +781,13 @@ class PrepChannels:
     self,
     *,
     client: "PrepClient",
-    info: "PrepInstrumentInfo",
+    driver: Optional["PrepDriver"] = None,
     deck: Optional["Deck"] = None,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ) -> None:
     self._client = client
-    self._info = info
+    self._driver = driver
     self.deck = deck
     self._user_traverse_height: Optional[float] = default_traverse_height
     self._channel_bounds: list[PrepChannelBounds] = []
@@ -798,6 +796,17 @@ class PrepChannels:
     self.setup_finished: bool = False
     self.channels: List[PrepPIPChannel] = []
     self.head: dict[int, TipTracker] = {}
+
+  @property
+  def _configuration(self) -> "DeviceConfiguration":
+    """The device's configuration, as the driver read it at setup.
+
+    Raises:
+      RuntimeError: If there is no driver, or it has not read one yet.
+    """
+    if self._driver is None or self._driver.configuration is None:
+      raise RuntimeError("no configuration read; have you called `prep.setup()`?")
+    return self._driver.configuration
 
   def _require_deck(self) -> "Deck":
     """The deck positions are measured from, which is what the firmware counts from.
@@ -851,7 +860,7 @@ class PrepChannels:
     level initialization (``MLPrep.Initialize``) runs earlier in
     :meth:`PrepDriver.setup` — the pipettor sees an already-initialized instrument.
     """
-    cfg = self._info.config
+    cfg = self._configuration
     logger.info(
       "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
       "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, has_mph=%s",
@@ -925,17 +934,17 @@ class PrepChannels:
 
   @property
   def num_channels(self) -> int:
-    """Number of independent dual-channel pipettor channels (1 or 2). Read from info.config."""
-    n: Optional[int] = self._info.config.num_channels
+    """Number of independent dual-channel pipettor channels (1 or 2). Read from the driver's configuration."""
+    n: Optional[int] = self._configuration.num_channels
     if n is None:
       raise RuntimeError("Instrument config has no num_channels (finish PrepDriver.setup first).")
     return n
 
   @property
   def has_mph(self) -> bool:
-    """True if the 8-channel Multi-Pipetting Head (8MPH) is present. Read from info.config."""
+    """True if the 8-channel Multi-Pipetting Head (8MPH) is present. Read from the driver's configuration."""
     try:
-      return bool(self._info.config.has_mph)
+      return bool(self._configuration.has_mph)
     except RuntimeError:
       return False
 
@@ -945,7 +954,7 @@ class PrepChannels:
     if self.deck is None:
       return 0
     try:
-      cfg = self._info.config
+      cfg = self._configuration
     except RuntimeError:
       return 0
     if cfg.num_channels != 2:
@@ -963,7 +972,7 @@ class PrepChannels:
     if self._user_traverse_height is not None:
       return self._user_traverse_height
     try:
-      cfg = self._info.config
+      cfg = self._configuration
     except RuntimeError:
       height: Optional[float] = None
     else:
@@ -2072,7 +2081,7 @@ class PrepChannels:
     if tip.tip_size in {TipSize.XL}:
       return False
     try:
-      n = self._info.config.num_channels
+      n = self._configuration.num_channels
     except RuntimeError:
       n = None
     if n is not None and channel_idx >= n:
@@ -2235,8 +2244,8 @@ class PrepChannels:
     """Request the Z position of the channel probe/head (excluding tip).
 
     Since GetPositions returns tip-adjusted Z when a tip is mounted, this
-    method queries the firmware's held tip definition (GetTipDefinitionHeld,
-    Pipettor cmd=13) to get the tip length and adds it back.
+    method queries the firmware's held tip definition (GetTipDefinitionHeld on the
+    Pipettor, looked up by name) to get the tip length and adds it back.
 
     When no tip is mounted, returns the same value as request_z_pos_channel_n().
 
@@ -2252,8 +2261,8 @@ class PrepChannels:
     tip_presence = await self.sense_tip_presence()
     if channel_idx < len(tip_presence) and tip_presence[channel_idx]:
       # Query firmware for the held tip definition to get tip length
-      pipettor_addr = await self._client.resolve_path(PIPETTOR_OBJECT_PATH)
-      raw = await self._client.execute(PrepCmd.PrepProbeRequest(dest=pipettor_addr, command_id=13))
+      # By name: the method's ids are not the same on every firmware version.
+      raw = await self._client.request_by_name(PIPETTOR_OBJECT_PATH, "GetTipDefinitionHeld")
       if raw is not None:
         import struct as _struct
 

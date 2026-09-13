@@ -143,6 +143,7 @@ def Prep(
   simulation: bool = False,
   host: Optional[str] = None,
   port: int = 2000,
+  declared_configuration_json: Optional[str] = None,
   driver: Optional[PrepDriver] = None,
   name: str = "Hamilton Prep",
   size_x: float = PREP_SIZE_X,
@@ -156,6 +157,8 @@ def Prep(
     simulation: whether to build a simulated device, which answers without one being connected.
     host: the address the Prep answers on. Required unless simulating or given a driver.
     port: the port it answers on.
+    declared_configuration_json: path to a declared configuration, passed to the driver this builds.
+      Read only when this builds one: a driver given outright brings its own.
     driver: the driver to drive it through, instead of building one.
     name: what to call it.
     size_x: how wide it is, in mm.
@@ -168,7 +171,13 @@ def Prep(
   if deck is None:
     deck = PrepDeck()
   if driver is None:
-    driver = PrepDriver(deck=deck, chatterbox=simulation, host=host, port=port)
+    driver = PrepDriver(
+      deck=deck,
+      chatterbox=simulation,
+      host=host,
+      port=port,
+      declared_configuration_json=declared_configuration_json,
+    )
   return PrepDevice(
     deck=deck,
     driver=driver,

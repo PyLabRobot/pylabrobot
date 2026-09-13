@@ -75,7 +75,8 @@ from ..client import MPH_OBJECT_PATH
 if TYPE_CHECKING:
   from pylabrobot.resources.deck import Deck
   from ..client import PrepClient
-  from ..configuration import PrepInstrumentInfo
+  from ..configuration import DeviceConfiguration
+  from ..master import PrepDriver
 
 logger = logging.getLogger(__name__)
 
@@ -119,13 +120,13 @@ class PrepHead8:
     self,
     *,
     client: "PrepClient",
-    info: "PrepInstrumentInfo",
+    driver: Optional["PrepDriver"] = None,
     deck: Optional["Deck"] = None,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ) -> None:
     self._client = client
-    self._info = info
+    self._driver = driver
     self.deck = deck
     self._user_traverse_height = default_traverse_height
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
@@ -168,6 +169,17 @@ class PrepHead8:
     self._supports_v2_pipetting = None
     for tracker in self.head.values():
       tracker.clear()
+
+  @property
+  def _configuration(self) -> "DeviceConfiguration":
+    """The device's configuration, as the driver read it at setup.
+
+    Raises:
+      RuntimeError: If there is no driver, or it has not read one yet.
+    """
+    if self._driver is None or self._driver.configuration is None:
+      raise RuntimeError("no configuration read; have you called `prep.setup()`?")
+    return self._driver.configuration
 
   def _require_deck(self) -> "Deck":
     """The deck positions are measured from, which is what the firmware counts from.
@@ -228,7 +240,7 @@ class PrepHead8:
       return final_z
     if self._user_traverse_height is not None:
       return self._user_traverse_height
-    height: Optional[float] = self._info.config.default_traverse_height
+    height: Optional[float] = self._configuration.default_traverse_height
     if height is None:
       raise RuntimeError("No traverse height available; set default_traverse_height")
     return height
@@ -1292,7 +1304,7 @@ class PrepHead8:
   # ---------------------------------------------------------------------------
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
-    """Sense whether tips are present on the 8MPH head via the sleeve sensor (cmd=15).
+    """Sense whether tips are present on the 8MPH head via the sleeve sensor (GetTipPresent).
 
     The 8MPH is a single ganged controller — the firmware tree exposes one sleeve
     sensor node (on the probe-0 / channel-0 entry). The result is broadcast across
@@ -1308,7 +1320,8 @@ class PrepHead8:
     if addr is None:
       return [None] * NUM_PROBES
 
-    raw = await self._client.execute(PrepCmd.PrepProbeRequest(dest=addr, command_id=15))
+    # By name: the method's ids are not the same on every firmware version.
+    raw = await self._client.request_by_name(addr, "GetTipPresent")
     if raw is None or len(raw) < 8:
       result = False
     else:

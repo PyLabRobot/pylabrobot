@@ -46,7 +46,7 @@ def test_chatterbox_sets_resolved_interfaces_and_channels():
     assert isinstance(p.client.mlprep_address, Address)
     addr = await p.client.resolve_path("MLPrepRoot.PipettorRoot.Pipettor")
     assert isinstance(addr, Address)
-    assert p.info.config.num_channels == 2
+    assert p.configuration.num_channels == 2
     assert p.channels is not None
     assert isinstance(p.channels, PrepChannels)
     assert p.channels.num_channels == 2
@@ -55,7 +55,8 @@ def test_chatterbox_sets_resolved_interfaces_and_channels():
     assert p.channels._supports_v2_pipetting is True
 
     await p.stop()
-    assert p.info._config is None
+    # Kept after the link closes, as the STAR driver keeps it, so a reading can still be saved.
+    assert p.configuration is not None
 
   asyncio.run(_run())
 
@@ -141,11 +142,11 @@ def test_prep_device_wires_calibration_after_setup():
     deck = STARLetDeck()
     p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
-    assert p.info.num_channels == p.info.config.num_channels
-    assert p.info.has_mph == p.info.config.has_mph
+    assert p.channels.num_channels == p.configuration.num_channels
+    assert p.channels.has_mph == p.configuration.has_mph
     assert p.calibration is not None
-    assert p.calibration.num_channels == p.info.config.num_channels
-    assert p.calibration.has_mph == p.info.config.has_mph
+    assert p.calibration.num_channels == p.configuration.num_channels
+    assert p.calibration.has_mph == p.configuration.has_mph
     assert isinstance(p.gripper, PrepGripper)
     async with p.core_grippers() as arm:
       assert isinstance(arm, PrepGripperArm)
@@ -196,9 +197,9 @@ def test_force_initialize_skips_is_initialized_check():
   async def _run() -> None:
     deck = STARLetDeck()
     p = PrepDriver(deck=deck, chatterbox=True)
-    p.info.is_initialized = AsyncMock(side_effect=AssertionError("should not be called"))  # type: ignore[method-assign]
+    p.request_initialization_status = AsyncMock(side_effect=AssertionError("should not be called"))  # type: ignore[method-assign]
     await p.setup(force_initialize=True)
-    p.info.is_initialized.assert_not_called()
+    p.request_initialization_status.assert_not_called()
     await p.stop()
 
   asyncio.run(_run())
