@@ -134,37 +134,37 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
     plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
 
-    self.deck.assign_child_resource(tip_car, rails=1)
-    self.deck.assign_child_resource(plt_car, rails=21)
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.deck.assign_child_resource(plt_car, track=21)
 
     # Test placing a carrier at a location where another carrier is located.
     with self.assertRaises(ValueError):
       dbl_plt_car_1 = PLT_CAR_L5AC_A00(name="double placed carrier 1")
-      self.deck.assign_child_resource(dbl_plt_car_1, rails=1)
+      self.deck.assign_child_resource(dbl_plt_car_1, track=1)
 
     with self.assertRaises(ValueError):
       dbl_plt_car_2 = PLT_CAR_L5AC_A00(name="double placed carrier 2")
-      self.deck.assign_child_resource(dbl_plt_car_2, rails=2)
+      self.deck.assign_child_resource(dbl_plt_car_2, track=2)
 
     with self.assertRaises(ValueError):
       dbl_plt_car_3 = PLT_CAR_L5AC_A00(name="double placed carrier 3")
-      self.deck.assign_child_resource(dbl_plt_car_3, rails=20)
+      self.deck.assign_child_resource(dbl_plt_car_3, track=20)
 
     # Test invalid rails.
     with self.assertRaises(ValueError):
-      self.deck.assign_child_resource(plt_car, rails=-1)
+      self.deck.assign_child_resource(plt_car, track=-1)
     with self.assertRaises(ValueError):
-      self.deck.assign_child_resource(plt_car, rails=42)
+      self.deck.assign_child_resource(plt_car, track=42)
     with self.assertRaises(ValueError):
-      self.deck.assign_child_resource(plt_car, rails=27)
+      self.deck.assign_child_resource(plt_car, track=27)
 
   def test_get_resource(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
-    self.deck.assign_child_resource(tip_car, rails=1)
-    self.deck.assign_child_resource(plt_car, rails=10)
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.deck.assign_child_resource(plt_car, track=10)
 
     # Get resource.
     self.assertEqual(self.lh.deck.get_resource("tip_carrier").name, "tip_carrier")
@@ -199,8 +199,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
     plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
-    self.deck.assign_child_resource(tip_car, rails=1)
-    self.deck.assign_child_resource(plt_car, rails=10)
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.deck.assign_child_resource(plt_car, track=10)
 
     # Rails 10 should be left of rails 1.
     self.assertGreater(
@@ -246,9 +246,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="sub")
-    self.deck.assign_child_resource(tip_car, rails=1)
+    self.deck.assign_child_resource(tip_car, track=1)
     with self.assertRaises(ValueError):
-      self.deck.assign_child_resource(plt_car, rails=10)
+      self.deck.assign_child_resource(plt_car, track=10)
 
   def test_illegal_subresource_assignment_after(self):
     # Test assigning subresource with the same name as another resource in another carrier, after
@@ -257,15 +257,15 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="ok")
-    self.deck.assign_child_resource(tip_car, rails=1)
-    self.deck.assign_child_resource(plt_car, rails=10)
+    self.deck.assign_child_resource(tip_car, track=1)
+    self.deck.assign_child_resource(plt_car, track=10)
     with self.assertRaises(ValueError):
       plt_car[1] = cor_96_wellplate_360uL_Fb(name="sub")
 
   async def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
-    self.deck.assign_child_resource(plt_car, rails=21)
+    self.deck.assign_child_resource(plt_car, track=21)
 
     await self.lh.move_plate(plate, plt_car[2])
     self.assertIsNotNone(plt_car[2].resource)
@@ -279,7 +279,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
   async def test_move_plate_free(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
-    self.deck.assign_child_resource(plt_car, rails=1)
+    self.deck.assign_child_resource(plt_car, track=1)
 
     await self.lh.move_plate(plate, Coordinate(1000, 1000, 1000))
     self.assertIsNotNone(self.lh.deck.get_resource("plate"))

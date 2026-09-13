@@ -1,13 +1,16 @@
 import textwrap
 import unittest
+from typing import cast
 
-from pylabrobot.resources import Deck, TipRack
+from pylabrobot.resources import Coordinate, Deck, Resource, TipRack
 from pylabrobot.resources.corning import (
   cor_96_wellplate_360uL_Fb,
 )
 from pylabrobot.resources.hamilton import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
+  HamiltonDeck,
+  STARDeck,
   STARLetDeck,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
@@ -18,6 +21,75 @@ from pylabrobot.resources.stanley.cups import (
 
 
 class HamiltonDeckTests(unittest.TestCase):
+  def test_rails_is_deprecated(self):
+    """`rails` still places a resource, and says it is deprecated."""
+    deck = STARLetDeck()
+    with self.assertWarns(DeprecationWarning):
+      deck.assign_child_resource(TIP_CAR_480_A00(name="tip_carrier"), rails=1)
+    self.assertEqual(
+      deck.get_resource("tip_carrier").get_location_wrt(deck).x,
+      deck.track_to_location(1).x,
+    )
+
+  def test_track_and_rails_together_is_refused(self):
+    """Passing both is a mistake rather than a preference."""
+    deck = STARLetDeck()
+    with self.assertRaises(ValueError):
+      deck.assign_child_resource(TIP_CAR_480_A00(name="tip_carrier"), track=1, rails=1)
+
+  def test_num_tracks_and_num_rails_together_is_refused(self):
+    class OwnDeck(HamiltonDeck):
+      def track_to_location(self, track: int) -> Coordinate:
+        return Coordinate(100.0 + (track - 1) * 22.5, 63, 100)
+
+    with self.assertRaises(ValueError):
+      OwnDeck(num_tracks=30, num_rails=30, size_x=1000, size_y=600, size_z=300)
+
+  def test_a_deck_saved_with_num_rails_loads_with_the_tracks_it_has(self):
+    """A saved STAR deck counted two more rails than it has tracks."""
+    for factory, tracks in ((STARLetDeck, 30), (STARDeck, 54)):
+      data = factory().serialize()
+      data["num_rails"] = data.pop("num_tracks") + 2
+      with self.assertWarns(DeprecationWarning):
+        deck = Deck.deserialize(data)
+      self.assertEqual(cast(HamiltonDeck, deck).num_tracks, tracks)
+
+  def test_num_rails_counts_as_it_did(self):
+    with self.assertWarns(DeprecationWarning):
+      self.assertEqual((STARLetDeck().num_rails, STARDeck().num_rails), (32, 56))
+
+  def test_rails_is_bounded_as_it_was_and_track_by_the_tracks(self):
+    deck = STARLetDeck()
+    with self.assertWarns(DeprecationWarning):
+      deck.assign_child_resource(Resource("front", size_x=20, size_y=20, size_z=20), rails=32)
+    with self.assertRaises(ValueError):
+      deck.assign_child_resource(Resource("front_2", size_x=20, size_y=20, size_z=20), track=32)
+
+  def test_hamilton_deck_takes_its_track_count_first_as_it_took_rails(self):
+    class OwnDeck(HamiltonDeck):
+      def track_to_location(self, track: int) -> Coordinate:
+        return Coordinate(100.0 + (track - 1) * 22.5, 63, 100)
+
+    deck = OwnDeck(30, 1000, 600, 300)
+    self.assertEqual((deck.num_tracks, deck.get_size_x()), (30, 1000))
+
+  def test_a_deck_implementing_rails_to_location_still_places_by_track(self):
+    class RailsDeck(HamiltonDeck):
+      def rails_to_location(self, rails: int) -> Coordinate:
+        return Coordinate(100.0 + (rails - 1) * 22.5, 63, 100)
+
+    deck = RailsDeck(30, 1000, 600, 300)
+    self.assertEqual(deck.track_to_location(3), Coordinate(145.0, 63, 100))
+    deck.assign_child_resource(TIP_CAR_480_A00(name="tip_carrier"), track=3)
+    self.assertEqual(deck.get_resource("tip_carrier").location, Coordinate(145.0, 63, 100))
+
+  def test_a_deck_implementing_neither_location_method_is_refused(self):
+    class NoTracksDeck(HamiltonDeck):
+      pass
+
+    with self.assertRaises(TypeError):
+      NoTracksDeck(30, 1000, 600, 300)
+
   """Tests for the HamiltonDeck class."""
 
   def build_layout(self):
@@ -33,8 +105,8 @@ class HamiltonDeckTests(unittest.TestCase):
     plt_car[0] = cor_96_wellplate_360uL_Fb(name="aspiration plate")
     plt_car[2] = cor_96_wellplate_360uL_Fb(name="dispense plate")
 
-    deck.assign_child_resource(tip_car, rails=1)
-    deck.assign_child_resource(plt_car, rails=21)
+    deck.assign_child_resource(tip_car, track=1)
+    deck.assign_child_resource(plt_car, track=21)
 
     return deck
 
@@ -80,7 +152,7 @@ class HamiltonDeckTests(unittest.TestCase):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     for i in range(5):
       tip_car[i] = hamilton_96_tiprack_300uL_filter(name=f"tip_rack_0{i}")
-    deck.assign_child_resource(tip_car, rails=1)
+    deck.assign_child_resource(tip_car, track=1)
 
     tip_racks = [r for r in deck.get_all_children() if isinstance(r, TipRack)]
     matches = [
@@ -122,7 +194,7 @@ class HamiltonDeckTests(unittest.TestCase):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
     deck = STARLetDeck()
     with self.assertLogs("pylabrobot") as log:
-      deck.assign_child_resource(stanley_cup, rails=1)
+      deck.assign_child_resource(stanley_cup, track=1)
     self.assertEqual(
       log.output,
       [

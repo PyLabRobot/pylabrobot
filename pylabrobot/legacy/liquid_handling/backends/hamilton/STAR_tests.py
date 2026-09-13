@@ -674,7 +674,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     self.tip_car[2] = self.tip_rack2 = hamilton_96_tiprack_1000uL_filter(name="tip_rack_02")
-    self.deck.assign_child_resource(self.tip_car, rails=1)
+    self.deck.assign_child_resource(self.tip_car, track=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
@@ -696,7 +696,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       nesting_z_height=10,
     )
     self.other_plate.assign_child_resource(lid)
-    self.deck.assign_child_resource(self.plt_car, rails=9)
+    self.deck.assign_child_resource(self.plt_car, track=9)
 
     class BlueBucket(Container):
       def __init__(self, name: str):
@@ -1756,7 +1756,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tip_car[0] = tr = hamilton_96_tiprack_1000uL(name="tips_01").rotated(z=90)
     assert tr.rotation.z == 90
     assert tr.location == Coordinate(82.6, 0, 0)
-    deck.assign_child_resource(tip_car, rails=2)
+    deck.assign_child_resource(tip_car, track=2)
     await lh.setup()
 
     await lh.pick_up_tips(tr["A4:A1"])
@@ -1820,10 +1820,10 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
 
     self.plt_car = PLT_CAR_L5MD_A00(name="plt_car")
     self.plt_car[0] = self.plate = celltreat_96_wellplate_350uL_Ub(name="plate", with_lid=True)
-    self.deck.assign_child_resource(self.plt_car, rails=15)
+    self.deck.assign_child_resource(self.plt_car, track=15)
 
     self.plt_car2 = PLT_CAR_P3AC_A01(name="plt_car2")
-    self.deck.assign_child_resource(self.plt_car2, rails=3)
+    self.deck.assign_child_resource(self.plt_car2, track=3)
 
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
@@ -1947,12 +1947,12 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
 
     tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
     tip_carrier[1] = self.tip_rack = hamilton_96_tiprack_1000uL(name="tip_rack")
-    self.deck.assign_child_resource(tip_carrier, rails=1)
+    self.deck.assign_child_resource(tip_carrier, track=1)
 
     plt_carrier = PLT_CAR_L5AC_A00(name="plt_carrier")
     plt_carrier[0] = self.plate = agenbio_1_troughplate_190mL_Fl(name="plate")
     self.well = self.plate.get_well("A1")
-    self.deck.assign_child_resource(plt_carrier, rails=10)
+    self.deck.assign_child_resource(plt_carrier, track=10)
 
     self.star._num_channels = 8
     self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
@@ -2171,7 +2171,7 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.backend, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    self.deck.assign_child_resource(self.tip_car, rails=1)
+    self.deck.assign_child_resource(self.tip_car, track=1)
 
     await self.lh.setup()
     set_tip_tracking(enabled=False)
@@ -2392,11 +2392,11 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
-    self.deck.assign_child_resource(self.tip_car, rails=1)
+    self.deck.assign_child_resource(self.tip_car, track=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
-    self.deck.assign_child_resource(self.plt_car, rails=9)
+    self.deck.assign_child_resource(self.plt_car, track=9)
 
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
@@ -2615,11 +2615,11 @@ class TestChatterboxLastLLDHeights(unittest.IsolatedAsyncioTestCase):
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
-    self.deck.assign_child_resource(self.tip_car, rails=1)
+    self.deck.assign_child_resource(self.tip_car, track=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
-    self.deck.assign_child_resource(self.plt_car, rails=9)
+    self.deck.assign_child_resource(self.plt_car, track=9)
 
     await self.lh.setup()
 

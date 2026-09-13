@@ -252,12 +252,12 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[0] = self.tip_rack = hamilton_96_tiprack_1000uL(name="tip_rack_01")
     self.tip_car[1] = self.small_tip_rack = hamilton_96_tiprack_10uL(name="tip_rack_02")
-    self.deck.assign_child_resource(self.tip_car, rails=18)
+    self.deck.assign_child_resource(self.tip_car, track=18)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
     self.plt_car[1] = self.other_plate = cor_96_wellplate_360uL_Fb(name="plate_02")
-    self.deck.assign_child_resource(self.plt_car, rails=24)
+    self.deck.assign_child_resource(self.plt_car, track=24)
 
     self.maxDiff = None
 
@@ -584,7 +584,7 @@ class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.backend, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    self.deck.assign_child_resource(self.tip_car, rails=18)
+    self.deck.assign_child_resource(self.tip_car, track=18)
 
     await self.lh.setup()
     set_tip_tracking(enabled=False)
