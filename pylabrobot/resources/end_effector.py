@@ -51,7 +51,8 @@ class MechanicalGripper(LinkBody):
     Args:
       name: what to call this one.
       proximal_joint: where the joint this gripper turns on sits within it.
-      tool_center_point: the point it grips at, from this gripper's own origin.
+      tool_center_point: the point it grips at, from `proximal_joint` - the flange it is mounted
+        on - rather than from this gripper's own origin.
       body: the material around the span, which is also what sizes this member.
       body_location: where it sits, from this gripper's own origin.
       fingers: the two jaws, either side of the span.
@@ -110,7 +111,7 @@ class MechanicalGripper(LinkBody):
   @property
   def length(self) -> float:
     """The joint this gripper turns on to the point it grips at, in mm."""
-    return math.dist(self._tool_center_point.vector(), self.proximal_joint.vector())
+    return math.dist(self._tool_center_point.vector(), (0.0, 0.0, 0.0))
 
   @property
   def jaw_width(self) -> float:
@@ -132,7 +133,7 @@ class MechanicalGripper(LinkBody):
       # A resource sits at its lowest-y corner: the facing surface on the +Y side, the back of the
       # finger on the -Y side. They close on what is at the grip centre, so they straddle the tool
       # centre point rather than the joint or the member's own middle.
-      facing = self._tool_center_point.y + side * self._jaw_width / 2.0
+      facing = self.proximal_joint.y + self._tool_center_point.y + side * self._jaw_width / 2.0
       finger.location = Coordinate(
         here.x, facing if side > 0 else facing - finger.get_size_y(), here.z
       )

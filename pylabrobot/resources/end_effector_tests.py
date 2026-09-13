@@ -19,8 +19,8 @@ JAW_RANGE = (70.844, 133.706)
 
 
 def tcp(z: float = 0.0, y: float = 0.0) -> Coordinate:
-  """The grip centre `LENGTH` along the span from the joint, and `y`/`z` off it."""
-  return Coordinate(PROXIMAL_JOINT.x + LENGTH, PROXIMAL_JOINT.y + y, PROXIMAL_JOINT.z + z)
+  """The grip centre `LENGTH` along the span from the joint, and `y`/`z` off it, from the joint."""
+  return Coordinate(LENGTH, y, z)
 
 
 def gripper(**overrides) -> MechanicalGripper:
@@ -74,6 +74,14 @@ class TestTheSpan(unittest.TestCase):
     # The span now runs diagonally, so the link is longer than its reach along X.
     self.assertAlmostEqual(g.length, math.dist((LENGTH, -13.0), (0.0, 0.0)))
 
+  def test_the_grip_centre_is_stated_from_where_the_tool_is_mounted(self):
+    """Moving the joint inside the member moves where the tool is mounted, not how far it reaches:
+    the grip centre is an offset from the flange, so it and the reach stay what they were."""
+    moved = PROXIMAL_JOINT + Coordinate(7.0, 0.0, 0.0)
+    g = gripper(proximal_joint=moved)
+    self.assertEqual(g.tool_center_point, tcp())
+    self.assertAlmostEqual(g.length, LENGTH)
+
   def test_nothing_attaches_past_a_tool(self):
     self.assertIsNone(gripper().distal_joint)
 
@@ -104,8 +112,8 @@ class TestJaws(unittest.TestCase):
       ]
       self.assertAlmostEqual(faces[0] - faces[1], width)
       # They straddle the grip centre, which is neither the member's middle nor its origin.
-      self.assertAlmostEqual(faces[0] + faces[1], 2 * tcp().y)
-      self.assertNotAlmostEqual(tcp().y, g.get_size_y() / 2.0)
+      self.assertAlmostEqual(faces[0] + faces[1], 2 * (PROXIMAL_JOINT.y + tcp().y))
+      self.assertNotAlmostEqual(PROXIMAL_JOINT.y + tcp().y, g.get_size_y() / 2.0)
 
   def test_the_jaws_refuse_a_width_they_do_not_reach(self):
     with self.assertRaises(ValueError):
