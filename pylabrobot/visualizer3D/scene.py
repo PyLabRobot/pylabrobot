@@ -34,7 +34,7 @@ NAME_KEYS = frozenset({"name", "parent_name"})
 # Fields a resource may declare about itself that `serialize()` does not yet carry. Upstream these
 # belong in the resource's own serialization; passing them through here keeps the viewer free of
 # any device's constants in the meantime.
-DECLARED_FIELDS = ("reference_point", "window", "mesh", "reference_glb")
+DECLARED_FIELDS = ("reference_point", "window", "mesh", "reference_glb", "appearance")
 RESOURCE_LINK = "<resource>"
 
 

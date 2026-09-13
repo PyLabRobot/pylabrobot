@@ -759,11 +759,15 @@ function buildArms() {
     }
 
     const solid = new THREE.ExtrudeGeometry(shape, { depth: sz, bevelEnabled: false });
+    // How the part looks, when it says: its colour and how metallic it reads. Otherwise every arm
+    // is the same translucent grey.
+    const appearance = model.appearance ?? {};
     const frame = new THREE.Mesh(
       solid,
       new THREE.MeshStandardMaterial({
-        color: ARM_COLOR,
-        roughness: 0.6,
+        color: appearance.color ?? ARM_COLOR,
+        metalness: appearance.metalness ?? 0,
+        roughness: appearance.roughness ?? 0.6,
         transparent: true,
         opacity: ARM_OPACITY,
         depthWrite: false,
@@ -1702,7 +1706,8 @@ const SQUARE_FOOTPRINT = ringFootprint(4);
 const ROUND_FOOTPRINT = ringFootprint(20);
 
 const footprintFor = (model) => (geometryFor(model) === BOX ? SQUARE_FOOTPRINT : ROUND_FOOTPRINT);
-const colorFor = (model) => RESOURCE_COLORS[model.category] ?? RESOURCE_COLORS.default;
+const colorFor = (model) =>
+  model.appearance?.color ?? RESOURCE_COLORS[model.category] ?? RESOURCE_COLORS.default;
 // "TipRack" -> "tipracks", as the existing visualizer writes them. Deliberately naive: a count is
 // always in front of it, so "1 plates" reads as a count rather than as a mistake.
 const plural = (type) => String(type).toLowerCase() + "s";
