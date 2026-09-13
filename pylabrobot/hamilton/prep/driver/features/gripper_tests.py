@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pylabrobot.hamilton.prep import Prep
+from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.features.gripper import PrepGripper, PrepGripperArm
 from pylabrobot.resources import Coordinate
@@ -16,7 +16,7 @@ from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500u
 from pylabrobot.resources.hamilton import HamiltonCoreGrippers, PrepDeck
 
 
-def _record_send(prep: Prep) -> list[Any]:
+def _record_send(prep: PrepDriver) -> list[Any]:
   captured: list[Any] = []
   orig_send = prep.client.execute
 
@@ -206,7 +206,7 @@ def test_pick_up_tool_default_pre_position_moves_then_picks():
 
   async def _run() -> None:
     deck = PrepDeck(with_core_grippers=True)
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.gripper is not None
     captured = _record_send(p)
@@ -231,7 +231,7 @@ def test_pick_up_tool_pre_position_false_skips_move():
 
   async def _run() -> None:
     deck = PrepDeck(with_core_grippers=True)
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.gripper is not None
     captured = _record_send(p)

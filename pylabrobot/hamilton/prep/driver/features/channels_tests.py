@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from pylabrobot.hamilton.prep import Prep
+from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep.driver.features.channels import PrepChannels, PrepPIPChannel
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck, hamilton_96_tiprack_50uL_NTR
@@ -22,7 +22,7 @@ def test_channels_match_info_num_channels():
   """PrepChannels.channels length matches info.config.num_channels on a default chatterbox."""
 
   async def _t():
-    p = Prep(deck=STARLetDeck(), chatterbox=True)
+    p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
     await p.setup()
     assert p.channels is not None
     assert isinstance(p.channels, PrepChannels)
@@ -39,7 +39,7 @@ def test_channels_attach_bounds_even_when_empty_offline():
   """Chatterbox firmware tree is empty, so bounds are None — but the attribute must exist."""
 
   async def _t():
-    p = Prep(deck=STARLetDeck(), chatterbox=True)
+    p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
     await p.setup()
     assert p.channels is not None
     assert isinstance(p.channels, PrepChannels)
@@ -58,7 +58,7 @@ def test_channels_tip_trackers_pick_and_drop():
     try:
       deck = PrepDeck()
       tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
-      p = Prep(deck=deck, chatterbox=True)
+      p = PrepDriver(deck=deck, chatterbox=True)
       await p.setup()
       assert p.channels is not None
       spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")]
@@ -94,7 +94,7 @@ def test_channels_volume_trackers_aspirate_dispense():
       deck = PrepDeck()
       tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
       plate = deck[0] = cor_axy_96_wellplate_500uL_Ub("plate")
-      p = Prep(deck=deck, chatterbox=True)
+      p = PrepDriver(deck=deck, chatterbox=True)
       await p.setup()
       assert p.channels is not None
       n = min(2, p.channels.num_channels)

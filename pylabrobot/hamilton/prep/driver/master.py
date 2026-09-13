@@ -24,7 +24,7 @@ from .features.method import PrepMethodLifecycle
 logger = logging.getLogger(__name__)
 
 
-class Prep:
+class PrepDriver:
   """Hamilton Prep liquid handler.
 
   Setup constructs peers (``channels``, ``head8``, ``method``, ``calibration``,
@@ -71,7 +71,7 @@ class Prep:
       await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
 
       self.method = PrepMethodLifecycle(self.client)
-      self.calibration = PrepCalibration(driver=self.client, info=self.info)
+      self.calibration = PrepCalibration(driver=self.client, info=self.info, deck=self.deck)
       channels = PrepChannels(
         client=self.client,
         info=self.info,
@@ -87,6 +87,7 @@ class Prep:
         head8 = PrepHead8(
           client=self.client,
           info=self.info,
+          deck=self.deck,
           default_traverse_height=default_traverse_height,
           use_v1_aspirate_dispense=use_v1_aspirate_dispense,
         )
@@ -136,7 +137,7 @@ class Prep:
       return
     if self._core_gripper_arm is not None:
       logger.warning(
-        "Prep.stop() called with CoRe grippers still mounted. "
+        "PrepDriver.stop() called with CoRe grippers still mounted. "
         "stop() only manages connection teardown and will NOT move the instrument. "
         "Call `await prep.return_core_grippers()` first if you want the tools returned."
       )
@@ -175,7 +176,7 @@ class Prep:
     if self._core_gripper_arm is not None:
       raise RuntimeError("CoRe grippers already mounted")
     if self.channels is None or self.gripper is None:
-      raise RuntimeError("Prep.setup() has not run.")
+      raise RuntimeError("PrepDriver.setup() has not run.")
 
     mount = self.deck.get_resource("core_grippers")
     if not isinstance(mount, HamiltonCoreGrippers):

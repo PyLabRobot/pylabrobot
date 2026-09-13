@@ -22,7 +22,7 @@ class PrepGripper:
   """CoRe gripper for Prep — translates plate/tool ops to PrepCmd firmware commands.
 
   Tool management (pick_up_tool / drop_tool) is handled by the
-  :meth:`Prep.core_grippers` context manager.
+  :meth:`PrepDriver.core_grippers` context manager.
   """
 
   def __init__(self, *, client: "PrepClient", channels: "PrepChannels") -> None:

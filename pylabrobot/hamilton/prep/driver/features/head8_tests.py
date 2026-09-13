@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pylabrobot.hamilton.prep import Prep
+from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.features.channels import (
   LLDMode,
@@ -43,7 +43,7 @@ def _make_head8() -> PrepHead8:
   return PrepHead8(client=None, info=None)  # type: ignore[arg-type]
 
 
-def _record_send(prep: Prep) -> tuple[list[Any], Any]:
+def _record_send(prep: PrepDriver) -> tuple[list[Any], Any]:
   captured: list[Any] = []
   orig_send = prep.client.execute
 
@@ -131,7 +131,7 @@ def test_partial_channel_pickup_raises_value_error():
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -147,7 +147,7 @@ def test_partial_channel_pickup_raises_value_error():
 def test_head8_present_after_chatterbox_setup():
   async def _run() -> None:
     deck, _, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
     assert isinstance(p.head8, PrepHead8)
@@ -161,7 +161,7 @@ def test_head8_full_flow():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -184,7 +184,7 @@ def test_head8_tip_trackers_pick_and_drop():
     set_tip_tracking(True)
     try:
       deck, tip_rack, _, _ = _make_deck()
-      p = Prep(deck=deck, chatterbox=True)
+      p = PrepDriver(deck=deck, chatterbox=True)
       await p.setup()
       assert p.head8 is not None
       spots = tip_rack.column(0)
@@ -233,7 +233,7 @@ def test_head8_move_to_position_sends_mph_wire_commands():
 
   async def _run() -> None:
     deck, _, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -261,7 +261,7 @@ def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -286,7 +286,7 @@ def test_pick_up_tips_pre_position_false_skips_mph_move():
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -309,7 +309,7 @@ def test_head8_partial_channel_aspirate_raises_value_error():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -338,7 +338,7 @@ def test_head8_v2_aspirate_sends_mphaspiratenolldmonitoring2():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -371,7 +371,7 @@ def test_head8_v2_dispense_sends_mphdispensetnolld2():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -401,7 +401,7 @@ def test_head8_v1_fallback_when_use_v1_flag_set():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup(use_v1_aspirate_dispense=True)
     assert p.head8 is not None
 
@@ -446,7 +446,7 @@ def test_head8_aspirate_tadm_sends_mphaspirate_tadm2():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -475,7 +475,7 @@ def test_head8_aspirate_clld_sends_mphaspirate_with_lld2():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -502,7 +502,7 @@ def test_head8_aspirate_lld_and_tadm_sends_mphaspirate_with_lld_tadm2():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -530,7 +530,7 @@ def test_head8_dispense_lld_pressure_raises():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 
@@ -555,7 +555,7 @@ def test_head8_command_version_override_v1():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
 

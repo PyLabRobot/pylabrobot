@@ -73,6 +73,7 @@ from .channels import (
 from ..client import MPH_OBJECT_PATH
 
 if TYPE_CHECKING:
+  from pylabrobot.resources.deck import Deck
   from ..client import PrepClient
   from ..configuration import PrepInstrumentInfo
 
@@ -119,11 +120,13 @@ class PrepHead8:
     *,
     client: "PrepClient",
     info: "PrepInstrumentInfo",
+    deck: Optional["Deck"] = None,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ) -> None:
     self._client = client
     self._info = info
+    self.deck = deck
     self._user_traverse_height = default_traverse_height
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self.channels: list = []  # populated by build_prep_channels after construction
@@ -165,6 +168,16 @@ class PrepHead8:
     self._supports_v2_pipetting = None
     for tracker in self.head.values():
       tracker.clear()
+
+  def _require_deck(self) -> "Deck":
+    """The deck positions are measured from, which is what the firmware counts from.
+
+    Raises:
+      RuntimeError: If this was given no deck.
+    """
+    if self.deck is None:
+      raise RuntimeError("no deck to measure positions from; pass one to the driver")
+    return self.deck
 
   def get_mounted_tips(self) -> List[Optional[Tip]]:
     """Tips currently mounted on the 8MPH (``None`` if empty)."""
@@ -743,7 +756,7 @@ class PrepHead8:
       rack.name if rack is not None else ref_spot.name,
       [s.name.rsplit("_", 1)[-1] for s in tip_spots],
     )
-    loc = ref_spot.get_absolute_location("c", "c", "t") + offset
+    loc = ref_spot.get_location_wrt(self._require_deck(), "c", "c", "t") + offset
 
     if pre_position:
       traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
@@ -816,7 +829,7 @@ class PrepHead8:
       [s.name.rsplit("_", 1)[-1] for s in destinations],
     )
 
-    loc = ref_spot.get_absolute_location("c", "c", "t")
+    loc = ref_spot.get_location_wrt(self._require_deck(), "c", "c", "t")
     if not is_trash:
       loc = loc + offset
     drop_type = PrepCmd.TipDropType.Stall if is_trash else PrepCmd.TipDropType.FixedHeight
@@ -923,9 +936,9 @@ class PrepHead8:
       self._validate_container_span(container)
       resource_name = container.parent.name if container.parent is not None else container.name
       op_targets: Union[str, List[str]] = container.name
-      loc = container.get_absolute_location("c", "c", "cavity_bottom")
+      loc = container.get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       ref_x, ref_y = loc.x, loc.y + 3.5 * PROBE_PITCH_MM
-      wg = _absolute_z_from_well(container, liquid_height)
+      wg = _absolute_z_from_well(container, self._require_deck(), liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(container) if auto_container_geometry else []
       )
@@ -939,9 +952,9 @@ class PrepHead8:
         wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
       )
       op_targets = [w.name.rsplit("_", 1)[-1] for w in wells_list]
-      ref_loc = wells_list[0].get_absolute_location("c", "c", "cavity_bottom")
+      ref_loc = wells_list[0].get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       ref_x, ref_y = ref_loc.x, ref_loc.y
-      wg = _absolute_z_from_well(wells_list[0], liquid_height)
+      wg = _absolute_z_from_well(wells_list[0], self._require_deck(), liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(wells_list[0]) if auto_container_geometry else []
       )
@@ -1136,9 +1149,9 @@ class PrepHead8:
       self._validate_container_span(container)
       resource_name = container.parent.name if container.parent is not None else container.name
       op_targets: Union[str, List[str]] = container.name
-      loc = container.get_absolute_location("c", "c", "cavity_bottom")
+      loc = container.get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       ref_x, ref_y = loc.x, loc.y + 3.5 * PROBE_PITCH_MM
-      wg = _absolute_z_from_well(container, liquid_height)
+      wg = _absolute_z_from_well(container, self._require_deck(), liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(container) if auto_container_geometry else []
       )
@@ -1152,9 +1165,9 @@ class PrepHead8:
         wells_list[0].parent.name if wells_list[0].parent is not None else wells_list[0].name
       )
       op_targets = [w.name.rsplit("_", 1)[-1] for w in wells_list]
-      ref_loc = wells_list[0].get_absolute_location("c", "c", "cavity_bottom")
+      ref_loc = wells_list[0].get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       ref_x, ref_y = ref_loc.x, ref_loc.y
-      wg = _absolute_z_from_well(wells_list[0], liquid_height)
+      wg = _absolute_z_from_well(wells_list[0], self._require_deck(), liquid_height)
       ref_segments = container_segments or (
         _build_container_segments(wells_list[0]) if auto_container_geometry else []
       )

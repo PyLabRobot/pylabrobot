@@ -337,6 +337,7 @@ class _WellGeometry(NamedTuple):
 
 def _absolute_z_from_well(
   resource,
+  deck: "Deck",
   liquid_height: Optional[float] = None,
   offset_z: float = 0.0,
   z_air_margin_mm: float = 2.0,
@@ -345,6 +346,7 @@ def _absolute_z_from_well(
 
   Args:
     resource: Well or Container with get_size_z().
+    deck: the deck the Z values are measured from, which is what the firmware counts from.
     liquid_height: Distance from well bottom to liquid surface (mm). None = 0.
     offset_z: Additional Z applied to the bottom position (e.g. from op.offset.z).
     z_air_margin_mm: Clearance above well opening for z_air (approach/exit height).
@@ -357,7 +359,7 @@ def _absolute_z_from_well(
       "Resource must have get_size_z() to derive absolute Z (e.g. a Well or Container). "
       "Pass z_minimum, z_fluid, z_air explicitly for this operation."
     )
-  loc = resource.get_absolute_location("c", "c", "cavity_bottom")
+  loc = resource.get_location_wrt(deck, "c", "c", "cavity_bottom")
   well_bottom_z = loc.z + offset_z
   liquid_surface_z = well_bottom_z + (liquid_height or 0.0)
   top_of_well_z = loc.z + resource.get_size_z()
@@ -401,7 +403,7 @@ class ChannelDriveMap:
 
 # ---------------------------------------------------------------------------
 # Firmware-tree discovery — module-level so it can be called independently of
-# any PrepChannels instance (used when building channels in Prep.setup, plus by
+# any PrepChannels instance (used when building channels in PrepDriver.setup, plus by
 # diagnostic notebooks that hold only a client).
 # ---------------------------------------------------------------------------
 
@@ -565,7 +567,7 @@ async def request_channel_bounds(client: "PrepClient") -> List[PrepChannelBounds
 class PrepPIPChannel:
   """Per-channel facade: drive addresses, movement bounds, firmware-version queries.
 
-  Instances are constructed by :func:`build_prep_channels` from :meth:`Prep.setup`
+  Instances are constructed by :func:`build_prep_channels` from :meth:`PrepDriver.setup`
   and exposed as ``prep.channels.channels[i]`` (or the dual-channel peer).
   """
 
@@ -606,7 +608,7 @@ class PrepPIPChannel:
 
 
 # ---------------------------------------------------------------------------
-# Builder called from Prep.setup.
+# Builder called from PrepDriver.setup.
 # ---------------------------------------------------------------------------
 
 
@@ -771,7 +773,7 @@ class PrepChannels:
 
   Narrow constructor: ``client`` (transport + JIT firmware-path resolve) and
   ``info`` (instrument-wide metadata). ``self.channels`` is attached by
-  :meth:`Prep.setup` before :meth:`_on_setup`.
+  :meth:`PrepDriver.setup` before :meth:`_on_setup`.
   """
 
   # V2 aspirate/dispense command IDs (interface 1 on Pipettor).
@@ -796,6 +798,16 @@ class PrepChannels:
     self.setup_finished: bool = False
     self.channels: List[PrepPIPChannel] = []
     self.head: dict[int, TipTracker] = {}
+
+  def _require_deck(self) -> "Deck":
+    """The deck positions are measured from, which is what the firmware counts from.
+
+    Raises:
+      RuntimeError: If this was given no deck.
+    """
+    if self.deck is None:
+      raise RuntimeError("no deck to measure positions from; pass one to the driver")
+    return self.deck
 
   def set_default_traverse_height(self, value: float) -> None:
     """Set the default traverse height (mm) used when final_z is not passed to pick_up_tips/drop_tips.
@@ -835,9 +847,9 @@ class PrepChannels:
   async def _on_setup(self):
     """Read config and probe pipettor capabilities.
 
-    Called after ``self.channels`` is populated by :meth:`Prep.setup`. Instrument-
+    Called after ``self.channels`` is populated by :meth:`PrepDriver.setup`. Instrument-
     level initialization (``MLPrep.Initialize``) runs earlier in
-    :meth:`Prep.setup` — the pipettor sees an already-initialized instrument.
+    :meth:`PrepDriver.setup` — the pipettor sees an already-initialized instrument.
     """
     cfg = self._info.config
     logger.info(
@@ -916,7 +928,7 @@ class PrepChannels:
     """Number of independent dual-channel pipettor channels (1 or 2). Read from info.config."""
     n: Optional[int] = self._info.config.num_channels
     if n is None:
-      raise RuntimeError("Instrument config has no num_channels (finish Prep.setup first).")
+      raise RuntimeError("Instrument config has no num_channels (finish PrepDriver.setup first).")
     return n
 
   @property
@@ -1052,7 +1064,7 @@ class PrepChannels:
       if ch not in indexed:
         continue
       spot, tip, off = indexed[ch]
-      loc = spot.get_absolute_location("c", "c", "t") + off
+      loc = spot.get_location_wrt(self._require_deck(), "c", "c", "t") + off
       tip_positions.append(
         PrepCmd.TipPositionParameters.for_op(
           _CHANNEL_INDEX[ch], loc, tip, z_seek_offset=z_seek_offset
@@ -1080,7 +1092,7 @@ class PrepChannels:
     if pre_position:
       traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
       locs = [
-        indexed[ch][0].get_absolute_location("c", "c", "t") + indexed[ch][2] for ch in use_channels
+        indexed[ch][0].get_location_wrt(self._require_deck(), "c", "c", "t") + indexed[ch][2] for ch in use_channels
       ]
       await self.move_to_position(
         x=locs[0].x,
@@ -1180,9 +1192,9 @@ class PrepChannels:
             f"Cannot drop tips to waste: deck has no waste position '{waste_name}'. "
             "Use a deck with waste_rear, waste_front (and waste_mph if using MPH)."
           )
-        loc = self.deck.get_resource(waste_name).get_absolute_location("c", "c", "t")
+        loc = self.deck.get_resource(waste_name).get_location_wrt(self.deck, "c", "c", "t")
       else:
-        loc = dest.get_absolute_location("c", "c", "t") + off
+        loc = dest.get_location_wrt(self._require_deck(), "c", "c", "t") + off
       tip_positions.append(
         PrepCmd.TipDropParameters.for_op(
           _CHANNEL_INDEX[ch], loc, tip, z_seek_offset=z_seek_offset, drop_type=resolved_drop_type
@@ -1324,7 +1336,7 @@ class PrepChannels:
     volumes = corrected_volumes_for_ops(ops, hlcs, dvc)
 
     well_geometry = [
-      _absolute_z_from_well(op.resource, op.liquid_height, op.offset.z) for op in ops
+      _absolute_z_from_well(op.resource, self._require_deck(), op.liquid_height, op.offset.z) for op in ops
     ]
     raw_traverse = self._resolve_traverse_height(None)
     z_minimum = fill_in_defaults(z_minimum, [g.well_bottom for g in well_geometry])
@@ -1437,7 +1449,7 @@ class PrepChannels:
         continue
       idx = ctx.ch_to_idx[ch]
       asp = ctx.indexed_ops[ch]
-      loc = asp.resource.get_absolute_location("c", "c", "cavity_bottom")
+      loc = asp.resource.get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       radius = _effective_radius(asp.resource)
 
       kits.append(
@@ -1695,7 +1707,7 @@ class PrepChannels:
         continue
       idx = ctx.ch_to_idx[ch]
       op = ctx.indexed_ops[ch]
-      loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
+      loc = op.resource.get_location_wrt(self._require_deck(), "c", "c", "cavity_bottom")
       radius = _effective_radius(op.resource)
 
       kits.append(

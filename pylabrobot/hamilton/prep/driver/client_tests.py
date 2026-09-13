@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pylabrobot.hamilton.prep import Prep
+from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep import PrepChatterboxClient
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.features.channels import PrepChannels
@@ -40,7 +40,7 @@ def test_firmware_string_queries_send_status_requests(command_id, interface_id):
 def test_chatterbox_sets_resolved_interfaces_and_channels():
   async def _run() -> None:
     deck = STARLetDeck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
 
     assert isinstance(p.client.mlprep_address, Address)
@@ -63,7 +63,7 @@ def test_chatterbox_sets_resolved_interfaces_and_channels():
 def test_chatterbox_use_v1_skips_v2_probe():
   async def _run() -> None:
     deck = STARLetDeck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup(use_v1_aspirate_dispense=True)
     assert p.channels is not None
     assert isinstance(p.channels, PrepChannels)
@@ -78,7 +78,7 @@ def test_chatterbox_use_v1_skips_v2_probe():
 def test_prep_device_motion_method_and_power_commands():
   async def _run() -> None:
     deck = STARLetDeck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     await p.park()
     await p.spread()
@@ -94,7 +94,7 @@ def test_prep_device_motion_method_and_power_commands():
 def test_prep_method_run_context_manager_aborts_on_exception():
   async def _run() -> None:
     deck = STARLetDeck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.method is not None
 
@@ -139,7 +139,7 @@ def test_prep_method_run_context_manager_aborts_on_exception():
 def test_prep_device_wires_calibration_after_setup():
   async def _run() -> None:
     deck = STARLetDeck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.info.num_channels == p.info.config.num_channels
     assert p.info.has_mph == p.info.config.has_mph
@@ -158,7 +158,7 @@ def test_prep_device_wires_calibration_after_setup():
 def test_execute_surfaces_clear_error_for_unresolvable_path():
   async def _run() -> None:
     deck = STARLetDeck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
 
     missing = "MLPrepRoot.MLPrep"
@@ -190,12 +190,12 @@ def test_chatterbox_preregisters_diagnostic_paths():
 
 
 def test_force_initialize_skips_is_initialized_check():
-  """When force_initialize=True, Prep.setup() never queries is_initialized."""
+  """When force_initialize=True, PrepDriver.setup() never queries is_initialized."""
   from unittest.mock import AsyncMock
 
   async def _run() -> None:
     deck = STARLetDeck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepDriver(deck=deck, chatterbox=True)
     p.info.is_initialized = AsyncMock(side_effect=AssertionError("should not be called"))  # type: ignore[method-assign]
     await p.setup(force_initialize=True)
     p.info.is_initialized.assert_not_called()

@@ -62,7 +62,7 @@ class PrepInstrumentInfo:
   # -- Lifecycle --------------------------------------------------------------
 
   async def _on_setup(self) -> None:
-    """Fetch and cache the instrument config. Called from :meth:`Prep.setup`."""
+    """Fetch and cache the instrument config. Called from :meth:`PrepDriver.setup`."""
     self._config = await self._load_instrument_config()
 
   async def _on_stop(self) -> None:
@@ -74,21 +74,21 @@ class PrepInstrumentInfo:
   def config(self) -> PrepCmd.InstrumentConfig:
     """Cached ``InstrumentConfig``. Raises if ``_on_setup`` has not run."""
     if self._config is None:
-      raise RuntimeError("Instrument config not available. Call Prep.setup() first.")
+      raise RuntimeError("Instrument config not available. Call PrepDriver.setup() first.")
     return self._config
 
   @property
   def num_channels(self) -> int:
     n = self.config.num_channels
     if n is None:
-      raise RuntimeError("Instrument config has no num_channels (finish Prep.setup first).")
+      raise RuntimeError("Instrument config has no num_channels (finish PrepDriver.setup first).")
     return n
 
   @property
   def has_mph(self) -> bool:
     h = self.config.has_mph
     if h is None:
-      raise RuntimeError("Instrument config has no has_mph (finish Prep.setup first).")
+      raise RuntimeError("Instrument config has no has_mph (finish PrepDriver.setup first).")
     return h
 
   @property

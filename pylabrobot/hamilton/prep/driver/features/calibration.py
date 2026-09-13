@@ -26,6 +26,7 @@ from pylabrobot.resources.tip_rack import TipSpot
 from .. import prep_commands as PrepCmd
 
 if TYPE_CHECKING:
+  from pylabrobot.resources.deck import Deck
   from ..client import PrepClient
   from ..configuration import PrepInstrumentInfo
 
@@ -65,9 +66,12 @@ class CalibrationCommandReport:
 class PrepCalibration:
   """Calibration façade: firmware MLPrepCalibration object + DeckConfiguration site defs."""
 
-  def __init__(self, *, driver: "PrepClient", info: "PrepInstrumentInfo") -> None:
+  def __init__(
+    self, *, driver: "PrepClient", info: "PrepInstrumentInfo", deck: Optional["Deck"] = None
+  ) -> None:
     self._driver = driver
     self._info = info
+    self.deck = deck
     self._calibration_session_active: bool = False
 
   @property
@@ -79,18 +83,28 @@ class PrepCalibration:
   def num_channels(self) -> int:
     n = self._info.config.num_channels
     if n is None:
-      raise RuntimeError("Instrument config has no num_channels (finish Prep.setup first).")
+      raise RuntimeError("Instrument config has no num_channels (finish PrepDriver.setup first).")
     return n
 
   @property
   def has_mph(self) -> bool:
     h = self._info.config.has_mph
     if h is None:
-      raise RuntimeError("Instrument config has no has_mph (finish Prep.setup first).")
+      raise RuntimeError("Instrument config has no has_mph (finish PrepDriver.setup first).")
     return h
 
   def _set_calibration_session_active(self, active: bool) -> None:
     self._calibration_session_active = active
+
+  def _require_deck(self) -> "Deck":
+    """The deck positions are measured from, which is what the firmware counts from.
+
+    Raises:
+      RuntimeError: If this was given no deck.
+    """
+    if self.deck is None:
+      raise RuntimeError("no deck to measure positions from; pass one to the driver")
+    return self.deck
 
   def calibration_session(
     self,
@@ -509,7 +523,7 @@ class PrepCalibrationSession:
         if ch not in indexed_spots:
           continue
         spot = indexed_spots[ch]
-        loc = spot.get_absolute_location("c", "c", "t")
+        loc = spot.get_location_wrt(self._cal._require_deck(), "c", "c", "t")
         tip_positions.append(
           PrepCmd.TipPositionParameters.for_op(
             _CHANNEL_INDEX[ch],
@@ -554,7 +568,7 @@ class PrepCalibrationSession:
         raise ValueError("calibrate_squeeze_tips_mph: tip_spot list is empty")
 
       ref_spot = spots[0]
-      loc = ref_spot.get_absolute_location("c", "c", "t")
+      loc = ref_spot.get_location_wrt(self._cal._require_deck(), "c", "c", "t")
       tip_position = PrepCmd.TipPositionParameters.for_op(
         PrepCmd.ChannelIndex.MPHChannel,
         loc,

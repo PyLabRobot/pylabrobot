@@ -3,7 +3,7 @@
 Owns MLPrep method commands (``PrepMethodBegin`` / ``PrepMethodEnd`` / ``PrepMethodAbort``)
 via ``PrepClient`` transport, and exposes an async context manager
 (:meth:`PrepMethodLifecycle.run`) that calls ``abort`` on exception and ``end`` on
-clean exit — mirrors the ``Prep.core_grippers()`` pattern in ``prep.py``.
+clean exit — mirrors the ``PrepDriver.core_grippers()`` pattern in ``prep.py``.
 """
 
 from __future__ import annotations
