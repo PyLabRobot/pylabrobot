@@ -11,6 +11,7 @@ fit a different one and the point moves with it.
 import math
 from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
+from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.manipulator import LinkBody
 from pylabrobot.resources.resource import Resource
@@ -215,6 +216,14 @@ class MechanicalGripper(LinkBody):
     rotation = data.get("rotation")
     if rotation is not None:
       gripper.rotation = cast(Rotation, deserialize(rotation, allow_marshal=allow_marshal))
+    # What `Resource.deserialize` restores after construction, since `__init__` takes none of it.
+    if data.get("barcode") is not None:
+      gripper.barcode = Barcode(**data["barcode"])
+    if data.get("preferred_pickup_location") is not None:
+      gripper.preferred_pickup_location = cast(
+        Coordinate, deserialize(data["preferred_pickup_location"])
+      )
+    gripper.metadata = dict(data.get("metadata") or {})
     for finger, child in carried:
       finger.assign_child_resource(
         Resource.deserialize(child, allow_marshal=allow_marshal), location=where(child)
