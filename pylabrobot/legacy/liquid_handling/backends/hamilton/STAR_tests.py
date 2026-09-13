@@ -32,6 +32,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.barcode import Barcode
+from pylabrobot.resources.errors import NoTipError
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
 from pylabrobot.resources.hamilton import STARDeck, STARLetDeck, hamilton_96_tiprack_300uL_filter
 
@@ -2770,3 +2771,39 @@ class TestXArmRangeEnforcement(unittest.IsolatedAsyncioTestCase):
     # The default single-arm STAR has no right X-arm, so a right-arm target is rejected.
     with self.assertRaises(ValueError):
       self.star._check_x_arm_reachable(400.0, "right")
+
+
+class TestSTARChatterboxTipPresenceRecovery(unittest.IsolatedAsyncioTestCase):
+  """Simulated STAR tip queries must report committed tracker state, not pending."""
+
+  async def asyncSetUp(self):
+    self.backend = STARChatterboxBackend()
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(self.backend, deck=self.deck)
+    self.tip_car = TIP_CAR_480_A00(name="tip carrier")
+    self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    self.deck.assign_child_resource(self.tip_car, rails=1)
+    await self.lh.setup()
+
+  async def asyncTearDown(self):
+    await self.lh.stop()
+
+  async def test_simulated_tip_queries_use_committed_state(self):
+    tip = self.tip_rack.get_item("A1").get_tip()
+    self.lh.head[0].add_tip(tip, commit=False)
+    self.assertEqual((await self.backend.request_tip_presence())[0], False)
+    with self.assertRaises(NoTipError):
+      await self.backend.request_tip_len_on_channel(0)
+
+    self.lh.head[0].commit()
+    self.assertEqual(await self.backend.request_tip_len_on_channel(0), tip.total_tip_length)
+    self.lh.head[0].remove_tip(commit=False)
+    self.assertEqual(await self.backend.request_tip_len_on_channel(0), tip.total_tip_length)
+
+    set_tip_tracking(enabled=True)
+    try:
+      self.assertEqual(await self.backend.head96_request_tip_presence(), 0)
+      self.lh.head96[0].add_tip(tip, commit=False)
+      self.assertEqual(await self.backend.head96_request_tip_presence(), 0)
+    finally:
+      set_tip_tracking(enabled=False)
