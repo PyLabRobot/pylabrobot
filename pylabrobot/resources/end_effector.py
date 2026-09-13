@@ -216,7 +216,8 @@ class MechanicalGripper(LinkBody):
     rotation = data.get("rotation")
     if rotation is not None:
       gripper.rotation = cast(Rotation, deserialize(rotation, allow_marshal=allow_marshal))
-    # What `Resource.deserialize` restores after construction, since `__init__` takes none of it.
+    # `MechanicalGripper.__init__` doesn't take these, so restore them as
+    # `Resource.deserialize` does.
     if data.get("barcode") is not None:
       gripper.barcode = Barcode(**data["barcode"])
     if data.get("preferred_pickup_location") is not None:
