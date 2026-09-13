@@ -1473,8 +1473,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
-    tip_spots = [op.resource for op in ops]
-    tips = set(cast(HamiltonTip, tip_spot.get_tip()) for tip_spot in tip_spots)
+    tips = set(cast(HamiltonTip, op.tip) for op in ops)
     if len(tips) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
     ttti = await self.get_or_assign_tip_type_index(tips.pop())
@@ -1484,9 +1483,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
     # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
+    if self._get_hamilton_tip([op.tip for op in ops]).tip_size == TipSize.LOW_VOLUME:
       max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
+    elif self._get_hamilton_tip([op.tip for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
       max_tip_length -= 2
 
     tip = ops[0].tip

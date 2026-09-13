@@ -360,6 +360,13 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       PICKUP_TIP_FORMAT,
     )
 
+  async def test_tip_tracking_pick_up(self):
+    set_tip_tracking(enabled=True)
+    try:
+      await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
+    finally:
+      set_tip_tracking(enabled=False)
+
   async def test_tip_drop_01(self):
     await self.test_tip_pickup_01()  # pick up tips first
     await self.lh.drop_tips(self.tip_rack["A1", "B1"])
