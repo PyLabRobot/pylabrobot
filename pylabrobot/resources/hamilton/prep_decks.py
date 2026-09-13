@@ -22,7 +22,7 @@ class PrepDeck(Deck):
   """Hamilton PREP deck: labware spots, trash, teaching tip site, and waste positions.
 
   Geometry aligns with the prep_tcp / MLPrep DeckConfiguration teaching site and waste
-  sites used by :class:`~pylabrobot.hamilton.prep.driver.features.pipettes.PrepChannels`
+  sites used by :class:`~pylabrobot.hamilton.prep.driver.features.pipettes.Pipettes`
   (``waste_rear``, ``waste_front``, ``waste_mph``). Validate coordinates on hardware
   (plastic mounts, calibration) before production use.
 

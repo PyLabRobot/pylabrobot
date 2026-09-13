@@ -1,4 +1,4 @@
-"""Tests for PrepGripperArm resource/coordinate pick and drop helpers."""
+"""Tests for CoreGripperArm resource/coordinate pick and drop helpers."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 
 from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.driver.features.core_grippers import PrepGripper, PrepGripperArm
+from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers, CoreGripperArm
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import HamiltonCoreGrippers, PrepDeck
@@ -28,11 +28,11 @@ def _record_send(prep: PrepDriver) -> list[Any]:
   return captured
 
 
-def _make_arm(deck: PrepDeck) -> PrepGripperArm:
-  backend = PrepGripper(client=AsyncMock(), channels=AsyncMock())
+def _make_arm(deck: PrepDeck) -> CoreGripperArm:
+  backend = CoreGrippers(client=AsyncMock(), channels=AsyncMock())
   backend.pick_up_at_location = AsyncMock()  # type: ignore[method-assign]
   backend.drop_at_location = AsyncMock()  # type: ignore[method-assign]
-  return PrepGripperArm(backend=backend, reference_resource=deck, grip_axis="y")
+  return CoreGripperArm(backend=backend, reference_resource=deck, grip_axis="y")
 
 
 def test_drop_location_matches_holder_geometry_and_offset():
@@ -208,7 +208,7 @@ def test_pick_up_tool_default_pre_position_moves_then_picks():
     deck = PrepDeck(with_core_grippers=True)
     p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
-    assert p.gripper is not None
+    assert p.core_grippers is not None
     captured = _record_send(p)
 
     await p.pick_up_core_grippers()
@@ -233,13 +233,13 @@ def test_pick_up_tool_pre_position_false_skips_move():
     deck = PrepDeck(with_core_grippers=True)
     p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
-    assert p.gripper is not None
+    assert p.core_grippers is not None
     captured = _record_send(p)
 
     mount = deck.get_resource("core_grippers")
     assert isinstance(mount, HamiltonCoreGrippers)
     loc = mount.get_location_wrt(deck)
-    await p.gripper.pick_up_tool(
+    await p.core_grippers.pick_up_tool(
       tool_position_x=loc.x,
       tool_position_z=loc.z,
       front_channel_position_y=loc.y + mount.front_channel_y_center,

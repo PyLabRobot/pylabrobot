@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # Channel v2 support probe expects pipettor interface 1 to expose these method IDs.
 _V2_PIPETTING_METHOD_IDS = frozenset(range(38, 44))
-# PrepHead8._probe_v2_support expects MPH interface 1 to expose these method IDs.
+# Head8._probe_v2_support expects MPH interface 1 to expose these method IDs.
 _V2_MPH_METHOD_IDS = frozenset(range(29, 35))
 # Methods the driver finds by name, at the ids MLPrep Runtime V3.0.20 declares them on interface 1.
 _MLPREP_NAMED_METHODS = {"IsParked": 34, "IsSpread": 35}
@@ -90,7 +90,7 @@ class PrepChatterboxClient(PrepClient):
   def __init__(
     self,
     num_channels: int = 2,
-    has_mph: bool = True,
+    head8_installed: bool = True,
     default_traverse_height: float = 180.0,
     use_v1_aspirate_dispense: bool = False,
     configuration: Optional[DeviceConfiguration] = None,
@@ -103,7 +103,7 @@ class PrepChatterboxClient(PrepClient):
         safe_speeds_enabled=True,
         default_traverse_height=default_traverse_height,
         num_channels=num_channels,
-        has_mph=has_mph,
+        head8_installed=head8_installed,
       )
     )
     self._pipettor_addr: Optional[Address] = None
@@ -177,7 +177,7 @@ class PrepChatterboxClient(PrepClient):
       )
     self._pipettor_addr = await self.resolve_path(PIPETTOR_OBJECT_PATH)
     self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
-    if self._canned_config.has_mph:
+    if self._canned_config.head8_installed:
       self._mph_addr = await self.resolve_path(MPH_OBJECT_PATH)
 
   async def stop(self):
@@ -257,7 +257,7 @@ class _PrepChatterboxSession(TCPSession):
     present = [PrepCmd.ChannelIndex.RearChannel, PrepCmd.ChannelIndex.FrontChannel][
       : config.num_channels or 0
     ]
-    if config.has_mph:
+    if config.head8_installed:
       present.append(PrepCmd.ChannelIndex.MPHChannel)
     self._responses[PrepCmd.PrepGetPresentChannels] = HoiParams().add(
       [int(c) for c in present], PrepCmd.EnumArray

@@ -1,4 +1,4 @@
-"""Hamilton Prep CoRe gripper and PrepGripperArm frontend helper."""
+"""Hamilton Prep CoRe gripper and CoreGripperArm frontend helper."""
 
 from __future__ import annotations
 
@@ -12,20 +12,20 @@ from pylabrobot.resources.resource_state import place_resource
 from .. import prep_commands as PrepCmd
 
 if TYPE_CHECKING:
-  from .pipettes import PrepChannels
+  from .pipettes import Pipettes
   from ..client import PrepClient
 
 logger = logging.getLogger(__name__)
 
 
-class PrepGripper:
+class CoreGrippers:
   """CoRe gripper for Prep — translates plate/tool ops to PrepCmd firmware commands.
 
   Tool management (pick_up_tool / drop_tool) is handled by the
-  :meth:`PrepDriver.core_grippers` context manager.
+  :meth:`PrepDriver.mounted_core_grippers` context manager.
   """
 
-  def __init__(self, *, client: "PrepClient", channels: "PrepChannels") -> None:
+  def __init__(self, *, client: "PrepClient", channels: "Pipettes") -> None:
     self._client = client
     self._channels = channels
 
@@ -185,17 +185,17 @@ class PrepGripper:
         tool_y_radius=tool_y_radius,
       )
     )
-    await self._channels.move_channels_to_safe_z()
+    await self._channels.move_to_safe_z()
 
   async def drop_tool(self, *, move_to_safe_z_first: bool = True) -> None:
     """Drop CoRe gripper tool (PrepDropTool, cmd=16)."""
     if move_to_safe_z_first:
-      await self._channels.move_channels_to_safe_z()
+      await self._channels.move_to_safe_z()
     await self._client.execute(PrepCmd.PrepDropTool())
 
 
-class PrepGripperArm:
-  """Resource-aware helper over :class:`PrepGripper` pose commands.
+class CoreGripperArm:
+  """Resource-aware helper over :class:`CoreGrippers` pose commands.
 
   Resource path: ``pick_up_resource`` / ``drop_resource`` resolve geometry from the
   resource tree (with optional ``offset``) and reassign the held resource on drop.
@@ -207,7 +207,7 @@ class PrepGripperArm:
 
   def __init__(
     self,
-    backend: PrepGripper,
+    backend: CoreGrippers,
     reference_resource: Resource,
     grip_axis: Literal["x", "y"] = "y",
   ) -> None:

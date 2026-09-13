@@ -2,8 +2,8 @@
 
 Owns MLPrep method commands (``PrepMethodBegin`` / ``PrepMethodEnd`` / ``PrepMethodAbort``)
 via ``PrepClient`` transport, and exposes an async context manager
-(:meth:`PrepMethodLifecycle.run`) that calls ``abort`` on exception and ``end`` on
-clean exit — mirrors the ``PrepDriver.core_grippers()`` pattern in ``prep.py``.
+(:meth:`MethodLifecycle.run`) that calls ``abort`` on exception and ``end`` on
+clean exit — mirrors the ``PrepDriver.mounted_core_grippers()`` pattern in ``prep.py``.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
   from ..client import PrepClient
 
 
-class PrepMethodLifecycle:
+class MethodLifecycle:
   """Method begin/end/abort + ``async with`` safety net."""
 
   def __init__(self, driver: "PrepClient"):
@@ -36,14 +36,14 @@ class PrepMethodLifecycle:
     await self._driver.execute(PrepCmd.PrepMethodAbort())
 
   @asynccontextmanager
-  async def run(self, automatic_pause: bool = False) -> AsyncIterator["PrepMethodLifecycle"]:
+  async def run(self, automatic_pause: bool = False) -> AsyncIterator["MethodLifecycle"]:
     """Bracket a liquid-handling block with ``begin`` / ``end``; ``abort`` on exception.
 
     Usage::
 
       async with prep.method.run():
-        await prep.channels.pick_up_tips(...)
-        await prep.channels.aspirate(...)
+        await prep.pipettes.pick_up_tips(...)
+        await prep.pipettes.aspirate(...)
     """
     await self.begin(automatic_pause=automatic_pause)
     try:

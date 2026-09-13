@@ -1,4 +1,4 @@
-"""Tests for PrepHead8.
+"""Tests for Head8.
 
 Covers core logic that must survive refactors:
   - _resolve_probe_positions: pitch validation for 96-well columns and interleaved 384-well
@@ -21,7 +21,7 @@ from pylabrobot.hamilton.prep.driver.features.pipettes import (
   LLDMode,
   _build_pipettor_gantry_move_parameters,
 )
-from pylabrobot.hamilton.prep.driver.features.head8 import PROBE_PITCH_MM, PrepHead8
+from pylabrobot.hamilton.prep.driver.features.head8 import PROBE_PITCH_MM, Head8
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import Cor_Axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
@@ -39,8 +39,8 @@ def _make_deck():
   return deck, tip_rack, src_plate, dst_plate
 
 
-def _make_head8() -> PrepHead8:
-  return PrepHead8(client=None)  # type: ignore[arg-type]
+def _make_head8() -> Head8:
+  return Head8(client=None)  # type: ignore[arg-type]
 
 
 def _record_send(prep: PrepDriver) -> tuple[list[Any], Any]:
@@ -122,12 +122,12 @@ def test_validate_container_span_too_narrow():
 
 
 # ---------------------------------------------------------------------------
-# Group 2: all-8-channel enforcement + PrepHead8 wiring
+# Group 2: all-8-channel enforcement + Head8 wiring
 # ---------------------------------------------------------------------------
 
 
 def test_partial_channel_pickup_raises_value_error():
-  """PrepHead8 rejects pick_up_tips8 with fewer than all 8 channels."""
+  """Head8 rejects pick_up_tips8 with fewer than all 8 channels."""
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
@@ -150,7 +150,7 @@ def test_head8_present_after_chatterbox_setup():
     p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
     assert p.head8 is not None
-    assert isinstance(p.head8, PrepHead8)
+    assert isinstance(p.head8, Head8)
     await p.stop()
 
   asyncio.run(_run())
@@ -229,7 +229,7 @@ def test_build_pipettor_gantry_move_parameters_maps_rear_front():
 
 
 def test_head8_move_to_position_sends_mph_wire_commands():
-  """PrepHead8.move_to_position sends MphMoveToPosition / ViaLane."""
+  """Head8.move_to_position sends MphMoveToPosition / ViaLane."""
 
   async def _run() -> None:
     deck, _, _, _ = _make_deck()
@@ -305,7 +305,7 @@ def test_pick_up_tips_pre_position_false_skips_mph_move():
 
 
 def test_head8_partial_channel_aspirate_raises_value_error():
-  """PrepHead8 rejects aspirate8 with fewer than all 8 channels."""
+  """Head8 rejects aspirate8 with fewer than all 8 channels."""
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()

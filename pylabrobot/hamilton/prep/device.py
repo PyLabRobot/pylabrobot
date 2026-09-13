@@ -3,12 +3,12 @@
 import logging
 from typing import Optional
 
-from pylabrobot.hamilton.prep.driver.features.calibration import PrepCalibration
-from pylabrobot.hamilton.prep.driver.features.pipettes import PrepChannels
-from pylabrobot.hamilton.prep.driver.features.core_grippers import PrepGripper
-from pylabrobot.hamilton.prep.driver.features.head8 import PrepHead8
-from pylabrobot.hamilton.prep.driver.features.method import PrepMethodLifecycle
-from pylabrobot.hamilton.prep.driver.features.x_arm import PrepXArm
+from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
+from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
+from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
+from pylabrobot.hamilton.prep.driver.features.head8 import Head8
+from pylabrobot.hamilton.prep.driver.features.method import MethodLifecycle
+from pylabrobot.hamilton.prep.driver.features.x_arm import XArm
 from pylabrobot.hamilton.prep.driver.master import PrepDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import PrepDeck
@@ -80,32 +80,32 @@ class PrepDevice(Resource):
   # Read through: they do not exist until setup has run.
 
   @property
-  def x_arm(self) -> Optional[PrepXArm]:
+  def x_arm(self) -> Optional[XArm]:
     """The X-arm the pipetting channels ride."""
     return self.driver.x_arm
 
   @property
-  def channels(self) -> Optional[PrepChannels]:
+  def pipettes(self) -> Optional[Pipettes]:
     """The pipetting channels."""
-    return self.driver.channels
+    return self.driver.pipettes
 
   @property
-  def head8(self) -> Optional[PrepHead8]:
+  def head8(self) -> Optional[Head8]:
     """The 8-channel head, on a device that has one."""
     return self.driver.head8
 
   @property
-  def gripper(self) -> Optional[PrepGripper]:
+  def core_grippers(self) -> Optional[CoreGrippers]:
     """The CoRe gripper."""
-    return self.driver.gripper
+    return self.driver.core_grippers
 
   @property
-  def method(self) -> Optional[PrepMethodLifecycle]:
+  def method(self) -> Optional[MethodLifecycle]:
     """The method lifecycle."""
     return self.driver.method
 
   @property
-  def calibration(self) -> Optional[PrepCalibration]:
+  def calibration(self) -> Optional[Calibration]:
     """Calibration."""
     return self.driver.calibration
 

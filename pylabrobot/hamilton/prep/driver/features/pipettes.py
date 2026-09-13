@@ -1,4 +1,4 @@
-"""PrepChannels: dual-channel pipettor ops plus per-channel discovery.
+"""Pipettes: dual-channel pipettor ops plus per-channel discovery.
 
 Channel-scoped topology discovery, bounds parsing, and per-channel firmware
 queries live alongside tip pickup/drop and aspirate/dispense orchestration.
@@ -24,6 +24,7 @@ from typing import (
   Any,
   Awaitable,
   Callable,
+  Dict,
   Generic,
   List,
   Literal,
@@ -98,7 +99,7 @@ _OpT = TypeVar("_OpT", bound=_PipetteTransfer)
 
 
 # =============================================================================
-# Shared pure helpers (also imported by PrepHead8)
+# Shared pure helpers (also imported by Head8)
 # =============================================================================
 
 
@@ -417,7 +418,7 @@ class ChannelDriveMap:
 
 # ---------------------------------------------------------------------------
 # Firmware-tree discovery — module-level so it can be called independently of
-# any PrepChannels instance (used when building channels in PrepDriver.setup, plus by
+# any Pipettes instance (used when building channels in PrepDriver.setup, plus by
 # diagnostic notebooks that hold only a client).
 # ---------------------------------------------------------------------------
 
@@ -526,7 +527,7 @@ async def discover_channel_drives(
 # ---------------------------------------------------------------------------
 
 
-class PrepChannelBounds(TypedDict):
+class ChannelBounds(TypedDict):
   """Firmware-reported movement limits for one pipettor channel (mm)."""
 
   x_min: float
@@ -537,7 +538,7 @@ class PrepChannelBounds(TypedDict):
   z_max: float
 
 
-async def request_channel_bounds(client: "PrepClient") -> List[PrepChannelBounds]:
+async def request_channel_bounds(client: "PrepClient") -> List[ChannelBounds]:
   """Request per-channel movement bounds from the firmware (cmd=10).
 
   Returns one dict per channel (keys ``x_min``, ``x_max``, ``y_min``, ``y_max``,
@@ -553,7 +554,7 @@ async def request_channel_bounds(client: "PrepClient") -> List[PrepChannelBounds
   except KeyError:
     return []
   channel_indices = {int(value): index for index, value in _CHANNEL_INDEX.items()}
-  indexed: list[tuple[int, PrepChannelBounds]] = []
+  indexed: list[tuple[int, ChannelBounds]] = []
   for bounds in response.bounds:
     index = channel_indices.get(int(bounds.channel))
     if index is not None:
@@ -574,15 +575,15 @@ async def request_channel_bounds(client: "PrepClient") -> List[PrepChannelBounds
 
 
 # ---------------------------------------------------------------------------
-# PrepPIPChannel — thin per-channel facade owned by PrepChannels.channels
+# PipetteChannel — thin per-channel facade owned by Pipettes.channels
 # ---------------------------------------------------------------------------
 
 
-class PrepPIPChannel:
+class PipetteChannel:
   """Per-channel facade: drive addresses, movement bounds, firmware-version queries.
 
   Instances are constructed by :func:`build_prep_channels` from :meth:`PrepDriver.setup`
-  and exposed as ``prep.channels.channels[i]`` (or the dual-channel peer).
+  and exposed as ``prep.pipettes.channels[i]`` (or the dual-channel peer).
   """
 
   def __init__(
@@ -593,7 +594,7 @@ class PrepPIPChannel:
     sleeve_sensor: Optional[Address] = None,
     zdrive: Optional[Address] = None,
     node_info: Optional[Address] = None,
-    bounds: Optional[PrepChannelBounds] = None,
+    bounds: Optional[ChannelBounds] = None,
   ) -> None:
     self.index = index
     self._client = client
@@ -604,7 +605,7 @@ class PrepPIPChannel:
 
   def __repr__(self) -> str:
     return (
-      f"PrepPIPChannel(index={self.index}, node_info={self.node_info!r}, "
+      f"PipetteChannel(index={self.index}, node_info={self.node_info!r}, "
       f"bounds={'set' if self.bounds else 'unset'})"
     )
 
@@ -632,7 +633,7 @@ async def build_prep_channels(
   *,
   root_name: str = "Channel Root",
   num_channels: Optional[int] = None,
-) -> List[PrepPIPChannel]:
+) -> List[PipetteChannel]:
   """Build per-channel facades, resolve drive addresses, fetch bounds.
 
   If ``num_channels`` is omitted, uses the configuration's ``num_channels``.
@@ -653,10 +654,10 @@ async def build_prep_channels(
   def _drive_addr(seq: List[Address], i: int) -> Optional[Address]:
     return seq[i] if i < len(seq) else None
 
-  channels: List[PrepPIPChannel] = []
+  channels: List[PipetteChannel] = []
   for i in range(num_channels):
     channels.append(
-      PrepPIPChannel(
+      PipetteChannel(
         index=i,
         client=client,
         sleeve_sensor=_drive_addr(drive_map.sleeve_sensor_addrs, i),
@@ -669,7 +670,7 @@ async def build_prep_channels(
 
 
 # =============================================================================
-# PrepChannels — channel indices and deck routing
+# Pipettes — channel indices and deck routing
 # =============================================================================
 
 
@@ -695,7 +696,7 @@ def _build_pipettor_gantry_move_parameters(
     ):
       raise ValueError(
         f"Pipettor gantry move does not support channel index {ch} (enum {enum_ch!r}). "
-        "MPH motion uses PrepHead8 / MphMoveToPosition on MLPrepRoot.MphRoot.MPH."
+        "MPH motion uses Head8 / MphMoveToPosition on MLPrepRoot.MphRoot.MPH."
       )
     axis_parameters.append(
       PrepCmd.ChannelYZMoveParameters(
@@ -779,7 +780,7 @@ class _ChannelContext(Generic[_OpT]):
   ch_segments: dict[int, list[PrepCmd.SegmentDescriptor]]
 
 
-class PrepChannels:
+class Pipettes:
   """Dual-channel pipettor for Hamilton Prep.
 
   Narrow constructor: ``client`` (transport + JIT firmware-path resolve) and
@@ -803,11 +804,11 @@ class PrepChannels:
     self._driver = driver
     self.deck = deck
     self._user_traverse_height: Optional[float] = default_traverse_height
-    self._channel_bounds: list[PrepChannelBounds] = []
+    self._channel_bounds: list[ChannelBounds] = []
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self._supports_v2_pipetting: Optional[bool] = None
     self.setup_finished: bool = False
-    self.channels: List[PrepPIPChannel] = []
+    self.channels: List[PipetteChannel] = []
     self.head: dict[int, TipTracker] = {}
     # One per channel, hung from the X-arm's resource when the driver was given a deck. Setup puts
     # them there; reads and moves keep them in step.
@@ -987,7 +988,7 @@ class PrepChannels:
       override,
       v2_error_hint=(
         "v2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
-        "Use command_version='v1' or pass use_v1_aspirate_dispense=True to PrepChannels."
+        "Use command_version='v1' or pass use_v1_aspirate_dispense=True to Pipettes."
       ),
     )
 
@@ -1005,7 +1006,7 @@ class PrepChannels:
     cfg = self._configuration
     logger.info(
       "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
-      "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, has_mph=%s",
+      "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, head8_installed=%s",
       cfg.has_enclosure,
       cfg.safe_speeds_enabled,
       cfg.default_traverse_height,
@@ -1013,7 +1014,7 @@ class PrepChannels:
       len(cfg.deck_sites),
       len(cfg.waste_sites),
       cfg.num_channels,
-      cfg.has_mph,
+      cfg.head8_installed,
     )
 
     # Per-channel bounds are attached to ``self.channels`` by build_prep_channels.
@@ -1037,7 +1038,7 @@ class PrepChannels:
       if not supported:
         raise RuntimeError(
           "V2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
-          "Pass use_v1_aspirate_dispense=True to PrepChannels to use v1 commands (cmd 1-6) instead."
+          "Pass use_v1_aspirate_dispense=True to Pipettes to use v1 commands (cmd 1-6) instead."
         )
       self._supports_v2_pipetting = True
       logger.info("V2 aspirate/dispense support: True")
@@ -1083,10 +1084,10 @@ class PrepChannels:
     return n
 
   @property
-  def has_mph(self) -> bool:
+  def head8_installed(self) -> bool:
     """True if the 8-channel Multi-Pipetting Head (8MPH) is present. Read from the driver's configuration."""
     try:
-      return bool(self._configuration.has_mph)
+      return bool(self._configuration.head8_installed)
     except RuntimeError:
       return False
 
@@ -1124,7 +1125,7 @@ class PrepChannels:
     raise RuntimeError(
       "Default traverse height is required for this operation but could not be determined. "
       "Either pass final_z explicitly to this call, or set it via "
-      "PrepChannels(..., default_traverse_height=<mm>) or set_default_traverse_height(<mm>). "
+      "Pipettes(..., default_traverse_height=<mm>) or set_default_traverse_height(<mm>). "
       "If the instrument supports it, the value is also probed during setup(); ensure setup() completed successfully."
     ) from None
 
@@ -2234,7 +2235,7 @@ class PrepChannels:
   # Firmware version queries (per-channel; box-level queries live on PrepClient)
   # ---------------------------------------------------------------------------
 
-  async def request_pip_channel_version(self, channel: int) -> Optional[str]:
+  async def request_firmware_version(self, channel: int) -> Optional[str]:
     """Firmware version string for pipettor channel (0=rearmost)."""
     if channel >= len(self.channels):
       return None
@@ -2244,7 +2245,7 @@ class PrepChannels:
   # Channel position queries
   # ---------------------------------------------------------------------------
 
-  async def request_channel_bounds(self) -> list[PrepChannelBounds]:
+  async def request_channel_bounds(self) -> list[ChannelBounds]:
     """Per-channel movement bounds (PipettorService.GetChannelBounds).
 
     Thin delegation to :func:`request_channel_bounds`.
@@ -2265,6 +2266,22 @@ class PrepChannels:
     Returns:
       List of Coordinate, one per channel.
     """
+    positions = await self._unchecked_fw_request_positions()
+    # The device is the authority on where the channels are, so what it answers is recorded.
+    self._record_positions(positions)
+    return positions
+
+  async def _unchecked_fw_request_positions(self) -> list[Coordinate]:
+    """Read where every channel is, without recording it.
+
+    The reading alone. `request_channel_positions`, `request_y_positions` and
+    `request_tool_bottom_z_positions` are the ones that also record it on the resources. Z is the
+    bottom of the tip on a channel carrying one, and the end of its shaft otherwise.
+
+    Returns:
+      One Coordinate per channel, ordered by channel index (0=rearmost). Empty when the device did not
+      answer with positions.
+    """
     try:
       resp_obj = await self._client.execute(PrepCmd.PrepGetPositions())
     except (HoiError, ChannelizedError):
@@ -2283,15 +2300,12 @@ class PrepChannels:
         indexed.append((ch_idx, Coordinate(x=p.position_x, y=p.position_y, z=p.position_z)))
 
     indexed.sort(key=lambda pair: pair[0])
-    positions = [coord for _, coord in indexed]
-    # The device is the authority on where the channels are, so what it answers is recorded.
-    self._record_positions(positions)
-    return positions
+    return [coord for _, coord in indexed]
 
-  async def request_x_pos_channel_n(self, channel_idx: int = 0) -> float:
+  async def request_x_position(self, channel_idx: int = 0) -> float:
     """Request X position of pipettor channel n (in mm).
 
-    Analogous to STARBackend.request_x_pos_channel_n().
+    Analogous to STARBackend.request_x_position().
 
     Args:
       channel_idx: Channel index (0=rearmost).
@@ -2304,10 +2318,10 @@ class PrepChannels:
       raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
     return float(positions[channel_idx].x)
 
-  async def request_y_pos_channel_n(self, channel_idx: int) -> float:
+  async def request_y_position(self, channel_idx: int) -> float:
     """Request Y position of pipettor channel n (in mm).
 
-    Analogous to STARBackend.request_y_pos_channel_n().
+    Analogous to STARBackend.request_y_position().
 
     Args:
       channel_idx: Channel index (0=rearmost).
@@ -2336,29 +2350,46 @@ class PrepChannels:
       raise ValueError(f"Channel {channel_idx} out of range ({len(positions)} channels).")
     return float(positions[channel_idx].z)
 
-  async def get_channels_y_positions(self) -> dict[int, float]:
-    """Request Y positions of all channels.
+  async def request_y_positions(self) -> List[float]:
+    """Request where every channel is along Y, in one command.
 
-    Analogous to STARBackend.get_channels_y_positions().
-
-    Returns:
-      Dict mapping channel index (0=rearmost) to Y position in mm.
-    """
-    positions = await self.request_channel_positions()
-    return {i: coord.y for i, coord in enumerate(positions)}
-
-  async def get_channels_z_positions(self) -> dict[int, float]:
-    """Request Z positions of all channels.
-
-    Analogous to STARBackend.get_channels_z_positions().
+    `GetPositions` answers for all of them at once. Each answer is recorded on the resource modelling
+    that channel, as the STAR driver's `request_y_positions` records it.
 
     Returns:
-      Dict mapping channel index (0=rearmost) to Z position in mm.
+      The position of each channel in mm, back to front.
     """
-    positions = await self.request_channel_positions()
-    return {i: coord.z for i, coord in enumerate(positions)}
+    positions = [coord.y for coord in await self._unchecked_fw_request_positions()]
+    for channel, y in enumerate(positions):
+      self.update_location_by_reference_point(channel, y=y)
+    return positions
 
-  async def request_tip_bottom_z_position(self, channel_idx: int) -> float:
+  async def request_tool_bottom_z_positions(self) -> Dict[int, float]:
+    """Read where the bottom of the tip on every channel is.
+
+    Every channel has to carry one, as the STAR driver requires: a channel with no tip has no tool
+    bottom. Records each channel's shaft end on the resource modelling it.
+
+    Returns:
+      The bottom of each channel's tip in mm, keyed by channel, 0-indexed from the back.
+
+    Raises:
+      ValueError: If any channel carries no tip.
+    """
+    tips = await self.sense_tip_presence()
+    missing = [channel for channel in range(self.num_channels) if channel >= len(tips) or not tips[channel]]
+    if missing:
+      raise ValueError(f"channels {missing} carry no tip, so they have no tool bottom to read")
+    bottoms = {
+      channel: coord.z for channel, coord in enumerate(await self._unchecked_fw_request_positions())
+    }
+    # What comes back is each tip's bottom, but the model references the ends of the shafts, so those
+    # are read for the model.
+    for channel in bottoms:
+      self.update_location_by_reference_point(channel, z=await self.request_stop_disc_z_position(channel))
+    return bottoms
+
+  async def request_tool_bottom_z_position(self, channel_idx: int) -> float:
     """Request the Z position of the tip bottom on the specified channel.
 
     GetPositions returns tip-adjusted Z when a tip is mounted — the reported Z
@@ -2368,7 +2399,7 @@ class PrepChannels:
 
     Requires a tip to be mounted (verified via sleeve sensor).
 
-    Analogous to STARBackend.request_tip_bottom_z_position().
+    Analogous to STARBackend.request_tool_bottom_z_position().
 
     Args:
       channel_idx: Channel index (0=rearmost).
@@ -2385,7 +2416,7 @@ class PrepChannels:
 
     return await self.request_z_pos_channel_n(channel_idx)
 
-  async def request_probe_z_position(self, channel_idx: int) -> float:
+  async def request_stop_disc_z_position(self, channel_idx: int) -> float:
     """Request the Z position of the channel probe/head (excluding tip).
 
     Since GetPositions returns tip-adjusted Z when a tip is mounted, this
@@ -2394,7 +2425,7 @@ class PrepChannels:
 
     When no tip is mounted, returns the same value as request_z_pos_channel_n().
 
-    Analogous to STARBackend.request_probe_z_position().
+    Analogous to STARBackend.request_stop_disc_z_position().
 
     Args:
       channel_idx: Channel index (0=rearmost).
@@ -2433,14 +2464,14 @@ class PrepChannels:
   # Per-axis channel movement
   # ---------------------------------------------------------------------------
 
-  async def move_channel_x(self, channel_idx: int, x: float) -> None:
+  async def move_to_x_position(self, channel_idx: int, x: float) -> None:
     """Move the gantry X axis to a position (in mm).
 
     On the Prep, X is shared across all channels (single gantry). The channel_idx
     parameter is accepted for STAR API compatibility but does not affect which
     channel moves — all channels move together in X.
 
-    Analogous to STARBackend.move_channel_x().
+    Analogous to STARBackend.move_to_x_position().
 
     Args:
       channel_idx: Channel index (0=rearmost). Used to read current Y/Z.
@@ -2453,10 +2484,10 @@ class PrepChannels:
       x, positions[channel_idx].y, positions[channel_idx].z, use_channels=channel_idx
     )
 
-  async def move_channel_y(self, channel_idx: int, y: float) -> None:
+  async def move_to_y_position(self, channel_idx: int, y: float) -> None:
     """Move a channel in the Y direction (in mm).
 
-    Analogous to STARBackend.move_channel_y().
+    Analogous to STARBackend.move_to_y_position().
 
     Args:
       channel_idx: Channel index (0=rearmost).
@@ -2538,7 +2569,7 @@ class PrepChannels:
     an X equivalent, though none was found in introspection.
     """
     raise NotImplementedError(
-      "clld_probe_x_position_using_channel is not yet implemented for PrepChannels."
+      "clld_probe_x_position_using_channel is not yet implemented for Pipettes."
     )
 
   async def clld_probe_y_position_using_channel(self, *args, **kwargs):
@@ -2550,7 +2581,7 @@ class PrepChannels:
     which suggest Y-axis seeking capability.
     """
     raise NotImplementedError(
-      "clld_probe_y_position_using_channel is not yet implemented for PrepChannels."
+      "clld_probe_y_position_using_channel is not yet implemented for Pipettes."
     )
 
   async def clld_probe_z_height_using_channel(self, *args, **kwargs):
@@ -2578,7 +2609,7 @@ class PrepChannels:
     - PipettorService.MeasureLldFrequency [1:6] for sensor health checks
     """
     raise NotImplementedError(
-      "clld_probe_z_height_using_channel is not yet implemented for PrepChannels."
+      "clld_probe_z_height_using_channel is not yet implemented for Pipettes."
     )
 
   async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
@@ -2593,14 +2624,14 @@ class PrepChannels:
       but it was not found in introspection.
     """
     raise NotImplementedError(
-      "ztouch_probe_z_height_using_channel is not yet implemented for PrepChannels."
+      "ztouch_probe_z_height_using_channel is not yet implemented for Pipettes."
     )
 
   # ---------------------------------------------------------------------------
   # Pipettor convenience methods
   # ---------------------------------------------------------------------------
 
-  async def move_channels_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
+  async def move_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
     """Move the given channels' Z axes up to safe (traverse) height (cmd=28).
 
     Use after picking up a tool or before returning a tool to avoid collisions
@@ -2616,14 +2647,25 @@ class PrepChannels:
       channels = sorted(set(channels))
     if not channels:
       return
-    assert max(channels) < self.num_channels, (
-      f"channel index out of range (valid: 0..{self.num_channels - 1})"
-    )
-    channel_enums = [_CHANNEL_INDEX[ch] for ch in channels]
+    if max(channels) >= self.num_channels or min(channels) < 0:
+      raise ValueError(
+        f"channels must be between 0 and {self.num_channels - 1}, are {channels}"
+      )
     try:
-      await self._client.execute(PrepCmd.PrepMoveZUpToSafe(channels=channel_enums))
+      await self._unchecked_fw_move_z_up_to_safe(channels)
+      # Nothing to record as asked: the firmware chooses the height. The read below records it.
     finally:
       await self._record_where_they_stopped()
+
+  async def _unchecked_fw_move_z_up_to_safe(self, channels: List[int]) -> None:
+    """Send MoveZUpToSafe for these channels. Nothing is guarded and nothing is recorded.
+
+    Args:
+      channels: channel indices, 0-indexed from the back.
+    """
+    await self._client.execute(
+      PrepCmd.PrepMoveZUpToSafe(channels=[_CHANNEL_INDEX[ch] for ch in channels])
+    )
 
   async def move_to_position(
     self,
@@ -2648,14 +2690,14 @@ class PrepChannels:
       # int or int-like (e.g. numpy.int64); single channel
       channels = [int(use_channels)]
     channels = sorted(channels)
-    if channels:
-      assert max(channels) < self.num_channels, (
-        f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
+    if channels and (max(channels) >= self.num_channels or min(channels) < 0):
+      raise ValueError(
+        f"use_channels must be between 0 and {self.num_channels - 1}, are {channels}"
       )
-    if isinstance(y, list):
-      assert len(y) == len(channels), "len(y) must equal len(use_channels)"
-    if isinstance(z, list):
-      assert len(z) == len(channels), "len(z) must equal len(use_channels)"
+    if isinstance(y, list) and len(y) != len(channels):
+      raise ValueError(f"y names {len(y)} positions for {len(channels)} channels")
+    if isinstance(z, list) and len(z) != len(channels):
+      raise ValueError(f"z names {len(z)} positions for {len(channels)} channels")
 
     # Validate against per-channel movement bounds (cached from firmware at setup).
     y_vals = y if isinstance(y, list) else [y] * len(channels)
@@ -2673,17 +2715,40 @@ class PrepChannels:
         if z_i > b["z_max"]:
           raise ValueError(f"z={z_i} above channel {ch} maximum {b['z_max']:.1f}")
 
-    move_parameters = _build_pipettor_gantry_move_parameters(x, channels, y, z)
-
     try:
-      if via_lane:
-        await self._client.execute(
-          PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
-        )
-      else:
-        await self._client.execute(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+      await self._unchecked_fw_move_to_position(x, channels, y, z, via_lane=via_lane)
+      # What was asked, recorded as soon as the command answers; the read below replaces it with
+      # where the channels actually stopped.
+      arm = None if self._driver is None else self._driver.x_arm
+      if arm is not None:
+        arm.update_location_by_reference_point(x)
+      for channel, y_i, z_i in zip(channels, y_vals, z_vals):
+        self.update_location_by_reference_point(channel, y=y_i, z=z_i)
     finally:
       await self._record_where_they_stopped()
+
+  async def _unchecked_fw_move_to_position(
+    self,
+    x: float,
+    channels: List[int],
+    y: Union[float, List[float]],
+    z: Union[float, List[float]],
+    via_lane: bool = False,
+  ) -> None:
+    """Send the gantry move (cmd=26, or 27 via the lane). Nothing is guarded and nothing is recorded.
+
+    Args:
+      x: where to send the gantry, in mm.
+      channels: which channels, sorted, 0-indexed from the back.
+      y: where to send each channel along Y, in mm; one value for all, or one per channel.
+      z: where to send each channel along Z, in mm; one value for all, or one per channel.
+      via_lane: travel by the firmware's lane rather than directly.
+    """
+    move_parameters = _build_pipettor_gantry_move_parameters(x, channels, y, z)
+    if via_lane:
+      await self._client.execute(PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters))
+    else:
+      await self._client.execute(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
 
   async def stop(self) -> None:
     self.setup_finished = False

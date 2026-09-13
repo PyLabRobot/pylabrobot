@@ -1,4 +1,4 @@
-"""PrepPIPChannel facade + enumeration against the chatterbox."""
+"""PipetteChannel facade + enumeration against the chatterbox."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from pylabrobot.hamilton.prep import PrepDriver
-from pylabrobot.hamilton.prep.driver.features.pipettes import PrepChannels, PrepPIPChannel
+from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes, PipetteChannel
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck, hamilton_96_tiprack_50uL_NTR
 from pylabrobot.resources.tip_tracker import set_tip_tracking
@@ -19,16 +19,16 @@ def _run(coro):
 
 
 def test_channels_match_configuration_num_channels():
-  """PrepChannels.channels length matches the configuration's num_channels on a default chatterbox."""
+  """Pipettes.channels length matches the configuration's num_channels on a default chatterbox."""
 
   async def _t():
     p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
     await p.setup()
-    assert p.channels is not None
-    assert isinstance(p.channels, PrepChannels)
-    assert len(p.channels.channels) == p.configuration.num_channels
-    for i, ch in enumerate(p.channels.channels):
-      assert isinstance(ch, PrepPIPChannel)
+    assert p.pipettes is not None
+    assert isinstance(p.pipettes, Pipettes)
+    assert len(p.pipettes.channels) == p.configuration.num_channels
+    for i, ch in enumerate(p.pipettes.channels):
+      assert isinstance(ch, PipetteChannel)
       assert ch.index == i
     await p.stop()
 
@@ -41,9 +41,9 @@ def test_channels_attach_bounds_even_when_empty_offline():
   async def _t():
     p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
     await p.setup()
-    assert p.channels is not None
-    assert isinstance(p.channels, PrepChannels)
-    for ch in p.channels.channels:
+    assert p.pipettes is not None
+    assert isinstance(p.pipettes, Pipettes)
+    for ch in p.pipettes.channels:
       assert ch.bounds is None
     await p.stop()
 
@@ -60,23 +60,23 @@ def test_channels_tip_trackers_pick_and_drop():
       tip_rack = deck[3] = hamilton_96_tiprack_50uL_NTR(name="ntr", with_tips=True)
       p = PrepDriver(deck=deck, chatterbox=True)
       await p.setup()
-      assert p.channels is not None
+      assert p.pipettes is not None
       spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")]
-      n = min(2, p.channels.num_channels)
+      n = min(2, p.pipettes.num_channels)
       spots = spots[:n]
       use = list(range(n))
       assert all(s.has_tip() for s in spots)
-      assert all(t is None for t in p.channels.get_mounted_tips()[:n])
+      assert all(t is None for t in p.pipettes.get_mounted_tips()[:n])
 
-      await p.channels.pick_up_tips(spots, use_channels=use)
+      await p.pipettes.pick_up_tips(spots, use_channels=use)
       assert all(not s.has_tip() for s in spots)
-      mounted = p.channels.get_mounted_tips()
+      mounted = p.pipettes.get_mounted_tips()
       assert all(mounted[i] is not None for i in use)
-      assert all(p.channels.head[i].has_tip for i in use)
+      assert all(p.pipettes.head[i].has_tip for i in use)
 
-      await p.channels.drop_tips(spots, use_channels=use)
+      await p.pipettes.drop_tips(spots, use_channels=use)
       assert all(s.has_tip() for s in spots)
-      assert all(not p.channels.head[i].has_tip for i in use)
+      assert all(not p.pipettes.head[i].has_tip for i in use)
       await p.stop()
     finally:
       set_tip_tracking(False)
@@ -96,8 +96,8 @@ def test_channels_volume_trackers_aspirate_dispense():
       plate = deck[0] = cor_axy_96_wellplate_500uL_Ub("plate")
       p = PrepDriver(deck=deck, chatterbox=True)
       await p.setup()
-      assert p.channels is not None
-      n = min(2, p.channels.num_channels)
+      assert p.pipettes is not None
+      n = min(2, p.pipettes.num_channels)
       spots = [tip_rack.get_item("A1"), tip_rack.get_item("B1")][:n]
       use = list(range(n))
       src = plate["A1:B1"][:n]
@@ -106,8 +106,8 @@ def test_channels_volume_trackers_aspirate_dispense():
       for well in src:
         well.tracker.set_volume(100.0)
 
-      await p.channels.pick_up_tips(spots, use_channels=use)
-      await p.channels.aspirate(
+      await p.pipettes.pick_up_tips(spots, use_channels=use)
+      await p.pipettes.aspirate(
         src,
         vols=vols,
         use_channels=use,
@@ -116,10 +116,10 @@ def test_channels_volume_trackers_aspirate_dispense():
       for well in src:
         assert well.tracker.get_used_volume() == pytest.approx(80.0)
       for ch in use:
-        tip = p.channels.head[ch].get_tip()
+        tip = p.pipettes.head[ch].get_tip()
         assert tip.tracker.get_used_volume() == pytest.approx(20.0)
 
-      await p.channels.dispense(
+      await p.pipettes.dispense(
         dst,
         vols=vols,
         use_channels=use,
@@ -128,10 +128,10 @@ def test_channels_volume_trackers_aspirate_dispense():
       for well in dst:
         assert well.tracker.get_used_volume() == pytest.approx(20.0)
       for ch in use:
-        tip = p.channels.head[ch].get_tip()
+        tip = p.pipettes.head[ch].get_tip()
         assert tip.tracker.get_used_volume() == pytest.approx(0.0)
 
-      await p.channels.drop_tips(spots, use_channels=use)
+      await p.pipettes.drop_tips(spots, use_channels=use)
       await p.stop()
     finally:
       set_tip_tracking(False)

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -6,9 +7,10 @@ import pytest
 from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep import PrepChatterboxClient
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.driver.features.pipettes import PrepChannels
+from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.prep.driver.client import PrepClient
-from pylabrobot.hamilton.prep.driver.features.core_grippers import PrepGripper, PrepGripperArm
+from pylabrobot.hamilton.prep.driver.configuration import read_configuration, to_jsonable
+from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers, CoreGripperArm
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.resources.hamilton import STARLetDeck
@@ -47,12 +49,12 @@ def test_chatterbox_sets_resolved_interfaces_and_channels():
     addr = await p.client.resolve_path("MLPrepRoot.PipettorRoot.Pipettor")
     assert isinstance(addr, Address)
     assert p.configuration.num_channels == 2
-    assert p.channels is not None
-    assert isinstance(p.channels, PrepChannels)
-    assert p.channels.num_channels == 2
-    assert p.channels.setup_finished is True
+    assert p.pipettes is not None
+    assert isinstance(p.pipettes, Pipettes)
+    assert p.pipettes.num_channels == 2
+    assert p.pipettes.setup_finished is True
     # Default setup: use_v1_aspirate_dispense=False → v2 probe passes (chatterbox stubs).
-    assert p.channels._supports_v2_pipetting is True
+    assert p.pipettes._supports_v2_pipetting is True
 
     await p.stop()
     # Kept after the link closes, as the STAR driver keeps it, so a reading can still be saved.
@@ -66,10 +68,10 @@ def test_chatterbox_use_v1_skips_v2_probe():
     deck = STARLetDeck()
     p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup(use_v1_aspirate_dispense=True)
-    assert p.channels is not None
-    assert isinstance(p.channels, PrepChannels)
-    assert p.channels.setup_finished is True
-    assert p.channels._supports_v2_pipetting is False
+    assert p.pipettes is not None
+    assert isinstance(p.pipettes, Pipettes)
+    assert p.pipettes.setup_finished is True
+    assert p.pipettes._supports_v2_pipetting is False
 
     await p.stop()
 
@@ -142,15 +144,17 @@ def test_prep_device_wires_calibration_after_setup():
     deck = STARLetDeck()
     p = PrepDriver(deck=deck, chatterbox=True)
     await p.setup()
-    assert p.channels.num_channels == p.configuration.num_channels
-    assert p.channels.has_mph == p.configuration.has_mph
+    assert p.num_channels == p.configuration.num_channels == 2
+    assert p.head8_installed == p.configuration.head8_installed
+    assert p.pipettes.num_channels == p.configuration.num_channels
+    assert p.pipettes.head8_installed == p.configuration.head8_installed
     assert p.calibration is not None
     assert p.calibration.num_channels == p.configuration.num_channels
-    assert p.calibration.has_mph == p.configuration.has_mph
-    assert isinstance(p.gripper, PrepGripper)
-    async with p.core_grippers() as arm:
-      assert isinstance(arm, PrepGripperArm)
-      assert isinstance(arm.backend, PrepGripper)
+    assert p.calibration.head8_installed == p.configuration.head8_installed
+    assert isinstance(p.core_grippers, CoreGrippers)
+    async with p.mounted_core_grippers() as arm:
+      assert isinstance(arm, CoreGripperArm)
+      assert isinstance(arm.backend, CoreGrippers)
     await p.stop()
 
   asyncio.run(_run())
@@ -201,5 +205,32 @@ def test_force_initialize_skips_is_initialized_check():
     await p.setup(force_initialize=True)
     p.request_initialization_status.assert_not_called()
     await p.stop()
+
+  asyncio.run(_run())
+
+
+def test_saved_configuration_holds_channel_count_and_head8(tmp_path):
+  """What a device reports it has fitted is saved, and a declaration of it drives the chatterbox."""
+
+  async def _run() -> None:
+    p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
+    await p.setup()
+    path = str(tmp_path / "prep.json")
+    p.save_configuration(path)
+    await p.stop()
+    saved = read_configuration(path)["device"]
+    assert saved.num_channels == p.num_channels
+    assert saved.head8_installed == p.head8_installed
+
+    saved.num_channels, saved.head8_installed = 1, False
+    declared = str(tmp_path / "declared.json")
+    with open(declared, "w", encoding="utf-8") as f:
+      json.dump({"device": to_jsonable(saved)}, f)
+    q = PrepDriver(deck=STARLetDeck(), chatterbox=True, declared_configuration_json=declared)
+    await q.setup()
+    assert q.num_channels == 1
+    assert q.head8_installed is False
+    assert q.head8 is None
+    await q.stop()
 
   asyncio.run(_run())

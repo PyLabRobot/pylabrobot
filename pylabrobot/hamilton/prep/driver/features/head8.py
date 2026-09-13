@@ -1,4 +1,4 @@
-"""PrepHead8 — 8MPH head for the Hamilton Prep.
+"""Head8 — 8MPH head for the Hamilton Prep.
 
 The 8MPH is a ganged head: a single X/Y/Z gantry and a single dispenser piston
 drive all 8 probes together. Individual sleeves are mechanically coupled — partial
@@ -87,7 +87,7 @@ _V2_MPH_CMD_IDS: frozenset = frozenset({29, 30, 31, 32, 33, 34})
 _PROBE_POS_TOLERANCE_MM: float = 1.0  # max deviation from expected 9mm pitch before raising
 
 
-class PrepHead8:
+class Head8:
   """8-channel Multi-Pipetting Head for the Hamilton Prep.
 
   All 8 probes must participate in every operation. Partial channel selection
@@ -160,7 +160,7 @@ class PrepHead8:
       if not supported:
         raise RuntimeError(
           "V2 aspirate/dispense commands (cmd 29-34) are not supported by this MPH firmware. "
-          "Pass use_v1_aspirate_dispense=True to PrepHead8 to use v1 commands instead."
+          "Pass use_v1_aspirate_dispense=True to Head8 to use v1 commands instead."
         )
       self._supports_v2_pipetting = True
       logger.info("MPH V2 aspirate/dispense support: True")
@@ -231,7 +231,7 @@ class PrepHead8:
       override,
       v2_error_hint=(
         "v2 aspirate/dispense commands (cmd 29-34) are not supported by this firmware. "
-        "Use command_version='v1' or pass use_v1_aspirate_dispense=True to PrepHead8."
+        "Use command_version='v1' or pass use_v1_aspirate_dispense=True to Head8."
       ),
     )
 
@@ -303,7 +303,7 @@ class PrepHead8:
     """
     if list(use_channels) != list(range(NUM_PROBES)):
       raise ValueError(
-        f"PrepHead8.{op}: the 8MPH is a fully-ganged head — all {NUM_PROBES} "
+        f"Head8.{op}: the 8MPH is a fully-ganged head — all {NUM_PROBES} "
         f"channels must participate. Received use_channels={use_channels}. "
         "Partial tip pickup/drop/aspirate/dispense is not physically supported."
       )

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PrepXArmConfiguration:
+class XArmConfiguration:
   """How the arm is modelled.
 
   Measured on the arm rather than read off the device: the Prep reports no size for it.
@@ -41,21 +41,21 @@ class PrepXArmConfiguration:
   """How the viewer draws the arm: silver, and metallic."""
 
 
-class PrepXArm:
+class XArm:
   """The X-arm the pipetting channels ride.
 
   Reached as `driver.x_arm`. The channels share its X: the firmware reports the gantry's position in
   each channel's `GetPositions` entry, not for the arm itself.
   """
 
-  def __init__(self, driver: "PrepDriver", configuration: Optional[PrepXArmConfiguration] = None):
+  def __init__(self, driver: "PrepDriver", configuration: Optional[XArmConfiguration] = None):
     """
     Args:
       driver: the driver to send commands through.
-      configuration: how the arm is modelled. Defaults to `PrepXArmConfiguration()`.
+      configuration: how the arm is modelled. Defaults to `XArmConfiguration()`.
     """
     self._driver = driver
-    self.configuration = configuration or PrepXArmConfiguration()
+    self.configuration = configuration or XArmConfiguration()
     # The arm on the deck, when the driver was given one. Setup puts it there; reads and moves keep it
     # in step. Without a deck it stays None and nothing is modelled.
     self.resource: Optional[Resource] = None

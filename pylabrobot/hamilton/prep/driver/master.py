@@ -18,13 +18,13 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 
 from . import prep_commands as PrepCmd
-from .features.calibration import PrepCalibration
+from .features.calibration import Calibration
 from .features.pipettes import (
   CHANNEL_MODEL,
   CHANNEL_SIZE_Z,
   CHANNEL_WIDTH,
   CHANNEL_X_REFERENCE_ANCHOR,
-  PrepChannels,
+  Pipettes,
   build_prep_channels,
 )
 from .simulator import PrepChatterboxClient
@@ -36,18 +36,18 @@ from .client import (
   MODULE_INFORMATION_OBJECT_PATH,
   PrepClient,
 )
-from .features.core_grippers import PrepGripper, PrepGripperArm
-from .features.head8 import PrepHead8
+from .features.core_grippers import CoreGrippers, CoreGripperArm
+from .features.head8 import Head8
 from .configuration import DeviceConfiguration, read_configuration, to_jsonable
 from .errors import PrepMethodNotFoundError
-from .features.method import PrepMethodLifecycle
-from .features.x_arm import PrepXArm
+from .features.method import MethodLifecycle
+from .features.x_arm import XArm
 
 logger = logging.getLogger(__name__)
 
 # What a declaration and a device have to agree on for the one to stand for the other: what is
 # fitted. Identity and set-up are the device's own.
-_DECLARATION_MUST_MATCH = ("num_channels", "has_mph", "has_enclosure")
+_DECLARATION_MUST_MATCH = ("num_channels", "head8_installed", "has_enclosure")
 
 
 class PrepDriver:
@@ -92,15 +92,29 @@ class PrepDriver:
     self.deck = deck
     # What the device reports about itself, read by `discover`. None until setup has run.
     self.configuration: Optional[DeviceConfiguration] = None
-    self._core_gripper_arm: Optional[PrepGripperArm] = None
-    self.channels: Optional[PrepChannels] = None
-    self.head8: Optional[PrepHead8] = None
-    self.gripper: Optional[PrepGripper] = None
-    self.method: Optional[PrepMethodLifecycle] = None
-    self.calibration: Optional[PrepCalibration] = None
+    self._core_gripper_arm: Optional[CoreGripperArm] = None
+    self.pipettes: Optional[Pipettes] = None
+    self.head8: Optional[Head8] = None
+    self.core_grippers: Optional[CoreGrippers] = None
+    self.method: Optional[MethodLifecycle] = None
+    self.calibration: Optional[Calibration] = None
     # The gantry the channels ride. Built at setup, and kept across setups like the configuration.
-    self.x_arm: Optional[PrepXArm] = None
+    self.x_arm: Optional[XArm] = None
     self._setup_finished: bool = False
+
+  @property
+  def num_channels(self) -> int:
+    """The number of independent pipetting channels present on the device."""
+    if self.configuration is None or self.configuration.num_channels is None:
+      raise RuntimeError("channel count not read; have you called `prep.setup()`?")
+    return self.configuration.num_channels
+
+  @property
+  def head8_installed(self) -> bool:
+    """Whether the 8-channel head is fitted."""
+    if self.configuration is None or self.configuration.head8_installed is None:
+      raise RuntimeError("head8 presence not read; have you called `prep.setup()`?")
+    return self.configuration.head8_installed
 
   async def setup(
     self,
@@ -116,9 +130,9 @@ class PrepDriver:
       await self.discover()
       await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
 
-      self.method = PrepMethodLifecycle(self.client)
-      self.calibration = PrepCalibration(client=self.client, driver=self, deck=self.deck)
-      channels = PrepChannels(
+      self.method = MethodLifecycle(self.client)
+      self.calibration = Calibration(client=self.client, driver=self, deck=self.deck)
+      channels = Pipettes(
         client=self.client,
         driver=self,
         deck=self.deck,
@@ -126,11 +140,11 @@ class PrepDriver:
         use_v1_aspirate_dispense=use_v1_aspirate_dispense,
       )
       channels.channels = await build_prep_channels(self.client, self.configuration)
-      self.channels = channels
+      self.pipettes = channels
       await channels._on_setup()
 
-      if channels.has_mph:
-        head8 = PrepHead8(
+      if channels.head8_installed:
+        head8 = Head8(
           client=self.client,
           driver=self,
           deck=self.deck,
@@ -143,9 +157,9 @@ class PrepDriver:
         self.head8 = head8
         await head8._on_setup()
 
-      self.gripper = PrepGripper(client=self.client, channels=channels)
+      self.core_grippers = CoreGrippers(client=self.client, channels=channels)
       if self.x_arm is None:
-        self.x_arm = PrepXArm(self)
+        self.x_arm = XArm(self)
       # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
       if self.deck is not None:
         await self._create_capability_resources()
@@ -192,14 +206,14 @@ class PrepDriver:
         "Call `await prep.return_core_grippers()` first if you want the tools returned."
       )
       self._core_gripper_arm = None
-    if self.channels is not None:
-      await self.channels._on_stop()
+    if self.pipettes is not None:
+      await self.pipettes._on_stop()
     if self.head8 is not None:
       await self.head8._on_stop()
     await self.client.stop()
-    self.channels = None
+    self.pipettes = None
     self.head8 = None
-    self.gripper = None
+    self.core_grippers = None
     self.method = None
     self.calibration = None
     self._setup_finished = False
@@ -327,14 +341,14 @@ class PrepDriver:
         if c in (PrepCmd.ChannelIndex.FrontChannel, PrepCmd.ChannelIndex.RearChannel)
       ]
       num_channels = len(dual)
-      has_mph = PrepCmd.ChannelIndex.MPHChannel in present
+      head8_installed = PrepCmd.ChannelIndex.MPHChannel in present
     else:
       num_channels = 2
-      has_mph = False
+      head8_installed = False
 
     return DeviceConfiguration(
       num_channels=num_channels,
-      has_mph=has_mph,
+      head8_installed=head8_installed,
       has_enclosure=has_enclosure,
       safe_speeds_enabled=safe_speeds_enabled,
       default_traverse_height=default_traverse_height,
@@ -473,16 +487,16 @@ class PrepDriver:
     As the STAR driver does. Only on a `PrepDeck`, which is what knows where a Prep's arm goes. What is
     already on the deck is reused, and repeated setups do not duplicate it.
     """
-    if not isinstance(self.deck, PrepDeck) or self.x_arm is None or self.channels is None:
+    if not isinstance(self.deck, PrepDeck) or self.x_arm is None or self.pipettes is None:
       return
-    positions = await self.channels.request_channel_positions()
+    positions = await self.pipettes.request_channel_positions()
     if not positions:
       logger.warning("the channels reported no positions, so the arm and channels are not modelled")
       return
     arm, c = self.x_arm, self.x_arm.configuration
     # The arm rides at the top of the channels' travel: what their bounds say, or the traverse height
     # when no bounds were read.
-    tops = [bounds["z_max"] for bounds in self.channels._channel_bounds]
+    tops = [bounds["z_max"] for bounds in self.pipettes._channel_bounds]
     if tops:
       z = max(tops)
     elif self.configuration is not None and self.configuration.default_traverse_height is not None:
@@ -503,7 +517,7 @@ class PrepDriver:
 
     # One resource per channel, a child of the arm's as on the STAR: the channels share the arm's X,
     # and each has its own Y and Z.
-    self.channels.resources = []
+    self.pipettes.resources = []
     for channel in range(len(positions)):
       name = f"pipette_channel_{channel}"
       resource = next((child for child in arm.resource.children if child.name == name), None)
@@ -520,20 +534,20 @@ class PrepDriver:
         arm.resource.assign_child_resource(
           resource, location=Coordinate(c.reference_point_from_left - anchor.x, 0.0, 0.0)
         )
-      self.channels.add_tip_mounting_shaft(resource)
-      self.channels.resources.append(resource)
+      self.pipettes.add_tip_mounting_shaft(resource)
+      self.pipettes.resources.append(resource)
     # Seat each where it was read, now that there is something to record it on.
-    self.channels._record_positions(positions)
+    self.pipettes._record_positions(positions)
 
   # -- CoRe grippers -----------------------------------------------------------
 
   @property
-  def core_gripper_arm(self) -> PrepGripperArm:
+  def core_gripper_arm(self) -> CoreGripperArm:
     """The mounted CoRe gripper arm. Raises if grippers are not currently picked up."""
     if self._core_gripper_arm is None:
       raise RuntimeError(
         "CoRe grippers not mounted. Call `await prep.pick_up_core_grippers()` first, "
-        "or use `async with prep.core_grippers() as arm:`."
+        "or use `async with prep.mounted_core_grippers() as arm:`."
       )
     return self._core_gripper_arm
 
@@ -541,11 +555,11 @@ class PrepDriver:
   def core_grippers_mounted(self) -> bool:
     return self._core_gripper_arm is not None
 
-  async def pick_up_core_grippers(self) -> PrepGripperArm:
+  async def pick_up_core_grippers(self) -> CoreGripperArm:
     """Pick up the CoRe gripper tools and return the mounted arm."""
     if self._core_gripper_arm is not None:
       raise RuntimeError("CoRe grippers already mounted")
-    if self.channels is None or self.gripper is None:
+    if self.pipettes is None or self.core_grippers is None:
       raise RuntimeError("PrepDriver.setup() has not run.")
 
     mount = self.deck.get_resource("core_grippers")
@@ -555,7 +569,7 @@ class PrepDriver:
       )
 
     loc = mount.get_location_wrt(self.deck)
-    await self.gripper.pick_up_tool(
+    await self.core_grippers.pick_up_tool(
       tool_position_x=loc.x,
       tool_position_z=loc.z,
       front_channel_position_y=loc.y + mount.front_channel_y_center,
@@ -563,8 +577,8 @@ class PrepDriver:
       tool_seek=loc.z + 10.0,
     )
 
-    self._core_gripper_arm = PrepGripperArm(
-      backend=self.gripper, reference_resource=self.deck, grip_axis="y"
+    self._core_gripper_arm = CoreGripperArm(
+      backend=self.core_grippers, reference_resource=self.deck, grip_axis="y"
     )
     return self._core_gripper_arm
 
@@ -577,7 +591,7 @@ class PrepDriver:
       self._core_gripper_arm = None
 
   @asynccontextmanager
-  async def core_grippers(self) -> AsyncIterator[PrepGripperArm]:
+  async def mounted_core_grippers(self) -> AsyncIterator[CoreGripperArm]:
     arm = await self.pick_up_core_grippers()
     try:
       yield arm
@@ -592,7 +606,7 @@ class PrepDriver:
   async def spread(self) -> None:
     await self.client.execute(PrepCmd.PrepSpread())
 
-  async def is_parked(self) -> bool:
+  async def request_parked(self) -> bool:
     """Whether MLPrep reports itself parked.
 
     Looked up by name: the method's id is not the same on every firmware version, and older
@@ -604,10 +618,10 @@ class PrepDriver:
     data = await self._request_by_name(MLPREP_OBJECT_PATH, "IsParked")
     return bool(PrepCmd.PrepIsParked.parse_response_parameters(data).value)
 
-  async def is_spread(self) -> bool:
+  async def request_spread(self) -> bool:
     """Whether MLPrep reports its channels spread.
 
-    Looked up by name, as `is_parked` is.
+    Looked up by name, as `request_parked` is.
 
     Raises:
       PrepMethodNotFoundError: If this firmware has no IsSpread.
@@ -624,7 +638,7 @@ class PrepDriver:
   async def cancel_power_down(self) -> None:
     await self.client.execute(PrepCmd.PrepCancelPowerDown())
 
-  async def get_deck_light(self) -> Tuple[int, int, int, int]:
+  async def request_deck_light(self) -> Tuple[int, int, int, int]:
     result = await self.client.execute(PrepCmd.PrepGetDeckLight())
     if result is None:
       raise ValueError("No response from GetDeckLight.")
@@ -637,7 +651,7 @@ class PrepDriver:
 
   async def disco_mode(self) -> None:
     """Easter egg: cycle deck lights then restore previous state."""
-    white, red, green, blue = await self.get_deck_light()
+    white, red, green, blue = await self.request_deck_light()
     try:
       for _ in range(69):
         await self.set_deck_light(

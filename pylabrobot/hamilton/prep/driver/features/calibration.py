@@ -64,7 +64,7 @@ class CalibrationCommandReport:
     )
 
 
-class PrepCalibration:
+class Calibration:
   """Calibration façade: firmware MLPrepCalibration object + DeckConfiguration site defs."""
 
   def __init__(
@@ -92,10 +92,10 @@ class PrepCalibration:
     return n
 
   @property
-  def has_mph(self) -> bool:
-    h = self._configuration.has_mph
+  def head8_installed(self) -> bool:
+    h = self._configuration.head8_installed
     if h is None:
-      raise RuntimeError("Instrument config has no has_mph (finish PrepDriver.setup first).")
+      raise RuntimeError("Instrument config has no head8_installed (finish PrepDriver.setup first).")
     return h
 
   def _set_calibration_session_active(self, active: bool) -> None:
@@ -129,9 +129,9 @@ class PrepCalibration:
     report_after_command: bool = True,
     report_scope: Literal["related", "full"] = "related",
     session_read_timeout: Optional[float] = None,
-  ) -> PrepCalibrationSession:
+  ) -> CalibrationSession:
     """Create a managed calibration session bound to this façade."""
-    return PrepCalibrationSession(
+    return CalibrationSession(
       self,
       float_tol=float_tol,
       report_after_command=report_after_command,
@@ -139,7 +139,7 @@ class PrepCalibration:
       session_read_timeout=session_read_timeout,
     )
 
-  async def get_calibration_site_definitions(self) -> Tuple[PrepCmd.CalibrationSiteInfo, ...]:
+  async def request_calibration_site_definitions(self) -> Tuple[PrepCmd.CalibrationSiteInfo, ...]:
     """Return calibration site definitions from DeckConfiguration (GetCalibrationSiteDefinitions, cmd=3)."""
     result = await self._client.execute(PrepCmd.PrepGetCalibrationSiteDefinitions())
     if result is None or not result.sites:
@@ -180,7 +180,7 @@ class PrepCalibration:
     """Initialize calibration hardware (CalibrationInitialize, cmd=5)."""
     await self._client.execute(PrepCmd.PrepCalibrationInitialize())
 
-  async def read_calibration_values(
+  async def request_calibration_values(
     self, read_timeout: Optional[float] = None
   ) -> PrepCmd.CalibrationValues:
     """Read calibration values (GetCalibrationValues, cmd=16)."""
@@ -216,12 +216,12 @@ class PrepCalibration:
     )
 
 
-class PrepCalibrationSession:
+class CalibrationSession:
   """Context manager for stateful Prep calibration workflows."""
 
   def __init__(
     self,
-    cal: PrepCalibration,
+    cal: Calibration,
     *,
     float_tol: float = 1e-6,
     report_after_command: bool = True,
@@ -301,7 +301,7 @@ class PrepCalibrationSession:
     *,
     read_timeout: Optional[float] = None,
   ) -> PrepCmd.CalibrationValues:
-    return await self._cal.read_calibration_values(read_timeout=read_timeout)
+    return await self._cal.request_calibration_values(read_timeout=read_timeout)
 
   async def _run_with_report(
     self,
@@ -336,18 +336,18 @@ class PrepCalibrationSession:
     self._log_report(report)
     return report
 
-  async def __aenter__(self) -> PrepCalibrationSession:
+  async def __aenter__(self) -> CalibrationSession:
     await self.start()
     return self
 
-  async def start(self) -> PrepCalibrationSession:
+  async def start(self) -> CalibrationSession:
     """Start calibration mode and capture baseline snapshot."""
     if self._started:
       return self
     if self._ended:
       raise RuntimeError("Calibration session is already ended; create a new session.")
     if self._cal._calibration_session_active:
-      raise RuntimeError("A calibration session is already active on this PrepCalibration.")
+      raise RuntimeError("A calibration session is already active on this Calibration.")
     await self._cal.begin_calibration()
     await self._cal.calibration_initialize()
     self._cal._set_calibration_session_active(True)
@@ -575,7 +575,7 @@ class PrepCalibrationSession:
     self._ensure_started()
 
     async def _op(timeout: Optional[float]) -> Tuple[int, ...]:
-      if not self._cal.has_mph:
+      if not self._cal.head8_installed:
         raise RuntimeError(
           "Instrument does not have an 8MPH head. Cannot use calibrate_squeeze_tips_mph."
         )
@@ -612,6 +612,6 @@ class PrepCalibrationSession:
 
 __all__ = [
   "CalibrationCommandReport",
-  "PrepCalibration",
-  "PrepCalibrationSession",
+  "Calibration",
+  "CalibrationSession",
 ]

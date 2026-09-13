@@ -31,7 +31,7 @@ class DeviceConfiguration:
   # -- what is fitted --
   num_channels: Optional[int] = None
   """How many independent pipetting channels, 1 or 2, from GetPresentChannels."""
-  has_mph: Optional[bool] = None
+  head8_installed: Optional[bool] = None
   """Whether the 8-channel head is fitted, from GetPresentChannels."""
   has_enclosure: bool = False
   """Whether MLPrep reports an enclosure."""

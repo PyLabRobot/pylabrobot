@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 from pylabrobot.hamilton.prep import PrepChatterboxClient
 from pylabrobot.hamilton.prep.driver import prep_commands as C
-from pylabrobot.hamilton.prep.driver.features.pipettes import ChannelDriveMap, PrepChannels
+from pylabrobot.hamilton.prep.driver.features.pipettes import ChannelDriveMap, Pipettes
 from pylabrobot.hamilton.prep.driver.client import MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH, PrepClient
 from pylabrobot.hamilton.prep.driver.errors import PREP_ERROR_CODES
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
@@ -45,7 +45,7 @@ class TestPrepTransport(_SessionTest):
   async def test_tip_presence_uses_each_objects_named_method_and_cached_table(self):
     """Sensor IDs come from discovery; repeated reads reuse the session's method tables."""
     client, io = self.make_client()
-    channels = PrepChannels(client=client)
+    channels = Pipettes(client=client)
     rear, front = Address(1, 236, 514), Address(1, 237, 514)
     tables = {
       rear: [
@@ -109,7 +109,7 @@ class TestPrepTransport(_SessionTest):
     ):
       with self.subTest(methods=methods):
         client, io = self.make_client()
-        channels = PrepChannels(client=client)
+        channels = Pipettes(client=client)
         addr = Address(1, 236, 514)
         with (
           patch.object(
