@@ -784,40 +784,43 @@ by <a class="reference internal" href="pylabrobot.resources.ItemizedResource.ite
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.register_will_unassign_resource_callback.html#pylabrobot.resources.ItemizedResource.register_will_unassign_resource_callback" title="pylabrobot.resources.ItemizedResource.register_will_unassign_resource_callback"><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_will_unassign_resource_callback</span></code></a>(...)</p></td>
 <td><p>Add a callback that will be called before a resource is unassigned from this resource.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.rotate.html#pylabrobot.resources.ItemizedResource.rotate" title="pylabrobot.resources.ItemizedResource.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate</span></code></a>([x, y, z])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.rotate.html#pylabrobot.resources.ItemizedResource.rotate" title="pylabrobot.resources.ItemizedResource.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate</span></code></a>([x, y, z, pivot_coordinate])</p></td>
 <td><p>Rotate counter-clockwise around the parent-coordinate axes by the given degrees.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.rotated.html#pylabrobot.resources.ItemizedResource.rotated" title="pylabrobot.resources.ItemizedResource.rotated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotated</span></code></a>([x, y, z])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.rotate_to.html#pylabrobot.resources.ItemizedResource.rotate_to" title="pylabrobot.resources.ItemizedResource.rotate_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate_to</span></code></a>([x, y, z, pivot_coordinate])</p></td>
+<td><p>Set the rotation about each axis, where <code class="code docutils literal notranslate"><span class="pre">rotate</span></code> turns by an amount instead.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.rotated.html#pylabrobot.resources.ItemizedResource.rotated" title="pylabrobot.resources.ItemizedResource.rotated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotated</span></code></a>([x, y, z, pivot_coordinate])</p></td>
 <td><p>Return a copy of this resource rotated by the given number of degrees.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.row.html#pylabrobot.resources.ItemizedResource.row" title="pylabrobot.resources.ItemizedResource.row"><code class="xref py py-obj docutils literal notranslate"><span class="pre">row</span></code></a>(row)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.row.html#pylabrobot.resources.ItemizedResource.row" title="pylabrobot.resources.ItemizedResource.row"><code class="xref py py-obj docutils literal notranslate"><span class="pre">row</span></code></a>(row)</p></td>
 <td><p>Get all items in the given row.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.save.html#pylabrobot.resources.ItemizedResource.save" title="pylabrobot.resources.ItemizedResource.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(fn[, indent])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.save.html#pylabrobot.resources.ItemizedResource.save" title="pylabrobot.resources.ItemizedResource.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(fn[, indent])</p></td>
 <td><p>Save a resource to a JSON file.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.save_state_to_file.html#pylabrobot.resources.ItemizedResource.save_state_to_file" title="pylabrobot.resources.ItemizedResource.save_state_to_file"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_state_to_file</span></code></a>(fn[, indent])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.save_state_to_file.html#pylabrobot.resources.ItemizedResource.save_state_to_file" title="pylabrobot.resources.ItemizedResource.save_state_to_file"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_state_to_file</span></code></a>(fn[, indent])</p></td>
 <td><p>Save the state of this resource and all children to a JSON file.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.serialize.html#pylabrobot.resources.ItemizedResource.serialize" title="pylabrobot.resources.ItemizedResource.serialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.serialize.html#pylabrobot.resources.ItemizedResource.serialize" title="pylabrobot.resources.ItemizedResource.serialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.serialize_all_state.html#pylabrobot.resources.ItemizedResource.serialize_all_state" title="pylabrobot.resources.ItemizedResource.serialize_all_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_all_state</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.serialize_all_state.html#pylabrobot.resources.ItemizedResource.serialize_all_state" title="pylabrobot.resources.ItemizedResource.serialize_all_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_all_state</span></code></a>()</p></td>
 <td><p>Serialize the state of this resource and all children.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.serialize_state.html#pylabrobot.resources.ItemizedResource.serialize_state" title="pylabrobot.resources.ItemizedResource.serialize_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_state</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.serialize_state.html#pylabrobot.resources.ItemizedResource.serialize_state" title="pylabrobot.resources.ItemizedResource.serialize_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_state</span></code></a>()</p></td>
 <td><p>Serialize the state of this resource only.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.summary.html#pylabrobot.resources.ItemizedResource.summary" title="pylabrobot.resources.ItemizedResource.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a>([occupied_func])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.summary.html#pylabrobot.resources.ItemizedResource.summary" title="pylabrobot.resources.ItemizedResource.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a>([occupied_func])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.traverse.html#pylabrobot.resources.ItemizedResource.traverse" title="pylabrobot.resources.ItemizedResource.traverse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">traverse</span></code></a>(batch_size, start, direction[, repeat])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.traverse.html#pylabrobot.resources.ItemizedResource.traverse" title="pylabrobot.resources.ItemizedResource.traverse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">traverse</span></code></a>(batch_size, start, direction[, repeat])</p></td>
 <td><p>Traverse the items in this resource.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.unassign.html#pylabrobot.resources.ItemizedResource.unassign" title="pylabrobot.resources.ItemizedResource.unassign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.unassign.html#pylabrobot.resources.ItemizedResource.unassign" title="pylabrobot.resources.ItemizedResource.unassign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign</span></code></a>()</p></td>
 <td><p>Unassign this resource from its parent.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.unassign_child_resource.html#pylabrobot.resources.ItemizedResource.unassign_child_resource" title="pylabrobot.resources.ItemizedResource.unassign_child_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign_child_resource</span></code></a>(resource)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.ItemizedResource.unassign_child_resource.html#pylabrobot.resources.ItemizedResource.unassign_child_resource" title="pylabrobot.resources.ItemizedResource.unassign_child_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign_child_resource</span></code></a>(resource)</p></td>
 <td><p>Unassign a child resource from this resource.</p></td>
 </tr>
 </tbody>

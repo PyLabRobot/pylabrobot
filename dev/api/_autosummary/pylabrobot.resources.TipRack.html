@@ -793,43 +793,46 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.register_will_unassign_resource_callback.html#pylabrobot.resources.TipRack.register_will_unassign_resource_callback" title="pylabrobot.resources.TipRack.register_will_unassign_resource_callback"><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_will_unassign_resource_callback</span></code></a>(...)</p></td>
 <td><p>Add a callback that will be called before a resource is unassigned from this resource.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.rotate.html#pylabrobot.resources.TipRack.rotate" title="pylabrobot.resources.TipRack.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate</span></code></a>([x, y, z])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.rotate.html#pylabrobot.resources.TipRack.rotate" title="pylabrobot.resources.TipRack.rotate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate</span></code></a>([x, y, z, pivot_coordinate])</p></td>
 <td><p>Rotate counter-clockwise around the parent-coordinate axes by the given degrees.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.rotated.html#pylabrobot.resources.TipRack.rotated" title="pylabrobot.resources.TipRack.rotated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotated</span></code></a>([x, y, z])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.rotate_to.html#pylabrobot.resources.TipRack.rotate_to" title="pylabrobot.resources.TipRack.rotate_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotate_to</span></code></a>([x, y, z, pivot_coordinate])</p></td>
+<td><p>Set the rotation about each axis, where <code class="code docutils literal notranslate"><span class="pre">rotate</span></code> turns by an amount instead.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.rotated.html#pylabrobot.resources.TipRack.rotated" title="pylabrobot.resources.TipRack.rotated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rotated</span></code></a>([x, y, z, pivot_coordinate])</p></td>
 <td><p>Return a copy of this resource rotated by the given number of degrees.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.row.html#pylabrobot.resources.TipRack.row" title="pylabrobot.resources.TipRack.row"><code class="xref py py-obj docutils literal notranslate"><span class="pre">row</span></code></a>(row)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.row.html#pylabrobot.resources.TipRack.row" title="pylabrobot.resources.TipRack.row"><code class="xref py py-obj docutils literal notranslate"><span class="pre">row</span></code></a>(row)</p></td>
 <td><p>Get all items in the given row.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.save.html#pylabrobot.resources.TipRack.save" title="pylabrobot.resources.TipRack.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(fn[, indent])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.save.html#pylabrobot.resources.TipRack.save" title="pylabrobot.resources.TipRack.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(fn[, indent])</p></td>
 <td><p>Save a resource to a JSON file.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.save_state_to_file.html#pylabrobot.resources.TipRack.save_state_to_file" title="pylabrobot.resources.TipRack.save_state_to_file"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_state_to_file</span></code></a>(fn[, indent])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.save_state_to_file.html#pylabrobot.resources.TipRack.save_state_to_file" title="pylabrobot.resources.TipRack.save_state_to_file"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_state_to_file</span></code></a>(fn[, indent])</p></td>
 <td><p>Save the state of this resource and all children to a JSON file.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.serialize.html#pylabrobot.resources.TipRack.serialize" title="pylabrobot.resources.TipRack.serialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.serialize.html#pylabrobot.resources.TipRack.serialize" title="pylabrobot.resources.TipRack.serialize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.serialize_all_state.html#pylabrobot.resources.TipRack.serialize_all_state" title="pylabrobot.resources.TipRack.serialize_all_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_all_state</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.serialize_all_state.html#pylabrobot.resources.TipRack.serialize_all_state" title="pylabrobot.resources.TipRack.serialize_all_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_all_state</span></code></a>()</p></td>
 <td><p>Serialize the state of this resource and all children.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.serialize_state.html#pylabrobot.resources.TipRack.serialize_state" title="pylabrobot.resources.TipRack.serialize_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_state</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.serialize_state.html#pylabrobot.resources.TipRack.serialize_state" title="pylabrobot.resources.TipRack.serialize_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialize_state</span></code></a>()</p></td>
 <td><p>Serialize the state of this resource only.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.set_tip_state.html#pylabrobot.resources.TipRack.set_tip_state" title="pylabrobot.resources.TipRack.set_tip_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_tip_state</span></code></a>(tips)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.set_tip_state.html#pylabrobot.resources.TipRack.set_tip_state" title="pylabrobot.resources.TipRack.set_tip_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_tip_state</span></code></a>(tips)</p></td>
 <td><p>Set the initial tip tracking state of all tips in this tip rack.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.summary.html#pylabrobot.resources.TipRack.summary" title="pylabrobot.resources.TipRack.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a>([occupied_func])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.summary.html#pylabrobot.resources.TipRack.summary" title="pylabrobot.resources.TipRack.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a>([occupied_func])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.traverse.html#pylabrobot.resources.TipRack.traverse" title="pylabrobot.resources.TipRack.traverse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">traverse</span></code></a>(batch_size, start, direction[, repeat])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.traverse.html#pylabrobot.resources.TipRack.traverse" title="pylabrobot.resources.TipRack.traverse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">traverse</span></code></a>(batch_size, start, direction[, repeat])</p></td>
 <td><p>Traverse the items in this resource.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.unassign.html#pylabrobot.resources.TipRack.unassign" title="pylabrobot.resources.TipRack.unassign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.unassign.html#pylabrobot.resources.TipRack.unassign" title="pylabrobot.resources.TipRack.unassign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign</span></code></a>()</p></td>
 <td><p>Unassign this resource from its parent.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.unassign_child_resource.html#pylabrobot.resources.TipRack.unassign_child_resource" title="pylabrobot.resources.TipRack.unassign_child_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign_child_resource</span></code></a>(resource)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.resources.TipRack.unassign_child_resource.html#pylabrobot.resources.TipRack.unassign_child_resource" title="pylabrobot.resources.TipRack.unassign_child_resource"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unassign_child_resource</span></code></a>(resource)</p></td>
 <td><p>Unassign a child resource from this resource.</p></td>
 </tr>
 </tbody>

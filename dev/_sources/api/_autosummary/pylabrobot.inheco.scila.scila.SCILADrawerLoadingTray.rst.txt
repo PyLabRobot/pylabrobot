@@ -74,6 +74,7 @@ pylabrobot.inheco.scila.scila.SCILADrawerLoadingTray
       ~SCILADrawerLoadingTray.register_will_assign_resource_callback
       ~SCILADrawerLoadingTray.register_will_unassign_resource_callback
       ~SCILADrawerLoadingTray.rotate
+      ~SCILADrawerLoadingTray.rotate_to
       ~SCILADrawerLoadingTray.rotated
       ~SCILADrawerLoadingTray.save
       ~SCILADrawerLoadingTray.save_state_to_file

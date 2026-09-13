@@ -75,6 +75,7 @@ pylabrobot.resources.tip\_rack.TipSpot
       ~TipSpot.register_will_assign_resource_callback
       ~TipSpot.register_will_unassign_resource_callback
       ~TipSpot.rotate
+      ~TipSpot.rotate_to
       ~TipSpot.rotated
       ~TipSpot.save
       ~TipSpot.save_state_to_file

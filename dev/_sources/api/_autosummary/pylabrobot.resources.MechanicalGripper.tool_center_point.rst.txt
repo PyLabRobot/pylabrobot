@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.tool\_center\_point
+==========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: MechanicalGripper.tool_center_point

@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.find\_resources
+=============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.find_resources

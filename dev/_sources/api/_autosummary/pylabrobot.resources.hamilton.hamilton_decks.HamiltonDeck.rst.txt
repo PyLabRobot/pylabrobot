@@ -75,6 +75,7 @@ pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
       ~HamiltonDeck.register_will_assign_resource_callback
       ~HamiltonDeck.register_will_unassign_resource_callback
       ~HamiltonDeck.rotate
+      ~HamiltonDeck.rotate_to
       ~HamiltonDeck.rotated
       ~HamiltonDeck.save
       ~HamiltonDeck.save_state_to_file

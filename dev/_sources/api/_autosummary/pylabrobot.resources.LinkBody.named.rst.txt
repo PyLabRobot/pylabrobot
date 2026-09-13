@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.named
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.named

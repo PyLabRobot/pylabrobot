@@ -98,6 +98,7 @@ pylabrobot.high\_res.sample\_storage.TundraStore
       ~TundraStore.request_version
       ~TundraStore.resolve_unresolved_transfer
       ~TundraStore.rotate
+      ~TundraStore.rotate_to
       ~TundraStore.rotated
       ~TundraStore.save
       ~TundraStore.save_state_to_file

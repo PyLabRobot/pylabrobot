@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.name
+==================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: LinkBody.name

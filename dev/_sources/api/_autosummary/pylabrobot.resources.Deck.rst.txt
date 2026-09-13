@@ -74,6 +74,7 @@ pylabrobot.resources.Deck
       ~Deck.register_will_assign_resource_callback
       ~Deck.register_will_unassign_resource_callback
       ~Deck.rotate
+      ~Deck.rotate_to
       ~Deck.rotated
       ~Deck.save
       ~Deck.save_state_to_file

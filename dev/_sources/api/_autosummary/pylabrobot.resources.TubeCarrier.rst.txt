@@ -74,6 +74,7 @@ pylabrobot.resources.TubeCarrier
       ~TubeCarrier.register_will_assign_resource_callback
       ~TubeCarrier.register_will_unassign_resource_callback
       ~TubeCarrier.rotate
+      ~TubeCarrier.rotate_to
       ~TubeCarrier.rotated
       ~TubeCarrier.save
       ~TubeCarrier.save_state_to_file

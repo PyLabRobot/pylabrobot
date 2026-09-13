@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.get\_location\_wrt
+=========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.get_location_wrt

@@ -1,0 +1,6 @@
+pylabrobot.resources.Lid.rotate\_to
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Lid.rotate_to

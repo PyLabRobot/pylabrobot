@@ -76,6 +76,7 @@ pylabrobot.resources.PetriDish
       ~PetriDish.register_will_assign_resource_callback
       ~PetriDish.register_will_unassign_resource_callback
       ~PetriDish.rotate
+      ~PetriDish.rotate_to
       ~PetriDish.rotated
       ~PetriDish.save
       ~PetriDish.save_state_to_file

@@ -1,0 +1,86 @@
+﻿:orphan:
+
+
+pylabrobot.resources.MechanicalGripper
+======================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: MechanicalGripper
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MechanicalGripper.jaw_width
+      ~MechanicalGripper.length
+      ~MechanicalGripper.location
+      ~MechanicalGripper.name
+      ~MechanicalGripper.tool_center_point
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MechanicalGripper.__init__
+      ~MechanicalGripper.assign_child_by_anchor
+      ~MechanicalGripper.assign_child_resource
+      ~MechanicalGripper.at
+      ~MechanicalGripper.center
+      ~MechanicalGripper.centers
+      ~MechanicalGripper.check_can_drop_resource_here
+      ~MechanicalGripper.copy
+      ~MechanicalGripper.deregister_did_assign_resource_callback
+      ~MechanicalGripper.deregister_did_unassign_resource_callback
+      ~MechanicalGripper.deregister_state_update_callback
+      ~MechanicalGripper.deregister_will_assign_resource_callback
+      ~MechanicalGripper.deregister_will_unassign_resource_callback
+      ~MechanicalGripper.deserialize
+      ~MechanicalGripper.find_resource
+      ~MechanicalGripper.find_resources
+      ~MechanicalGripper.get_absolute_location
+      ~MechanicalGripper.get_absolute_rotation
+      ~MechanicalGripper.get_absolute_size_x
+      ~MechanicalGripper.get_absolute_size_y
+      ~MechanicalGripper.get_absolute_size_z
+      ~MechanicalGripper.get_all_children
+      ~MechanicalGripper.get_anchor
+      ~MechanicalGripper.get_highest_known_point
+      ~MechanicalGripper.get_location_wrt
+      ~MechanicalGripper.get_resource
+      ~MechanicalGripper.get_root
+      ~MechanicalGripper.get_size_x
+      ~MechanicalGripper.get_size_y
+      ~MechanicalGripper.get_size_z
+      ~MechanicalGripper.has_resource
+      ~MechanicalGripper.is_in_subtree_of
+      ~MechanicalGripper.load_all_state
+      ~MechanicalGripper.load_from_json_file
+      ~MechanicalGripper.load_state
+      ~MechanicalGripper.load_state_from_file
+      ~MechanicalGripper.named
+      ~MechanicalGripper.register_did_assign_resource_callback
+      ~MechanicalGripper.register_did_unassign_resource_callback
+      ~MechanicalGripper.register_state_update_callback
+      ~MechanicalGripper.register_will_assign_resource_callback
+      ~MechanicalGripper.register_will_unassign_resource_callback
+      ~MechanicalGripper.rotate
+      ~MechanicalGripper.rotate_to
+      ~MechanicalGripper.rotated
+      ~MechanicalGripper.save
+      ~MechanicalGripper.save_state_to_file
+      ~MechanicalGripper.serialize
+      ~MechanicalGripper.serialize_all_state
+      ~MechanicalGripper.serialize_state
+      ~MechanicalGripper.unassign
+      ~MechanicalGripper.unassign_child_resource
+   
+   

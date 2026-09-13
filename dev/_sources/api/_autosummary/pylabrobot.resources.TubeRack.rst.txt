@@ -92,6 +92,7 @@ pylabrobot.resources.TubeRack
       ~TubeRack.register_will_assign_resource_callback
       ~TubeRack.register_will_unassign_resource_callback
       ~TubeRack.rotate
+      ~TubeRack.rotate_to
       ~TubeRack.rotated
       ~TubeRack.row
       ~TubeRack.row_containers

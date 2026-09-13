@@ -76,6 +76,7 @@ pylabrobot.resources.Container
       ~Container.register_will_assign_resource_callback
       ~Container.register_will_unassign_resource_callback
       ~Container.rotate
+      ~Container.rotate_to
       ~Container.rotated
       ~Container.save
       ~Container.save_state_to_file

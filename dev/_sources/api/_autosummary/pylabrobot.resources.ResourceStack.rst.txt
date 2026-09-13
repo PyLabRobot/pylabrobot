@@ -73,6 +73,7 @@ pylabrobot.resources.ResourceStack
       ~ResourceStack.register_will_assign_resource_callback
       ~ResourceStack.register_will_unassign_resource_callback
       ~ResourceStack.rotate
+      ~ResourceStack.rotate_to
       ~ResourceStack.rotated
       ~ResourceStack.save
       ~ResourceStack.save_state_to_file

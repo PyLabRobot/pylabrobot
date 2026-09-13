@@ -75,6 +75,7 @@ pylabrobot.inheco.cpac.InhecoCPAC
       ~InhecoCPAC.request_current_temperature
       ~InhecoCPAC.request_device_info
       ~InhecoCPAC.rotate
+      ~InhecoCPAC.rotate_to
       ~InhecoCPAC.rotated
       ~InhecoCPAC.save
       ~InhecoCPAC.save_state_to_file

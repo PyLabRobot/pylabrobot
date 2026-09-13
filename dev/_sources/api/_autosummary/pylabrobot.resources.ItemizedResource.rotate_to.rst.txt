@@ -1,0 +1,6 @@
+pylabrobot.resources.ItemizedResource.rotate\_to
+================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ItemizedResource.rotate_to

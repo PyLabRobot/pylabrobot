@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.get\_anchor
+=========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.get_anchor

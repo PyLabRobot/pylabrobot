@@ -76,6 +76,7 @@ pylabrobot.resources.Trash
       ~Trash.register_will_assign_resource_callback
       ~Trash.register_will_unassign_resource_callback
       ~Trash.rotate
+      ~Trash.rotate_to
       ~Trash.rotated
       ~Trash.save
       ~Trash.save_state_to_file

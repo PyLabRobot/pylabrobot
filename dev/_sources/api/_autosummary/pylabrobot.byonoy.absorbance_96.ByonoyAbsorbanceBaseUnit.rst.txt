@@ -70,6 +70,7 @@ pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbanceBaseUnit
       ~ByonoyAbsorbanceBaseUnit.register_will_assign_resource_callback
       ~ByonoyAbsorbanceBaseUnit.register_will_unassign_resource_callback
       ~ByonoyAbsorbanceBaseUnit.rotate
+      ~ByonoyAbsorbanceBaseUnit.rotate_to
       ~ByonoyAbsorbanceBaseUnit.rotated
       ~ByonoyAbsorbanceBaseUnit.save
       ~ByonoyAbsorbanceBaseUnit.save_state_to_file

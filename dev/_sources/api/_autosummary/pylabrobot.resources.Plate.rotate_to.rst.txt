@@ -1,0 +1,6 @@
+pylabrobot.resources.Plate.rotate\_to
+=====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Plate.rotate_to

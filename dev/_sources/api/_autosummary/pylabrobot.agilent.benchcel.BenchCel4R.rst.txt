@@ -86,6 +86,7 @@ pylabrobot.agilent.benchcel.BenchCel4R
       ~BenchCel4R.request_status
       ~BenchCel4R.request_status_snapshot
       ~BenchCel4R.rotate
+      ~BenchCel4R.rotate_to
       ~BenchCel4R.rotated
       ~BenchCel4R.save
       ~BenchCel4R.save_state_to_file

@@ -1,0 +1,6 @@
+pylabrobot.agilent.vspin.Access2.rotate\_to
+===========================================
+
+.. currentmodule:: pylabrobot.agilent.vspin
+
+.. automethod:: Access2.rotate_to

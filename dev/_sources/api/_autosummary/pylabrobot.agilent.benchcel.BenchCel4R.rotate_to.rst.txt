@@ -1,0 +1,6 @@
+pylabrobot.agilent.benchcel.BenchCel4R.rotate\_to
+=================================================
+
+.. currentmodule:: pylabrobot.agilent.benchcel
+
+.. automethod:: BenchCel4R.rotate_to

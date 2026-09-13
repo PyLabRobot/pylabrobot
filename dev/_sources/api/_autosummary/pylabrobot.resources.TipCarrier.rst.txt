@@ -74,6 +74,7 @@ pylabrobot.resources.TipCarrier
       ~TipCarrier.register_will_assign_resource_callback
       ~TipCarrier.register_will_unassign_resource_callback
       ~TipCarrier.rotate
+      ~TipCarrier.rotate_to
       ~TipCarrier.rotated
       ~TipCarrier.save
       ~TipCarrier.save_state_to_file

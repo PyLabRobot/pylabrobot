@@ -75,6 +75,7 @@ pylabrobot.inheco.thermoshake.InhecoThermoShake
       ~InhecoThermoShake.request_current_temperature
       ~InhecoThermoShake.request_device_info
       ~InhecoThermoShake.rotate
+      ~InhecoThermoShake.rotate_to
       ~InhecoThermoShake.rotated
       ~InhecoThermoShake.save
       ~InhecoThermoShake.save_state_to_file

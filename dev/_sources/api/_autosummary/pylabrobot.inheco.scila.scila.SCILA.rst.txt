@@ -82,6 +82,7 @@ pylabrobot.inheco.scila.scila.SCILA
       ~SCILA.request_temperature_information
       ~SCILA.request_valve_status
       ~SCILA.rotate
+      ~SCILA.rotate_to
       ~SCILA.rotated
       ~SCILA.save
       ~SCILA.save_state_to_file

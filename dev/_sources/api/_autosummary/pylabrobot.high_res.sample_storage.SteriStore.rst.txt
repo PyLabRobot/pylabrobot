@@ -98,6 +98,7 @@ pylabrobot.high\_res.sample\_storage.SteriStore
       ~SteriStore.request_version
       ~SteriStore.resolve_unresolved_transfer
       ~SteriStore.rotate
+      ~SteriStore.rotate_to
       ~SteriStore.rotated
       ~SteriStore.save
       ~SteriStore.save_state_to_file

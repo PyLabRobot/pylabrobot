@@ -91,6 +91,7 @@ pylabrobot.resources.TipRack
       ~TipRack.register_will_assign_resource_callback
       ~TipRack.register_will_unassign_resource_callback
       ~TipRack.rotate
+      ~TipRack.rotate_to
       ~TipRack.rotated
       ~TipRack.row
       ~TipRack.save

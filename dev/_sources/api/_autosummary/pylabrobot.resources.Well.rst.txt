@@ -79,6 +79,7 @@ pylabrobot.resources.Well
       ~Well.register_will_assign_resource_callback
       ~Well.register_will_unassign_resource_callback
       ~Well.rotate
+      ~Well.rotate_to
       ~Well.rotated
       ~Well.save
       ~Well.save_state_to_file

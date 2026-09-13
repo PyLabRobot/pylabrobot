@@ -1,0 +1,6 @@
+pylabrobot.inheco.scila.scila.SCILA.rotate\_to
+==============================================
+
+.. currentmodule:: pylabrobot.inheco.scila.scila
+
+.. automethod:: SCILA.rotate_to

@@ -74,6 +74,7 @@ pylabrobot.resources.PlateCarrier
       ~PlateCarrier.register_will_assign_resource_callback
       ~PlateCarrier.register_will_unassign_resource_callback
       ~PlateCarrier.rotate
+      ~PlateCarrier.rotate_to
       ~PlateCarrier.rotated
       ~PlateCarrier.save
       ~PlateCarrier.save_state_to_file

@@ -98,6 +98,7 @@ pylabrobot.high\_res.sample\_storage.AmbiStore
       ~AmbiStore.request_version
       ~AmbiStore.resolve_unresolved_transfer
       ~AmbiStore.rotate
+      ~AmbiStore.rotate_to
       ~AmbiStore.rotated
       ~AmbiStore.save
       ~AmbiStore.save_state_to_file

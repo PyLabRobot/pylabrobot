@@ -84,6 +84,7 @@ pylabrobot.resources.ItemizedResource
       ~ItemizedResource.register_will_assign_resource_callback
       ~ItemizedResource.register_will_unassign_resource_callback
       ~ItemizedResource.rotate
+      ~ItemizedResource.rotate_to
       ~ItemizedResource.rotated
       ~ItemizedResource.row
       ~ItemizedResource.save

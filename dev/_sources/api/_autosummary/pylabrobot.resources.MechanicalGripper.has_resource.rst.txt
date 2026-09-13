@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.has\_resource
+====================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.has_resource

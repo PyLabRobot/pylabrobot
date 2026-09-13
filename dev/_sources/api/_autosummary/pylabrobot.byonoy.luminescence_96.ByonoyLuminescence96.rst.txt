@@ -79,6 +79,7 @@ pylabrobot.byonoy.luminescence\_96.ByonoyLuminescence96
       ~ByonoyLuminescence96.request_supported_reports
       ~ByonoyLuminescence96.request_versions
       ~ByonoyLuminescence96.rotate
+      ~ByonoyLuminescence96.rotate_to
       ~ByonoyLuminescence96.rotated
       ~ByonoyLuminescence96.save
       ~ByonoyLuminescence96.save_state_to_file

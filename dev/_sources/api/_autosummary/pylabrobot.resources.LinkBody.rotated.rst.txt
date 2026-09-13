@@ -1,0 +1,6 @@
+pylabrobot.resources.LinkBody.rotated
+=====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: LinkBody.rotated

@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.at
+=========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.at

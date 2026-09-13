@@ -1,0 +1,6 @@
+pylabrobot.resources.MechanicalGripper.get\_size\_z
+===================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: MechanicalGripper.get_size_z

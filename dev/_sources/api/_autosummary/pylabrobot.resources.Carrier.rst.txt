@@ -74,6 +74,7 @@ pylabrobot.resources.Carrier
       ~Carrier.register_will_assign_resource_callback
       ~Carrier.register_will_unassign_resource_callback
       ~Carrier.rotate
+      ~Carrier.rotate_to
       ~Carrier.rotated
       ~Carrier.save
       ~Carrier.save_state_to_file

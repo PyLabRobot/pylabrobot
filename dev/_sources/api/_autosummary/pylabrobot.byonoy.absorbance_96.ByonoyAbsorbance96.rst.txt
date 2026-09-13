@@ -81,6 +81,7 @@ pylabrobot.byonoy.absorbance\_96.ByonoyAbsorbance96
       ~ByonoyAbsorbance96.request_supported_reports
       ~ByonoyAbsorbance96.request_versions
       ~ByonoyAbsorbance96.rotate
+      ~ByonoyAbsorbance96.rotate_to
       ~ByonoyAbsorbance96.rotated
       ~ByonoyAbsorbance96.save
       ~ByonoyAbsorbance96.save_state_to_file

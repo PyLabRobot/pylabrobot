@@ -76,6 +76,7 @@ pylabrobot.resources.Trough
       ~Trough.register_will_assign_resource_callback
       ~Trough.register_will_unassign_resource_callback
       ~Trough.rotate
+      ~Trough.rotate_to
       ~Trough.rotated
       ~Trough.save
       ~Trough.save_state_to_file

@@ -70,6 +70,7 @@ pylabrobot.resources.Lid
       ~Lid.register_will_assign_resource_callback
       ~Lid.register_will_unassign_resource_callback
       ~Lid.rotate
+      ~Lid.rotate_to
       ~Lid.rotated
       ~Lid.save
       ~Lid.save_state_to_file

@@ -73,6 +73,7 @@ pylabrobot.agilent.vspin.Access2
       ~Access2.register_will_assign_resource_callback
       ~Access2.register_will_unassign_resource_callback
       ~Access2.rotate
+      ~Access2.rotate_to
       ~Access2.rotated
       ~Access2.save
       ~Access2.save_state_to_file
