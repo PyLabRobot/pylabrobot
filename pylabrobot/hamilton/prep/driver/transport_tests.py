@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, patch
 from pylabrobot.hamilton.prep import PrepChatterboxClient
 from pylabrobot.hamilton.prep.driver import prep_commands as C
 from pylabrobot.hamilton.prep.driver.features.pipettes import ChannelDriveMap, Pipettes
-from pylabrobot.hamilton.prep.driver.client import MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH, PrepClient
+from pylabrobot.hamilton.prep.driver.client import (
+  MLPREP_OBJECT_PATH,
+  PIPETTOR_OBJECT_PATH,
+  PrepClient,
+)
 from pylabrobot.hamilton.prep.driver.errors import PREP_ERROR_CODES
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.introspection import MethodInfo, ObjectInfo

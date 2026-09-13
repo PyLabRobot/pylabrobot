@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from unittest.mock import AsyncMock
 
 import pytest
@@ -54,7 +55,7 @@ def test_chatterbox_sets_resolved_interfaces_and_channels():
     assert p.pipettes.num_channels == 2
     assert p.pipettes.setup_finished is True
     # Default setup: use_v1_aspirate_dispense=False → v2 probe passes (chatterbox stubs).
-    assert p.pipettes._supports_v2_pipetting is True
+    assert p.pipettes.configuration.supports_v2_pipetting is True
 
     await p.stop()
     # Kept after the link closes, as the STAR driver keeps it, so a reading can still be saved.
@@ -71,7 +72,7 @@ def test_chatterbox_use_v1_skips_v2_probe():
     assert p.pipettes is not None
     assert isinstance(p.pipettes, Pipettes)
     assert p.pipettes.setup_finished is True
-    assert p.pipettes._supports_v2_pipetting is False
+    assert p.pipettes.configuration.supports_v2_pipetting is False
 
     await p.stop()
 
@@ -217,8 +218,12 @@ def test_saved_configuration_holds_channel_count_and_head8(tmp_path):
     await p.setup()
     path = str(tmp_path / "prep.json")
     p.save_configuration(path)
+    assert p.pipettes is not None
+    pipettes = p.pipettes.configuration
     await p.stop()
-    saved = read_configuration(path)["device"]
+    read = read_configuration(path)
+    assert read["pipettes"] == pipettes
+    saved = read["device"]
     assert saved.num_channels == p.num_channels
     assert saved.head8_installed == p.head8_installed
 
@@ -232,5 +237,32 @@ def test_saved_configuration_holds_channel_count_and_head8(tmp_path):
     assert q.head8_installed is False
     assert q.head8 is None
     await q.stop()
+
+  asyncio.run(_run())
+
+
+def test_setup_logs_one_summary_of_what_was_found(caplog):
+  """Setup ends with one INFO block describing the device, as the STAR driver's does."""
+
+  async def _run() -> None:
+    p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
+    assert p.format_setup_summary() == "[Hamilton Prep] not discovered yet"
+    # The pylabrobot logger does not propagate to the root, so caplog listens on it directly.
+    prep_logger = logging.getLogger("pylabrobot.hamilton.prep")
+    prep_logger.addHandler(caplog.handler)
+    try:
+      with caplog.at_level(logging.DEBUG, logger="pylabrobot.hamilton.prep"):
+        await p.setup()
+    finally:
+      prep_logger.removeHandler(caplog.handler)
+    summary = p.format_setup_summary()
+    assert summary.startswith("[Hamilton Prep] Connected on simulation (no link)")
+    assert "  Pipettes: 2, v2 aspirate/dispense" in summary
+    assert "    channel 0 (rear):" in summary
+    assert "    channel 1 (front):" in summary
+    assert "  8-channel head: installed" in summary
+    infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert infos == [summary]
+    await p.stop()
 
   asyncio.run(_run())

@@ -17,6 +17,7 @@ from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.wire_types import Str, StructArray
 from pylabrobot.io.socket import Socket
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 from . import prep_commands as PrepCmd
 from .client import (
@@ -32,6 +33,9 @@ from .configuration import DeviceConfiguration
 from .prep_commands import PrepCommand
 
 logger = logging.getLogger(__name__)
+
+# What the simulated link calls itself in the IO log, as the STAR simulator's does.
+SIMULATED_LINK = "[simulation]"
 
 # Channel v2 support probe expects pipettor interface 1 to expose these method IDs.
 _V2_PIPETTING_METHOD_IDS = frozenset(range(38, 44))
@@ -120,11 +124,13 @@ class PrepChatterboxClient(PrepClient):
     def _stub_methods(addr: Address, interface_id: int) -> Optional[List[MethodInfo]]:
       if interface_id != 1:
         return None
+
       def named(methods: dict) -> List[MethodInfo]:
         return [
           MethodInfo(interface_id=1, call_type=0, method_id=mid, name=name)
           for name, mid in methods.items()
         ]
+
       stubs: List[MethodInfo] = []
       if self._pipettor_addr is not None and addr == self._pipettor_addr:
         stubs += named(_PIPETTOR_NAMED_METHODS)
@@ -134,9 +140,7 @@ class PrepChatterboxClient(PrepClient):
             for mid in sorted(_V2_PIPETTING_METHOD_IDS)
           ]
       if (
-        self._mph_addr is not None
-        and addr == self._mph_addr
-        and not self._use_v1_aspirate_dispense
+        self._mph_addr is not None and addr == self._mph_addr and not self._use_v1_aspirate_dispense
       ):
         stubs += [
           MethodInfo(interface_id=1, call_type=0, method_id=mid, name=f"v2_mph_stub_{mid}")
@@ -179,6 +183,9 @@ class PrepChatterboxClient(PrepClient):
     self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
     if self._canned_config.head8_installed:
       self._mph_addr = await self.resolve_path(MPH_OBJECT_PATH)
+
+  def describe_link(self) -> str:
+    return "simulation (no link)"
 
   async def stop(self):
     self._pipettor_addr = None
@@ -229,8 +236,12 @@ _CANNED_RESPONSES: dict[type[TCPCommand], HoiParams] = {
 
 # Replies to the methods the driver finds by name, keyed by object path and the ids stubbed above.
 _NAMED_METHOD_RESPONSES: dict[tuple[str, int, int], HoiParams] = {
-  (MLPREP_OBJECT_PATH, 1, _MLPREP_NAMED_METHODS["IsParked"]): HoiParams().add(False, PrepCmd.PaddedBool),
-  (MLPREP_OBJECT_PATH, 1, _MLPREP_NAMED_METHODS["IsSpread"]): HoiParams().add(False, PrepCmd.PaddedBool),
+  (MLPREP_OBJECT_PATH, 1, _MLPREP_NAMED_METHODS["IsParked"]): HoiParams().add(
+    False, PrepCmd.PaddedBool
+  ),
+  (MLPREP_OBJECT_PATH, 1, _MLPREP_NAMED_METHODS["IsSpread"]): HoiParams().add(
+    False, PrepCmd.PaddedBool
+  ),
 }
 
 
@@ -265,7 +276,14 @@ class _PrepChatterboxSession(TCPSession):
     if config.deck_bounds is not None:
       bounds = config.deck_bounds
       params = HoiParams()
-      for value in (bounds.min_x, bounds.max_x, bounds.min_y, bounds.max_y, bounds.min_z, bounds.max_z):
+      for value in (
+        bounds.min_x,
+        bounds.max_x,
+        bounds.min_y,
+        bounds.max_y,
+        bounds.min_z,
+        bounds.max_z,
+      ):
         params.add(value, PrepCmd.F32)
       self._responses[PrepCmd.PrepGetDeckBounds] = params
     # Where each pipetting channel is, moved by the moves it is sent.
@@ -293,14 +311,16 @@ class _PrepChatterboxSession(TCPSession):
     )
     hoi = HoiPacket.unpack(request_frame.payload)
     request = command.request if isinstance(command, _ResolvedPrepCommand) else command
-    logger.info("[Prep chatterbox] %s", type(request).__name__)
+    logger.log(LOG_LEVEL_IO, "%s write: %s", SIMULATED_LINK, request)
     payload = self._responses.get(type(request), HoiParams())
     # Which device this is, from the configuration it stands in for: serial (9) and firmware (8).
     if (
       isinstance(request, PrepCmd.PrepProbeRequest)
       and self.registry.path(request.dest) == MLPREP_CPU_OBJECT_PATH
     ):
-      answer = {9: self._config.serial_number, 8: self._config.firmware_version}.get(request.command_id)
+      answer = {9: self._config.serial_number, 8: self._config.firmware_version}.get(
+        request.command_id
+      )
       if answer is not None:
         payload = HoiParams().add(answer, Str)
     if isinstance(request, PrepCmd.PrepProbeRequest):
@@ -316,7 +336,10 @@ class _PrepChatterboxSession(TCPSession):
       for axis in move.axis_parameters:
         if int(axis.channel) in self._positions:
           self._positions[int(axis.channel)][1:] = [axis.y_position, axis.z_position]
-    if isinstance(request, PrepCmd.PrepMoveZUpToSafe) and self._config.default_traverse_height is not None:
+    if (
+      isinstance(request, PrepCmd.PrepMoveZUpToSafe)
+      and self._config.default_traverse_height is not None
+    ):
       for channel in request.channels:
         if int(channel) in self._positions:
           self._positions[int(channel)][2] = self._config.default_traverse_height
@@ -330,6 +353,10 @@ class _PrepChatterboxSession(TCPSession):
         ],
         StructArray(),
       )
+    params = payload.build()
+    # Logged as the transport logs a real exchange. Only what the simulation answers is read back.
+    if params:
+      logger.log(LOG_LEVEL_IO, "%s read: simulation: %s", SIMULATED_LINK, params.hex())
     action = (
       Hoi2Action.STATUS_RESPONSE
       if hoi.action_code == Hoi2Action.STATUS_REQUEST
@@ -338,7 +365,7 @@ class _PrepChatterboxSession(TCPSession):
     response = HoiPacket(
       interface_id=hoi.interface_id,
       action_id=hoi.action_id,
-      params=payload.build(),
+      params=params,
       action_code=action,
     )
     harp = HarpPacket(

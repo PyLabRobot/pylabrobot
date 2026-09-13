@@ -19,14 +19,7 @@ from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 
 from . import prep_commands as PrepCmd
 from .features.calibration import Calibration
-from .features.pipettes import (
-  CHANNEL_MODEL,
-  CHANNEL_SIZE_Z,
-  CHANNEL_WIDTH,
-  CHANNEL_X_REFERENCE_ANCHOR,
-  Pipettes,
-  build_prep_channels,
-)
+from .features.pipettes import Pipettes, build_prep_channels
 from .simulator import PrepChatterboxClient
 from .client import (
   DECK_CONFIGURATION_OBJECT_PATH,
@@ -48,6 +41,11 @@ logger = logging.getLogger(__name__)
 # What a declaration and a device have to agree on for the one to stand for the other: what is
 # fitted. Identity and set-up are the device's own.
 _DECLARATION_MUST_MATCH = ("num_channels", "head8_installed", "has_enclosure")
+
+
+def _range(values: Optional[Tuple[float, float]]) -> str:
+  """A `(low, high)` range in mm, or a note that it was not resolved."""
+  return "unresolved" if values is None else f"{values[0]:.2f} to {values[1]:.2f} mm"
 
 
 class PrepDriver:
@@ -125,10 +123,20 @@ class PrepDriver:
     use_v1_aspirate_dispense: bool = False,
   ):
     """Connect, discover the device, initialize MLPrep, construct peers."""
+    logger.debug("Setting up Prep on %s ...", self.client.describe_link())
     try:
       await self.client.setup()
+
+      # 1. What is on the other end, and what does it carry?
+      logger.debug("[PHASE 1] Discovery")
       await self.discover()
+
+      # 2. Bring the device to a known state.
+      logger.debug("[PHASE 2] Device initialization")
       await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+
+      # 3. Each feature brings itself up.
+      logger.debug("[PHASE 3] Feature initialization")
 
       self.method = MethodLifecycle(self.client)
       self.calibration = Calibration(client=self.client, driver=self, deck=self.deck)
@@ -162,11 +170,14 @@ class PrepDriver:
         self.x_arm = XArm(self)
       # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
       if self.deck is not None:
+        logger.debug("[PHASE 4] Feature resources")
         await self._create_capability_resources()
       self._setup_finished = True
     except Exception:
       await self.client.stop()
       raise
+
+    logger.info("%s", self.format_setup_summary())
 
   async def _initialize_instrument(self, *, smart: bool, force_initialize: bool) -> None:
     """Send ``MLPrep.Initialize`` when needed."""
@@ -177,9 +188,10 @@ class PrepDriver:
         logger.error("GetIsInitialized failed; cannot decide whether to init: %s", e)
         raise
       if already:
-        logger.info("MLPrep already initialized, skipping Initialize")
+        logger.debug("device reports initialized - skipping the initialization procedure")
         return
 
+      logger.debug("device reports not initialized - running the initialization procedure")
     await self.client.execute(
       PrepCmd.PrepInitialize(
         smart=smart,
@@ -191,10 +203,7 @@ class PrepDriver:
         ),
       )
     )
-    logger.info(
-      "Prep initialization complete%s",
-      " (force_initialize=True)" if force_initialize else "",
-    )
+    logger.debug("the device initialization procedure has run")
 
   async def stop(self):
     if not self._setup_finished:
@@ -359,7 +368,9 @@ class PrepDriver:
 
   async def request_initialization_status(self) -> bool:
     """Whether MLPrep reports as initialized (GetIsInitialized, cmd=2)."""
-    result = await self.client.execute(PrepCmd.PrepGetIsInitialized(dest=self.client.mlprep_address))
+    result = await self.client.execute(
+      PrepCmd.PrepGetIsInitialized(dest=self.client.mlprep_address)
+    )
     if result is None:
       return False
     return bool(result.value)
@@ -456,6 +467,57 @@ class PrepDriver:
     self.configuration = configuration
     return configuration
 
+  def format_setup_summary(self) -> str:
+    """One block describing the device that was found: how it is reached, what it calls itself and
+    runs, how it is set up, its deck, and per channel its firmware and reach, and whether it carries
+    an 8-channel head.
+
+    Returns:
+      A multi-line summary, or a note that setup has not run.
+    """
+    c = self.configuration
+    if c is None:
+      return "[Hamilton Prep] not discovered yet"
+
+    traverse = "unknown" if c.default_traverse_height is None else f"{c.default_traverse_height} mm"
+    lines = [
+      f"[Hamilton Prep] Connected on {self.client.describe_link()}",
+      f"  Serial: {c.serial_number or 'unknown'}",
+      f"  Firmware: {c.firmware_version or 'unknown'}",
+      f"  Configuration: enclosure {'installed' if c.has_enclosure else 'none'}, "
+      f"safe speeds {'on' if c.safe_speeds_enabled else 'off'}, traverse height {traverse}",
+    ]
+    deck = f"{len(c.deck_sites)} sites, {len(c.waste_sites)} waste sites"
+    if c.deck_bounds is not None:
+      b = c.deck_bounds
+      deck = (
+        f"x {_range((b.min_x, b.max_x))}, y {_range((b.min_y, b.max_y))}, "
+        f"z {_range((b.min_z, b.max_z))}; {deck}"
+      )
+    lines.append(f"  Deck: {deck}")
+
+    if self.pipettes is None:
+      lines.append("  Pipettes: none")
+    else:
+      p = self.pipettes.configuration
+      pipetting = "aspirate/dispense unprobed"
+      if p.supports_v2_pipetting is not None:
+        pipetting = f"{'v2' if p.supports_v2_pipetting else 'v1'} aspirate/dispense"
+      lines.append(f"  Pipettes: {len(p.channels)}, {pipetting}")
+      for channel, entry in enumerate(p.channels):
+        side = {0: "rear", 1: "front"}.get(channel, str(channel))
+        firmware = f"firmware {entry.firmware_version}, " if entry.firmware_version else ""
+        lines.append(
+          f"    channel {channel} ({side}): {firmware}x {_range(entry.x_range)}, "
+          f"y {_range(entry.y_range)}, z {_range(entry.z_range)}"
+        )
+
+    head8 = "none"
+    if c.head8_installed:
+      head8 = "installed" if self.head8 is not None else "none, but the device reports it installed"
+    lines.append(f"  8-channel head: {head8}")
+    return "\n".join(lines)
+
   def _saved_configuration(self) -> Dict[str, Any]:
     """What `save_configuration` writes.
 
@@ -464,7 +526,10 @@ class PrepDriver:
     """
     if self.configuration is None:
       raise RuntimeError("nothing has been read off this device; call `setup` first")
-    return {"device": to_jsonable(self.configuration)}
+    saved: Dict[str, Any] = {"device": to_jsonable(self.configuration)}
+    if self.pipettes is not None:
+      saved["pipettes"] = to_jsonable(self.pipettes.configuration)
+    return saved
 
   def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:
     """Write what this device reported to a file, to be declared or simulated from later.
@@ -494,9 +559,10 @@ class PrepDriver:
       logger.warning("the channels reported no positions, so the arm and channels are not modelled")
       return
     arm, c = self.x_arm, self.x_arm.configuration
+    pipettes = self.pipettes.configuration
     # The arm rides at the top of the channels' travel: what their bounds say, or the traverse height
     # when no bounds were read.
-    tops = [bounds["z_max"] for bounds in self.pipettes._channel_bounds]
+    tops = [c.z_range[1] for c in self.pipettes.configuration.channels if c.z_range is not None]
     if tops:
       z = max(tops)
     elif self.configuration is not None and self.configuration.default_traverse_height is not None:
@@ -524,13 +590,13 @@ class PrepDriver:
       if resource is None:
         resource = Resource(
           name=name,
-          size_x=CHANNEL_WIDTH,
-          size_y=CHANNEL_WIDTH,
-          size_z=CHANNEL_SIZE_Z,
+          size_x=pipettes.channel_width,
+          size_y=pipettes.channel_width,
+          size_z=pipettes.channel_size_z,
           category="pipette_channel",
-          model=CHANNEL_MODEL,
+          model=pipettes.channel_model,
         )
-        anchor = resource.get_anchor(x=CHANNEL_X_REFERENCE_ANCHOR)
+        anchor = resource.get_anchor(x=pipettes.x_reference_anchor)
         arm.resource.assign_child_resource(
           resource, location=Coordinate(c.reference_point_from_left - anchor.x, 0.0, 0.0)
         )
@@ -606,7 +672,7 @@ class PrepDriver:
   async def spread(self) -> None:
     await self.client.execute(PrepCmd.PrepSpread())
 
-  async def request_parked(self) -> bool:
+  async def is_parked(self) -> bool:
     """Whether MLPrep reports itself parked.
 
     Looked up by name: the method's id is not the same on every firmware version, and older
@@ -618,10 +684,10 @@ class PrepDriver:
     data = await self._request_by_name(MLPREP_OBJECT_PATH, "IsParked")
     return bool(PrepCmd.PrepIsParked.parse_response_parameters(data).value)
 
-  async def request_spread(self) -> bool:
+  async def is_spread(self) -> bool:
     """Whether MLPrep reports its channels spread.
 
-    Looked up by name, as `request_parked` is.
+    Looked up by name, as `is_parked` is.
 
     Raises:
       PrepMethodNotFoundError: If this firmware has no IsSpread.

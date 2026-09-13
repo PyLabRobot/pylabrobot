@@ -150,7 +150,7 @@ class Head8:
   async def _on_setup(self) -> None:
     if self._use_v1_aspirate_dispense:
       self._supports_v2_pipetting = False
-      logger.info("MPH V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
+      logger.debug("MPH V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
     else:
       try:
         supported = await self._probe_v2_support()
@@ -163,7 +163,7 @@ class Head8:
           "Pass use_v1_aspirate_dispense=True to Head8 to use v1 commands instead."
         )
       self._supports_v2_pipetting = True
-      logger.info("MPH V2 aspirate/dispense support: True")
+      logger.debug("MPH V2 aspirate/dispense support: True")
 
   async def _on_stop(self) -> None:
     self._supports_v2_pipetting = None

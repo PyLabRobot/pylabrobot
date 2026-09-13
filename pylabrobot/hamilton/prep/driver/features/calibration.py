@@ -95,7 +95,9 @@ class Calibration:
   def head8_installed(self) -> bool:
     h = self._configuration.head8_installed
     if h is None:
-      raise RuntimeError("Instrument config has no head8_installed (finish PrepDriver.setup first).")
+      raise RuntimeError(
+        "Instrument config has no head8_installed (finish PrepDriver.setup first)."
+      )
     return h
 
   def _set_calibration_session_active(self, active: bool) -> None:

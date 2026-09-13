@@ -138,3 +138,38 @@ def test_channels_volume_trackers_aspirate_dispense():
       set_volume_tracking(False)
 
   _run(_t())
+
+
+def test_configuration_holds_one_entry_per_channel_and_setup_choices():
+  """Setup sizes `configuration.channels` against the device, and keeps what the caller chose."""
+
+  async def _t():
+    p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
+    await p.setup(default_traverse_height=150.0)
+    assert p.pipettes is not None
+    c = p.pipettes.configuration
+    assert len(c.channels) == p.num_channels
+    assert c.default_traverse_height == 150.0
+    assert c.use_v1_aspirate_dispense is False
+    assert c.supports_v2_pipetting is True
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_position_refuses_what_the_channel_bounds_exclude():
+  """The reach recorded on a channel's configuration guards the move before anything is sent."""
+
+  async def _t():
+    p = PrepDriver(deck=STARLetDeck(), chatterbox=True)
+    await p.setup()
+    assert p.pipettes is not None
+    c = p.pipettes.configuration.channels[0]
+    c.x_range, c.y_range, c.z_range = (0.0, 400.0), (0.0, 400.0), (0.0, 170.0)
+    with pytest.raises(ValueError, match="outside channel 0"):
+      await p.pipettes.move_to_position(x=500.0, use_channels=0, y=100.0, z=100.0)
+    with pytest.raises(ValueError, match="above channel 0 maximum"):
+      await p.pipettes.move_to_position(x=100.0, use_channels=0, y=100.0, z=200.0)
+    await p.stop()
+
+  _run(_t())

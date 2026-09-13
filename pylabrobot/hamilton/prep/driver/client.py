@@ -95,6 +95,10 @@ class PrepClient(HamiltonTCPClient):
     )
     self._mlprep_address: Optional[Address] = None
 
+  def describe_link(self) -> str:
+    """How this device is reached."""
+    return f"TCP {self._host}:{self._port}"
+
   async def setup(self) -> None:
     """Connect, verify the instrument identity, and resolve the MLPrep object."""
     await super().setup()

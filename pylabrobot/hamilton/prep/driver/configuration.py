@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 # particular to that device.
 from pylabrobot.hamilton.star.driver.configuration import _restore, to_jsonable
 
+from .features.pipettes import PipettesConfiguration
 from .prep_commands import DeckBounds, DeckSiteInfo, WasteSiteInfo
 
 __all__ = ["DeviceConfiguration", "read_configuration", "to_jsonable"]
@@ -56,11 +57,14 @@ def read_configuration(path: str) -> Dict[str, Any]:
     path: a file `PrepDriver.save_configuration` wrote.
 
   Returns:
-    `{"device": DeviceConfiguration}`, or an empty dict when the file holds none.
+    `{"device": DeviceConfiguration, "pipettes": PipettesConfiguration}`, holding whichever of the
+    two the file holds.
   """
   with open(path, encoding="utf-8") as f:
     saved = json.load(f)
   read: Dict[str, Any] = {}
   if "device" in saved:
     read["device"] = _restore(DeviceConfiguration, saved["device"])
+  if "pipettes" in saved:
+    read["pipettes"] = _restore(PipettesConfiguration, saved["pipettes"])
   return read

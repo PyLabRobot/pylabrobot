@@ -18,7 +18,7 @@ import enum
 import logging
 import math
 import struct as _struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
   TYPE_CHECKING,
   Any,
@@ -376,16 +376,99 @@ _CHANNEL_INDEX = {
   1: PrepCmd.ChannelIndex.FrontChannel,
 }
 
-# How a channel is modelled, as the STAR models its channels. The Prep reports neither a channel's
-# width nor its height, so these are the STAR's: the width its channels report, and the height it
-# models them at.
-CHANNEL_WIDTH = 8.9826
-CHANNEL_SIZE_Z = 140.0
-CHANNEL_MODEL = "hamilton_star_pipette_channel"
-# Where on a channel the positions refer to: centred across it, at the end of its tip mounting shaft.
-CHANNEL_X_REFERENCE_ANCHOR = "c"
-CHANNEL_Y_REFERENCE_ANCHOR = "c"
-CHANNEL_Z_REFERENCE_ANCHOR = "b"
+
+@dataclass
+class PipetteConfiguration:
+  """What a single pipetting channel reports about itself.
+
+  Read off the channel at setup. Every field is None until it has been read.
+  """
+
+  firmware_version: Optional[str] = None
+  """What the channel's node runs, from its NodeInformation."""
+  x_range: Optional[Tuple[float, float]] = None
+  """The X window the channel reaches, in mm, lowest first. From GetChannelBounds."""
+  y_range: Optional[Tuple[float, float]] = None
+  """The Y window the channel reaches, in mm, lowest first. From GetChannelBounds."""
+  z_range: Optional[Tuple[float, float]] = None
+  """The Z window the channel reaches, in mm, lowest first. From GetChannelBounds."""
+
+
+@dataclass
+class PipettesConfiguration:
+  """Configuration for the pipetting channels, and for each channel in turn.
+
+  `channels` holds what each individual channel reports. It is empty until setup has counted the
+  channels; only the device reports how many there are.
+  """
+
+  # -- how the caller wants them driven --
+  default_traverse_height: Optional[float] = None
+  """The height to travel at when a command names none, in mm. None leaves it to the height the
+  device reports."""
+  use_v1_aspirate_dispense: bool = False
+  """Whether to aspirate and dispense with the v1 commands (cmd 1-6) rather than the v2 ones."""
+
+  # -- what the pipettor answered --
+  supports_v2_pipetting: Optional[bool] = None
+  """Whether the pipettor carries the v2 aspirate/dispense commands. None until probed; False when
+  the probe was skipped for v1."""
+  v2_pipetting_command_ids: Tuple[int, ...] = (38, 39, 40, 41, 42, 43)
+  """The v2 aspirate/dispense command ids, on the pipettor's interface 1."""
+
+  # -- device facts --
+  x_reference_anchor: str = "c"
+  """Along X the channels sit at the gantry's reported position: centred across the channel."""
+  y_reference_anchor: str = "c"
+  z_reference_anchor: str = "b"
+  """Along Z the positions refer to the end of the tip mounting shaft. A channel carrying a shaft is
+  anchored on the shaft's end rather than on this, which then applies only to one that carries none."""
+  channel_width: float = 8.9826
+  """How wide to model a channel, in mm. Not reported by the Prep: the width the STAR's channels
+  report."""
+  channel_size_z: float = 140.0
+  """How tall to model a channel, in mm. Not reported by the Prep: the height the STAR models its
+  channels at."""
+  channel_model: str = "hamilton_star_pipette_channel"
+  """Which 3D model draws a channel."""
+
+  channels: List[PipetteConfiguration] = field(default_factory=list)
+  """One entry per channel, in channel order."""
+
+  def check_channels_agree(self) -> None:
+    """Warn if the channels are not all running the same firmware.
+
+    Channels are replaced individually. A device repaired piecemeal is the case this catches.
+    """
+    by_version: Dict[str, List[int]] = {}
+    for channel, entry in enumerate(self.channels):
+      if entry.firmware_version is not None:
+        by_version.setdefault(entry.firmware_version, []).append(channel)
+    if len(by_version) <= 1:
+      return
+    reported = "; ".join(
+      f"{version} on channel{'s' if len(channels) > 1 else ''} "
+      f"{', '.join(str(c) for c in channels)}"
+      for version, channels in by_version.items()
+    )
+    logger.warning("the pipetting channels are not all on the same firmware (%s)", reported)
+
+  def resolve_channels(self, num_channels: int) -> None:
+    """Size `channels` against the device, once it has said how many channels it has.
+
+    A list supplied up front is left as it is. A caller can configure channels before the device
+    is known, and it is then checked, not overwritten.
+
+    Args:
+      num_channels: how many channels the device reported.
+
+    Raises:
+      ValueError: If a supplied list does not have one entry per channel.
+    """
+    if not self.channels:
+      self.channels.extend(PipetteConfiguration() for _ in range(num_channels))
+    elif len(self.channels) != num_channels:
+      raise ValueError(f"configuration has {len(self.channels)} channels, expected {num_channels}")
 
 
 @dataclass(frozen=True)
@@ -514,7 +597,7 @@ async def discover_channel_drives(
       if "ZDrive" in zx:
         zdrive.append(zx["ZDrive"])
 
-  logger.info("Discovered %d %s channel drive pair(s)", len(channel_root_addrs), root_name)
+  logger.debug("Discovered %d %s channel drive pair(s)", len(channel_root_addrs), root_name)
   return ChannelDriveMap(
     sleeve_sensor_addrs=sleeve,
     zdrive_addrs=zdrive,
@@ -788,9 +871,6 @@ class Pipettes:
   :meth:`PrepDriver.setup` before :meth:`_on_setup`.
   """
 
-  # V2 aspirate/dispense command IDs (interface 1 on Pipettor).
-  _V2_PIPETTING_CMD_IDS = {38, 39, 40, 41, 42, 43}
-
   def __init__(
     self,
     *,
@@ -799,14 +879,25 @@ class Pipettes:
     deck: Optional["Deck"] = None,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
+    configuration: Optional[PipettesConfiguration] = None,
   ) -> None:
+    """
+    Args:
+      client: the client to send commands through.
+      driver: the driver whose configuration holds what the device reported.
+      deck: the deck positions are measured from.
+      default_traverse_height: sets `configuration.default_traverse_height`, when given.
+      use_v1_aspirate_dispense: sets `configuration.use_v1_aspirate_dispense`, when set.
+      configuration: the channels' configuration. Defaults to `PipettesConfiguration()`.
+    """
     self._client = client
     self._driver = driver
     self.deck = deck
-    self._user_traverse_height: Optional[float] = default_traverse_height
-    self._channel_bounds: list[ChannelBounds] = []
-    self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
-    self._supports_v2_pipetting: Optional[bool] = None
+    self.configuration = configuration or PipettesConfiguration()
+    if default_traverse_height is not None:
+      self.configuration.default_traverse_height = default_traverse_height
+    if use_v1_aspirate_dispense:
+      self.configuration.use_v1_aspirate_dispense = True
     self.setup_finished: bool = False
     self.channels: List[PipetteChannel] = []
     self.head: dict[int, TipTracker] = {}
@@ -853,8 +944,9 @@ class Pipettes:
     stated = getattr(resource, "reference_point", None)
     if isinstance(stated, Coordinate):
       return stated
+    c = self.configuration
     anchor = resource.get_anchor(
-      x=CHANNEL_X_REFERENCE_ANCHOR, y=CHANNEL_Y_REFERENCE_ANCHOR, z=CHANNEL_Z_REFERENCE_ANCHOR
+      x=c.x_reference_anchor, y=c.y_reference_anchor, z=c.z_reference_anchor
     )
     shaft = next(
       (child for child in resource.children if isinstance(child, TipMountingShaft)), None
@@ -967,7 +1059,7 @@ class Pipettes:
     Use this when the instrument did not report a traverse height at setup, or to override
     the probed value.
     """
-    self._user_traverse_height = value
+    self.configuration.default_traverse_height = value
 
   async def _probe_v2_support(self) -> bool:
     """Probe the pipettor for v2 aspirate/dispense command support.
@@ -979,12 +1071,12 @@ class Pipettes:
     dest = await self._client.resolve_path(PIPETTOR_OBJECT_PATH)
     methods = await self._client.introspection.methods_for_interface(dest, interface_id=1)
     iface1_ids = {m.method_id for m in methods}
-    return self._V2_PIPETTING_CMD_IDS.issubset(iface1_ids)
+    return set(self.configuration.v2_pipetting_command_ids).issubset(iface1_ids)
 
   def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
     return resolve_command_version(
-      self._supports_v2_pipetting,
-      self._use_v1_aspirate_dispense,
+      self.configuration.supports_v2_pipetting,
+      self.configuration.use_v1_aspirate_dispense,
       override,
       v2_error_hint=(
         "v2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
@@ -1004,7 +1096,7 @@ class Pipettes:
     :meth:`PrepDriver.setup` — the pipettor sees an already-initialized instrument.
     """
     cfg = self._configuration
-    logger.info(
+    logger.debug(
       "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
       "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, head8_installed=%s",
       cfg.has_enclosure,
@@ -1017,18 +1109,14 @@ class Pipettes:
       cfg.head8_installed,
     )
 
-    # Per-channel bounds are attached to ``self.channels`` by build_prep_channels.
-    # Keep a flat list too for legacy call sites that iterate _channel_bounds.
-    self._channel_bounds = [c.bounds for c in self.channels if c.bounds is not None]
-    if self._channel_bounds:
-      logger.info("Channel bounds: %s", self._channel_bounds)
-    else:
+    await self.discover()
+    if not any(c.x_range is not None for c in self.configuration.channels):
       logger.warning("Channel bounds not available — move_to_position will skip validation")
 
     # Probe pipettor for v2 aspirate/dispense support (cmd 38-43).
-    if self._use_v1_aspirate_dispense:
-      self._supports_v2_pipetting = False
-      logger.info("V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
+    if self.configuration.use_v1_aspirate_dispense:
+      self.configuration.supports_v2_pipetting = False
+      logger.debug("V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
     else:
       try:
         supported = await self._probe_v2_support()
@@ -1040,11 +1128,28 @@ class Pipettes:
           "V2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
           "Pass use_v1_aspirate_dispense=True to Pipettes to use v1 commands (cmd 1-6) instead."
         )
-      self._supports_v2_pipetting = True
-      logger.info("V2 aspirate/dispense support: True")
+      self.configuration.supports_v2_pipetting = True
+      logger.debug("V2 aspirate/dispense support: True")
 
     self._ensure_head()
     self.setup_finished = True
+
+  async def discover(self):
+    """Read what each channel reports about itself.
+
+    Read-only. Fills in `configuration.channels`: each channel's firmware version, and the window it
+    reaches from the bounds `build_prep_channels` read.
+    """
+    self.configuration.resolve_channels(len(self.channels))
+    for index, channel in enumerate(self.channels):
+      bounds = channel.bounds
+      self.configuration.channels[index] = PipetteConfiguration(
+        firmware_version=await channel.request_firmware_version(),
+        x_range=None if bounds is None else (bounds["x_min"], bounds["x_max"]),
+        y_range=None if bounds is None else (bounds["y_min"], bounds["y_max"]),
+        z_range=None if bounds is None else (bounds["z_min"], bounds["z_max"]),
+      )
+    self.configuration.check_channels_agree()
 
   async def _on_stop(self):
     for tracker in self.head.values():
@@ -1112,8 +1217,8 @@ class Pipettes:
     """Resolve final_z: explicit arg > user-set default > probed value. Raises if none available."""
     if final_z is not None:
       return final_z
-    if self._user_traverse_height is not None:
-      return self._user_traverse_height
+    if self.configuration.default_traverse_height is not None:
+      return self.configuration.default_traverse_height
     try:
       cfg = self._configuration
     except RuntimeError:
@@ -1244,7 +1349,8 @@ class Pipettes:
     if pre_position:
       traverse_h = minimum_traverse_height_at_beginning_of_a_command or resolved_final_z
       locs = [
-        indexed[ch][0].get_location_wrt(self._require_deck(), "c", "c", "t") + indexed[ch][2] for ch in use_channels
+        indexed[ch][0].get_location_wrt(self._require_deck(), "c", "c", "t") + indexed[ch][2]
+        for ch in use_channels
       ]
       await self.move_to_position(
         x=locs[0].x,
@@ -1488,7 +1594,8 @@ class Pipettes:
     volumes = corrected_volumes_for_ops(ops, hlcs, dvc)
 
     well_geometry = [
-      _absolute_z_from_well(op.resource, self._require_deck(), op.liquid_height, op.offset.z) for op in ops
+      _absolute_z_from_well(op.resource, self._require_deck(), op.liquid_height, op.offset.z)
+      for op in ops
     ]
     raw_traverse = self._resolve_traverse_height(None)
     z_minimum = fill_in_defaults(z_minimum, [g.well_bottom for g in well_geometry])
@@ -2377,7 +2484,9 @@ class Pipettes:
       ValueError: If any channel carries no tip.
     """
     tips = await self.sense_tip_presence()
-    missing = [channel for channel in range(self.num_channels) if channel >= len(tips) or not tips[channel]]
+    missing = [
+      channel for channel in range(self.num_channels) if channel >= len(tips) or not tips[channel]
+    ]
     if missing:
       raise ValueError(f"channels {missing} carry no tip, so they have no tool bottom to read")
     bottoms = {
@@ -2386,7 +2495,9 @@ class Pipettes:
     # What comes back is each tip's bottom, but the model references the ends of the shafts, so those
     # are read for the model.
     for channel in bottoms:
-      self.update_location_by_reference_point(channel, z=await self.request_stop_disc_z_position(channel))
+      self.update_location_by_reference_point(
+        channel, z=await self.request_stop_disc_z_position(channel)
+      )
     return bottoms
 
   async def request_tool_bottom_z_position(self, channel_idx: int) -> float:
@@ -2648,9 +2759,7 @@ class Pipettes:
     if not channels:
       return
     if max(channels) >= self.num_channels or min(channels) < 0:
-      raise ValueError(
-        f"channels must be between 0 and {self.num_channels - 1}, are {channels}"
-      )
+      raise ValueError(f"channels must be between 0 and {self.num_channels - 1}, are {channels}")
     try:
       await self._unchecked_fw_move_z_up_to_safe(channels)
       # Nothing to record as asked: the firmware chooses the height. The read below records it.
@@ -2704,16 +2813,18 @@ class Pipettes:
     z_vals = z if isinstance(z, list) else [z] * len(channels)
     for i, (y_i, z_i) in enumerate(zip(y_vals, z_vals)):
       ch = channels[i]
-      if ch < len(self._channel_bounds):
-        b = self._channel_bounds[ch]
-        if not b["x_min"] <= x <= b["x_max"]:
-          raise ValueError(f"x={x} outside channel {ch} range [{b['x_min']:.1f}, {b['x_max']:.1f}]")
-        if not b["y_min"] <= y_i <= b["y_max"]:
+      if ch < len(self.configuration.channels):
+        c = self.configuration.channels[ch]
+        if c.x_range is not None and not c.x_range[0] <= x <= c.x_range[1]:
           raise ValueError(
-            f"y={y_i} outside channel {ch} range [{b['y_min']:.1f}, {b['y_max']:.1f}]"
+            f"x={x} outside channel {ch} range [{c.x_range[0]:.1f}, {c.x_range[1]:.1f}]"
           )
-        if z_i > b["z_max"]:
-          raise ValueError(f"z={z_i} above channel {ch} maximum {b['z_max']:.1f}")
+        if c.y_range is not None and not c.y_range[0] <= y_i <= c.y_range[1]:
+          raise ValueError(
+            f"y={y_i} outside channel {ch} range [{c.y_range[0]:.1f}, {c.y_range[1]:.1f}]"
+          )
+        if c.z_range is not None and z_i > c.z_range[1]:
+          raise ValueError(f"z={z_i} above channel {ch} maximum {c.z_range[1]:.1f}")
 
     try:
       await self._unchecked_fw_move_to_position(x, channels, y, z, via_lane=via_lane)
@@ -2756,6 +2867,6 @@ class Pipettes:
   def serialize(self) -> dict:
     return {
       "type": self.__class__.__name__,
-      "default_traverse_height": self._user_traverse_height,
-      "use_v1_aspirate_dispense": self._use_v1_aspirate_dispense,
+      "default_traverse_height": self.configuration.default_traverse_height,
+      "use_v1_aspirate_dispense": self.configuration.use_v1_aspirate_dispense,
     }
