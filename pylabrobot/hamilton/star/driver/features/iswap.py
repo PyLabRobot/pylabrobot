@@ -2817,7 +2817,7 @@ class iSWAP:
       link_1_length: rotation joint to wrist joint, in mm - the arm's own.
       tool_center_point_distance: wrist joint to the point the end-effector is programmed against,
         in mm - the tool's own, which the gripper reports as its `tool_center_point`.
-      wrist_straight_angle: what the wrist reports when it is straight, in degrees.1
+      wrist_straight_angle: what the wrist reports when it is straight, in degrees.
       rotation_drive_z_offset_above_finger: how far the drive's bottom sits above the fingers.
 
     Returns:

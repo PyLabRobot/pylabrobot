@@ -1,11 +1,15 @@
+import math
 import unittest
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 
 async def gripper() -> Tuple[iSWAP, List[str]]:
@@ -136,6 +140,50 @@ class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
     wrist = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments["left"])
     with self.assertRaises(ValueError):
       iswap._check_pose_reachable(angle, wrist)
+
+  async def test_a_grip_centre_just_in_front_of_the_rail_is_allowed(self):
+    """Rotation -3.5 deg with the wrist at 121 deg puts the grip centre 6.2 mm in front of the
+    carriage's back stop. Measuring the tool from the gripper's corner rather than its wrist put it
+    6.2 mm behind, and refused a pose the arm can reach."""
+    iswap, _ = await gripper()
+    c = iswap.configuration
+
+    self.assertEqual(await iswap.rotation_drive_request_y_position(), c.rotation_drive_y_max)
+    iswap._check_pose_reachable(-3.5, 121.0)
+
+
+class TestToolCentrePoint(unittest.IsolatedAsyncioTestCase):
+  """Where the kinematics put the grip centre, against the arm the model builds."""
+
+  async def test_the_grip_centre_is_the_tool_length_from_the_wrist(self):
+    """The firmware reports the tool length from the wrist joint, so a pose worked out at any angles
+    carries the grip centre exactly that far past it."""
+    iswap, _ = await gripper()
+    c = iswap.configuration
+    assert c.tool_length is not None
+
+    for rotation in (-90.0, 0.0, 45.0, 90.0):
+      for wrist in (-135.0, -45.0, 45.0, 121.0):
+        with self.subTest(rotation=rotation, wrist=wrist):
+          pose = iswap._compute_pose_at_angles(rotation, wrist)
+          w, t = pose.wrist_joint_location, pose.gripper_center_location
+          self.assertAlmostEqual(math.hypot(t.x - w.x, t.y - w.y), c.tool_length, places=2)
+
+  async def test_the_pose_puts_the_grip_centre_where_the_gripper_has_it(self):
+    """`request_pose` and the gripper resource describe the same arm from the same joints, so they
+    agree on where it grips. They parted by 13 mm when the tool was measured from the gripper's
+    corner instead of the joint it hangs on at link 1's far end."""
+    iswap, _ = await gripper()
+    g = cast(MechanicalGripper, iswap.gripper)
+
+    pose = await iswap.request_pose()
+    turned = g.get_absolute_rotation().get_rotation_matrix()
+    # The grip centre is stated from the joint the gripper hangs on, so that joint carries it across.
+    model = g.get_absolute_location() + Coordinate(
+      *matrix_vector_multiply_3x3(turned, (g.proximal_joint + g.tool_center_point).vector())
+    )
+    self.assertAlmostEqual(pose.gripper_center_location.x, model.x, places=2)
+    self.assertAlmostEqual(pose.gripper_center_location.y, model.y, places=2)
 
 
 class TestLostSteps(unittest.IsolatedAsyncioTestCase):
