@@ -485,6 +485,13 @@ class TestResource(unittest.TestCase):
     self.assertEqual(plate.location, Coordinate(200, 300, 0))
     self.assertEqual(plate.rotation.z, 0)
 
+  def test_rotated_works_on_a_subclass_overriding_rotate_without_a_pivot(self):
+    class OldStyle(Resource):
+      def rotate(self, x: float = 0, y: float = 0, z: float = 0):  # type: ignore[override]
+        super().rotate(x=x, y=y, z=z)
+
+    self.assertEqual(OldStyle("old", size_x=10, size_y=10, size_z=10).rotated(z=90).rotation.z, 90)
+
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
     r.location = Coordinate.zero()

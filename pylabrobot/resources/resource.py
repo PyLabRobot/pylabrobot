@@ -1021,7 +1021,11 @@ class Resource(SerializableMixin):
     """
 
     new_resource = self.copy()
-    new_resource.rotate(x=x, y=y, z=z, pivot_coordinate=pivot_coordinate)
+    # Only passed when given, so a subclass overriding `rotate` without it keeps working.
+    if pivot_coordinate is None:
+      new_resource.rotate(x=x, y=y, z=z)
+    else:
+      new_resource.rotate(x=x, y=y, z=z, pivot_coordinate=pivot_coordinate)
     return new_resource
 
   def at(self, location: Coordinate) -> Self:
