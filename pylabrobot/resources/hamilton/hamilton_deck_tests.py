@@ -37,6 +37,14 @@ class HamiltonDeckTests(unittest.TestCase):
     with self.assertRaises(ValueError):
       deck.assign_child_resource(TIP_CAR_480_A00(name="tip_carrier"), track=1, rails=1)
 
+  def test_num_tracks_and_num_rails_together_is_refused(self):
+    class OwnDeck(HamiltonDeck):
+      def track_to_location(self, track: int) -> Coordinate:
+        return Coordinate(100.0 + (track - 1) * 22.5, 63, 100)
+
+    with self.assertRaises(ValueError):
+      OwnDeck(num_tracks=30, num_rails=30, size_x=1000, size_y=600, size_z=300)
+
   def test_a_deck_saved_with_num_rails_loads_with_the_tracks_it_has(self):
     """A saved STAR deck counted two more rails than it has tracks."""
     for factory, tracks in ((STARLetDeck, 30), (STARDeck, 54)):

@@ -91,7 +91,7 @@ def rails_for_x_coordinate(x: float) -> int:
   return track_for_x_coordinate(x)
 
 
-def _tracks_from(num_tracks: Optional[int], num_rails: Optional[int]) -> int:
+def _resolve_num_tracks(num_tracks: Optional[int], num_rails: Optional[int]) -> int:
   """The track count, from whichever argument carried it.
 
   Args:
@@ -103,8 +103,11 @@ def _tracks_from(num_tracks: Optional[int], num_rails: Optional[int]) -> int:
 
   Raises:
     TypeError: If neither was given.
+    ValueError: If both were given.
   """
   if num_tracks is not None:
+    if num_rails is not None:
+      raise ValueError("pass num_tracks, not both num_tracks and num_rails")
     return num_tracks
   if num_rails is None:
     raise TypeError("num_tracks is required")
@@ -153,7 +156,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     )
     # `Deck` takes no model, so it is set here rather than passed up.
     self.model = model
-    self.num_tracks = _tracks_from(num_tracks, num_rails)
+    self.num_tracks = _resolve_num_tracks(num_tracks, num_rails)
     # A deck restored from a serialization arrives with the panel it was saved with; one built from
     # scratch works out which it is. Either way, fitting an autoload swaps it.
     if model is None:
