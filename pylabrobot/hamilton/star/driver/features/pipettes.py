@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Tuple
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
-from pylabrobot.hamilton.star.resource_model import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.resource import Resource
 
 if TYPE_CHECKING:

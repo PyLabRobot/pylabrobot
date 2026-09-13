@@ -37,7 +37,6 @@ from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfigurati
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.hamilton.star.resource_model import (
   ROTATION_DRIVE_COLUMN_ABOVE_REPORTED_Z,
-  NChannelPipette,
   iswap_gripper,
   iswap_head,
   iswap_link_1,
@@ -52,6 +51,7 @@ from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.manipulator import LinkBody
+from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 from pylabrobot.resources.resource import Resource
 
 logger = logging.getLogger(__name__)

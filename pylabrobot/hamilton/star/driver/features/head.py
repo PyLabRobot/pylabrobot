@@ -24,8 +24,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
-from pylabrobot.hamilton.star.resource_model import NChannelPipette
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.features.x_arm import XArm
