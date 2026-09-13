@@ -151,7 +151,7 @@ from pylabrobot.resources.hamilton import (
 )
 from pylabrobot.resources.hamilton.hamilton_decks import (
   HamiltonCoreGrippers,
-  rails_for_x_coordinate,
+  track_for_x_coordinate,
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
@@ -10046,8 +10046,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if isinstance(child, Carrier):
         # Get x coordinate relative to deck
         carrier_x = child.get_location_wrt(self.deck).x
-        carrier_start_rail = rails_for_x_coordinate(carrier_x)
-        carrier_end_rail = rails_for_x_coordinate(carrier_x - 100.0 + child.get_absolute_size_x())
+        carrier_start_rail = track_for_x_coordinate(carrier_x)
+        carrier_end_rail = track_for_x_coordinate(carrier_x - 100.0 + child.get_absolute_size_x())
 
         # Verify rails are valid
         carrier_start_rail = max(1, min(carrier_start_rail, 54))
