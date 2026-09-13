@@ -48,26 +48,26 @@ from pylabrobot.resources.tip_tracker import TipTracker
 from pylabrobot.resources.well import Well
 
 from .. import prep_commands as PrepCmd
-from .channels import (
+from .pipettes import (
   LLDMode,
   _absolute_z_from_well,
   _build_container_segments,
   _effective_radius,
   _LldDefaults,
 )
-from .channels import (
+from .pipettes import (
   default_lld_params as _default_lld_params_fn,
 )
-from .channels import (
+from .pipettes import (
   lld_for_well as _lld_for_well_fn,
 )
-from .channels import (
+from .pipettes import (
   lld_seek_timeout as _lld_seek_timeout,
 )
-from .channels import (
+from .pipettes import (
   patch_common_with_cone as _patch_common_with_cone_fn,
 )
-from .channels import (
+from .pipettes import (
   resolve_command_version as _resolve_command_version_fn,
 )
 from ..client import MPH_OBJECT_PATH

@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from pylabrobot.hamilton.prep import PrepDriver
-from pylabrobot.hamilton.prep.driver.features.channels import PrepChannels, PrepPIPChannel
+from pylabrobot.hamilton.prep.driver.features.pipettes import PrepChannels, PrepPIPChannel
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck, hamilton_96_tiprack_50uL_NTR
 from pylabrobot.resources.tip_tracker import set_tip_tracking

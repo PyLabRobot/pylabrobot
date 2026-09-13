@@ -4,10 +4,11 @@ import logging
 from typing import Optional
 
 from pylabrobot.hamilton.prep.driver.features.calibration import PrepCalibration
-from pylabrobot.hamilton.prep.driver.features.channels import PrepChannels
-from pylabrobot.hamilton.prep.driver.features.gripper import PrepGripper
+from pylabrobot.hamilton.prep.driver.features.pipettes import PrepChannels
+from pylabrobot.hamilton.prep.driver.features.core_grippers import PrepGripper
 from pylabrobot.hamilton.prep.driver.features.head8 import PrepHead8
 from pylabrobot.hamilton.prep.driver.features.method import PrepMethodLifecycle
+from pylabrobot.hamilton.prep.driver.features.x_arm import PrepXArm
 from pylabrobot.hamilton.prep.driver.master import PrepDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import PrepDeck
@@ -77,6 +78,11 @@ class PrepDevice(Resource):
 
   # -- what the device carries ------------------------------------------------------------
   # Read through: they do not exist until setup has run.
+
+  @property
+  def x_arm(self) -> Optional[PrepXArm]:
+    """The X-arm the pipetting channels ride."""
+    return self.driver.x_arm
 
   @property
   def channels(self) -> Optional[PrepChannels]:

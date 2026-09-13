@@ -11,12 +11,22 @@ from typing import Any, AsyncIterator, Dict, Optional, Tuple
 
 from pylabrobot.hamilton.transport.tcp.introspection import FirmwareTreeNode
 from pylabrobot.hamilton.transport.tcp.packets import Address
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.hamilton.prep_decks import PrepDeck
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 
 from . import prep_commands as PrepCmd
 from .features.calibration import PrepCalibration
-from .features.channels import PrepChannels, build_prep_channels
+from .features.pipettes import (
+  CHANNEL_MODEL,
+  CHANNEL_SIZE_Z,
+  CHANNEL_WIDTH,
+  CHANNEL_X_REFERENCE_ANCHOR,
+  PrepChannels,
+  build_prep_channels,
+)
 from .simulator import PrepChatterboxClient
 from .client import (
   DECK_CONFIGURATION_OBJECT_PATH,
@@ -26,11 +36,12 @@ from .client import (
   MODULE_INFORMATION_OBJECT_PATH,
   PrepClient,
 )
-from .features.gripper import PrepGripper, PrepGripperArm
+from .features.core_grippers import PrepGripper, PrepGripperArm
 from .features.head8 import PrepHead8
 from .configuration import DeviceConfiguration, read_configuration, to_jsonable
 from .errors import PrepMethodNotFoundError
 from .features.method import PrepMethodLifecycle
+from .features.x_arm import PrepXArm
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +98,8 @@ class PrepDriver:
     self.gripper: Optional[PrepGripper] = None
     self.method: Optional[PrepMethodLifecycle] = None
     self.calibration: Optional[PrepCalibration] = None
+    # The gantry the channels ride. Built at setup, and kept across setups like the configuration.
+    self.x_arm: Optional[PrepXArm] = None
     self._setup_finished: bool = False
 
   async def setup(
@@ -131,6 +144,11 @@ class PrepDriver:
         await head8._on_setup()
 
       self.gripper = PrepGripper(client=self.client, channels=channels)
+      if self.x_arm is None:
+        self.x_arm = PrepXArm(self)
+      # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
+      if self.deck is not None:
+        await self._create_capability_resources()
       self._setup_finished = True
     except Exception:
       await self.client.stop()
@@ -446,6 +464,64 @@ class PrepDriver:
     """
     with open(path, "w", encoding="utf-8") as f:
       json.dump(self._saved_configuration(), f, indent=indent)
+
+  # -- Resource model -----------------------------------------------------------
+
+  async def _create_capability_resources(self) -> None:
+    """Put the X-arm on the deck where it is, and hang a resource for each pipetting channel from it.
+
+    As the STAR driver does. Only on a `PrepDeck`, which is what knows where a Prep's arm goes. What is
+    already on the deck is reused, and repeated setups do not duplicate it.
+    """
+    if not isinstance(self.deck, PrepDeck) or self.x_arm is None or self.channels is None:
+      return
+    positions = await self.channels.request_channel_positions()
+    if not positions:
+      logger.warning("the channels reported no positions, so the arm and channels are not modelled")
+      return
+    arm, c = self.x_arm, self.x_arm.configuration
+    # The arm rides at the top of the channels' travel: what their bounds say, or the traverse height
+    # when no bounds were read.
+    tops = [bounds["z_max"] for bounds in self.channels._channel_bounds]
+    if tops:
+      z = max(tops)
+    elif self.configuration is not None and self.configuration.default_traverse_height is not None:
+      z = self.configuration.default_traverse_height
+    else:
+      z = self.deck.get_absolute_size_z()
+    arm.resource = self.deck.get_or_create_x_arm(
+      name="x_arm",
+      x=positions[0].x,
+      z=z,
+      size_x=c.size_x,
+      size_z=c.size_z,
+      reference_point_from_left=c.reference_point_from_left,
+      model=c.model,
+    )
+
+    # One resource per channel, a child of the arm's as on the STAR: the channels share the arm's X,
+    # and each has its own Y and Z.
+    self.channels.resources = []
+    for channel in range(len(positions)):
+      name = f"pipette_channel_{channel}"
+      resource = next((child for child in arm.resource.children if child.name == name), None)
+      if resource is None:
+        resource = Resource(
+          name=name,
+          size_x=CHANNEL_WIDTH,
+          size_y=CHANNEL_WIDTH,
+          size_z=CHANNEL_SIZE_Z,
+          category="pipette_channel",
+          model=CHANNEL_MODEL,
+        )
+        anchor = resource.get_anchor(x=CHANNEL_X_REFERENCE_ANCHOR)
+        arm.resource.assign_child_resource(
+          resource, location=Coordinate(c.reference_point_from_left - anchor.x, 0.0, 0.0)
+        )
+      self.channels.add_tip_mounting_shaft(resource)
+      self.channels.resources.append(resource)
+    # Seat each where it was read, now that there is something to record it on.
+    self.channels._record_positions(positions)
 
   # -- CoRe grippers -----------------------------------------------------------
 

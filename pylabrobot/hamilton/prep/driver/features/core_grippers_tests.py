@@ -10,7 +10,7 @@ import pytest
 
 from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.driver.features.gripper import PrepGripper, PrepGripperArm
+from pylabrobot.hamilton.prep.driver.features.core_grippers import PrepGripper, PrepGripperArm
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import HamiltonCoreGrippers, PrepDeck

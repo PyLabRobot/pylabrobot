@@ -234,6 +234,14 @@ _NAMED_METHOD_RESPONSES: dict[tuple[str, int, int], HoiParams] = {
 }
 
 
+# Where PRPAA1087's channels reported themselves after it initialized on 2026-09-13, as (x, y, z)
+# in mm. What a simulated device answers until something moves it.
+_INITIALIZED_POSITIONS = {
+  PrepCmd.ChannelIndex.RearChannel: (289.489, 365.0148, 167.499),
+  PrepCmd.ChannelIndex.FrontChannel: (289.489, 345.0123, 167.4954),
+}
+
+
 class _PrepChatterboxSession(TCPSession):
   """Offline exchange using the same immutable requests and decoders as TCP."""
 
@@ -260,6 +268,12 @@ class _PrepChatterboxSession(TCPSession):
       for value in (bounds.min_x, bounds.max_x, bounds.min_y, bounds.max_y, bounds.min_z, bounds.max_z):
         params.add(value, PrepCmd.F32)
       self._responses[PrepCmd.PrepGetDeckBounds] = params
+    # Where each pipetting channel is, moved by the moves it is sent.
+    self._positions = {
+      int(channel): list(_INITIALIZED_POSITIONS[channel])
+      for channel in present
+      if channel in _INITIALIZED_POSITIONS
+    }
     self._responses[PrepCmd.PrepGetSafeSpeedsEnabled] = HoiParams().add(
       config.safe_speeds_enabled, PrepCmd.PaddedBool
     )
@@ -295,6 +309,27 @@ class _PrepChatterboxSession(TCPSession):
       )
       if named is not None:
         payload = named
+    if isinstance(request, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepMoveToPositionViaLane)):
+      move = request.move_parameters
+      for position in self._positions.values():
+        position[0] = move.gantry_x_position
+      for axis in move.axis_parameters:
+        if int(axis.channel) in self._positions:
+          self._positions[int(axis.channel)][1:] = [axis.y_position, axis.z_position]
+    if isinstance(request, PrepCmd.PrepMoveZUpToSafe) and self._config.default_traverse_height is not None:
+      for channel in request.channels:
+        if int(channel) in self._positions:
+          self._positions[int(channel)][2] = self._config.default_traverse_height
+    if isinstance(request, PrepCmd.PrepGetPositions):
+      payload = HoiParams().add(
+        [
+          PrepCmd.ChannelXYZPositionParameters(
+            default_values=False, channel=channel, position_x=x, position_y=y, position_z=z
+          )
+          for channel, (x, y, z) in sorted(self._positions.items())
+        ],
+        StructArray(),
+      )
     action = (
       Hoi2Action.STATUS_RESPONSE
       if hoi.action_code == Hoi2Action.STATUS_REQUEST

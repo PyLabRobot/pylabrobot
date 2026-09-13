@@ -47,6 +47,8 @@ from pylabrobot.legacy.liquid_handling.liquid_classes.hamilton.base import Hamil
 from pylabrobot.resources import Container, Coordinate, Tip
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
+from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_state import (
   TipDropIntent,
   TipPickupIntent,
@@ -372,6 +374,17 @@ _CHANNEL_INDEX = {
   0: PrepCmd.ChannelIndex.RearChannel,
   1: PrepCmd.ChannelIndex.FrontChannel,
 }
+
+# How a channel is modelled, as the STAR models its channels. The Prep reports neither a channel's
+# width nor its height, so these are the STAR's: the width its channels report, and the height it
+# models them at.
+CHANNEL_WIDTH = 8.9826
+CHANNEL_SIZE_Z = 140.0
+CHANNEL_MODEL = "hamilton_star_pipette_channel"
+# Where on a channel the positions refer to: centred across it, at the end of its tip mounting shaft.
+CHANNEL_X_REFERENCE_ANCHOR = "c"
+CHANNEL_Y_REFERENCE_ANCHOR = "c"
+CHANNEL_Z_REFERENCE_ANCHOR = "b"
 
 
 @dataclass(frozen=True)
@@ -796,6 +809,9 @@ class PrepChannels:
     self.setup_finished: bool = False
     self.channels: List[PrepPIPChannel] = []
     self.head: dict[int, TipTracker] = {}
+    # One per channel, hung from the X-arm's resource when the driver was given a deck. Setup puts
+    # them there; reads and moves keep them in step.
+    self.resources: List[Resource] = []
 
   @property
   def _configuration(self) -> "DeviceConfiguration":
@@ -817,6 +833,126 @@ class PrepChannels:
     if self.deck is None:
       raise RuntimeError("no deck to measure positions from; pass one to the driver")
     return self.deck
+
+  # -- where the channels are, on the resources that model them --------------
+
+  def _reference_anchor(self, resource: Resource) -> Coordinate:
+    """Where on a channel's resource the reported positions refer to, from its left front bottom corner.
+
+    Along Z that is the end of the tip mounting shaft, which hangs below the channel's body, so it is
+    taken from the shaft where the channel carries one - as the STAR driver takes it.
+
+    Args:
+      resource: the resource modelling the channel.
+
+    Returns:
+      The offset from the resource's corner to the point the positions refer to.
+    """
+    anchor = resource.get_anchor(y=CHANNEL_Y_REFERENCE_ANCHOR, z=CHANNEL_Z_REFERENCE_ANCHOR)
+    shaft = next(
+      (child for child in resource.children if isinstance(child, TipMountingShaft)), None
+    )
+    if shaft is None or shaft.location is None:
+      return anchor
+    return Coordinate(anchor.x, anchor.y, shaft.location.z)
+
+  def get_reference_point_location(self, channel: int) -> Optional[Coordinate]:
+    """Where the model has a channel's reference point, in mm on the deck.
+
+    The inverse of `update_location_by_reference_point`.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      Where the model has it, or None when there is nothing modelling it yet.
+    """
+    if channel >= len(self.resources) or self.deck is None:
+      return None
+    resource = self.resources[channel]
+    if resource.location is None or resource.parent is None:
+      return None
+    return (
+      resource.location
+      + resource.parent.get_location_wrt(self.deck)
+      + self._reference_anchor(resource)
+    )
+
+  def update_location_by_reference_point(
+    self, channel: int, y: Optional[float] = None, z: Optional[float] = None
+  ) -> None:
+    """Record where a channel is on the resource that models it.
+
+    Y and Z only: a channel rides the arm, so its resource is a child of the arm's and follows it in X.
+    Positions are reported in the deck's frame and a resource is located in its parent's, so the arm's
+    position is taken out before either is recorded. Does nothing when nothing models the channel.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      y: where it is now, in mm on the deck. Left as it was when None.
+      z: where the end of its shaft is now, in mm on the deck. Left as it was when None.
+    """
+    if channel >= len(self.resources) or self.deck is None:
+      return
+    resource = self.resources[channel]
+    if resource.location is None or resource.parent is None:
+      return
+    here, on_the_arm = resource.location, resource.parent.get_location_wrt(self.deck)
+    anchor = self._reference_anchor(resource)
+    resource.location = Coordinate(
+      here.x,
+      here.y if y is None else y - on_the_arm.y - anchor.y,
+      here.z if z is None else z - on_the_arm.z - anchor.z,
+    )
+
+  @staticmethod
+  def add_tip_mounting_shaft(channel: Resource) -> None:
+    """Hang a tip mounting shaft off the lower end of a channel, and measure the channel from it.
+
+    As the STAR driver hangs one: its own length below the channel's bottom, centred on the channel. A
+    shaft already there is left alone, and repeated setups do not duplicate it.
+
+    Args:
+      channel: the channel resource to hang it from.
+    """
+    name = f"{channel.name}_tip_mounting_shaft"
+    if any(child.name == name for child in channel.children):
+      return
+    shaft = TipMountingShaft(name=name, tip_pickup_mode="core")
+    channel.assign_child_resource(
+      shaft,
+      location=Coordinate(
+        (channel.get_absolute_size_x() - shaft.get_absolute_size_x()) / 2,
+        (channel.get_absolute_size_y() - shaft.get_absolute_size_y()) / 2,
+        -shaft.get_absolute_size_z(),
+      ),
+    )
+    channel.reference_point = Coordinate(  # type: ignore[attr-defined]
+      channel.get_absolute_size_x() / 2,
+      channel.get_absolute_size_y() / 2,
+      -shaft.get_absolute_size_z(),
+    )
+
+  def _record_positions(self, positions: List[Coordinate]) -> None:
+    """Record reported positions on the arm and the channels: X on the arm, Y and Z on each channel."""
+    arm = None if self._driver is None else self._driver.x_arm
+    if positions and arm is not None:
+      arm.update_location_by_reference_point(positions[0].x)
+    for channel, position in enumerate(positions):
+      self.update_location_by_reference_point(channel, y=position.y, z=position.z)
+
+  async def _record_where_they_stopped(self) -> None:
+    """Read where the channels came to rest, and record it. For a move's `finally`.
+
+    Only when something models them. Its own failure is logged and swallowed: it must not replace the
+    move's exception, which is the one that says what went wrong.
+    """
+    if not self.resources:
+      return
+    try:
+      await self.request_channel_positions()
+    except Exception:
+      logger.warning("could not read where the channels stopped; their model is stale")
 
   def set_default_traverse_height(self, value: float) -> None:
     """Set the default traverse height (mm) used when final_z is not passed to pick_up_tips/drop_tips.
@@ -2141,7 +2277,10 @@ class PrepChannels:
         indexed.append((ch_idx, Coordinate(x=p.position_x, y=p.position_y, z=p.position_z)))
 
     indexed.sort(key=lambda pair: pair[0])
-    return [coord for _, coord in indexed]
+    positions = [coord for _, coord in indexed]
+    # The device is the authority on where the channels are, so what it answers is recorded.
+    self._record_positions(positions)
+    return positions
 
   async def request_x_pos_channel_n(self, channel_idx: int = 0) -> float:
     """Request X position of pipettor channel n (in mm).
@@ -2475,7 +2614,10 @@ class PrepChannels:
       f"channel index out of range (valid: 0..{self.num_channels - 1})"
     )
     channel_enums = [_CHANNEL_INDEX[ch] for ch in channels]
-    await self._client.execute(PrepCmd.PrepMoveZUpToSafe(channels=channel_enums))
+    try:
+      await self._client.execute(PrepCmd.PrepMoveZUpToSafe(channels=channel_enums))
+    finally:
+      await self._record_where_they_stopped()
 
   async def move_to_position(
     self,
@@ -2527,10 +2669,15 @@ class PrepChannels:
 
     move_parameters = _build_pipettor_gantry_move_parameters(x, channels, y, z)
 
-    if via_lane:
-      await self._client.execute(PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters))
-    else:
-      await self._client.execute(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+    try:
+      if via_lane:
+        await self._client.execute(
+          PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
+        )
+      else:
+        await self._client.execute(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+    finally:
+      await self._record_where_they_stopped()
 
   async def stop(self) -> None:
     self.setup_finished = False

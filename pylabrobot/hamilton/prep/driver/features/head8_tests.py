@@ -17,7 +17,7 @@ import pytest
 
 from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.driver.features.channels import (
+from pylabrobot.hamilton.prep.driver.features.pipettes import (
   LLDMode,
   _build_pipettor_gantry_move_parameters,
 )

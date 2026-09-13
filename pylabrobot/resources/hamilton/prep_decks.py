@@ -22,7 +22,7 @@ class PrepDeck(Deck):
   """Hamilton PREP deck: labware spots, trash, teaching tip site, and waste positions.
 
   Geometry aligns with the prep_tcp / MLPrep DeckConfiguration teaching site and waste
-  sites used by :class:`~pylabrobot.hamilton.prep.driver.features.channels.PrepChannels`
+  sites used by :class:`~pylabrobot.hamilton.prep.driver.features.pipettes.PrepChannels`
   (``waste_rear``, ``waste_front``, ``waste_mph``). Validate coordinates on hardware
   (plastic mounts, calibration) before production use.
 
@@ -90,6 +90,50 @@ class PrepDeck(Deck):
         waste,
         location=Coordinate(x=286.8, y=y_pos, z=68.4),
       )
+
+  def get_or_create_x_arm(
+    self,
+    name: str,
+    x: float,
+    z: float,
+    size_x: float,
+    size_z: float,
+    reference_point_from_left: float,
+    model: str,
+  ) -> Resource:
+    """Get, or create once, the deck-owned X-arm resource called `name`.
+
+    As `HamiltonDeck.get_or_create_x_arm` does for a STAR: created as a child the first time and reused
+    thereafter, and placed so its reference point sits at the arm's current x. A STAR's arm is 712 mm
+    deep and rides at that device's stop-disc safety height; neither fits a Prep, so this arm spans the
+    deck's depth and rides at the height it is given.
+
+    Args:
+      name: what to call it.
+      x: where the arm is now, in mm, at its reference point.
+      z: the height it rides at, in mm: the top of the channels' travel.
+      size_x: how wide the arm is, in mm, end to end.
+      size_z: how tall to model it, in mm.
+      reference_point_from_left: how far along it, from its left edge in mm, its x refers to.
+      model: which arm this is.
+
+    Returns:
+      The arm resource, whether it was just created or already there.
+    """
+    if self.has_resource(name):
+      return self.get_resource(name)
+    x_arm = Resource(
+      name=name,
+      size_x=size_x,
+      size_y=self.get_absolute_size_y(),
+      size_z=size_z,
+      category="x_arm",
+      model=model,
+    )
+    # What x refers to, stated on the resource as the STAR's arm states it.
+    x_arm.reference_point = {"x": reference_point_from_left}  # type: ignore[attr-defined]
+    self.assign_child_resource(x_arm, location=Coordinate(x - reference_point_from_left, 0.0, z))
+    return x_arm
 
   def __getitem__(self, key: int) -> ResourceHolder:
     """Labware spot by index 0–7 (column-major: ``spot_0_0`` … ``spot_1_3``)."""

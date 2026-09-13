@@ -12,7 +12,7 @@ from pylabrobot.resources.resource_state import place_resource
 from .. import prep_commands as PrepCmd
 
 if TYPE_CHECKING:
-  from .channels import PrepChannels
+  from .pipettes import PrepChannels
   from ..client import PrepClient
 
 logger = logging.getLogger(__name__)

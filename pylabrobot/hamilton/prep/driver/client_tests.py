@@ -6,9 +6,9 @@ import pytest
 from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.prep import PrepChatterboxClient
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.driver.features.channels import PrepChannels
+from pylabrobot.hamilton.prep.driver.features.pipettes import PrepChannels
 from pylabrobot.hamilton.prep.driver.client import PrepClient
-from pylabrobot.hamilton.prep.driver.features.gripper import PrepGripper, PrepGripperArm
+from pylabrobot.hamilton.prep.driver.features.core_grippers import PrepGripper, PrepGripperArm
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.resources.hamilton import STARLetDeck
