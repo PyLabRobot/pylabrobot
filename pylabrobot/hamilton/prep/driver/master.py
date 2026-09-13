@@ -494,9 +494,11 @@ class PrepDriver:
       x=positions[0].x,
       z=z,
       size_x=c.size_x,
+      size_y=c.size_y,
       size_z=c.size_z,
       reference_point_from_left=c.reference_point_from_left,
       model=c.model,
+      appearance=c.appearance,
     )
 
     # One resource per channel, a child of the arm's as on the STAR: the channels share the arm's X,

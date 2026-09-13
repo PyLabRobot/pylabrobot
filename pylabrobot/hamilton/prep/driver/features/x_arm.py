@@ -1,12 +1,11 @@
-"""The X-arm: the gantry the pipetting channels ride, modelled as the STAR's arm."""
+"""The X-arm: the gantry the pipetting channels ride."""
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pylabrobot.hamilton.star.driver.features.x_arm import XArmConfiguration
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -17,26 +16,29 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The STAR's large arm, whose measurements and 3D model the Prep's arm borrows.
-_STAR_ARM = XArmConfiguration()
-
 
 @dataclass
 class PrepXArmConfiguration:
   """How the arm is modelled.
 
-  None of this is read off a Prep: it reports no size for its arm, so the arm is modelled as the STAR's
-  large arm, with that arm's measurements and 3D model.
+  Measured on the arm rather than read off the device: the Prep reports no size for it.
   """
 
-  size_x: float = field(default=_STAR_ARM.large_arm_size_x)
-  """How wide the arm is, in mm, end to end."""
-  reference_point_from_left: float = field(default=_STAR_ARM.large_arm_reference_from_left)
-  """Where along the arm, from its left edge in mm, the gantry's x refers to."""
-  size_z: float = 140.0
-  """How tall to model the arm, in mm, as the STAR's arm is modelled."""
-  model: str = "hamilton_legacy_star_dual_rail_arm"
-  """Which 3D model draws it: the STAR's large arm."""
+  size_x: float = 66.0
+  """How wide the arm is, in mm."""
+  size_y: float = 532.0
+  """How deep the arm is, in mm. Its back is flush with the back of the device."""
+  size_z: float = 69.0
+  """How tall the arm is, in mm."""
+  reference_point_from_left: float = -80.0
+  """Where the gantry's x refers to, in mm from the arm's left edge. The channels hang to the arm's left,
+  so their axis - which is what the Prep reports - sits about 80 mm left of that edge."""
+  model: str = "hamilton_prep_x_arm"
+  """Which 3D model draws it. None ships yet, so the viewer draws a box of this size."""
+  appearance: Dict[str, Any] = field(
+    default_factory=lambda: {"color": 0xC0C4C8, "metalness": 0.6, "roughness": 0.35}
+  )
+  """How the viewer draws the arm: silver, and metallic."""
 
 
 class PrepXArm:
@@ -61,9 +63,9 @@ class PrepXArm:
   def update_location_by_reference_point(self, x: float) -> None:
     """Record where the arm is on the resource that models it.
 
-    The gantry's x refers to a point along the arm, while a resource is located by its left front
-    bottom corner, so the two differ by how far along the arm that point sits. Does nothing when the
-    driver was given no deck to model into.
+    The gantry's x refers to the channels' axis, which sits a fixed distance from the arm's left edge,
+    while a resource is located by its left front bottom corner, so the two differ by that distance.
+    Does nothing when the driver was given no deck to model into.
 
     Args:
       x: where the reference point is now, in mm on the deck.

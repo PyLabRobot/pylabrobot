@@ -1,6 +1,6 @@
 """Hamilton Prep deck."""
 
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -97,25 +97,31 @@ class PrepDeck(Deck):
     x: float,
     z: float,
     size_x: float,
+    size_y: float,
     size_z: float,
     reference_point_from_left: float,
     model: str,
+    appearance: Optional[Dict[str, Any]] = None,
   ) -> Resource:
     """Get, or create once, the deck-owned X-arm resource called `name`.
 
     As `HamiltonDeck.get_or_create_x_arm` does for a STAR: created as a child the first time and reused
-    thereafter, and placed so its reference point sits at the arm's current x. A STAR's arm is 712 mm
-    deep and rides at that device's stop-disc safety height; neither fits a Prep, so this arm spans the
-    deck's depth and rides at the height it is given.
+    thereafter, and placed so its reference point sits at the arm's current x. Its back is flush with
+    the back of the device carrying the deck, which being deeper than the deck puts its front at a
+    negative y. It rides at the height it is given.
 
     Args:
       name: what to call it.
       x: where the arm is now, in mm, at its reference point.
       z: the height it rides at, in mm: the top of the channels' travel.
-      size_x: how wide the arm is, in mm, end to end.
-      size_z: how tall to model it, in mm.
-      reference_point_from_left: how far along it, from its left edge in mm, its x refers to.
+      size_x: how wide the arm is, in mm.
+      size_y: how deep the arm is, in mm.
+      size_z: how tall the arm is, in mm.
+      reference_point_from_left: where its x refers to, in mm from its left edge. Negative when the
+        point is to the arm's left.
       model: which arm this is.
+      appearance: how a viewer should draw it - `color`, `metalness`, `roughness` - or None for
+        the viewer's own default.
 
     Returns:
       The arm resource, whether it was just created or already there.
@@ -125,14 +131,23 @@ class PrepDeck(Deck):
     x_arm = Resource(
       name=name,
       size_x=size_x,
-      size_y=self.get_absolute_size_y(),
+      size_y=size_y,
       size_z=size_z,
       category="x_arm",
       model=model,
     )
     # What x refers to, stated on the resource as the STAR's arm states it.
     x_arm.reference_point = {"x": reference_point_from_left}  # type: ignore[attr-defined]
-    self.assign_child_resource(x_arm, location=Coordinate(x - reference_point_from_left, 0.0, z))
+    if appearance is not None:
+      x_arm.appearance = dict(appearance)  # type: ignore[attr-defined]
+    # The back of the arm at the back of the device. A deck standing on its own has no device to measure
+    # from, and keeps its own back edge.
+    device = self.parent
+    if device is None or self.location is None:
+      y = self.get_absolute_size_y() - size_y
+    else:
+      y = device.get_absolute_size_y() - self.location.y - size_y
+    self.assign_child_resource(x_arm, location=Coordinate(x - reference_point_from_left, y, z))
     return x_arm
 
   def __getitem__(self, key: int) -> ResourceHolder:
