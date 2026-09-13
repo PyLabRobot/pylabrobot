@@ -180,6 +180,65 @@ class TestRoundTrip(unittest.TestCase):
     self.assertEqual([pad.location for pad in back.pads], [PAD_LOCATION] * 2)
     self.assertEqual([pad.parent for pad in back.pads], back.fingers)
 
+  def test_what_a_finger_carries_besides_its_pad_comes_back_on_that_finger(self):
+    g = gripper()
+    sensor = Resource(name="demo_sensor", size_x=5.0, size_y=5.0, size_z=5.0)
+    g.fingers[0].assign_child_resource(sensor, location=Coordinate(80.0, 0.0, 2.0))
+    back = MechanicalGripper.deserialize(g.serialize())
+
+    self.assertEqual([pad.name for pad in back.pads], [pad.name for pad in g.pads])
+    self.assertEqual([pad.parent for pad in back.pads], back.fingers)
+    carried = back.get_resource("demo_sensor")
+    self.assertIs(carried.parent, back.fingers[0])
+    self.assertEqual(carried.location, Coordinate(80.0, 0.0, 2.0))
+    # Through `copy`, which `rotated` goes through too.
+    copied = g.copy()
+    self.assertIs(copied.get_resource("demo_sensor").parent, copied.fingers[0])
+
+  def test_what_a_bare_finger_carries_is_not_taken_for_a_pad(self):
+    g = gripper(pads=None, pad_location=None)
+    for finger in g.fingers:
+      finger.assign_child_resource(
+        Resource(name=f"{finger.name}_sensor", size_x=5.0, size_y=5.0, size_z=5.0),
+        location=Coordinate(80.0, 0.0, 2.0),
+      )
+    back = MechanicalGripper.deserialize(g.serialize())
+
+    self.assertEqual(back.pads, [])
+    self.assertEqual(
+      [[child.name for child in finger.children] for finger in back.fingers],
+      [[f"{finger.name}_sensor"] for finger in g.fingers],
+    )
+
+  def test_a_pad_moved_since_it_was_fitted_comes_back_where_it_was_moved(self):
+    g = gripper()
+    g.pads[1].location = PAD_LOCATION + Coordinate(0.0, 0.0, 2.0)
+    back = MechanicalGripper.deserialize(g.serialize())
+    self.assertEqual(
+      [pad.location for pad in back.pads], [PAD_LOCATION, PAD_LOCATION + Coordinate(0.0, 0.0, 2.0)]
+    )
+
+  def test_parts_are_found_by_name_not_by_where_they_sit_among_the_children(self):
+    g = gripper()
+    held = Resource(name="demo_plate", size_x=127.76, size_y=85.48, size_z=14.2)
+    g.assign_child_resource(held, location=Coordinate(90.0, -4.7, -20.0))
+    data = g.serialize()
+    data["children"].reverse()
+    back = MechanicalGripper.deserialize(data)
+
+    self.assertEqual(back.body.name, "demo_body")
+    self.assertEqual([finger.name for finger in back.fingers], [f.name for f in g.fingers])
+    plate = back.get_resource("demo_plate")
+    self.assertIs(plate.parent, back)
+    self.assertEqual(plate.location, Coordinate(90.0, -4.7, -20.0))
+
+  def test_a_pad_missing_from_its_finger_is_refused(self):
+    data = gripper().serialize()
+    finger = next(child for child in data["children"] if child["name"] == "demo_finger_right")
+    finger["children"] = []
+    with self.assertRaises(ValueError):
+      MechanicalGripper.deserialize(data)
+
 
 if __name__ == "__main__":
   unittest.main()
