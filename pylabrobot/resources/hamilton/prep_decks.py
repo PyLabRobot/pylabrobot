@@ -12,6 +12,12 @@ from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.trash import Trash
 
 
+# How tall the deck's working volume is, in mm, from the deck surface. The channels travel from 18.03
+# to 167.5 mm and the deck configuration reports the same Z range, as read off PRPAA1087 on
+# 2026-09-13, so the top of that travel is the top of the deck.
+PREP_DECK_SIZE_Z = 167.5
+
+
 class PrepDeck(Deck):
   """Hamilton PREP deck: labware spots, trash, teaching tip site, and waste positions.
 
@@ -28,7 +34,7 @@ class PrepDeck(Deck):
     name: str = "deck",
     size_x: float = 300.0,
     size_y: float = 394.0,
-    size_z: float = 0,
+    size_z: float = PREP_DECK_SIZE_Z,
     origin: Coordinate = Coordinate.zero(),
     category: str = "deck",
     with_core_grippers: bool = False,
