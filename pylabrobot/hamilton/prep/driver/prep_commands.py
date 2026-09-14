@@ -21,6 +21,7 @@ from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import HamiltonProtocol, Hoi2Action
 from pylabrobot.hamilton.transport.tcp.wire_types import (
   F32,
+  F64,
   I8,
   I16,
   U16,
@@ -3156,21 +3157,25 @@ class PrepMoveZUpToSafe(PrepCommand[None]):
 
 
 @dataclass(frozen=True)
-class PrepZSeekLldPosition(PrepCommand[None]):
+class PrepZSeekLldPosition(PrepCommand["PrepZSeekLldPosition.Response"]):
   """Z-seek LLD position (cmd=29, dest=Pipettor)."""
 
   command_id = 29
   firmware_path = "MLPrepRoot.PipettorRoot.Pipettor"
   seek_parameters: Annotated[list[LLDChannelSeekParameters], StructArray()]
 
+  @dataclass(frozen=True)
+  class Response:
+    results: Annotated[list[SeekResultParameters], StructArray()]
+
   def build_parameters(self) -> HoiParams:
     """Encode fields in firmware-defined order."""
     return HoiParams().add(self.seek_parameters, StructArray())
 
   @classmethod
-  def parse_response_parameters(cls, data: bytes) -> None:
+  def parse_response_parameters(cls, data: bytes) -> PrepZSeekLldPosition.Response:
     """Decode the declared success response."""
-    return None
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
 
   uses_physical_channels = True
 
@@ -3822,6 +3827,159 @@ class PrepGetZSpeedScale(PrepStatusRequest["PrepGetZSpeedScale.Response"]):
   def parse_response_parameters(cls, data: bytes) -> PrepGetZSpeedScale.Response:
     """Decode the declared success response."""
     return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepXAxisSetVelocity(PrepCommand[None]):
+  """Set the X axis velocity, in mm/s (cmd=9, dest=XAxis). Volatile."""
+
+  command_id = 9
+  firmware_path = "MLPrepRoot.XAxis"
+  value: F64
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.value, F64)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepXAxisSetAcceleration(PrepCommand[None]):
+  """Set the X axis acceleration, in mm/s2 (cmd=11, dest=XAxis). Volatile."""
+
+  command_id = 11
+  firmware_path = "MLPrepRoot.XAxis"
+  value: F64
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.value, F64)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepXAxisGetCommandedPosition(PrepStatusRequest["PrepXAxisGetCommandedPosition.Response"]):
+  """Get the X axis commanded position, in the axis's own frame, in mm (cmd=7, dest=XAxis)."""
+
+  command_id = 7
+  firmware_path = "MLPrepRoot.XAxis"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: F64
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepXAxisGetCommandedPosition.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepXAxisGetVelocity(PrepStatusRequest["PrepXAxisGetVelocity.Response"]):
+  """Get the X axis velocity, in mm/s (cmd=10, dest=XAxis)."""
+
+  command_id = 10
+  firmware_path = "MLPrepRoot.XAxis"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: F64
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepXAxisGetVelocity.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepXAxisGetAcceleration(PrepStatusRequest["PrepXAxisGetAcceleration.Response"]):
+  """Get the X axis acceleration, in mm/s2 (cmd=12, dest=XAxis)."""
+
+  command_id = 12
+  firmware_path = "MLPrepRoot.XAxis"
+
+  @dataclass(frozen=True)
+  class Response:
+    value: F64
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepXAxisGetAcceleration.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepXAxisSeekToHomeFlag(PrepCommand["PrepXAxisSeekToHomeFlag.Response"]):
+  """Move the X axis until its home flag sensor trips (cmd=5, dest=XAxis).
+
+  `distance` is relative, in mm; `trip_sense` is the firmware's TripSense {Sensor0=0, Sensor1=1,
+  SensorToggle=2}. Answers where the sensor tripped, in mm in the axis's own frame.
+  """
+
+  command_id = 5
+  firmware_path = "MLPrepRoot.XAxis"
+  distance: F64
+  travel_limits_enable: PaddedBool
+  trip_sense: WEnum
+
+  @dataclass(frozen=True)
+  class Response:
+    value: F64
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      HoiParams()
+      .add(self.distance, F64)
+      .add(self.travel_limits_enable, PaddedBool)
+      .add(self.trip_sense, WEnum)
+    )
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepXAxisSeekToHomeFlag.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepXAxisMoveAbsolute(PrepCommand[None]):
+  """Move the X axis to a position in its own frame, in mm (cmd=3, dest=XAxis).
+
+  Addressed to the axis rather than the channel coordinator.
+  """
+
+  command_id = 3
+  firmware_path = "MLPrepRoot.XAxis"
+  position: F64
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.position, F64)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
 
 
 @dataclass(frozen=True)

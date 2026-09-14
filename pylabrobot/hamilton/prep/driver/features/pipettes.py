@@ -686,6 +686,11 @@ class Pipettes:
     # no Z speed.
     self.default_z_speed: float = 113.6
     self.default_z_acceleration: float = 640.0
+    # cLLD Z probe: the seek speed (mm/s), sensitivity and detect mode `probe_z_using_clld` was run with on
+    # PRPAA1087 (V1.2.2), where it triggered.
+    self.default_clld_probe_speed: float = 20.0
+    self.default_clld_sensitivity: int = 1
+    self.default_clld_detect_mode: int = 0
     if use_v1_aspirate_dispense:
       self.configuration.use_v1_aspirate_dispense = True
     self.setup_finished: bool = False
@@ -1586,33 +1591,118 @@ class Pipettes:
 
   # -- z probing (capacitive, force) ---------------------------------------------------------------
 
-  async def clld_probe_z_height_using_channel(self, *args, **kwargs):
-    """Probe Z-height using capacitive LLD. Not yet implemented for the Prep.
+  async def probe_z_using_clld(
+    self,
+    channel: int,
+    *,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+    start_z: Optional[float] = None,
+    speed: Optional[float] = None,
+    lowest_z: float,
+    sensitivity: Optional[int] = None,
+    detect_mode: Optional[int] = None,
+    final_z: Optional[float] = None,
+  ) -> Optional[float]:
+    """Lower one channel until its capacitive LLD triggers, and return where it did.
 
-    TODO: Implement using the standalone ZSeekLldPosition command:
-    - Pipettor [1:29] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
-    - ChannelCoordinator [1:20] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
-    Previously returned HC_RESULT=0x0F06 which was assumed to be "LLD not supported".
-    Now identified as "Z position out of allowed movement range" — the Z parameters
-    in LLDChannelSeekParameters were out of bounds. Retry with valid Z values
-    within deck_bounds (min_z=18.03, max_z=167.5).
+    Sends `Pipettor.ZSeekLldPosition`. On PRPAA1087 (V1.2.2) a front channel without a tip, seeking
+    from 167.5 mm towards a 100 mm floor at 20 mm/s, triggered on a finger touching it at 140.451 mm
+    and went back up to `final_z`. `start_z` and `lowest_z` are sent as the seek's `seek_height` and
+    `min_seek_height`; that the firmware starts from the one and stops at the other rests on that run.
 
-    Findings from testing:
-    - cLLD DOES work through the aspirate path (aspirate with
-      lld_mode=[LLDMode.CAPACITIVE] and default_values=False on both
-      LldParameters and CLldParameters).
-    - Standalone ZSeekLldPosition is rejected with 0x0F06 when Z params are out of range.
-    - The aspirate-based approach is a workaround, not a proper standalone probe.
+    Args:
+      channel: which channel, 0-indexed from the back.
+      x: where to probe along X, in mm. Defaults to where the gantry is.
+      y: where to probe along Y, in mm. Defaults to where the channel is.
+      start_z: the height to start seeking from, in mm. Defaults to the traverse height.
+      speed: how fast to seek down, in mm/s. Defaults to `default_clld_probe_speed`.
+      lowest_z: the lowest the channel may seek to, in mm.
+      sensitivity: the cLLD sensitivity sent. Defaults to `default_clld_sensitivity`.
+      detect_mode: the cLLD detect mode sent. Defaults to `default_clld_detect_mode`.
+      final_z: where to leave the channel afterwards, in mm. Defaults to `start_z`.
 
-    Also investigate ZAxis-level alternatives:
-    - ZAxis.SeekCapacitiveLld [1:12] (returns 0x0207 when called directly)
-    - ZAxis.SeekCapacitiveLldTip [1:13] (returns 0x0207 when called directly)
-    - ZAxis.LiquidStatus [1:16] for reading last detection results
-    - PipettorService.MeasureLldFrequency [1:6] for sensor health checks
+    Returns:
+      The height the cLLD triggered at, in mm, or None when it did not trigger.
+
+    Raises:
+      ValueError: If the channel does not exist, a position is outside the channel's reach,
+        `lowest_z` is above `start_z`, or `speed` is not positive.
+      RuntimeError: If the channel reports no position to default `x` or `y` from.
     """
-    raise NotImplementedError(
-      "clld_probe_z_height_using_channel is not yet implemented for Pipettes."
+    if not 0 <= channel < self.num_channels:
+      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
+    if x is None or y is None:
+      positions = await self.request_channel_positions()
+      if channel >= len(positions):
+        raise RuntimeError(f"channel {channel} reported no position")
+      x = positions[channel].x if x is None else x
+      y = positions[channel].y if y is None else y
+    start_z = self._resolve_traverse_height() if start_z is None else start_z
+    speed = self.default_clld_probe_speed if speed is None else speed
+    sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
+    detect_mode = self.default_clld_detect_mode if detect_mode is None else detect_mode
+    final_z = start_z if final_z is None else final_z
+    if speed <= 0:
+      raise ValueError(f"speed must be positive, is {speed}")
+    if lowest_z > start_z:
+      raise ValueError(f"lowest_z={lowest_z} is above start_z={start_z}")
+    if channel < len(self.configuration.channels):
+      reach = self.configuration.channels[channel]
+      for name, value, window in (
+        ("x", x, reach.x_range),
+        ("y", y, reach.y_range),
+        ("start_z", start_z, reach.z_range),
+        ("lowest_z", lowest_z, reach.z_range),
+        ("final_z", final_z, reach.z_range),
+      ):
+        if window is not None and not window[0] <= value <= window[1]:
+          raise ValueError(
+            f"{name}={value} outside channel {channel} range [{window[0]:.1f}, {window[1]:.1f}]"
+          )
+
+    seek = PrepCmd.LLDChannelSeekParameters(
+      default_values=False,
+      channel=_CHANNEL_INDEX[channel],
+      seek_position_x=x,
+      seek_position_y=y,
+      seek_velocity_z=speed,
+      seek_height=start_z,
+      min_seek_height=lowest_z,
+      final_position_z=final_z,
+      lld_sensitivity=sensitivity,
+      detect_mode=detect_mode,
     )
+    try:
+      results = await self._unchecked_fw_z_seek_lld_position([seek])
+      # What was asked, recorded as soon as the command answers; the read below replaces it with
+      # where the channels actually stopped.
+      arm = None if self._driver is None else self._driver.x_arm
+      if arm is not None:
+        arm.update_location_by_reference_point(x)
+      self.update_location_by_reference_point(channel, y=y, z=final_z)
+    finally:
+      await self._record_where_they_stopped()
+    result = next((r for r in results if int(r.channel) == int(_CHANNEL_INDEX[channel])), None)
+    if result is None or not result.detected:
+      return None
+    return float(result.position)
+
+  async def _unchecked_fw_z_seek_lld_position(
+    self, seek_parameters: List[PrepCmd.LLDChannelSeekParameters]
+  ) -> List[PrepCmd.SeekResultParameters]:
+    """Send `Pipettor.ZSeekLldPosition` (cmd=29). Nothing is guarded and nothing is recorded.
+
+    Args:
+      seek_parameters: one entry per channel to seek.
+
+    Returns:
+      The firmware's result for each entry.
+    """
+    response = await self._client.execute(
+      PrepCmd.PrepZSeekLldPosition(seek_parameters=seek_parameters)
+    )
+    return list(response.results)
 
   async def ztouch_probe_z_height_using_channel(self, *args, **kwargs):
     """Probe Z-height using force/motor stall detection. Not yet implemented for the Prep.

@@ -15,7 +15,7 @@ from pylabrobot.hamilton.transport.tcp.messages import CommandResponse, HoiParam
 from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, HoiPacket, IpPacket
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
-from pylabrobot.hamilton.transport.tcp.wire_types import Str, StructArray
+from pylabrobot.hamilton.transport.tcp.wire_types import F64, Str, StructArray
 from pylabrobot.io.socket import Socket
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
@@ -51,6 +51,8 @@ _CANNED_RESPONSES: dict[type[TCPCommand], HoiParams] = {
   PrepCmd.PrepGetPositions: HoiParams().add([], StructArray()),
   PrepCmd.PrepGetIsInitialized: HoiParams().add(False, PrepCmd.PaddedBool),
   PrepCmd.PrepGetXSpeedScale: HoiParams().add(100, PrepCmd.PaddedU8),
+  PrepCmd.PrepXAxisGetVelocity: HoiParams().add(400.0, F64),
+  PrepCmd.PrepXAxisGetAcceleration: HoiParams().add(2250.0, F64),
   PrepCmd.PrepGetZSpeedScale: HoiParams().add(100, PrepCmd.PaddedU8),
   PrepCmd.PrepGetDeckLight: HoiParams()
   .add(0, PrepCmd.PaddedU8)
@@ -231,6 +233,37 @@ class _PrepChatterboxSession(TCPSession):
       for channel in request.channels:
         if int(channel) in self._positions:
           self._positions[int(channel)][2] = self._config.default_traverse_height
+    if isinstance(request, PrepCmd.PrepXAxisSeekToHomeFlag):
+      # No flag is modelled: the seek trips where the axis stands and nothing moves.
+      x = next(iter(self._positions.values()))[0] if self._positions else 0.0
+      payload = HoiParams().add(x, F64)
+    if isinstance(request, PrepCmd.PrepXAxisMoveAbsolute):
+      # The simulated axis counts in the same frame GetPositions reports.
+      for position in self._positions.values():
+        position[0] = request.position
+    if isinstance(request, PrepCmd.PrepXAxisGetCommandedPosition):
+      x = next(iter(self._positions.values()))[0] if self._positions else 0.0
+      payload = HoiParams().add(x, F64)
+    if isinstance(request, PrepCmd.PrepZSeekLldPosition):
+      # Nothing to detect in simulation: each channel seeks to its floor, is left at its final height,
+      # and reports no detection.
+      for seek in request.seek_parameters:
+        for position in self._positions.values():
+          position[0] = seek.seek_position_x
+        if int(seek.channel) in self._positions:
+          self._positions[int(seek.channel)][1:] = [seek.seek_position_y, seek.final_position_z]
+      payload = HoiParams().add(
+        [
+          PrepCmd.SeekResultParameters(
+            default_values=False,
+            channel=seek.channel,
+            detected=False,
+            position=seek.min_seek_height,
+          )
+          for seek in request.seek_parameters
+        ],
+        StructArray(),
+      )
     if isinstance(request, PrepCmd.PrepGetPositions):
       payload = HoiParams().add(
         [

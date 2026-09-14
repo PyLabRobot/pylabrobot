@@ -7,6 +7,7 @@ import asyncio
 import pytest
 
 from pylabrobot.hamilton.prep import PrepDriver
+from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes, PipetteChannel
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
@@ -285,6 +286,160 @@ def test_move_to_coordinate_uses_default_x_speed_when_none_is_given():
     await p.pipettes.move_to_coordinate(Coordinate(150.0, 200.0, 160.0))
     scales = [c.value for c in sent if type(c).__name__ == "PrepSetXSpeedScale"]
     assert scales == [53, 100, 10, 100]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probe_z_using_clld_sends_one_seek_and_leaves_the_channel_at_final_z():
+  """The seek carries every argument as written out, and the model follows where the channel stopped."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    execute = p.client.execute
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await execute(command, *args, **kwargs)
+
+    p.client.execute = record  # type: ignore[method-assign]
+    found = await p.pipettes.probe_z_using_clld(1, x=150.0, y=200.0, start_z=160.0, lowest_z=100.0)
+    assert found is None  # nothing to detect in simulation
+    seeks = [c for c in sent if type(c).__name__ == "PrepZSeekLldPosition"]
+    assert len(seeks) == 1
+    seek = seeks[0].seek_parameters[0]
+    assert int(seek.channel) == int(PrepCmd.ChannelIndex.FrontChannel)
+    assert (seek.seek_position_x, seek.seek_position_y) == (150.0, 200.0)
+    assert (seek.seek_height, seek.min_seek_height, seek.final_position_z) == (160.0, 100.0, 160.0)
+    assert seek.seek_velocity_z == p.pipettes.default_clld_probe_speed
+    assert (seek.lld_sensitivity, seek.detect_mode) == (1, 0)
+    positions = await p.pipettes.request_channel_positions()
+    assert (positions[1].x, positions[1].y, positions[1].z) == (150.0, 200.0, 160.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_probe_z_using_clld_refuses_before_sending():
+  """A floor above the start, a height out of reach or an unknown channel is refused."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.pipettes is not None
+    p.pipettes.configuration.channels[0].z_range = (18.0, 167.5)
+    with pytest.raises(ValueError, match="above start_z"):
+      await p.pipettes.probe_z_using_clld(0, x=150.0, y=200.0, start_z=120.0, lowest_z=130.0)
+    with pytest.raises(ValueError, match="lowest_z=10.0 outside channel 0"):
+      await p.pipettes.probe_z_using_clld(0, x=150.0, y=200.0, start_z=160.0, lowest_z=10.0)
+    with pytest.raises(ValueError, match="channel must be between"):
+      await p.pipettes.probe_z_using_clld(5, x=150.0, y=200.0, start_z=160.0, lowest_z=100.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_x_arm_move_sets_speed_and_acceleration_for_the_axis_move_and_puts_them_back():
+  """The X axis move runs at the given (or default) speed and acceleration, restored afterwards."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.x_arm is not None and p.pipettes is not None
+    await p.pipettes.move_to_safe_z()
+    sent: list = []
+    execute = p.client.execute
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await execute(command, *args, **kwargs)
+
+    p.client.execute = record  # type: ignore[method-assign]
+    await p.x_arm.move_to_x_position(200.0)
+    axis = [c for c in sent if type(c).__name__.startswith("PrepXAxis")]
+    assert [type(c).__name__ for c in axis] == [
+      "PrepXAxisGetCommandedPosition",
+      "PrepXAxisGetVelocity",
+      "PrepXAxisGetAcceleration",
+      "PrepXAxisSetVelocity",
+      "PrepXAxisSetAcceleration",
+      "PrepXAxisMoveAbsolute",
+      "PrepXAxisSetVelocity",
+      "PrepXAxisSetAcceleration",
+    ]
+    assert (axis[3].value, axis[4].value) == (320.0, 1800.0)
+    assert axis[5].position == 200.0
+    assert (axis[6].value, axis[7].value) == (400.0, 2250.0)
+    assert await p.x_arm.request_position() == 200.0
+
+    sent.clear()
+    await p.x_arm.move_to_x_position(150.0, speed=100.0, acceleration=500.0)
+    values = [
+      c.value
+      for c in sent
+      if type(c).__name__ in ("PrepXAxisSetVelocity", "PrepXAxisSetAcceleration")
+    ]
+    assert values[:2] == [100.0, 500.0]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_x_arm_move_refuses_with_a_channel_below_the_traverse_height():
+  """An X axis move does not raise the channels, so it is refused while one is lowered."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.x_arm is not None and p.pipettes is not None
+    await p.pipettes.move_to_coordinate(Coordinate(150.0, 200.0, 100.0), use_channels=1)
+    with pytest.raises(RuntimeError, match="below the traverse height"):
+      await p.x_arm.move_to_x_position(200.0)
+    with pytest.raises(ValueError, match="speed must be above 0"):
+      await p.x_arm.move_to_x_position(200.0, speed=500.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_x_arm_probe_home_flag_seeks_at_the_given_speed_and_returns_the_deck_frame():
+  """The seek is sent with its arguments written out, at a set velocity that is put back."""
+
+  async def _t():
+    p = PrepDriver(deck=PrepDeck(), chatterbox=True)
+    await p.setup()
+    assert p.x_arm is not None and p.pipettes is not None
+    await p.pipettes.move_to_safe_z()
+    start = await p.x_arm.request_position()
+    assert start is not None
+    sent: list = []
+    execute = p.client.execute
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await execute(command, *args, **kwargs)
+
+    p.client.execute = record  # type: ignore[method-assign]
+    tripped = await p.x_arm.probe_home_flag(-30.0)
+    assert tripped == pytest.approx(start, abs=1e-3)  # no flag is modelled in simulation
+    axis = [c for c in sent if type(c).__name__.startswith("PrepXAxis")]
+    assert [type(c).__name__ for c in axis] == [
+      "PrepXAxisGetCommandedPosition",
+      "PrepXAxisGetVelocity",
+      "PrepXAxisSetVelocity",
+      "PrepXAxisSeekToHomeFlag",
+      "PrepXAxisSetVelocity",
+    ]
+    seek = axis[3]
+    assert (seek.distance, seek.travel_limits_enable, seek.trip_sense) == (-30.0, True, 0)
+    assert (axis[2].value, axis[4].value) == (100.0, 400.0)
+
+    with pytest.raises(ValueError, match="outside the channels' range"):
+      p.pipettes.configuration.channels[0].x_range = (0.0, 299.0)
+      await p.x_arm.probe_home_flag(-1000.0)
     await p.stop()
 
   _run(_t())
