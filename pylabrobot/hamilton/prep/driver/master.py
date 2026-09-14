@@ -52,6 +52,13 @@ logger = logging.getLogger(__name__)
 # fitted. Identity and set-up are the device's own.
 _DECLARATION_MUST_MATCH = ("num_channels", "head8_installed", "has_enclosure")
 
+# The PrepDeck waste position for each channel a waste site names.
+_WASTE_SITE_NAMES = {
+  int(PrepCmd.ChannelIndex.FrontChannel): "waste_front",
+  int(PrepCmd.ChannelIndex.RearChannel): "waste_rear",
+  int(PrepCmd.ChannelIndex.MPHChannel): "waste_mph",
+}
+
 
 ResultT = TypeVar("ResultT")
 
@@ -243,6 +250,7 @@ class PrepDriver:
       # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
       if self.deck is not None:
         logger.debug("[PHASE 4] Feature resources")
+        self._place_reported_sites()
         await self._create_capability_resources()
       self._setup_finished = True
     except Exception:
@@ -871,6 +879,35 @@ class PrepDriver:
   # ----------------------------------------
   # Resource model
   # ----------------------------------------
+
+  def _place_reported_sites(self) -> None:
+    """Move the teaching needle and the waste positions to where the device reports them.
+
+    Only on a `PrepDeck`. The teaching needle goes to the deck site whose footprint matches the deck's
+    teaching spot, keeping the spot's height: a site's height is not where a needle is picked up. Each waste
+    position goes to the waste site for its channel. Whatever the device does not report keeps the deck's
+    default.
+    """
+    if not isinstance(self.deck, PrepDeck) or self.configuration is None:
+      return
+    c = self.configuration
+    if self.deck.has_resource("teaching_tip"):
+      spot = self.deck.get_resource("teaching_tip")
+      footprint = (spot.get_absolute_size_x(), spot.get_absolute_size_y())
+      site = next((s for s in c.deck_sites if (s.length, s.width) == footprint), None)
+      if site is not None and spot.location is not None:
+        spot.location = Coordinate(
+          site.left_bottom_front_x, site.left_bottom_front_y, spot.location.z
+        )
+        logger.debug("teaching needle at deck site %d", site.id)
+    for waste_site in c.waste_sites:
+      name = _WASTE_SITE_NAMES.get(waste_site.index)
+      if name is None or not self.deck.has_resource(name):
+        continue
+      self.deck.get_resource(name).location = Coordinate(
+        waste_site.x_position, waste_site.y_position, waste_site.z_position
+      )
+      logger.debug("%s at waste site %d", name, waste_site.index)
 
   async def _create_capability_resources(self) -> None:
     """Put the X-arm on the deck where it is, and hang a resource for each pipetting channel from it.

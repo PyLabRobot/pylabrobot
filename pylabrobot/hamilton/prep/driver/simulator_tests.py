@@ -105,6 +105,35 @@ def test_initializes_once_when_switched_on():
   asyncio.run(_run())
 
 
+def test_setup_places_the_teaching_needle_and_waste_positions_where_the_device_reports_them():
+  """The deck's defaults give way to the device's deck and waste sites at setup."""
+
+  async def _run() -> None:
+    deck = PrepDeck()
+    needle = deck.get_resource("teaching_tip")
+    waste = deck.get_resource("waste_front")
+    assert needle.location is not None
+    height = needle.location.z
+    needle.location = Coordinate(0.0, 0.0, height)
+    waste.location = Coordinate(0.0, 0.0, 0.0)
+    p = PrepSimulationDriver(deck=deck)
+    await p.setup()
+    recorded = read_configuration(RECORDING_PREP)["device"]
+    site = next(s for s in recorded.deck_sites if (s.length, s.width) == (6.0, 6.0))
+    assert (needle.location.x, needle.location.y, needle.location.z) == pytest.approx(
+      (site.left_bottom_front_x, site.left_bottom_front_y, height)
+    )
+    front = next(
+      s for s in recorded.waste_sites if s.index == int(PrepCmd.ChannelIndex.FrontChannel)
+    )
+    assert (waste.location.x, waste.location.y, waste.location.z) == pytest.approx(
+      (front.x_position, front.y_position, front.z_position)
+    )
+    await p.stop()
+
+  asyncio.run(_run())
+
+
 def test_head8_recording_has_a_head8():
   async def _run() -> None:
     p = PrepSimulationDriver(deck=PrepDeck(), declared_configuration_json=RECORDING_PREP_HEAD8)

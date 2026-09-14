@@ -6,10 +6,11 @@ from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import prep_core_gripper_mount
-from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_300uL_filter
+from pylabrobot.resources.hamilton.tip_creators import hamilton_teaching_needle_300uL
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.trash import Trash
+from pylabrobot.resources.trough import Trough
 
 # How tall the deck's working volume is, in mm, from the deck surface. The channels travel from 18.03
 # to 167.5 mm and the deck configuration reports the same Z range, as read off PRPAA1087 on
@@ -18,7 +19,7 @@ PREP_DECK_SIZE_Z = 167.5
 
 
 class PrepDeck(Deck):
-  """Hamilton PREP deck: labware spots, trash, teaching tip site, and waste positions.
+  """Hamilton PREP deck: labware spots, waste block, liquid waste container, teaching needle, and waste positions.
 
   Geometry aligns with the prep_tcp / MLPrep DeckConfiguration teaching site and waste
   sites used by :class:`~pylabrobot.hamilton.prep.driver.features.pipettes.Pipettes`
@@ -42,6 +43,7 @@ class PrepDeck(Deck):
       name=name, size_x=size_x, size_y=size_y, size_z=size_z, origin=origin, category=category
     )
     if with_core_grippers:
+      # From the Prep PR (#1196); not measured on a device. The device reports no gripper position.
       self.assign_child_resource(prep_core_gripper_mount(), location=Coordinate(290, 266.5, 62.5))
     spots_list: List[ResourceHolder] = []
     for column in range(2):
@@ -61,14 +63,35 @@ class PrepDeck(Deck):
         spots_list.append(spot)
     self.spots: List[ResourceHolder] = spots_list
 
-    trash = Trash(name="trash", size_x=13, size_y=132.7, size_z=73)
-    self.assign_child_resource(trash, location=Coordinate(280.3, -3, 0))
+    # Where tips are dropped, as on the STAR's waste block.
+    waste_block = Trash(name="waste_block", size_x=13, size_y=132.7, size_z=73)
+    self.assign_child_resource(waste_block, location=Coordinate(280.3, -3, 0))
 
+    # The liquid waste trough, part of the standard deck. As wide as the waste block, and filling the gap from the
+    # waste block's back edge to the teaching needle's front edge. Its depth and height are not measured, and its
+    # volume is the box's.
+    liquid_waste_front_y = -3 + waste_block.get_absolute_size_y()
+    liquid_waste_size_y = 214.29 - liquid_waste_front_y
+    liquid_waste_container = Trough(
+      name="liquid_waste_container",
+      size_x=waste_block.get_absolute_size_x(),
+      size_y=liquid_waste_size_y,
+      size_z=waste_block.get_absolute_size_z(),
+      max_volume=waste_block.get_absolute_size_x()
+      * liquid_waste_size_y
+      * waste_block.get_absolute_size_z(),
+    )
+    self.assign_child_resource(
+      liquid_waste_container, location=Coordinate(280.3, liquid_waste_front_y, 0)
+    )
+
+    # The teaching needle, the one STAR decks carry. X and Y are PRPAA1087's 6 x 6 mm deck site
+    # (DeckConfiguration); the driver moves it to the connected device's at setup. Z is not measured.
     teaching_tip_spot = TipSpot(
       name="teaching_tip",
       size_x=6.0,
       size_y=6.0,
-      make_tip=hamilton_tip_300uL_filter,
+      make_tip=hamilton_teaching_needle_300uL,
       size_z=0.0,
       category="teaching_tip",
     )
@@ -77,6 +100,7 @@ class PrepDeck(Deck):
       location=Coordinate(x=284.76, y=214.29, z=23.85),
     )
 
+    # PRPAA1087's waste sites (DeckConfiguration); the driver moves them to the connected device's at setup.
     for waste_name, y_pos in [("waste_rear", 30.0), ("waste_front", 10.0), ("waste_mph", 112.0)]:
       waste = Trash(
         name=waste_name,
@@ -87,7 +111,7 @@ class PrepDeck(Deck):
       )
       self.assign_child_resource(
         waste,
-        location=Coordinate(x=286.8, y=y_pos, z=68.4),
+        location=Coordinate(x=287.0, y=y_pos, z=68.4),
       )
 
   def get_or_create_x_arm(
