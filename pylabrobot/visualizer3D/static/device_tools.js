@@ -149,8 +149,10 @@ export function initDeviceTools({ getWorld, modelOf, onSelect }) {
 
   /** A row of one label and one value, the shape the info panel already uses. */
   function row(key, value) {
-    return `<div class="dt-row"><span class="dt-key">${escapeHtml(key)}</span>` +
-      `<span class="dt-val">${escapeHtml(String(value))}</span></div>`;
+    return (
+      `<div class="dt-row"><span class="dt-key">${escapeHtml(key)}</span>` +
+      `<span class="dt-val">${escapeHtml(String(value))}</span></div>`
+    );
   }
 
   function fillSingle(panel, device) {
@@ -203,7 +205,7 @@ export function initDeviceTools({ getWorld, modelOf, onSelect }) {
             (spot) =>
               `<i class="dt-dot${spot.filled ? " is-filled" : ""}"` +
               ` style="grid-row:${spot.row + 1};grid-column:${spot.column + 1}"` +
-              ` title="${escapeHtml(world.names[spot.index])}"></i>`
+              ` title="${escapeHtml(world.names[spot.index])}"></i>`,
           )
           .join("");
         return (
@@ -228,9 +230,10 @@ export function initDeviceTools({ getWorld, modelOf, onSelect }) {
       .map((index) => {
         const model = modelOf(index);
         const held = heldBy(index);
-        const jaws = model.jaw_width !== undefined && model.jaw_width !== null
-          ? `${Number(model.jaw_width).toFixed(1)} mm`
-          : "unreported";
+        const jaws =
+          model.jaw_width !== undefined && model.jaw_width !== null
+            ? `${Number(model.jaw_width).toFixed(1)} mm`
+            : "unreported";
         return (
           `<div class="dt-arm" data-index="${index}">` +
           `<div class="dt-title">${escapeHtml(world.names[index])}</div>` +
@@ -264,7 +267,7 @@ export function initDeviceTools({ getWorld, modelOf, onSelect }) {
       // them into one another, which is worse than a group that runs off a narrow window.
       let left = Math.min(
         Math.max(anchor.left - bounds.left + anchor.width / 2 - total / 2, PANEL_EDGE),
-        Math.max(PANEL_EDGE, bounds.width - total - PANEL_EDGE)
+        Math.max(PANEL_EDGE, bounds.width - total - PANEL_EDGE),
       );
       mine.forEach((panel, i) => {
         const dragged = moved.get(panel.element.id);
@@ -333,8 +336,7 @@ export function initDeviceTools({ getWorld, modelOf, onSelect }) {
     const element = document.createElement("div");
     element.className = `dt-panel mt-panel-${kind}`;
     element.id = id;
-    element.innerHTML =
-      `<button class="dt-reset" title="Put this panel back">&#8635;</button><div class="dt-body"></div>`;
+    element.innerHTML = `<button class="dt-reset" title="Put this panel back">&#8635;</button><div class="dt-body"></div>`;
     element.querySelector(".dt-reset").addEventListener("click", (event) => {
       event.stopPropagation();
       moved.delete(id);
@@ -380,7 +382,11 @@ export function initDeviceTools({ getWorld, modelOf, onSelect }) {
         if (collapsed) for (const id of KINDS.map((k) => idOf(device, k.kind))) close(id);
       });
 
-      const has = { single: parts.channels.length, multi: parts.heads.length, arm: parts.grippers.length };
+      const has = {
+        single: parts.channels.length,
+        multi: parts.heads.length,
+        arm: parts.grippers.length,
+      };
       for (const { kind, icon, title } of KINDS) {
         if (!has[kind]) continue;
         const button = document.createElement("button");

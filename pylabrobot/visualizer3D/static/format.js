@@ -6,7 +6,10 @@
  */
 
 export function escapeHtml(text) {
-  return String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return String(text).replace(
+    /[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+  );
 }
 
 export function fmt(value) {
@@ -24,15 +27,25 @@ export function fmt(value) {
 
 export function umlRows(pairs) {
   return pairs
-    .map(([k, v]) => `<div class="uml-row"><span class="uml-key">${escapeHtml(k)}</span><span class="uml-value">${v}</span></div>`)
+    .map(
+      ([k, v]) =>
+        `<div class="uml-row"><span class="uml-key">${escapeHtml(k)}</span><span class="uml-value">${v}</span></div>`,
+    )
     .join("");
 }
 
 export const UNITS = {
-  size_x: "mm", size_y: "mm", size_z: "mm",
-  material_z_thickness: "mm", total_tip_length: "mm", plate_z_offset: "mm",
-  max_volume: "uL", volume: "uL", pending_volume: "uL",
-  nominal_volume: "uL", maximal_volume: "uL",
+  size_x: "mm",
+  size_y: "mm",
+  size_z: "mm",
+  material_z_thickness: "mm",
+  total_tip_length: "mm",
+  plate_z_offset: "mm",
+  max_volume: "uL",
+  volume: "uL",
+  pending_volume: "uL",
+  nominal_volume: "uL",
+  maximal_volume: "uL",
 };
 
 export const NBSP = "\u00a0";

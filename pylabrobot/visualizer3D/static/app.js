@@ -12,62 +12,63 @@
 const _t0 = performance.now();
 
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/OrbitControls.js";
-import { ViewHelper } from "three/addons/ViewHelper.js";
-import { RoomEnvironment } from "three/addons/RoomEnvironment.js";
+import { DRACOLoader } from "three/addons/DRACOLoader.js";
+import { GLTFLoader } from "three/addons/GLTFLoader.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
-import { GLTFLoader } from "three/addons/GLTFLoader.js";
-import { DRACOLoader } from "three/addons/DRACOLoader.js";
+import { OrbitControls } from "three/addons/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/RoomEnvironment.js";
+import { ViewHelper } from "three/addons/ViewHelper.js";
 
 import {
-  DEG,
-  RESOURCE_COLORS,
+  ARM_COLOR,
+  ARM_EDGE,
+  ARM_EDGE_WIDTH_3D,
+  ARM_EDGE_WIDTH_FLAT,
+  ARM_INSET_X,
+  ARM_INSET_Y,
+  ARM_OPACITY,
+  ARM_REFERENCE_OPACITY,
+  BOX_OPACITY,
   CONTAINERS,
   CONTENTS,
-  PICKABLE_PARTS,
-  TREE_HIDDEN,
+  DEG,
+  EDGE_WIDTH_3D,
+  EDGE_WIDTH_FLAT,
+  FLAT_EDGE,
   GLAZED_MAX_OPACITY,
+  GRIP_MARK_OPACITY,
+  GRIP_MARK_OPENING,
+  GRIP_MARK_WIDTH,
+  HOLDERS,
+  HOVER,
+  LIQUID,
+  MODEL_EDGE_OPACITY,
+  MOVING_OPACITY,
   MOVING_PARTS,
   NO_REFERENCE_MARK,
-  FLAT_EDGE,
-  EDGE_WIDTH_FLAT,
-  EDGE_WIDTH_3D,
+  PICKABLE_PARTS,
+  REFERENCE_DROP,
+  REFERENCE_LINE,
+  REFERENCE_WIDTH,
+  RESOURCE_COLORS,
+  SELECT,
+  SHELL_OPACITY,
+  SPACE_OPACITY,
   structureEdgeStyle,
-  LIQUID,
+  TIP,
+  TIP_RACK_OPACITY,
+  TREE_HIDDEN,
   VESSEL_EMPTY,
   VESSEL_RIM,
   VESSEL_WALL,
   VESSEL_WALL_OPACITY,
-  TIP,
-  SELECT,
-  HOVER,
-  ARM_COLOR,
-  ARM_OPACITY,
-  BOX_OPACITY,
-  MODEL_EDGE_OPACITY,
-  MOVING_OPACITY,
-  SHELL_OPACITY,
-  SPACE_OPACITY,
-  HOLDERS,
-  TIP_RACK_OPACITY,
-  ARM_EDGE,
-  ARM_EDGE_WIDTH_FLAT,
-  ARM_EDGE_WIDTH_3D,
-  ARM_INSET_X,
-  ARM_INSET_Y,
-  GRIP_MARK_OPACITY,
-  GRIP_MARK_OPENING,
-  GRIP_MARK_WIDTH,
-  REFERENCE_LINE,
-  REFERENCE_WIDTH,
-  REFERENCE_DROP,
-  ARM_REFERENCE_OPACITY,
 } from "./constants.js";
-import { initGif } from "./gif.js";
 import { initCoords } from "./coords.js";
 import { initDeviceTools } from "./device_tools.js";
 import { input, query } from "./dom.js";
+import { escapeHtml, fmt, NBSP, section, tuple, withUnit } from "./format.js";
+import { initGif } from "./gif.js";
 import {
   buildWorld,
   mirrorPlacement,
@@ -80,8 +81,6 @@ import {
   treeDepth,
   world,
 } from "./world.js";
-import { escapeHtml, fmt, NBSP, tuple, withUnit, section } from "./format.js";
-
 
 const timings = { moduleMs: performance.now() - _t0 };
 
@@ -104,8 +103,8 @@ let edgeOf = new Map();
 // landed: everything that says what is drawn runs again on every view change, so a one-off switch
 // would be undone by the next orbit past an axis.
 let drawnFromFile = new Set();
-let stateOf = new Map();
-let hiddenNames = new Set();
+const stateOf = new Map();
+const hiddenNames = new Set();
 let selected = -1;
 let stats = {};
 let activeTool = "cursor";
@@ -217,7 +216,10 @@ function wheelPans(event) {
   const now = performance.now();
   const fresh = now > gestureEndsAt;
   gestureEndsAt = now + GESTURE_GAP_MS;
-  if (event.ctrlKey) return (gesturePans = false); // a pinch is a zoom, whatever came before it
+  if (event.ctrlKey) {
+    gesturePans = false; // a pinch is a zoom, whatever came before it
+    return false;
+  }
   if (fresh) gesturePans = looksLikeTrackpad(event);
   return gesturePans;
 }
@@ -352,7 +354,7 @@ function labelSprite(text, color = GRID_LABEL, sizeMm = GRID_LABEL_MM) {
   // so they lie in it. PlaneGeometry is already in XY, which is the surface's plane.
   const label = new THREE.Mesh(
     new THREE.PlaneGeometry(sizeMm * 2, sizeMm),
-    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false })
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false }),
   );
   label.frustumCulled = false;
   return label;
@@ -400,7 +402,7 @@ function buildDeclaredMeshes() {
   const byModel = new Map();
   for (let index = 0; index < world.names.length; index++) {
     const declared = modelOf(index).mesh;
-    if (!declared || !declared.url) continue;
+    if (!declared?.url) continue;
     if (!byModel.has(world.modelOf[index])) byModel.set(world.modelOf[index], []);
     byModel.get(world.modelOf[index]).push(index);
   }
@@ -458,7 +460,9 @@ function buildDeclaredMeshes() {
           for (const [key, spec] of Object.entries(declared.joints ?? {})) {
             const node = scene.getObjectByName(spec.node);
             if (!node) {
-              console.warn(`${world.names[index]} declares joint ${key} on node ${spec.node}, which the file does not have`);
+              console.warn(
+                `${world.names[index]} declares joint ${key} on node ${spec.node}, which the file does not have`,
+              );
               continue;
             }
             joints.set(key, {
@@ -502,7 +506,7 @@ function buildDeclaredMeshes() {
         }
       },
       undefined,
-      (error) => console.warn(`could not load the mesh declared by ${names[0]}`, error)
+      (error) => console.warn(`could not load the mesh declared by ${names[0]}`, error),
     );
   }
 }
@@ -533,7 +537,6 @@ function applyJoints(index) {
       joint.node.quaternion.copy(joint.restQuaternion).multiply(turn);
     }
   }
-
 }
 
 const AXIS_VECTOR = {
@@ -598,12 +601,15 @@ function gripCross(reach, width, opening) {
       const angle = turn - theta + (2 * theta * step) / GRIP_ARC_STEPS;
       points.push(new THREE.Vector2(opening * Math.cos(angle), opening * Math.sin(angle)));
     }
-    for (const [x, y] of [[arm, half], [arm, -half]]) {
+    for (const [x, y] of [
+      [arm, half],
+      [arm, -half],
+    ]) {
       points.push(
         new THREE.Vector2(
           x * Math.cos(turn) - y * Math.sin(turn),
-          x * Math.sin(turn) + y * Math.cos(turn)
-        )
+          x * Math.sin(turn) + y * Math.cos(turn),
+        ),
       );
     }
     shapes.push(new THREE.Shape(points));
@@ -618,9 +624,12 @@ function buildGripMark(index, model, pad) {
   const plane = new THREE.Mesh(
     gripCross(along, GRIP_MARK_WIDTH, GRIP_MARK_OPENING),
     new THREE.MeshBasicMaterial({
-      color: REFERENCE_LINE, transparent: true, opacity: GRIP_MARK_OPACITY,
-      depthTest: false, side: THREE.DoubleSide,
-    })
+      color: REFERENCE_LINE,
+      transparent: true,
+      opacity: GRIP_MARK_OPACITY,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    }),
   );
   plane.frustumCulled = false;
   plane.renderOrder = OVERLAY_ORDER + 5;
@@ -691,22 +700,24 @@ function buildReferenceMarks() {
     // shaft A1, eight millimetres below the plane the body is measured from; the mark used to sit
     // on that plane, which is the resource's origin and nothing the device ever refers to.
     const sz = carried(index)
-      ? model.reference_point.z ?? 0
+      ? (model.reference_point.z ?? 0)
       : deckZ === null
         ? 0
         : deckZ - world.matrices[index].elements[14];
     const plane = new THREE.Mesh(
       new THREE.PlaneGeometry(REFERENCE_WIDTH, sy),
       new THREE.MeshBasicMaterial({
-        color: REFERENCE_LINE, transparent: true, opacity: ARM_REFERENCE_OPACITY,
-        depthTest: false, side: THREE.DoubleSide,
-      })
+        color: REFERENCE_LINE,
+        transparent: true,
+        opacity: ARM_REFERENCE_OPACITY,
+        depthTest: false,
+        side: THREE.DoubleSide,
+      }),
     );
     plane.frustumCulled = false;
     plane.renderOrder = paintOrderOf(index) + REFERENCE_MARK_OFFSET;
     plane.matrixAutoUpdate = false;
-    plane.userData.local = new THREE.Matrix4().makeTranslation(
-      referenceOffset(model), sy / 2, sz);
+    plane.userData.local = new THREE.Matrix4().makeTranslation(referenceOffset(model), sy / 2, sz);
     plane.matrix.multiplyMatrices(world.matrices[index], plane.userData.local);
     plane.matrixWorldNeedsUpdate = true;
     view.add(plane);
@@ -772,7 +783,7 @@ function buildArms() {
         transparent: true,
         opacity: ARM_OPACITY,
         depthWrite: false,
-      })
+      }),
     );
     frame.renderOrder = paintOrderOf(index) + ARM_FRAME_OFFSET;
 
@@ -798,8 +809,11 @@ function buildArms() {
     const line = new THREE.Mesh(
       new THREE.PlaneGeometry(REFERENCE_WIDTH, sy),
       new THREE.MeshBasicMaterial({
-        color: REFERENCE_LINE, transparent: true, opacity: ARM_REFERENCE_OPACITY, depthTest: false,
-      })
+        color: REFERENCE_LINE,
+        transparent: true,
+        opacity: ARM_REFERENCE_OPACITY,
+        depthTest: false,
+      }),
     );
     line.position.set(offset, sy / 2, -REFERENCE_DROP);
     // Under the frame in paint order as well as in z, so it reads through the window and is tinted
@@ -845,9 +859,7 @@ function updateArms(delta) {
     arm.currentX = reduce
       ? arm.targetX
       : arm.currentX + (arm.targetX - arm.currentX) * Math.min(1, delta * ARM_GLIDE_PER_SECOND);
-    const local = new THREE.Matrix4().makeTranslation(
-      arm.currentX, arm.local[1], arm.local[2]
-    );
+    const local = new THREE.Matrix4().makeTranslation(arm.currentX, arm.local[1], arm.local[2]);
     arm.group.matrix.multiplyMatrices(arm.parentMatrix, local);
     arm.group.matrixWorldNeedsUpdate = true;
 
@@ -1000,7 +1012,7 @@ function buildGridMarks() {
       });
       const surface = new THREE.Mesh(
         new THREE.PlaneGeometry(footprintX, footprintY),
-        surfaceMaterial
+        surfaceMaterial,
       );
       // The deck's own top face, so it paints just after the deck's box and just before whatever
       // stands on it. On the same height scale as everything else - left on the old tree-depth scale
@@ -1051,7 +1063,7 @@ function buildGridMarks() {
       bandGeometry.setAttribute("position", new THREE.Float32BufferAttribute(bandPoints, 3));
       const bandLines = new THREE.LineSegments(
         bandGeometry,
-        new THREE.LineBasicMaterial({ color: BAND_COLOR, depthTest: false })
+        new THREE.LineBasicMaterial({ color: BAND_COLOR, depthTest: false }),
       );
       bandLines.renderOrder = paintOrderOf(index) + 0.5;
       group.add(bandLines);
@@ -1060,10 +1072,10 @@ function buildGridMarks() {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
     const marks = new THREE.LineSegments(
-        geometry,
-        // Opaque, so it sorts with everything else: a transparent line renders after all opaque
-        // geometry no matter its render order, which is what kept these on top of the carriers.
-        new THREE.LineBasicMaterial({ color: GRID_LINE, depthTest: false })
+      geometry,
+      // Opaque, so it sorts with everything else: a transparent line renders after all opaque
+      // geometry no matter its render order, which is what kept these on top of the carriers.
+      new THREE.LineBasicMaterial({ color: GRID_LINE, depthTest: false }),
     );
     // Just above the surface it is drawn on, and below anything standing on that surface.
     marks.renderOrder = paintOrderOf(index) + 0.5;
@@ -1076,8 +1088,11 @@ function buildGridMarks() {
     const showThrough = new THREE.LineSegments(
       geometry,
       new THREE.LineBasicMaterial({
-        color: GRID_LINE, transparent: true, opacity: GRID_GHOST_OPACITY, depthTest: false,
-      })
+        color: GRID_LINE,
+        transparent: true,
+        opacity: GRID_GHOST_OPACITY,
+        depthTest: false,
+      }),
     );
     showThrough.userData.mark = "through";
     showThrough.renderOrder = OVERLAY_ORDER - 1;
@@ -1116,11 +1131,12 @@ function buildOrigin() {
     const material = new THREE.MeshStandardMaterial({ color, roughness: 0.45 });
     const body = length * 0.78;
     const bar = new THREE.Mesh(new THREE.CylinderGeometry(shaft, shaft, body, 12), material);
-    const head = new THREE.Mesh(
-      new THREE.ConeGeometry(shaft * 2.6, length - body, 14), material
-    );
+    const head = new THREE.Mesh(new THREE.ConeGeometry(shaft * 2.6, length - body, 14), material);
     // Cylinders and cones point along +Y; turn each onto its own axis.
-    const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      direction,
+    );
     bar.quaternion.copy(quaternion);
     head.quaternion.copy(quaternion);
     bar.position.copy(direction).multiplyScalar(body / 2);
@@ -1131,14 +1147,19 @@ function buildOrigin() {
   originMarker.add(
     new THREE.Mesh(
       new THREE.SphereGeometry(shaft * 2.2, 18, 14),
-      new THREE.MeshStandardMaterial({ color: 0x1a1f22, roughness: 0.4 })
-    )
+      new THREE.MeshStandardMaterial({ color: 0x1a1f22, roughness: 0.4 }),
+    ),
   );
 
   // A ring flat on the floor, so the origin is still findable from directly above.
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(length * 0.15, length * 0.2, 48),
-    new THREE.MeshBasicMaterial({ color: 0x1a4b8c, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({
+      color: 0x1a4b8c,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide,
+    }),
   );
   originMarker.add(ring);
 
@@ -1251,7 +1272,6 @@ const OVERLAY_ORDER = 10_000 * PAINT_LEVEL;
 // blended over the deck rather than into it. Whole numbers, with room for a vessel's own contents
 // between them.
 const CARRIED_LAYER = 2;
-
 
 // Whether a model's box is drawn as a filled solid at all. A part that travels over the deck is
 // drawn see-through wherever it is, and a model whose own geometry has arrived has no use for the
@@ -1422,11 +1442,7 @@ function setRenderMode(plan) {
     // All that is left of a box whose model is being drawn: its border, and only just.
     const stoodIn = drawnFromFile.has(index);
     line.material.depthTest = !plan;
-    line.material.opacity = stoodIn
-      ? MODEL_EDGE_OPACITY
-      : plan
-        ? 1
-        : line.userData.baseOpacity;
+    line.material.opacity = stoodIn ? MODEL_EDGE_OPACITY : plan ? 1 : line.userData.baseOpacity;
     line.material.linewidth = plan ? EDGE_WIDTH_FLAT : EDGE_WIDTH_3D;
     line.material.color.set(plan ? FLAT_EDGE : line.userData.baseColor);
     line.renderOrder = plan ? paintOrderOf(index) + 1 : 0;
@@ -1498,7 +1514,7 @@ function updateOrigin() {
     .set(
       Math.max(-ORIGIN_EDGE, Math.min(ORIGIN_EDGE, _originNdc.x)),
       Math.max(-ORIGIN_EDGE, Math.min(ORIGIN_EDGE, _originNdc.y)),
-      depth
+      depth,
     )
     .unproject(camera);
 }
@@ -1512,8 +1528,8 @@ let floorZ = 0;
 
 // 1, 2 or 5 times a power of ten: the spacings a person can count in.
 function niceNumber(value) {
-  const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(value, 1e-6))));
-  return ([1, 2, 5, 10].map((m) => m * magnitude).find((v) => v >= value) ?? magnitude * 10);
+  const magnitude = 10 ** Math.floor(Math.log10(Math.max(value, 1e-6)));
+  return [1, 2, 5, 10].map((m) => m * magnitude).find((v) => v >= value) ?? magnitude * 10;
 }
 
 function mmPerPixel() {
@@ -1555,7 +1571,10 @@ function updateGrid() {
   const span = perPixel * Math.hypot(viewportEl.clientWidth, viewportEl.clientHeight) * 1.3;
   // Coarsen the spacing rather than shrink the coverage: a grid that stops inside the viewport
   // reads as a hole in the floor, whereas a larger cell just reads as a larger cell.
-  const cell = Math.max(niceNumber(perPixel * GRID_TARGET_PX), niceNumber(span / GRID_MAX_DIVISIONS));
+  const cell = Math.max(
+    niceNumber(perPixel * GRID_TARGET_PX),
+    niceNumber(span / GRID_MAX_DIVISIONS),
+  );
   const divisions = Math.max(4, Math.ceil(span / cell));
   // Snap the centre to the spacing, or the lines crawl as you pan.
   const cx = Math.round(controls.target.x / cell) * cell;
@@ -1600,7 +1619,7 @@ function updateGrid() {
       // as well as on a resize, because the first grid is built before the first resize lands.
       floorMaterials[kind].resolution?.set(
         viewportEl.clientWidth || 1,
-        Math.max(viewportEl.clientHeight, 1)
+        Math.max(viewportEl.clientHeight, 1),
       );
       const line = new LineSegments2(geometry, floorMaterials[kind]);
       line.position.set(cx, cy, floorZ);
@@ -1628,7 +1647,6 @@ for (const helper of [selectionBox, hoverBox]) {
   helper.renderOrder = OVERLAY_ORDER + 30;
 }
 
-
 // three's own view helper, in place of the hand-drawn legend: same three axes, but clickable,
 // and it animates the camera onto the axis you pick.
 const clock = new THREE.Clock();
@@ -1653,8 +1671,6 @@ const CONE = new THREE.ConeGeometry(0.5, 1, 14).rotateX(-Math.PI / 2);
 const EDGE_LIMIT = 160;
 
 // ---------------------------------------------------------------- scene build
-
-
 
 // A resource says what shape it is through `cross_section_type`. A tip spot does not serialize
 // one, though it is plainly round, so it is special-cased here; upstream it should declare the
@@ -1694,8 +1710,12 @@ function ringFootprint(corners) {
     const to = ((corner + 1.5) / corners) * Math.PI * 2;
     const reach = corners === 4 ? Math.SQRT1_2 : 0.5;
     points.push(
-      Math.cos(from) * reach, Math.sin(from) * reach, -0.5,
-      Math.cos(to) * reach, Math.sin(to) * reach, -0.5
+      Math.cos(from) * reach,
+      Math.sin(from) * reach,
+      -0.5,
+      Math.cos(to) * reach,
+      Math.sin(to) * reach,
+      -0.5,
     );
   }
   const geometry = new LineSegmentsGeometry();
@@ -1711,7 +1731,7 @@ const colorFor = (model) =>
   model.appearance?.color ?? RESOURCE_COLORS[model.category] ?? RESOURCE_COLORS.default;
 // "TipRack" -> "tipracks", as the existing visualizer writes them. Deliberately naive: a count is
 // always in front of it, so "1 plates" reads as a count rather than as a mistake.
-const plural = (type) => String(type).toLowerCase() + "s";
+const plural = (type) => `${String(type).toLowerCase()}s`;
 
 // The plural naming these resources, or "" if they are not all of one kind and so cannot be
 // counted as one thing.
@@ -1719,7 +1739,7 @@ function countable(indices) {
   const types = new Set(indices.map((i) => modelOf(i).type));
   return types.size === 1 ? plural(modelOf(indices[0]).type) : "";
 }
-const hexOf = (n) => "#" + n.toString(16).padStart(6, "0");
+const hexOf = (n) => `#${n.toString(16).padStart(6, "0")}`;
 
 const IDENTITY_Q = new THREE.Quaternion();
 const tmpMatrix = new THREE.Matrix4();
@@ -1753,7 +1773,6 @@ function collectEnclosedModels(index, into) {
     collectEnclosedModels(child, into);
   }
 }
-
 
 // A carrier is the level you look at rather than through: its floor is filled in, and its walls
 // keep their fill instead of being culled when the things it holds are drawn.
@@ -1855,7 +1874,10 @@ function buildMeshes() {
     mesh.userData.instances = instances;
     view.add(mesh);
     meshes.push({
-      mesh, model, modelIndex, instances,
+      mesh,
+      model,
+      modelIndex,
+      instances,
       depth: treeDepth(instances[0]),
       lit: material,
       flat: flatVariant(material),
@@ -1926,7 +1948,7 @@ function buildMeshes() {
         // pre-sized plane would be scaled by its own dimensions a second time.
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshStandardMaterial({ color: colorFor(model), roughness: 0.7 }),
-        instances.length
+        instances.length,
       );
       floor.frustumCulled = false;
       instances.forEach((globalIndex, slot) => {
@@ -1955,7 +1977,7 @@ function buildMeshes() {
           transparent: true,
           opacity: VESSEL_WALL_OPACITY,
         }),
-        instances.length
+        instances.length,
       );
       wall.frustumCulled = false;
       instances.forEach((globalIndex, slot) => {
@@ -1977,9 +1999,12 @@ function buildMeshes() {
         // render order says, so an opaque cavity inside a see-through wall is painted first and
         // then covered by the wall's own top face - which is what hid the well from above.
         new THREE.MeshStandardMaterial({
-          color: 0xffffff, roughness: 0.55, transparent: true, opacity: 1,
+          color: 0xffffff,
+          roughness: 0.55,
+          transparent: true,
+          opacity: 1,
         }),
-        instances.length
+        instances.length,
       );
       inner.frustumCulled = false;
       const white = new THREE.Color(VESSEL_EMPTY);
@@ -2023,7 +2048,7 @@ function buildOverlay(instances, model) {
   const mesh = new THREE.InstancedMesh(
     CONE,
     new THREE.MeshStandardMaterial({ color: TIP, roughness: 0.55 }),
-    instances.length
+    instances.length,
   );
   mesh.frustumCulled = false;
   for (let slot = 0; slot < instances.length; slot++) mesh.setMatrixAt(slot, ZERO);
@@ -2031,7 +2056,9 @@ function buildOverlay(instances, model) {
   mesh.userData.flat = flatVariant(mesh.material);
   mesh.userData.lit = mesh.material;
   view.add(mesh);
-  instances.forEach((globalIndex, slot) => tipOf.set(globalIndex, { mesh, slot, model }));
+  instances.forEach((globalIndex, slot) => {
+    tipOf.set(globalIndex, { mesh, slot, model });
+  });
   return mesh;
 }
 
@@ -2081,13 +2108,13 @@ function refreshOverlays(index, touched) {
     vessel.mesh.setColorAt(vessel.slot, new THREE.Color(fitted ? TIP : VESSEL_EMPTY));
     if (vessel.mesh.instanceColor) vessel.mesh.instanceColor.needsUpdate = true;
   } else if (vessel && Number.isFinite(vessel.model.max_volume)) {
-    const volume = state ? state.pending_volume ?? state.volume ?? 0 : 0;
+    const volume = state ? (state.pending_volume ?? state.volume ?? 0) : 0;
     const fraction = Math.max(0, Math.min(1, volume / (vessel.model.max_volume || 1)));
     // Empty is white; any liquid at all steps clear of white so a nearly empty well still reads.
     const t = fraction > 0 ? 0.35 + 0.65 * fraction : 0;
     vessel.mesh.setColorAt(
       vessel.slot,
-      new THREE.Color(VESSEL_EMPTY).lerp(new THREE.Color(LIQUID), t)
+      new THREE.Color(VESSEL_EMPTY).lerp(new THREE.Color(LIQUID), t),
     );
     if (vessel.mesh.instanceColor) vessel.mesh.instanceColor.needsUpdate = true;
   }
@@ -2116,8 +2143,17 @@ function placeParts(index, touched) {
     if (!mounted || !visible) tip.mesh.setMatrixAt(tip.slot, ZERO);
     else {
       const length = mounted.total_tip_length || sz;
-      placeInstance(tip.mesh, tip.slot, world.matrices[index],
-        sx * 0.62, sy * 0.62, length, sx / 2, sy / 2, length / 2);
+      placeInstance(
+        tip.mesh,
+        tip.slot,
+        world.matrices[index],
+        sx * 0.62,
+        sy * 0.62,
+        length,
+        sx / 2,
+        sy / 2,
+        length / 2,
+      );
     }
     touched.add(tip.mesh);
   }
@@ -2195,7 +2231,7 @@ function referencePoint(index, xRef, yRef, zRef) {
       : zRef === "top"
         ? sz
         : zRef === "cavity_bottom"
-          ? thickness ?? 0
+          ? (thickness ?? 0)
           : 0;
   const point = new THREE.Vector3(x, y, z).applyMatrix4(world.matrices[index]);
   point.zKnown = zRef !== "cavity_bottom" || typeof thickness === "number";
@@ -2207,8 +2243,14 @@ function worldBox(index) {
   const box = new THREE.Box3();
   const corner = new THREE.Vector3();
   for (const c of [
-    [0, 0, 0], [sx, 0, 0], [0, sy, 0], [0, 0, sz],
-    [sx, sy, 0], [sx, 0, sz], [0, sy, sz], [sx, sy, sz],
+    [0, 0, 0],
+    [sx, 0, 0],
+    [0, sy, 0],
+    [0, 0, sz],
+    [sx, sy, 0],
+    [sx, 0, sz],
+    [0, sy, sz],
+    [sx, sy, sz],
   ]) {
     corner.set(c[0], c[1], c[2]).applyMatrix4(world.matrices[index]);
     box.expandByPoint(corner);
@@ -2232,7 +2274,7 @@ function shortName(index) {
   const parent = world.parentOf[index];
   const name = world.names[index];
   if (parent < 0) return name;
-  const prefix = world.names[parent] + "_";
+  const prefix = `${world.names[parent]}_`;
   return name.startsWith(prefix) ? name.slice(prefix.length) : name;
 }
 
@@ -2295,7 +2337,9 @@ function siteOrder(index) {
   });
   const oneRow = sorted.every((c) => Math.abs(at(c)[13] - at(sorted[0])[13]) <= SAME_ROW);
   const number = new Map();
-  sorted.forEach((c, i) => number.set(c, oneRow ? i : sorted.length - 1 - i));
+  sorted.forEach((c, i) => {
+    number.set(c, oneRow ? i : sorted.length - 1 - i);
+  });
   return { sorted, number };
 }
 
@@ -2317,7 +2361,7 @@ function addRow(index, depth, before) {
   row.dataset.index = index;
 
   const arrow = document.createElement("span");
-  arrow.className = "tree-node-arrow" + (children.length ? " has-children" : "");
+  arrow.className = `tree-node-arrow${children.length ? " has-children" : ""}`;
   arrow.textContent = children.length ? "▶" : "";
   row.appendChild(arrow);
 
@@ -2532,10 +2576,18 @@ function hideInfoPanel() {
 // Units for the fields that have them. A number without its unit is not an answer.
 // Shown by the panel's own sections, so they must not appear again under Specifics.
 const HANDLED = new Set([
-  "type", "category", "methods", "model",
-  "size_x", "size_y", "size_z",
-  "max_volume", "volume", "pending_volume",
-  "height_volume_data", "ordering",
+  "type",
+  "category",
+  "methods",
+  "model",
+  "size_x",
+  "size_y",
+  "size_z",
+  "max_volume",
+  "volume",
+  "pending_volume",
+  "height_volume_data",
+  "ordering",
 ]);
 
 // A field that records how a resource was constructed rather than what it is now. These are kept,
@@ -2561,7 +2613,10 @@ function renderInfoPanel() {
   const xf = world.local;
   const state = stateOf.get(index);
 
-  const identity = [["name", escapeHtml(world.names[index])], ["type", escapeHtml(model.type)]];
+  const identity = [
+    ["name", escapeHtml(world.names[index])],
+    ["type", escapeHtml(model.type)],
+  ];
   if (model.model) identity.push(["model", escapeHtml(String(model.model))]);
   identity.push(["category", escapeHtml(model.category ?? "uncategorised")]);
 
@@ -2572,23 +2627,29 @@ function renderInfoPanel() {
   if (xf[o + 3] || xf[o + 4] || xf[o + 5]) {
     placement.push(["rotation", tuple(xf[o + 3], xf[o + 4], xf[o + 5], "deg")]);
   }
-  placement.push(["parent", world.parentOf[index] >= 0 ? escapeHtml(world.names[world.parentOf[index]]) : "none"]);
+  placement.push([
+    "parent",
+    world.parentOf[index] >= 0 ? escapeHtml(world.names[world.parentOf[index]]) : "none",
+  ]);
   placement.push(["children", String(world.childrenOf[index].length)]);
 
   const [sx, sy, sz] = sizeOf(model);
-  const geometry = [["size", `${fmt(sx)}${NBSP}&#215;${NBSP}${fmt(sy)}${NBSP}&#215;${NBSP}${fmt(sz)}${NBSP}mm`]];
+  const geometry = [
+    ["size", `${fmt(sx)}${NBSP}&#215;${NBSP}${fmt(sy)}${NBSP}&#215;${NBSP}${fmt(sz)}${NBSP}mm`],
+  ];
   if (model.ordering) geometry.push(["items", String(Object.keys(model.ordering).length)]);
 
   const contents = [];
   if (model.max_volume !== undefined) {
-    const volume = state ? state.pending_volume ?? state.volume ?? 0 : 0;
+    const volume = state ? (state.pending_volume ?? state.volume ?? 0) : 0;
     contents.push(["volume", `${fmt(volume)}${NBSP}/${NBSP}${fmt(model.max_volume)}${NBSP}uL`]);
   }
   if (state && "pending_tip" in state) {
     contents.push(["tip", state.pending_tip ? "fitted" : "none"]);
     if (state.pending_tip) {
       for (const key of ["total_tip_length", "nominal_volume", "has_filter"]) {
-        if (state.pending_tip[key] !== undefined) contents.push([key, withUnit(key, state.pending_tip[key])]);
+        if (state.pending_tip[key] !== undefined)
+          contents.push([key, withUnit(key, state.pending_tip[key])]);
       }
     }
   }
@@ -2602,7 +2663,12 @@ function renderInfoPanel() {
 
   const tracker = state
     ? Object.entries(state)
-        .filter(([k]) => !["rotation", "pending_volume", "volume", "tip", "pending_tip", "tip_state"].includes(k))
+        .filter(
+          ([k]) =>
+            !["rotation", "pending_volume", "volume", "tip", "pending_tip", "tip_state"].includes(
+              k,
+            ),
+        )
         .map(([k, v]) => [k, withUnit(k, v)])
     : [];
 
@@ -2670,12 +2736,10 @@ function clearHover() {
   markTreeRow(null);
 }
 
-
 // A line at the X the device positions the arm by. Where that sits on the arm is the whole
 // difference between a dual-rail arm, positioned by its centre, and a single-rail one, positioned
 // by its right edge - so drawing the reported X against the arm shows which it is without the
 // viewer needing to know anything about rail types.
-
 
 // ---------------------------------------------------------------- picking
 
@@ -2698,7 +2762,8 @@ function pick(event) {
       // Enclosures are translucent, so clicking through one to its contents is the useful
       // behaviour; take an enclosure only when nothing solid lies behind it. A part that always
       // carries something - a pipetting channel and its shaft - is taken where it is clicked.
-      const takesClick = world.childrenOf[index].length === 0 || PICKABLE_PARTS.has(modelOf(index).category);
+      const takesClick =
+        world.childrenOf[index].length === 0 || PICKABLE_PARTS.has(modelOf(index).category);
       if (takesClick || hits.length === 1) return { index };
     }
   }
@@ -2718,7 +2783,12 @@ const deviceTools = initDeviceTools({
     select(index, true);
   },
 });
-const { coordinateLabel, recordMeasurement, populateWrtDropdown, endpoints: deltaEndpoints } = coords;
+const {
+  coordinateLabel,
+  recordMeasurement,
+  populateWrtDropdown,
+  endpoints: deltaEndpoints,
+} = coords;
 
 // ---------------------------------------------------------------- delta lines
 
@@ -2757,7 +2827,12 @@ function buildDeltaAnnotation() {
       const geometry = new LineSegmentsGeometry();
       geometry.setPositions([0, 0, 0, 0, 0, 0]);
       const material = new THREE.Line2NodeMaterial({
-        color, linewidth, worldUnits: false, transparent: true, opacity, depthTest: false,
+        color,
+        linewidth,
+        worldUnits: false,
+        transparent: true,
+        opacity,
+        depthTest: false,
       });
       edgeMaterials.add(material);
       const line = new LineSegments2(geometry, material);
@@ -2777,12 +2852,20 @@ function buildDeltaAnnotation() {
     // from wherever it is looked at.
     const label = new THREE.Mesh(
       new THREE.PlaneGeometry(DELTA_LABEL_MM * 4, DELTA_LABEL_MM),
-      new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false })
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false }),
     );
     label.frustumCulled = false;
     label.renderOrder = OVERLAY_ORDER + 42;
     group.add(label);
-    return { axis, color: `#${color.toString(16).padStart(6, "0")}`, lines, canvas, texture, label, text: null };
+    return {
+      axis,
+      color: `#${color.toString(16).padStart(6, "0")}`,
+      lines,
+      canvas,
+      texture,
+      label,
+      text: null,
+    };
   });
   view.add(group);
   return { group, legs };
@@ -2909,7 +2992,9 @@ function setProjection(kind) {
   buildViewHelper();
   projectionButton.textContent = kind === "orthographic" ? "ORT" : "PSP";
   projectionButton.title =
-    kind === "orthographic" ? "Orthographic: switch to perspective" : "Perspective: switch to orthographic";
+    kind === "orthographic"
+      ? "Orthographic: switch to perspective"
+      : "Perspective: switch to orthographic";
 }
 
 function sceneBounds() {
@@ -2949,7 +3034,7 @@ function projectedExtent(box, direction) {
     corner.set(
       i & 1 ? box.max.x : box.min.x,
       i & 2 ? box.max.y : box.min.y,
-      i & 4 ? box.max.z : box.min.z
+      i & 4 ? box.max.z : box.min.z,
     );
     offset.subVectors(corner, centre);
     halfWidth = Math.max(halfWidth, Math.abs(offset.dot(right)));
@@ -3043,7 +3128,7 @@ function atBoundary(surface) {
         invalidate();
         return result;
       },
-    ])
+    ]),
   );
 }
 
@@ -3151,7 +3236,10 @@ function atBoundary(surface) {
       });
     }
     if (gridLabels.length) {
-      out.at = gridLabels[0].getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(1));
+      out.at = gridLabels[0]
+        .getWorldPosition(new THREE.Vector3())
+        .toArray()
+        .map((v) => +v.toFixed(1));
     }
     return out;
   },
@@ -3214,7 +3302,7 @@ function updateStats() {
   const fps = Math.round((frames * 1000) / (now - lastSample));
   frames = 0;
   lastSample = now;
-  drawStats(String(fps) + " fps");
+  drawStats(`${String(fps)} fps`);
 }
 
 // Quoting a frame rate while nothing is being drawn would be a lie, so an idle viewer says so. This
@@ -3281,7 +3369,9 @@ function showHoverFor(event) {
   markTreeRow(hit.index);
   drawDeltaLines(hit.index);
   readout.textContent =
-    activeTool === "coords" ? coordinateLabel(hit.index) : `${world.names[hit.index]}\n${modelOf(hit.index).type}`;
+    activeTool === "coords"
+      ? coordinateLabel(hit.index)
+      : `${world.names[hit.index]}\n${modelOf(hit.index).type}`;
 }
 
 renderer.domElement.addEventListener("pointermove", (event) => {
@@ -3378,7 +3468,7 @@ toolButtons.gif.addEventListener("click", () => {
 // it. What the helper cannot do is choose a projection, so that button stays.
 const projectionButton = document.getElementById("view-projection");
 projectionButton.addEventListener("click", () =>
-  setProjection(projection === "orthographic" ? "perspective" : "orthographic")
+  setProjection(projection === "orthographic" ? "perspective" : "orthographic"),
 );
 const homeButton = document.getElementById("home-button");
 homeButton.addEventListener("click", () => {
@@ -3410,9 +3500,9 @@ document.getElementById("toggle-expand-btn").addEventListener("click", () => {
   allExpanded = !allExpanded;
   expandAll(allExpanded);
 });
-document.getElementById("collapse-all-btn").addEventListener("click", () =>
-  showToDepth(Number(depthInput.value) || 0)
-);
+document
+  .getElementById("collapse-all-btn")
+  .addEventListener("click", () => showToDepth(Number(depthInput.value) || 0));
 depthInput.addEventListener("change", () => showToDepth(Number(depthInput.value) || 0));
 
 // search
@@ -3502,7 +3592,10 @@ resizeHandle.addEventListener("pointerdown", (e) => {
 });
 resizeHandle.addEventListener("pointermove", (e) => {
   if (!resizingFrom) return;
-  const width = Math.max(150, Math.min(window.innerWidth * 0.6, resizingFrom.width - (e.clientX - resizingFrom.x)));
+  const width = Math.max(
+    150,
+    Math.min(window.innerWidth * 0.6, resizingFrom.width - (e.clientX - resizingFrom.x)),
+  );
   sidepanel.style.width = `${width}px`;
   resize();
 });
@@ -3534,7 +3627,10 @@ document.addEventListener("visibilitychange", () => {
 });
 
 function connect() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+  ) {
     return;
   }
   socket = new WebSocket(`ws://${location.hostname}:${window.WS_PORT}`);

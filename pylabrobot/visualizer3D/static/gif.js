@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { input, button } from "./dom.js";
+import { button, input } from "./dom.js";
 
 /**
  * Wires up the GIF recording panel.

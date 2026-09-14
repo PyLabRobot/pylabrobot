@@ -22,13 +22,23 @@ export function initCoords({ getWorld, referencePoint, escapeHtml }) {
    * @returns {{from: any, to: any}}
    */
   function endpoints(index) {
-    const to = referencePoint(index, refValue("coords-x-ref"), refValue("coords-y-ref"), refValue("coords-z-ref"));
+    const to = referencePoint(
+      index,
+      refValue("coords-x-ref"),
+      refValue("coords-y-ref"),
+      refValue("coords-z-ref"),
+    );
     const wrtName = refValue("coords-wrt-ref");
     if (wrtName === "root") return { from: null, to };
     const wrtIndex = getWorld().indexOfName.get(wrtName);
     if (wrtIndex === undefined) return { from: null, to };
     return {
-      from: referencePoint(wrtIndex, refValue("coords-wrt-x-ref"), refValue("coords-wrt-y-ref"), refValue("coords-wrt-z-ref")),
+      from: referencePoint(
+        wrtIndex,
+        refValue("coords-wrt-x-ref"),
+        refValue("coords-wrt-y-ref"),
+        refValue("coords-wrt-z-ref"),
+      ),
       to,
     };
   }
@@ -91,7 +101,8 @@ export function initCoords({ getWorld, referencePoint, escapeHtml }) {
       option.textContent = getWorld().names[i];
       select.appendChild(option);
     }
-    select.value = current && [...select.options].some((o) => o.value === current) ? current : "root";
+    select.value =
+      current && [...select.options].some((o) => o.value === current) ? current : "root";
   }
 
   return { coordinateLabel, recordMeasurement, populateWrtDropdown, endpoints };

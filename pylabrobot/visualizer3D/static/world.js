@@ -73,7 +73,6 @@ export function buildWorld(data) {
   };
 }
 
-
 /**
  * Take a new scene. Everything derived from the old one is invalid from here on: a rebuild
  * renumbers every instance, so an index held across this call means a different resource after it.
@@ -124,7 +123,10 @@ export function refreshTransforms(index, skipSelf) {
       const parent = world.parentOf[at];
       const q = at * 6;
       _localEuler.set(
-        world.local[q + 3] * DEG, world.local[q + 4] * DEG, world.local[q + 5] * DEG, "XYZ"
+        world.local[q + 3] * DEG,
+        world.local[q + 4] * DEG,
+        world.local[q + 5] * DEG,
+        "XYZ",
       );
       _localMatrix.makeRotationFromEuler(_localEuler);
       _localMatrix.setPosition(world.local[q], world.local[q + 1], world.local[q + 2]);

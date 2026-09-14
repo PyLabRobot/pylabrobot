@@ -14,13 +14,13 @@ export const RESOURCE_COLORS = {
   carrier: 0x5c6c8f,
   mfx_carrier: 0x536181,
   plate_carrier: 0x5c6c8f,
-  tip_carrier: 0x4e3149,  // darkest of the three: the carrier
+  tip_carrier: 0x4e3149, // darkest of the three: the carrier
   trough_carrier: 0x756793,
   tube_carrier: 0x756793,
   plate: 0x3a3a3a,
   well: 0xbcc7cf,
-  tip_rack: 0x9b6690,     // mid: the rack sitting in it
-  tip_spot: 0x6b4f66,     // the spot's rim; its inside carries whether a tip is in it
+  tip_rack: 0x9b6690, // mid: the rack sitting in it
+  tip_spot: 0x6b4f66, // the spot's rim; its inside carries whether a tip is in it
   tube_rack: 0x122d42,
   tube: 0xbcc7cf,
   trough: 0x756793,
