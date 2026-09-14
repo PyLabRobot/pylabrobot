@@ -68,13 +68,12 @@ from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
 
 from .. import prep_commands as PrepCmd
-from ..client import PIPETTOR_OBJECT_PATH
+from ..prep_commands import PIPETTOR_OBJECT_PATH
 from .x_arm import XArmConfiguration
 
 if TYPE_CHECKING:
   from pylabrobot.resources.deck import Deck
 
-  from ..client import PrepClient
   from ..configuration import DeviceConfiguration
   from ..master import PrepDriver
 
@@ -471,14 +470,14 @@ class PipetteChannel:
     self,
     *,
     index: int,
-    client: "PrepClient",
+    driver: "PrepDriver",
     sleeve_sensor: Optional[Address] = None,
     zdrive: Optional[Address] = None,
     node_info: Optional[Address] = None,
     bounds: Optional[ChannelBounds] = None,
   ) -> None:
     self.index = index
-    self._client = client
+    self._driver = driver
     self.sleeve_sensor = sleeve_sensor
     self.zdrive = zdrive
     self.node_info = node_info
@@ -500,7 +499,7 @@ class PipetteChannel:
     """
     if self.node_info is None:
       return None
-    return await self._client._query_firmware_string(self.node_info, cmd_id=8, iface_id=1)
+    return await self._driver.request_firmware_string(self.node_info, method_id=8, interface_id=1)
 
 
 # =============================================================================
@@ -646,26 +645,20 @@ class Pipettes:
 
   def __init__(
     self,
+    driver: "PrepDriver",
     *,
-    client: "PrepClient",
-    driver: Optional["PrepDriver"] = None,
-    deck: Optional["Deck"] = None,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
     configuration: Optional[PipettesConfiguration] = None,
   ) -> None:
     """
     Args:
-      client: the client to send commands through.
-      driver: the driver whose configuration holds what the device reported.
-      deck: the deck positions are measured from.
+      driver: the driver to send commands through, whose configuration holds what the device reported.
       default_traverse_height: sets `default_minimum_traverse_height`, when given.
       use_v1_aspirate_dispense: sets `configuration.use_v1_aspirate_dispense`, when set.
       configuration: the channels' configuration. Defaults to `PipettesConfiguration()`.
     """
-    self._client = client
     self._driver = driver
-    self.deck = deck
     self.configuration = configuration or PipettesConfiguration()
     # The height to travel at when a command names none, in mm. None leaves it to the height the
     # device reports.
@@ -791,6 +784,11 @@ class Pipettes:
   # -- session / discovery -------------------------------------------------------------------------
 
   @property
+  def deck(self) -> Optional["Deck"]:
+    """The deck positions are measured from: the driver's."""
+    return self._driver.deck
+
+  @property
   def _configuration(self) -> "DeviceConfiguration":
     """The device's configuration, as the driver read it at setup.
 
@@ -836,7 +834,7 @@ class Pipettes:
     Read-only. Builds `channels` from the drive addresses and movement bounds, then fills in
     `configuration.channels`: each channel's firmware version, and the window it reaches.
     """
-    drive_map = await self._client.request_channel_drives(root_name="Channel Root")
+    drive_map = await self._driver.request_channel_drives(root_name="Channel Root")
     try:
       num_channels = self._configuration.num_channels
     except RuntimeError:
@@ -855,7 +853,7 @@ class Pipettes:
     self.channels = [
       PipetteChannel(
         index=i,
-        client=self._client,
+        driver=self._driver,
         sleeve_sensor=_drive_addr(drive_map.sleeve_sensor_addrs, i),
         zdrive=_drive_addr(drive_map.zdrive_addrs, i),
         node_info=_drive_addr(drive_map.node_info_addrs, i),
@@ -888,8 +886,8 @@ class Pipettes:
     all v2 command IDs (38-43) are present. Returns False when the firmware only
     exposes v1 commands (1-6).
     """
-    dest = await self._client.resolve_path(PIPETTOR_OBJECT_PATH)
-    methods = await self._client.introspection.methods_for_interface(dest, interface_id=1)
+    dest = await self._driver.resolve_path(PIPETTOR_OBJECT_PATH)
+    methods = await self._driver.request_interface_methods(dest, interface_id=1)
     iface1_ids = {m.method_id for m in methods}
     return set(self.configuration.v2_pipetting_command_ids).issubset(iface1_ids)
 
@@ -1032,14 +1030,14 @@ class Pipettes:
       List of bools, one per channel (index 0=rearmost). True if tip detected.
     """
 
-    drive_map = await self._client.request_channel_drives(root_name="Channel Root")
+    drive_map = await self._driver.request_channel_drives(root_name="Channel Root")
     if not drive_map.sleeve_sensor_addrs:
       raise RuntimeError("No channel sleeve sensor addresses discovered.")
 
     results: list[bool] = []
     for addr in drive_map.sleeve_sensor_addrs:
-      method = await self._client.introspection.get_method_by_name(addr, "GetTipPresent")
-      raw = await self._client.execute(
+      method = await self._driver.request_method_by_name(addr, "GetTipPresent")
+      raw = await self._driver.send_command(
         PrepCmd.PrepProbeRequest(
           dest=addr, command_id=method.method_id, interface_id=method.interface_id
         )
@@ -1089,7 +1087,7 @@ class Pipettes:
     empty channels; with a tip attached the effective Z minimum is higher.
     """
     try:
-      response = await self._client.execute(PrepCmd.PrepGetChannelBounds())
+      response = await self._driver.send_command(PrepCmd.PrepGetChannelBounds())
     except KeyError:
       return []
     channel_indices = {int(value): index for index, value in _CHANNEL_INDEX.items()}
@@ -1141,7 +1139,7 @@ class Pipettes:
       answer with positions.
     """
     try:
-      resp_obj = await self._client.execute(PrepCmd.PrepGetPositions())
+      resp_obj = await self._driver.send_command(PrepCmd.PrepGetPositions())
     except (HoiError, ChannelizedError):
       return []
     if not isinstance(resp_obj, PrepCmd.PrepGetPositions.Response):
@@ -1340,7 +1338,7 @@ class Pipettes:
     if channel < len(tip_presence) and tip_presence[channel]:
       # Query firmware for the held tip definition to get tip length
       # By name: the method's ids are not the same on every firmware version.
-      raw = await self._client.request_by_name(PIPETTOR_OBJECT_PATH, "GetTipDefinitionHeld")
+      raw = await self._driver.request_by_name(PIPETTOR_OBJECT_PATH, "GetTipDefinitionHeld")
       if raw is not None:
         import struct as _struct
 
@@ -1413,7 +1411,7 @@ class Pipettes:
     Args:
       channels: channel indices, 0-indexed from the back.
     """
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepMoveZUpToSafe(channels=[_CHANNEL_INDEX[ch] for ch in channels])
     )
 
@@ -1556,9 +1554,11 @@ class Pipettes:
     """
     move_parameters = _build_pipettor_gantry_move_parameters(x, channels, y, z)
     if via_lane:
-      await self._client.execute(PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters))
+      await self._driver.send_command(
+        PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
+      )
     else:
-      await self._client.execute(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
+      await self._driver.send_command(PrepCmd.PrepMoveToPosition(move_parameters=move_parameters))
 
   # ----------------------------------------
   # Probing
@@ -1740,7 +1740,7 @@ class Pipettes:
     Returns:
       The firmware's result for each entry.
     """
-    response = await self._client.execute(
+    response = await self._driver.send_command(
       PrepCmd.PrepZSeekLldPosition(seek_parameters=seek_parameters)
     )
     return list(response.results)
@@ -1912,7 +1912,7 @@ class Pipettes:
     queue_tip_pickups(tip_intents)
 
     async def _send() -> None:
-      await self._client.execute(
+      await self._driver.send_command(
         PrepCmd.PrepPickUpTips(
           tip_positions=tip_positions,
           final_z=resolved_final_z,
@@ -2009,7 +2009,7 @@ class Pipettes:
     queue_tip_drops(tip_intents)
 
     async def _send() -> None:
-      await self._client.execute(
+      await self._driver.send_command(
         PrepCmd.PrepDropTips(
           tip_positions=tip_positions,
           final_z=resolved_final_z,
@@ -2436,7 +2436,7 @@ class Pipettes:
     cmd_cls = self._ASPIRATE_CMD[(effective_lld, is_tadm, use_v2)]
     assembler = self._assemble_aspirate_v2 if use_v2 else self._assemble_aspirate_v1
     params = [assembler(k, effective_lld, is_tadm) for k in kits]
-    await self._client.execute(
+    await self._driver.send_command(
       cmd_cls(aspirate_parameters=params),  # type: ignore[arg-type]
       read_timeout=read_timeout if effective_lld else None,
     )
@@ -2623,7 +2623,7 @@ class Pipettes:
     cmd_cls = self._DISPENSE_CMD[(effective_lld, use_v2)]
     assembler = self._assemble_dispense_v2 if use_v2 else self._assemble_dispense_v1
     params = [assembler(k, effective_lld) for k in kits]
-    await self._client.execute(
+    await self._driver.send_command(
       cmd_cls(dispense_parameters=params),  # type: ignore[arg-type]
       read_timeout=read_timeout if effective_lld else None,
     )

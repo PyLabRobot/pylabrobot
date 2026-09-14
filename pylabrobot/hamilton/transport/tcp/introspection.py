@@ -1767,6 +1767,30 @@ class HamiltonIntrospection:
 
     return Address(response.module_id, response.node_id, response.object_id)
 
+  async def find_children_by_name(self, parent_addr: Address, *names: str) -> dict:
+    """Enumerate ``parent_addr``'s subobjects; return ``{name: Address}`` for matches.
+
+    Bounded by ``subobject_count`` on the parent. Returns early once every
+    requested name has been found. Children that raise on ``get_object`` (e.g.
+    unknown firmware types) are skipped with a debug log.
+    """
+    self._executor.require_active()
+    parent = await self.get_object(parent_addr)
+    wanted = set(names)
+    found: dict = {}
+    for i in range(parent.subobject_count):
+      try:
+        sub_addr = await self.get_subobject_address(parent_addr, i)
+        sub = await self.get_object(sub_addr)
+      except Exception as e:
+        logger.debug("subobject[%d] of %s failed: %s", i, parent_addr, e)
+        continue
+      if sub.name in wanted:
+        found[sub.name] = sub_addr
+        if len(found) == len(wanted):
+          break
+    return found
+
   async def get_interfaces(
     self,
     address: Address,

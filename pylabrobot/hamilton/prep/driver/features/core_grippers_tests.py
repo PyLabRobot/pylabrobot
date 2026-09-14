@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pylabrobot.hamilton.prep import PrepDriver
+from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers, CoreGripperArm
+from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGripperArm, CoreGrippers
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import HamiltonCoreGrippers, PrepDeck
@@ -18,18 +18,18 @@ from pylabrobot.resources.hamilton import HamiltonCoreGrippers, PrepDeck
 
 def _record_send(prep: PrepDriver) -> list[Any]:
   captured: list[Any] = []
-  orig_send = prep.client.execute
+  orig_send = prep.send_command
 
   async def recording(command, **kw):
     captured.append(command)
     return await orig_send(command, **kw)
 
-  prep.client.execute = recording  # type: ignore[method-assign, assignment]
+  prep.send_command = recording  # type: ignore[method-assign, assignment]
   return captured
 
 
 def _make_arm(deck: PrepDeck) -> CoreGripperArm:
-  backend = CoreGrippers(client=AsyncMock(), channels=AsyncMock())
+  backend = CoreGrippers(AsyncMock())
   backend.pick_up_at_location = AsyncMock()  # type: ignore[method-assign]
   backend.drop_at_location = AsyncMock()  # type: ignore[method-assign]
   return CoreGripperArm(backend=backend, reference_resource=deck, grip_axis="y")
@@ -206,7 +206,7 @@ def test_pick_up_tool_default_pre_position_moves_then_picks():
 
   async def _run() -> None:
     deck = PrepDeck(with_core_grippers=True)
-    p = PrepDriver(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck)
     await p.setup()
     assert p.core_grippers is not None
     captured = _record_send(p)
@@ -231,7 +231,7 @@ def test_pick_up_tool_pre_position_false_skips_move():
 
   async def _run() -> None:
     deck = PrepDeck(with_core_grippers=True)
-    p = PrepDriver(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck)
     await p.setup()
     assert p.core_grippers is not None
     captured = _record_send(p)

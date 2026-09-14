@@ -22,7 +22,6 @@ from pylabrobot.hamilton.transport.tcp.protocol import HamiltonProtocol, Hoi2Act
 from pylabrobot.hamilton.transport.tcp.wire_types import (
   F32,
   F64,
-  I8,
   I16,
   U16,
   U32,
@@ -40,6 +39,16 @@ from pylabrobot.hamilton.transport.tcp.wire_types import (
 from pylabrobot.hamilton.transport.tcp.wire_types import (
   Enum as WEnum,
 )
+
+# Firmware object paths the driver and its features address by name.
+PREP_ROOT_NAME = "MLPrepRoot"
+MLPREP_OBJECT_PATH = "MLPrepRoot.MLPrep"
+PIPETTOR_OBJECT_PATH = "MLPrepRoot.PipettorRoot.Pipettor"
+MPH_OBJECT_PATH = "MLPrepRoot.MphRoot.MPH"
+MLPREP_SERVICE_OBJECT_PATH = "MLPrepRoot.MLPrepService"
+DECK_CONFIGURATION_OBJECT_PATH = "MLPrepRoot.MLPrepCalibration.DeckConfiguration"
+MLPREP_CPU_OBJECT_PATH = "MLPrepRoot.MLPrepCpu"
+MODULE_INFORMATION_OBJECT_PATH = "MLPrepRoot.PipettorRoot.ModuleInformation"
 
 # =============================================================================
 # Enums (mirrored from Prep protocol spec)
@@ -1898,7 +1907,7 @@ class DispenseParametersLld2:
 # =============================================================================
 
 
-# An unresolved command is bound to a firmware address by PrepClient for each execution.
+# An unresolved command is bound to a firmware address by PrepDriver.send_command for each execution.
 _UNRESOLVED = Address(-1, -1, -1)
 _CHANNEL_TO_INDEX = {int(ChannelIndex.RearChannel): 0, int(ChannelIndex.FrontChannel): 1}
 
@@ -1945,7 +1954,7 @@ class PrepStatusRequest(PrepCommand[ResponseT]):
 class PrepProbeRequest(PrepCommand[bytes]):
   """Ad-hoc STATUS_REQUEST with runtime command_id and interface_id.
 
-  Use with :meth:`~PrepClient.exchange` when the target command_id is only
+  Use with :meth:`~PrepDriver.exchange` when the target command_id is only
   known at runtime. Always supply ``dest=`` explicitly; the JIT firmware-path
   resolver is bypassed because ``firmware_path = None``.
 
@@ -4212,8 +4221,8 @@ class _WasteSiteDefinitionWire:
 
   default_values: PaddedBool
   index: WEnum
-  x_position: I8
-  y_position: U16
+  x_position: F32
+  y_position: F32
   z_position: F32
   z_seek: F32
 
@@ -4222,8 +4231,8 @@ class _WasteSiteDefinitionWire:
     return (
       params.add(self.default_values, PaddedBool)
       .add(self.index, WEnum)
-      .add(self.x_position, I8)
-      .add(self.y_position, U16)
+      .add(self.x_position, F32)
+      .add(self.y_position, F32)
       .add(self.z_position, F32)
       .add(self.z_seek, F32)
     )

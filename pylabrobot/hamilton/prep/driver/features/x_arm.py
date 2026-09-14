@@ -169,22 +169,23 @@ class XArm:
         f"channels {low} are below the traverse height ({traverse} mm); an X axis move does not raise them"
       )
 
-    client = self._driver.client
-    commanded = (await client.execute(PrepCmd.PrepXAxisGetCommandedPosition())).value
+    commanded = (await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())).value
     axis_x = x - (positions[0].x - commanded)
-    velocity_before = (await client.execute(PrepCmd.PrepXAxisGetVelocity())).value
-    acceleration_before = (await client.execute(PrepCmd.PrepXAxisGetAcceleration())).value
+    velocity_before = (await self._driver.send_command(PrepCmd.PrepXAxisGetVelocity())).value
+    acceleration_before = (
+      await self._driver.send_command(PrepCmd.PrepXAxisGetAcceleration())
+    ).value
     try:
-      await client.execute(PrepCmd.PrepXAxisSetVelocity(value=speed))
-      await client.execute(PrepCmd.PrepXAxisSetAcceleration(value=acceleration))
+      await self._driver.send_command(PrepCmd.PrepXAxisSetVelocity(value=speed))
+      await self._driver.send_command(PrepCmd.PrepXAxisSetAcceleration(value=acceleration))
       await self._unchecked_fw_move_absolute(axis_x)
       # What was asked, recorded as soon as the command answers; the read below replaces it with
       # where the arm actually stopped.
       self.update_location_by_reference_point(x)
     finally:
       try:
-        await client.execute(PrepCmd.PrepXAxisSetVelocity(value=velocity_before))
-        await client.execute(PrepCmd.PrepXAxisSetAcceleration(value=acceleration_before))
+        await self._driver.send_command(PrepCmd.PrepXAxisSetVelocity(value=velocity_before))
+        await self._driver.send_command(PrepCmd.PrepXAxisSetAcceleration(value=acceleration_before))
       finally:
         try:
           await self.request_position()
@@ -249,18 +250,17 @@ class XArm:
         f"channels {low} are below the traverse height ({traverse} mm); an X axis seek does not raise them"
       )
 
-    client = self._driver.client
-    commanded = (await client.execute(PrepCmd.PrepXAxisGetCommandedPosition())).value
+    commanded = (await self._driver.send_command(PrepCmd.PrepXAxisGetCommandedPosition())).value
     offset = positions[0].x - commanded
-    velocity_before = (await client.execute(PrepCmd.PrepXAxisGetVelocity())).value
+    velocity_before = (await self._driver.send_command(PrepCmd.PrepXAxisGetVelocity())).value
     try:
-      await client.execute(PrepCmd.PrepXAxisSetVelocity(value=speed))
+      await self._driver.send_command(PrepCmd.PrepXAxisSetVelocity(value=speed))
       tripped = await self._unchecked_fw_seek_to_home_flag(
         distance, travel_limits_enable, trip_sense
       )
     finally:
       try:
-        await client.execute(PrepCmd.PrepXAxisSetVelocity(value=velocity_before))
+        await self._driver.send_command(PrepCmd.PrepXAxisSetVelocity(value=velocity_before))
       finally:
         try:
           await self.request_position()
@@ -281,7 +281,7 @@ class XArm:
     Returns:
       Where the sensor tripped, in mm in the axis's own frame.
     """
-    response = await self._driver.client.execute(
+    response = await self._driver.send_command(
       PrepCmd.PrepXAxisSeekToHomeFlag(
         distance=distance, travel_limits_enable=travel_limits_enable, trip_sense=int(trip_sense)
       )
@@ -294,7 +294,7 @@ class XArm:
     Args:
       position: where to send the axis, in mm in the axis's own frame.
     """
-    await self._driver.client.execute(PrepCmd.PrepXAxisMoveAbsolute(position=position))
+    await self._driver.send_command(PrepCmd.PrepXAxisMoveAbsolute(position=position))
 
   async def request_position(self) -> Optional[float]:
     """Request where along X the arm is.
@@ -305,7 +305,7 @@ class XArm:
     Returns:
       The position in mm, or None when no channel reported one.
     """
-    response = await self._driver.client.execute(PrepCmd.PrepGetPositions())
+    response = await self._driver.send_command(PrepCmd.PrepGetPositions())
     if not response or not response.positions:
       return None
     x = float(response.positions[0].position_x)

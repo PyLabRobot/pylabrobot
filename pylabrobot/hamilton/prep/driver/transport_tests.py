@@ -4,16 +4,12 @@ import asyncio
 from dataclasses import FrozenInstanceError
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.hamilton.prep import PrepChatterboxClient
+from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as C
-from pylabrobot.hamilton.prep.driver.client import ChannelDriveMap
-from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
-from pylabrobot.hamilton.prep.driver.client import (
-  MLPREP_OBJECT_PATH,
-  PIPETTOR_OBJECT_PATH,
-  PrepClient,
-)
 from pylabrobot.hamilton.prep.driver.errors import PREP_ERROR_CODES
+from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
+from pylabrobot.hamilton.prep.driver.master import ChannelDriveMap
+from pylabrobot.hamilton.prep.driver.prep_commands import MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.introspection import MethodInfo, ObjectInfo
 from pylabrobot.hamilton.transport.tcp.messages import HoiParams
@@ -24,33 +20,34 @@ from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.tests.tcp_tests import _MemorySocket, _response, _SessionTest
 from pylabrobot.hamilton.transport.tcp.wire_types import F32, Str
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
+from pylabrobot.resources.hamilton import PrepDeck
 
 
 class TestPrepTransport(_SessionTest):
   """Check request binding, typed responses, and failure ownership end to end."""
 
-  def start_session(self, client: PrepClient, address: Address) -> _MemorySocket:
+  def start_session(self, driver: PrepDriver, address: Address) -> _MemorySocket:
     """Install a fresh production session without opening a network connection."""
     io = _MemorySocket()
-    client._session = TCPSession(io, error_codes=PREP_ERROR_CODES)
-    client._session.client_address = Address(2, 1, 65535)
-    client._session.state = SessionState.CONNECTING
+    driver.io._session = TCPSession(io, error_codes=PREP_ERROR_CODES)
+    driver.io._session.client_address = Address(2, 1, 65535)
+    driver.io._session.state = SessionState.CONNECTING
     for path in (MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH):
-      client.registry.register(path, ObjectInfo(path.rsplit(".", 1)[-1], "", 0, 0, address))
-    client._session.start_reader()
+      driver.io.registry.register(path, ObjectInfo(path.rsplit(".", 1)[-1], "", 0, 0, address))
+    driver.io._session.start_reader()
     return io
 
-  def make_client(self) -> tuple[PrepClient, _MemorySocket]:
-    """Provide a Prep client using the production reader and transaction code."""
-    client = PrepClient("memory-only", 0)
-    io = self.start_session(client, Address(1, 1, 257))
-    self.addAsyncCleanup(client.stop)
-    return client, io
+  def make_driver(self) -> tuple[PrepDriver, _MemorySocket]:
+    """Provide a Prep driver using the production reader and transaction code."""
+    driver = PrepDriver(deck=PrepDeck(), host="memory-only", port=0)
+    io = self.start_session(driver, Address(1, 1, 257))
+    self.addAsyncCleanup(driver.io.stop)
+    return driver, io
 
   async def test_tip_presence_uses_each_objects_named_method_and_cached_table(self):
     """Sensor IDs come from discovery; repeated reads reuse the session's method tables."""
-    client, io = self.make_client()
-    channels = Pipettes(client=client)
+    client, io = self.make_driver()
+    channels = Pipettes(client)
     rear, front = Address(1, 236, 514), Address(1, 237, 514)
     tables = {
       rear: [
@@ -87,12 +84,12 @@ class TestPrepTransport(_SessionTest):
         new=AsyncMock(return_value=ChannelDriveMap([rear, front], [], [])),
       ),
       patch.object(
-        client.introspection,
+        client.io.introspection,
         "get_object",
         new=AsyncMock(side_effect=lambda addr: ObjectInfo("SDrive", "", 2, 0, addr)),
       ),
       patch.object(
-        client.introspection,
+        client.io.introspection,
         "get_method",
         new=AsyncMock(side_effect=lambda addr, index: tables[addr][index]),
       ) as get_method,
@@ -113,8 +110,8 @@ class TestPrepTransport(_SessionTest):
       [MethodInfo(1, 0, 15, "GetTipPresent"), MethodInfo(2, 0, 15, "GetTipPresent")],
     ):
       with self.subTest(methods=methods):
-        client, io = self.make_client()
-        channels = Pipettes(client=client)
+        client, io = self.make_driver()
+        channels = Pipettes(client)
         addr = Address(1, 236, 514)
         with (
           patch.object(
@@ -123,7 +120,7 @@ class TestPrepTransport(_SessionTest):
             new=AsyncMock(return_value=ChannelDriveMap([addr], [], [])),
           ),
           patch.object(
-            client.introspection,
+            client.io.introspection,
             "ensure_method_table",
             new=AsyncMock(return_value=methods),
           ),
@@ -133,11 +130,11 @@ class TestPrepTransport(_SessionTest):
         self.assertEqual(io.writes, [])
 
   async def test_reusable_request_rebinds_after_reconnection(self):
-    client, io = self.make_client()
+    client, io = self.make_driver()
     command = C.PrepGetDefaultTraverseHeight()
     for address in (Address(1, 1, 257), Address(1, 2, 300)):
       if address.node == 2:
-        await client.stop()
+        await client.io.stop()
         io = self.start_session(client, address)
 
       async def respond(request: HarpPacket) -> None:
@@ -153,7 +150,7 @@ class TestPrepTransport(_SessionTest):
         )
 
       io.on_write = respond
-      responses = await asyncio.gather(client.execute(command), client.execute(command))
+      responses = await asyncio.gather(client.send_command(command), client.send_command(command))
       self.assertEqual(responses, [C.PrepGetDefaultTraverseHeight.Response(180.0)] * 2)
       self.assertEqual([request.seq for request in io.writes], [1, 2])
       self.assertEqual(command, C.PrepGetDefaultTraverseHeight())
@@ -161,7 +158,7 @@ class TestPrepTransport(_SessionTest):
       command.dest = Address(1, 1, 999)  # type: ignore[misc]
 
   async def test_identity_query_uses_runtime_interface_and_method(self):
-    client, io = self.make_client()
+    client, io = self.make_driver()
 
     async def respond(request: HarpPacket) -> None:
       """Inspect the real encoded probe and return a string fragment."""
@@ -178,10 +175,10 @@ class TestPrepTransport(_SessionTest):
       )
 
     io.on_write = respond
-    self.assertEqual(await client._query_firmware_string(Address(1, 1, 257), 9), "PREP123")
+    self.assertEqual(await client.request_firmware_string(Address(1, 1, 257), 9), "PREP123")
 
   async def test_execute_raises_firmware_error_and_exchange_preserves_frame(self):
-    client, io = self.make_client()
+    client, io = self.make_driver()
     payload = HoiParams().add("0x0001.0x0001.0x0101:0x01,0x0006,0x0F08", Str).build()
 
     async def respond(request: HarpPacket) -> None:
@@ -190,16 +187,16 @@ class TestPrepTransport(_SessionTest):
 
     io.on_write = respond
     with self.assertRaises(HoiError) as caught:
-      await client.execute(C.PrepPark())
+      await client.send_command(C.PrepPark())
     self.assertEqual(caught.exception.raw_response, payload)
     self.assertEqual(len(io.writes), 1)
     raw = await client.exchange(C.PrepPark())
     self.assertEqual(raw.hoi.params, payload)
     self.assertEqual(raw.hoi.action_code, Hoi2Action.COMMAND_EXCEPTION)
-    self.assertEqual(client.connection_info.state, SessionState.READY)
+    self.assertEqual(client.io.connection_info.state, SessionState.READY)
 
   async def test_errors_follow_selected_channels_instead_of_firmware_ordinals(self):
-    client, io = self.make_client()
+    client, io = self.make_driver()
     command = C.PrepDispenseInitToWaste(
       waste_parameters=[
         C.DispenseInitToWasteParameters(False, C.ChannelIndex.FrontChannel, 12.5, 12.5, 12.5),
@@ -213,44 +210,44 @@ class TestPrepTransport(_SessionTest):
 
     io.on_write = respond
     with self.assertRaises(ChannelizedError) as caught:
-      await client.execute(command)
+      await client.send_command(command)
     self.assertEqual(set(caught.exception.errors), {1})
 
   async def test_cancellation_prevents_further_prep_queries(self):
-    client, io = self.make_client()
-    task = asyncio.create_task(client.execute(C.PrepGetDefaultTraverseHeight()))
+    client, io = self.make_driver()
+    task = asyncio.create_task(client.send_command(C.PrepGetDefaultTraverseHeight()))
     await self.wait_until(lambda: len(io.writes) == 1)
     task.cancel()
     with self.assertRaises(asyncio.CancelledError):
       await task
-    self.assertEqual(client.connection_info.state, SessionState.UNCERTAIN)
+    self.assertEqual(client.io.connection_info.state, SessionState.UNCERTAIN)
     with self.assertRaises(ConnectionError):
-      await client.execute(C.PrepPark())
+      await client.send_command(C.PrepPark())
     self.assertEqual(len(io.writes), 1)
 
   async def test_failed_prep_identity_check_closes_the_session(self):
-    client, io = self.make_client()
+    client, io = self.make_driver()
     with (
       patch.object(HamiltonTCPClient, "setup", new=AsyncMock()),
       patch.object(client, "request_root_name", new=AsyncMock(return_value="WrongRoot")),
     ):
       with self.assertRaisesRegex(RuntimeError, "Wrong instrument"):
-        await client.setup()
+        await client._open()
     self.assertTrue(io.closed)
-    self.assertEqual(client.connection_info.state, SessionState.CLOSED)
+    self.assertEqual(client.io.connection_info.state, SessionState.CLOSED)
 
-  async def test_chatterbox_decodes_queries_and_invalidates_retained_discovery(self):
-    client = PrepChatterboxClient()
-    await client.setup()
-    self.addAsyncCleanup(client.stop)
-    intro = client.introspection
+  async def test_simulation_decodes_queries_and_invalidates_retained_discovery(self):
+    client = PrepSimulationDriver(deck=PrepDeck())
+    await client._open()
+    self.addAsyncCleanup(client._close)
+    intro = client.io.introspection
     address = await client.resolve_path(PIPETTOR_OBJECT_PATH)
-    result = await client.execute(C.PrepGetIsInitialized(dest=client.mlprep_address))
+    result = await client.send_command(C.PrepGetIsInitialized(dest=client.mlprep_address))
     self.assertIsInstance(result, C.PrepGetIsInitialized.Response)
     frame = await client.exchange(C.PrepPark())
     self.assertEqual(frame.harp.action_code, 4)
-    await client.stop()
-    await client.setup()
+    await client._close()
+    await client._open()
     with self.assertRaises(ConnectionError):
       await intro.methods_for_interface(address, 1)
 
@@ -271,8 +268,8 @@ class TestPrepTransport(_SessionTest):
     )
 
   async def test_channel_bounds_decode_nested_structures_in_channel_order(self):
-    client, io = self.make_client()
-    client.registry.register(
+    client, io = self.make_driver()
+    client.io.registry.register(
       C.PrepGetChannelBounds.firmware_path,
       ObjectInfo("PipettorService", "", 0, 0, Address(1, 1, 257)),
     )
@@ -295,7 +292,7 @@ class TestPrepTransport(_SessionTest):
       )
 
     io.on_write = respond
-    bounds = await Pipettes(client=client).request_channel_bounds()
+    bounds = await Pipettes(client).request_channel_bounds()
     self.assertEqual(
       bounds,
       [
@@ -320,12 +317,12 @@ class TestPrepTransport(_SessionTest):
 
   async def test_reconnection_during_path_resolution_cannot_send_an_old_address(self):
     for raw in (False, True):
-      client, io = self.make_client()
+      client, io = self.make_driver()
       fresh_sockets: list[_MemorySocket] = []
 
       async def resolve(path: str) -> Address:
         """Replace the session while a firmware-path lookup is in flight."""
-        await client.stop()
+        await client.io.stop()
         fresh = self.start_session(client, Address(1, 2, 300))
         fresh.on_write = AsyncMock(side_effect=AssertionError("stale address reached new session"))
         fresh_sockets.append(fresh)
@@ -336,7 +333,7 @@ class TestPrepTransport(_SessionTest):
         if raw:
           await client.exchange(C.PrepPark())
         else:
-          await client.execute(C.PrepPark())
+          await client.send_command(C.PrepPark())
       self.assertTrue(io.closed)
       self.assertEqual(fresh_sockets[0].writes, [])
-      self.assertEqual(client.connection_info.state, SessionState.READY)
+      self.assertEqual(client.io.connection_info.state, SessionState.READY)

@@ -1,7 +1,7 @@
 """Prep method lifecycle service.
 
 Owns MLPrep method commands (``PrepMethodBegin`` / ``PrepMethodEnd`` / ``PrepMethodAbort``)
-via ``PrepClient`` transport, and exposes an async context manager
+through the driver, and exposes an async context manager
 (:meth:`MethodLifecycle.run`) that calls ``abort`` on exception and ``end`` on
 clean exit — mirrors the ``PrepDriver.mounted_core_grippers()`` pattern in ``prep.py``.
 """
@@ -14,26 +14,26 @@ from typing import TYPE_CHECKING, AsyncIterator
 from .. import prep_commands as PrepCmd
 
 if TYPE_CHECKING:
-  from ..client import PrepClient
+  from ..master import PrepDriver
 
 
 class MethodLifecycle:
   """Method begin/end/abort + ``async with`` safety net."""
 
-  def __init__(self, driver: "PrepClient"):
+  def __init__(self, driver: "PrepDriver"):
     self._driver = driver
 
   async def begin(self, automatic_pause: bool = False) -> None:
     """Signal the start of a liquid-handling method."""
-    await self._driver.execute(PrepCmd.PrepMethodBegin(automatic_pause=automatic_pause))
+    await self._driver.send_command(PrepCmd.PrepMethodBegin(automatic_pause=automatic_pause))
 
   async def end(self) -> None:
     """Signal the end of a liquid-handling method."""
-    await self._driver.execute(PrepCmd.PrepMethodEnd())
+    await self._driver.send_command(PrepCmd.PrepMethodEnd())
 
   async def abort(self) -> None:
     """Abort the current method."""
-    await self._driver.execute(PrepCmd.PrepMethodAbort())
+    await self._driver.send_command(PrepCmd.PrepMethodAbort())
 
   @asynccontextmanager
   async def run(self, automatic_pause: bool = False) -> AsyncIterator["MethodLifecycle"]:

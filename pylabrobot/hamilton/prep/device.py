@@ -4,12 +4,13 @@ import logging
 from typing import Optional
 
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
-from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.prep.driver.features.head8 import Head8
 from pylabrobot.hamilton.prep.driver.features.method import MethodLifecycle
+from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.prep.driver.features.x_arm import XArm
 from pylabrobot.hamilton.prep.driver.master import PrepDriver
+from pylabrobot.hamilton.prep.driver.simulator import PrepSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import PrepDeck
 from pylabrobot.resources.resource import Resource
@@ -150,6 +151,7 @@ def Prep(
   host: Optional[str] = None,
   port: int = 2000,
   declared_configuration_json: Optional[str] = None,
+  firmware_tree_json: Optional[str] = None,
   driver: Optional[PrepDriver] = None,
   name: str = "Hamilton Prep",
   size_x: float = PREP_SIZE_X,
@@ -164,7 +166,10 @@ def Prep(
     host: the address the Prep answers on. Required unless simulating or given a driver.
     port: the port it answers on.
     declared_configuration_json: path to a declared configuration, passed to the driver this builds.
-      Read only when this builds one: a driver given outright brings its own.
+      Read only when this builds one: a driver given outright brings its own. A simulated device
+      defaults to PRPAA1087's recording.
+    firmware_tree_json: path to a recorded firmware tree, for a simulated device to have. Defaults to
+      MLPrep Runtime V1.2.2's.
     driver: the driver to drive it through, instead of building one.
     name: what to call it.
     size_x: how wide it is, in mm.
@@ -177,13 +182,19 @@ def Prep(
   if deck is None:
     deck = PrepDeck()
   if driver is None:
-    driver = PrepDriver(
-      deck=deck,
-      chatterbox=simulation,
-      host=host,
-      port=port,
-      declared_configuration_json=declared_configuration_json,
-    )
+    if simulation:
+      driver = PrepSimulationDriver(
+        deck=deck,
+        declared_configuration_json=declared_configuration_json,
+        firmware_tree_json=firmware_tree_json,
+      )
+    else:
+      driver = PrepDriver(
+        deck=deck,
+        host=host,
+        port=port,
+        declared_configuration_json=declared_configuration_json,
+      )
   return PrepDevice(
     deck=deck,
     driver=driver,

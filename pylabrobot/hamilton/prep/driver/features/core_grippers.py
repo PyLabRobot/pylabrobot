@@ -12,8 +12,8 @@ from pylabrobot.resources.resource_state import place_resource
 from .. import prep_commands as PrepCmd
 
 if TYPE_CHECKING:
+  from ..master import PrepDriver
   from .pipettes import Pipettes
-  from ..client import PrepClient
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +25,23 @@ class CoreGrippers:
   :meth:`PrepDriver.mounted_core_grippers` context manager.
   """
 
-  def __init__(self, *, client: "PrepClient", channels: "Pipettes") -> None:
-    self._client = client
-    self._channels = channels
+  def __init__(self, driver: "PrepDriver") -> None:
+    """
+    Args:
+      driver: the driver to send commands through, whose pipettes carry the grippers.
+    """
+    self._driver = driver
 
   @property
-  def client(self) -> "PrepClient":
-    return self._client
+  def _channels(self) -> "Pipettes":
+    """The pipetting channels that carry the grippers.
+
+    Raises:
+      RuntimeError: If the driver has no pipettes yet.
+    """
+    if self._driver.pipettes is None:
+      raise RuntimeError("no pipettes to carry the grippers; have you called `prep.setup()`?")
+    return self._driver.pipettes
 
   async def pick_up_at_location(
     self,
@@ -71,7 +81,7 @@ class CoreGrippers:
     )
     grip_distance = clearance_y + squeeze_mm
 
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepPickUpPlate(
         plate_top_center=plate_top_center,
         plate=plate_dims,
@@ -105,7 +115,7 @@ class CoreGrippers:
       y_position=location.y,
       z_position=location.z,
     )
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepDropPlate(
         plate_top_center=plate_top_center,
         clearance_y=clearance_y,
@@ -131,7 +141,7 @@ class CoreGrippers:
       y_position=location.y,
       z_position=location.z,
     )
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepMovePlate(
         plate_top_center=plate_top_center,
         acceleration_scale_x=acceleration_scale_x,
@@ -140,7 +150,7 @@ class CoreGrippers:
 
   async def release_plate(self) -> None:
     """Open the CoRe gripper and release whatever is held (PrepReleasePlate, cmd=21)."""
-    await self._client.execute(PrepCmd.PrepReleasePlate())
+    await self._driver.send_command(PrepCmd.PrepReleasePlate())
 
   async def pick_up_tool(
     self,
@@ -174,7 +184,7 @@ class CoreGrippers:
         ],
         use_channels=[0, 1],
       )
-    await self._client.execute(
+    await self._driver.send_command(
       PrepCmd.PrepPickUpTool(
         tip_definition=tip_definition,
         tool_position_x=tool_position_x,
@@ -192,7 +202,7 @@ class CoreGrippers:
     """Drop CoRe gripper tool (PrepDropTool, cmd=16)."""
     if move_to_safe_z_first:
       await self._channels.move_to_safe_z()
-    await self._client.execute(PrepCmd.PrepDropTool())
+    await self._driver.send_command(PrepCmd.PrepDropTool())
 
 
 class CoreGripperArm:

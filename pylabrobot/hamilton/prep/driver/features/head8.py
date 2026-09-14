@@ -49,7 +49,7 @@ from pylabrobot.resources.tip_tracker import TipTracker
 from pylabrobot.resources.well import Well
 
 from .. import prep_commands as PrepCmd
-from ..client import MPH_OBJECT_PATH
+from ..prep_commands import MPH_OBJECT_PATH
 from .pipettes import (
   PipetteChannel,
   Pipettes,
@@ -76,7 +76,6 @@ from .pipettes import (
 if TYPE_CHECKING:
   from pylabrobot.resources.deck import Deck
 
-  from ..client import PrepClient
   from ..configuration import DeviceConfiguration
   from ..master import PrepDriver
 
@@ -100,16 +99,18 @@ class Head8:
 
   def __init__(
     self,
+    driver: "PrepDriver",
     *,
-    client: "PrepClient",
-    driver: Optional["PrepDriver"] = None,
-    deck: Optional["Deck"] = None,
     default_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
   ) -> None:
-    self._client = client
+    """
+    Args:
+      driver: the driver to send commands through.
+      default_traverse_height: the height to travel at when a command names none, in mm.
+      use_v1_aspirate_dispense: whether to aspirate and dispense with the v1 commands.
+    """
     self._driver = driver
-    self.deck = deck
     self._user_traverse_height = default_traverse_height
     self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
     self.channels: List[PipetteChannel] = []  # built by discover
@@ -117,6 +118,11 @@ class Head8:
     self.head: dict[int, TipTracker] = {
       i: TipTracker(thing=f"Head8 channel {i}") for i in range(NUM_PROBES)
     }
+
+  @property
+  def deck(self) -> Optional["Deck"]:
+    """The deck positions are measured from: the driver's."""
+    return self._driver.deck
 
   async def _on_setup(self) -> None:
     await self.discover()
@@ -167,7 +173,7 @@ class Head8:
 
   async def discover(self) -> None:
     """Find the 8MPH channels in the firmware tree (``MPH Channel Root``) and build `channels`."""
-    drive_map = await self._client.request_channel_drives(root_name="MPH Channel Root")
+    drive_map = await self._driver.request_channel_drives(root_name="MPH Channel Root")
 
     def _drive_addr(seq: List[Address], i: int) -> Optional[Address]:
       return seq[i] if i < len(seq) else None
@@ -175,7 +181,7 @@ class Head8:
     self.channels = [
       PipetteChannel(
         index=i,
-        client=self._client,
+        driver=self._driver,
         sleeve_sensor=_drive_addr(drive_map.sleeve_sensor_addrs, i),
         zdrive=_drive_addr(drive_map.zdrive_addrs, i),
         node_info=_drive_addr(drive_map.node_info_addrs, i),
@@ -185,8 +191,8 @@ class Head8:
 
   async def _probe_v2_support(self) -> bool:
     """Return True if the MPH firmware exposes V2 aspirate/dispense (cmds 29-34)."""
-    dest = await self._client.resolve_path(MPH_OBJECT_PATH)
-    methods = await self._client.introspection.methods_for_interface(dest, interface_id=1)
+    dest = await self._driver.resolve_path(MPH_OBJECT_PATH)
+    methods = await self._driver.request_interface_methods(dest, interface_id=1)
     iface1_ids = {m.method_id for m in methods}
     return _V2_MPH_CMD_IDS.issubset(iface1_ids)
 
@@ -235,7 +241,7 @@ class Head8:
       return [None] * NUM_PROBES
 
     # By name: the method's ids are not the same on every firmware version.
-    raw = await self._client.request_by_name(addr, "GetTipPresent")
+    raw = await self._driver.request_by_name(addr, "GetTipPresent")
     if raw is None or len(raw) < 8:
       result = False
     else:
@@ -267,11 +273,11 @@ class Head8:
       via_lane: Use lane-aware move when True.
     """
     if via_lane:
-      await self._client.execute(
+      await self._driver.send_command(
         PrepCmd.MphMoveToPositionViaLane(x_position=x, y_position=y, z_position=z)
       )
     else:
-      await self._client.execute(
+      await self._driver.send_command(
         PrepCmd.MphMoveToPosition(x_position=x, y_position=y, z_position=z)
       )
 
@@ -383,7 +389,7 @@ class Head8:
     queue_tip_pickups(tip_intents)
 
     async def _send() -> None:
-      await self._client.execute(
+      await self._driver.send_command(
         PrepCmd.MphPickupTips(
           tip_position=tip_position,
           final_z=resolved_final_z,
@@ -452,7 +458,7 @@ class Head8:
     queue_tip_drops(tip_intents)
 
     async def _send() -> None:
-      await self._client.execute(
+      await self._driver.send_command(
         PrepCmd.MphDropTips(
           tip_position=tip_position,
           final_z=resolved_final_z,
@@ -1133,7 +1139,7 @@ class Head8:
     queue_volume_transfers(volume_intents)
 
     async def _send() -> None:
-      await self._client.execute(
+      await self._driver.send_command(
         cmd_cls(aspirate_parameters=[param_struct]),  # type: ignore[arg-type]
         read_timeout=resolved_read_timeout if effective_lld else None,
       )
@@ -1341,7 +1347,7 @@ class Head8:
     queue_volume_transfers(volume_intents)
 
     async def _send() -> None:
-      await self._client.execute(
+      await self._driver.send_command(
         cmd_cls(dispense_parameters=[param_struct]),  # type: ignore[arg-type]
         read_timeout=resolved_read_timeout if effective_lld else None,
       )

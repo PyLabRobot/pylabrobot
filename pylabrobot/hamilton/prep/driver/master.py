@@ -7,34 +7,44 @@ import json
 import logging
 import random
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, TypeVar, Union
 
-from pylabrobot.hamilton.transport.tcp.introspection import FirmwareTreeNode
+from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
+from pylabrobot.hamilton.transport.tcp.introspection import FirmwareTreeNode, MethodInfo
+from pylabrobot.hamilton.transport.tcp.messages import (
+  CommandMessage,
+  CommandResponse,
+  HoiParamsParser,
+)
 from pylabrobot.hamilton.transport.tcp.packets import Address
+from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
+from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.hamilton.prep_decks import PrepDeck
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 
 from . import prep_commands as PrepCmd
+from .configuration import DeviceConfiguration, read_configuration, to_jsonable
+from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
+from .features.core_grippers import CoreGripperArm, CoreGrippers
+from .features.head8 import Head8
+from .features.method import MethodLifecycle
 from .features.pipettes import Pipettes
-from .simulator import PrepChatterboxClient
-from .client import (
+from .features.x_arm import XArm
+from .prep_commands import (
+  _UNRESOLVED,
   DECK_CONFIGURATION_OBJECT_PATH,
   MLPREP_CPU_OBJECT_PATH,
   MLPREP_OBJECT_PATH,
   MLPREP_SERVICE_OBJECT_PATH,
   MODULE_INFORMATION_OBJECT_PATH,
-  PrepClient,
+  PREP_ROOT_NAME,
+  PrepCommand,
 )
-from .features.core_grippers import CoreGrippers, CoreGripperArm
-from .features.head8 import Head8
-from .configuration import DeviceConfiguration, read_configuration, to_jsonable
-from .errors import PrepMethodNotFoundError
-from .features.method import MethodLifecycle
-from .features.x_arm import XArm
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +53,82 @@ logger = logging.getLogger(__name__)
 _DECLARATION_MUST_MATCH = ("num_channels", "head8_installed", "has_enclosure")
 
 
+ResultT = TypeVar("ResultT")
+
+
 def _range(values: Optional[Tuple[float, float]]) -> str:
   """A `(low, high)` range in mm, or a note that it was not resolved."""
   return "unresolved" if values is None else f"{values[0]:.2f} to {values[1]:.2f} mm"
+
+
+class _PrepTCPClient(HamiltonTCPClient):
+  """The TCP link to a Prep, describing firmware errors from the Prep's own error table."""
+
+  _ERROR_CODES = PREP_ERROR_CODES
+
+
+@dataclass(frozen=True)
+class ChannelDriveMap:
+  """Cached channel-drive topology discovered from the firmware tree.
+
+  One entry per discovered channel for the sleeve sensor (``Squeeze.SDrive``),
+  the Z drive (``ZAxis.ZDrive``), and the per-node ``NodeInformation`` object
+  (used for firmware-string queries). Lists are parallel and sorted by tree
+  traversal order (same order the firmware returns Channel Root instances).
+  """
+
+  sleeve_sensor_addrs: List[Address]
+  zdrive_addrs: List[Address]
+  node_info_addrs: List[Address]
+
+  @property
+  def num_channels_discovered(self) -> int:
+    return len(self.sleeve_sensor_addrs)
+
+  def to_dict(self) -> dict:
+    """Serialize for logs / notebooks that prefer plain dicts."""
+    return {
+      "num_channels_discovered": self.num_channels_discovered,
+      "sleeve_sensor_addrs": list(self.sleeve_sensor_addrs),
+      "zdrive_addrs": list(self.zdrive_addrs),
+      "node_info_addrs": list(self.node_info_addrs),
+    }
+
+
+@dataclass(frozen=True)
+class _ResolvedPrepCommand(TCPCommand[bytes]):
+  """Bind a reusable Prep request to one connection's discovered destination."""
+
+  request: PrepCommand[object]
+
+  def build(self, src: Address, seq: int, response_required: bool = True) -> bytes:
+    """Encode the original request at its resolved destination."""
+    request = self.request
+    if request.interface_id is None or request.command_id is None:
+      raise ValueError(f"{type(request).__name__} must define interface_id and command_id")
+    return CommandMessage(
+      dest=self.dest,
+      interface_id=request.interface_id,
+      method_id=request.command_id,
+      params=request.build_parameters(),
+      action_code=request.action_code,
+      harp_protocol=request.harp_protocol,
+      ip_protocol=request.ip_protocol,
+    ).build(src, seq, harp_response_required=response_required)
+
+  @property
+  def uses_physical_channels(self) -> bool:  # type: ignore[override]
+    """Preserve the device request's error attribution."""
+    return self.request.uses_physical_channels
+
+  def _channel_index_for_entry(self, entry_index: int, entry: HcResultEntry) -> Optional[int]:
+    """Map result ordinals through the original channel selection."""
+    return self.request._channel_index_for_entry(entry_index, entry)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> bytes:
+    """Preserve the checked payload for the original request to decode."""
+    return data
 
 
 class PrepDriver:
@@ -53,40 +136,42 @@ class PrepDriver:
 
   Setup constructs peers (``channels``, ``head8``, ``method``, ``calibration``,
   gripper factory) directly. Firmware paths live on each :class:`PrepCommand`
-  subclass and are resolved JIT by :meth:`PrepClient.execute`.
+  subclass and are resolved JIT by :meth:`PrepDriver.send_command`.
   """
 
   def __init__(
     self,
     deck: Deck,
-    chatterbox: bool = False,
     host: Optional[str] = None,
     port: int = 2000,
     declared_configuration_json: Optional[str] = None,
+    io: Optional[HamiltonTCPClient] = None,
   ):
     """
     Args:
       deck: the deck positions are measured from.
-      chatterbox: whether to drive a simulated device, which answers without one being connected.
-      host: the address the Prep answers on. Required unless `chatterbox` is set.
+      host: the address the Prep answers on. Required unless `io` is given.
       port: the port it answers on.
       declared_configuration_json: path to a JSON file holding a declared configuration, as
         `save_configuration` writes one. The only way a configuration is read from a file. Against a
-        physical device, discovery cross-checks it against what the device answers; against the
-        chatterbox, the device answers as it says.
+        physical device, discovery cross-checks it against what the device answers; against a
+        simulated one, the device answers as it says.
+      io: the link to drive the device through, instead of a TCP connection to `host`.
+
+    Raises:
+      ValueError: If neither `host` nor `io` is given.
     """
     # What was declared this device is, read once here. Empty when nothing was declared.
     self.declared_configuration_json = declared_configuration_json
     self.declared: Dict[str, Any] = (
       {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
     )
-    if chatterbox:
-      client: PrepClient = PrepChatterboxClient(configuration=self.declared.get("device"))
-    else:
+    if io is None:
       if not host:
-        raise ValueError("host must be provided when chatterbox is False.")
-      client = PrepClient(host=host, port=port)
-    self.client: PrepClient = client
+        raise ValueError("host must be provided to reach a Prep over TCP")
+      io = _PrepTCPClient(host=host, port=port)
+    self.io: HamiltonTCPClient = io
+    self._mlprep_address: Optional[Address] = None
     self.deck = deck
     # What the device reports about itself, read by `discover`. None until setup has run.
     self.configuration: Optional[DeviceConfiguration] = None
@@ -113,9 +198,9 @@ class PrepDriver:
     use_v1_aspirate_dispense: bool = False,
   ):
     """Connect, discover the device, initialize MLPrep, construct peers."""
-    logger.debug("Setting up Prep on %s ...", self.client.describe_link())
+    logger.debug("Setting up Prep on %s ...", self.describe_link())
     try:
-      await self.client.setup()
+      await self._open()
 
       # 1. What is on the other end, and what does it carry?
       logger.debug("[PHASE 1] Discovery")
@@ -128,30 +213,31 @@ class PrepDriver:
       # 3. Each feature brings itself up.
       logger.debug("[PHASE 3] Feature initialization")
 
-      self.method = MethodLifecycle(self.client)
-      self.calibration = Calibration(client=self.client, driver=self, deck=self.deck)
-      channels = Pipettes(
-        client=self.client,
-        driver=self,
-        deck=self.deck,
-        default_traverse_height=default_traverse_height,
-        use_v1_aspirate_dispense=use_v1_aspirate_dispense,
-      )
-      self.pipettes = channels
-      await channels._on_setup()
+      # Built only if not already there: a caller can hand a feature its configuration before setup,
+      # and re-running setup keeps it.
+      if self.method is None:
+        self.method = MethodLifecycle(self)
+      if self.calibration is None:
+        self.calibration = Calibration(self)
+      if self.pipettes is None:
+        self.pipettes = Pipettes(self)
+      if default_traverse_height is not None:
+        self.pipettes.default_minimum_traverse_height = default_traverse_height
+      if use_v1_aspirate_dispense:
+        self.pipettes.configuration.use_v1_aspirate_dispense = True
+      await self.pipettes._on_setup()
 
-      if channels.head8_installed:
-        head8 = Head8(
-          client=self.client,
-          driver=self,
-          deck=self.deck,
-          default_traverse_height=default_traverse_height,
-          use_v1_aspirate_dispense=use_v1_aspirate_dispense,
-        )
-        self.head8 = head8
-        await head8._on_setup()
+      if self.pipettes.head8_installed:
+        if self.head8 is None:
+          self.head8 = Head8(
+            self,
+            default_traverse_height=default_traverse_height,
+            use_v1_aspirate_dispense=use_v1_aspirate_dispense,
+          )
+        await self.head8._on_setup()
 
-      self.core_grippers = CoreGrippers(client=self.client, channels=channels)
+      if self.core_grippers is None:
+        self.core_grippers = CoreGrippers(self)
       if self.x_arm is None:
         self.x_arm = XArm(self)
       # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
@@ -160,7 +246,7 @@ class PrepDriver:
         await self._create_capability_resources()
       self._setup_finished = True
     except Exception:
-      await self.client.stop()
+      await self._close()
       raise
 
     logger.info("%s", self.format_setup_summary())
@@ -179,38 +265,257 @@ class PrepDriver:
       await self.pipettes._on_stop()
     if self.head8 is not None:
       await self.head8._on_stop()
-    await self.client.stop()
-    self.pipettes = None
-    self.head8 = None
-    self.core_grippers = None
-    self.method = None
-    self.calibration = None
+    await self._close()
     self._setup_finished = False
 
   # ----------------------------------------
   # Low-level I/O
   # ----------------------------------------
 
+  async def _open(self) -> None:
+    """Open the link and check that a Prep answers on it.
+
+    Raises:
+      RuntimeError: If the device's firmware root is not a Prep's.
+    """
+    await self.io.setup()
+    self._mlprep_address = None
+    try:
+      root = await self.request_root_name()
+      if root != PREP_ROOT_NAME:
+        raise RuntimeError(
+          f"Expected root '{PREP_ROOT_NAME}' (Prep), but discovered '{root}'. Wrong instrument?"
+        )
+      self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
+    except BaseException:
+      await self._close()
+      raise
+
+  async def _close(self) -> None:
+    """Close the link and discard what was resolved on it."""
+    try:
+      await self.io.stop()
+    finally:
+      self._mlprep_address = None
+
+  def describe_link(self) -> str:
+    """How this device is reached."""
+    return f"TCP {self.io._host}:{self.io._port}"
+
+  @property
+  def mlprep_address(self) -> Address:
+    """Address of MLPrep in the current connection."""
+    if self._mlprep_address is None:
+      raise RuntimeError("MLPrep address not resolved. Call setup() first.")
+    return self._mlprep_address
+
+  async def resolve_path(self, path: str) -> Address:
+    """The address of the firmware object at `path` on the current connection.
+
+    Raises:
+      KeyError: If the device has no object at that path.
+    """
+    return await self.io.resolve_path(path)
+
   async def _resolve_optional(self, path: str) -> Optional[Address]:
     """The address of the object at `path`, or None when this instrument has no such object."""
     try:
-      return await self.client.resolve_path(path)
+      return await self.resolve_path(path)
     except (KeyError, RuntimeError, TypeError):
       return None
 
-  async def _request_by_name(self, path: str, name: str) -> bytes:
-    """`PrepClient.request_by_name`, saying which firmware this Prep runs when the method is missing.
+  async def _resolve_command(
+    self, command: TCPCommand[ResultT]
+  ) -> Union[TCPCommand[ResultT], _ResolvedPrepCommand]:
+    """Resolve a fixed firmware path without modifying the caller's request."""
+    self.io._session.require_active()
+    if not isinstance(command, PrepCommand) or command.dest != _UNRESOLVED:
+      return command
+    path = command.firmware_path
+    if path is None:
+      raise RuntimeError(
+        f"{type(command).__name__} has no firmware_path declared and no explicit dest= supplied."
+      )
+    try:
+      address = await self.resolve_path(path)
+    except KeyError as exc:
+      raise RuntimeError(
+        f"Cannot send {type(command).__name__}: firmware path {path!r} did not resolve ({exc})."
+      ) from exc
+    return _ResolvedPrepCommand(dest=address, request=command)
+
+  async def send_command(
+    self, command: TCPCommand[ResultT], *, read_timeout: Optional[float] = None
+  ) -> ResultT:
+    """Send a command to the object it names, and decode what the device answers.
+
+    Args:
+      command: the command. One declaring a `firmware_path` is sent to that object's address on this
+        connection; one given an explicit `dest` is sent there.
+      read_timeout: how long to wait for the answer, in seconds. Defaults to the link's.
+
+    Returns:
+      The command's decoded response.
 
     Raises:
-      PrepMethodNotFoundError: If this Prep's firmware has no method of that name on that object.
+      RuntimeError: If the command's firmware path does not resolve on this device.
     """
-    try:
-      return await self.client.request_by_name(path, name)
-    except PrepMethodNotFoundError as error:
+    session = self.io._session
+    resolved = await self._resolve_command(command)
+    if isinstance(resolved, _ResolvedPrepCommand):
+      data = await session.execute(resolved, read_timeout=read_timeout)
+      return command.parse_response_parameters(data)
+    return await session.execute(command, read_timeout=read_timeout)
+
+  async def exchange(
+    self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
+  ) -> CommandResponse:
+    """Send a command and return the device's full terminal frame, firmware errors included."""
+    session = self.io._session
+    return await session.exchange(await self._resolve_command(command), read_timeout=read_timeout)
+
+  async def request_root_name(self) -> str:
+    """Request the name of the device's firmware root object."""
+    roots = self.io.get_root_object_addresses()
+    if not roots:
+      raise RuntimeError("No root objects discovered. Call setup() first.")
+    return (await self.io.introspection.get_object(roots[0])).name
+
+  async def request_method_by_name(self, address: Union[Address, str], name: str) -> MethodInfo:
+    """Request the method called `name` on an object, from its method table.
+
+    Raises:
+      RuntimeError: If the name is absent, or on more than one interface.
+    """
+    return await self.io.introspection.get_method_by_name(address, name)
+
+  async def request_interface_methods(
+    self, address: Union[Address, str], interface_id: int
+  ) -> List[MethodInfo]:
+    """Request the methods an object declares on one interface."""
+    return await self.io.introspection.methods_for_interface(address, interface_id)
+
+  async def request_by_name(self, dest: Union[Address, str], name: str) -> bytes:
+    """Send a status request to the method called `name`, at the ids this firmware declares for it.
+
+    Prep firmware versions do not keep a method at the same ids, and older ones lack some methods
+    altogether, so a method is found by name in the object's method table rather than by number.
+
+    Args:
+      dest: the object, by address or firmware path.
+      name: the method's exact firmware name.
+
+    Returns:
+      The reply's parameters, for the caller to decode.
+
+    Raises:
+      PrepMethodNotFoundError: If the object has no method of that name.
+      RuntimeError: If the object has the name on more than one interface, so the name alone does
+        not say which to send.
+    """
+    address = dest if isinstance(dest, Address) else await self.resolve_path(dest)
+    where = dest if isinstance(dest, str) else (self.io.registry.path(address) or str(address))
+    table = await self.io.introspection.ensure_method_table(address)
+    matches = [m for m in table if m.name == name]
+    if not matches:
+      message = (
+        f"this Prep's firmware has no {name!r} method on {where}; which methods exist, and at "
+        "which ids, differs between firmware versions"
+      )
       version = None if self.configuration is None else self.configuration.firmware_version
-      if version is None:
-        raise
-      raise PrepMethodNotFoundError(f"{error} (this Prep runs {version})") from None
+      if version is not None:
+        message += f" (this Prep runs {version})"
+      raise PrepMethodNotFoundError(message)
+    if len(matches) > 1:
+      interfaces = sorted(m.interface_id for m in matches)
+      raise RuntimeError(
+        f"{name!r} is on more than one interface of {where} ({interfaces}), so the name does not "
+        "say which to send"
+      )
+    method = matches[0]
+    return await self.send_command(
+      PrepCmd.PrepProbeRequest(
+        dest=address, command_id=method.method_id, interface_id=method.interface_id
+      )
+    )
+
+  async def request_firmware_string(
+    self, address: Address, method_id: int, interface_id: int = 3
+  ) -> Optional[str]:
+    """Send a status request and decode the string it answers, or None when it answers none."""
+    data = await self.send_command(
+      PrepCmd.PrepProbeRequest(dest=address, command_id=method_id, interface_id=interface_id)
+    )
+    for _, value in HoiParamsParser(data).parse_all():
+      if isinstance(value, str):
+        return value.rstrip("\x00")
+    return None
+
+  async def request_channel_drives(self, root_name: str = "Channel Root") -> ChannelDriveMap:
+    """Discover per-channel drive addresses via bounded subobject enumeration.
+
+    MLPrepRoot exposes one ``<root_name>`` child per physical channel (siblings
+    with identical names, distinguished by the ``node`` component of their
+    :class:`Address`). For each one we walk:
+
+    - ``<root>.Channel.Squeeze.SDrive``     → sleeve sensor
+    - ``<root>.Channel.ZAxis.ZDrive``       → Z drive
+    - ``<root>.NodeInformation``            → per-channel firmware strings
+
+    Uses ``get_subobject_address`` / ``get_object`` along the known path shape —
+    no full-tree traversal. Pass ``root_name="MPH Channel Root"`` for the 8MPH
+    head. For a full firmware-tree dump use
+    :meth:`PrepDriver.request_firmware_tree`.
+    """
+    intro = self.io.introspection
+    try:
+      mlprep_root = await self.resolve_path(PREP_ROOT_NAME)
+      root_info = await intro.get_object(mlprep_root)
+    except (KeyError, RuntimeError) as e:
+      logger.debug("MLPrepRoot unavailable (%s); skipping channel discovery", e)
+      return ChannelDriveMap(sleeve_sensor_addrs=[], zdrive_addrs=[], node_info_addrs=[])
+
+    channel_root_addrs: List[Address] = []
+    for i in range(root_info.subobject_count):
+      try:
+        sub_addr = await intro.get_subobject_address(mlprep_root, i)
+        sub = await intro.get_object(sub_addr)
+      except Exception as e:
+        logger.debug("MLPrepRoot subobject[%d] failed: %s", i, e)
+        continue
+      if sub.name == root_name:
+        channel_root_addrs.append(sub_addr)
+
+    sleeve: List[Address] = []
+    zdrive: List[Address] = []
+    node_info: List[Address] = []
+
+    for ch_root in channel_root_addrs:
+      top = await intro.find_children_by_name(ch_root, "Channel", "NodeInformation")
+      if "NodeInformation" in top:
+        node_info.append(top["NodeInformation"])
+
+      channel_addr = top.get("Channel")
+      if channel_addr is None:
+        logger.warning("%s @ %s has no 'Channel' child", root_name, ch_root)
+        continue
+
+      axes = await intro.find_children_by_name(channel_addr, "Squeeze", "ZAxis")
+      if (sq_parent := axes.get("Squeeze")) is not None:
+        sq = await intro.find_children_by_name(sq_parent, "SDrive")
+        if "SDrive" in sq:
+          sleeve.append(sq["SDrive"])
+      if (zx_parent := axes.get("ZAxis")) is not None:
+        zx = await intro.find_children_by_name(zx_parent, "ZDrive")
+        if "ZDrive" in zx:
+          zdrive.append(zx["ZDrive"])
+
+    logger.debug("Discovered %d %s channel drive pair(s)", len(channel_root_addrs), root_name)
+    return ChannelDriveMap(
+      sleeve_sensor_addrs=sleeve,
+      zdrive_addrs=zdrive,
+      node_info_addrs=node_info,
+    )
 
   # ----------------------------------------
   # What the device carries
@@ -239,28 +544,28 @@ class PrepDriver:
     addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
     if addr is None:
       return None
-    return await self.client._query_firmware_string(addr, cmd_id=9)
+    return await self.request_firmware_string(addr, method_id=9)
 
   async def request_firmware_version(self) -> Optional[str]:
     """Request what MLPrepCpu runs, or None when this instrument has no such object."""
     addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
     if addr is None:
       return None
-    return await self.client._query_firmware_string(addr, cmd_id=8)
+    return await self.request_firmware_string(addr, method_id=8)
 
   async def request_bootloader_version(self) -> Optional[str]:
     """Request MLPrepCpu's bootloader version, or None when this instrument has no such object."""
     addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
     if addr is None:
       return None
-    return await self.client._query_firmware_string(addr, cmd_id=2, iface_id=2)
+    return await self.request_firmware_string(addr, method_id=2, interface_id=2)
 
   async def request_module_part_number(self) -> Optional[str]:
     """Request the pipettor module's part number, or None when it has no such object."""
     addr = await self._resolve_optional(MODULE_INFORMATION_OBJECT_PATH)
     if addr is None:
       return None
-    return await self.client._query_firmware_string(addr, cmd_id=5)
+    return await self.request_firmware_string(addr, method_id=5)
 
   async def request_present_channels(self) -> Optional[Tuple[PrepCmd.ChannelIndex, ...]]:
     """Request which channels are present (GetPresentChannels on MLPrepService)."""
@@ -268,7 +573,7 @@ class PrepDriver:
     if service_addr is None:
       return None
     try:
-      resp = await self.client.execute(PrepCmd.PrepGetPresentChannels(dest=service_addr))
+      resp = await self.send_command(PrepCmd.PrepGetPresentChannels(dest=service_addr))
       if resp is None or not resp.channels:
         return None
       return tuple(
@@ -297,11 +602,10 @@ class PrepDriver:
     Raises:
       RuntimeError: If the deck configuration object does not resolve.
     """
-    client = self.client
-    mlprep = client.mlprep_address
-    enc_resp = await client.execute(PrepCmd.PrepGetIsEnclosurePresent(dest=mlprep))
-    safe_resp = await client.execute(PrepCmd.PrepGetSafeSpeedsEnabled(dest=mlprep))
-    height_resp = await client.execute(PrepCmd.PrepGetDefaultTraverseHeight(dest=mlprep))
+    mlprep = self.mlprep_address
+    enc_resp = await self.send_command(PrepCmd.PrepGetIsEnclosurePresent(dest=mlprep))
+    safe_resp = await self.send_command(PrepCmd.PrepGetSafeSpeedsEnabled(dest=mlprep))
+    height_resp = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=mlprep))
     has_enclosure = bool(enc_resp.value) if enc_resp else False
     safe_speeds_enabled = bool(safe_resp.value) if safe_resp else False
     default_traverse_height = float(height_resp.value) if height_resp else None
@@ -313,7 +617,7 @@ class PrepDriver:
     if deck_addr is None:
       raise RuntimeError("DeckConfiguration path did not resolve — cannot load instrument config")
 
-    bounds_resp = await client.execute(PrepCmd.PrepGetDeckBounds(dest=deck_addr))
+    bounds_resp = await self.send_command(PrepCmd.PrepGetDeckBounds(dest=deck_addr))
     if bounds_resp:
       deck_bounds = PrepCmd.DeckBounds(
         min_x=bounds_resp.min_x,
@@ -324,7 +628,7 @@ class PrepDriver:
         max_z=bounds_resp.max_z,
       )
 
-    sites_resp = await client.execute(PrepCmd.PrepGetDeckSiteDefinitions(dest=deck_addr))
+    sites_resp = await self.send_command(PrepCmd.PrepGetDeckSiteDefinitions(dest=deck_addr))
     if sites_resp and sites_resp.sites:
       deck_sites = tuple(
         PrepCmd.DeckSiteInfo(
@@ -340,7 +644,7 @@ class PrepDriver:
       )
       logger.debug("Discovered %d deck sites", len(deck_sites))
 
-    waste_resp = await client.execute(PrepCmd.PrepGetWasteSiteDefinitions(dest=deck_addr))
+    waste_resp = await self.send_command(PrepCmd.PrepGetWasteSiteDefinitions(dest=deck_addr))
     if waste_resp and waste_resp.sites:
       waste_sites = tuple(
         PrepCmd.WasteSiteInfo(
@@ -380,16 +684,14 @@ class PrepDriver:
 
   async def request_initialization_status(self) -> bool:
     """Whether MLPrep reports as initialized (GetIsInitialized, cmd=2)."""
-    result = await self.client.execute(
-      PrepCmd.PrepGetIsInitialized(dest=self.client.mlprep_address)
-    )
+    result = await self.send_command(PrepCmd.PrepGetIsInitialized(dest=self.mlprep_address))
     if result is None:
       return False
     return bool(result.value)
 
   async def request_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
     """Firmware object tree. ``print(await prep.request_firmware_tree())`` for a diagnostic dump."""
-    return await self.client.introspection.get_firmware_tree(refresh=refresh)
+    return await self.io.introspection.get_firmware_tree(refresh=refresh)
 
   # ----------------------------------------
   # Tip types
@@ -397,8 +699,8 @@ class PrepDriver:
 
   async def request_tip_and_needle_definitions(self) -> Tuple[PrepCmd.TipDefinition, ...]:
     """Tip/needle definitions (GetTipAndNeedleDefinitions, cmd=11)."""
-    result = await self.client.execute(
-      PrepCmd.PrepGetTipAndNeedleDefinitions(dest=self.client.mlprep_address)
+    result = await self.send_command(
+      PrepCmd.PrepGetTipAndNeedleDefinitions(dest=self.mlprep_address)
     )
     if result is None or not result.definitions:
       return ()
@@ -472,7 +774,7 @@ class PrepDriver:
         return
 
       logger.debug("device reports not initialized - running the initialization procedure")
-    await self.client.execute(
+    await self.send_command(
       PrepCmd.PrepInitialize(
         smart=smart,
         tip_drop_params=PrepCmd.InitTipDropParameters(
@@ -499,7 +801,7 @@ class PrepDriver:
 
     traverse = "unknown" if c.default_traverse_height is None else f"{c.default_traverse_height} mm"
     lines = [
-      f"[Hamilton Prep] Connected on {self.client.describe_link()}",
+      f"[Hamilton Prep] Connected on {self.describe_link()}",
       f"  Serial: {c.serial_number or 'unknown'}",
       f"  Firmware: {c.firmware_version or 'unknown'}",
       f"  Configuration: enclosure {'installed' if c.has_enclosure else 'none'}, "
@@ -695,10 +997,10 @@ class PrepDriver:
   # ----------------------------------------
 
   async def park(self) -> None:
-    await self.client.execute(PrepCmd.PrepPark())
+    await self.send_command(PrepCmd.PrepPark())
 
   async def spread(self) -> None:
-    await self.client.execute(PrepCmd.PrepSpread())
+    await self.send_command(PrepCmd.PrepSpread())
 
   async def is_parked(self) -> bool:
     """Whether MLPrep reports itself parked.
@@ -709,7 +1011,7 @@ class PrepDriver:
     Raises:
       PrepMethodNotFoundError: If this firmware has no IsParked.
     """
-    data = await self._request_by_name(MLPREP_OBJECT_PATH, "IsParked")
+    data = await self.request_by_name(MLPREP_OBJECT_PATH, "IsParked")
     return bool(PrepCmd.PrepIsParked.parse_response_parameters(data).value)
 
   async def is_spread(self) -> bool:
@@ -720,7 +1022,7 @@ class PrepDriver:
     Raises:
       PrepMethodNotFoundError: If this firmware has no IsSpread.
     """
-    data = await self._request_by_name(MLPREP_OBJECT_PATH, "IsSpread")
+    data = await self.request_by_name(MLPREP_OBJECT_PATH, "IsSpread")
     return bool(PrepCmd.PrepIsSpread.parse_response_parameters(data).value)
 
   # ----------------------------------------
@@ -728,28 +1030,26 @@ class PrepDriver:
   # ----------------------------------------
 
   async def power_down_request(self) -> None:
-    await self.client.execute(PrepCmd.PrepPowerDownRequest())
+    await self.send_command(PrepCmd.PrepPowerDownRequest())
 
   async def confirm_power_down(self) -> None:
-    await self.client.execute(PrepCmd.PrepConfirmPowerDown())
+    await self.send_command(PrepCmd.PrepConfirmPowerDown())
 
   async def cancel_power_down(self) -> None:
-    await self.client.execute(PrepCmd.PrepCancelPowerDown())
+    await self.send_command(PrepCmd.PrepCancelPowerDown())
 
   # ----------------------------------------
   # Deck light
   # ----------------------------------------
 
   async def request_deck_light(self) -> Tuple[int, int, int, int]:
-    result = await self.client.execute(PrepCmd.PrepGetDeckLight())
+    result = await self.send_command(PrepCmd.PrepGetDeckLight())
     if result is None:
       raise ValueError("No response from GetDeckLight.")
     return (result.white, result.red, result.green, result.blue)
 
   async def set_deck_light(self, white: int, red: int, green: int, blue: int) -> None:
-    await self.client.execute(
-      PrepCmd.PrepSetDeckLight(white=white, red=red, green=green, blue=blue)
-    )
+    await self.send_command(PrepCmd.PrepSetDeckLight(white=white, red=red, green=green, blue=blue))
 
   async def disco_mode(self) -> None:
     """Easter egg: cycle deck lights then restore previous state."""
@@ -772,11 +1072,11 @@ class PrepDriver:
 
   async def request_x_speed_scale(self) -> int:
     """Request how fast MLPrep drives X, as a percentage of its full speed."""
-    return int((await self.client.execute(PrepCmd.PrepGetXSpeedScale())).value)
+    return int((await self.send_command(PrepCmd.PrepGetXSpeedScale())).value)
 
   async def request_z_speed_scale(self) -> int:
     """Request how fast MLPrep drives Z, as a percentage of its full speed."""
-    return int((await self.client.execute(PrepCmd.PrepGetZSpeedScale())).value)
+    return int((await self.send_command(PrepCmd.PrepGetZSpeedScale())).value)
 
   async def set_x_speed_scale(self, percent: int) -> None:
     """Set how fast MLPrep drives X, as a percentage of its full speed. Stays set until changed.
@@ -789,7 +1089,7 @@ class PrepDriver:
     """
     if not 1 <= percent <= 100:
       raise ValueError(f"x speed scale must be between 1 and 100 percent, is {percent}")
-    await self.client.execute(PrepCmd.PrepSetXSpeedScale(value=percent))
+    await self.send_command(PrepCmd.PrepSetXSpeedScale(value=percent))
 
   async def set_z_speed_scale(self, percent: int) -> None:
     """Set how fast MLPrep drives Z, as a percentage of its full speed. Stays set until changed.
@@ -802,4 +1102,4 @@ class PrepDriver:
     """
     if not 1 <= percent <= 100:
       raise ValueError(f"z speed scale must be between 1 and 100 percent, is {percent}")
-    await self.client.execute(PrepCmd.PrepSetZSpeedScale(value=percent))
+    await self.send_command(PrepCmd.PrepSetZSpeedScale(value=percent))

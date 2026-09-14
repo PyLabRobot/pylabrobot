@@ -11,7 +11,6 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.trash import Trash
 
-
 # How tall the deck's working volume is, in mm, from the deck surface. The channels travel from 18.03
 # to 167.5 mm and the deck configuration reports the same Z range, as read off PRPAA1087 on
 # 2026-09-13, so the top of that travel is the top of the deck.

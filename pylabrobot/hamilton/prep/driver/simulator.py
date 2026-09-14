@@ -1,288 +1,495 @@
-"""PrepChatterboxClient: minimal client for tests without TCP hardware."""
+"""A Prep that answers without being plugged in.
 
-from __future__ import annotations
+The Prep is reached over TCP, so its simulator stands in at the wire: every
+command is built into the frame a device would receive, and answered with a frame the real decoder
+takes apart. Everything above the link - path resolution, method lookup by name, discovery, the
+configuration each feature resolves - runs exactly as it does against hardware.
 
+What answers comes from two recordings, as the STAR simulator's does:
+
+- a saved configuration (`save_configuration`), which says what device this is and what it carries;
+- a firmware tree read off a device, which says which objects and methods its firmware has. A method
+  the recorded firmware lacks is refused as that firmware refuses it, so the version is selectable.
+
+Reads of where things are come from the resource model, and moves update it: a simulated device keeps
+no positions of its own. A read nothing here answers is refused with an exception frame, which is how
+a command that has not been simulated makes itself known.
+"""
+
+import dataclasses
+import json
 import logging
-from typing import Callable, List, Optional, Union
+import os
+from typing import Any, Dict, List, Optional, Tuple, cast, get_type_hints
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
+from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.introspection import (
-  HamiltonIntrospection,
-  MethodInfo,
-  ObjectInfo,
+  GetEnumsCommand,
+  GetInterfacesCommand,
+  GetMethodCommand,
+  GetObjectCommand,
+  GetStructsCommand,
+  GetSubobjectAddressCommand,
 )
-from pylabrobot.hamilton.transport.tcp.messages import CommandResponse, HoiParams
+from pylabrobot.hamilton.transport.tcp.messages import (
+  CommandResponse,
+  HoiParams,
+  hoi_action_code_base,
+)
 from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, HoiPacket, IpPacket
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
-from pylabrobot.hamilton.transport.tcp.wire_types import F64, Str, StructArray
+from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
+from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, wire_type_of
 from pylabrobot.io.socket import Socket
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
+from pylabrobot.resources.deck import Deck
 
 from . import prep_commands as PrepCmd
-from .client import (
-  DISCOVERY_OBJECT_PATHS,
-  MLPREP_CPU_OBJECT_PATH,
-  MLPREP_OBJECT_PATH,
-  MPH_OBJECT_PATH,
-  PIPETTOR_OBJECT_PATH,
-  PrepClient,
-  _ResolvedPrepCommand,
-)
 from .configuration import DeviceConfiguration
-from .prep_commands import PrepCommand
+from .errors import PREP_ERROR_CODES
+from .features.pipettes import _CHANNEL_INDEX, Pipettes, PipettesConfiguration
+from .features.x_arm import XArm
+from .master import PrepDriver, _ResolvedPrepCommand
+from .prep_commands import MPH_OBJECT_PATH, PrepCommand
 
 logger = logging.getLogger(__name__)
 
-# What the simulated link calls itself in the IO log, as the STAR simulator's does.
+
+# What stands where a transport's identity would be in the log, so simulated and recorded runs read
+# the same way.
 SIMULATED_LINK = "[simulation]"
 
-# Channel v2 support probe expects pipettor interface 1 to expose these method IDs.
-_V2_PIPETTING_METHOD_IDS = frozenset(range(38, 44))
-# Head8._probe_v2_support expects MPH interface 1 to expose these method IDs.
-_V2_MPH_METHOD_IDS = frozenset(range(29, 35))
-# Methods the driver finds by name, at the ids MLPrep Runtime V3.0.20 declares them on interface 1.
-_MLPREP_NAMED_METHODS = {"IsParked": 34, "IsSpread": 35}
-_PIPETTOR_NAMED_METHODS = {"GetTipDefinitionHeld": 13}
+_RECORDINGS = os.path.join(os.path.dirname(__file__), "recordings")
 
+# PRPAA1087 as it saved itself, on MLPrep Runtime V1.2.2. What a simulated Prep is unless told otherwise.
+RECORDING_PREP = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2.json")
+# The same, declared with an 8-channel head. No device with one has been recorded.
+RECORDING_PREP_HEAD8 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_head8.json")
 
-# Canned payloads follow the declared response schemas; empty lists mean no simulated geometry.
-_CANNED_RESPONSES: dict[type[TCPCommand], HoiParams] = {
-  PrepCmd.PrepGetPositions: HoiParams().add([], StructArray()),
-  PrepCmd.PrepGetIsInitialized: HoiParams().add(False, PrepCmd.PaddedBool),
-  PrepCmd.PrepGetXSpeedScale: HoiParams().add(100, PrepCmd.PaddedU8),
-  PrepCmd.PrepXAxisGetVelocity: HoiParams().add(400.0, F64),
-  PrepCmd.PrepXAxisGetAcceleration: HoiParams().add(2250.0, F64),
-  PrepCmd.PrepGetZSpeedScale: HoiParams().add(100, PrepCmd.PaddedU8),
-  PrepCmd.PrepGetDeckLight: HoiParams()
-  .add(0, PrepCmd.PaddedU8)
-  .add(0, PrepCmd.PaddedU8)
-  .add(0, PrepCmd.PaddedU8)
-  .add(0, PrepCmd.PaddedU8),
-  PrepCmd.PrepIsParked: HoiParams().add(False, PrepCmd.PaddedBool),
-  PrepCmd.PrepIsSpread: HoiParams().add(False, PrepCmd.PaddedBool),
-  PrepCmd.PrepGetIsEnclosurePresent: HoiParams().add(False, PrepCmd.PaddedBool),
-  PrepCmd.PrepGetSafeSpeedsEnabled: HoiParams().add(False, PrepCmd.PaddedBool),
-  PrepCmd.PrepGetDefaultTraverseHeight: HoiParams().add(0, PrepCmd.F32),
-  PrepCmd.PrepGetTipAndNeedleDefinitions: HoiParams().add([], StructArray()),
-  PrepCmd.PrepGetDeckBounds: HoiParams()
-  .add(0, PrepCmd.F32)
-  .add(0, PrepCmd.F32)
-  .add(0, PrepCmd.F32)
-  .add(0, PrepCmd.F32)
-  .add(0, PrepCmd.F32)
-  .add(0, PrepCmd.F32),
-  PrepCmd.PrepGetCalibrationSiteDefinitions: HoiParams().add([], StructArray()),
-  PrepCmd.PrepGetDeckSiteDefinitions: HoiParams().add([], StructArray()),
-  PrepCmd.PrepGetWasteSiteDefinitions: HoiParams().add([], StructArray()),
-  PrepCmd.PrepGetChannelBounds: HoiParams().add([], StructArray()),
-  PrepCmd.PrepGetPresentChannels: HoiParams().add([], PrepCmd.EnumArray),
-  PrepCmd.PrepCalibrateXAxis: HoiParams().add(0, PrepCmd.F32),
-  PrepCmd.PrepCalibrateYAxis: HoiParams().add(0, PrepCmd.F32),
-  PrepCmd.PrepCalibrateZAxis: HoiParams().add(0, PrepCmd.F32),
-  PrepCmd.PrepCalibrateSqueeze: HoiParams().add(0, PrepCmd.U32),
-  PrepCmd.PrepCalibrateSqueezeTips: HoiParams().add([], PrepCmd.U32Array),
-  PrepCmd.PrepGetCalibrationValues: HoiParams()
-  .add(0, PrepCmd.F32)
-  .add(0, PrepCmd.F32)
-  .add([], StructArray()),
-  PrepCmd.PrepGetChannelHardwareConfiguration: HoiParams().add([], StructArray()),
+# The firmware trees read off two devices. V1.2.2 is what a simulated Prep runs unless told otherwise.
+FIRMWARE_TREE_V1_2_2 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_firmware_tree.json")
+FIRMWARE_TREE_V3_0_20 = os.path.join(_RECORDINGS, "prep_PRPBD1394_v3_0_20_firmware_tree.json")
+
+# Where PRPAA1087's channels reported themselves after it initialized on 2026-09-13, as (x, y, z) in
+# mm, by channel. What a simulated device answers until the resource model holds the channels.
+SIMULATED_INITIALIZED_POSITIONS = {
+  0: (289.489, 365.0148, 167.499),
+  1: (289.489, 345.0123, 167.4954),
 }
 
+# The X axis profile PRPAA1087 read at an X speed scale of 100 percent, in mm/s and mm/s2. A simulated
+# axis keeps no profile, so setting one changes nothing it answers.
+SIMULATED_X_VELOCITY = 400.0
+SIMULATED_X_ACCELERATION = 2250.0
 
-# Replies to the methods the driver finds by name, keyed by object path and the ids stubbed above.
-_NAMED_METHOD_RESPONSES: dict[tuple[str, int, int], HoiParams] = {
-  (MLPREP_OBJECT_PATH, 1, _MLPREP_NAMED_METHODS["IsParked"]): HoiParams().add(
-    False, PrepCmd.PaddedBool
-  ),
-  (MLPREP_OBJECT_PATH, 1, _MLPREP_NAMED_METHODS["IsSpread"]): HoiParams().add(
-    False, PrepCmd.PaddedBool
-  ),
-}
+# The speed scales PRPAA1087 read, in percent. A simulated device keeps none.
+SIMULATED_SPEED_SCALE = 100
+
+# What the deck light reads: off. A simulated device has no light.
+SIMULATED_DECK_LIGHT = (0, 0, 0, 0)
+
+# The firmware's result for a method it does not have (HC_RESULT GenericNotSupported).
+_NOT_SUPPORTED = next(
+  code for code, name in HC_RESULT_PROTOCOL.items() if name == "GenericNotSupported"
+)
+
+# Where the 8-channel head's objects are put in a recorded tree, which has none: no head has been
+# recorded, so these addresses are not a device's.
+_MPH_ROOT_ADDRESS = Address(0xE001, 1, 0xBF00)
+_MPH_ADDRESS = Address(0xE001, 1, 0x1000)
 
 
-class _PrepChatterboxIntrospection(HamiltonIntrospection):
-  """Offline introspection: v2 probe succeeds when ``use_v1_aspirate_dispense`` is False."""
+def _encode(response: Any) -> HoiParams:
+  """Encode a response dataclass field by field, the inverse of `parse_into_struct`.
 
-  def __init__(
-    self,
-    *args,
-    stub_methods_fn: Callable[[Address, int], Optional[List[MethodInfo]]],
-    **kwargs,
-  ):
-    super().__init__(*args, **kwargs)
-    self._stub_methods_fn = stub_methods_fn
+  Args:
+    response: an instance of a command's `Response`, whose fields carry their wire types.
 
-  async def methods_for_interface(
-    self, address: Union[Address, str], interface_id: int
-  ) -> List[MethodInfo]:
-    self._executor.require_active()
-    addr = await self._resolve_target_address(address)
-    stubs = self._stub_methods_fn(addr, interface_id)
-    if stubs is not None:
-      return stubs
-    return await super().methods_for_interface(address, interface_id)
+  Returns:
+    The parameters a device would answer with.
+  """
+  params = HoiParams()
+  hints = get_type_hints(type(response), include_extras=True)
+  for field in dataclasses.fields(response):
+    meta = wire_type_of(hints.get(field.name))
+    if meta is not None:
+      meta.encode_into(getattr(response, field.name), params)
+  return params
 
-  async def ensure_method_table(self, address, *, _supported=None, _object_info=None):
-    self._executor.require_active()
-    addr = await self._resolve_target_address(address)
-    stubs = self._stub_methods_fn(addr, 1)
-    if stubs is not None:
-      return stubs
-    return await super().ensure_method_table(
-      address, _supported=_supported, _object_info=_object_info
+
+@dataclasses.dataclass
+class _RecordedObject:
+  """One object of a recorded firmware tree."""
+
+  path: str
+  name: str
+  version: str
+  address: Address
+  interfaces: List[Tuple[int, str]]
+  # As recorded: name, interface_id, method_id, call_type, and the full GetMethod answer in hex.
+  methods: List[Dict[str, Any]]
+  children: List["_RecordedObject"]
+
+  def method(self, interface_id: int, method_id: int) -> Optional[Dict[str, Any]]:
+    """The recorded method at these ids, or None when this firmware has none there."""
+    return next(
+      (m for m in self.methods if (m["interface_id"], m["method_id"]) == (interface_id, method_id)),
+      None,
     )
 
 
-# Where PRPAA1087's channels reported themselves after it initialized on 2026-09-13, as (x, y, z)
-# in mm. What a simulated device answers until something moves it.
-_INITIALIZED_POSITIONS = {
-  PrepCmd.ChannelIndex.RearChannel: (289.489, 365.0148, 167.499),
-  PrepCmd.ChannelIndex.FrontChannel: (289.489, 345.0123, 167.4954),
-}
+class _RecordedTree:
+  """A firmware tree read off a device, which a simulated device answers introspection from."""
 
+  def __init__(self, path: str, head8_installed: bool):
+    """
+    Args:
+      path: a recorded firmware tree.
+      head8_installed: whether to add the 8-channel head's objects, which no recorded tree holds.
+    """
+    with open(path, encoding="utf-8") as f:
+      recorded = json.load(f)
+    self.firmware_version: Optional[str] = recorded.get("firmware_version")
+    self.root = self._read(recorded["tree"])
+    if head8_installed and not any(c.name == "MphRoot" for c in self.root.children):
+      self.root.children.append(self._head8_objects())
+    self._by_address: Dict[Address, _RecordedObject] = {}
+    self._index(self.root)
 
-class _PrepChatterboxSession(TCPSession):
-  """Offline exchange using the same immutable requests and decoders as TCP."""
+  @classmethod
+  def _read(cls, node: Dict[str, Any]) -> _RecordedObject:
+    return _RecordedObject(
+      path=node["path"],
+      name=node["name"],
+      version=node["version"],
+      address=Address(**node["address"]),
+      interfaces=[(i["interface_id"], i["name"]) for i in node["interfaces"]],
+      methods=list(node["methods"]),
+      children=[cls._read(child) for child in node["children"]],
+    )
 
-  def __init__(self, io: Socket, config: DeviceConfiguration) -> None:
-    """Use the configured instrument metadata for matching typed status replies."""
-    super().__init__(io)
-    self._config = config
-    self._responses = dict(_CANNED_RESPONSES)
-    if config.default_traverse_height is not None:
-      self._responses[PrepCmd.PrepGetDefaultTraverseHeight] = HoiParams().add(
-        config.default_traverse_height, PrepCmd.F32
-      )
-    present = [PrepCmd.ChannelIndex.RearChannel, PrepCmd.ChannelIndex.FrontChannel][
-      : config.num_channels or 0
+  def _index(self, node: _RecordedObject) -> None:
+    self._by_address[node.address] = node
+    for child in node.children:
+      self._index(child)
+
+  def _head8_objects(self) -> _RecordedObject:
+    """`MphRoot.MPH`, carrying the root's recorded introspection methods and the commands the driver
+    sends the head, at the ids it sends them at."""
+    introspection = [m for m in self.root.methods if m["interface_id"] == 0]
+    commands: Dict[Tuple[int, int], str] = {}
+    pending = list(PrepCommand.__subclasses__())
+    while pending:
+      cls = pending.pop()
+      pending.extend(cls.__subclasses__())
+      if cls.firmware_path == MPH_OBJECT_PATH and cls.command_id is not None:
+        commands[(cls.interface_id, cls.command_id)] = cls.__name__
+    methods = introspection + [
+      {
+        "name": name,
+        "interface_id": interface_id,
+        "method_id": method_id,
+        "call_type": 0,
+        "raw_metadata_hex": HoiParams()
+        .add(interface_id, PrepCmd.PaddedU8)
+        .add(0, PrepCmd.PaddedU8)
+        .add(method_id, PrepCmd.U16)
+        .add(name, Str)
+        .build()
+        .hex(),
+      }
+      for (interface_id, method_id), name in sorted(commands.items())
     ]
-    if config.head8_installed:
-      present.append(PrepCmd.ChannelIndex.MPHChannel)
-    self._responses[PrepCmd.PrepGetPresentChannels] = HoiParams().add(
-      [int(c) for c in present], PrepCmd.EnumArray
+    mph = _RecordedObject(
+      path=MPH_OBJECT_PATH,
+      name="MPH",
+      version="",
+      address=_MPH_ADDRESS,
+      interfaces=list(self.root.interfaces),
+      methods=methods,
+      children=[],
     )
-    if config.deck_bounds is not None:
-      bounds = config.deck_bounds
-      params = HoiParams()
-      for value in (
-        bounds.min_x,
-        bounds.max_x,
-        bounds.min_y,
-        bounds.max_y,
-        bounds.min_z,
-        bounds.max_z,
-      ):
-        params.add(value, PrepCmd.F32)
-      self._responses[PrepCmd.PrepGetDeckBounds] = params
-    # Where each pipetting channel is, moved by the moves it is sent.
-    self._positions = {
-      int(channel): list(_INITIALIZED_POSITIONS[channel])
-      for channel in present
-      if channel in _INITIALIZED_POSITIONS
-    }
-    self._responses[PrepCmd.PrepGetSafeSpeedsEnabled] = HoiParams().add(
-      config.safe_speeds_enabled, PrepCmd.PaddedBool
-    )
-    self._responses[PrepCmd.PrepGetIsEnclosurePresent] = HoiParams().add(
-      config.has_enclosure, PrepCmd.PaddedBool
+    return _RecordedObject(
+      path=MPH_OBJECT_PATH.rsplit(".", 1)[0],
+      name="MphRoot",
+      version="",
+      address=_MPH_ROOT_ADDRESS,
+      interfaces=list(self.root.interfaces),
+      methods=introspection,
+      children=[mph],
     )
 
-  async def exchange(
-    self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
-  ) -> CommandResponse:
-    """Encode one request and return a correlated canned success frame."""
-    self.require_ready()
-    if self.client_address is None:
-      raise RuntimeError("the chatterbox session has no client address; call setup first")
-    sequence = self.allocate_sequence(command.dest)
-    request_frame = HarpPacket.unpack(
-      IpPacket.unpack(command.build(self.client_address, sequence)).payload
+  def get(self, address: Address) -> Optional[_RecordedObject]:
+    """The object at an address, or None when the recorded firmware has none there."""
+    return self._by_address.get(address)
+
+  def channel_of(self, address: Address) -> Optional[int]:
+    """Which pipetting channel an object belongs to, 0-indexed from the back, or None for none.
+
+    Each channel's objects share its node, and the tree lists the channel roots rear first.
+    """
+    roots = [child for child in self.root.children if child.name == "Channel Root"]
+    return next(
+      (index for index, root in enumerate(roots) if root.address.node == address.node), None
     )
-    hoi = HoiPacket.unpack(request_frame.payload)
-    request = command.request if isinstance(command, _ResolvedPrepCommand) else command
-    logger.log(LOG_LEVEL_IO, "%s write: %s", SIMULATED_LINK, request)
-    payload = self._responses.get(type(request), HoiParams())
-    # Which device this is, from the configuration it stands in for: serial (9) and firmware (8).
-    if (
-      isinstance(request, PrepCmd.PrepProbeRequest)
-      and self.registry.path(request.dest) == MLPREP_CPU_OBJECT_PATH
-    ):
-      answer = {9: self._config.serial_number, 8: self._config.firmware_version}.get(
-        request.command_id
+
+  def answer_introspection(self, node: _RecordedObject, request: TCPCommand) -> Optional[HoiParams]:
+    """What an object answers an interface-0 request with, from the recording.
+
+    Returns:
+      The answer, or None for a request this does not know.
+    """
+    if isinstance(request, GetObjectCommand):
+      # Only the children the recording holds are counted, so every slot asked for is one there is.
+      return _encode(
+        GetObjectCommand.Response(
+          name=node.name,
+          version=node.version,
+          method_count=len(node.methods),
+          subobject_count=len(node.children),
+        )
       )
-      if answer is not None:
-        payload = HoiParams().add(answer, Str)
-    if isinstance(request, PrepCmd.PrepProbeRequest):
-      named = _NAMED_METHOD_RESPONSES.get(
-        (self.registry.path(request.dest), request.interface_id, request.command_id)
+    if isinstance(request, GetMethodCommand):
+      params = HoiParams()
+      params._fragments.append(
+        bytes.fromhex(node.methods[request.method_index]["raw_metadata_hex"])
       )
-      if named is not None:
-        payload = named
+      return params
+    if isinstance(request, GetSubobjectAddressCommand):
+      child = node.children[request.subobject_index].address
+      return _encode(
+        GetSubobjectAddressCommand.Response(
+          module_id=child.module, node_id=child.node, object_id=child.object
+        )
+      )
+    if isinstance(request, GetInterfacesCommand):
+      return _encode(
+        GetInterfacesCommand.Response(
+          interface_ids=[i for i, _ in node.interfaces],
+          interface_names=[name for _, name in node.interfaces],
+        )
+      )
+    # The recordings hold no enums or structs.
+    if isinstance(request, GetEnumsCommand):
+      return _encode(
+        GetEnumsCommand.Response(enum_names=[], value_counts=[], values=[], value_names=[])
+      )
+    if isinstance(request, GetStructsCommand):
+      return _encode(
+        GetStructsCommand.Response(
+          struct_names=[], field_counts=[], field_type_ids=[], field_names=[]
+        )
+      )
+    return None
+
+
+class _Simulated:
+  """Reaches the device behind a feature, which for a simulated one is the simulator."""
+
+  _driver: PrepDriver
+
+  @property
+  def device(self) -> "PrepSimulationDriver":
+    return cast("PrepSimulationDriver", self._driver)
+
+  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    """What this feature would answer a command with, taken from the model.
+
+    The link offers every command to each feature in turn, so a read is built and logged exactly as a
+    move is. A move is answered with nothing, and moves the model as the device would have moved.
+
+    Args:
+      request: the command, as the driver sent it.
+      path: the firmware path of the object it was sent to.
+      method: the name the recorded firmware gives the method it was sent to.
+
+    Returns:
+      The answer - the command's `Response`, or the parameters of a read by name - and where in the
+      model it came from. None when this feature does not answer that command.
+    """
+    return None
+
+
+class SimulatedPipettes(_Simulated, Pipettes):
+  """The pipetting channels, answering for themselves."""
+
+  def _declared(self) -> PipettesConfiguration:
+    """What this device was told its channels are."""
+    return self.device.simulated_pipettes or PipettesConfiguration()
+
+  def _modelled_location(self, channel: int) -> Tuple[float, float, float]:
+    """Where the model has one channel, as (x, y, z) in mm on the deck.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      Where the model has it, or where PRPAA1087 reported it after initializing when nothing models it
+      yet.
+    """
+    x, y, z = SIMULATED_INITIALIZED_POSITIONS[channel]
+    point = self.get_reference_point_location(channel)
+    if point is not None:
+      y, z = point.y, point.z
+    return self.device.modelled_x(default=x), y, z
+
+  def _move(self, channel: int, x: Optional[float], y: Optional[float], z: Optional[float]) -> None:
+    """Record a move on the model: X on the arm, Y and Z on the channel."""
+    arm = self.device.x_arm
+    if x is not None and arm is not None:
+      arm.update_location_by_reference_point(x)
+    self.update_location_by_reference_point(channel, y=y, z=z)
+
+  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    channels = range(self.device.simulated_configuration.num_channels or 0)
+    index_of = {int(enum): index for index, enum in _CHANNEL_INDEX.items()}
+
+    if isinstance(request, PrepCmd.PrepGetPositions):
+      positions = []
+      for channel in channels:
+        x, y, z = self._modelled_location(channel)
+        positions.append(
+          PrepCmd.ChannelXYZPositionParameters(
+            default_values=False,
+            channel=_CHANNEL_INDEX[channel],
+            position_x=x,
+            position_y=y,
+            position_z=z,
+          )
+        )
+      return PrepCmd.PrepGetPositions.Response(
+        positions=positions
+      ), "where the model has the channels"
+
     if isinstance(request, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepMoveToPositionViaLane)):
       move = request.move_parameters
-      for position in self._positions.values():
-        position[0] = move.gantry_x_position
       for axis in move.axis_parameters:
-        if int(axis.channel) in self._positions:
-          self._positions[int(axis.channel)][1:] = [axis.y_position, axis.z_position]
-    if (
-      isinstance(request, PrepCmd.PrepMoveZUpToSafe)
-      and self._config.default_traverse_height is not None
-    ):
-      for channel in request.channels:
-        if int(channel) in self._positions:
-          self._positions[int(channel)][2] = self._config.default_traverse_height
-    if isinstance(request, PrepCmd.PrepXAxisSeekToHomeFlag):
-      # No flag is modelled: the seek trips where the axis stands and nothing moves.
-      x = next(iter(self._positions.values()))[0] if self._positions else 0.0
-      payload = HoiParams().add(x, F64)
-    if isinstance(request, PrepCmd.PrepXAxisMoveAbsolute):
-      # The simulated axis counts in the same frame GetPositions reports.
-      for position in self._positions.values():
-        position[0] = request.position
-    if isinstance(request, PrepCmd.PrepXAxisGetCommandedPosition):
-      x = next(iter(self._positions.values()))[0] if self._positions else 0.0
-      payload = HoiParams().add(x, F64)
+        moved = index_of.get(int(axis.channel))
+        if moved is not None:
+          self._move(moved, move.gantry_x_position, axis.y_position, axis.z_position)
+      return None
+
+    if isinstance(request, PrepCmd.PrepMoveZUpToSafe):
+      height = self.device.simulated_configuration.default_traverse_height
+      for enum in request.channels:
+        raised = index_of.get(int(enum))
+        if raised is not None and height is not None:
+          self._move(raised, None, None, height)
+      return None
+
     if isinstance(request, PrepCmd.PrepZSeekLldPosition):
-      # Nothing to detect in simulation: each channel seeks to its floor, is left at its final height,
-      # and reports no detection.
+      # Nothing to detect in simulation: each channel seeks down to its floor, finds nothing, and is
+      # left at its final height.
+      results = []
       for seek in request.seek_parameters:
-        for position in self._positions.values():
-          position[0] = seek.seek_position_x
-        if int(seek.channel) in self._positions:
-          self._positions[int(seek.channel)][1:] = [seek.seek_position_y, seek.final_position_z]
-      payload = HoiParams().add(
-        [
+        seeking = index_of.get(int(seek.channel))
+        if seeking is not None:
+          self._move(seeking, seek.seek_position_x, seek.seek_position_y, seek.final_position_z)
+        results.append(
           PrepCmd.SeekResultParameters(
             default_values=False,
             channel=seek.channel,
             detected=False,
             position=seek.min_seek_height,
           )
-          for seek in request.seek_parameters
-        ],
-        StructArray(),
-      )
-    if isinstance(request, PrepCmd.PrepGetPositions):
-      payload = HoiParams().add(
-        [
-          PrepCmd.ChannelXYZPositionParameters(
-            default_values=False, channel=channel, position_x=x, position_y=y, position_z=z
+        )
+      return PrepCmd.PrepZSeekLldPosition.Response(results=results), "nothing to detect"
+
+    if isinstance(request, PrepCmd.PrepGetChannelBounds):
+      declared = self._declared().channels
+      bounds = []
+      for channel in channels:
+        if channel >= len(declared):
+          continue
+        c = declared[channel]
+        if c.x_range is None or c.y_range is None or c.z_range is None:
+          continue
+        bounds.append(
+          PrepCmd.ChannelBoundsParameters(
+            channel=_CHANNEL_INDEX[channel],
+            x_min=c.x_range[0],
+            x_max=c.x_range[1],
+            y_min=c.y_range[0],
+            y_max=c.y_range[1],
+            z_min=c.z_range[0],
+            z_max=c.z_range[1],
           )
-          for channel, (x, y, z) in sorted(self._positions.items())
-        ],
-        StructArray(),
+        )
+      return PrepCmd.PrepGetChannelBounds.Response(bounds=bounds), "the declared channel ranges"
+
+    if isinstance(request, PrepCmd.PrepProbeRequest):
+      owner = self.device.tree.channel_of(request.dest)
+      if owner is None:
+        return None
+      if method == "GetNodeVersion":
+        declared = self._declared().channels
+        version = declared[owner].firmware_version if owner < len(declared) else None
+        if version is None:
+          return None
+        return HoiParams().add(version, Str), f"channel {owner}'s declared firmware"
+      if method == "GetTipPresent":
+        tracker = self.head.get(owner)
+        present = tracker is not None and tracker.has_tip
+        return HoiParams().add(int(present), U32), f"channel {owner}'s tip tracker"
+
+    return None
+
+
+class SimulatedXArm(_Simulated, XArm):
+  """The X-arm, answering for itself."""
+
+  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    x = self.device.modelled_x(default=SIMULATED_INITIALIZED_POSITIONS[0][0])
+    if isinstance(request, PrepCmd.PrepXAxisGetCommandedPosition):
+      # The simulated axis counts in the frame the channels report X in.
+      return PrepCmd.PrepXAxisGetCommandedPosition.Response(value=x), "where the model has the arm"
+    if isinstance(request, PrepCmd.PrepXAxisGetVelocity):
+      return PrepCmd.PrepXAxisGetVelocity.Response(
+        value=SIMULATED_X_VELOCITY
+      ), "PRPAA1087's profile"
+    if isinstance(request, PrepCmd.PrepXAxisGetAcceleration):
+      return (
+        PrepCmd.PrepXAxisGetAcceleration.Response(value=SIMULATED_X_ACCELERATION),
+        "PRPAA1087's profile",
       )
-    params = payload.build()
-    # Logged as the transport logs a real exchange. Only what the simulation answers is read back.
-    if params:
-      logger.log(LOG_LEVEL_IO, "%s read: simulation: %s", SIMULATED_LINK, params.hex())
-    action = (
-      Hoi2Action.STATUS_RESPONSE
-      if hoi.action_code == Hoi2Action.STATUS_REQUEST
-      else Hoi2Action.COMMAND_RESPONSE
-    )
+    if isinstance(request, PrepCmd.PrepXAxisMoveAbsolute):
+      self.update_location_by_reference_point(request.position)
+      return None
+    if isinstance(request, PrepCmd.PrepXAxisSeekToHomeFlag):
+      # No flag is modelled: the seek trips where the arm stands, and nothing moves.
+      return PrepCmd.PrepXAxisSeekToHomeFlag.Response(value=x), "where the model has the arm"
+    return None
+
+
+class _SimulatedSession(TCPSession):
+  """A session whose other end is the simulator: requests are built as for TCP, and answered with
+  frames the real decoder reads."""
+
+  def __init__(self, io: Socket, driver: "PrepSimulationDriver"):
+    super().__init__(io, error_codes=PREP_ERROR_CODES)
+    self._driver = driver
+
+  async def exchange(
+    self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
+  ) -> CommandResponse:
+    """Build one request into its frame and answer it, as a device on the link would."""
+    self.require_ready()
+    if self.client_address is None:
+      raise RuntimeError("the simulated session has no client address; call setup first")
+    sequence = self.allocate_sequence(command.dest)
+    frame = HarpPacket.unpack(IpPacket.unpack(command.build(self.client_address, sequence)).payload)
+    hoi = HoiPacket.unpack(frame.payload)
+    request = command.request if isinstance(command, _ResolvedPrepCommand) else command
+    logger.log(LOG_LEVEL_IO, "%s write: %s", SIMULATED_LINK, request)
+
+    status = hoi_action_code_base(hoi.action_code) == Hoi2Action.STATUS_REQUEST
+    params, refused = await self._respond(request, command.dest, hoi)
+    if refused:
+      action = Hoi2Action.STATUS_EXCEPTION if status else Hoi2Action.COMMAND_EXCEPTION
+    else:
+      action = Hoi2Action.STATUS_RESPONSE if status else Hoi2Action.COMMAND_RESPONSE
     response = HoiPacket(
       interface_id=hoi.interface_id,
       action_id=hoi.action_id,
@@ -299,119 +506,248 @@ class _PrepChatterboxSession(TCPSession):
     )
     return CommandResponse.from_bytes(IpPacket(protocol=6, payload=harp.pack()).pack())
 
+  async def _respond(
+    self, request: TCPCommand, dest: Address, hoi: HoiPacket
+  ) -> Tuple[bytes, bool]:
+    """What the simulated device answers, and whether it refuses.
 
-class PrepChatterboxClient(PrepClient):
-  """Skips TCP; uses canned addresses so Prep channels can be exercised offline.
+    Returns:
+      The answer's parameters, and True when they are an exception rather than an answer.
+    """
+    tree = self._driver.tree
+    node = tree.get(dest)
+    if node is None:
+      return self._refusal(dest, hoi, "no object at that address in the recorded firmware"), True
 
-  Canned firmware state lives on the chatterbox client as a :class:`DeviceConfiguration`, and the
-  session answers the configuration queries from it, so the driver reads it the way it reads a
-  physical device's. A declared configuration is passed as ``configuration``.
+    if hoi.interface_id == 0:
+      answered = tree.answer_introspection(node, request)
+      if answered is None:
+        return self._refusal(dest, hoi, "introspection request not simulated"), True
+      params = answered.build()
+      logger.log(LOG_LEVEL_IO, "%s read: simulation: %s", SIMULATED_LINK, params.hex())
+      return params, False
 
-  Default ``use_v1_aspirate_dispense=False`` matches hardware: introspection stubs
-  report v2 aspirate/dispense commands on the pipettor. Pass
-  ``use_v1_aspirate_dispense=True`` for a thinner v1-only offline path.
-  """
+    method = node.method(hoi.interface_id, hoi.action_id)
+    if method is None:
+      return self._refusal(
+        dest, hoi, f"{node.path} has no such method in the recorded firmware"
+      ), True
+
+    answer = await self._driver._answer(request, node.path, method["name"])
+    if answer is None:
+      if isinstance(request, PrepCmd.PrepProbeRequest) or hasattr(type(request), "Response"):
+        return self._refusal(dest, hoi, f"{node.path}.{method['name']} is not simulated"), True
+      return b"", False
+    value, source = answer
+    params = (value if isinstance(value, HoiParams) else _encode(value)).build()
+    logger.log(LOG_LEVEL_IO, "%s read: simulation: %s from model %s", SIMULATED_LINK, value, source)
+    return params, False
+
+  @staticmethod
+  def _refusal(dest: Address, hoi: HoiPacket, why: str) -> bytes:
+    """The exception a device sends for a method it does not have, logged with why."""
+    logger.log(LOG_LEVEL_IO, "%s read: simulation refuses: %s", SIMULATED_LINK, why)
+    entry = (
+      f"0x{dest.module:04X}.0x{dest.node:04X}.0x{dest.object:04X}:"
+      f"0x{hoi.interface_id:02X},0x{hoi.action_id:04X},0x{_NOT_SUPPORTED:04X}"
+    )
+    return HoiParams().add(entry, Str).build()
+
+
+class _SimulatedIO(HamiltonTCPClient):
+  """Stands where the TCP link would be, with the simulator on its other end."""
+
+  def __init__(self, driver: "PrepSimulationDriver"):
+    self._driver = driver
+    super().__init__(host="simulation", port=0)
+
+  def _create_session(self) -> TCPSession:
+    return _SimulatedSession(
+      Socket(human_readable_device_name="Hamilton Prep simulation", host="simulation", port=0),
+      self._driver,
+    )
+
+  async def setup(self) -> None:
+    """Open the simulated session and register the recorded root, as the handshake would."""
+    if self._session.state is not SessionState.CLOSED:
+      raise RuntimeError("the simulated Prep is already set up - call stop() first")
+    self._session = self._create_session()
+    self._session.state = SessionState.READY
+    self._session.client_id = 1
+    self._session.client_address = Address(2, 1, 65535)
+    root = self._driver.tree.root.address
+    self._session.registry.set_root_address(root)
+    root_info = await self.introspection.get_object(root)
+    root_info.children = {}
+    self._session.registry.register(root_info.name, root_info)
+
+
+class PrepSimulationDriver(PrepDriver):
+  """A simulated Prep, driven exactly like the real one."""
 
   def __init__(
     self,
-    num_channels: int = 2,
-    head8_installed: bool = True,
-    default_traverse_height: float = 180.0,
-    use_v1_aspirate_dispense: bool = False,
-    configuration: Optional[DeviceConfiguration] = None,
+    deck: Deck,
+    declared_configuration_json: Optional[str] = None,
+    firmware_tree_json: Optional[str] = None,
+    initialized: bool = False,
   ):
-    self._canned_config = (
-      configuration
-      if configuration is not None
-      else DeviceConfiguration(
-        has_enclosure=False,
-        safe_speeds_enabled=True,
-        default_traverse_height=default_traverse_height,
-        num_channels=num_channels,
-        head8_installed=head8_installed,
-      )
+    """
+    Args:
+      deck: the deck to reflect this device into.
+      declared_configuration_json: path to a saved configuration, which this device then answers as.
+        Defaults to `RECORDING_PREP`.
+      firmware_tree_json: path to a recorded firmware tree, whose objects and methods this device
+        then has. Defaults to `FIRMWARE_TREE_V1_2_2`.
+      initialized: whether the device reports itself already initialized. One that has just been
+        switched on does not.
+
+    Raises:
+      ValueError: If the declared configuration holds no device.
+    """
+    super().__init__(
+      deck=deck,
+      declared_configuration_json=declared_configuration_json or RECORDING_PREP,
+      io=_SimulatedIO(self),
     )
-    self._pipettor_addr: Optional[Address] = None
-    self._mph_addr: Optional[Address] = None
-    self._use_v1_aspirate_dispense: bool = use_v1_aspirate_dispense
-    super().__init__(host="chatterbox", port=2000)
-
-  # -- the device itself ----------------------------------------------------
-
-  async def setup(self):
-    if self._session.state is not SessionState.CLOSED:
-      raise RuntimeError("Prep chatterbox already set up - call stop() first")
-    self._session = self._create_session()
-    self._session.state = SessionState.READY
-    self._session.client_address = Address(2, 1, 65535)
-    self._session.client_id = 1
-    # Seed the introspection registry with every firmware path the codebase
-    # may touch. The seed list is derived from the command aggregate
-    # (PrepCommand._ALL_PATHS) plus the paths discovery reads — new commands
-    # with new firmware_path values get chatterbox parity for free. Addresses
-    # are assigned deterministically in sorted-path order so they're stable
-    # across runs.
-    seed_paths = sorted(PrepCommand._ALL_PATHS | set(DISCOVERY_OBJECT_PATHS))
-    for idx, path in enumerate(seed_paths):
-      leaf = path.rsplit(".", 1)[-1]
-      addr = Address(1, 1, 256 + idx)
-      self.registry.register(
-        path,
-        ObjectInfo(name=leaf, version="", method_count=0, subobject_count=0, address=addr),
+    configuration = self.declared.get("device")
+    if configuration is None:
+      raise ValueError(
+        "a simulated device has to be told what it is simulating: pass "
+        "`declared_configuration_json`, naming a file that records one"
       )
-    self._pipettor_addr = await self.resolve_path(PIPETTOR_OBJECT_PATH)
-    self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
-    if self._canned_config.head8_installed:
-      self._mph_addr = await self.resolve_path(MPH_OBJECT_PATH)
+    self.simulated_configuration: DeviceConfiguration = configuration
+    self.simulated_pipettes: Optional[PipettesConfiguration] = self.declared.get("pipettes")
+    self.firmware_tree_json = firmware_tree_json or FIRMWARE_TREE_V1_2_2
+    self.tree = _RecordedTree(
+      self.firmware_tree_json, head8_installed=bool(configuration.head8_installed)
+    )
+    self.initialized = initialized
 
-  async def stop(self):
-    self._pipettor_addr = None
-    self._mph_addr = None
-    self._mlprep_address = None
-    await super().stop()
+    # The features this device has, each answering for itself. Setup builds only the ones that are
+    # not already there, so these stand in for the real ones throughout.
+    self.x_arm = SimulatedXArm(self)
+    if configuration.num_channels:
+      self.pipettes = SimulatedPipettes(self)
 
   def describe_link(self) -> str:
     return "simulation (no link)"
 
-  def _create_session(self) -> TCPSession:
-    """Create an offline session that still encodes requests and decodes responses."""
-    session = _PrepChatterboxSession(
-      Socket("Prep chatterbox", "chatterbox", 2000), self._canned_config
-    )
+  def _check_declared_against(self, discovered: DeviceConfiguration) -> None:
+    """Nothing to cross-check: a simulated device answers from the declaration.
 
-    def _stub_methods(addr: Address, interface_id: int) -> Optional[List[MethodInfo]]:
-      if interface_id != 1:
+    Args:
+      discovered: what this device answered, which is what it was told to answer.
+    """
+
+  def modelled_x(self, default: float) -> float:
+    """Where the model has the arm along X, in mm on the deck.
+
+    Args:
+      default: what to answer when nothing models the arm yet.
+    """
+    arm = self.x_arm
+    if arm is None or arm.resource is None or arm.resource.location is None or self.deck is None:
+      return default
+    return arm.resource.get_location_wrt(self.deck).x + arm.configuration.reference_point_from_left
+
+  async def _answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    """What the device would answer, asked of the feature the command is about.
+
+    Each feature answers for its own model, so the logic stays where the model is; this only decides
+    who is asked, and answers what the device itself holds.
+    """
+    for feature in (self.pipettes, self.x_arm):
+      if isinstance(feature, _Simulated):
+        answered = await feature.answer(request, path, method)
+        if answered is not None:
+          return answered
+    return self._answer_for_device(request, path, method)
+
+  def _answer_for_device(
+    self, request: TCPCommand, path: str, method: str
+  ) -> Optional[Tuple[Any, str]]:
+    """What MLPrep, its deck configuration and its CPU answer, from the declared configuration."""
+    c = self.simulated_configuration
+    declared = "the declared configuration"
+
+    if isinstance(request, PrepCmd.PrepInitialize):
+      self.initialized = True
+      return None
+    if isinstance(request, PrepCmd.PrepGetIsInitialized):
+      return PrepCmd.PrepGetIsInitialized.Response(
+        value=self.initialized
+      ), "whether it was initialized"
+    if isinstance(request, PrepCmd.PrepGetIsEnclosurePresent):
+      return PrepCmd.PrepGetIsEnclosurePresent.Response(value=c.has_enclosure), declared
+    if isinstance(request, PrepCmd.PrepGetSafeSpeedsEnabled):
+      return PrepCmd.PrepGetSafeSpeedsEnabled.Response(value=c.safe_speeds_enabled), declared
+    if isinstance(request, PrepCmd.PrepGetDefaultTraverseHeight):
+      if c.default_traverse_height is None:
         return None
+      return PrepCmd.PrepGetDefaultTraverseHeight.Response(
+        value=c.default_traverse_height
+      ), declared
+    if isinstance(request, PrepCmd.PrepGetDeckBounds):
+      b = c.deck_bounds
+      if b is None:
+        return None
+      return (
+        PrepCmd.PrepGetDeckBounds.Response(
+          min_x=b.min_x, max_x=b.max_x, min_y=b.min_y, max_y=b.max_y, min_z=b.min_z, max_z=b.max_z
+        ),
+        declared,
+      )
+    if isinstance(request, PrepCmd.PrepGetDeckSiteDefinitions):
+      sites = [
+        PrepCmd._DeckSiteDefinitionWire(
+          default_values=False,
+          id=s.id,
+          left_bottom_front_x=s.left_bottom_front_x,
+          left_bottom_front_y=s.left_bottom_front_y,
+          left_bottom_front_z=s.left_bottom_front_z,
+          length=s.length,
+          width=s.width,
+          height=s.height,
+        )
+        for s in c.deck_sites
+      ]
+      return PrepCmd.PrepGetDeckSiteDefinitions.Response(sites=sites), declared
+    if isinstance(request, PrepCmd.PrepGetWasteSiteDefinitions):
+      waste = [
+        PrepCmd._WasteSiteDefinitionWire(
+          default_values=False,
+          index=s.index,
+          x_position=s.x_position,
+          y_position=s.y_position,
+          z_position=s.z_position,
+          z_seek=s.z_seek,
+        )
+        for s in c.waste_sites
+      ]
+      return PrepCmd.PrepGetWasteSiteDefinitions.Response(sites=waste), declared
+    if isinstance(request, PrepCmd.PrepGetPresentChannels):
+      present = [int(_CHANNEL_INDEX[channel]) for channel in range(c.num_channels or 0)]
+      if c.head8_installed:
+        present.append(int(PrepCmd.ChannelIndex.MPHChannel))
+      return PrepCmd.PrepGetPresentChannels.Response(channels=present), declared
+    if isinstance(request, (PrepCmd.PrepGetXSpeedScale, PrepCmd.PrepGetZSpeedScale)):
+      return type(request).Response(value=SIMULATED_SPEED_SCALE), "PRPAA1087's speed scale"
+    if isinstance(request, PrepCmd.PrepGetDeckLight):
+      white, red, green, blue = SIMULATED_DECK_LIGHT
+      return (
+        PrepCmd.PrepGetDeckLight.Response(white=white, red=red, green=green, blue=blue),
+        "no light",
+      )
+    if isinstance(request, PrepCmd.PrepGetTipAndNeedleDefinitions):
+      return PrepCmd.PrepGetTipAndNeedleDefinitions.Response(definitions=[]), "none registered"
 
-      def named(methods: dict) -> List[MethodInfo]:
-        return [
-          MethodInfo(interface_id=1, call_type=0, method_id=mid, name=name)
-          for name, mid in methods.items()
-        ]
-
-      stubs: List[MethodInfo] = []
-      if self._pipettor_addr is not None and addr == self._pipettor_addr:
-        stubs += named(_PIPETTOR_NAMED_METHODS)
-        if not self._use_v1_aspirate_dispense:
-          stubs += [
-            MethodInfo(interface_id=1, call_type=0, method_id=mid, name=f"v2_stub_{mid}")
-            for mid in sorted(_V2_PIPETTING_METHOD_IDS)
-          ]
-      if (
-        self._mph_addr is not None and addr == self._mph_addr and not self._use_v1_aspirate_dispense
-      ):
-        stubs += [
-          MethodInfo(interface_id=1, call_type=0, method_id=mid, name=f"v2_mph_stub_{mid}")
-          for mid in sorted(_V2_MPH_METHOD_IDS)
-        ]
-      if self._mlprep_address is not None and addr == self._mlprep_address:
-        stubs += named(_MLPREP_NAMED_METHODS)
-      return stubs or None
-
-    session.introspection = _PrepChatterboxIntrospection(
-      registry=session.registry,
-      global_object_addresses=session.global_object_addresses,
-      executor=session,
-      stub_methods_fn=_stub_methods,
-    )
-    return session
+    if isinstance(request, PrepCmd.PrepProbeRequest):
+      if method == "GetSerialNumber" and c.serial_number is not None:
+        return HoiParams().add(c.serial_number, Str), declared
+      if method == "GetModuleVersion" and c.firmware_version is not None:
+        return HoiParams().add(c.firmware_version, Str), declared
+      if method in ("IsParked", "IsSpread"):
+        # Neither is modelled: a simulated device's channels are where the model has them.
+        return HoiParams().add(False, PaddedBool), "not modelled"
+    return None
