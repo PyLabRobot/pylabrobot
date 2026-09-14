@@ -699,10 +699,10 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.backend.send_command = self.mock_send  # type: ignore[method-assign]
 
     self.tip_rack = hamilton_96_tiprack_300uL("tip_rack")
-    self.deck.assign_child_resource(self.tip_rack, rails=1)
+    self.deck.assign_child_resource(self.tip_rack, track=1)
 
     self.plate = cor_96_wellplate_360uL_Fb("plate")
-    self.deck.assign_child_resource(self.plate, rails=10)
+    self.deck.assign_child_resource(self.plate, track=10)
 
     self.tip = HamiltonTip(
       name="test_tip",
@@ -1083,7 +1083,7 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_10uL
 
     tip_rack = hamilton_96_tiprack_10uL("tips")
-    self.deck.assign_child_resource(tip_rack, rails=1)
+    self.deck.assign_child_resource(tip_rack, track=1)
     tip_spot = tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
 
@@ -1110,7 +1110,7 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_50uL
 
     tip_rack = hamilton_96_tiprack_50uL("tips")
-    self.deck.assign_child_resource(tip_rack, rails=1)
+    self.deck.assign_child_resource(tip_rack, track=1)
     tip_spot = tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
 
@@ -1137,7 +1137,7 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
 
     tip_rack = hamilton_96_tiprack_300uL("tips")
-    self.deck.assign_child_resource(tip_rack, rails=1)
+    self.deck.assign_child_resource(tip_rack, track=1)
     tip_spot = tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
 
@@ -1164,7 +1164,7 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_1000uL
 
     tip_rack = hamilton_96_tiprack_1000uL("tips")
-    self.deck.assign_child_resource(tip_rack, rails=1)
+    self.deck.assign_child_resource(tip_rack, track=1)
     tip_spot = tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
 
