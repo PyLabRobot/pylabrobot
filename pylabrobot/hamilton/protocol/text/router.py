@@ -63,13 +63,16 @@ class ReplyRouter:
     self._parse_id = parse_id
     self._raise_for_error = raise_for_error
 
+    # TODO: not used by the reader yet.
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
 
     self.id_ = 0
     self._reading_thread: Optional[threading.Thread] = None
     self._reading_thread_stop = threading.Event()
+    # The reading thread and the event loop both change this, so every change goes through the lock.
     self._waiting_tasks: List[HamiltonTask] = []
+    self._waiting_tasks_lock = threading.Lock()
 
   def start(self) -> None:
     """Begin reading replies. The caller opens the transport first."""
@@ -83,11 +86,12 @@ class ReplyRouter:
     if self._reading_thread is not None:
       self._reading_thread.join(timeout=10)
       self._reading_thread = None
-    for task in self._waiting_tasks:
+    with self._waiting_tasks_lock:
+      waiting, self._waiting_tasks = self._waiting_tasks, []
+    for task in waiting:
       task.loop.call_soon_threadsafe(
         task.fut.set_exception, RuntimeError("Stopping the reply router.")
       )
-    self._waiting_tasks.clear()
 
   def next_id(self) -> int:
     """continuously generate unique ids 0 <= x < 10000."""
@@ -133,8 +137,9 @@ class ReplyRouter:
     try:
       await self.io.write(cmd.encode(), timeout=write_timeout)
     except BaseException:
-      if task in self._waiting_tasks:
-        self._waiting_tasks.remove(task)
+      with self._waiting_tasks_lock:
+        if task in self._waiting_tasks:
+          self._waiting_tasks.remove(task)
       raise
     return await fut
 
@@ -170,7 +175,8 @@ class ReplyRouter:
 
     timeout_time = time.time() + timeout
     task = HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time)
-    self._waiting_tasks.append(task)
+    with self._waiting_tasks_lock:
+      self._waiting_tasks.append(task)
 
     if self._reading_thread is None or not self._reading_thread.is_alive():
       self._reading_thread_stop.clear()
@@ -197,17 +203,20 @@ class ReplyRouter:
     """
 
     while not self._reading_thread_stop.is_set():
-      for idx in range(len(self._waiting_tasks) - 1, -1, -1):  # reverse order to allow deletion
-        task = self._waiting_tasks[idx]
-        if time.time() > task.timeout_time:
-          logger.warning("Timeout while waiting for response to command %s.", task.cmd)
-          task.loop.call_soon_threadsafe(
-            task.fut.set_exception,
-            TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
-          )
-          del self._waiting_tasks[idx]
+      with self._waiting_tasks_lock:
+        now = time.time()
+        timed_out = [task for task in self._waiting_tasks if now > task.timeout_time]
+        for task in timed_out:
+          self._waiting_tasks.remove(task)
+        waiting = len(self._waiting_tasks)
+      for task in timed_out:
+        logger.warning("Timeout while waiting for response to command %s.", task.cmd)
+        task.loop.call_soon_threadsafe(
+          task.fut.set_exception,
+          TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
+        )
 
-      if len(self._waiting_tasks) == 0:
+      if waiting == 0:
         await asyncio.sleep(0.01)
         continue
 
@@ -227,15 +236,19 @@ class ReplyRouter:
         continue
 
       module_and_command = resp[: self.module_id_length + 2]
-      matched = None
-      for idx in range(len(self._waiting_tasks)):
-        task = self._waiting_tasks[idx]
-        # if the command has no id, we have to check the command itself
-        if response_id == task.id_ or (
-          task.id_ is None and task.cmd.startswith(module_and_command)
-        ):
-          matched = idx
-          break
+      with self._waiting_tasks_lock:
+        matched = next(
+          (
+            task
+            for task in self._waiting_tasks
+            # if the command has no id, we have to check the command itself
+            if response_id == task.id_
+            or (task.id_ is None and task.cmd.startswith(module_and_command))
+          ),
+          None,
+        )
+        if matched is not None:
+          self._waiting_tasks.remove(matched)
 
       if matched is None:
         # Deliberately not guessed at. Handing it to whichever outstanding command shares its
@@ -244,11 +257,9 @@ class ReplyRouter:
         logger.warning("nothing was waiting for this reply, and it was dropped: %s", resp)
         continue
 
-      task = self._waiting_tasks[matched]
       try:
         self._raise_for_error(resp)
       except Exception as e:
-        task.loop.call_soon_threadsafe(task.fut.set_exception, e)
+        matched.loop.call_soon_threadsafe(matched.fut.set_exception, e)
       else:
-        task.loop.call_soon_threadsafe(task.fut.set_result, resp)
-      del self._waiting_tasks[matched]
+        matched.loop.call_soon_threadsafe(matched.fut.set_result, resp)
