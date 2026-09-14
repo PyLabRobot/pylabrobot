@@ -1,11 +1,11 @@
 import unittest
 from typing import Any, List, Optional, Set, Tuple
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
-from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, STARDeck
 
 # Where the simulated wheel reads, in mm, when a test wants it standing below its safe Z.
 LOWERED = "pylabrobot.hamilton.star.driver.simulator.SIMULATED_AUTOLOAD_Z_POSITION"
@@ -125,6 +125,32 @@ class TestAFailedSledMoveRaisesTheWheel(unittest.IsolatedAsyncioTestCase):
       await feature.park()
 
     self.assertLess(sent.index("C0IV"), sent.index("I0XP"))
+
+
+class TestLoadCarrier(unittest.IsolatedAsyncioTestCase):
+  """The command that reads a carrier's barcode is the one that pulls it in off the tray."""
+
+  async def test_a_carrier_is_pulled_in_whether_or_not_its_barcode_is_wanted(self):
+    feature, _ = await autoload(failing=set())
+    deck = feature._driver.deck
+    assert deck is not None
+    carrier = PLT_CAR_L5AC_A00(name="carrier")
+    deck.assign_child_resource(carrier, track=20)
+
+    on_the_tray = AsyncMock(return_value=True)
+    for wanted in (True, False):
+      pulled_in = AsyncMock(return_value="read")
+      with patch.object(
+        feature, "sense_carrier_presence_on_single_loading_tray_track", on_the_tray
+      ):
+        with patch.object(feature, "load_carrier_from_tray_and_scan_carrier_barcode", pulled_in):
+          loaded = await feature.load_carrier(
+            carrier, carrier_barcode_reading=wanted, park_after=False
+          )
+
+      with self.subTest(carrier_barcode_reading=wanted):
+        pulled_in.assert_awaited_once()
+        self.assertEqual(loaded["carrier_barcode"], "read" if wanted else None)
 
 
 if __name__ == "__main__":

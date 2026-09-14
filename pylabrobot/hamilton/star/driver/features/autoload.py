@@ -1577,7 +1577,8 @@ class Autoload:
 
     Args:
       carrier: the carrier to load, as it is to sit on the deck.
-      carrier_barcode_reading: whether to read the carrier's own barcode as it comes in.
+      carrier_barcode_reading: whether to return the carrier's own barcode. It is scanned as the
+        carrier comes in either way.
       barcode_reading: whether to read the barcode of each container it carries.
       barcode_reading_direction: which way the scanner looks while reading those.
       containers_per_carrier: how many container barcodes to read.
@@ -1610,9 +1611,11 @@ class Autoload:
     if not await self.sense_carrier_presence_on_single_loading_tray_track(track):
       raise ValueError(f"no carrier at track {track}; is it on the right loading tray position?")
 
-    carrier_barcode = None
-    if carrier_barcode_reading:
-      carrier_barcode = await self.load_carrier_from_tray_and_scan_carrier_barcode(track)
+    # The command that reads the carrier's barcode is also the one that pulls it in off the tray,
+    # so it runs either way, as in legacy; the flag only decides whether the barcode is returned.
+    carrier_barcode = await self.load_carrier_from_tray_and_scan_carrier_barcode(track)
+    if not carrier_barcode_reading:
+      carrier_barcode = None
 
     container_barcodes = await self.load_carrier_from_autoload_belt(
       barcode_reading=barcode_reading,
