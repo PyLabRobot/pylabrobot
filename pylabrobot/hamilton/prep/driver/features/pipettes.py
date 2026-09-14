@@ -1664,7 +1664,8 @@ class Pipettes:
       via_lane: travel by the firmware's lane rather than directly.
       x_speed: how fast to drive X for this move, in mm/s. Set as the nearest X speed scale, so it
         is rounded to whole multiples of `XArmConfiguration.speed_per_scale_percent`. Defaults to
-        `default_x_speed`.
+        `default_x_speed` when the move takes the gantry to another x; a move that keeps it where it
+        stands leaves the scale as it is.
       x_speed_scale: overrides `x_speed` with the X speed scale itself, in percent, 1 to 100. Give
         one or the other, not both.
       z_speed_scale: how fast to drive Z for this move, in percent of full speed, 1 to 100. None
@@ -1678,13 +1679,11 @@ class Pipettes:
     """
     if x_speed is not None and x_speed_scale is not None:
       raise ValueError("give x_speed or x_speed_scale, not both")
-    if x_speed is None and x_speed_scale is None:
-      x_speed = self.default_x_speed
+    x_speed_named = x_speed is not None or x_speed_scale is not None
+    arm = None if self._driver is None else self._driver.x_arm
+    x_arm_configuration = arm.configuration if arm is not None else XArmConfiguration()
     if x_speed is not None:
-      arm = None if self._driver is None else self._driver.x_arm
-      x_speed_scale = (
-        arm.configuration if arm is not None else XArmConfiguration()
-      ).speed_to_scale_percent(x_speed)
+      x_speed_scale = x_arm_configuration.speed_to_scale_percent(x_speed)
     for axis, scale in (("x", x_speed_scale), ("z", z_speed_scale)):
       if scale is not None and not 1 <= scale <= 100:
         raise ValueError(f"{axis} speed scale must be between 1 and 100 percent, is {scale}")
@@ -1730,12 +1729,18 @@ class Pipettes:
         if c.z_range is not None and z_i > c.z_range[1]:
           raise ValueError(f"z={z_i} above channel {ch} maximum {c.z_range[1]:.1f}")
 
+    # Where the channels stand: for the Y a channel not named keeps, and for whether the gantry moves.
+    standing: List[Coordinate] = []
+    if len(channels) < len(self.channel_order) or not x_speed_named:
+      standing = await self._unchecked_fw_request_positions()
+    # With no speed named, the default X speed is set only for a move that takes the gantry somewhere.
+    if not x_speed_named and not (standing and standing[0].x == x):
+      x_speed_scale = x_arm_configuration.speed_to_scale_percent(self.default_x_speed)
+
     # Every channel's Y after the move: where it is sent, or, for a channel not named, where it stands.
     final_y: Dict[int, float] = {}
     if len(channels) < len(self.channel_order):
-      final_y = {
-        i: position.y for i, position in enumerate(await self._unchecked_fw_request_positions())
-      }
+      final_y = {i: position.y for i, position in enumerate(standing)}
     final_y.update(zip(channels, y_vals))
     self._check_y_spacing(final_y)
 

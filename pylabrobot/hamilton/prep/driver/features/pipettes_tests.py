@@ -344,9 +344,33 @@ def test_move_to_location_uses_default_x_speed_when_none_is_given():
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0))
     p.pipettes.default_x_speed = 60.0
-    await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0))
+    await p.pipettes.move_to_location(Coordinate(200.0, 360.0, 160.0))
     scales = [c.value for c in sent if type(c).__name__ == "PrepSetXSpeedScale"]
     assert scales == [53, 100, 10, 100]
+    await p.stop()
+
+  _run(_t())
+
+
+def test_moves_that_keep_x_leave_the_x_speed_scale_alone():
+  """A Y or Z move keeps the gantry where it stands, so no X speed scale is read, set or put back."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    execute = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await execute(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 280.0})
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 150.0, 1: 140.0})
+    assert "PrepMoveToPosition" in sent
+    assert not [name for name in sent if "XSpeedScale" in name]
     await p.stop()
 
   _run(_t())
