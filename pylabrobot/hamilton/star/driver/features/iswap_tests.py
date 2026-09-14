@@ -152,6 +152,27 @@ class TestYMoves(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len([m for m in moves(sent) if m.startswith("R0YA")]), 1)
 
 
+class TestRotationWithoutADeck(unittest.IsolatedAsyncioTestCase):
+  """A driver given no deck models no arm: a relative angle needs none, an absolute one is on it."""
+
+  async def test_a_relative_rotation_goes_ahead(self):
+    iswap, sent = await gripper()
+    iswap._driver.deck = None
+
+    await iswap.rotate_to_angles(rotation_relative_angle="front", raise_features=False)
+
+    self.assertEqual(len([move for move in moves(sent) if move.startswith("R0PA")]), 1)
+
+  async def test_an_absolute_rotation_is_refused_before_anything_moves(self):
+    iswap, sent = await gripper()
+    iswap._driver.deck = None
+
+    with self.assertRaises(RuntimeError):
+      await iswap.rotate_to_angles(rotation_absolute_angle="front", raise_features=False)
+
+    self.assertEqual(moves(sent), [])
+
+
 class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
   """What the X-arm at the back of the deck lets the arm reach."""
 

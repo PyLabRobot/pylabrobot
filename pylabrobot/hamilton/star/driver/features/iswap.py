@@ -1771,7 +1771,8 @@ class iSWAP:
       wrist_current_limit: motor current protection limiter, 0..7.
 
     Raises:
-      RuntimeError: if `setup()` has not populated the predefined-stop tables.
+      RuntimeError: if `setup()` has not populated the predefined-stop tables, or an absolute angle
+        is given to a driver with no deck.
       ValueError: if no angle is provided, if a joint is given both of its angles, or if either
         resolved target increment is outside the hardware range.
       NotImplementedError: if `make_space` is True, which is not built for a rotation yet.
@@ -1808,6 +1809,14 @@ class iSWAP:
       )
     ):
       raise ValueError("pass at least one angle; all four are None")
+    # An absolute angle is on the deck: with no deck, there is nothing to measure it against.
+    if (
+      rotation_absolute_angle is not None or gripper_absolute_angle is not None
+    ) and self.rotation_drive_get_reference_point_location() is None:
+      raise RuntimeError(
+        "absolute angles are on the deck, and the iSWAP's arm is not modelled: the driver was "
+        "given no deck. Pass relative angles instead"
+      )
     # Held in the drive's own increments rather than through its angle, so a joint that is holding
     # is sent exactly where it already is.
     if rotation_absolute_angle is not None:
@@ -1994,7 +2003,7 @@ class iSWAP:
         than the arm can carry it.
     """
     y_max = self.configuration.rotation_drive_y_max
-    if y_max is None:
+    if y_max is None or self.rotation_drive_get_reference_point_location() is None:
       return
     pose = self._compute_pose_at_angles(rotation_angle, gripper_relative_angle, y=y)
     at = "" if y is None else f" and the drive at y {y:.1f} mm"
