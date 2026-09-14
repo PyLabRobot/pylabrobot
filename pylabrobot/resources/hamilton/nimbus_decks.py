@@ -12,34 +12,12 @@ import warnings
 from typing import Any, Dict, List, Literal, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.hamilton.hamilton_decks import (
-  HamiltonCoreGrippers,
-  HamiltonDeck,
-)
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
 from pylabrobot.serializer import serialize
 
 logger = logging.getLogger(__name__)
-
-
-def nimbus_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
-  """CORE gripper rack for Nimbus decks, co-located with the waste block.
-
-  Derived from measured Hamilton coordinates on the default Nimbus8 deck:
-    Front paddle (ch_last): Ham(557.352, -293.030, 147.559) → PLR y = 70.800
-    Back paddle  (ch1):     Ham(557.352, -263.820, 147.559) → PLR y = 100.010
-    Resource center placed at PLR(708.862, 85.405, 147.559).
-  """
-  return HamiltonCoreGrippers(
-    name="core_grippers",
-    back_channel_y_center=14.605,
-    front_channel_y_center=-14.605,
-    size_x=20.0,
-    size_y=30.0,
-    size_z=25.0,
-    model="nimbus_core_gripper_1000ul_at_waste",
-  )
 
 
 class NimbusDeck(HamiltonDeck):
@@ -67,7 +45,6 @@ class NimbusDeck(HamiltonDeck):
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
     waste_type: Optional[Literal["default_long"]] = "default_long",
-    core_grippers: Optional[Literal["1000uL-at-waste"]] = "1000uL-at-waste",
   ) -> None:
     """Create a new Nimbus deck.
 
@@ -91,13 +68,9 @@ class NimbusDeck(HamiltonDeck):
         origin: PyLabRobot origin coordinate (default: Coordinate.zero())
         waste_type: Waste configuration type (default: "default_long"). If "default_long",
             creates a waste block with 8 channel positions. If None, no waste is created.
-        core_grippers: CORE gripper rack type (default: "1000uL-at-waste"). If
-            "1000uL-at-waste", assigns the gripper rack resource at the waste block
-            using the standard Nimbus8 paddle positions. Requires waste_type="default_long".
-            If None, no gripper resource is created.
     """
     super().__init__(
-      num_rails=num_rails,
+      num_tracks=num_rails,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
@@ -121,13 +94,10 @@ class NimbusDeck(HamiltonDeck):
 
     # Store waste type for waste position lookup
     self.waste_type = waste_type
-    self.core_grippers_type = core_grippers
 
     # Create waste resources if specified
     if waste_type == "default_long":
       self._create_default_long_waste()
-      if core_grippers == "1000uL-at-waste":
-        self._create_core_grippers()
 
   def _create_default_long_waste(self) -> None:
     """Create default_long waste block with 8 channel positions.
@@ -194,37 +164,19 @@ class NimbusDeck(HamiltonDeck):
       # Assign waste position to waste block
       waste_block.assign_child_resource(waste_position, location=pos_plr_rel)
 
-  def _create_core_grippers(self) -> None:
-    """Assign CORE gripper rack to the waste block at the standard Nimbus8 paddle position."""
-    waste_block = self.get_resource("default_long_block")
-    waste_loc = waste_block.get_location_wrt(self)
+  def track_to_location(self, track: int) -> Coordinate:
+    """Where a track starts on this deck.
 
-    # Center of the two paddles in Hamilton coordinates, converted to PLR
-    center_ham = Coordinate(x=557.352, y=(-293.030 + -263.820) / 2, z=147.559)
-    center_plr = self.from_hamilton_coordinate(center_ham)
-
-    rel = Coordinate(
-      x=center_plr.x - waste_loc.x,
-      y=center_plr.y - waste_loc.y,
-      z=center_plr.z - waste_loc.z,
-    )
-    waste_block.assign_child_resource(nimbus_core_gripper_1000ul_at_waste(), location=rel)
-
-  def rails_to_location(self, rails: int) -> Coordinate:
-    """Convert a rail identifier to an absolute (x, y, z) coordinate.
-
-    Converts rail number (1-30) to PyLabRobot coordinates. Internally maps
-    hardware tracks to API rails for consistency with other Hamilton decks.
-    Uses instance attributes for rail positions, which can be set from config files.
+    Read from instance attributes, which can be set from config files.
 
     Args:
-        rails: Rail number (1-30, maps to hardware tracks)
+        track: the track, counted from 1.
 
     Returns:
-        PyLabRobot coordinate relative to deck origin
+        Its position, in this deck's own frame.
     """
     # Calculate X position in Hamilton coordinates using instance attributes
-    x_hamilton = self._rail_start_x + (rails - 1) * self._rail_width
+    x_hamilton = self._rail_start_x + (track - 1) * self._rail_width
     y_hamilton = self._rail_y
     z_hamilton = 0.0
 
@@ -335,7 +287,6 @@ class NimbusDeck(HamiltonDeck):
       "rail_width": self._rail_width,
       "rail_y": self._rail_y,
       "waste_type": self.waste_type,
-      "core_grippers": None,  # encoded as child resource; prevent double-creation on deserialize
     }
 
   @classmethod
@@ -355,16 +306,15 @@ class NimbusDeck(HamiltonDeck):
     """
     data_copy = data.copy()
     original_waste_type = data_copy.get("waste_type")
-    original_core_grippers = data_copy.get("core_grippers")
-    # Suppress creation of waste/gripper resources in __init__; children carry the serialized data
+    # Set waste_type=None to prevent __init__() from creating waste block
+    # The waste block will come from children data (already serialized)
     data_copy["waste_type"] = None
-    data_copy["core_grippers"] = None
 
+    # Call parent deserialize (waste block won't be created in __init__)
     deck = super().deserialize(data_copy, allow_marshal=allow_marshal)
 
-    # Restore type attributes so the instance stays consistent with what was serialized
+    # Restore waste_type attribute from serialized data to keep instance consistent
     deck.waste_type = original_waste_type
-    deck.core_grippers_type = original_core_grippers
 
     return deck
 
@@ -386,7 +336,6 @@ class NimbusDeck(HamiltonDeck):
     rail_width: Optional[float] = None,
     rail_y: Optional[float] = None,
     waste_type: Optional[Literal["default_long"]] = None,
-    core_grippers: Optional[Literal["1000uL-at-waste"]] = None,
   ) -> NimbusDeck:
     """Create a Nimbus deck by parsing config files.
 
@@ -679,5 +628,4 @@ class NimbusDeck(HamiltonDeck):
       rail_y=rail_y_val,
       origin=origin,
       waste_type=waste_type,
-      core_grippers=core_grippers,
     )

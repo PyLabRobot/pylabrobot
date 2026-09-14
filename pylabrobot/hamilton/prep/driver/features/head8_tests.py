@@ -1,4 +1,4 @@
-"""Tests for PrepHead8.
+"""Tests for Head8.
 
 Covers core logic that must survive refactors:
   - _resolve_probe_positions: pitch validation for 96-well columns and interleaved 384-well
@@ -15,13 +15,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pylabrobot.hamilton.prep import Prep
-from pylabrobot.hamilton.prep import prep_commands as PrepCmd
-from pylabrobot.hamilton.prep.channels import (
-  LLDMode,
+from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
+from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
+from pylabrobot.hamilton.prep.driver.features.head8 import PROBE_PITCH_MM, Head8
+from pylabrobot.hamilton.prep.driver.features.pipettes import (
+  Pipettes,
   _build_pipettor_gantry_move_parameters,
 )
-from pylabrobot.hamilton.prep.head8 import PROBE_PITCH_MM, PrepHead8
+from pylabrobot.hamilton.prep.driver.simulator import RECORDING_PREP_HEAD8
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning.axygen.plates import Cor_Axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import PrepDeck, hamilton_96_tiprack_50uL_NTR
@@ -39,19 +40,19 @@ def _make_deck():
   return deck, tip_rack, src_plate, dst_plate
 
 
-def _make_head8() -> PrepHead8:
-  return PrepHead8(client=None, info=None)  # type: ignore[arg-type]
+def _make_head8() -> Head8:
+  return Head8(None)  # type: ignore[arg-type]
 
 
-def _record_send(prep: Prep) -> tuple[list[Any], Any]:
+def _record_send(prep: PrepDriver) -> tuple[list[Any], Any]:
   captured: list[Any] = []
-  orig_send = prep.client.execute
+  orig_send = prep.send_command
 
   async def recording(command, **kw):
     captured.append(command)
     return await orig_send(command, **kw)
 
-  prep.client.execute = recording  # type: ignore[method-assign, assignment]
+  prep.send_command = recording  # type: ignore[method-assign, assignment]
   return captured, orig_send
 
 
@@ -122,54 +123,54 @@ def test_validate_container_span_too_narrow():
 
 
 # ---------------------------------------------------------------------------
-# Group 2: all-8-channel enforcement + PrepHead8 wiring
+# Group 2: all-8-channel enforcement + Head8 wiring
 # ---------------------------------------------------------------------------
 
 
 def test_partial_channel_pickup_raises_value_error():
-  """PrepHead8 rejects pick_up_tips8 with fewer than all 8 channels."""
+  """Head8 rejects pick_up_tips with fewer than all 8 channels."""
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     spots = tip_rack.column(1)[4:]  # E2, F2, G2, H2
     with pytest.raises(ValueError, match="fully-ganged head"):
-      await p.head8.pick_up_tips8(spots, use_channels=(4, 5, 6, 7))
+      await p.head8.pick_up_tips(spots, use_channels=(4, 5, 6, 7))
 
     await p.stop()
 
   asyncio.run(_run())
 
 
-def test_head8_present_after_chatterbox_setup():
+def test_head8_present_after_simulated_setup():
   async def _run() -> None:
     deck, _, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
-    assert isinstance(p.head8, PrepHead8)
+    assert isinstance(p.head8, Head8)
     await p.stop()
 
   asyncio.run(_run())
 
 
 def test_head8_full_flow():
-  """pick_up_tips8 → aspirate8 → dispense8 → drop_tips8 on chatterbox."""
+  """pick_up_tips → aspirate → dispense → drop_tips on the simulator."""
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(wells=src_plate.column(0), volume=20)
-    await p.head8.dispense8(wells=dst_plate.column(0), volume=20)
-    await p.head8.drop_tips8(spots)
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(wells=src_plate.column(0), volume=20)
+    await p.head8.dispense(wells=dst_plate.column(0), volume=20)
+    await p.head8.drop_tips(spots)
 
     await p.stop()
 
@@ -177,23 +178,23 @@ def test_head8_full_flow():
 
 
 def test_head8_tip_trackers_pick_and_drop():
-  """8 TipTrackers stay in sync across pick_up_tips8 / drop_tips8 with tip tracking on."""
+  """8 TipTrackers stay in sync across pick_up_tips / drop_tips with tip tracking on."""
   from pylabrobot.resources.tip_tracker import set_tip_tracking
 
   async def _run() -> None:
     set_tip_tracking(True)
     try:
       deck, tip_rack, _, _ = _make_deck()
-      p = Prep(deck=deck, chatterbox=True)
+      p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
       await p.setup()
       assert p.head8 is not None
       spots = tip_rack.column(0)
       assert all(s.has_tip() for s in spots)
-      await p.head8.pick_up_tips8(spots)
+      await p.head8.pick_up_tips(spots)
       assert all(not s.has_tip() for s in spots)
       assert all(p.head8.head[i].has_tip for i in range(8))
       assert all(t is not None for t in p.head8.get_mounted_tips())
-      await p.head8.drop_tips8(spots)
+      await p.head8.drop_tips(spots)
       assert all(s.has_tip() for s in spots)
       assert all(not p.head8.head[i].has_tip for i in range(8))
       await p.stop()
@@ -229,11 +230,11 @@ def test_build_pipettor_gantry_move_parameters_maps_rear_front():
 
 
 def test_head8_move_to_position_sends_mph_wire_commands():
-  """PrepHead8.move_to_position sends MphMoveToPosition / ViaLane."""
+  """Head8.move_to_position sends MphMoveToPosition / ViaLane."""
 
   async def _run() -> None:
     deck, _, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
@@ -261,13 +262,13 @@ def test_pick_up_tips_default_pre_position_sends_mph_move_then_pickup():
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
-    await p.head8.pick_up_tips8(tip_rack.column(0))
+    await p.head8.pick_up_tips(tip_rack.column(0))
 
     mph_seq = [
       c for c in captured if isinstance(c, (PrepCmd.MphMoveToPosition, PrepCmd.MphPickupTips))
@@ -286,13 +287,13 @@ def test_pick_up_tips_pre_position_false_skips_mph_move():
 
   async def _run() -> None:
     deck, tip_rack, _, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
-    await p.head8.pick_up_tips8(tip_rack.column(1), pre_position=False)
+    await p.head8.pick_up_tips(tip_rack.column(1), pre_position=False)
 
     mph_moves = [c for c in captured if isinstance(c, PrepCmd.MphMoveToPosition)]
     pickups = [c for c in captured if isinstance(c, PrepCmd.MphPickupTips)]
@@ -305,19 +306,19 @@ def test_pick_up_tips_pre_position_false_skips_mph_move():
 
 
 def test_head8_partial_channel_aspirate_raises_value_error():
-  """PrepHead8 rejects aspirate8 with fewer than all 8 channels."""
+  """Head8 rejects aspirate with fewer than all 8 channels."""
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
+    await p.head8.pick_up_tips(spots)
 
     with pytest.raises(ValueError, match="fully-ganged head"):
-      await p.head8.aspirate8(
+      await p.head8.aspirate(
         wells=src_plate.column(0)[:4],
         volume=10,
         use_channels=(0, 1, 2, 3),
@@ -334,19 +335,19 @@ def test_head8_partial_channel_aspirate_raises_value_error():
 
 
 def test_head8_v2_aspirate_sends_mphaspiratenolldmonitoring2():
-  """Chatterbox default (use_v1=False) → V2 command class is sent."""
+  """Simulator default (use_v1=False) → V2 command class is sent."""
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(wells=src_plate.column(0), volume=10)
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(wells=src_plate.column(0), volume=10)
 
     asp_cmds = [c for c in captured if isinstance(c, PrepCmd.MphAspirateNoLldMonitoring2)]
     v1_cmds = [
@@ -367,20 +368,20 @@ def test_head8_v2_aspirate_sends_mphaspiratenolldmonitoring2():
 
 
 def test_head8_v2_dispense_sends_mphdispensetnolld2():
-  """Chatterbox default (use_v1=False) → V2 dispense command class is sent."""
+  """Simulator default (use_v1=False) → V2 dispense command class is sent."""
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(wells=src_plate.column(0), volume=10)
-    await p.head8.dispense8(wells=dst_plate.column(0), volume=10)
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(wells=src_plate.column(0), volume=10)
+    await p.head8.dispense(wells=dst_plate.column(0), volume=10)
 
     disp_cmds = [c for c in captured if isinstance(c, PrepCmd.MphDispenseNoLld2)]
     v1_cmds = [
@@ -401,16 +402,16 @@ def test_head8_v1_fallback_when_use_v1_flag_set():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup(use_v1_aspirate_dispense=True)
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(wells=src_plate.column(0), volume=10)
-    await p.head8.dispense8(wells=dst_plate.column(0), volume=10)
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(wells=src_plate.column(0), volume=10)
+    await p.head8.dispense(wells=dst_plate.column(0), volume=10)
 
     v2_asp = [c for c in captured if isinstance(c, PrepCmd.MphAspirateNoLldMonitoring2)]
     v2_disp = [c for c in captured if isinstance(c, PrepCmd.MphDispenseNoLld2)]
@@ -446,15 +447,15 @@ def test_head8_aspirate_tadm_sends_mphaspirate_tadm2():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(
       wells=src_plate.column(0),
       volume=10,
       tadm=PrepCmd.TadmParameters.default(),
@@ -475,18 +476,18 @@ def test_head8_aspirate_clld_sends_mphaspirate_with_lld2():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(
       wells=src_plate.column(0),
       volume=10,
-      lld_mode=LLDMode.CAPACITIVE,
+      lld_mode=Pipettes.LLDMode.CAPACITIVE,
     )
 
     lld_cmds = [c for c in captured if isinstance(c, PrepCmd.MphAspirateWithLld2)]
@@ -502,18 +503,18 @@ def test_head8_aspirate_lld_and_tadm_sends_mphaspirate_with_lld_tadm2():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, _ = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(
       wells=src_plate.column(0),
       volume=10,
-      lld_mode=LLDMode.CAPACITIVE,
+      lld_mode=Pipettes.LLDMode.CAPACITIVE,
       tadm=PrepCmd.TadmParameters.default(),
     )
 
@@ -530,19 +531,19 @@ def test_head8_dispense_lld_pressure_raises():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(wells=src_plate.column(0), volume=10)
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(wells=src_plate.column(0), volume=10)
 
     with pytest.raises(ValueError, match="PRESSURE"):
-      await p.head8.dispense8(
+      await p.head8.dispense(
         wells=dst_plate.column(0),
         volume=10,
-        lld_mode=LLDMode.PRESSURE,
+        lld_mode=Pipettes.LLDMode.PRESSURE,
       )
 
     await p.stop()
@@ -555,20 +556,20 @@ def test_head8_command_version_override_v1():
 
   async def _run() -> None:
     deck, tip_rack, src_plate, dst_plate = _make_deck()
-    p = Prep(deck=deck, chatterbox=True)
+    p = PrepSimulationDriver(deck=deck, declared_configuration_json=RECORDING_PREP_HEAD8)
     await p.setup()
     assert p.head8 is not None
 
     captured, _ = _record_send(p)
 
     spots = tip_rack.column(0)
-    await p.head8.pick_up_tips8(spots)
-    await p.head8.aspirate8(
+    await p.head8.pick_up_tips(spots)
+    await p.head8.aspirate(
       wells=src_plate.column(0),
       volume=10,
       command_version="v1",
     )
-    await p.head8.dispense8(
+    await p.head8.dispense(
       wells=dst_plate.column(0),
       volume=10,
       command_version="v1",
