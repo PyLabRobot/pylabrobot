@@ -29,6 +29,8 @@ class iSWAPHead(Resource):
     reference_point: Coordinate,
     category: str = "iswap_head",
     model: Optional[str] = None,
+    rotation_drive_angle: Optional[float] = None,
+    wrist_drive_angle: Optional[float] = None,
   ):
     """
     Args:
@@ -39,13 +41,15 @@ class iSWAPHead(Resource):
       reference_point: the point the drives report, from the left front bottom corner.
       category: what kind of resource this is.
       model: which drive this is.
+      rotation_drive_angle: the rotation drive's angle as last read, as `serialize` writes it.
+      wrist_drive_angle: the wrist drive's angle as last read, as `serialize` writes it.
     """
     super().__init__(
       name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category, model=model
     )
     self.reference_point = reference_point
-    self.rotation_drive_angle: Optional[float] = None
-    self.wrist_drive_angle: Optional[float] = None
+    self.rotation_drive_angle: Optional[float] = rotation_drive_angle
+    self.wrist_drive_angle: Optional[float] = wrist_drive_angle
     """Which way the rotation drive reports the arm points, in degrees, or None until it is read.
 
     Kept in the drive's own terms, as it reports them. `rotation` carries the same fact rendered

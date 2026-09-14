@@ -9,6 +9,7 @@ from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.resources.resource import Resource
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 
@@ -171,6 +172,22 @@ class TestRotationWithoutADeck(unittest.IsolatedAsyncioTestCase):
       await iswap.rotate_to_angles(rotation_absolute_angle="front", raise_features=False)
 
     self.assertEqual(moves(sent), [])
+
+
+class TestTheModelIsSavedWhole(unittest.IsolatedAsyncioTestCase):
+  """A deck carrying the iSWAP is read back with the arm as it was: its parts and the angles its
+  drives last reported from `serialize`, and the gripper's jaw width from the state."""
+
+  async def test_a_deck_carrying_the_iswap_deserializes(self):
+    iswap, _ = await gripper()
+    deck = iswap._driver.deck
+    head = iswap.resource
+    assert deck is not None and head is not None
+
+    loaded = Resource.deserialize(deck.serialize())
+    loaded.load_all_state(deck.serialize_all_state())
+
+    self.assertEqual(loaded.get_resource(head.name).serialize(), head.serialize())
 
 
 class TestPosesAgainstTheRail(unittest.IsolatedAsyncioTestCase):
