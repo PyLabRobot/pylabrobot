@@ -220,17 +220,16 @@
         "supports_clot_monitoring_clld": false,
         "head_type": "High volume head",
         "tip_discard_location": null,
-        "z_range": null,
         "z_drive_mm_per_increment": 0.005,
         "y_drive_mm_per_increment": 0.015625,
         "y_drive_acceleration_mm_per_increment": 15.625,
         "z_drive_acceleration_mm_per_increment": 5.0,
         "dispensing_drive_mm_per_increment": 0.00063333,
-        "z_speed_increment_range": [
+        "z_speed_range_increments": [
           50,
           20000
         ],
-        "z_acceleration_increment_range": [
+        "z_acceleration_range_increments": [
           5,
           100
         ],
@@ -260,7 +259,6 @@
           "predefined_8": 32000,
           "predefined_9": 32000
         },
-        "z_drive_safety_position": 336.0,
         "traversal_z_position": 245.0,
         "y_drive_current_limit_default": 4,
         "z_drive_current_limit_default": 7,
@@ -268,28 +266,28 @@
           0,
           7
         ],
-        "y_speed_increment_default": 20000,
-        "y_acceleration_increment_default": 32,
-        "z_speed_increment_default": 17000,
-        "z_acceleration_increment_default": 80,
+        "y_speed_default_increments": 20000,
+        "y_acceleration_default_increments": 32,
+        "z_speed_default_increments": 17000,
+        "z_acceleration_default_increments": 80,
         "y_drive_speed_firmware_reported": null,
         "y_drive_acceleration_firmware_reported": null,
         "z_drive_speed_firmware_reported": null,
         "z_drive_acceleration_firmware_reported": null,
         "supports_lld_absolute_threshold_check": false,
-        "y_increment_range": [
+        "y_range_increments": [
           7100,
           36100
         ],
-        "y_speed_increment_range": [
+        "y_speed_range_increments": [
           50,
           20000
         ],
-        "y_acceleration_increment_range": [
+        "y_acceleration_range_increments": [
           5,
           32
         ],
-        "z_increment_range": [
+        "z_range_increments": [
           33200,
           67200
         ]

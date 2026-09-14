@@ -225,17 +225,16 @@
         "supports_clot_monitoring_clld": false,
         "head_type": "96 head II",
         "tip_discard_location": null,
-        "z_range": null,
         "z_drive_mm_per_increment": 0.005,
         "y_drive_mm_per_increment": 0.015625,
         "y_drive_acceleration_mm_per_increment": 0.015625,
         "z_drive_acceleration_mm_per_increment": 0.005,
         "dispensing_drive_mm_per_increment": 0.001025641026,
-        "z_speed_increment_range": [
+        "z_speed_range_increments": [
           50,
           20000
         ],
-        "z_acceleration_increment_range": [
+        "z_acceleration_range_increments": [
           5000,
           100000
         ],
@@ -272,10 +271,10 @@
           0,
           15
         ],
-        "y_speed_increment_default": 25000,
-        "y_acceleration_increment_default": 35000,
-        "z_speed_increment_default": 17000,
-        "z_acceleration_increment_default": 80000,
+        "y_speed_default_increments": 25000,
+        "y_acceleration_default_increments": 35000,
+        "z_speed_default_increments": 17000,
+        "z_acceleration_default_increments": 80000,
         "y_drive_speed_firmware_reported": null,
         "y_drive_acceleration_firmware_reported": null,
         "z_drive_speed_firmware_reported": null,
@@ -296,15 +295,7 @@
         "tip_engage_correction_other": -2.0,
         "tip_drop_clearance": 1.45,
         "dispensing_drive_position_before_rack_pickup": 218.19,
-        "y_increment_floor": 6528,
-        "z_increment_range_legacy": [
-          36100,
-          68500
-        ],
-        "z_increment_range_fm_star": [
-          24200,
-          76200
-        ]
+        "y_increment_floor": 6528
       },
       "iswap": {
         "firmware_version": "4.1S 2011-12-19",

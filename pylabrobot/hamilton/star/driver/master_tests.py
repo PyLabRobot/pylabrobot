@@ -144,6 +144,25 @@ class TestSimulation(unittest.IsolatedAsyncioTestCase):
       STARSimulationDriver()
 
 
+class TestRecordings(unittest.TestCase):
+  """What ships under recordings/ is read back whole: no key a head's configuration no longer has,
+  and no window left empty for a head to be built on."""
+
+  def test_every_head_key_is_a_field_and_its_z_range_is_set(self):
+    for path in sorted(pathlib.Path(RECORDING_STAR).parent.glob("*.json")):
+      saved = json.loads(path.read_text(encoding="utf-8"))
+      read = read_configuration(str(path))
+      for side, carried in saved.get("arms", {}).items():
+        for name in ("head96", "head384"):
+          if name not in carried:
+            continue
+          configuration = read["arms"][side][name]
+          with self.subTest(recording=path.name, head=name):
+            fields = {field.name for field in dataclasses.fields(configuration)}
+            self.assertEqual(set(carried[name]) - fields, set())
+            self.assertIsNotNone(configuration.z_range)
+
+
 class TestRepeatedSetup(unittest.IsolatedAsyncioTestCase):
   """Setup is repeatable: a second one re-reads the device over the link the first one opened."""
 
