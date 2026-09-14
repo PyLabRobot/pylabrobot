@@ -162,6 +162,24 @@ class TestPrepTransport(_SessionTest):
     self.assertIn("write: PrepPark(", lines[2])
     self.assertIn("read: error: 0x0F08", lines[3])
 
+  async def test_prep_session_logs_probe_answers_as_values(self):
+    """A probe by ids decodes nothing itself: its answer is logged as values, structures opened, not as bytes."""
+    driver = PrepDriver(deck=PrepDeck(), host="memory-only", port=0)
+    address = Address(1, 1, 257)
+    io = self.start_session(driver, address, session_type=_PrepTCPSession)
+    self.addAsyncCleanup(driver.io.stop)
+    inner = HoiParams().add(1.5, F32).build()
+    params = HoiParams().add(180.0, F32).build() + bytes([30, 0, len(inner), 0]) + inner
+
+    async def respond(request: HarpPacket) -> None:
+      io.feed(_response(sequence=request.seq, action=Hoi2Action.STATUS_RESPONSE, params=params))
+
+    io.on_write = respond
+    with self.assertLogs("pylabrobot.hamilton.prep.driver.master", level=logging.DEBUG) as logs:
+      await driver.send_command(C.PrepProbeRequest(dest=address, command_id=5, interface_id=1))
+    lines = [record.getMessage() for record in logs.records]
+    self.assertIn("read: [180.0, [1.5]]", lines[1])
+
   async def test_reusable_request_rebinds_after_reconnection(self):
     client, io = self.make_driver()
     command = C.PrepGetDefaultTraverseHeight()

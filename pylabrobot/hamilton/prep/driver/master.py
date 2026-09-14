@@ -23,7 +23,7 @@ from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
-from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
+from pylabrobot.hamilton.transport.tcp.wire_types import HamiltonDataType, HcResultEntry
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
@@ -71,6 +71,18 @@ ResultT = TypeVar("ResultT")
 def _range(values: Optional[Tuple[float, float]]) -> str:
   """A `(low, high)` range in mm, or a note that it was not resolved."""
   return "unresolved" if values is None else f"{values[0]:.2f} to {values[1]:.2f} mm"
+
+
+def _fragment_values(data: bytes) -> List[Any]:
+  """Each value in an HOI payload, with structures opened into their own values."""
+  values: List[Any] = []
+  for type_id, value in HoiParamsParser(data).parse_all():
+    if type_id == HamiltonDataType.STRUCTURE:
+      value = _fragment_values(value)
+    elif type_id == HamiltonDataType.STRUCTURE_ARRAY:
+      value = [_fragment_values(v) for v in value]
+    values.append(value)
+  return values
 
 
 class _PrepTCPClient(HamiltonTCPClient):
@@ -198,7 +210,9 @@ class _PrepTCPSession(TCPSession):
       return "error: " + ("; ".join(described) or params.hex())
     try:
       payload, _ = command._strip_warning_prefix(response)
-      return repr(request.parse_response_parameters(payload))
+      decoded = request.parse_response_parameters(payload)
+      # A request that does not decode its answer (a probe by ids) hands back the payload: show its values.
+      return repr(_fragment_values(decoded) if isinstance(decoded, bytes) else decoded)
     except Exception:
       return params.hex()
 
