@@ -98,6 +98,9 @@ class AutoloadConfiguration:
   - Z drive (carrier handling wheel), which raises and retracts the handling wheel.
   """
 
+  module: str = "I0"
+  """What the autoload is on the bus."""
+
   firmware_version: Optional[str] = None
   firmware_date: Optional[datetime.date] = None
   autoload_type: Optional[str] = None  # see AUTOLOAD_TYPES

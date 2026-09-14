@@ -7,6 +7,7 @@ import unittest
 import unittest.mock
 from typing import List, cast
 
+import pylabrobot.hamilton.star.driver.master as master
 import pylabrobot.hamilton.star.driver.simulator as simulator
 from pylabrobot.hamilton.star.conftest import BARE_X_ARM
 from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STAR_HEAD384
@@ -143,6 +144,17 @@ class TestSimulation(unittest.IsolatedAsyncioTestCase):
       STARSimulationDriver()
 
 
+class TestRepeatedSetup(unittest.IsolatedAsyncioTestCase):
+  """Setup is repeatable: a second one re-reads the device over the link the first one opened."""
+
+  async def test_a_second_setup_does_not_open_the_link_again(self):
+    star = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    with unittest.mock.patch.object(star, "_open", wraps=star._open) as opened:
+      await star.setup()
+      await star.setup()
+    self.assertEqual(opened.call_count, 1)
+
+
 # What each initialization step is called in the sequences below, and where it is defined. The simulated
 # classes override some of them, so each is recorded where a simulated run would reach it.
 MOVING_STEPS = [
@@ -241,6 +253,24 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "II autoload",
         "autoload park",
       ],
+    )
+
+  async def warnings_after_setup(self, head_up: bool, eject_position: bool) -> List[str]:
+    with unittest.mock.patch.object(master.logger, "warning") as warning:
+      await self.run_setup(device_up=True, head_up=head_up, eject_position=eject_position)
+    return [call.args[0] % call.args[1:] for call in warning.call_args_list]
+
+  async def test_a_feature_left_down_is_named_once_setup_has_run(self):
+    warnings = await self.warnings_after_setup(head_up=False, eject_position=False)
+    self.assertTrue(
+      any("setup finished with these not initialized" in w and "Head96" in w for w in warnings),
+      warnings,
+    )
+
+  async def test_nothing_is_named_when_everything_came_up(self):
+    warnings = await self.warnings_after_setup(head_up=True, eject_position=True)
+    self.assertFalse(
+      any("setup finished with these not initialized" in w for w in warnings), warnings
     )
 
   async def test_device_not_up(self):

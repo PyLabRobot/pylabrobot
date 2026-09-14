@@ -153,6 +153,9 @@ class iSWAPConfiguration:
   Neither changes at runtime.
   """
 
+  module: str = "R0"
+  """What the iSWAP is on the bus."""
+
   firmware_version: Optional[str] = None
   firmware_date: Optional[datetime.date] = None
 

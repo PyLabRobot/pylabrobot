@@ -9,7 +9,7 @@ import dataclasses
 import datetime
 import json
 import logging
-from typing import Any, Dict, FrozenSet, List, Literal, Optional, Tuple, cast, overload
+from typing import Any, Dict, FrozenSet, List, Literal, Optional, Tuple, Union, cast, overload
 
 from pylabrobot.events import emit_event
 from pylabrobot.hamilton.protocol.text.framing import (
@@ -218,8 +218,11 @@ class STARDriver:
       if skip
     )
     logger.debug("Setting up STAR on %s ...", self._describe_link())
-    await self._open()
-    self._connected = True
+    # A repeated setup goes over the link the first one opened: opening it again would start a
+    # second thread reading the same replies.
+    if not self._connected:
+      await self._open()
+      self._connected = True
 
     try:
       # 1. What is on the other end, and what does it carry?
@@ -250,6 +253,19 @@ class STARDriver:
       if autoload is not None:
         initializing.append(autoload.initialize())
       await asyncio.gather(*initializing)
+
+      # A command that answered is not a module that came up, so each is asked again. The channels
+      # report no initialization of their own.
+      down = [
+        type(feature).__name__
+        for feature in self.features
+        if not isinstance(feature, Pipettes)
+        and not await self.request_initialization_status(feature.configuration.module)
+      ]
+      if not await self.request_initialization_status():
+        down.insert(0, "device")
+      if down:
+        logger.warning("setup finished with these not initialized: %s", ", ".join(down))
 
       # 4. What was found, as resources on the deck - when the driver was given one to reflect
       #    into. Each is a child of the deck, so a device with a deck carries one tree.
@@ -655,6 +671,19 @@ class STARDriver:
   def arms(self) -> List[XArm]:
     """The arms this device has, left first."""
     return [arm for arm in (self.left_x_arm, self.right_x_arm) if arm is not None]
+
+  @property
+  def features(self) -> List[Union[Pipettes, Head96, Head384, iSWAP, Autoload]]:
+    """Every feature this device is fitted with: each arm's channels, heads and iSWAP, then the
+    autoload."""
+    features: List[Union[Pipettes, Head96, Head384, iSWAP, Autoload]] = []
+    for arm in self.arms:
+      for feature in (arm.pipettes, arm.head96, arm.head384, arm.iswap):
+        if feature is not None:
+          features.append(feature)
+    if self.autoload is not None:
+      features.append(self.autoload)
+    return features
 
   def _require_one_arm(self, reaching_for: str) -> Optional[XArm]:
     """Check to enable simple accessors which are only unambiguous when there is only one Xarm.
