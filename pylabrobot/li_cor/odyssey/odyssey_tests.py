@@ -1,7 +1,9 @@
 """Odyssey wire-protocol and lifecycle tests; no real instrument is contacted."""
 
+import asyncio
 import io
 import json
+import struct
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs
@@ -180,6 +182,46 @@ class OdysseyProtocolTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(OdysseyScanError):
       await self.device.wait_until_done()
 
+  async def test_scan_waits_past_stale_idle_for_fresh_acquisition(self):
+    await self.configure()
+    self.io.request_raw.reset_mock()
+    self.io.request_raw.side_effect = [self.response("")] + [
+      self.response(f"Scanner Status: {state}") for state in ("Idle", "Idle", "Scanning", "Idle")
+    ]
+    states = []
+    result = await self.device.scan(
+      poll_interval=0.001, on_progress=lambda reading: states.append(reading.state)
+    )
+    self.assertEqual(result.state, "Idle")
+    self.assertEqual(states, ["Idle", "Idle", "Scanning", "Idle"])
+
+  async def test_wait_deadline_cancels_slow_status_request(self):
+    cancelled = asyncio.Event()
+
+    async def delayed_response(*args, **kwargs):
+      try:
+        await asyncio.sleep(1)
+        return self.response("Scanner Status: Idle")
+      except asyncio.CancelledError:
+        cancelled.set()
+        raise
+
+    self.io.request_raw.side_effect = delayed_response
+    with self.assertRaises(TimeoutError):
+      await self.device.wait_until_done(timeout=0.01, require_fresh=False)
+    self.assertTrue(cancelled.is_set())
+
+  async def test_wait_rejects_terminal_response_delivered_after_deadline(self):
+    async def delayed_response(*args, **kwargs):
+      try:
+        await asyncio.sleep(1)
+      except asyncio.CancelledError:
+        return self.response("Scanner Status: Idle")
+
+    self.io.request_raw.side_effect = delayed_response
+    with self.assertRaises(TimeoutError):
+      await self.device.wait_until_done(timeout=0.01, require_fresh=False)
+
   async def test_download_encodes_xml_and_preserves_channel_files(self):
     raw = _tiff()
     self.io.request_raw.return_value = HTTPResponse(200, raw, {"content-length": str(len(raw))})
@@ -306,3 +348,50 @@ class TaggingTests(unittest.TestCase):
       self.assertEqual(image.tobytes(), original.tobytes())
       self.assertEqual(json.loads(image.tag_v2[270]), {"pid": "unit", "channel": 700})
       self.assertEqual(image.tag_v2[305], "PyLabRobot Odyssey")
+
+  @unittest.skipIf(Image is None, "Pillow is not installed")
+  def test_tiff_tagging_preserves_all_pages_tags_and_compressed_image_bytes(self):
+    with Image.new("I;16", (3, 2), 42) as first, Image.new("I;16", (3, 2), 999) as second:
+      buffer = io.BytesIO()
+      first.save(
+        buffer,
+        format="TIFF",
+        save_all=True,
+        append_images=[second],
+        compression="tiff_deflate",
+        tiffinfo={65000: "vendor metadata", 270: "old description"},
+      )
+    raw = buffer.getvalue()
+    tagged = tag_tiff_with_identity(raw, {"pid": "instrument"}, channel=800)
+    self.assertEqual(tagged[8 : len(raw)], raw[8:])
+    with Image.open(io.BytesIO(raw)) as original, Image.open(io.BytesIO(tagged)) as result:
+      self.assertEqual(result.n_frames, 2)
+      for index in range(original.n_frames):
+        original.seek(index)
+        result.seek(index)
+        self.assertEqual(result.tobytes(), original.tobytes())
+        for tag, value in original.tag_v2.items():
+          if tag not in (270, 305):
+            self.assertEqual(result.tag_v2[tag], value)
+        self.assertEqual(json.loads(result.tag_v2[270]), {"pid": "instrument", "channel": 800})
+
+  @unittest.skipIf(Image is None, "Pillow is not installed")
+  def test_big_endian_tiff_and_short_software_tag_are_preserved(self):
+    with Image.new("I;16B", (2, 1), 513) as image:
+      buffer = io.BytesIO()
+      image.save(buffer, format="TIFF", tiffinfo={65000: "custom"})
+    raw = buffer.getvalue()
+    self.assertEqual(raw[:4], b"MM\x00*")
+    tagged = tag_tiff_with_identity(raw, {"name": "instrument"}, software_tag="PLR")
+    with Image.open(io.BytesIO(raw)) as original, Image.open(io.BytesIO(tagged)) as result:
+      self.assertEqual(result.tobytes(), original.tobytes())
+      self.assertEqual(result.tag_v2[65000], "custom")
+      self.assertEqual(result.tag_v2[305], "PLR")
+
+  def test_bigtiff_and_malformed_directories_return_original_bytes(self):
+    cyclic = bytearray(_tiff())
+    count = struct.unpack_from("<H", cyclic, 8)[0]
+    struct.pack_into("<I", cyclic, 8 + 2 + count * 12, 8)
+    for raw in (b"II+\x00\x08\x00\x00\x00", b"II*\x00", _tiff()[:20], bytes(cyclic)):
+      with self.subTest(raw=raw):
+        self.assertEqual(tag_tiff_with_identity(raw, {"pid": "instrument"}), raw)

@@ -494,7 +494,15 @@ class OdysseyClassic:
     deadline = loop.time() + timeout
     require_transition = require_fresh
     while True:
-      reading = await self.request_status()
+      remaining = deadline - loop.time()
+      if remaining <= 0:
+        raise TimeoutError(f"Scan did not complete within {timeout:g} s")
+      try:
+        reading = await asyncio.wait_for(self.request_status(), timeout=remaining)
+      except asyncio.TimeoutError as error:
+        raise TimeoutError(f"Scan did not complete within {timeout:g} s") from error
+      if loop.time() >= deadline:
+        raise TimeoutError(f"Scan did not complete within {timeout:g} s")
       if on_progress is not None:
         on_progress(reading)
       if reading.state == "Failed":
@@ -520,7 +528,7 @@ class OdysseyClassic:
     """Start the configured scan and wait for completion. Download its images separately."""
     await self.start_scan()
     return await self.wait_until_done(
-      timeout=timeout, poll_interval=poll_interval, on_progress=on_progress, require_fresh=False
+      timeout=timeout, poll_interval=poll_interval, on_progress=on_progress, require_fresh=True
     )
 
   async def stop_and_save(self, timeout: float = 15, poll_interval: float = 1) -> StopResult:
