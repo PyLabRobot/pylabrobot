@@ -72,12 +72,12 @@ def test_moves_update_the_model_and_reads_answer_from_it():
     p = PrepSimulationDriver(deck=PrepDeck())
     await p.setup()
     assert p.pipettes is not None and p.x_arm is not None
-    await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 160.0), use_channels=0)
+    await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), use_channels=0)
     point = p.pipettes.get_reference_point_location(0)
     assert point is not None
-    assert (point.x, point.y, point.z) == pytest.approx((150.0, 200.0, 160.0))
+    assert (point.x, point.y, point.z) == pytest.approx((150.0, 360.0, 160.0))
     locations = await p.pipettes.request_locations()
-    assert (locations[0].x, locations[0].y, locations[0].z) == pytest.approx((150.0, 200.0, 160.0))
+    assert (locations[0].x, locations[0].y, locations[0].z) == pytest.approx((150.0, 360.0, 160.0))
     assert await p.x_arm.request_position() == pytest.approx(150.0)
     await p.stop()
 

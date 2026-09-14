@@ -183,6 +183,35 @@ def test_move_to_location_refuses_what_the_channel_bounds_exclude():
   _run(_t())
 
 
+def test_move_to_y_positions_moves_each_named_channel_in_one_command():
+  """Each channel goes to its own Y in a single move, keeping its X and Z."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    before = await p.pipettes.request_locations()
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_y_positions({1: 75.0, 0: 100.0})
+    assert sent.count("PrepMoveToPosition") == 1
+    after = await p.pipettes.request_locations()
+    assert (after[0].y, after[0].z) == (100.0, before[0].z)
+    assert (after[1].y, after[1].z) == (75.0, before[1].z)
+    assert after[0].x == after[1].x == before[0].x
+    with pytest.raises(ValueError, match="out of range"):
+      await p.pipettes.move_to_y_positions({2: 50.0})
+    await p.stop()
+
+  _run(_t())
+
+
 def test_move_tool_bottom_to_z_positions_moves_each_named_channel_in_one_command():
   """Each channel goes to its own Z in a single move, keeping its X and Y."""
 
@@ -246,22 +275,24 @@ def test_move_to_location_sets_speed_scales_for_the_move_and_puts_them_back():
 
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.move_to_location(
-      Coordinate(150.0, 200.0, 160.0), use_channels=0, x_speed_scale=25, z_speed_scale=50
+      Coordinate(150.0, 360.0, 160.0), use_channels=0, x_speed_scale=25, z_speed_scale=50
     )
     names = [type(c).__name__ for c in sent]
     move = names.index("PrepMoveToPosition")
+    # The front channel's position is read first, to check the rear channel keeps its spacing from it.
     assert names[:move] == [
+      "PrepGetPositions",
       "PrepGetXSpeedScale",
       "PrepSetXSpeedScale",
       "PrepGetZSpeedScale",
       "PrepSetZSpeedScale",
     ]
-    assert (sent[1].value, sent[3].value) == (25, 50)
+    assert (sent[2].value, sent[4].value) == (25, 50)
     assert names[move + 1 : move + 3] == ["PrepSetXSpeedScale", "PrepSetZSpeedScale"]
     assert (sent[move + 1].value, sent[move + 2].value) == (100, 100)
 
     with pytest.raises(ValueError, match="between 1 and 100"):
-      await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 160.0), x_speed_scale=0)
+      await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), x_speed_scale=0)
     await p.stop()
 
   _run(_t())
@@ -282,15 +313,15 @@ def test_move_to_location_x_speed_is_set_as_the_nearest_scale():
       return await execute(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 160.0), x_speed=150.0)
+    await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), x_speed=150.0)
     scales = [c.value for c in sent if type(c).__name__ == "PrepSetXSpeedScale"]
     assert scales == [25, 100]
     with pytest.raises(ValueError, match="not both"):
       await p.pipettes.move_to_location(
-        Coordinate(150.0, 200.0, 160.0), x_speed=150.0, x_speed_scale=25
+        Coordinate(150.0, 360.0, 160.0), x_speed=150.0, x_speed_scale=25
       )
     with pytest.raises(ValueError, match="between 6.0 and 400.0 mm/s"):
-      await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 160.0), x_speed=500.0)
+      await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0), x_speed=500.0)
     await p.stop()
 
   _run(_t())
@@ -311,9 +342,9 @@ def test_move_to_location_uses_default_x_speed_when_none_is_given():
       return await execute(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
-    await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 160.0))
+    await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0))
     p.pipettes.default_x_speed = 60.0
-    await p.pipettes.move_to_location(Coordinate(150.0, 200.0, 160.0))
+    await p.pipettes.move_to_location(Coordinate(150.0, 360.0, 160.0))
     scales = [c.value for c in sent if type(c).__name__ == "PrepSetXSpeedScale"]
     assert scales == [53, 100, 10, 100]
     await p.stop()
@@ -501,6 +532,155 @@ def test_probe_z_using_clld_defaults_lowest_z_to_the_bottom_of_the_channel_z_ran
     p.pipettes.configuration.channels[1].z_range = None
     with pytest.raises(RuntimeError, match="Z range has not been read"):
       await p.pipettes.probe_z_using_clld(1, start_pos_search=160.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_channel_order_comes_from_the_device():
+  """Channels are ordered back to front by how far back they reach; the legacy order is the fallback."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    rear, front = int(PrepCmd.ChannelIndex.RearChannel), int(PrepCmd.ChannelIndex.FrontChannel)
+    assert p.pipettes.channel_order == (rear, front)
+    assert p.pipettes.channel_of(front) == 1
+    assert p.pipettes.channel_of(int(PrepCmd.ChannelIndex.MPHChannel)) is None
+    await p.stop()
+
+  _run(_t())
+
+  def bounds(channel, y_max):
+    return PrepCmd.ChannelBoundsParameters(channel, 0.0, 300.0, y_max - 385.0, y_max, 18.0, 167.5)
+
+  present = [
+    PrepCmd.ChannelIndex.FrontChannel,
+    PrepCmd.ChannelIndex.RearChannel,
+    PrepCmd.ChannelIndex.MPHChannel,
+  ]
+  order = Pipettes._order_channels(present, [bounds(1, 376.0), bounds(2, 385.0)])
+  assert order == (2, 1)
+  assert Pipettes._order_channels(None, []) == (2, 1)
+  assert Pipettes._order_channels([PrepCmd.ChannelIndex.FrontChannel], []) == (1,)
+
+
+def test_minimum_y_spacing_comes_from_the_channel_windows():
+  """The offset between neighbouring channels' Y windows is the spacing kept between them."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    assert p.pipettes._min_spacing_between(0, 1) == 9.0
+    p.pipettes.configuration.channels[0].y_range = (0.0, 380.0)
+    with pytest.raises(RuntimeError, match="spacing is unknown"):
+      p.pipettes._min_spacing_between(0, 1)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_moves_refuse_channels_too_close_or_out_of_order():
+  """Neither move sends anything that puts neighbouring channels closer than their spacing, or swaps them."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    with pytest.raises(ValueError, match="at least 9.0mm apart"):
+      await p.pipettes.move_to_y_positions({0: 100.0, 1: 95.0})
+    with pytest.raises(ValueError, match="at least 9.0mm apart"):
+      await p.pipettes.move_to_y_positions({0: 100.0, 1: 120.0})
+    here = await p.pipettes.request_locations()
+    with pytest.raises(ValueError, match="at least 9.0mm apart"):
+      # The front channel sent to 5 mm in front of the rear one, which stays where it is.
+      await p.pipettes.move_to_location(
+        Coordinate(here[1].x, here[0].y - 5.0, here[1].z), use_channels=1
+      )
+    assert "PrepMoveToPosition" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_move_to_y_positions_make_space_moves_the_channel_not_named():
+  """With make_space, a channel in the way is pushed just far enough, in the same single move."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    before = await p.pipettes.request_locations()
+    target = before[0].y - 5.0
+    with pytest.raises(ValueError, match="at least 9.0mm apart"):
+      await p.pipettes.move_to_y_positions({1: target})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_y_positions({1: target}, make_space=True)
+    assert sent.count("PrepMoveToPosition") == 1
+    after = await p.pipettes.request_locations()
+    assert after[1].y == pytest.approx(target)
+    assert after[0].y == pytest.approx(target + 9.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_a_channel_without_reported_bounds_keeps_the_default_y_window():
+  """Setup replaces each channel's default Y window with the one its device reports, and keeps the default
+  where the device reports none."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    assert p.simulated_pipettes is not None
+    p.simulated_pipettes.channels[
+      0
+    ].y_range = None  # the simulated device reports no bounds for the rear channel
+    p.simulated_pipettes.channels[1].y_range = (-8.0, 375.0)
+    await p.setup()
+    assert p.pipettes is not None
+    c = p.pipettes.configuration
+    assert c.channels[0].y_range == c.default_y_ranges[0] == (0.0, 385.0)
+    assert c.channels[1].y_range == (-8.0, 375.0)
+    await p.stop()
+
+  _run(_t())
+
+  fresh = Pipettes.__init__.__globals__["PipettesConfiguration"]()
+  fresh.resolve_channels(2)
+  assert [ch.y_range for ch in fresh.channels] == [(0.0, 385.0), (-9.0, 376.0)]
+
+
+def test_default_y_windows_are_not_applied_on_a_device_with_an_8_channel_head():
+  """The 8-channel head rides the channels' Y rail, so a channel it reports no bounds for gets no default window."""
+  from pylabrobot.hamilton.prep.driver.simulator import RECORDING_PREP_HEAD8
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck(), declared_configuration_json=RECORDING_PREP_HEAD8)
+    assert p.simulated_pipettes is not None
+    p.simulated_pipettes.channels[
+      0
+    ].y_range = None  # the simulated device reports no bounds for the rear channel
+    await p.setup()
+    assert p.pipettes is not None and p.head8 is not None
+    assert p.pipettes.configuration.channels[0].y_range is None
+    assert p.pipettes.configuration.channels[1].y_range is not None
     await p.stop()
 
   _run(_t())

@@ -48,7 +48,7 @@ from pylabrobot.resources.deck import Deck
 from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration
 from .errors import PREP_ERROR_CODES
-from .features.pipettes import _CHANNEL_INDEX, Pipettes, PipettesConfiguration
+from .features.pipettes import Pipettes, PipettesConfiguration
 from .features.x_arm import XArm
 from .master import PrepDriver, _ResolvedPrepCommand
 from .prep_commands import MPH_OBJECT_PATH, PrepCommand
@@ -343,7 +343,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
 
   async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
     channels = range(self.device.simulated_configuration.num_channels or 0)
-    index_of = {int(enum): index for index, enum in _CHANNEL_INDEX.items()}
+    index_of = {int(enum): index for index, enum in enumerate(PrepCmd.channel_order_legacy_prep)}
 
     if isinstance(request, PrepCmd.PrepGetPositions):
       positions = []
@@ -352,7 +352,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
         positions.append(
           PrepCmd.ChannelXYZPositionParameters(
             default_values=False,
-            channel=_CHANNEL_INDEX[channel],
+            channel=PrepCmd.channel_order_legacy_prep[channel],
             position_x=x,
             position_y=y,
             position_z=z,
@@ -407,7 +407,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
           continue
         bounds.append(
           PrepCmd.ChannelBoundsParameters(
-            channel=_CHANNEL_INDEX[channel],
+            channel=PrepCmd.channel_order_legacy_prep[channel],
             x_min=c.x_range[0],
             x_max=c.x_range[1],
             y_min=c.y_range[0],
@@ -726,7 +726,9 @@ class PrepSimulationDriver(PrepDriver):
       ]
       return PrepCmd.PrepGetWasteSiteDefinitions.Response(sites=waste), declared
     if isinstance(request, PrepCmd.PrepGetPresentChannels):
-      present = [int(_CHANNEL_INDEX[channel]) for channel in range(c.num_channels or 0)]
+      present = [
+        int(PrepCmd.channel_order_legacy_prep[channel]) for channel in range(c.num_channels or 0)
+      ]
       if c.head8_installed:
         present.append(int(PrepCmd.ChannelIndex.MPHChannel))
       return PrepCmd.PrepGetPresentChannels.Response(channels=present), declared

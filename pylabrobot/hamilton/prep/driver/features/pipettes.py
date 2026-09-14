@@ -35,6 +35,7 @@ from typing import (
   TypedDict,
   TypeVar,
   Union,
+  cast,
 )
 
 from pylabrobot.hamilton.liquid_class_resolver import (
@@ -347,12 +348,6 @@ def _absolute_z_from_well(
   return _WellGeometry(well_bottom_z, liquid_surface_z, top_of_well_z, z_air_z)
 
 
-_CHANNEL_INDEX = {
-  0: PrepCmd.ChannelIndex.RearChannel,
-  1: PrepCmd.ChannelIndex.FrontChannel,
-}
-
-
 @dataclass
 class PipetteConfiguration:
   """What a single pipetting channel reports about itself.
@@ -404,8 +399,17 @@ class PipettesConfiguration:
   channels at."""
   channel_model: str = "hamilton_star_pipette_channel"
   """Which 3D model draws a channel."""
+  default_y_ranges: Tuple[Tuple[float, float], ...] = ((0.0, 385.0), (-9.0, 376.0))
+  """The Y window each channel reaches when its device reports none, in mm, lowest first, by channel back to
+  front. A legacy Prep's without an 8-channel head: what GetChannelBounds reports on PRPAA1087 (V1.2.2) and
+  PRPBD1394 (V3.0.20). Setup replaces a channel's window with the one its device reports. Not applied on a
+  device with an 8-channel head, which rides the same Y rail and leaves both channels less reach."""
   channels: List[PipetteConfiguration] = field(default_factory=list)
   """One entry per channel, in channel order."""
+
+  def default_y_range(self, channel: int) -> Optional[Tuple[float, float]]:
+    """The Y window `default_y_ranges` gives a channel, 0-indexed from the back, or None when it gives none."""
+    return self.default_y_ranges[channel] if 0 <= channel < len(self.default_y_ranges) else None
 
   def check_channels_agree(self) -> None:
     """Warn if the channels are not all running the same firmware.
@@ -438,7 +442,9 @@ class PipettesConfiguration:
       ValueError: If a supplied list does not have one entry per channel.
     """
     if not self.channels:
-      self.channels.extend(PipetteConfiguration() for _ in range(num_channels))
+      self.channels.extend(
+        PipetteConfiguration(y_range=self.default_y_range(i)) for i in range(num_channels)
+      )
     elif len(self.channels) != num_channels:
       raise ValueError(f"configuration has {len(self.channels)} channels, expected {num_channels}")
 
@@ -512,6 +518,7 @@ def _build_pipettor_gantry_move_parameters(
   channels: List[int],
   y: Union[float, List[float]],
   z: Union[float, List[float]],
+  channel_order: Sequence[int] = PrepCmd.channel_order_legacy_prep,
 ) -> PrepCmd.GantryMoveXYZParameters:
   """Build :class:`~prep_commands.GantryMoveXYZParameters` for PipettorRoot move commands.
 
@@ -522,15 +529,12 @@ def _build_pipettor_gantry_move_parameters(
   for i, ch in enumerate(channels):
     y_i = y[i] if isinstance(y, list) else y
     z_i = z[i] if isinstance(z, list) else z
-    enum_ch = _CHANNEL_INDEX[ch]
-    if enum_ch not in (
-      PrepCmd.ChannelIndex.FrontChannel,
-      PrepCmd.ChannelIndex.RearChannel,
-    ):
+    if not 0 <= ch < len(channel_order) or channel_order[ch] == PrepCmd.ChannelIndex.MPHChannel:
       raise ValueError(
-        f"Pipettor gantry move does not support channel index {ch} (enum {enum_ch!r}). "
+        f"Pipettor gantry move does not support channel index {ch}. "
         "MPH motion uses Head8 / MphMoveToPosition on MLPrepRoot.MphRoot.MPH."
       )
+    enum_ch = channel_order[ch]
     axis_parameters.append(
       PrepCmd.ChannelYZMoveParameters(
         default_values=False, channel=enum_ch, y_position=y_i, z_position=z_i
@@ -688,6 +692,8 @@ class Pipettes:
       self.configuration.use_v1_aspirate_dispense = True
     self.setup_finished: bool = False
     self.channels: List[PipetteChannel] = []
+    # The firmware's ChannelIndex for each channel, back to front. Discovery sets it from the device.
+    self.channel_order: Tuple[int, ...] = tuple(PrepCmd.channel_order_legacy_prep)
     self.head: dict[int, TipTracker] = {}
     # One per channel, hung from the X-arm's resource when the driver was given a deck. Setup puts
     # them there; reads and moves keep them in step.
@@ -842,10 +848,13 @@ class Pipettes:
     if num_channels is None:
       num_channels = drive_map.num_channels_discovered
     try:
-      bounds_list = await self.request_channel_bounds()
+      raw_bounds = await self._unchecked_fw_request_channel_bounds()
     except Exception as e:
       logger.warning("Failed to query channel bounds: %s", e)
-      bounds_list = []
+      raw_bounds = []
+    present = await self._driver.request_present_channels()
+    self.channel_order = self._order_channels(present, raw_bounds)
+    bounds_by_channel = self._bounds_by_channel(raw_bounds)
 
     def _drive_addr(seq: List[Address], i: int) -> Optional[Address]:
       return seq[i] if i < len(seq) else None
@@ -857,18 +866,28 @@ class Pipettes:
         sleeve_sensor=_drive_addr(drive_map.sleeve_sensor_addrs, i),
         zdrive=_drive_addr(drive_map.zdrive_addrs, i),
         node_info=_drive_addr(drive_map.node_info_addrs, i),
-        bounds=bounds_list[i] if i < len(bounds_list) else None,
+        bounds=bounds_by_channel.get(i),
       )
       for i in range(num_channels)
     ]
 
     self.configuration.resolve_channels(len(self.channels))
+    # The 8-channel head rides the same Y rail as the channels, so on a device with one the channels reach less
+    # than the defaults say. Only what the device reports is used there; how much less is not recorded yet.
+    head8 = self.head8_installed
+    if head8 and any(channel.bounds is None for channel in self.channels):
+      logger.warning(
+        "the device has an 8-channel head, which narrows the channels' Y reach, and did not report every "
+        "channel's bounds; those channels have no Y window, so their Y positions and spacing are not checked"
+      )
     for index, channel in enumerate(self.channels):
       bounds = channel.bounds
       self.configuration.channels[index] = PipetteConfiguration(
         firmware_version=await channel.request_firmware_version(),
         x_range=None if bounds is None else (bounds["x_min"], bounds["x_max"]),
-        y_range=None if bounds is None else (bounds["y_min"], bounds["y_max"]),
+        y_range=(None if head8 else self.configuration.default_y_range(index))
+        if bounds is None
+        else (bounds["y_min"], bounds["y_max"]),
         z_range=None if bounds is None else (bounds["z_min"], bounds["z_max"]),
       )
     self.configuration.check_channels_agree()
@@ -890,6 +909,116 @@ class Pipettes:
     methods = await self._driver.request_interface_methods(dest, interface_id=1)
     iface1_ids = {m.method_id for m in methods}
     return set(self.configuration.v2_pipetting_command_ids).issubset(iface1_ids)
+
+  def channel_enum(self, channel: int) -> int:
+    """The firmware's ChannelIndex for a channel.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Raises:
+      ValueError: If the device has no such channel.
+    """
+    if not 0 <= channel < len(self.channel_order):
+      raise ValueError(
+        f"channel {channel} does not exist; the channels are 0 to {len(self.channel_order) - 1}"
+      )
+    return self.channel_order[channel]
+
+  def channel_of(self, channel_enum: int) -> Optional[int]:
+    """The channel, 0-indexed from the back, that a firmware ChannelIndex names, or None for no pipetting channel."""
+    return next((i for i, e in enumerate(self.channel_order) if int(e) == int(channel_enum)), None)
+
+  @staticmethod
+  def _order_channels(
+    present: Optional[Sequence[int]], bounds: Sequence[PrepCmd.ChannelBoundsParameters]
+  ) -> Tuple[int, ...]:
+    """The device's pipetting channels, back to front.
+
+    The channels the device reports present, less its 8-channel head, ordered by how far back each reaches: the
+    rearmost reaches furthest. Without a window for every channel they keep the legacy order; without a report
+    of which are present, they are the legacy channels.
+
+    Args:
+      present: what `GetPresentChannels` answered, or None when it did not.
+      bounds: what `GetChannelBounds` answered.
+    """
+    not_pipetting = (int(PrepCmd.ChannelIndex.InvalidIndex), int(PrepCmd.ChannelIndex.MPHChannel))
+    legacy = [int(c) for c in PrepCmd.channel_order_legacy_prep]
+    channels = (
+      legacy if present is None else [int(c) for c in present if int(c) not in not_pipetting]
+    )
+    reach = {int(b.channel): b.y_max for b in bounds}
+    rank = {c: i for i, c in enumerate(legacy)}
+    if channels and all(c in reach for c in channels):
+      ordered = sorted(channels, key=lambda c: (-reach[c], rank.get(c, len(rank))))
+    else:
+      ordered = sorted(channels, key=lambda c: rank.get(c, len(rank) + c))
+    return tuple(ordered)
+
+  def _min_spacing_between(self, i: int, j: int) -> float:
+    """The smallest Y gap two channels may sit at, in mm, from the Y windows the device reports.
+
+    A channel reaches no further back than the channel behind it allows, and no further forward than the one in
+    front of it allows, so neighbouring channels' windows are offset by the spacing kept between them: rear 0 to
+    385 mm and front -9 to 376 mm on both PRPAA1087 (V1.2.2) and PRPBD1394 (V3.0.20), 9 mm at either end.
+    Channels further apart take the sum of the pairs between them.
+
+    Args:
+      i: one channel, 0-indexed from the back.
+      j: the other.
+
+    Returns:
+      The gap in mm.
+
+    Raises:
+      RuntimeError: If a channel's Y window has not been read, or a pair's windows are not offset by the same
+        amount at both ends.
+    """
+    lo, hi = min(i, j), max(i, j)
+    if hi - lo > 1:
+      return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
+    if lo == hi:
+      return 0.0
+    channels = self.configuration.channels
+    if hi >= len(channels) or channels[lo].y_range is None or channels[hi].y_range is None:
+      raise RuntimeError(f"channels {lo} and {hi} have no Y window read yet; run discovery first")
+    back, front = (
+      cast(Tuple[float, float], channels[lo].y_range),
+      cast(Tuple[float, float], channels[hi].y_range),
+    )
+    at_front, at_back = back[0] - front[0], back[1] - front[1]
+    if abs(at_front - at_back) > 0.01:
+      raise RuntimeError(
+        f"channels {lo} and {hi} are {at_front:.2f} mm apart at the front of their Y windows and {at_back:.2f} mm "
+        "at the back, so their spacing is unknown"
+      )
+    return round(at_front, 2)
+
+  def _check_y_spacing(self, ys: Dict[int, float]) -> None:
+    """Refuse channel Y positions that are out of order or closer than their minimum spacing.
+
+    Pairs whose Y windows have not been read are not checked, as positions are not checked against windows that
+    have not been read.
+
+    Args:
+      ys: each channel's Y after a move, in mm, keyed by channel, 0-indexed from the back.
+
+    Raises:
+      ValueError: If two neighbouring channels would be closer than `_min_spacing_between`, or out of order.
+    """
+    channels = self.configuration.channels
+    for i in range(len(self.channel_order) - 1):
+      if i not in ys or i + 1 not in ys or i + 1 >= len(channels):
+        continue
+      if channels[i].y_range is None or channels[i + 1].y_range is None:
+        continue
+      required = self._min_spacing_between(i, i + 1)
+      actual = ys[i] - ys[i + 1]
+      if round(actual * 1000) < round(required * 1000):  # compare in um to avoid float issues
+        raise ValueError(
+          f"Channels {i} and {i + 1} must be at least {required}mm apart, but are {actual:.2f}mm apart."
+        )
 
   def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
     return resolve_command_version(
@@ -1087,28 +1216,48 @@ class Pipettes:
     empty channels; with a tip attached the effective Z minimum is higher.
     """
     try:
-      response = await self._driver.send_command(PrepCmd.PrepGetChannelBounds())
+      raw = await self._unchecked_fw_request_channel_bounds()
     except KeyError:
       return []
-    channel_indices = {int(value): index for index, value in _CHANNEL_INDEX.items()}
-    indexed: list[tuple[int, ChannelBounds]] = []
-    for bounds in response.bounds:
+    return self._bounds_in_channel_order(raw)
+
+  async def _unchecked_fw_request_channel_bounds(self) -> List[PrepCmd.ChannelBoundsParameters]:
+    """Send `PipettorService.GetChannelBounds` (cmd=10). Nothing is ordered and nothing is recorded.
+
+    Returns:
+      Each channel's bounds, as the firmware answers them.
+    """
+    response = await self._driver.send_command(PrepCmd.PrepGetChannelBounds())
+    return list(response.bounds)
+
+  def _bounds_in_channel_order(
+    self, raw: List[PrepCmd.ChannelBoundsParameters]
+  ) -> List[ChannelBounds]:
+    """Firmware channel bounds as dicts, in channel order (0=rearmost); channels not in `channel_order` dropped."""
+    by_channel = self._bounds_by_channel(raw)
+    return [by_channel[index] for index in sorted(by_channel)]
+
+  def _bounds_by_channel(
+    self, raw: List[PrepCmd.ChannelBoundsParameters]
+  ) -> Dict[int, ChannelBounds]:
+    """Firmware channel bounds as dicts, keyed by channel (0=rearmost); channels not in `channel_order` dropped.
+
+    Keyed rather than listed, so a channel the device reports no bounds for does not take its neighbour's.
+    """
+    channel_indices = {int(value): index for index, value in enumerate(self.channel_order)}
+    by_channel: Dict[int, ChannelBounds] = {}
+    for bounds in raw:
       index = channel_indices.get(int(bounds.channel))
       if index is not None:
-        indexed.append(
-          (
-            index,
-            {
-              "x_min": bounds.x_min,
-              "x_max": bounds.x_max,
-              "y_min": bounds.y_min,
-              "y_max": bounds.y_max,
-              "z_min": bounds.z_min,
-              "z_max": bounds.z_max,
-            },
-          )
-        )
-    return [bounds for _, bounds in sorted(indexed, key=lambda pair: pair[0])]
+        by_channel[index] = {
+          "x_min": bounds.x_min,
+          "x_max": bounds.x_max,
+          "y_min": bounds.y_min,
+          "y_max": bounds.y_max,
+          "z_min": bounds.z_min,
+          "z_max": bounds.z_max,
+        }
+    return by_channel
 
   async def request_locations(self) -> list[Coordinate]:
     """Request the current XYZ positions of all pipettor channels.
@@ -1148,7 +1297,7 @@ class Pipettes:
     if not resp.positions:
       return []
 
-    _CHANNEL_ENUM_TO_IDX = {int(v): k for k, v in _CHANNEL_INDEX.items()}
+    _CHANNEL_ENUM_TO_IDX = {int(v): k for k, v in enumerate(self.channel_order)}
     indexed: list[tuple[int, Coordinate]] = []
     for p in resp.positions:
       ch_idx = _CHANNEL_ENUM_TO_IDX.get(p.channel)
@@ -1225,6 +1374,54 @@ class Pipettes:
     if channel >= len(positions):
       raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     return float(positions[channel].y)
+
+  async def move_to_y_positions(self, ys: Dict[int, float], make_space: bool = False) -> None:
+    """Move channels along Y, in one command.
+
+    Each named channel keeps its X and Z; the channels not named stay where they are, unless `make_space` moves
+    them. The channels stay in order back to front, each neighbouring pair at least `_min_spacing_between` apart.
+
+    Args:
+      ys: where to put each named channel, in mm on the deck, keyed by channel, 0-indexed from the back.
+      make_space: whether the channels not named may be moved along Y, so that every pair meets its minimum
+        spacing and the channels stay in order back to front. Off by default: nothing moves that the caller did
+        not ask to move, and a request that will not fit raises instead. It can raise either way, since the
+        requested positions may leave no room.
+
+    Raises:
+      ValueError: If a named channel does not exist, a channel cannot reach its Y, or the channels would be out
+        of order or closer than their minimum spacing.
+    """
+    if not ys:
+      return
+    positions = await self.request_locations()
+    for channel in ys:
+      if not 0 <= channel < len(positions):
+        raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
+    targets = {i: position.y for i, position in enumerate(positions)}
+    targets.update(ys)
+
+    if make_space:
+      back, front = min(ys), max(ys)
+      # Behind the rearmost named channel, push each channel back far enough, nearest first.
+      for i in range(back, 0, -1):
+        spacing = self._min_spacing_between(i - 1, i)
+        if targets[i - 1] - targets[i] < spacing:
+          targets[i - 1] = targets[i] + spacing
+      # Between named channels, place the ones not named at their minimum spacing.
+      for i in range(back + 1, front):
+        if i not in ys:
+          targets[i] = targets[i - 1] - self._min_spacing_between(i - 1, i)
+      # In front of the frontmost named channel, push each channel forward far enough, nearest first.
+      for i in range(front, len(positions) - 1):
+        spacing = self._min_spacing_between(i, i + 1)
+        if targets[i] - targets[i + 1] < spacing:
+          targets[i + 1] = targets[i] - spacing
+
+    moving = sorted(i for i in targets if i in ys or targets[i] != positions[i].y)
+    await self.move_to_location(
+      [Coordinate(positions[i].x, targets[i], positions[i].z) for i in moving], use_channels=moving
+    )
 
   async def move_to_y_position(self, channel: int, y: float) -> None:
     """Move a channel in the Y direction (in mm).
@@ -1437,7 +1634,7 @@ class Pipettes:
       channels: channel indices, 0-indexed from the back.
     """
     await self._driver.send_command(
-      PrepCmd.PrepMoveZUpToSafe(channels=[_CHANNEL_INDEX[ch] for ch in channels])
+      PrepCmd.PrepMoveZUpToSafe(channels=[self.channel_enum(ch) for ch in channels])
     )
 
   # -- xyz position --------------------------------------------------------------------------------
@@ -1533,6 +1730,15 @@ class Pipettes:
         if c.z_range is not None and z_i > c.z_range[1]:
           raise ValueError(f"z={z_i} above channel {ch} maximum {c.z_range[1]:.1f}")
 
+    # Every channel's Y after the move: where it is sent, or, for a channel not named, where it stands.
+    final_y: Dict[int, float] = {}
+    if len(channels) < len(self.channel_order):
+      final_y = {
+        i: position.y for i, position in enumerate(await self._unchecked_fw_request_positions())
+      }
+    final_y.update(zip(channels, y_vals))
+    self._check_y_spacing(final_y)
+
     # The scales in force before this move, to put back once it is done.
     restore_x: Optional[int] = None
     restore_z: Optional[int] = None
@@ -1577,7 +1783,9 @@ class Pipettes:
       z: where to send each channel along Z, in mm; one value for all, or one per channel.
       via_lane: travel by the firmware's lane rather than directly.
     """
-    move_parameters = _build_pipettor_gantry_move_parameters(x, channels, y, z)
+    move_parameters = _build_pipettor_gantry_move_parameters(
+      x, channels, y, z, channel_order=self.channel_order
+    )
     if via_lane:
       await self._driver.send_command(
         PrepCmd.PrepMoveToPositionViaLane(move_parameters=move_parameters)
@@ -1732,7 +1940,7 @@ class Pipettes:
 
     seek = PrepCmd.LLDChannelSeekParameters(
       default_values=False,
-      channel=_CHANNEL_INDEX[channel_idx],
+      channel=self.channel_enum(channel_idx),
       seek_position_x=x,
       seek_position_y=y,
       seek_velocity_z=channel_speed,
@@ -1749,7 +1957,9 @@ class Pipettes:
       self.update_location_by_reference_point(channel_idx, z=z_position_at_end_of_a_command)
     finally:
       await self._record_where_they_stopped()
-    result = next((r for r in results if int(r.channel) == int(_CHANNEL_INDEX[channel_idx])), None)
+    result = next(
+      (r for r in results if int(r.channel) == int(self.channel_enum(channel_idx))), None
+    )
     if result is None or not result.detected:
       return None
     return float(result.position)
@@ -1891,7 +2101,7 @@ class Pipettes:
       loc = spot.get_location_wrt(self._require_deck(), "c", "c", "t") + off
       tip_positions.append(
         PrepCmd.TipPositionParameters.for_op(
-          _CHANNEL_INDEX[ch], loc, tip, z_seek_offset=z_seek_offset
+          self.channel_enum(ch), loc, tip, z_seek_offset=z_seek_offset
         )
       )
 
@@ -2018,7 +2228,7 @@ class Pipettes:
         loc = dest.get_location_wrt(self._require_deck(), "c", "c", "t") + off
       tip_positions.append(
         PrepCmd.TipDropParameters.for_op(
-          _CHANNEL_INDEX[ch], loc, tip, z_seek_offset=z_seek_offset, drop_type=resolved_drop_type
+          self.channel_enum(ch), loc, tip, z_seek_offset=z_seek_offset, drop_type=resolved_drop_type
         )
       )
 
@@ -2286,7 +2496,7 @@ class Pipettes:
 
       kits.append(
         _AspirateChannelKit(
-          channel=_CHANNEL_INDEX[ch],
+          channel=self.channel_enum(ch),
           aspirate=PrepCmd.AspirateParameters.from_location(
             loc, prewet_volume=prewet_volume[idx], blowout_volume=blowout_volumes[idx]
           ),
@@ -2542,7 +2752,7 @@ class Pipettes:
 
       kits.append(
         _DispenseChannelKit(
-          channel=_CHANNEL_INDEX[ch],
+          channel=self.channel_enum(ch),
           dispense=PrepCmd.DispenseParameters.for_op(
             loc, stop_back_volume=stop_back_volume[idx], cutoff_speed=cutoff_speed[idx]
           ),
@@ -2781,7 +2991,7 @@ class Pipettes:
         channel=ch,
         container=op.resource,
         tip=op.tip,
-        volume_ul=next(k.common.liquid_volume for k in kits if k.channel == _CHANNEL_INDEX[ch]),
+        volume_ul=next(k.common.liquid_volume for k in kits if k.channel == self.channel_enum(ch)),
         direction="aspirate",
       )
       for ch, op in zip(use_channels, ops)
@@ -2877,7 +3087,7 @@ class Pipettes:
         channel=ch,
         container=op.resource,
         tip=op.tip,
-        volume_ul=next(k.common.liquid_volume for k in kits if k.channel == _CHANNEL_INDEX[ch]),
+        volume_ul=next(k.common.liquid_volume for k in kits if k.channel == self.channel_enum(ch)),
         direction="dispense",
       )
       for ch, op in zip(use_channels, ops)

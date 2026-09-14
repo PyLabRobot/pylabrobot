@@ -733,15 +733,16 @@ class PrepDriver:
 
     present = await self.request_present_channels()
     if present is not None:
-      dual = [
+      pipetting = [
         c
         for c in present
-        if c in (PrepCmd.ChannelIndex.FrontChannel, PrepCmd.ChannelIndex.RearChannel)
+        if c not in (PrepCmd.ChannelIndex.InvalidIndex, PrepCmd.ChannelIndex.MPHChannel)
       ]
-      num_channels = len(dual)
+      num_channels = len(pipetting)
       head8_installed = PrepCmd.ChannelIndex.MPHChannel in present
     else:
-      num_channels = 2
+      # A device that does not say which channels it has is taken for a legacy Prep, with its two.
+      num_channels = len(PrepCmd.channel_order_legacy_prep)
       head8_installed = False
 
     return DeviceConfiguration(
@@ -898,7 +899,16 @@ class PrepDriver:
         pipetting = f"{'v2' if p.supports_v2_pipetting else 'v1'} aspirate/dispense"
       lines.append(f"  Pipettes: {len(p.channels)}, {pipetting}")
       for channel, entry in enumerate(p.channels):
-        side = {0: "rear", 1: "front"}.get(channel, str(channel))
+        order = self.pipettes.channel_order
+        enum = int(order[channel]) if channel < len(order) else None
+        side = (
+          {
+            int(PrepCmd.ChannelIndex.RearChannel): "rear",
+            int(PrepCmd.ChannelIndex.FrontChannel): "front",
+          }.get(enum, str(channel))
+          if enum is not None
+          else str(channel)
+        )
         firmware = f"firmware {entry.firmware_version}, " if entry.firmware_version else ""
         lines.append(
           f"    channel {channel} ({side}): {firmware}x {_range(entry.x_range)}, "

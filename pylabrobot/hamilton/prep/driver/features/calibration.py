@@ -36,10 +36,6 @@ logger = logging.getLogger(__name__)
 _TCalibResult = TypeVar("_TCalibResult")
 
 # Same mapping as Prep channels for TipPositionParameters / channel indices.
-_CHANNEL_INDEX = {
-  0: PrepCmd.ChannelIndex.RearChannel,
-  1: PrepCmd.ChannelIndex.FrontChannel,
-}
 
 
 @dataclass(frozen=True)
@@ -79,6 +75,20 @@ class Calibration:
   def deck(self) -> Optional["Deck"]:
     """The deck positions are measured from: the driver's."""
     return self._driver.deck
+
+  def _channel_enum(self, channel: int) -> int:
+    """The firmware's ChannelIndex for a channel: the pipettes' order, or the legacy one before discovery.
+
+    Raises:
+      ValueError: If there is no such channel.
+    """
+    pipettes = self._driver.pipettes
+    order = (
+      pipettes.channel_order if pipettes is not None else tuple(PrepCmd.channel_order_legacy_prep)
+    )
+    if not 0 <= channel < len(order):
+      raise ValueError(f"channel {channel} does not exist; the channels are 0 to {len(order) - 1}")
+    return order[channel]
 
   @property
   def num_channels(self) -> int:
@@ -541,7 +551,7 @@ class CalibrationSession:
         loc = spot.get_location_wrt(self._cal._require_deck(), "c", "c", "t")
         tip_positions.append(
           PrepCmd.TipPositionParameters.for_op(
-            _CHANNEL_INDEX[ch],
+            self._cal._channel_enum(ch),
             loc,
             spot.get_tip(),
             z_seek_offset=z_seek_offset,

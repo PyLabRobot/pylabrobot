@@ -32,7 +32,7 @@ an 8-channel head is installed, or whether there is an enclosure.
 | file | device | notes |
 |---|---|---|
 | `prep_PRPAA1087_v1_2_2.json` | PRPAA1087, MLPrep Runtime V1.2.2.444 | The default for a simulated device. Identical to what `save_configuration` wrote off PRPAA1087 on 2026-09-14. |
-| `prep_PRPAA1087_v1_2_2_head8.json` | derived from the above | The same, with `head8_installed` set. No device with an 8-channel head has been recorded. |
+| `prep_PRPAA1087_v1_2_2_head8.json` | derived from the above | The same, with `head8_installed` set. No device with an 8-channel head has been recorded. Its channel windows are PRPAA1087's, which has no head: on a real device the head rides the same Y rail and leaves both channels less Y reach, by an amount not yet recorded. |
 
 ### What is in one
 

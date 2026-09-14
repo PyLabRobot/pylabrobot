@@ -1909,7 +1909,15 @@ class DispenseParametersLld2:
 
 # An unresolved command is bound to a firmware address by PrepDriver.send_command for each execution.
 _UNRESOLVED = Address(-1, -1, -1)
-_CHANNEL_TO_INDEX = {int(ChannelIndex.RearChannel): 0, int(ChannelIndex.FrontChannel): 1}
+# The pipetting channels of a legacy Prep, back to front: its firmware's ChannelIndex names a rear and a
+# front channel. `Pipettes` orders the connected device's own channels at discovery and falls back to this.
+channel_order_legacy_prep: Tuple[ChannelIndex, ...] = (
+  ChannelIndex.RearChannel,
+  ChannelIndex.FrontChannel,
+)
+# A firmware error names a channel by its ChannelIndex. A command cannot reach the driver's channel order, so
+# errors are attributed with the legacy one.
+_CHANNEL_TO_INDEX = {int(channel): index for index, channel in enumerate(channel_order_legacy_prep)}
 
 
 def _plr_channel_index(channel: int, entry_index: int) -> Optional[int]:
