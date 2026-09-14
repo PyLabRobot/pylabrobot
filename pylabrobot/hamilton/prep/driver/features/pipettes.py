@@ -674,7 +674,7 @@ class Pipettes:
     # percent of what the axis does on PRPAA1087 (V1.2.2).
     # X: 80 % of the X axis profile (`XAxis.GetVelocity` 400 mm/s, `GetAcceleration` 2250 mm/s2) at
     # MLPrep's X speed scale of 100 percent; the scale leaves the acceleration unchanged. Used by
-    # `move_to_coordinate` when a move names no X speed.
+    # `move_to_location` when a move names no X speed.
     self.default_x_speed: float = 320.0
     self.default_x_acceleration: float = 1800.0
     # Y: 80 % of 345 mm/s and 950 mm/s2, fitted from timed `MoveToPosition` moves of 5 to 200 mm
@@ -699,6 +699,59 @@ class Pipettes:
     # One per channel, hung from the X-arm's resource when the driver was given a deck. Setup puts
     # them there; reads and moves keep them in step.
     self.resources: List[Resource] = []
+
+  async def _on_setup(self):
+    """Read config and probe pipettor capabilities.
+
+    Called after ``self.channels`` is populated by :meth:`PrepDriver.setup`. Instrument-
+    level initialization (``MLPrep.Initialize``) runs earlier in
+    :meth:`PrepDriver.setup` — the pipettor sees an already-initialized instrument.
+    """
+    cfg = self._configuration
+    logger.debug(
+      "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
+      "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, head8_installed=%s",
+      cfg.has_enclosure,
+      cfg.safe_speeds_enabled,
+      cfg.default_traverse_height,
+      cfg.deck_bounds,
+      len(cfg.deck_sites),
+      len(cfg.waste_sites),
+      cfg.num_channels,
+      cfg.head8_installed,
+    )
+
+    await self.discover()
+    if not any(c.x_range is not None for c in self.configuration.channels):
+      logger.warning("Channel bounds not available — move_to_location will skip validation")
+
+    # Probe pipettor for v2 aspirate/dispense support (cmd 38-43).
+    if self.configuration.use_v1_aspirate_dispense:
+      self.configuration.supports_v2_pipetting = False
+      logger.debug("V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
+    else:
+      try:
+        supported = await self._probe_v2_support()
+      except Exception as e:
+        logger.warning("PIP V2 support probe failed: %s", e)
+        supported = False
+      if not supported:
+        raise RuntimeError(
+          "V2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
+          "Pass use_v1_aspirate_dispense=True to Pipettes to use v1 commands (cmd 1-6) instead."
+        )
+      self.configuration.supports_v2_pipetting = True
+      logger.debug("V2 aspirate/dispense support: True")
+
+    self._ensure_head()
+    self.setup_finished = True
+
+  async def _on_stop(self):
+    for tracker in self.head.values():
+      tracker.clear()
+
+  async def stop(self) -> None:
+    self.setup_finished = False
 
   # -- addressing ----------------------------------------------------------------------------------
 
@@ -767,7 +820,7 @@ class Pipettes:
     if not self.resources:
       return
     try:
-      await self.request_channel_positions()
+      await self.request_locations()
     except Exception:
       logger.warning("could not read where the channels stopped; their model is stale")
 
@@ -821,56 +874,6 @@ class Pipettes:
         z_range=None if bounds is None else (bounds["z_min"], bounds["z_max"]),
       )
     self.configuration.check_channels_agree()
-
-  async def _on_setup(self):
-    """Read config and probe pipettor capabilities.
-
-    Called after ``self.channels`` is populated by :meth:`PrepDriver.setup`. Instrument-
-    level initialization (``MLPrep.Initialize``) runs earlier in
-    :meth:`PrepDriver.setup` — the pipettor sees an already-initialized instrument.
-    """
-    cfg = self._configuration
-    logger.debug(
-      "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
-      "deck_bounds=%s, deck_sites=%d, waste_sites=%d, num_channels=%s, head8_installed=%s",
-      cfg.has_enclosure,
-      cfg.safe_speeds_enabled,
-      cfg.default_traverse_height,
-      cfg.deck_bounds,
-      len(cfg.deck_sites),
-      len(cfg.waste_sites),
-      cfg.num_channels,
-      cfg.head8_installed,
-    )
-
-    await self.discover()
-    if not any(c.x_range is not None for c in self.configuration.channels):
-      logger.warning("Channel bounds not available — move_to_coordinate will skip validation")
-
-    # Probe pipettor for v2 aspirate/dispense support (cmd 38-43).
-    if self.configuration.use_v1_aspirate_dispense:
-      self.configuration.supports_v2_pipetting = False
-      logger.debug("V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
-    else:
-      try:
-        supported = await self._probe_v2_support()
-      except Exception as e:
-        logger.warning("PIP V2 support probe failed: %s", e)
-        supported = False
-      if not supported:
-        raise RuntimeError(
-          "V2 aspirate/dispense commands (cmd 38-43) are not supported by this firmware. "
-          "Pass use_v1_aspirate_dispense=True to Pipettes to use v1 commands (cmd 1-6) instead."
-        )
-      self.configuration.supports_v2_pipetting = True
-      logger.debug("V2 aspirate/dispense support: True")
-
-    self._ensure_head()
-    self.setup_finished = True
-
-  async def _on_stop(self):
-    for tracker in self.head.values():
-      tracker.clear()
 
   def _ensure_head(self) -> None:
     """Ensure pipette-side TipTrackers exist for each dual-channel index."""
@@ -1109,7 +1112,7 @@ class Pipettes:
         )
     return [bounds for _, bounds in sorted(indexed, key=lambda pair: pair[0])]
 
-  async def request_channel_positions(self) -> list[Coordinate]:
+  async def request_locations(self) -> list[Coordinate]:
     """Request the current XYZ positions of all pipettor channels.
 
     Queries Pipettor.GetPositions (cmd=25). Returns one Coordinate per channel,
@@ -1129,7 +1132,7 @@ class Pipettes:
   async def _unchecked_fw_request_positions(self) -> list[Coordinate]:
     """Read where every channel is, without recording it.
 
-    The reading alone. `request_channel_positions`, `request_y_positions` and
+    The reading alone. `request_locations`, `request_y_positions` and
     `request_tool_bottom_z_positions` are the ones that also record it on the resources. Z is the
     bottom of the tip on a channel carrying one, and the end of its shaft otherwise.
 
@@ -1170,7 +1173,7 @@ class Pipettes:
     Raises:
       RuntimeError: If the channels report no positions.
     """
-    positions = await self.request_channel_positions()
+    positions = await self.request_locations()
     if not positions:
       raise RuntimeError("the channels reported no positions")
     return float(positions[0].x)
@@ -1188,10 +1191,10 @@ class Pipettes:
     Raises:
       RuntimeError: If the channels report no positions.
     """
-    positions = await self.request_channel_positions()
+    positions = await self.request_locations()
     if not positions:
       raise RuntimeError("the channels reported no positions")
-    await self.move_to_coordinate(Coordinate(x, positions[0].y, positions[0].z), use_channels=0)
+    await self.move_to_location(Coordinate(x, positions[0].y, positions[0].z), use_channels=0)
 
   # -- y position ----------------------------------------------------------------------------------
 
@@ -1220,7 +1223,7 @@ class Pipettes:
     Returns:
       Y position in mm.
     """
-    positions = await self.request_channel_positions()
+    positions = await self.request_locations()
     if channel >= len(positions):
       raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     return float(positions[channel].y)
@@ -1234,10 +1237,10 @@ class Pipettes:
       channel: Channel index (0=rearmost).
       y: Target Y position in mm.
     """
-    positions = await self.request_channel_positions()
+    positions = await self.request_locations()
     if channel >= len(positions):
       raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
-    await self.move_to_coordinate(
+    await self.move_to_location(
       Coordinate(positions[channel].x, y, positions[channel].z), use_channels=channel
     )
 
@@ -1254,7 +1257,7 @@ class Pipettes:
     Returns:
       Z position in mm.
     """
-    positions = await self.request_channel_positions()
+    positions = await self.request_locations()
     if channel >= len(positions):
       raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     return float(positions[channel].z)
@@ -1373,10 +1376,10 @@ class Pipettes:
     Raises:
       ValueError: If the channel does not exist, or cannot reach `z`.
     """
-    positions = await self.request_channel_positions()
+    positions = await self.request_locations()
     if channel >= len(positions):
       raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
-    await self.move_to_coordinate(
+    await self.move_to_location(
       Coordinate(positions[channel].x, positions[channel].y, z), use_channels=channel
     )
 
@@ -1416,7 +1419,7 @@ class Pipettes:
 
   # -- xyz position --------------------------------------------------------------------------------
 
-  async def move_to_coordinate(
+  async def move_to_location(
     self,
     location: Union[Coordinate, List[Coordinate]],
     use_channels: Optional[Union[int, List[int]]] = 0,
@@ -1593,83 +1596,124 @@ class Pipettes:
 
   async def probe_z_using_clld(
     self,
-    channel: int,
+    channel_idx: int,
     *,
-    x: Optional[float] = None,
-    y: Optional[float] = None,
-    start_z: Optional[float] = None,
-    speed: Optional[float] = None,
-    lowest_z: float,
+    start_pos_search: Optional[float] = None,
+    channel_speed: Optional[float] = None,
+    lowest_immers_pos: Optional[float] = None,
     sensitivity: Optional[int] = None,
     detect_mode: Optional[int] = None,
-    final_z: Optional[float] = None,
+    z_position_at_end_of_a_command: Optional[float] = None,
   ) -> Optional[float]:
-    """Lower one channel until its capacitive LLD triggers, and return where it did.
+    """Lower one channel where it stands until its capacitive LLD triggers, and return where it did.
 
-    Sends `Pipettor.ZSeekLldPosition`. On PRPAA1087 (V1.2.2) a front channel without a tip, seeking
-    from 167.5 mm towards a 100 mm floor at 20 mm/s, triggered on a finger touching it at 140.451 mm
-    and went back up to `final_z`. `start_z` and `lowest_z` are sent as the seek's `seek_height` and
-    `min_seek_height`; that the firmware starts from the one and stops at the other rests on that run.
+    Sends `Pipettor.ZSeekLldPosition` with the channel's current X and Y, so it does not move sideways:
+    given another X or Y the firmware moves there before seeking. It seeks down from `start_pos_search`
+    at `channel_speed`, stops at `lowest_immers_pos` when nothing triggers, and goes to
+    `z_position_at_end_of_a_command` either way (PRPAA1087, V1.2.2). There a front channel without a tip
+    triggered on a finger touching it at 140.451 mm. To probe elsewhere, move there first with
+    `move_to_location`. Argument names follow legacy STARBackend's `clld_probe_z_height_using_channel`
+    where the Prep has the same setting.
 
     Args:
-      channel: which channel, 0-indexed from the back.
-      x: where to probe along X, in mm. Defaults to where the gantry is.
-      y: where to probe along Y, in mm. Defaults to where the channel is.
-      start_z: the height to start seeking from, in mm. Defaults to the traverse height.
-      speed: how fast to seek down, in mm/s. Defaults to `default_clld_probe_speed`.
-      lowest_z: the lowest the channel may seek to, in mm.
+      channel_idx: which channel, 0-indexed from the back.
+      start_pos_search: the height to start seeking from, in mm. Defaults to the traverse height.
+      channel_speed: how fast to seek down, in mm/s. Defaults to `default_clld_probe_speed`.
+      lowest_immers_pos: the lowest the channel may seek to, in mm. Defaults to the bottom of the
+        channel's Z range (`configuration.channels[channel_idx].z_range`).
       sensitivity: the cLLD sensitivity sent. Defaults to `default_clld_sensitivity`.
       detect_mode: the cLLD detect mode sent. Defaults to `default_clld_detect_mode`.
-      final_z: where to leave the channel afterwards, in mm. Defaults to `start_z`.
+      z_position_at_end_of_a_command: where to leave the channel afterwards, in mm. Defaults to
+        `start_pos_search`.
 
     Returns:
       The height the cLLD triggered at, in mm, or None when it did not trigger.
 
     Raises:
       ValueError: If the channel does not exist, a position is outside the channel's reach,
-        `lowest_z` is above `start_z`, or `speed` is not positive.
-      RuntimeError: If the channel reports no position to default `x` or `y` from.
+        `lowest_immers_pos` is above `start_pos_search`, or `channel_speed` is not positive.
+      RuntimeError: If the channel reports no position, or its Z range has not been read to default
+        `lowest_immers_pos` from.
+
+    Note:
+      Carried over from the earlier stub, to investigate the other firmware commands that may serve:
+
+      - Pipettor [1:29] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters (used here).
+      - ChannelCoordinator [1:20] ZSeekLldPosition(seekParameters) -> results: SeekResultParameters
+      Previously returned HC_RESULT=0x0F06 which was assumed to be "LLD not supported".
+      Now identified as "Z position out of allowed movement range" — the Z parameters
+      in LLDChannelSeekParameters were out of bounds. Retry with valid Z values
+      within deck_bounds (min_z=18.03, max_z=167.5).
+
+      Findings from testing:
+      - cLLD DOES work through the aspirate path (aspirate with
+        lld_mode=[LLDMode.CAPACITIVE] and default_values=False on both
+        LldParameters and CLldParameters).
+      - Standalone ZSeekLldPosition is rejected with 0x0F06 when Z params are out of range.
+      - The aspirate-based approach is a workaround, not a proper standalone probe.
+
+      Also investigate ZAxis-level alternatives:
+      - ZAxis.SeekCapacitiveLld [1:12] (returns 0x0207 when called directly)
+      - ZAxis.SeekCapacitiveLldTip [1:13] (returns 0x0207 when called directly)
+      - ZAxis.LiquidStatus [1:16] for reading last detection results
+      - PipettorService.MeasureLldFrequency [1:6] for sensor health checks
     """
-    if not 0 <= channel < self.num_channels:
-      raise ValueError(f"channel must be between 0 and {self.num_channels - 1}, is {channel}")
-    if x is None or y is None:
-      positions = await self.request_channel_positions()
-      if channel >= len(positions):
-        raise RuntimeError(f"channel {channel} reported no position")
-      x = positions[channel].x if x is None else x
-      y = positions[channel].y if y is None else y
-    start_z = self._resolve_traverse_height() if start_z is None else start_z
-    speed = self.default_clld_probe_speed if speed is None else speed
+    if not 0 <= channel_idx < self.num_channels:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
+      )
+    positions = await self.request_locations()
+    if channel_idx >= len(positions):
+      raise RuntimeError(f"channel {channel_idx} reported no position")
+    # Sent as the channel stands: given another X or Y, the firmware moves there before seeking.
+    x, y = positions[channel_idx].x, positions[channel_idx].y
+    start_pos_search = (
+      self._resolve_traverse_height() if start_pos_search is None else start_pos_search
+    )
+    channel_speed = self.default_clld_probe_speed if channel_speed is None else channel_speed
     sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
     detect_mode = self.default_clld_detect_mode if detect_mode is None else detect_mode
-    final_z = start_z if final_z is None else final_z
-    if speed <= 0:
-      raise ValueError(f"speed must be positive, is {speed}")
-    if lowest_z > start_z:
-      raise ValueError(f"lowest_z={lowest_z} is above start_z={start_z}")
-    if channel < len(self.configuration.channels):
-      reach = self.configuration.channels[channel]
+    z_position_at_end_of_a_command = (
+      start_pos_search if z_position_at_end_of_a_command is None else z_position_at_end_of_a_command
+    )
+    if lowest_immers_pos is None:
+      reach_z = (
+        self.configuration.channels[channel_idx].z_range
+        if channel_idx < len(self.configuration.channels)
+        else None
+      )
+      if reach_z is None:
+        raise RuntimeError(
+          f"channel {channel_idx}'s Z range has not been read; pass lowest_immers_pos"
+        )
+      lowest_immers_pos = reach_z[0]
+    if channel_speed <= 0:
+      raise ValueError(f"channel_speed must be positive, is {channel_speed}")
+    if lowest_immers_pos > start_pos_search:
+      raise ValueError(
+        f"lowest_immers_pos={lowest_immers_pos} is above start_pos_search={start_pos_search}"
+      )
+    if channel_idx < len(self.configuration.channels):
+      reach = self.configuration.channels[channel_idx]
       for name, value, window in (
-        ("x", x, reach.x_range),
-        ("y", y, reach.y_range),
-        ("start_z", start_z, reach.z_range),
-        ("lowest_z", lowest_z, reach.z_range),
-        ("final_z", final_z, reach.z_range),
+        ("start_pos_search", start_pos_search, reach.z_range),
+        ("lowest_immers_pos", lowest_immers_pos, reach.z_range),
+        ("z_position_at_end_of_a_command", z_position_at_end_of_a_command, reach.z_range),
       ):
         if window is not None and not window[0] <= value <= window[1]:
           raise ValueError(
-            f"{name}={value} outside channel {channel} range [{window[0]:.1f}, {window[1]:.1f}]"
+            f"{name}={value} outside channel {channel_idx} range [{window[0]:.1f}, {window[1]:.1f}]"
           )
 
     seek = PrepCmd.LLDChannelSeekParameters(
       default_values=False,
-      channel=_CHANNEL_INDEX[channel],
+      channel=_CHANNEL_INDEX[channel_idx],
       seek_position_x=x,
       seek_position_y=y,
-      seek_velocity_z=speed,
-      seek_height=start_z,
-      min_seek_height=lowest_z,
-      final_position_z=final_z,
+      seek_velocity_z=channel_speed,
+      seek_height=start_pos_search,
+      min_seek_height=lowest_immers_pos,
+      final_position_z=z_position_at_end_of_a_command,
       lld_sensitivity=sensitivity,
       detect_mode=detect_mode,
     )
@@ -1677,13 +1721,10 @@ class Pipettes:
       results = await self._unchecked_fw_z_seek_lld_position([seek])
       # What was asked, recorded as soon as the command answers; the read below replaces it with
       # where the channels actually stopped.
-      arm = None if self._driver is None else self._driver.x_arm
-      if arm is not None:
-        arm.update_location_by_reference_point(x)
-      self.update_location_by_reference_point(channel, y=y, z=final_z)
+      self.update_location_by_reference_point(channel_idx, z=z_position_at_end_of_a_command)
     finally:
       await self._record_where_they_stopped()
-    result = next((r for r in results if int(r.channel) == int(_CHANNEL_INDEX[channel])), None)
+    result = next((r for r in results if int(r.channel) == int(_CHANNEL_INDEX[channel_idx])), None)
     if result is None or not result.detected:
       return None
     return float(result.position)
@@ -1720,9 +1761,6 @@ class Pipettes:
     )
 
   # -- shutdown / serialization --------------------------------------------------------------------
-
-  async def stop(self) -> None:
-    self.setup_finished = False
 
   def serialize(self) -> dict:
     return {
@@ -1856,7 +1894,7 @@ class Pipettes:
         indexed[ch][0].get_location_wrt(self._require_deck(), "c", "c", "t") + indexed[ch][2]
         for ch in use_channels
       ]
-      await self.move_to_coordinate(
+      await self.move_to_location(
         [Coordinate(locs[0].x, loc.y, traverse_h) for loc in locs],
         use_channels=use_channels,
       )

@@ -118,6 +118,30 @@ class Head8:
       i: TipTracker(thing=f"Head8 channel {i}") for i in range(NUM_PROBES)
     }
 
+  async def _on_setup(self) -> None:
+    await self.discover()
+    if self._use_v1_aspirate_dispense:
+      self._supports_v2_pipetting = False
+      logger.debug("MPH V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
+    else:
+      try:
+        supported = await self._probe_v2_support()
+      except Exception as e:
+        logger.warning("MPH V2 support probe failed: %s", e)
+        supported = False
+      if not supported:
+        raise RuntimeError(
+          "V2 aspirate/dispense commands (cmd 29-34) are not supported by this MPH firmware. "
+          "Pass use_v1_aspirate_dispense=True to Head8 to use v1 commands instead."
+        )
+      self._supports_v2_pipetting = True
+      logger.debug("MPH V2 aspirate/dispense support: True")
+
+  async def _on_stop(self) -> None:
+    self._supports_v2_pipetting = None
+    for tracker in self.head.values():
+      tracker.clear()
+
   # -- session / discovery -------------------------------------------------------------------------
 
   @property
@@ -158,30 +182,6 @@ class Head8:
       )
       for i in range(NUM_PROBES)
     ]
-
-  async def _on_setup(self) -> None:
-    await self.discover()
-    if self._use_v1_aspirate_dispense:
-      self._supports_v2_pipetting = False
-      logger.debug("MPH V2 aspirate/dispense probe skipped (use_v1_aspirate_dispense=True)")
-    else:
-      try:
-        supported = await self._probe_v2_support()
-      except Exception as e:
-        logger.warning("MPH V2 support probe failed: %s", e)
-        supported = False
-      if not supported:
-        raise RuntimeError(
-          "V2 aspirate/dispense commands (cmd 29-34) are not supported by this MPH firmware. "
-          "Pass use_v1_aspirate_dispense=True to Head8 to use v1 commands instead."
-        )
-      self._supports_v2_pipetting = True
-      logger.debug("MPH V2 aspirate/dispense support: True")
-
-  async def _on_stop(self) -> None:
-    self._supports_v2_pipetting = None
-    for tracker in self.head.values():
-      tracker.clear()
 
   async def _probe_v2_support(self) -> bool:
     """Return True if the MPH firmware exposes V2 aspirate/dispense (cmds 29-34)."""

@@ -122,7 +122,7 @@ class XArm:
   ) -> None:
     """Move the arm along X with the X axis's own move, at a given speed and acceleration.
 
-    `Pipettes.move_to_coordinate` moves through the channel coordinator, whose move overwrites the X
+    `Pipettes.move_to_location` moves through the channel coordinator, whose move overwrites the X
     axis's velocity and acceleration. This sends `XAxis.MoveAbsolute`, which on PRPAA1087 (V1.2.2) moved
     at the velocity and acceleration set just before it. Those are read before the move, set for it,
     and put back afterwards. The coordinator takes no part, so every channel has to be at the traverse
@@ -158,7 +158,7 @@ class XArm:
         raise ValueError(
           f"x={x} outside the channels' range [{channel.x_range[0]:.1f}, {channel.x_range[1]:.1f}]"
         )
-    positions = await pipettes.request_channel_positions()
+    positions = await pipettes.request_locations()
     if not positions:
       raise RuntimeError("the channels reported no positions")
     # The positions a traverse leaves the channels at read a few hundredths of a millimetre under it.
@@ -231,7 +231,7 @@ class XArm:
     pipettes = self._driver.pipettes
     if pipettes is None:
       raise RuntimeError("no pipettes to read the channels from; have you called `prep.setup()`?")
-    positions = await pipettes.request_channel_positions()
+    positions = await pipettes.request_locations()
     if not positions:
       raise RuntimeError("the channels reported no positions")
     end = positions[0].x + distance

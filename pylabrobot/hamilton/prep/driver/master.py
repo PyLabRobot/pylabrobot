@@ -578,7 +578,7 @@ class PrepDriver:
     """
     if not isinstance(self.deck, PrepDeck) or self.x_arm is None or self.pipettes is None:
       return
-    positions = await self.pipettes.request_channel_positions()
+    positions = await self.pipettes.request_locations()
     if not positions:
       logger.warning("the channels reported no positions, so the arm and channels are not modelled")
       return

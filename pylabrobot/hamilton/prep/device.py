@@ -76,6 +76,32 @@ class PrepDevice(Resource):
       deck, location=deck_location if deck_location is not None else Coordinate(0, 0, 0)
     )
 
+  async def setup(
+    self,
+    smart: bool = True,
+    force_initialize: bool = False,
+    default_traverse_height: Optional[float] = None,
+    use_v1_aspirate_dispense: bool = False,
+  ):
+    """Bring the device up.
+
+    Args:
+      smart: as `PrepDriver.setup` takes it.
+      force_initialize: as `PrepDriver.setup` takes it.
+      default_traverse_height: as `PrepDriver.setup` takes it.
+      use_v1_aspirate_dispense: as `PrepDriver.setup` takes it.
+    """
+    await self.driver.setup(
+      smart=smart,
+      force_initialize=force_initialize,
+      default_traverse_height=default_traverse_height,
+      use_v1_aspirate_dispense=use_v1_aspirate_dispense,
+    )
+
+  async def stop(self):
+    """Put the device down."""
+    await self.driver.stop()
+
   # -- what the device carries ------------------------------------------------------------
   # Read through: they do not exist until setup has run.
 
@@ -110,32 +136,6 @@ class PrepDevice(Resource):
     return self.driver.calibration
 
   # -- session ---------------------------------------------------------------
-
-  async def setup(
-    self,
-    smart: bool = True,
-    force_initialize: bool = False,
-    default_traverse_height: Optional[float] = None,
-    use_v1_aspirate_dispense: bool = False,
-  ):
-    """Bring the device up.
-
-    Args:
-      smart: as `PrepDriver.setup` takes it.
-      force_initialize: as `PrepDriver.setup` takes it.
-      default_traverse_height: as `PrepDriver.setup` takes it.
-      use_v1_aspirate_dispense: as `PrepDriver.setup` takes it.
-    """
-    await self.driver.setup(
-      smart=smart,
-      force_initialize=force_initialize,
-      default_traverse_height=default_traverse_height,
-      use_v1_aspirate_dispense=use_v1_aspirate_dispense,
-    )
-
-  async def stop(self):
-    """Put the device down."""
-    await self.driver.stop()
 
   def __str__(self) -> str:
     return f"{self.name}({self.driver.__class__.__name__})"
