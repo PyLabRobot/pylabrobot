@@ -48,6 +48,7 @@ class TipMountingShaft(Resource):
     size_z: float = SHAFT_LENGTH,
     category: str = "tip_mounting_shaft",
     model: Optional[str] = None,
+    cross_section_type: str = CrossSectionType.CIRCLE.value,
   ):
     """
     Args:
@@ -58,14 +59,19 @@ class TipMountingShaft(Resource):
       size_z: how far it reaches below whatever carries it, in mm.
       category: what kind of resource this is.
       model: which channel this is.
+      cross_section_type: its shape across, as `serialize` writes it. Always a circle; taken so a
+        serialized shaft deserializes.
 
     Raises:
-      ValueError: If the tip pickup mode is not one this models.
+      ValueError: If the tip pickup mode is not one this models, or the cross section is not a
+        circle.
     """
     if tip_pickup_mode not in get_args(TipPickupMode):
       raise ValueError(
         f"unknown tip_pickup_mode {tip_pickup_mode!r}, expected one of {get_args(TipPickupMode)}"
       )
+    if cross_section_type != CrossSectionType.CIRCLE.value:
+      raise ValueError(f"a tip mounting shaft is round, not {cross_section_type!r}")
     self.tip_pickup_mode = tip_pickup_mode
     super().__init__(
       name=name,
