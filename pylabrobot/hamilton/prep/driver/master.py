@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, TypeVar, Union
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
+from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
+from pylabrobot.hamilton.transport.tcp.hoi_error import parse_hamilton_error_entries
 from pylabrobot.hamilton.transport.tcp.introspection import FirmwareTreeNode, MethodInfo
 from pylabrobot.hamilton.transport.tcp.messages import (
   CommandMessage,
@@ -18,8 +20,12 @@ from pylabrobot.hamilton.transport.tcp.messages import (
   HoiParamsParser,
 )
 from pylabrobot.hamilton.transport.tcp.packets import Address
+from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
+from pylabrobot.hamilton.transport.tcp.session import TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
+from pylabrobot.io.socket import Socket
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
@@ -72,6 +78,19 @@ class _PrepTCPClient(HamiltonTCPClient):
   """The TCP link to a Prep, describing firmware errors from the Prep's own error table."""
 
   _ERROR_CODES = PREP_ERROR_CODES
+
+  def _create_session(self) -> TCPSession:
+    return _PrepTCPSession(
+      Socket(
+        human_readable_device_name="Hamilton Prep",
+        host=self._host,
+        port=self._port,
+        read_timeout=self._read_timeout,
+        write_timeout=self._write_timeout,
+      ),
+      read_timeout=self._read_timeout,
+      error_codes=self._ERROR_CODES,
+    )
 
 
 @dataclass(frozen=True)
@@ -136,6 +155,53 @@ class _ResolvedPrepCommand(TCPCommand[bytes]):
   def parse_response_parameters(cls, data: bytes) -> bytes:
     """Preserve the checked payload for the original request to decode."""
     return data
+
+
+class _PrepTCPSession(TCPSession):
+  """A session that logs each request and what the device answered, as the simulator's session does.
+
+  At IO level, beside the socket's raw bytes: the request as it was sent and the object it went to, then the
+  decoded answer, or the firmware's error with its description.
+  """
+
+  async def exchange(
+    self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
+  ) -> CommandResponse:
+    request = command.request if isinstance(command, _ResolvedPrepCommand) else command
+    link = f"[{getattr(self._io, '_host', '?')}:{getattr(self._io, '_port', '?')}]"
+    if logger.isEnabledFor(LOG_LEVEL_IO):
+      logger.log(LOG_LEVEL_IO, "%s write: %s to %s", link, request, command.dest)
+    response = await super().exchange(command, read_timeout=read_timeout)
+    if logger.isEnabledFor(LOG_LEVEL_IO):
+      logger.log(LOG_LEVEL_IO, "%s read: %s", link, self._describe(command, request, response))
+    return response
+
+  def _describe(
+    self, command: TCPCommand[object], request: TCPCommand[object], response: CommandResponse
+  ) -> str:
+    """The answer decoded as the request decodes it, or the firmware's error; hex when neither decodes."""
+    params = response.hoi.params
+    if response.hoi.action_code in (
+      Hoi2Action.STATUS_EXCEPTION,
+      Hoi2Action.COMMAND_EXCEPTION,
+      Hoi2Action.INVALID_ACTION_RESPONSE,
+    ):
+      described = []
+      for e in parse_hamilton_error_entries(params):
+        key = (e.module_id, e.node_id, e.object_id, e.interface_id, e.result)
+        fallback = (e.module_id, e.node_id, e.object_id, e.action_id, e.result)
+        text = (
+          self._error_codes.get(key)
+          or self._error_codes.get(fallback)
+          or HC_RESULT_PROTOCOL.get(e.result)
+        )
+        described.append(f"0x{e.result:04X}" + (f" {text}" if text else ""))
+      return "error: " + ("; ".join(described) or params.hex())
+    try:
+      payload, _ = command._strip_warning_prefix(response)
+      return repr(request.parse_response_parameters(payload))
+    except Exception:
+      return params.hex()
 
 
 class PrepDriver:

@@ -1360,6 +1360,31 @@ class Pipettes:
             i += 1
     return z
 
+  async def move_tool_bottom_to_z_positions(self, zs: Dict[int, float]) -> None:
+    """Move the bottom of the tool on each named channel along Z, in one command.
+
+    The Prep positions the tool bottom: the end of the tip when one is mounted, the end of the tip
+    mounting shaft when none is. Each named channel keeps its X and Y; the channels not named stay where
+    they are.
+
+    Args:
+      zs: where to put each named channel's tool bottom, in mm on the deck, keyed by channel, 0-indexed
+        from the back.
+
+    Raises:
+      ValueError: If a named channel does not exist, or cannot reach its `z`.
+    """
+    if not zs:
+      return
+    positions = await self.request_locations()
+    for channel in zs:
+      if not 0 <= channel < len(positions):
+        raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
+    channels = sorted(zs)
+    await self.move_to_location(
+      [Coordinate(positions[c].x, positions[c].y, zs[c]) for c in channels], use_channels=channels
+    )
+
   async def move_tool_bottom_to_z_position(self, channel: int, z: float) -> None:
     """Move the bottom of the tool on one channel along Z.
 

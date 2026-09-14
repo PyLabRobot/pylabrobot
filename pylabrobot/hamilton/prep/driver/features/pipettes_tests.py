@@ -183,6 +183,34 @@ def test_move_to_location_refuses_what_the_channel_bounds_exclude():
   _run(_t())
 
 
+def test_move_tool_bottom_to_z_positions_moves_each_named_channel_in_one_command():
+  """Each channel goes to its own Z in a single move, keeping its X and Y."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    before = await p.pipettes.request_locations()
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_tool_bottom_to_z_positions({1: 75.0, 0: 50.0})
+    assert sent.count("PrepMoveToPosition") == 1
+    after = await p.pipettes.request_locations()
+    assert (after[0].y, after[0].z) == (before[0].y, 50.0)
+    assert (after[1].y, after[1].z) == (before[1].y, 75.0)
+    with pytest.raises(ValueError, match="out of range"):
+      await p.pipettes.move_tool_bottom_to_z_positions({2: 50.0})
+    await p.stop()
+
+  _run(_t())
+
+
 def test_move_to_location_keeps_each_location_with_its_channel():
   """Locations named out of channel order still go to the channels they were named for."""
 

@@ -8,7 +8,7 @@ from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as C
 from pylabrobot.hamilton.prep.driver.errors import PREP_ERROR_CODES
 from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
-from pylabrobot.hamilton.prep.driver.master import ChannelDriveMap
+from pylabrobot.hamilton.prep.driver.master import ChannelDriveMap, _PrepTCPSession
 from pylabrobot.hamilton.prep.driver.prep_commands import MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH
 from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError
 from pylabrobot.hamilton.transport.tcp.introspection import MethodInfo, ObjectInfo
@@ -19,6 +19,7 @@ from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.tests.tcp_tests import _MemorySocket, _response, _SessionTest
 from pylabrobot.hamilton.transport.tcp.wire_types import F32, Str
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.resources.hamilton import PrepDeck
 
@@ -26,10 +27,12 @@ from pylabrobot.resources.hamilton import PrepDeck
 class TestPrepTransport(_SessionTest):
   """Check request binding, typed responses, and failure ownership end to end."""
 
-  def start_session(self, driver: PrepDriver, address: Address) -> _MemorySocket:
+  def start_session(
+    self, driver: PrepDriver, address: Address, session_type: type = TCPSession
+  ) -> _MemorySocket:
     """Install a fresh production session without opening a network connection."""
     io = _MemorySocket()
-    driver.io._session = TCPSession(io, error_codes=PREP_ERROR_CODES)
+    driver.io._session = session_type(io, error_codes=PREP_ERROR_CODES)
     driver.io._session.client_address = Address(2, 1, 65535)
     driver.io._session.state = SessionState.CONNECTING
     for path in (MLPREP_OBJECT_PATH, PIPETTOR_OBJECT_PATH):
@@ -128,6 +131,36 @@ class TestPrepTransport(_SessionTest):
           with self.assertRaisesRegex(RuntimeError, "GetTipPresent"):
             await asyncio.wait_for(channels.sense_tip_presence(), timeout=1)
         self.assertEqual(io.writes, [])
+
+  async def test_prep_session_logs_each_request_and_its_answer(self):
+    """The request, the object it went to, and the decoded answer or the firmware error, at IO level."""
+    driver = PrepDriver(deck=PrepDeck(), host="memory-only", port=0)
+    io = self.start_session(driver, Address(1, 1, 257), session_type=_PrepTCPSession)
+    self.addAsyncCleanup(driver.io.stop)
+    answers = [
+      (Hoi2Action.STATUS_RESPONSE, HoiParams().add(180.0, F32).build()),
+      (
+        Hoi2Action.COMMAND_EXCEPTION,
+        HoiParams().add("0x0001.0x0001.0x0101:0x01,0x0006,0x0F08", Str).build(),
+      ),
+    ]
+
+    async def respond(request: HarpPacket) -> None:
+      """Answer the traverse height, then refuse the park."""
+      action, params = answers.pop(0)
+      io.feed(_response(sequence=request.seq, action=action, params=params))
+
+    io.on_write = respond
+    with self.assertLogs("pylabrobot.hamilton.prep.driver.master", level=LOG_LEVEL_IO) as logs:
+      await driver.send_command(C.PrepGetDefaultTraverseHeight())
+      with self.assertRaises(HoiError):
+        await driver.send_command(C.PrepPark())
+    lines = [record.getMessage() for record in logs.records]
+    self.assertIn("write: PrepGetDefaultTraverseHeight(", lines[0])
+    self.assertIn("to 1:1:257", lines[0])
+    self.assertIn("read: PrepGetDefaultTraverseHeight.Response(value=180.0)", lines[1])
+    self.assertIn("write: PrepPark(", lines[2])
+    self.assertIn("read: error: 0x0F08", lines[3])
 
   async def test_reusable_request_rebinds_after_reconnection(self):
     client, io = self.make_driver()
