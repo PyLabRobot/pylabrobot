@@ -25,7 +25,6 @@ from pylabrobot.hamilton.transport.tcp.session import TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
 from pylabrobot.io.socket import Socket
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
@@ -160,7 +159,7 @@ class _ResolvedPrepCommand(TCPCommand[bytes]):
 class _PrepTCPSession(TCPSession):
   """A session that logs each request and what the device answered, as the simulator's session does.
 
-  At IO level, beside the socket's raw bytes: the request as it was sent and the object it went to, then the
+  At DEBUG level, above the socket's raw bytes at IO level: the request as it was sent and the object it went to, then the
   decoded answer, or the firmware's error with its description.
   """
 
@@ -169,11 +168,11 @@ class _PrepTCPSession(TCPSession):
   ) -> CommandResponse:
     request = command.request if isinstance(command, _ResolvedPrepCommand) else command
     link = f"[{getattr(self._io, '_host', '?')}:{getattr(self._io, '_port', '?')}]"
-    if logger.isEnabledFor(LOG_LEVEL_IO):
-      logger.log(LOG_LEVEL_IO, "%s write: %s to %s", link, request, command.dest)
+    if logger.isEnabledFor(logging.DEBUG):
+      logger.debug("%s write: %s to %s", link, request, command.dest)
     response = await super().exchange(command, read_timeout=read_timeout)
-    if logger.isEnabledFor(LOG_LEVEL_IO):
-      logger.log(LOG_LEVEL_IO, "%s read: %s", link, self._describe(command, request, response))
+    if logger.isEnabledFor(logging.DEBUG):
+      logger.debug("%s read: %s", link, self._describe(command, request, response))
     return response
 
   def _describe(

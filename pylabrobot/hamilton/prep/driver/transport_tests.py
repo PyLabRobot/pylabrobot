@@ -1,6 +1,7 @@
 """Prep integration with real TCP sessions over framed, in-memory I/O."""
 
 import asyncio
+import logging
 from dataclasses import FrozenInstanceError
 from unittest.mock import AsyncMock, patch
 
@@ -19,7 +20,6 @@ from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.tests.tcp_tests import _MemorySocket, _response, _SessionTest
 from pylabrobot.hamilton.transport.tcp.wire_types import F32, Str
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.resources.hamilton import PrepDeck
 
@@ -133,7 +133,7 @@ class TestPrepTransport(_SessionTest):
         self.assertEqual(io.writes, [])
 
   async def test_prep_session_logs_each_request_and_its_answer(self):
-    """The request, the object it went to, and the decoded answer or the firmware error, at IO level."""
+    """The request, the object it went to, and the decoded answer or the firmware error, at DEBUG level."""
     driver = PrepDriver(deck=PrepDeck(), host="memory-only", port=0)
     io = self.start_session(driver, Address(1, 1, 257), session_type=_PrepTCPSession)
     self.addAsyncCleanup(driver.io.stop)
@@ -151,7 +151,7 @@ class TestPrepTransport(_SessionTest):
       io.feed(_response(sequence=request.seq, action=action, params=params))
 
     io.on_write = respond
-    with self.assertLogs("pylabrobot.hamilton.prep.driver.master", level=LOG_LEVEL_IO) as logs:
+    with self.assertLogs("pylabrobot.hamilton.prep.driver.master", level=logging.DEBUG) as logs:
       await driver.send_command(C.PrepGetDefaultTraverseHeight())
       with self.assertRaises(HoiError):
         await driver.send_command(C.PrepPark())

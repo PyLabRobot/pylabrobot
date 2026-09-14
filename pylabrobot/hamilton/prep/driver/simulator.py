@@ -43,7 +43,6 @@ from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, wire_type_of
 from pylabrobot.io.socket import Socket
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 from pylabrobot.resources.deck import Deck
 
 from . import prep_commands as PrepCmd
@@ -482,7 +481,7 @@ class _SimulatedSession(TCPSession):
     frame = HarpPacket.unpack(IpPacket.unpack(command.build(self.client_address, sequence)).payload)
     hoi = HoiPacket.unpack(frame.payload)
     request = command.request if isinstance(command, _ResolvedPrepCommand) else command
-    logger.log(LOG_LEVEL_IO, "%s write: %s", SIMULATED_LINK, request)
+    logger.debug("%s write: %s", SIMULATED_LINK, request)
 
     status = hoi_action_code_base(hoi.action_code) == Hoi2Action.STATUS_REQUEST
     params, refused = await self._respond(request, command.dest, hoi)
@@ -524,7 +523,7 @@ class _SimulatedSession(TCPSession):
       if answered is None:
         return self._refusal(dest, hoi, "introspection request not simulated"), True
       params = answered.build()
-      logger.log(LOG_LEVEL_IO, "%s read: simulation: %s", SIMULATED_LINK, params.hex())
+      logger.debug("%s read: simulation: %s", SIMULATED_LINK, params.hex())
       return params, False
 
     method = node.method(hoi.interface_id, hoi.action_id)
@@ -540,13 +539,13 @@ class _SimulatedSession(TCPSession):
       return b"", False
     value, source = answer
     params = (value if isinstance(value, HoiParams) else _encode(value)).build()
-    logger.log(LOG_LEVEL_IO, "%s read: simulation: %s from model %s", SIMULATED_LINK, value, source)
+    logger.debug("%s read: simulation: %s from model %s", SIMULATED_LINK, value, source)
     return params, False
 
   @staticmethod
   def _refusal(dest: Address, hoi: HoiPacket, why: str) -> bytes:
     """The exception a device sends for a method it does not have, logged with why."""
-    logger.log(LOG_LEVEL_IO, "%s read: simulation refuses: %s", SIMULATED_LINK, why)
+    logger.debug("%s read: simulation refuses: %s", SIMULATED_LINK, why)
     entry = (
       f"0x{dest.module:04X}.0x{dest.node:04X}.0x{dest.object:04X}:"
       f"0x{hoi.interface_id:02X},0x{hoi.action_id:04X},0x{_NOT_SUPPORTED:04X}"
