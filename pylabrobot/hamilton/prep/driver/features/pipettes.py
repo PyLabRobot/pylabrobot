@@ -18,12 +18,15 @@ import enum
 import logging
 import math
 import struct as _struct
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import (
   TYPE_CHECKING,
   Any,
+  AsyncIterator,
   Awaitable,
   Callable,
+  Collection,
   Dict,
   Generic,
   List,
@@ -376,6 +379,11 @@ class PipettesConfiguration:
   # -- how the caller wants them driven --
   use_v1_aspirate_dispense: bool = False
   """Whether to aspirate and dispense with the v1 commands (cmd 1-6) rather than the v2 ones."""
+
+  # -- what the device holds --
+  z_drive_acceleration: float = 800.0
+  """What each channel's Z drive holds as its acceleration, in mm/s2: read with `ZDrive.GetAcceleration` on
+  PRPAA1087 (V1.2.2). The driver reads the drives themselves; a simulated device answers with this."""
 
   # -- what the pipettor answered --
   supports_v2_pipetting: Optional[bool] = None
@@ -957,7 +965,12 @@ class Pipettes:
       ordered = sorted(channels, key=lambda c: rank.get(c, len(rank) + c))
     return tuple(ordered)
 
-  def _check_y_spacing(self, ys: Dict[int, float]) -> None:
+  def _check_y_spacing(
+    self,
+    ys: Dict[int, float],
+    named: Optional[Collection[int]] = None,
+    make_space_available: bool = False,
+  ) -> None:
     """Refuse channel Y positions that are out of order or closer than their minimum spacing.
 
     Pairs whose Y windows have not been read are not checked, as positions are not checked against windows that
@@ -965,9 +978,13 @@ class Pipettes:
 
     Args:
       ys: each channel's Y after a move, in mm, keyed by channel, 0-indexed from the back.
+      named: the channels the caller asked to move. A channel of a refused pair that is not among them is named
+        in the error as staying where it stands. None says nothing about it.
+      make_space_available: whether the error may point to `make_space=True` for a channel that was not named.
 
     Raises:
-      ValueError: If two neighbouring channels would be closer than `_min_spacing_between`, or out of order.
+      ValueError: If two neighbouring channels would be closer than `_min_spacing_between`, or out of order. The
+        message says which, where each would be, and where either could go instead.
     """
     channels = self.configuration.channels
     for i in range(len(self.channel_order) - 1):
@@ -978,9 +995,22 @@ class Pipettes:
       required = self._min_spacing_between(i, i + 1)
       actual = ys[i] - ys[i + 1]
       if round(actual * 1000) < round(required * 1000):  # compare in um to avoid float issues
-        raise ValueError(
-          f"Channels {i} and {i + 1} must be at least {required}mm apart, but are {actual:.2f}mm apart."
+        if actual < 0:
+          message = (
+            f"Channel {i} would be {-actual:.2f} mm in front of channel {i + 1} (y={ys[i]:.2f} and "
+            f"y={ys[i + 1]:.2f} mm). Channels are numbered from the back, so channel {i} needs the larger y"
+          )
+        else:
+          message = f"Channels {i} and {i + 1} would be {actual:.2f} mm apart (y={ys[i]:.2f} and y={ys[i + 1]:.2f} mm)"
+        message += (
+          f"; they must be at least {required} mm apart. Send channel {i} to y >= {ys[i + 1] + required:.2f} "
+          f"or channel {i + 1} to y <= {ys[i] - required:.2f}."
         )
+        for channel in (i, i + 1):
+          if named is not None and channel not in named:
+            message += f" Channel {channel} was not named, so it stays at y={ys[channel]:.2f} mm"
+            message += "; make_space=True moves it out of the way." if make_space_available else "."
+        raise ValueError(message)
 
   def _resolve_command_version(self, override: Optional[Literal["v1", "v2"]] = None) -> bool:
     return resolve_command_version(
@@ -1376,11 +1406,12 @@ class Pipettes:
       raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     return float(positions[channel].y)
 
-  async def _unchecked_fw_move_y_absolute(self, ys: Dict[int, float]) -> None:
-    """Send `ChannelXYZCoordinator.MoveYAbsolute` at `default_y_speed`. Nothing is guarded and nothing is recorded.
+  async def _unchecked_fw_move_y_absolute(self, ys: Dict[int, float], speed: float) -> None:
+    """Send `ChannelXYZCoordinator.MoveYAbsolute`. Nothing is guarded and nothing is recorded.
 
     Args:
       ys: where to send each channel along Y, in mm, keyed by channel, 0-indexed from the back.
+      speed: how fast, in mm/s.
     """
     await self._driver.send_command(
       PrepCmd.PrepMoveYAbsolute(
@@ -1390,14 +1421,16 @@ class Pipettes:
           )
           for channel, y in sorted(ys.items())
         ],
-        velocity=self.default_y_speed,
+        velocity=speed,
       )
     )
 
-  async def move_to_y_positions(self, ys: Dict[int, float], make_space: bool = False) -> None:
+  async def move_to_y_positions(
+    self, ys: Dict[int, float], make_space: bool = False, speed: Optional[float] = None
+  ) -> None:
     """Move channels along Y, in one command.
 
-    Y alone, at `default_y_speed`: every channel keeps its X and Z. The command carries a Y for every channel,
+    Y alone: every channel keeps its X and Z. The command carries a Y for every channel,
     so the channels not named are sent where they stand, unless `make_space` moves them. The channels stay in
     order back to front, each neighbouring pair at least `_min_spacing_between` apart.
 
@@ -1407,11 +1440,15 @@ class Pipettes:
         spacing and the channels stay in order back to front. Off by default: nothing moves that the caller did
         not ask to move, and a request that will not fit raises instead. It can raise either way, since the
         requested positions may leave no room.
+      speed: how fast, in mm/s. Defaults to `default_y_speed`.
 
     Raises:
-      ValueError: If a named channel does not exist, a channel cannot reach its Y, or the channels would be out
-        of order or closer than their minimum spacing.
+      ValueError: If a named channel does not exist, a channel cannot reach its Y, the channels would be out of
+        order or closer than their minimum spacing, or `speed` is not above 0.
     """
+    speed = self.default_y_speed if speed is None else speed
+    if speed <= 0:
+      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
     if not ys:
       return
     positions = await self.request_locations()
@@ -1448,10 +1485,10 @@ class Pipettes:
         raise ValueError(
           f"y={y} outside channel {channel} range [{window[0]:.1f}, {window[1]:.1f}]"
         )
-    self._check_y_spacing(targets)
+    self._check_y_spacing(targets, named=ys, make_space_available=not make_space)
 
     try:
-      await self._unchecked_fw_move_y_absolute(targets)
+      await self._unchecked_fw_move_y_absolute(targets, speed)
     except Exception:
       # Only on the way out: a move that arrives is recorded from its targets below.
       await self._record_where_they_stopped()
@@ -1459,7 +1496,7 @@ class Pipettes:
     for channel, y in targets.items():
       self.update_location_by_reference_point(channel, y=y)
 
-  async def move_to_y_position(self, channel: int, y: float) -> None:
+  async def move_to_y_position(self, channel: int, y: float, speed: Optional[float] = None) -> None:
     """Move a channel in the Y direction (in mm).
 
     Analogous to STARBackend.move_to_y_position().
@@ -1467,8 +1504,9 @@ class Pipettes:
     Args:
       channel: Channel index (0=rearmost).
       y: Target Y position in mm.
+      speed: how fast, in mm/s. Defaults to `default_y_speed`.
     """
-    await self.move_to_y_positions({channel: y})
+    await self.move_to_y_positions({channel: y}, speed=speed)
 
   # -- z position ----------------------------------------------------------------------------------
 
@@ -1588,20 +1626,34 @@ class Pipettes:
             i += 1
     return z
 
-  async def move_tool_bottom_to_z_positions(self, zs: Dict[int, float]) -> None:
+  async def move_tool_bottom_to_z_positions(
+    self,
+    zs: Dict[int, float],
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+  ) -> None:
     """Move the bottom of the tool on each named channel along Z, in one command.
 
     The Prep positions the tool bottom: the end of the tip when one is mounted, the end of the tip
-    mounting shaft when none is. Z alone, at `default_z_speed`: every channel keeps its X and Y. The
+    mounting shaft when none is. Z alone: every channel keeps its X and Y. The
     command carries a Z for every channel, so the channels not named are sent where they stand.
 
     Args:
       zs: where to put each named channel's tool bottom, in mm on the deck, keyed by channel, 0-indexed
         from the back.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Every channel's Z drive is set to it for this move and put back to what
+        it held afterwards, whether or not the move succeeded. None leaves the drives as they are.
 
     Raises:
-      ValueError: If a named channel does not exist, or cannot reach its `z`.
+      ValueError: If a named channel does not exist, cannot reach its `z`, or `speed` or `acceleration` is not
+        above 0.
     """
+    speed = self.default_z_speed if speed is None else speed
+    if speed <= 0:
+      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    if acceleration is not None and acceleration <= 0:
+      raise ValueError(f"acceleration must be above 0 mm/s2, is {acceleration}")
     if not zs:
       return
     positions = await self.request_locations()
@@ -1617,7 +1669,8 @@ class Pipettes:
     targets.update(zs)
 
     try:
-      await self._unchecked_fw_move_z_absolute(targets)
+      async with self._z_drive_acceleration(acceleration):
+        await self._unchecked_fw_move_z_absolute(targets, speed)
     except Exception:
       # Only on the way out: a move that arrives is recorded from its targets below.
       await self._record_where_they_stopped()
@@ -1625,11 +1678,49 @@ class Pipettes:
     for channel, z in targets.items():
       self.update_location_by_reference_point(channel, z=z)
 
-  async def _unchecked_fw_move_z_absolute(self, zs: Dict[int, float]) -> None:
-    """Send `ChannelXYZCoordinator.MoveZAbsolute` at `default_z_speed`. Nothing is guarded and nothing is recorded.
+  @asynccontextmanager
+  async def _z_drive_acceleration(self, acceleration: Optional[float]) -> AsyncIterator[None]:
+    """Hold every channel's Z drive at `acceleration` for what runs inside, then put back what each held.
+
+    `MoveZAbsolute` carries no acceleration: it follows what each channel's Z drive holds. A drive that cannot be
+    put back is logged, not raised, so the error that matters is the one already on its way out. None leaves the
+    drives as they are and sends nothing.
+
+    Args:
+      acceleration: in mm/s2, or None.
+    """
+    if acceleration is None:
+      yield
+      return
+    held: Dict[Address, float] = {}
+    try:
+      for drive in (await self._driver.request_channel_drives()).zdrive_addrs:
+        response = await self._driver.send_command(PrepCmd.PrepZDriveGetAcceleration(dest=drive))
+        held[drive] = float(response.value)
+        await self._driver.send_command(
+          PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=acceleration)
+        )
+      yield
+    finally:
+      for drive, value in held.items():
+        try:
+          await self._driver.send_command(
+            PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=value)
+          )
+        except Exception:
+          logger.warning(
+            "could not put the Z drive acceleration at %s back to %s mm/s2",
+            drive,
+            value,
+            exc_info=True,
+          )
+
+  async def _unchecked_fw_move_z_absolute(self, zs: Dict[int, float], speed: float) -> None:
+    """Send `ChannelXYZCoordinator.MoveZAbsolute`. Nothing is guarded and nothing is recorded.
 
     Args:
       zs: where to send each channel's tool bottom along Z, in mm, keyed by channel, 0-indexed from the back.
+      speed: how fast, in mm/s.
     """
     await self._driver.send_command(
       PrepCmd.PrepMoveZAbsolute(
@@ -1639,11 +1730,17 @@ class Pipettes:
           )
           for channel, z in sorted(zs.items())
         ],
-        velocity=self.default_z_speed,
+        velocity=speed,
       )
     )
 
-  async def move_tool_bottom_to_z_position(self, channel: int, z: float) -> None:
+  async def move_tool_bottom_to_z_position(
+    self,
+    channel: int,
+    z: float,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+  ) -> None:
     """Move the bottom of the tool on one channel along Z.
 
     The Prep positions the tool bottom: the end of the tip when one is mounted, the end of the tip
@@ -1653,11 +1750,14 @@ class Pipettes:
     Args:
       channel: which channel to move, 0-indexed from the back.
       z: where to put the bottom of its tool, in mm on the deck.
+      speed: how fast, in mm/s. Defaults to `default_z_speed`.
+      acceleration: how hard, in mm/s2. Set on every channel's Z drive for this move and put back afterwards.
+        None leaves the drives as they are.
 
     Raises:
-      ValueError: If the channel does not exist, or cannot reach `z`.
+      ValueError: If the channel does not exist, cannot reach `z`, or `speed` or `acceleration` is not above 0.
     """
-    await self.move_tool_bottom_to_z_positions({channel: z})
+    await self.move_tool_bottom_to_z_positions({channel: z}, speed=speed, acceleration=acceleration)
 
   async def move_to_safe_z(self, channels: Optional[List[int]] = None) -> None:
     """Move the given channels' Z axes up to safe (traverse) height (cmd=28).
@@ -1798,7 +1898,7 @@ class Pipettes:
     if len(channels) < len(self.channel_order):
       final_y = {i: position.y for i, position in enumerate(standing)}
     final_y.update(zip(channels, y_vals))
-    self._check_y_spacing(final_y)
+    self._check_y_spacing(final_y, named=channels)
 
     # The scales in force before this move, to put back once it is done.
     restore_x: Optional[int] = None

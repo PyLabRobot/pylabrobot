@@ -364,22 +364,75 @@ class PrepDriver:
     finally:
       self._mlprep_address = None
 
+  async def features_below_safe_z(self, tolerance: float = 0.5) -> List[str]:
+    """Which channels report below where they are safe.
+
+    Read back rather than taken on trust: a retract that answered without arriving leaves the device looking
+    safe while a lateral move would drive whatever is still low into whatever is in the way. Each channel's stop
+    disc is held to the traverse height the device reports, so a mounted tip does not count as low. The 8-channel
+    head is not judged: no read of its height is known.
+
+    Args:
+      tolerance: how far below the traverse height still counts as up, in mm.
+
+    Returns:
+      One entry per channel that is low, naming it and where it says it is. Empty when everything is up, or when
+      the device reported no traverse height to hold the channels to.
+    """
+    low: List[str] = []
+    pipettes = self.pipettes
+    safe = None if self.configuration is None else self.configuration.default_traverse_height
+    if pipettes is None or safe is None:
+      return low
+    for channel in range(pipettes.num_channels):
+      try:
+        z = await pipettes.request_stop_disc_z_position(channel)
+      except Exception:
+        low.append(f"channel {channel} (where it is could not be read)")
+      else:
+        if z < safe - tolerance:
+          low.append(f"channel {channel} at {z:.1f} mm, safe is {safe:.1f} mm")
+    return low
+
   async def stop(self):
+    """Close the link, leaving the device safe to move laterally.
+
+    The device keeps its state; only this driver lets go of it. Every pipetting channel is moved up to Z safety
+    first, and where the channels stopped is read back: a driver that let go with a channel low would leave the
+    next lateral move to crash it. The 8-channel head is not raised: no move of its Z alone is known.
+
+    The link closes whether or not that succeeds. Repeatable: a driver that is not set up is left alone.
+    """
     if not self._setup_finished:
       return
-    if self._core_gripper_arm is not None:
+    try:
+      if self._core_gripper_arm is not None:
+        logger.warning(
+          "PrepDriver.stop() called with CoRe grippers still mounted. stop() raises the channels to Z "
+          "safety but does not return the tools. Call `await prep.return_core_grippers()` first if you "
+          "want them returned."
+        )
+        self._core_gripper_arm = None
+      if self.pipettes is not None:
+        try:
+          await self.pipettes.move_to_safe_z()
+        except Exception:
+          logger.warning("could not move the channels to Z safety", exc_info=True)
+        # Asked, not assumed: a move that answers has not said where it stopped.
+        low = await self.features_below_safe_z()
+        if low:
+          logger.warning("not everything is at Z safety: %s", "; ".join(low))
+    except Exception:
       logger.warning(
-        "PrepDriver.stop() called with CoRe grippers still mounted. "
-        "stop() only manages connection teardown and will NOT move the instrument. "
-        "Call `await prep.return_core_grippers()` first if you want the tools returned."
+        "could not bring the device to a safe state; closing the link anyway", exc_info=True
       )
-      self._core_gripper_arm = None
-    if self.pipettes is not None:
-      await self.pipettes._on_stop()
-    if self.head8 is not None:
-      await self.head8._on_stop()
-    await self._close()
-    self._setup_finished = False
+    finally:
+      if self.pipettes is not None:
+        await self.pipettes._on_stop()
+      if self.head8 is not None:
+        await self.head8._on_stop()
+      await self._close()
+      self._setup_finished = False
 
   # ----------------------------------------
   # Low-level I/O

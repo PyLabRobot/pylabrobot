@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from pylabrobot.hamilton.prep import PrepSimulationDriver
@@ -393,6 +395,124 @@ def test_y_and_z_moves_send_every_channel_at_the_default_speed():
   _run(_t())
 
 
+def test_y_and_z_moves_send_the_speed_they_are_given():
+  """A speed named on any of the four Y and Z moves is the velocity sent; one not above 0 is refused unsent."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_y_positions({0: 370.0, 1: 350.0}, speed=50.0)
+    await p.pipettes.move_to_y_position(1, 340.0, speed=60.0)
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 150.0, 1: 140.0}, speed=30.0)
+    await p.pipettes.move_tool_bottom_to_z_position(0, 160.0, speed=40.0)
+    moves = [
+      c for c in sent if isinstance(c, (PrepCmd.PrepMoveYAbsolute, PrepCmd.PrepMoveZAbsolute))
+    ]
+    assert [(type(c).__name__, c.velocity) for c in moves] == [
+      ("PrepMoveYAbsolute", 50.0),
+      ("PrepMoveYAbsolute", 60.0),
+      ("PrepMoveZAbsolute", 30.0),
+      ("PrepMoveZAbsolute", 40.0),
+    ]
+    sent.clear()
+    for refused in (
+      lambda: p.pipettes.move_to_y_positions({0: 370.0}, speed=0),
+      lambda: p.pipettes.move_to_y_position(0, 370.0, speed=-5.0),
+      lambda: p.pipettes.move_tool_bottom_to_z_positions({0: 150.0}, speed=0),
+      lambda: p.pipettes.move_tool_bottom_to_z_position(0, 150.0, speed=-1.0),
+    ):
+      with pytest.raises(ValueError, match="speed must be above 0 mm/s"):
+        await refused()
+    assert sent == []
+    await p.stop()
+
+  _run(_t())
+
+
+def test_z_moves_hold_the_acceleration_for_the_move_and_put_it_back():
+  """Each Z drive's acceleration is read and set before the move and set back after it, even when it fails; with
+  none named nothing is sent, and one not above 0 is refused unsent."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    acceleration_commands = (
+      PrepCmd.PrepZDriveGetAcceleration,
+      PrepCmd.PrepZDriveSetAcceleration,
+      PrepCmd.PrepMoveZAbsolute,
+    )
+
+    def sequence():
+      return [
+        (
+          type(c).__name__,
+          str(c.dest) if not isinstance(c, PrepCmd.PrepMoveZAbsolute) else None,
+          getattr(c, "value", None),
+        )
+        for c in sent
+        if isinstance(c, acceleration_commands)
+      ]
+
+    drives = [str(a) for a in (await p.request_channel_drives()).zdrive_addrs]
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 150.0, 1: 140.0}, acceleration=400.0)
+    assert sequence() == [
+      ("PrepZDriveGetAcceleration", drives[0], None),
+      ("PrepZDriveSetAcceleration", drives[0], 400.0),
+      ("PrepZDriveGetAcceleration", drives[1], None),
+      ("PrepZDriveSetAcceleration", drives[1], 400.0),
+      ("PrepMoveZAbsolute", None, None),
+      ("PrepZDriveSetAcceleration", drives[0], 800.0),
+      ("PrepZDriveSetAcceleration", drives[1], 800.0),
+    ]
+
+    sent.clear()
+    await p.pipettes.move_tool_bottom_to_z_position(0, 160.0)
+    assert [name for name, _, _ in sequence()] == ["PrepMoveZAbsolute"]
+
+    sent.clear()
+    p.pipettes._unchecked_fw_move_z_absolute = AsyncMock(side_effect=RuntimeError("stuck"))  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="stuck"):
+      await p.pipettes.move_tool_bottom_to_z_position(1, 150.0, acceleration=300.0)
+    assert [
+      (name, value) for name, _, value in sequence() if name == "PrepZDriveSetAcceleration"
+    ] == [
+      ("PrepZDriveSetAcceleration", 300.0),
+      ("PrepZDriveSetAcceleration", 300.0),
+      ("PrepZDriveSetAcceleration", 800.0),
+      ("PrepZDriveSetAcceleration", 800.0),
+    ]
+
+    sent.clear()
+    for refused in (
+      lambda: p.pipettes.move_tool_bottom_to_z_positions({0: 150.0}, acceleration=0),
+      lambda: p.pipettes.move_tool_bottom_to_z_position(0, 150.0, acceleration=-100.0),
+    ):
+      with pytest.raises(ValueError, match="acceleration must be above 0 mm/s2"):
+        await refused()
+    assert sequence() == []
+    await p.stop()
+
+  _run(_t())
+
+
 def test_moves_that_keep_x_leave_the_x_speed_scale_alone():
   """A Y or Z move keeps the gantry where it stands, so no X speed scale is read, set or put back."""
 
@@ -662,18 +782,51 @@ def test_moves_refuse_channels_too_close_or_out_of_order():
       return await send(command, *args, **kwargs)
 
     p.send_command = record  # type: ignore[method-assign]
-    with pytest.raises(ValueError, match="at least 9.0mm apart"):
+    with pytest.raises(ValueError, match="at least 9.0 mm apart"):
       await p.pipettes.move_to_y_positions({0: 100.0, 1: 95.0})
-    with pytest.raises(ValueError, match="at least 9.0mm apart"):
+    with pytest.raises(ValueError, match="at least 9.0 mm apart"):
       await p.pipettes.move_to_y_positions({0: 100.0, 1: 120.0})
     here = await p.pipettes.request_locations()
-    with pytest.raises(ValueError, match="at least 9.0mm apart"):
+    with pytest.raises(ValueError, match="at least 9.0 mm apart"):
       # The front channel sent to 5 mm in front of the rear one, which stays where it is.
       await p.pipettes.move_to_location(
         Coordinate(here[1].x, here[0].y - 5.0, here[1].z), use_channels=1
       )
     assert "PrepMoveToPosition" not in sent
     assert "PrepMoveYAbsolute" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
+def test_spacing_refusals_say_what_is_wrong_and_what_would_fit():
+  """Out of order and too close read differently, give both positions and where either channel could go, and
+  name a channel that was not asked to move - pointing to make_space where the move offers it."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 200.0, 1: 91.0})
+    with pytest.raises(ValueError) as refused:
+      await p.pipettes.move_to_y_positions({0: 80.0})
+    assert str(refused.value) == (
+      "Channel 0 would be 11.00 mm in front of channel 1 (y=80.00 and y=91.00 mm). Channels are numbered from "
+      "the back, so channel 0 needs the larger y; they must be at least 9.0 mm apart. Send channel 0 to "
+      "y >= 100.00 or channel 1 to y <= 71.00. Channel 1 was not named, so it stays at y=91.00 mm; "
+      "make_space=True moves it out of the way."
+    )
+    with pytest.raises(ValueError) as refused:
+      await p.pipettes.move_to_y_positions({0: 100.0, 1: 95.0})
+    assert str(refused.value) == (
+      "Channels 0 and 1 would be 5.00 mm apart (y=100.00 and y=95.00 mm); they must be at least 9.0 mm apart. "
+      "Send channel 0 to y >= 104.00 or channel 1 to y <= 91.00."
+    )
+    here = await p.pipettes.request_locations()
+    with pytest.raises(
+      ValueError, match=r"Channel 0 was not named, so it stays at y=200\.00 mm\.$"
+    ):
+      await p.pipettes.move_to_location(Coordinate(here[1].x, 195.0, here[1].z), use_channels=1)
     await p.stop()
 
   _run(_t())
@@ -688,7 +841,7 @@ def test_move_to_y_positions_make_space_moves_the_channel_not_named():
     assert p.pipettes is not None
     before = await p.pipettes.request_locations()
     target = before[0].y - 5.0
-    with pytest.raises(ValueError, match="at least 9.0mm apart"):
+    with pytest.raises(ValueError, match="at least 9.0 mm apart"):
       await p.pipettes.move_to_y_positions({1: target})
     sent: list = []
     send = p.send_command

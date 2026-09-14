@@ -432,6 +432,11 @@ class SimulatedPipettes(_Simulated, Pipettes):
         )
       return PrepCmd.PrepGetChannelBounds.Response(bounds=bounds), "the declared channel ranges"
 
+    if isinstance(request, PrepCmd.PrepZDriveGetAcceleration):
+      return PrepCmd.PrepZDriveGetAcceleration.Response(
+        value=self._declared().z_drive_acceleration
+      ), "the declared Z drive acceleration"
+
     if isinstance(request, PrepCmd.PrepProbeRequest):
       owner = self.device.tree.channel_of(request.dest)
       if owner is None:

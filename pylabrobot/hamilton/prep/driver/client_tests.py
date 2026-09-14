@@ -269,3 +269,65 @@ def test_setup_logs_one_summary_of_what_was_found(caplog):
     await p.stop()
 
   asyncio.run(_run())
+
+
+def test_stop_raises_the_channels_to_z_safety_and_reads_them_back():
+  """stop() sends MoveZUpToSafe for every channel, then finds nothing low, then closes the link."""
+
+  async def _run() -> None:
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None and p.configuration is not None
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 120.0, 1: 130.0})
+    assert len(await p.features_below_safe_z()) == 2
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    found: list = []
+    check = p.features_below_safe_z
+
+    async def recorded_check(*args, **kwargs):
+      found.append(await check(*args, **kwargs))
+      return found[-1]
+
+    p.features_below_safe_z = recorded_check  # type: ignore[method-assign]
+    await p.stop()
+    up = [c for c in sent if isinstance(c, PrepCmd.PrepMoveZUpToSafe)]
+    assert len(up) == 1 and len(up[0].channels) == 2
+    assert found == [[]]
+    assert p._setup_finished is False
+
+  asyncio.run(_run())
+
+
+def test_stop_closes_the_link_when_the_channels_do_not_go_up():
+  """A retract that fails is logged with what is still low, and the link closes anyway."""
+
+  async def _run() -> None:
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_tool_bottom_to_z_positions({0: 120.0})
+    p.pipettes.move_to_safe_z = AsyncMock(side_effect=RuntimeError("stuck"))  # type: ignore[method-assign]
+    records: list = []
+    capture = logging.Handler(logging.WARNING)
+    capture.emit = records.append  # type: ignore[method-assign,assignment]
+    driver_logger = logging.getLogger("pylabrobot.hamilton.prep.driver.master")
+    driver_logger.addHandler(capture)
+    try:
+      await p.stop()
+    finally:
+      driver_logger.removeHandler(capture)
+    messages = [record.getMessage() for record in records]
+    assert "could not move the channels to Z safety" in messages
+    assert any(
+      m.startswith("not everything is at Z safety: channel 0 at 120.0 mm") for m in messages
+    )
+    assert p._setup_finished is False
+
+  asyncio.run(_run())

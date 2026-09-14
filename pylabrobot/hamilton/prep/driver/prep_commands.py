@@ -3230,6 +3230,60 @@ class PrepMoveZAbsolute(PrepCommand[None]):
 
 
 @dataclass(frozen=True)
+class PrepZDriveGetAcceleration(PrepStatusRequest["PrepZDriveGetAcceleration.Response"]):
+  """Get one channel's Z drive acceleration, in mm/s2 (cmd=16, dest=that channel's ZAxis.ZDrive).
+
+  Both channels' drives read 800 mm/s2 on PRPAA1087 (V1.2.2).
+  """
+
+  command_id = 16
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+
+  @dataclass(frozen=True)
+  class Response:
+    value: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode the request payload."""
+    return HoiParams()
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepZDriveGetAcceleration.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepZDriveSetAcceleration(PrepCommand[None]):
+  """Set one channel's Z drive acceleration, in mm/s2 (cmd=15, dest=that channel's ZAxis.ZDrive).
+
+  `PrepMoveZAbsolute` follows it: on PRPAA1087 (V1.2.2) 400 mm/s2 made a 47.5 mm move at 113.6 mm/s 143 ms
+  slower than 800, as a trapezoidal profile predicts, and 800 set back read back 800. Whether a value survives
+  the device powering down is not known.
+  """
+
+  command_id = 15
+  firmware_path = None
+  dest: Address  # type: ignore[misc]
+  # A default only because `dest` comes first; every caller names the acceleration.
+  value: F32 = math.nan
+
+  def __post_init__(self) -> None:
+    if not self.value > 0:
+      raise ValueError(f"a Z drive acceleration must be above 0 mm/s2, is {self.value}")
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.value, F32)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
 class PrepMoveZUpToSafe(PrepCommand[None]):
   """Move Z axes up to safe height (cmd=28, dest=Pipettor)."""
 
