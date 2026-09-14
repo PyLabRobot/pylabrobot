@@ -327,7 +327,8 @@ def diff_calibration_values(
         )
       )
       continue
-    assert old_cv is not None and new_cv is not None
+    if old_cv is None or new_cv is None:
+      raise RuntimeError("a channel present on both sides has no value on one of them")
 
     field_changes = []
     for field_name, old_value, new_value in (
@@ -384,11 +385,13 @@ def format_calibration_diff(diff: CalibrationValuesDiff) -> str:
     lines.append("Per-channel:")
     for channel_diff in diff.channel_diffs:
       if channel_diff.state == "added":
-        assert channel_diff.new is not None
+        if channel_diff.new is None:
+          raise RuntimeError("an added channel has no new value")
         lines.append(f"  index={channel_diff.index}: added ({channel_diff.new.to_pretty_string()})")
         continue
       if channel_diff.state == "removed":
-        assert channel_diff.old is not None
+        if channel_diff.old is None:
+          raise RuntimeError("a removed channel has no old value")
         lines.append(
           f"  index={channel_diff.index}: removed ({channel_diff.old.to_pretty_string()})"
         )

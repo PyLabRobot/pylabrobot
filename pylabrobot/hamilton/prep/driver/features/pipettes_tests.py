@@ -150,7 +150,7 @@ def test_configuration_holds_one_entry_per_channel_and_setup_choices():
     assert p.pipettes is not None
     c = p.pipettes.configuration
     assert len(c.channels) == p.num_channels
-    assert c.default_traverse_height == 150.0
+    assert p.pipettes.default_minimum_traverse_height == 150.0
     assert c.use_v1_aspirate_dispense is False
     assert c.supports_v2_pipetting is True
     await p.stop()

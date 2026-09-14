@@ -244,6 +244,9 @@ class Pipettes:
     # on the arm; the reads keep them in step. Without a deck the list stays empty.
     self.resources: List[Resource] = []
     self.configuration = configuration or PipettesConfiguration()
+    # The height the channels travel at when a command names none, in mm. Legacy STARBackend's
+    # channel traversal height.
+    self.default_minimum_traverse_height: float = 245.0
 
   # -- addressing ------------------------------------------------------------
 

@@ -178,7 +178,7 @@ class Calibration:
     """Reset calibration data (ResetCalibration, cmd=4)."""
     await self._client.execute(PrepCmd.PrepResetCalibration(store=store))
 
-  async def calibration_initialize(self) -> None:
+  async def initialize_calibration(self) -> None:
     """Initialize calibration hardware (CalibrationInitialize, cmd=5)."""
     await self._client.execute(PrepCmd.PrepCalibrationInitialize())
 
@@ -351,7 +351,7 @@ class CalibrationSession:
     if self._cal._calibration_session_active:
       raise RuntimeError("A calibration session is already active on this Calibration.")
     await self._cal.begin_calibration()
-    await self._cal.calibration_initialize()
+    await self._cal.initialize_calibration()
     self._cal._set_calibration_session_active(True)
     try:
       snapshot = await self._get_calibration_values(read_timeout=self.session_read_timeout)
@@ -533,7 +533,8 @@ class CalibrationSession:
 
     async def _op(timeout: Optional[float]) -> Tuple[int, ...]:
       channels = use_channels if use_channels is not None else list(range(len(tip_spots)))
-      assert len(tip_spots) == len(channels)
+      if len(tip_spots) != len(channels):
+        raise ValueError(f"{len(tip_spots)} tip spots given for {len(channels)} channels")
 
       indexed_spots = {ch: spot for ch, spot in zip(channels, tip_spots)}
       tip_positions: List[PrepCmd.TipPositionParameters] = []

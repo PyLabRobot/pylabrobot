@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Optional, TypeVar, Union
+from typing import List, Optional, TypeVar, Union
 
 from pylabrobot.hamilton.prep.driver.errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
@@ -35,6 +36,36 @@ DISCOVERY_OBJECT_PATHS = (
   MODULE_INFORMATION_OBJECT_PATH,
 )
 ResultT = TypeVar("ResultT")
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ChannelDriveMap:
+  """Cached channel-drive topology discovered from the firmware tree.
+
+  One entry per discovered channel for the sleeve sensor (``Squeeze.SDrive``),
+  the Z drive (``ZAxis.ZDrive``), and the per-node ``NodeInformation`` object
+  (used for firmware-string queries). Lists are parallel and sorted by tree
+  traversal order (same order the firmware returns Channel Root instances).
+  """
+
+  sleeve_sensor_addrs: List[Address]
+  zdrive_addrs: List[Address]
+  node_info_addrs: List[Address]
+
+  @property
+  def num_channels_discovered(self) -> int:
+    return len(self.sleeve_sensor_addrs)
+
+  def to_dict(self) -> dict:
+    """Serialize for logs / notebooks that prefer plain dicts."""
+    return {
+      "num_channels_discovered": self.num_channels_discovered,
+      "sleeve_sensor_addrs": list(self.sleeve_sensor_addrs),
+      "zdrive_addrs": list(self.zdrive_addrs),
+      "node_info_addrs": list(self.node_info_addrs),
+    }
 
 
 @dataclass(frozen=True)
@@ -104,7 +135,7 @@ class PrepClient(HamiltonTCPClient):
     await super().setup()
     self._mlprep_address = None
     try:
-      root = await self.discovered_root_name()
+      root = await self.request_root_name()
       if root != _EXPECTED_ROOT:
         raise RuntimeError(
           f"Expected root '{_EXPECTED_ROOT}' (Prep), but discovered '{root}'. Wrong instrument?"
@@ -166,7 +197,7 @@ class PrepClient(HamiltonTCPClient):
     session = self._session
     return await session.exchange(await self._resolve_command(command), read_timeout=read_timeout)
 
-  async def discovered_root_name(self) -> str:
+  async def request_root_name(self) -> str:
     """Read the discovered firmware root's name."""
     roots = self.get_root_object_addresses()
     if not roots:
@@ -210,6 +241,96 @@ class PrepClient(HamiltonTCPClient):
       PrepCmd.PrepProbeRequest(
         dest=address, command_id=method.method_id, interface_id=method.interface_id
       )
+    )
+
+  async def _find_children_by_name(self, parent_addr: Address, *names: str) -> dict:
+    """Enumerate ``parent_addr``'s subobjects; return ``{name: Address}`` for matches.
+
+    Bounded by ``subobject_count`` on the parent. Returns early once every
+    requested name has been found. Children that raise on ``get_object`` (e.g.
+    unknown firmware types) are skipped with a debug log.
+    """
+    intro = self.introspection
+    parent = await intro.get_object(parent_addr)
+    wanted = set(names)
+    found: dict = {}
+    for i in range(parent.subobject_count):
+      try:
+        sub_addr = await intro.get_subobject_address(parent_addr, i)
+        sub = await intro.get_object(sub_addr)
+      except Exception as e:
+        logger.debug("subobject[%d] of %s failed: %s", i, parent_addr, e)
+        continue
+      if sub.name in wanted:
+        found[sub.name] = sub_addr
+        if len(found) == len(wanted):
+          break
+    return found
+
+  async def request_channel_drives(self, root_name: str = "Channel Root") -> ChannelDriveMap:
+    """Discover per-channel drive addresses via bounded subobject enumeration.
+
+    MLPrepRoot exposes one ``<root_name>`` child per physical channel (siblings
+    with identical names, distinguished by the ``node`` component of their
+    :class:`Address`). For each one we walk:
+
+    - ``<root>.Channel.Squeeze.SDrive``     → sleeve sensor
+    - ``<root>.Channel.ZAxis.ZDrive``       → Z drive
+    - ``<root>.NodeInformation``            → per-channel firmware strings
+
+    Uses ``get_subobject_address`` / ``get_object`` along the known path shape —
+    no full-tree traversal. Pass ``root_name="MPH Channel Root"`` for the 8MPH
+    head. For a full firmware-tree dump use
+    :meth:`PrepDriver.request_firmware_tree`.
+    """
+    intro = self.introspection
+    try:
+      mlprep_root = await self.resolve_path("MLPrepRoot")
+      root_info = await intro.get_object(mlprep_root)
+    except (KeyError, RuntimeError) as e:
+      logger.debug("MLPrepRoot unavailable (%s); skipping channel discovery", e)
+      return ChannelDriveMap(sleeve_sensor_addrs=[], zdrive_addrs=[], node_info_addrs=[])
+
+    channel_root_addrs: List[Address] = []
+    for i in range(root_info.subobject_count):
+      try:
+        sub_addr = await intro.get_subobject_address(mlprep_root, i)
+        sub = await intro.get_object(sub_addr)
+      except Exception as e:
+        logger.debug("MLPrepRoot subobject[%d] failed: %s", i, e)
+        continue
+      if sub.name == root_name:
+        channel_root_addrs.append(sub_addr)
+
+    sleeve: List[Address] = []
+    zdrive: List[Address] = []
+    node_info: List[Address] = []
+
+    for ch_root in channel_root_addrs:
+      top = await self._find_children_by_name(ch_root, "Channel", "NodeInformation")
+      if "NodeInformation" in top:
+        node_info.append(top["NodeInformation"])
+
+      channel_addr = top.get("Channel")
+      if channel_addr is None:
+        logger.warning("%s @ %s has no 'Channel' child", root_name, ch_root)
+        continue
+
+      axes = await self._find_children_by_name(channel_addr, "Squeeze", "ZAxis")
+      if (sq_parent := axes.get("Squeeze")) is not None:
+        sq = await self._find_children_by_name(sq_parent, "SDrive")
+        if "SDrive" in sq:
+          sleeve.append(sq["SDrive"])
+      if (zx_parent := axes.get("ZAxis")) is not None:
+        zx = await self._find_children_by_name(zx_parent, "ZDrive")
+        if "ZDrive" in zx:
+          zdrive.append(zx["ZDrive"])
+
+    logger.debug("Discovered %d %s channel drive pair(s)", len(channel_root_addrs), root_name)
+    return ChannelDriveMap(
+      sleeve_sensor_addrs=sleeve,
+      zdrive_addrs=zdrive,
+      node_info_addrs=node_info,
     )
 
   async def _query_firmware_string(

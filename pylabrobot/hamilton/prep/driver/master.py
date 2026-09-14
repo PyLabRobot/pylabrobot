@@ -19,7 +19,7 @@ from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 
 from . import prep_commands as PrepCmd
 from .features.calibration import Calibration
-from .features.pipettes import Pipettes, build_prep_channels
+from .features.pipettes import Pipettes
 from .simulator import PrepChatterboxClient
 from .client import (
   DECK_CONFIGURATION_OBJECT_PATH,
@@ -100,19 +100,9 @@ class PrepDriver:
     self.x_arm: Optional[XArm] = None
     self._setup_finished: bool = False
 
-  @property
-  def num_channels(self) -> int:
-    """The number of independent pipetting channels present on the device."""
-    if self.configuration is None or self.configuration.num_channels is None:
-      raise RuntimeError("channel count not read; have you called `prep.setup()`?")
-    return self.configuration.num_channels
-
-  @property
-  def head8_installed(self) -> bool:
-    """Whether the 8-channel head is fitted."""
-    if self.configuration is None or self.configuration.head8_installed is None:
-      raise RuntimeError("head8 presence not read; have you called `prep.setup()`?")
-    return self.configuration.head8_installed
+  # ----------------------------------------
+  # Connection and lifecycle
+  # ----------------------------------------
 
   async def setup(
     self,
@@ -147,7 +137,6 @@ class PrepDriver:
         default_traverse_height=default_traverse_height,
         use_v1_aspirate_dispense=use_v1_aspirate_dispense,
       )
-      channels.channels = await build_prep_channels(self.client, self.configuration)
       self.pipettes = channels
       await channels._on_setup()
 
@@ -158,9 +147,6 @@ class PrepDriver:
           deck=self.deck,
           default_traverse_height=default_traverse_height,
           use_v1_aspirate_dispense=use_v1_aspirate_dispense,
-        )
-        head8.channels = await build_prep_channels(
-          self.client, self.configuration, root_name="MPH Channel Root", num_channels=8
         )
         self.head8 = head8
         await head8._on_setup()
@@ -178,32 +164,6 @@ class PrepDriver:
       raise
 
     logger.info("%s", self.format_setup_summary())
-
-  async def _initialize_instrument(self, *, smart: bool, force_initialize: bool) -> None:
-    """Send ``MLPrep.Initialize`` when needed."""
-    if not force_initialize:
-      try:
-        already = await self.request_initialization_status()
-      except Exception as e:
-        logger.error("GetIsInitialized failed; cannot decide whether to init: %s", e)
-        raise
-      if already:
-        logger.debug("device reports initialized - skipping the initialization procedure")
-        return
-
-      logger.debug("device reports not initialized - running the initialization procedure")
-    await self.client.execute(
-      PrepCmd.PrepInitialize(
-        smart=smart,
-        tip_drop_params=PrepCmd.InitTipDropParameters(
-          default_values=True,
-          x_position=287.0,
-          rolloff_distance=3,
-          channel_parameters=[],
-        ),
-      )
-    )
-    logger.debug("the device initialization procedure has run")
 
   async def stop(self):
     if not self._setup_finished:
@@ -227,7 +187,9 @@ class PrepDriver:
     self.calibration = None
     self._setup_finished = False
 
-  # -- The device's configuration -------------------------------------------------
+  # ----------------------------------------
+  # Low-level I/O
+  # ----------------------------------------
 
   async def _resolve_optional(self, path: str) -> Optional[Address]:
     """The address of the object at `path`, or None when this instrument has no such object."""
@@ -249,6 +211,56 @@ class PrepDriver:
       if version is None:
         raise
       raise PrepMethodNotFoundError(f"{error} (this Prep runs {version})") from None
+
+  # ----------------------------------------
+  # What the device carries
+  # ----------------------------------------
+
+  @property
+  def num_channels(self) -> int:
+    """The number of independent pipetting channels present on the device."""
+    if self.configuration is None or self.configuration.num_channels is None:
+      raise RuntimeError("channel count not read; have you called `prep.setup()`?")
+    return self.configuration.num_channels
+
+  @property
+  def head8_installed(self) -> bool:
+    """Whether the 8-channel head is fitted."""
+    if self.configuration is None or self.configuration.head8_installed is None:
+      raise RuntimeError("head8 presence not read; have you called `prep.setup()`?")
+    return self.configuration.head8_installed
+
+  # ----------------------------------------
+  # Device queries
+  # ----------------------------------------
+
+  async def request_device_serial_number(self) -> Optional[str]:
+    """Request what the device calls itself, or None when this instrument has no such object."""
+    addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
+    if addr is None:
+      return None
+    return await self.client._query_firmware_string(addr, cmd_id=9)
+
+  async def request_firmware_version(self) -> Optional[str]:
+    """Request what MLPrepCpu runs, or None when this instrument has no such object."""
+    addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
+    if addr is None:
+      return None
+    return await self.client._query_firmware_string(addr, cmd_id=8)
+
+  async def request_bootloader_version(self) -> Optional[str]:
+    """Request MLPrepCpu's bootloader version, or None when this instrument has no such object."""
+    addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
+    if addr is None:
+      return None
+    return await self.client._query_firmware_string(addr, cmd_id=2, iface_id=2)
+
+  async def request_module_part_number(self) -> Optional[str]:
+    """Request the pipettor module's part number, or None when it has no such object."""
+    addr = await self._resolve_optional(MODULE_INFORMATION_OBJECT_PATH)
+    if addr is None:
+      return None
+    return await self.client._query_firmware_string(addr, cmd_id=5)
 
   async def request_present_channels(self) -> Optional[Tuple[PrepCmd.ChannelIndex, ...]]:
     """Request which channels are present (GetPresentChannels on MLPrepService)."""
@@ -375,6 +387,14 @@ class PrepDriver:
       return False
     return bool(result.value)
 
+  async def request_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
+    """Firmware object tree. ``print(await prep.request_firmware_tree())`` for a diagnostic dump."""
+    return await self.client.introspection.get_firmware_tree(refresh=refresh)
+
+  # ----------------------------------------
+  # Tip types
+  # ----------------------------------------
+
   async def request_tip_and_needle_definitions(self) -> Tuple[PrepCmd.TipDefinition, ...]:
     """Tip/needle definitions (GetTipAndNeedleDefinitions, cmd=11)."""
     result = await self.client.execute(
@@ -384,37 +404,9 @@ class PrepDriver:
       return ()
     return tuple(result.definitions)
 
-  async def request_firmware_version(self) -> Optional[str]:
-    """Request what MLPrepCpu runs, or None when this instrument has no such object."""
-    addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
-    if addr is None:
-      return None
-    return await self.client._query_firmware_string(addr, cmd_id=8)
-
-  async def request_device_serial_number(self) -> Optional[str]:
-    """Request what the device calls itself, or None when this instrument has no such object."""
-    addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
-    if addr is None:
-      return None
-    return await self.client._query_firmware_string(addr, cmd_id=9)
-
-  async def request_bootloader_version(self) -> Optional[str]:
-    """Request MLPrepCpu's bootloader version, or None when this instrument has no such object."""
-    addr = await self._resolve_optional(MLPREP_CPU_OBJECT_PATH)
-    if addr is None:
-      return None
-    return await self.client._query_firmware_string(addr, cmd_id=2, iface_id=2)
-
-  async def request_module_part_number(self) -> Optional[str]:
-    """Request the pipettor module's part number, or None when it has no such object."""
-    addr = await self._resolve_optional(MODULE_INFORMATION_OBJECT_PATH)
-    if addr is None:
-      return None
-    return await self.client._query_firmware_string(addr, cmd_id=5)
-
-  async def request_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
-    """Firmware object tree. ``print(await prep.request_firmware_tree())`` for a diagnostic dump."""
-    return await self.client.introspection.get_firmware_tree(refresh=refresh)
+  # ----------------------------------------
+  # Discovery and initialization
+  # ----------------------------------------
 
   def _check_declared_against(self, discovered: DeviceConfiguration) -> None:
     """Raise if what was declared cannot stand for what the device answered.
@@ -467,6 +459,32 @@ class PrepDriver:
     self.configuration = configuration
     return configuration
 
+  async def _initialize_instrument(self, *, smart: bool, force_initialize: bool) -> None:
+    """Send ``MLPrep.Initialize`` when needed."""
+    if not force_initialize:
+      try:
+        already = await self.request_initialization_status()
+      except Exception as e:
+        logger.error("GetIsInitialized failed; cannot decide whether to init: %s", e)
+        raise
+      if already:
+        logger.debug("device reports initialized - skipping the initialization procedure")
+        return
+
+      logger.debug("device reports not initialized - running the initialization procedure")
+    await self.client.execute(
+      PrepCmd.PrepInitialize(
+        smart=smart,
+        tip_drop_params=PrepCmd.InitTipDropParameters(
+          default_values=True,
+          x_position=287.0,
+          rolloff_distance=3,
+          channel_parameters=[],
+        ),
+      )
+    )
+    logger.debug("the device initialization procedure has run")
+
   def format_setup_summary(self) -> str:
     """One block describing the device that was found: how it is reached, what it calls itself and
     runs, how it is set up, its deck, and per channel its firmware and reach, and whether it carries
@@ -518,6 +536,10 @@ class PrepDriver:
     lines.append(f"  8-channel head: {head8}")
     return "\n".join(lines)
 
+  # ----------------------------------------
+  # Configuration system
+  # ----------------------------------------
+
   def _saved_configuration(self) -> Dict[str, Any]:
     """What `save_configuration` writes.
 
@@ -544,7 +566,9 @@ class PrepDriver:
     with open(path, "w", encoding="utf-8") as f:
       json.dump(self._saved_configuration(), f, indent=indent)
 
-  # -- Resource model -----------------------------------------------------------
+  # ----------------------------------------
+  # Resource model
+  # ----------------------------------------
 
   async def _create_capability_resources(self) -> None:
     """Put the X-arm on the deck where it is, and hang a resource for each pipetting channel from it.
@@ -605,7 +629,9 @@ class PrepDriver:
     # Seat each where it was read, now that there is something to record it on.
     self.pipettes._record_positions(positions)
 
-  # -- CoRe grippers -----------------------------------------------------------
+  # ----------------------------------------
+  # CoRe grippers
+  # ----------------------------------------
 
   @property
   def core_gripper_arm(self) -> CoreGripperArm:
@@ -664,7 +690,9 @@ class PrepDriver:
     finally:
       await self.return_core_grippers()
 
-  # -- Motion, power, lights (MLPrep via client transport) --------------------
+  # ----------------------------------------
+  # Park and spread
+  # ----------------------------------------
 
   async def park(self) -> None:
     await self.client.execute(PrepCmd.PrepPark())
@@ -695,6 +723,10 @@ class PrepDriver:
     data = await self._request_by_name(MLPREP_OBJECT_PATH, "IsSpread")
     return bool(PrepCmd.PrepIsSpread.parse_response_parameters(data).value)
 
+  # ----------------------------------------
+  # Power
+  # ----------------------------------------
+
   async def power_down_request(self) -> None:
     await self.client.execute(PrepCmd.PrepPowerDownRequest())
 
@@ -703,6 +735,10 @@ class PrepDriver:
 
   async def cancel_power_down(self) -> None:
     await self.client.execute(PrepCmd.PrepCancelPowerDown())
+
+  # ----------------------------------------
+  # Deck light
+  # ----------------------------------------
 
   async def request_deck_light(self) -> Tuple[int, int, int, int]:
     result = await self.client.execute(PrepCmd.PrepGetDeckLight())
@@ -714,6 +750,25 @@ class PrepDriver:
     await self.client.execute(
       PrepCmd.PrepSetDeckLight(white=white, red=red, green=green, blue=blue)
     )
+
+  async def disco_mode(self) -> None:
+    """Easter egg: cycle deck lights then restore previous state."""
+    white, red, green, blue = await self.request_deck_light()
+    try:
+      for _ in range(69):
+        await self.set_deck_light(
+          white=random.randint(1, 255),
+          red=random.randint(1, 255),
+          green=random.randint(1, 255),
+          blue=random.randint(1, 255),
+        )
+        await asyncio.sleep(0.1)
+    finally:
+      await self.set_deck_light(white=white, red=red, green=green, blue=blue)
+
+  # ----------------------------------------
+  # Speed scales
+  # ----------------------------------------
 
   async def request_x_speed_scale(self) -> int:
     """Request how fast MLPrep drives X, as a percentage of its full speed."""
@@ -748,18 +803,3 @@ class PrepDriver:
     if not 1 <= percent <= 100:
       raise ValueError(f"z speed scale must be between 1 and 100 percent, is {percent}")
     await self.client.execute(PrepCmd.PrepSetZSpeedScale(value=percent))
-
-  async def disco_mode(self) -> None:
-    """Easter egg: cycle deck lights then restore previous state."""
-    white, red, green, blue = await self.request_deck_light()
-    try:
-      for _ in range(69):
-        await self.set_deck_light(
-          white=random.randint(1, 255),
-          red=random.randint(1, 255),
-          green=random.randint(1, 255),
-          blue=random.randint(1, 255),
-        )
-        await asyncio.sleep(0.1)
-    finally:
-      await self.set_deck_light(white=white, red=red, green=green, blue=blue)

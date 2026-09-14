@@ -39,8 +39,7 @@ class MethodLifecycle:
   async def run(self, automatic_pause: bool = False) -> AsyncIterator["MethodLifecycle"]:
     """Bracket a liquid-handling block with ``begin`` / ``end``; ``abort`` on exception.
 
-    Usage::
-
+    Example:
       async with prep.method.run():
         await prep.pipettes.pick_up_tips(...)
         await prep.pipettes.aspirate(...)

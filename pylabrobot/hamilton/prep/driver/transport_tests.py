@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 from pylabrobot.hamilton.prep import PrepChatterboxClient
 from pylabrobot.hamilton.prep.driver import prep_commands as C
-from pylabrobot.hamilton.prep.driver.features.pipettes import ChannelDriveMap, Pipettes
+from pylabrobot.hamilton.prep.driver.client import ChannelDriveMap
+from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.prep.driver.client import (
   MLPREP_OBJECT_PATH,
   PIPETTOR_OBJECT_PATH,
@@ -81,8 +82,8 @@ class TestPrepTransport(_SessionTest):
     io.on_write = respond
     with (
       patch.object(
-        channels,
-        "discover_channel_drives",
+        client,
+        "request_channel_drives",
         new=AsyncMock(return_value=ChannelDriveMap([rear, front], [], [])),
       ),
       patch.object(
@@ -117,8 +118,8 @@ class TestPrepTransport(_SessionTest):
         addr = Address(1, 236, 514)
         with (
           patch.object(
-            channels,
-            "discover_channel_drives",
+            client,
+            "request_channel_drives",
             new=AsyncMock(return_value=ChannelDriveMap([addr], [], [])),
           ),
           patch.object(
@@ -231,7 +232,7 @@ class TestPrepTransport(_SessionTest):
     client, io = self.make_client()
     with (
       patch.object(HamiltonTCPClient, "setup", new=AsyncMock()),
-      patch.object(client, "discovered_root_name", new=AsyncMock(return_value="WrongRoot")),
+      patch.object(client, "request_root_name", new=AsyncMock(return_value="WrongRoot")),
     ):
       with self.assertRaisesRegex(RuntimeError, "Wrong instrument"):
         await client.setup()
@@ -270,8 +271,6 @@ class TestPrepTransport(_SessionTest):
     )
 
   async def test_channel_bounds_decode_nested_structures_in_channel_order(self):
-    from pylabrobot.hamilton.prep.driver.features.pipettes import request_channel_bounds
-
     client, io = self.make_client()
     client.registry.register(
       C.PrepGetChannelBounds.firmware_path,
@@ -296,7 +295,7 @@ class TestPrepTransport(_SessionTest):
       )
 
     io.on_write = respond
-    bounds = await request_channel_bounds(client)
+    bounds = await Pipettes(client=client).request_channel_bounds()
     self.assertEqual(
       bounds,
       [
