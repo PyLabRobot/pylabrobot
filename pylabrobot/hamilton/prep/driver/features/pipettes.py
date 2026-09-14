@@ -957,45 +957,6 @@ class Pipettes:
       ordered = sorted(channels, key=lambda c: rank.get(c, len(rank) + c))
     return tuple(ordered)
 
-  def _min_spacing_between(self, i: int, j: int) -> float:
-    """The smallest Y gap two channels may sit at, in mm, from the Y windows the device reports.
-
-    A channel reaches no further back than the channel behind it allows, and no further forward than the one in
-    front of it allows, so neighbouring channels' windows are offset by the spacing kept between them: rear 0 to
-    385 mm and front -9 to 376 mm on both PRPAA1087 (V1.2.2) and PRPBD1394 (V3.0.20), 9 mm at either end.
-    Channels further apart take the sum of the pairs between them.
-
-    Args:
-      i: one channel, 0-indexed from the back.
-      j: the other.
-
-    Returns:
-      The gap in mm.
-
-    Raises:
-      RuntimeError: If a channel's Y window has not been read, or a pair's windows are not offset by the same
-        amount at both ends.
-    """
-    lo, hi = min(i, j), max(i, j)
-    if hi - lo > 1:
-      return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
-    if lo == hi:
-      return 0.0
-    channels = self.configuration.channels
-    if hi >= len(channels) or channels[lo].y_range is None or channels[hi].y_range is None:
-      raise RuntimeError(f"channels {lo} and {hi} have no Y window read yet; run discovery first")
-    back, front = (
-      cast(Tuple[float, float], channels[lo].y_range),
-      cast(Tuple[float, float], channels[hi].y_range),
-    )
-    at_front, at_back = back[0] - front[0], back[1] - front[1]
-    if abs(at_front - at_back) > 0.01:
-      raise RuntimeError(
-        f"channels {lo} and {hi} are {at_front:.2f} mm apart at the front of their Y windows and {at_back:.2f} mm "
-        "at the back, so their spacing is unknown"
-      )
-    return round(at_front, 2)
-
   def _check_y_spacing(self, ys: Dict[int, float]) -> None:
     """Refuse channel Y positions that are out of order or closer than their minimum spacing.
 
@@ -1179,6 +1140,45 @@ class Pipettes:
         results.append(bool(val))
 
     return results
+
+  def _min_spacing_between(self, i: int, j: int) -> float:
+    """The smallest Y gap two channels may sit at, in mm, from the Y windows the device reports.
+
+    A channel reaches no further back than the channel behind it allows, and no further forward than the one in
+    front of it allows, so neighbouring channels' windows are offset by the spacing kept between them: rear 0 to
+    385 mm and front -9 to 376 mm on both PRPAA1087 (V1.2.2) and PRPBD1394 (V3.0.20), 9 mm at either end.
+    Channels further apart take the sum of the pairs between them.
+
+    Args:
+      i: one channel, 0-indexed from the back.
+      j: the other.
+
+    Returns:
+      The gap in mm.
+
+    Raises:
+      RuntimeError: If a channel's Y window has not been read, or a pair's windows are not offset by the same
+        amount at both ends.
+    """
+    lo, hi = min(i, j), max(i, j)
+    if hi - lo > 1:
+      return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
+    if lo == hi:
+      return 0.0
+    channels = self.configuration.channels
+    if hi >= len(channels) or channels[lo].y_range is None or channels[hi].y_range is None:
+      raise RuntimeError(f"channels {lo} and {hi} have no Y window read yet; run discovery first")
+    back, front = (
+      cast(Tuple[float, float], channels[lo].y_range),
+      cast(Tuple[float, float], channels[hi].y_range),
+    )
+    at_front, at_back = back[0] - front[0], back[1] - front[1]
+    if abs(at_front - at_back) > 0.01:
+      raise RuntimeError(
+        f"channels {lo} and {hi} are {at_front:.2f} mm apart at the front of their Y windows and {at_back:.2f} mm "
+        "at the back, so their spacing is unknown"
+      )
+    return round(at_front, 2)
 
   # ----------------------------------------
   # Movement
@@ -1376,6 +1376,24 @@ class Pipettes:
       raise ValueError(f"Channel {channel} out of range ({len(positions)} channels).")
     return float(positions[channel].y)
 
+  async def _unchecked_fw_move_y_absolute(self, ys: Dict[int, float]) -> None:
+    """Send `ChannelXYZCoordinator.MoveYAbsolute` at `default_y_speed`. Nothing is guarded and nothing is recorded.
+
+    Args:
+      ys: where to send each channel along Y, in mm, keyed by channel, 0-indexed from the back.
+    """
+    await self._driver.send_command(
+      PrepCmd.PrepMoveYAbsolute(
+        channels=[
+          PrepCmd.ChannelYPositionParameters(
+            default_values=False, channel=self.channel_enum(channel), y_position=y
+          )
+          for channel, y in sorted(ys.items())
+        ],
+        velocity=self.default_y_speed,
+      )
+    )
+
   async def move_to_y_positions(self, ys: Dict[int, float], make_space: bool = False) -> None:
     """Move channels along Y, in one command.
 
@@ -1440,24 +1458,6 @@ class Pipettes:
       raise
     for channel, y in targets.items():
       self.update_location_by_reference_point(channel, y=y)
-
-  async def _unchecked_fw_move_y_absolute(self, ys: Dict[int, float]) -> None:
-    """Send `ChannelXYZCoordinator.MoveYAbsolute` at `default_y_speed`. Nothing is guarded and nothing is recorded.
-
-    Args:
-      ys: where to send each channel along Y, in mm, keyed by channel, 0-indexed from the back.
-    """
-    await self._driver.send_command(
-      PrepCmd.PrepMoveYAbsolute(
-        channels=[
-          PrepCmd.ChannelYPositionParameters(
-            default_values=False, channel=self.channel_enum(channel), y_position=y
-          )
-          for channel, y in sorted(ys.items())
-        ],
-        velocity=self.default_y_speed,
-      )
-    )
 
   async def move_to_y_position(self, channel: int, y: float) -> None:
     """Move a channel in the Y direction (in mm).

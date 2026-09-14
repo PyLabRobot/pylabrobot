@@ -338,27 +338,6 @@ class PrepDriver:
 
     logger.info("%s", self.format_setup_summary())
 
-  async def stop(self):
-    if not self._setup_finished:
-      return
-    if self._core_gripper_arm is not None:
-      logger.warning(
-        "PrepDriver.stop() called with CoRe grippers still mounted. "
-        "stop() only manages connection teardown and will NOT move the instrument. "
-        "Call `await prep.return_core_grippers()` first if you want the tools returned."
-      )
-      self._core_gripper_arm = None
-    if self.pipettes is not None:
-      await self.pipettes._on_stop()
-    if self.head8 is not None:
-      await self.head8._on_stop()
-    await self._close()
-    self._setup_finished = False
-
-  # ----------------------------------------
-  # Low-level I/O
-  # ----------------------------------------
-
   async def _open(self) -> None:
     """Open the link and check that a Prep answers on it.
 
@@ -384,6 +363,27 @@ class PrepDriver:
       await self.io.stop()
     finally:
       self._mlprep_address = None
+
+  async def stop(self):
+    if not self._setup_finished:
+      return
+    if self._core_gripper_arm is not None:
+      logger.warning(
+        "PrepDriver.stop() called with CoRe grippers still mounted. "
+        "stop() only manages connection teardown and will NOT move the instrument. "
+        "Call `await prep.return_core_grippers()` first if you want the tools returned."
+      )
+      self._core_gripper_arm = None
+    if self.pipettes is not None:
+      await self.pipettes._on_stop()
+    if self.head8 is not None:
+      await self.head8._on_stop()
+    await self._close()
+    self._setup_finished = False
+
+  # ----------------------------------------
+  # Low-level I/O
+  # ----------------------------------------
 
   def describe_link(self) -> str:
     """How this device is reached."""

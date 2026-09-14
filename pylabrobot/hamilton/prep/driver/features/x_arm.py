@@ -99,6 +99,10 @@ class XArm:
     # Speed (mm/s) `probe_home_flag` seeks at when none is given: what it was run with on PRPAA1087.
     self.default_probe_speed: float = 100.0
 
+  # ----------------------------------------
+  # Movement
+  # ----------------------------------------
+
   def update_location_by_reference_point(self, x: float) -> None:
     """Record where the arm is on the resource that models it.
 
@@ -116,6 +120,24 @@ class XArm:
       self.resource.location.y,
       self.resource.location.z,
     )
+
+  # -- x motion --------------------------------------------------------------
+
+  async def request_position(self) -> Optional[float]:
+    """Request where along X the arm is.
+
+    Read from `GetPositions`, whose entries all carry the gantry's X, and recorded on the resource that
+    models the arm.
+
+    Returns:
+      The position in mm, or None when no channel reported one.
+    """
+    response = await self._driver.send_command(PrepCmd.PrepGetPositions())
+    if not response or not response.positions:
+      return None
+    x = float(response.positions[0].position_x)
+    self.update_location_by_reference_point(x)
+    return x
 
   async def move_to_x_position(
     self, x: float, speed: Optional[float] = None, acceleration: Optional[float] = None
@@ -295,19 +317,3 @@ class XArm:
       position: where to send the axis, in mm in the axis's own frame.
     """
     await self._driver.send_command(PrepCmd.PrepXAxisMoveAbsolute(position=position))
-
-  async def request_position(self) -> Optional[float]:
-    """Request where along X the arm is.
-
-    Read from `GetPositions`, whose entries all carry the gantry's X, and recorded on the resource that
-    models the arm.
-
-    Returns:
-      The position in mm, or None when no channel reported one.
-    """
-    response = await self._driver.send_command(PrepCmd.PrepGetPositions())
-    if not response or not response.positions:
-      return None
-    x = float(response.positions[0].position_x)
-    self.update_location_by_reference_point(x)
-    return x
