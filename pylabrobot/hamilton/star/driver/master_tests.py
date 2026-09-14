@@ -18,9 +18,11 @@ from pylabrobot.hamilton.star.driver.configuration import (
 )
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
+from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.resources.resource import Resource
 
 # The device this package ships a recording of, read through the one reader there is: tests need a
 # device to start from, and this is the one they stand in for.
@@ -258,6 +260,46 @@ def recorded_moves():
 
       stack.enter_context(unittest.mock.patch.object(owner, name, wrap()))
     yield moves
+
+
+class TestEveryReadIsSimulated(unittest.IsolatedAsyncioTestCase):
+  """The reads nothing in setup sends still have an answer on a simulated device, taken from what it
+  was declared to be or from the model, as every other read does."""
+
+  async def test_the_arms_ranges_envelopes_and_status(self):
+    star = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    await star.setup()
+    declared = cast(DeviceConfiguration, star.declared["device"])
+    left = cast(XArmConfiguration, declared.left_arm)
+
+    ranges = await star.request_maximal_ranges_of_x_drives()
+    envelopes = await star.request_working_envelopes_per_arm()
+
+    self.assertEqual(ranges["left"], left.x_range)
+    self.assertEqual(envelopes["left"], (left.wrap_size, left.workspace_x_range))
+    self.assertEqual(envelopes["right"][0], 0.0)
+    self.assertTrue(await cast(XArm, star.x_arm).request_initialization_status())
+
+  async def test_a_heads_location_and_the_tips_it_carries(self):
+    for recording, name in ((RECORDING_STAR, "head96"), (RECORDING_STAR_HEAD384, "head384")):
+      with self.subTest(head=name):
+        star = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=recording)
+        await star.setup()
+        head = getattr(star, name)
+        shaft = head.resource.get_item(0)
+        a1 = shaft.get_location_wrt(star.deck)
+
+        # The master answers in tenths of a millimetre.
+        self.assertFalse(await head.request_tip_presence())
+        located = await head.request_location()
+        self.assertAlmostEqual(located.x, a1.x, delta=0.1)
+        self.assertAlmostEqual(located.y, a1.y, delta=0.1)
+        self.assertAlmostEqual(located.z, a1.z, delta=0.1)
+
+        tip = Resource(name="tip", size_x=5.0, size_y=5.0, size_z=50.0)
+        shaft.mount_tip(tip)
+        self.assertTrue(await head.request_tip_presence())
+        self.assertAlmostEqual(await head.request_tip_overhang(), 50.0, delta=0.1)
 
 
 class TestSetupSequence(unittest.IsolatedAsyncioTestCase):

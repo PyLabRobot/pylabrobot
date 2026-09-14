@@ -289,6 +289,30 @@ SIMULATED_LEFT_X_ARM_POSITION = 362.9
 class SimulatedXArm(_Simulated, XArm):
   """An X-arm, answering for itself."""
 
+  async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
+    arm_number = "1" if self.side == "left" else "2"
+    if module == "X0" and command == "QW" and kwargs.get("mn") == arm_number:
+      return {"qw": 1}, f"the {self.side} X-arm, which a simulated device keeps initialized"
+    # Both arms are answered in one reply, so the first arm answers it for the device.
+    if module != "C0" or command not in ("RU", "UA") or self is not self.device.arms[0]:
+      return None
+    declared = self.device.simulated_configuration
+    arms = (declared.left_arm, declared.right_arm)
+
+    def tenths(value: Optional[float]) -> int:
+      return 0 if value is None else round(value * 10)
+
+    if command == "RU":
+      values = [tenths(v) for arm in arms for v in (arm.x_range if arm and arm.x_range else (0, 0))]
+      return "ru" + " ".join(str(v) for v in values), "the declared arms' X ranges"
+    wraps = [tenths(arm.wrap_size if arm else None) for arm in arms]
+    workspaces = [
+      tenths(v)
+      for arm in arms
+      for v in (arm.workspace_x_range if arm and arm.workspace_x_range else (0, 0))
+    ]
+    return "ua" + " ".join(str(v) for v in wraps + workspaces), "the declared arms' envelopes"
+
   async def request_firmware_version(self) -> Tuple[str, datetime.date]:
     declared = self.configuration.firmware_version
     if declared is None:
@@ -364,6 +388,27 @@ class _SimulatedHead(_Simulated, Head):
           f"the simulated {self._label} has no X offset; set it on its configuration"
         )
       return {c.x_offset_parameter: round(x_offset * 10)}, f"the {self._label}'s declared X offset"
+
+    if module == "C0" and command in (c.tip_presence_command, c.position_command):
+      deck = self.device.deck
+      if self.resource is None or self.resource.location is None or deck is None:
+        raise RuntimeError(f"the simulated {self._label} is not modelled, so it has nothing to say")
+      if command == c.tip_presence_command:
+        carries = any(shaft.has_tip() for shaft in self.resource.get_all_items())
+        return {command.lower(): int(carries)}, f"whether the {self._label} is modelled with tips"
+      # Channel A1, at the bottom of whatever it carries, as the master reports it.
+      shaft = self.resource.get_item(HEAD_REFERENCE_SHAFT)
+      a1 = shaft.get_location_wrt(deck)
+      z = a1.z + shaft.tip_bottom().z
+      return (
+        {
+          "xs": abs(round(a1.x * 10)),
+          "xd": 0 if a1.x >= 0 else 1,
+          c.y_parameter: round(a1.y * 10),
+          c.z_parameter: round(z * 10),
+        },
+        f"where the {self._label}'s channel A1 is modelled",
+      )
 
     if module != c.module:
       return None
