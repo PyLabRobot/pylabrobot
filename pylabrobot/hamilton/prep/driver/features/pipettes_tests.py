@@ -200,7 +200,8 @@ def test_move_to_y_positions_moves_each_named_channel_in_one_command():
 
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.move_to_y_positions({1: 75.0, 0: 100.0})
-    assert sent.count("PrepMoveToPosition") == 1
+    assert sent.count("PrepMoveYAbsolute") == 1
+    assert "PrepMoveToPosition" not in sent
     after = await p.pipettes.request_locations()
     assert (after[0].y, after[0].z) == (100.0, before[0].z)
     assert (after[1].y, after[1].z) == (75.0, before[1].z)
@@ -229,7 +230,8 @@ def test_move_tool_bottom_to_z_positions_moves_each_named_channel_in_one_command
 
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.move_tool_bottom_to_z_positions({1: 75.0, 0: 50.0})
-    assert sent.count("PrepMoveToPosition") == 1
+    assert sent.count("PrepMoveZAbsolute") == 1
+    assert "PrepMoveToPosition" not in sent
     after = await p.pipettes.request_locations()
     assert (after[0].y, after[0].z) == (before[0].y, 50.0)
     assert (after[1].y, after[1].z) == (before[1].y, 75.0)
@@ -352,6 +354,45 @@ def test_move_to_location_uses_default_x_speed_when_none_is_given():
   _run(_t())
 
 
+def test_y_and_z_moves_send_every_channel_at_the_default_speed():
+  """One-axis moves carry each channel's device ChannelIndex, the channels not named where they stand, and the
+  default speed."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    before = await p.pipettes.request_locations()
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    await p.pipettes.move_to_y_position(0, 370.0)
+    await p.pipettes.move_tool_bottom_to_z_position(1, 150.0)
+    y_move = next(c for c in sent if isinstance(c, PrepCmd.PrepMoveYAbsolute))
+    z_move = next(c for c in sent if isinstance(c, PrepCmd.PrepMoveZAbsolute))
+    rear, front = p.pipettes.channel_enum(0), p.pipettes.channel_enum(1)
+    assert [(int(c.channel), c.y_position) for c in y_move.channels] == [
+      (rear, 370.0),
+      (front, before[1].y),
+    ]
+    assert y_move.velocity == p.pipettes.default_y_speed
+    assert [(int(c.channel), c.z_position) for c in z_move.channels] == [
+      (rear, before[0].z),
+      (front, 150.0),
+    ]
+    assert z_move.velocity == p.pipettes.default_z_speed
+    after = await p.pipettes.request_locations()
+    assert (after[0].x, after[0].y, after[1].z) == (before[0].x, 370.0, 150.0)
+    await p.stop()
+
+  _run(_t())
+
+
 def test_moves_that_keep_x_leave_the_x_speed_scale_alone():
   """A Y or Z move keeps the gantry where it stands, so no X speed scale is read, set or put back."""
 
@@ -369,7 +410,7 @@ def test_moves_that_keep_x_leave_the_x_speed_scale_alone():
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.move_to_y_positions({0: 300.0, 1: 280.0})
     await p.pipettes.move_tool_bottom_to_z_positions({0: 150.0, 1: 140.0})
-    assert "PrepMoveToPosition" in sent
+    assert {"PrepMoveYAbsolute", "PrepMoveZAbsolute"} <= set(sent)
     assert not [name for name in sent if "XSpeedScale" in name]
     await p.stop()
 
@@ -632,6 +673,7 @@ def test_moves_refuse_channels_too_close_or_out_of_order():
         Coordinate(here[1].x, here[0].y - 5.0, here[1].z), use_channels=1
       )
     assert "PrepMoveToPosition" not in sent
+    assert "PrepMoveYAbsolute" not in sent
     await p.stop()
 
   _run(_t())
@@ -657,7 +699,7 @@ def test_move_to_y_positions_make_space_moves_the_channel_not_named():
 
     p.send_command = record  # type: ignore[method-assign]
     await p.pipettes.move_to_y_positions({1: target}, make_space=True)
-    assert sent.count("PrepMoveToPosition") == 1
+    assert sent.count("PrepMoveYAbsolute") == 1
     after = await p.pipettes.request_locations()
     assert after[1].y == pytest.approx(target)
     assert after[0].y == pytest.approx(target + 9.0)

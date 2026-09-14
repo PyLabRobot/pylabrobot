@@ -370,6 +370,20 @@ class SimulatedPipettes(_Simulated, Pipettes):
           self._move(moved, move.gantry_x_position, axis.y_position, axis.z_position)
       return None
 
+    if isinstance(request, PrepCmd.PrepMoveYAbsolute):
+      for y_target in request.channels:
+        moved = index_of.get(int(y_target.channel))
+        if moved is not None:
+          self._move(moved, None, y_target.y_position, None)
+      return None
+
+    if isinstance(request, PrepCmd.PrepMoveZAbsolute):
+      for z_target in request.channels:
+        moved = index_of.get(int(z_target.channel))
+        if moved is not None:
+          self._move(moved, None, None, z_target.z_position)
+      return None
+
     if isinstance(request, PrepCmd.PrepMoveZUpToSafe):
       height = self.device.simulated_configuration.default_traverse_height
       for enum in request.channels:

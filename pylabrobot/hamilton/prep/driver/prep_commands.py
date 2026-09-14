@@ -49,6 +49,7 @@ MLPREP_SERVICE_OBJECT_PATH = "MLPrepRoot.MLPrepService"
 DECK_CONFIGURATION_OBJECT_PATH = "MLPrepRoot.MLPrepCalibration.DeckConfiguration"
 MLPREP_CPU_OBJECT_PATH = "MLPrepRoot.MLPrepCpu"
 MODULE_INFORMATION_OBJECT_PATH = "MLPrepRoot.PipettorRoot.ModuleInformation"
+CHANNEL_XYZ_COORDINATOR_OBJECT_PATH = "MLPrepRoot.ChannelCoordinator.ChannelXYZCoordinator"
 
 # =============================================================================
 # Enums (mirrored from Prep protocol spec)
@@ -467,6 +468,32 @@ class XYCoord:
       params.add(self.default_values, PaddedBool)
       .add(self.x_position, F32)
       .add(self.y_position, F32)
+    )
+
+
+@dataclass
+class ChannelYPositionParameters:
+  default_values: PaddedBool
+  channel: WEnum
+  y_position: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool).add(self.channel, WEnum).add(self.y_position, F32)
+    )
+
+
+@dataclass
+class ChannelZPositionParameters:
+  default_values: PaddedBool
+  channel: WEnum
+  z_position: F32
+
+  def encode_into(self, params: HoiParams) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return (
+      params.add(self.default_values, PaddedBool).add(self.channel, WEnum).add(self.z_position, F32)
     )
 
 
@@ -3153,6 +3180,53 @@ class PrepGetPositions(PrepStatusRequest["PrepGetPositions.Response"]):
   def parse_response_parameters(cls, data: bytes) -> PrepGetPositions.Response:
     """Decode the declared success response."""
     return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
+class PrepMoveYAbsolute(PrepCommand[None]):
+  """Move channels along Y alone, together (cmd=10, dest=ChannelXYZCoordinator).
+
+  Carries a Y for each channel it names and one velocity. On PRPAA1087 (V1.2.2) X and Z stayed where
+  they were to the micrometre, the velocity was in mm/s, and a pair closer than the firmware's Y
+  spacing was refused (8.75 mm refused, 8.8 mm moved).
+  """
+
+  command_id = 10
+  firmware_path = CHANNEL_XYZ_COORDINATOR_OBJECT_PATH
+  channels: Annotated[list[ChannelYPositionParameters], StructArray()]
+  velocity: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channels, StructArray()).add(self.velocity, F32)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
+
+
+@dataclass(frozen=True)
+class PrepMoveZAbsolute(PrepCommand[None]):
+  """Move channels along Z alone, together (cmd=12, dest=ChannelXYZCoordinator).
+
+  Carries a Z for each channel it names and one velocity. On PRPAA1087 (V1.2.2), without tips, X and Y
+  stayed where they were to the micrometre and the velocity was in mm/s.
+  """
+
+  command_id = 12
+  firmware_path = CHANNEL_XYZ_COORDINATOR_OBJECT_PATH
+  channels: Annotated[list[ChannelZPositionParameters], StructArray()]
+  velocity: F32
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.channels, StructArray()).add(self.velocity, F32)
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> None:
+    """Decode the declared success response."""
+    return None
 
 
 @dataclass(frozen=True)
