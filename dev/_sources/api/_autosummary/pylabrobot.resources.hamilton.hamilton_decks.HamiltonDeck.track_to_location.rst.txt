@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck.track\_to\_location
+==============================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.hamilton_decks
+
+.. automethod:: HamiltonDeck.track_to_location

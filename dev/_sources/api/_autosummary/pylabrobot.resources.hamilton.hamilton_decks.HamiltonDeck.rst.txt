@@ -17,6 +17,7 @@ pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
    
       ~HamiltonDeck.location
       ~HamiltonDeck.name
+      ~HamiltonDeck.num_rails
    
    
 
@@ -83,6 +84,7 @@ pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
       ~HamiltonDeck.serialize_all_state
       ~HamiltonDeck.serialize_state
       ~HamiltonDeck.summary
+      ~HamiltonDeck.track_to_location
       ~HamiltonDeck.unassign
       ~HamiltonDeck.unassign_child_resource
    

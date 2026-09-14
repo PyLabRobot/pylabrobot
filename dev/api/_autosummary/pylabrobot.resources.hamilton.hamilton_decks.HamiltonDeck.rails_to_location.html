@@ -589,14 +589,17 @@
 <h1>pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.rails_to_location<a class="headerlink" href="#pylabrobot-resources-hamilton-hamilton-decks-hamiltondeck-rails-to-location" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.rails_to_location">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">HamiltonDeck.</span></span><span class="sig-name descname"><span class="pre">rails_to_location</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rails</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><span class="pre">Coordinate</span></a></span></span><a class="headerlink" href="#pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.rails_to_location" title="Link to this definition">#</a></dt>
-<dd><p>Convert a rail identifier to an absolute (x, y, z) coordinate.</p>
+<span class="sig-prename descclassname"><span class="pre">HamiltonDeck.</span></span><span class="sig-name descname"><span class="pre">rails_to_location</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rails</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><span class="pre">Coordinate</span></a></span></span><a class="headerlink" href="#pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.rails_to_location" title="Link to this definition">#</a></dt>
+<dd><p>Deprecated. Use <code class="code docutils literal notranslate"><span class="pre">track_to_location</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>rails</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p>
+<dd class="field-odd"><p><strong>rails</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the track, counted from 1.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><em>Coordinate</em></a></p>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>What <code class="code docutils literal notranslate"><span class="pre">track_to_location</span></code> returns for it.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="pylabrobot.resources.Coordinate.html#pylabrobot.resources.Coordinate" title="pylabrobot.resources.coordinate.Coordinate"><em>Coordinate</em></a></p>
 </dd>
 </dl>
 </dd></dl>
