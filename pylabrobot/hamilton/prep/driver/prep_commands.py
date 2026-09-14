@@ -3332,6 +3332,34 @@ class PrepZSeekLldPosition(PrepCommand["PrepZSeekLldPosition.Response"]):
 
 
 @dataclass(frozen=True)
+class PrepYSeekLldPosition(PrepCommand["PrepYSeekLldPosition.Response"]):
+  """Y-seek LLD position (cmd=19, dest=ChannelCoordinator).
+
+  Moves one channel along Y, at the start X and Z it is given, until its capacitive LLD triggers or it reaches
+  `seek_parameters.seek_position_y`, at `seek_velocity_y`. No acceleration is carried. On PRPAA1087 (V1.2.2) a search
+  with nothing in the way moved at the velocity sent, stopped at the seek position, and answered `detected` False
+  with a position that does not describe the search.
+  """
+
+  command_id = 19
+  firmware_path = "MLPrepRoot.ChannelCoordinator"
+  seek_parameters: Annotated[YLLDSeekParameters, Struct()]
+
+  @dataclass(frozen=True)
+  class Response:
+    result: Annotated[SeekResultParameters, Struct()]
+
+  def build_parameters(self) -> HoiParams:
+    """Encode fields in firmware-defined order."""
+    return HoiParams().add(self.seek_parameters, Struct())
+
+  @classmethod
+  def parse_response_parameters(cls, data: bytes) -> PrepYSeekLldPosition.Response:
+    """Decode the declared success response."""
+    return parse_into_struct(HoiParamsParser(data), cls.Response)
+
+
+@dataclass(frozen=True)
 class PrepCreateTadmLimitCurve(PrepCommand[None]):
   """Create TADM limit curve (cmd=31, dest=Pipettor)."""
 

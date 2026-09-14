@@ -537,6 +537,107 @@ def test_moves_that_keep_x_leave_the_x_speed_scale_alone():
   _run(_t())
 
 
+def test_clld_probe_y_searches_along_y_where_the_channel_stands():
+  """The Y seek is sent at the channel's X and Z from its start to its end; nothing detected raises."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 200.0})
+    here = (await p.pipettes.request_locations())[1]
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(command)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="detected nothing between y=200.00 and y=150.00 mm"):
+      await p.pipettes.clld_probe_y_position_using_channel(
+        1, "forward", end_pos_search=150.0, speed=5.0
+      )
+    seek = next(c for c in sent if isinstance(c, PrepCmd.PrepYSeekLldPosition)).seek_parameters
+    assert (seek.start_position_x, seek.start_position_y, seek.start_position_z) == (
+      here.x,
+      200.0,
+      here.z,
+    )
+    assert (seek.seek_position_y, seek.seek_velocity_y) == (150.0, 5.0)
+    assert int(seek.channel) == p.pipettes.channel_enum(1)
+    assert (seek.lld_sensitivity, seek.detect_mode) == (
+      p.pipettes.default_clld_sensitivity,
+      p.pipettes.default_clld_detect_mode,
+    )
+    assert (await p.pipettes.request_locations())[1].y == 150.0
+    await p.stop()
+
+  _run(_t())
+
+
+def test_clld_probe_y_returns_the_surface_and_backs_off():
+  """A detection returns where the channel stopped less half the tip diameter, and backs the channel off."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 200.0})
+    touched = PrepCmd.SeekResultParameters(
+      default_values=False, channel=p.pipettes.channel_enum(1), detected=True, position=0.0
+    )
+    p.pipettes._unchecked_fw_y_seek_lld_position = AsyncMock(return_value=touched)  # type: ignore[method-assign]
+    surface = await p.pipettes.clld_probe_y_position_using_channel(
+      1, "forward", end_pos_search=150.0
+    )
+    assert surface == pytest.approx(200.0 - 0.6)
+    assert (await p.pipettes.request_locations())[1].y == pytest.approx(202.0)
+    surface = await p.pipettes.clld_probe_y_position_using_channel(
+      0, "backward", tip_bottom_diameter=2.0
+    )
+    assert surface == pytest.approx(300.0 + 1.0)
+    assert (await p.pipettes.request_locations())[0].y == pytest.approx(298.0)
+    await p.stop()
+
+  _run(_t())
+
+
+def test_clld_probe_y_refuses_searches_it_cannot_make():
+  """Out of range, into a neighbour, backwards, or without speed: refused before anything is sent."""
+
+  async def _t():
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    assert p.pipettes is not None
+    await p.pipettes.move_to_y_positions({0: 300.0, 1: 200.0})
+    sent: list = []
+    send = p.send_command
+
+    async def record(command, *args, **kwargs):
+      sent.append(type(command).__name__)
+      return await send(command, *args, **kwargs)
+
+    p.send_command = record  # type: ignore[method-assign]
+    probe = p.pipettes.clld_probe_y_position_using_channel
+    for call, message in (
+      (
+        lambda: probe(1, "backward", end_pos_search=295.0),
+        "outside the range channel 1 may search",
+      ),
+      (lambda: probe(1, "backward", end_pos_search=150.0), "cannot end at"),
+      (lambda: probe(1, "sideways", end_pos_search=150.0), "probing_direction"),  # type: ignore[arg-type]
+      (lambda: probe(1, "forward", speed=0), "speed must be above 0"),
+      (lambda: probe(2, "forward"), "channel_idx must be between"),
+    ):
+      with pytest.raises(ValueError, match=message):
+        await call()
+    assert "PrepYSeekLldPosition" not in sent and "PrepMoveYAbsolute" not in sent
+    await p.stop()
+
+  _run(_t())
+
+
 def test_probe_z_using_clld_seeks_where_the_channel_stands():
   """The seek is sent at the channel's current X and Y with every other argument written out."""
 

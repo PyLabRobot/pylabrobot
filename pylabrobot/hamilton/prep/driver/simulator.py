@@ -392,6 +392,23 @@ class SimulatedPipettes(_Simulated, Pipettes):
           self._move(raised, None, None, height)
       return None
 
+    if isinstance(request, PrepCmd.PrepYSeekLldPosition):
+      # Nothing to detect in simulation: the channel searches to the end of its search and finds nothing.
+      y_seek = request.seek_parameters
+      searching = index_of.get(int(y_seek.channel))
+      if searching is not None:
+        self._move(
+          searching, y_seek.start_position_x, y_seek.seek_position_y, y_seek.start_position_z
+        )
+      return PrepCmd.PrepYSeekLldPosition.Response(
+        result=PrepCmd.SeekResultParameters(
+          default_values=False,
+          channel=y_seek.channel,
+          detected=False,
+          position=y_seek.seek_position_y,
+        )
+      ), "nothing to detect"
+
     if isinstance(request, PrepCmd.PrepZSeekLldPosition):
       # Nothing to detect in simulation: each channel seeks down to its floor, finds nothing, and is
       # left at its final height.

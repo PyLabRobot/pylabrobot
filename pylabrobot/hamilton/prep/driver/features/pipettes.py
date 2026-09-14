@@ -1974,17 +1974,138 @@ class Pipettes:
 
   # -- y probing (capacitive only) -----------------------------------------------------------------
 
-  async def clld_probe_y_position_using_channel(self, *args, **kwargs):
-    """Probe Y position using capacitive LLD. Not yet implemented for the Prep.
+  async def clld_probe_y_position_using_channel(
+    self,
+    channel_idx: int,
+    probing_direction: Literal["forward", "backward"],
+    end_pos_search: Optional[float] = None,
+    speed: float = 10.0,
+    sensitivity: Optional[int] = None,
+    detect_mode: Optional[int] = None,
+    post_detection_dist: float = 2.0,
+    tip_bottom_diameter: float = 1.2,
+  ) -> float:
+    """Probe the Y position of a conductive material with the channel's capacitive LLD.
 
-    TODO: Investigate ChannelCoordinator [1:19] YSeekLldPosition(seekParameters)
-    which takes a YLLDSeekParameters struct and returns SeekResultParameters.
-    Also Channel [1:11] LeakCheck has ySeekDistance/yPreloadDistance params
-    which suggest Y-axis seeking capability.
+    As legacy STARBackend's `clld_probe_y_position_using_channel`. The channel searches from where it stands, along Y
+    alone at its X and Z, with `ChannelCoordinator.YSeekLldPosition`, until its cLLD triggers or it reaches the end of
+    the search.
+    The search stays inside the channel's Y window and clear of its neighbours by their minimum spacing. After a
+    detection the channel backs off by `post_detection_dist`, as far as its neighbours allow.
+
+    On PRPAA1087 (V1.2.2) a 10 mm search at 5 mm/s with nothing in the way moved at 5.0 mm/s and stopped at its end;
+    a detection has not been run yet. The seek carries no acceleration.
+
+    Args:
+      channel_idx: which channel, 0-indexed from the back.
+      probing_direction: "forward" searches toward the front (decreasing y), "backward" toward the back.
+      end_pos_search: where the search ends when nothing triggers, in mm. Defaults to as far as the channel may go.
+      speed: how fast to search, in mm/s.
+      sensitivity: the cLLD sensitivity sent. Defaults to `default_clld_sensitivity`.
+      detect_mode: the cLLD detect mode sent. Defaults to `default_clld_detect_mode`.
+      post_detection_dist: how far to back off after a detection, in mm.
+      tip_bottom_diameter: the diameter of what touches the material, in mm. Half of it is added in the search
+        direction, so the result is where the material's surface is. Defaults to 1.2 mm, the STAR's teaching needles.
+
+    Returns:
+      The y position of the detected material's surface, in mm.
+
+    Raises:
+      ValueError: If the channel does not exist, `probing_direction` is neither direction, `speed` is not
+        above 0, `end_pos_search` is outside the range the channel may search or not ahead of where it stands.
+      RuntimeError: If nothing was detected.
     """
-    raise NotImplementedError(
-      "clld_probe_y_position_using_channel is not yet implemented for Pipettes."
+    if not 0 <= channel_idx < self.num_channels:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, is {channel_idx}"
+      )
+    if probing_direction not in ("forward", "backward"):
+      raise ValueError(
+        f"probing_direction must be 'forward' or 'backward', is {probing_direction!r}"
+      )
+    if speed <= 0:
+      raise ValueError(f"speed must be above 0 mm/s, is {speed}")
+    forward = probing_direction == "forward"
+    positions = await self.request_locations()
+    here = positions[channel_idx]
+
+    # How far the channel may go: its Y window, and its neighbours kept at their minimum spacing.
+    window = (
+      self.configuration.channels[channel_idx].y_range
+      if channel_idx < len(self.configuration.channels)
+      else None
     )
+    low, high = (-math.inf, math.inf) if window is None else window
+    if channel_idx > 0:
+      high = min(
+        high, positions[channel_idx - 1].y - self._min_spacing_between(channel_idx - 1, channel_idx)
+      )
+    if channel_idx + 1 < len(positions):
+      low = max(
+        low, positions[channel_idx + 1].y + self._min_spacing_between(channel_idx, channel_idx + 1)
+      )
+    if end_pos_search is not None and not low <= end_pos_search <= high:
+      raise ValueError(
+        f"end_pos_search={end_pos_search} is outside the range channel {channel_idx} may search, "
+        f"[{low:.2f}, {high:.2f}]"
+      )
+    start = here.y
+    end = (low if forward else high) if end_pos_search is None else end_pos_search
+    if math.isinf(end):
+      raise ValueError(f"channel {channel_idx}'s Y window has not been read; pass end_pos_search")
+    if (end >= start) if forward else (end <= start):
+      raise ValueError(
+        f"a {probing_direction} search from y={start:.2f} cannot end at y={end:.2f} mm"
+      )
+
+    seek = PrepCmd.YLLDSeekParameters(
+      default_values=False,
+      channel=self.channel_enum(channel_idx),
+      start_position_x=here.x,
+      start_position_y=start,
+      start_position_z=here.z,
+      seek_position_y=end,
+      seek_velocity_y=speed,
+      lld_sensitivity=self.default_clld_sensitivity if sensitivity is None else sensitivity,
+      detect_mode=self.default_clld_detect_mode if detect_mode is None else detect_mode,
+    )
+    try:
+      result = await self._unchecked_fw_y_seek_lld_position(
+        seek, read_timeout=abs(end - start) / speed + 30
+      )
+    finally:
+      await self._record_where_they_stopped()
+    if not result.detected:
+      raise RuntimeError(
+        f"channel {channel_idx} detected nothing between y={start:.2f} and y={end:.2f} mm"
+      )
+
+    # Where the channel stopped is where it touched: read, as the STAR reads it.
+    detected_y = (await self.request_locations())[channel_idx].y
+    back_off = (
+      min(detected_y + post_detection_dist, high)
+      if forward
+      else max(detected_y - post_detection_dist, low)
+    )
+    await self.move_to_y_positions({channel_idx: back_off}, speed=speed)
+    return detected_y - tip_bottom_diameter / 2 if forward else detected_y + tip_bottom_diameter / 2
+
+  async def _unchecked_fw_y_seek_lld_position(
+    self, seek: PrepCmd.YLLDSeekParameters, read_timeout: Optional[float] = None
+  ) -> PrepCmd.SeekResultParameters:
+    """Send `ChannelCoordinator.YSeekLldPosition` (cmd=19). Nothing is guarded and nothing is recorded.
+
+    Args:
+      seek: the search.
+      read_timeout: how long to wait for the answer, in seconds. Defaults to the link's.
+
+    Returns:
+      The firmware's result.
+    """
+    response = await self._driver.send_command(
+      PrepCmd.PrepYSeekLldPosition(seek_parameters=seek), read_timeout=read_timeout
+    )
+    return response.result
 
   # -- z probing (capacitive, force) ---------------------------------------------------------------
 
@@ -1993,7 +2114,7 @@ class Pipettes:
     channel_idx: int,
     *,
     start_pos_search: Optional[float] = None,
-    channel_speed: Optional[float] = None,
+    speed: Optional[float] = None,
     lowest_immers_pos: Optional[float] = None,
     sensitivity: Optional[int] = None,
     detect_mode: Optional[int] = None,
@@ -2003,16 +2124,16 @@ class Pipettes:
 
     Sends `Pipettor.ZSeekLldPosition` with the channel's current X and Y, so it does not move sideways:
     given another X or Y the firmware moves there before seeking. It seeks down from `start_pos_search`
-    at `channel_speed`, stops at `lowest_immers_pos` when nothing triggers, and goes to
+    at `speed`, stops at `lowest_immers_pos` when nothing triggers, and goes to
     `z_position_at_end_of_a_command` either way (PRPAA1087, V1.2.2). There a front channel without a tip
     triggered on a finger touching it at 140.451 mm. To probe elsewhere, move there first with
     `move_to_location`. Argument names follow legacy STARBackend's `clld_probe_z_height_using_channel`
-    where the Prep has the same setting.
+    where the Prep has the same setting, except `speed`.
 
     Args:
       channel_idx: which channel, 0-indexed from the back.
       start_pos_search: the height to start seeking from, in mm. Defaults to the traverse height.
-      channel_speed: how fast to seek down, in mm/s. Defaults to `default_clld_probe_speed`.
+      speed: how fast to seek down, in mm/s. Defaults to `default_clld_probe_speed`.
       lowest_immers_pos: the lowest the channel may seek to, in mm. Defaults to the bottom of the
         channel's Z range (`configuration.channels[channel_idx].z_range`).
       sensitivity: the cLLD sensitivity sent. Defaults to `default_clld_sensitivity`.
@@ -2025,7 +2146,7 @@ class Pipettes:
 
     Raises:
       ValueError: If the channel does not exist, a position is outside the channel's reach,
-        `lowest_immers_pos` is above `start_pos_search`, or `channel_speed` is not positive.
+        `lowest_immers_pos` is above `start_pos_search`, or `speed` is not positive.
       RuntimeError: If the channel reports no position, or its Z range has not been read to default
         `lowest_immers_pos` from.
 
@@ -2064,7 +2185,7 @@ class Pipettes:
     start_pos_search = (
       self._resolve_traverse_height() if start_pos_search is None else start_pos_search
     )
-    channel_speed = self.default_clld_probe_speed if channel_speed is None else channel_speed
+    speed = self.default_clld_probe_speed if speed is None else speed
     sensitivity = self.default_clld_sensitivity if sensitivity is None else sensitivity
     detect_mode = self.default_clld_detect_mode if detect_mode is None else detect_mode
     z_position_at_end_of_a_command = (
@@ -2081,8 +2202,8 @@ class Pipettes:
           f"channel {channel_idx}'s Z range has not been read; pass lowest_immers_pos"
         )
       lowest_immers_pos = reach_z[0]
-    if channel_speed <= 0:
-      raise ValueError(f"channel_speed must be positive, is {channel_speed}")
+    if speed <= 0:
+      raise ValueError(f"speed must be positive, is {speed}")
     if lowest_immers_pos > start_pos_search:
       raise ValueError(
         f"lowest_immers_pos={lowest_immers_pos} is above start_pos_search={start_pos_search}"
@@ -2104,7 +2225,7 @@ class Pipettes:
       channel=self.channel_enum(channel_idx),
       seek_position_x=x,
       seek_position_y=y,
-      seek_velocity_z=channel_speed,
+      seek_velocity_z=speed,
       seek_height=start_pos_search,
       min_seek_height=lowest_immers_pos,
       final_position_z=z_position_at_end_of_a_command,
