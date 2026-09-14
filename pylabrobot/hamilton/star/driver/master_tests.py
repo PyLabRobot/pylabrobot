@@ -144,23 +144,52 @@ class TestSimulation(unittest.IsolatedAsyncioTestCase):
       STARSimulationDriver()
 
 
-class TestRecordings(unittest.TestCase):
-  """What ships under recordings/ is read back whole: no key a head's configuration no longer has,
-  and no window left empty for a head to be built on."""
+def keys_no_field_reads(saved: dict, configuration: object) -> List[str]:
+  """What a saved configuration holds that reading it back leaves out, nested ones included.
 
-  def test_every_head_key_is_a_field_and_its_z_range_is_set(self):
+  Args:
+    saved: the configuration as JSON holds it.
+    configuration: what reading it back built.
+
+  Returns:
+    Every key with no field to read it into, as a dotted path from `saved`.
+  """
+  fields = {field.name: field for field in dataclasses.fields(configuration)}  # type: ignore[arg-type]
+  dropped = [key for key in saved if key not in fields]
+  for key, value in saved.items():
+    nested = getattr(configuration, key, None)
+    if key in fields and isinstance(value, dict) and dataclasses.is_dataclass(nested):
+      dropped += [f"{key}.{inner}" for inner in keys_no_field_reads(value, nested)]
+  return dropped
+
+
+class TestRecordings(unittest.TestCase):
+  """What ships under recordings/ is read back whole: no key a configuration no longer has, and no
+  window left empty for a head to be built on."""
+
+  def test_every_key_is_a_field(self):
     for path in sorted(pathlib.Path(RECORDING_STAR).parent.glob("*.json")):
       saved = json.loads(path.read_text(encoding="utf-8"))
       read = read_configuration(str(path))
+      sections = [("device", saved["device"], read["device"])]
       for side, carried in saved.get("arms", {}).items():
+        sections += [
+          (f"arms.{side}.{name}", value, read["arms"][side][name])
+          for name, value in carried.items()
+        ]
+      if "autoload" in saved:
+        sections.append(("autoload", saved["autoload"], read["autoload"]))
+      for where, value, configuration in sections:
+        with self.subTest(recording=path.name, section=where):
+          self.assertEqual(keys_no_field_reads(value, configuration), [])
+
+  def test_every_head_has_a_z_range(self):
+    for path in sorted(pathlib.Path(RECORDING_STAR).parent.glob("*.json")):
+      for side, carried in read_configuration(str(path))["arms"].items():
         for name in ("head96", "head384"):
-          if name not in carried:
-            continue
-          configuration = read["arms"][side][name]
-          with self.subTest(recording=path.name, head=name):
-            fields = {field.name for field in dataclasses.fields(configuration)}
-            self.assertEqual(set(carried[name]) - fields, set())
-            self.assertIsNotNone(configuration.z_range)
+          if name in carried:
+            with self.subTest(recording=path.name, head=name):
+              self.assertIsNotNone(carried[name].z_range)
 
 
 class TestRepeatedSetup(unittest.IsolatedAsyncioTestCase):

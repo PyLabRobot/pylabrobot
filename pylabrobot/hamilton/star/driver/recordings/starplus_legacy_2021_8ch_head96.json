@@ -61,7 +61,7 @@
       "wrap_size": 595.2,
       "firmware_version": "1.4S 2012-04-25",
       "x_mm_per_increment": 0.1,
-      "x_increment_range": [
+      "x_range_increments": [
         0,
         30000
       ],
@@ -111,7 +111,7 @@
         "z_reference_anchor": "b",
         "y_drive_mm_per_increment": 0.046302083,
         "z_drive_mm_per_increment": 0.01072765,
-        "z_increment_range": [
+        "z_range_increments": [
           9320,
           31200
         ],
@@ -325,43 +325,43 @@
           "extra_3": -26577
         },
         "tool_length": 137.7,
-        "y_increment_range": [
+        "y_range_increments": [
           0,
           14000
         ],
         "y_mm_per_increment": 0.046302083,
-        "y_speed_increment_range": [
+        "y_speed_range_increments": [
           50,
           8000
         ],
         "rotation_drive_diameter": 30.5,
         "rotation_drive_safety_radius": 90.0,
         "rotation_drive_size_z": 120.0,
-        "z_increment_range": [
+        "z_range_increments": [
           -187,
           26661
         ],
         "z_mm_per_increment": 0.01072765,
-        "z_speed_increment_range": [
+        "z_speed_range_increments": [
           50,
           15000
         ],
-        "z_acceleration_increment_range": [
+        "z_acceleration_range_increments": [
           5,
           999
         ],
         "rotation_drive_z_offset_above_finger": 13.0,
-        "rotation_increment_range": [
+        "rotation_range_increments": [
           -30032,
           30032
         ],
         "rotation_deg_per_increment": 0.00309619077,
-        "wrist_increment_range": [
+        "wrist_range_increments": [
           -30000,
           30000
         ],
         "wrist_deg_per_increment": 0.00507968798,
-        "gripper_increment_range": [
+        "gripper_range_increments": [
           12780,
           24120
         ],
