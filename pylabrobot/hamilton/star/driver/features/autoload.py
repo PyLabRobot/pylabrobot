@@ -4,7 +4,7 @@ import datetime
 import logging
 import string
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.resources.barcode import Barcode1DSymbology, Barcode2DSymbology
@@ -171,7 +171,6 @@ class AutoloadConfiguration:
   z_drive_speed_default: int = 1_750
   z_drive_acceleration_ramp_range: Tuple[int, int] = (1, 4)
   z_drive_acceleration_ramp_default: int = 4
-  z_drive_safety_position: Optional[float] = None
 
   # -- carrier Y drive (handling wheel; in and out of the deck) --
   y_drive_mm_per_increment: float = 0.06404424
@@ -383,8 +382,7 @@ class Autoload:
     """Initialize the autoload and everything else that makes it operational. This moves it.
 
     Homing is skipped when it already reports itself initialized, so this can be called on any
-    device. The rest runs either way: the wheel goes to its safe Z, and the height it comes to
-    rest at is read, which no command reports directly.
+    device. The rest runs either way: the wheel goes to its safe Z.
 
     Reporting itself uninitialized after the device procedure has run is the device's
     behaviour rather than a failed initialization: across 182 recorded runs it reported itself
@@ -398,7 +396,6 @@ class Autoload:
       logger.debug("autoload reports itself uninitialized - homing its drives")
       await self._send_command_and_update_sled_x(module="C0", command="II", subsystem="I0")
     await self.wheel_move_to_safe_z()
-    self.configuration.z_drive_safety_position = await self.wheel_request_z_position()
 
     if park_after:
       logger.debug("parking the autoload after initialization")
@@ -406,17 +403,51 @@ class Autoload:
 
   # -- scanner X drive (along the deck) ------------------------------------------------------------
 
-  async def _record_where_it_stopped(self) -> None:
-    """Read where the sled came to rest, and record it.
+  async def _record_where_it_stopped(self, axis: Literal["x", "y", "z"]) -> Optional[float]:
+    """Read where a drive came to rest, and record it.
 
-    For a move's `finally`. A move that stopped part way left the sled somewhere no target
+    For a move's `finally`. A move that stopped part way left the drive somewhere no target
     describes. Its own failure is logged and swallowed: it must not replace the move's exception,
     which is the one that says what went wrong.
+
+    Args:
+      axis: which drive the move drove - `x` the sled along the deck, `y` the carrier drive in and
+        out, `z` the carrier-handling wheel up and down.
+
+    Returns:
+      Where the drive is, in mm, or None if it could not be read.
     """
     try:
-      await self.request_x_position()
+      if axis == "x":
+        return await self.request_x_position()
+      if axis == "y":
+        return await self.wheel_request_y_position()
+      return await self.wheel_request_z_position()
     except Exception:
-      logger.warning("could not read where the autoload stopped; its model is stale")
+      logger.warning("could not read where the autoload stopped along %s; its model is stale", axis)
+      return None
+
+  async def _raise_wheel_after_failed_move(self) -> None:
+    """Send the carrier-handling wheel to its safe Z after a sled move failed, unless it is there.
+
+    For a move's `except`. A move that failed is no evidence of where the wheel stands, so it is
+    read: at the start of its Z travel it is already safe and is left alone, anywhere else it is
+    raised. A read that fails says nothing either, so the wheel is raised then too.
+
+    Its own failure is logged and swallowed: it must not replace the move's exception, which is the
+    one that says what went wrong.
+    """
+    try:
+      at_safe_z = await self.wheel_is_at_safe_z()
+    except Exception:
+      logger.warning("could not read the autoload's wheel height after a failed move; raising it")
+      at_safe_z = False
+    if at_safe_z:
+      return
+    try:
+      await self.wheel_move_to_safe_z()
+    except Exception:
+      logger.warning("could not raise the autoload's wheel to safe Z after a failed move")
 
   async def _send_command_and_update_sled_x(self, **kwargs: Any) -> Any:
     """Send a command that moves the sled, then read back where along X it ended up.
@@ -437,7 +468,7 @@ class Autoload:
     finally:
       # Whether the move succeeded or not: one that stopped part way left the sled somewhere no
       # target describes, and this read is also how a successful move is recorded.
-      await self._record_where_it_stopped()
+      await self._record_where_it_stopped("x")
 
   async def request_track(self) -> int:
     """Request the current track of the autoload's carrier handler.
@@ -586,23 +617,22 @@ class Autoload:
       raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
 
     # -- device preparation ----------------------------------------------------------------------
-    current_wheel_z = await self.wheel_request_z_position()
-    if c.z_drive_safety_position is not None and current_wheel_z < c.z_drive_safety_position:
-      logger.debug(
-        "retracting the handling wheel to its safe Z %.3f mm before moving to track %d",
-        c.z_drive_safety_position,
-        track,
-      )
+    if not await self.wheel_is_at_safe_z():
+      logger.debug("retracting the handling wheel to its safe Z before moving to track %d", track)
       await self.wheel_move_to_safe_z()
 
-    return await self._send_command_and_update_sled_x(
-      module="I0",
-      command="XP",
-      xp=f"{track:02}",
-      xv=f"{speed_increments:04}",
-      xr=f"{acceleration_ramp:01}",
-      xw=f"{current_limit:01}",
-    )
+    try:
+      return await self._send_command_and_update_sled_x(
+        module="I0",
+        command="XP",
+        xp=f"{track:02}",
+        xv=f"{speed_increments:04}",
+        xr=f"{acceleration_ramp:01}",
+        xw=f"{current_limit:01}",
+      )
+    except Exception:
+      await self._raise_wheel_after_failed_move()
+      raise
 
   async def move_x(
     self,
@@ -660,23 +690,22 @@ class Autoload:
       raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
 
     # -- device preparation ----------------------------------------------------------------------
-    current_wheel_z = await self.wheel_request_z_position()
-    if c.z_drive_safety_position is not None and current_wheel_z < c.z_drive_safety_position:
-      logger.debug(
-        "retracting the handling wheel to its safe Z %.3f mm before moving to %.3f mm",
-        c.z_drive_safety_position,
-        x,
-      )
+    if not await self.wheel_is_at_safe_z():
+      logger.debug("retracting the handling wheel to its safe Z before moving to %.3f mm", x)
       await self.wheel_move_to_safe_z()
 
-    return await self._send_command_and_update_sled_x(
-      module="I0",
-      command="XA",
-      xa=f"{increments:05}",
-      xv=f"{speed_increments:04}",
-      xr=f"{acceleration_ramp:01}",
-      xw=f"{current_limit:01}",
-    )
+    try:
+      return await self._send_command_and_update_sled_x(
+        module="I0",
+        command="XA",
+        xa=f"{increments:05}",
+        xv=f"{speed_increments:04}",
+        xr=f"{acceleration_ramp:01}",
+        xw=f"{current_limit:01}",
+      )
+    except Exception:
+      await self._raise_wheel_after_failed_move()
+      raise
 
   async def move_x_relative(
     self,
@@ -730,6 +759,17 @@ class Autoload:
       await self._request_drive_position("RZ", digits=4)
     )
 
+  async def wheel_is_at_safe_z(self) -> bool:
+    """Request whether the carrier-handling wheel is at its safe Z, the start of its Z travel.
+
+    Returns:
+      True if the wheel reads the first increment of `z_drive_range_increments`.
+    """
+    return (
+      await self._request_drive_position("RZ", digits=4)
+      == self.configuration.z_drive_range_increments[0]
+    )
+
   async def wheel_move_to_safe_z(self) -> float:
     """Move the carrier-handling wheel to its safe Z, and read where that put it.
 
@@ -739,76 +779,60 @@ class Autoload:
     await self._driver.send_command(module="C0", command="IV", subsystem="I0")
     return await self.wheel_request_z_position()
 
-  async def wheel_move_z(
-    self,
-    z: float,
-    speed: Optional[float] = None,
-    acceleration_ramp: Optional[int] = None,
-    current_limit: Optional[int] = None,
+  async def _unchecked_fw_move_to_z_position(
+    self, z: float, speed: float, acceleration_ramp: int, current_limit: int
   ):
-    """Move the carrier-handling wheel to a Z position.
+    """Move the carrier-handling wheel to a Z position. Nothing is guarded.
 
     Args:
-      z: how high to move it, in mm from the drive's zero.
-      speed: how fast to travel, in mm/s. Defaults to
-        `configuration.z_drive_speed_default`.
-      acceleration_ramp: how hard to accelerate, in multiples of
-        `configuration.acceleration_ramp_increments_per_second_squared`. Defaults to
-        `configuration.z_drive_acceleration_ramp_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.motor_current_limit_default`.
-    Raises:
-      ValueError: If the position, or an argument, is outside what the drive accepts.
+      z: where to, in mm from the drive's zero.
+      speed: how fast to travel, in mm/s.
+      acceleration_ramp: how hard to accelerate.
+      current_limit: the motor current limit.
     """
     c = self.configuration
-    self._check_reachable("z", z)
-    increments = c.z_drive_mm_to_increments(z)
-
-    # Every parameter is sent: what the drive does is written here, not left to it.
-    speed = c.z_drive_increments_to_mm(c.z_drive_speed_default) if speed is None else speed
-    acceleration_ramp = (
-      c.z_drive_acceleration_ramp_default if acceleration_ramp is None else acceleration_ramp
-    )
-    current_limit = c.motor_current_limit_default if current_limit is None else current_limit
-
-    low, high = c.z_drive_speed_range_increments
-    speed_increments = c.z_drive_mm_to_increments(speed)
-    if not low <= speed_increments <= high:
-      raise ValueError(
-        f"speed must be between {c.z_drive_increments_to_mm(low)} and "
-        f"{c.z_drive_increments_to_mm(high)} mm/s, is {speed}"
-      )
-
-    low, high = c.z_drive_acceleration_ramp_range
-    if not low <= acceleration_ramp <= high:
-      raise ValueError(
-        f"acceleration_ramp must be between {low} and {high}, is {acceleration_ramp}"
-      )
-
-    low, high = c.motor_current_limit_range
-    if not low <= current_limit <= high:
-      raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
-
     return await self._driver.send_command(
       module="I0",
       command="ZA",
-      za=f"{increments:04}",
-      zv=f"{speed_increments:04}",
+      za=f"{c.z_drive_mm_to_increments(z):04}",
+      zv=f"{c.z_drive_mm_to_increments(speed):04}",
+      zr=f"{acceleration_ramp:01}",
+      zw=f"{current_limit:01}",
+    )
+
+  async def _unchecked_fw_move_to_predefined_z_position(
+    self, z: ZPosition, speed: float, acceleration_ramp: int, current_limit: int
+  ):
+    """Move the carrier-handling wheel to a Z position it knows by name. Nothing is guarded.
+
+    Args:
+      z: which one: `below` or `above`.
+      speed: how fast to travel, in mm/s.
+      acceleration_ramp: how hard to accelerate.
+      current_limit: the motor current limit.
+    """
+    c = self.configuration
+    return await self._driver.send_command(
+      module="I0",
+      command="ZP",
+      zp=f"{c.z_positions[z]:01}",
+      zv=f"{c.z_drive_mm_to_increments(speed):04}",
       zr=f"{acceleration_ramp:01}",
       zw=f"{current_limit:01}",
     )
 
   async def wheel_move_to_z_position(
     self,
-    position: ZPosition,
+    z: Union[float, ZPosition],
     speed: Optional[float] = None,
     acceleration_ramp: Optional[int] = None,
     current_limit: Optional[int] = None,
-  ):
-    """Move the carrier-handling wheel to one of the two positions it knows.
+  ) -> float:
+    """Move the carrier-handling wheel to a Z position.
 
     Args:
-      position: which one: `below` or `above`.
+      z: where to: in mm from the drive's zero, or one of the positions it knows by name,
+        `below` or `above`.
       speed: how fast to travel, in mm/s. Defaults to
         `configuration.z_drive_speed_default`.
       acceleration_ramp: how hard to accelerate, in multiples of
@@ -816,13 +840,18 @@ class Autoload:
         `configuration.z_drive_acceleration_ramp_default`.
       current_limit: the motor current limit. Defaults to
         `configuration.motor_current_limit_default`.
+    Returns:
+      Where the wheel came to rest, in mm, as its drive reads it.
     Raises:
-      ValueError: If the position is not one it knows, or an argument is outside what the drive
-        accepts.
+      ValueError: If the position is outside what the drive reaches or not a name it knows, or an
+        argument is outside what the drive accepts.
     """
     c = self.configuration
-    if position not in c.z_positions:
-      raise ValueError(f"position must be one of {list(c.z_positions)}, is {position!r}")
+    if isinstance(z, str):
+      if z not in c.z_positions:
+        raise ValueError(f"z must be one of {list(c.z_positions)}, is {z!r}")
+    else:
+      self._check_reachable("z", z)
 
     # Every parameter is sent: what the drive does is written here, not left to it.
     speed = c.z_drive_increments_to_mm(c.z_drive_speed_default) if speed is None else speed
@@ -849,14 +878,18 @@ class Autoload:
     if not low <= current_limit <= high:
       raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
 
-    return await self._driver.send_command(
-      module="I0",
-      command="ZP",
-      zp=f"{c.z_positions[position]:01}",
-      zv=f"{speed_increments:04}",
-      zr=f"{acceleration_ramp:01}",
-      zw=f"{current_limit:01}",
-    )
+    try:
+      if isinstance(z, str):
+        await self._unchecked_fw_move_to_predefined_z_position(
+          z, speed, acceleration_ramp, current_limit
+        )
+      else:
+        await self._unchecked_fw_move_to_z_position(z, speed, acceleration_ramp, current_limit)
+    finally:
+      # Whether the move succeeded or not: what the drive reads is where the wheel is.
+      z_reached = await self._record_where_it_stopped("z")
+    # The move answered but that read did not: read again, and let this one raise.
+    return await self.wheel_request_z_position() if z_reached is None else z_reached
 
   # -- Y drive (handling wheel moving carriers in and out of the deck) -----------------------
 
@@ -870,76 +903,60 @@ class Autoload:
       await self._request_drive_position("RY", digits=4)
     )
 
-  async def wheel_move_y(
-    self,
-    y: float,
-    speed: Optional[float] = None,
-    acceleration_ramp: Optional[int] = None,
-    current_limit: Optional[int] = None,
+  async def _unchecked_fw_move_to_y_position(
+    self, y: float, speed: float, acceleration_ramp: int, current_limit: int
   ):
-    """Move the carrier drive to a Y position, pulling a carrier in or pushing it out.
+    """Move the carrier drive to a Y position. Nothing is guarded.
 
     Args:
-      y: how far to move it, in mm from the drive's zero.
-      speed: how fast to travel, in mm/s. Defaults to
-        `configuration.y_drive_speed_default`.
-      acceleration_ramp: how hard to accelerate, in multiples of
-        `configuration.acceleration_ramp_increments_per_second_squared`. Defaults to
-        `configuration.y_drive_acceleration_ramp_default`.
-      current_limit: the motor current limit. Defaults to
-        `configuration.motor_current_limit_default`.
-    Raises:
-      ValueError: If the position, or an argument, is outside what the drive accepts.
+      y: where to, in mm from the drive's zero.
+      speed: how fast to travel, in mm/s.
+      acceleration_ramp: how hard to accelerate.
+      current_limit: the motor current limit.
     """
     c = self.configuration
-    self._check_reachable("y", y)
-    increments = c.y_drive_mm_to_increments(y)
-
-    # Every parameter is sent: what the drive does is written here, not left to it.
-    speed = c.y_drive_increments_to_mm(c.y_drive_speed_default) if speed is None else speed
-    acceleration_ramp = (
-      c.y_drive_acceleration_ramp_default if acceleration_ramp is None else acceleration_ramp
-    )
-    current_limit = c.motor_current_limit_default if current_limit is None else current_limit
-
-    low, high = c.y_drive_speed_range_increments
-    speed_increments = c.y_drive_mm_to_increments(speed)
-    if not low <= speed_increments <= high:
-      raise ValueError(
-        f"speed must be between {c.y_drive_increments_to_mm(low)} and "
-        f"{c.y_drive_increments_to_mm(high)} mm/s, is {speed}"
-      )
-
-    low, high = c.y_drive_acceleration_ramp_range
-    if not low <= acceleration_ramp <= high:
-      raise ValueError(
-        f"acceleration_ramp must be between {low} and {high}, is {acceleration_ramp}"
-      )
-
-    low, high = c.motor_current_limit_range
-    if not low <= current_limit <= high:
-      raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
-
     return await self._driver.send_command(
       module="I0",
       command="YA",
-      ya=f"{increments:04}",
-      yv=f"{speed_increments:04}",
+      ya=f"{c.y_drive_mm_to_increments(y):04}",
+      yv=f"{c.y_drive_mm_to_increments(speed):04}",
+      yr=f"{acceleration_ramp:01}",
+      yw=f"{current_limit:01}",
+    )
+
+  async def _unchecked_fw_move_to_predefined_y_position(
+    self, y: YPosition, speed: float, acceleration_ramp: int, current_limit: int
+  ):
+    """Move the carrier drive to a Y position it knows by name. Nothing is guarded.
+
+    Args:
+      y: which one: `loading_tray`, `carrier_identification` or `deck`.
+      speed: how fast to travel, in mm/s.
+      acceleration_ramp: how hard to accelerate.
+      current_limit: the motor current limit.
+    """
+    c = self.configuration
+    return await self._driver.send_command(
+      module="I0",
+      command="YP",
+      yp=f"{c.y_positions[y]:01}",
+      yv=f"{c.y_drive_mm_to_increments(speed):04}",
       yr=f"{acceleration_ramp:01}",
       yw=f"{current_limit:01}",
     )
 
   async def wheel_move_to_y_position(
     self,
-    position: YPosition,
+    y: Union[float, YPosition],
     speed: Optional[float] = None,
     acceleration_ramp: Optional[int] = None,
     current_limit: Optional[int] = None,
-  ):
-    """Move the carrier drive to one of the three positions it knows.
+  ) -> float:
+    """Move the carrier drive to a Y position, pulling a carrier in or pushing it out.
 
     Args:
-      position: which one: `loading_tray`, `carrier_identification` or `deck`.
+      y: where to: in mm from the drive's zero, or one of the positions it knows by name,
+        `loading_tray`, `carrier_identification` or `deck`.
       speed: how fast to travel, in mm/s. Defaults to
         `configuration.y_drive_speed_default`.
       acceleration_ramp: how hard to accelerate, in multiples of
@@ -947,15 +964,19 @@ class Autoload:
         `configuration.y_drive_acceleration_ramp_default`.
       current_limit: the motor current limit. Defaults to
         `configuration.motor_current_limit_default`.
+    Returns:
+      Where the carrier drive came to rest, in mm, as it reads it.
     Raises:
-      ValueError: If the position is not one it knows, or an argument is outside what the drive
-        accepts.
+      ValueError: If the position is outside what the drive reaches or not a name it knows, or an
+        argument is outside what the drive accepts.
     """
     c = self.configuration
-    if position not in c.y_positions:
-      raise ValueError(f"position must be one of {list(c.y_positions)}, is {position!r}")
+    if isinstance(y, str):
+      if y not in c.y_positions:
+        raise ValueError(f"y must be one of {list(c.y_positions)}, is {y!r}")
+    else:
+      self._check_reachable("y", y)
 
-    # Every parameter is sent: what the drive does is written here, not left to it.
     speed = c.y_drive_increments_to_mm(c.y_drive_speed_default) if speed is None else speed
     acceleration_ramp = (
       c.y_drive_acceleration_ramp_default if acceleration_ramp is None else acceleration_ramp
@@ -979,14 +1000,19 @@ class Autoload:
     low, high = c.motor_current_limit_range
     if not low <= current_limit <= high:
       raise ValueError(f"current_limit must be between {low} and {high}, is {current_limit}")
-    return await self._driver.send_command(
-      module="I0",
-      command="YP",
-      yp=f"{c.y_positions[position]:01}",
-      yv=f"{speed_increments:04}",
-      yr=f"{acceleration_ramp:01}",
-      yw=f"{current_limit:01}",
-    )
+
+    try:
+      if isinstance(y, str):
+        await self._unchecked_fw_move_to_predefined_y_position(
+          y, speed, acceleration_ramp, current_limit
+        )
+      else:
+        await self._unchecked_fw_move_to_y_position(y, speed, acceleration_ramp, current_limit)
+    finally:
+      # Whether the move succeeded or not: what the drive reads is where the carrier drive is.
+      y_reached = await self._record_where_it_stopped("y")
+    # The move answered but that read did not: read again, and let this one raise.
+    return await self.wheel_request_y_position() if y_reached is None else y_reached
 
   # -- scanner rotation drive ----------------------------------------------------------------------
 

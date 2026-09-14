@@ -328,15 +328,14 @@ class STARDriver:
             low.append(f"{arm.side} iSWAP at {z:.1f} mm, safe is {safe:.1f} mm")
 
     autoload = self.autoload
-    if autoload is not None and autoload.configuration.z_drive_safety_position is not None:
-      safe = autoload.configuration.z_drive_safety_position
+    if autoload is not None:
       try:
-        z = await autoload.wheel_request_z_position()
+        at_safe_z = await autoload.wheel_is_at_safe_z()
       except Exception:
         low.append("autoload wheel (where it is could not be read)")
       else:
-        if z < safe - tolerance:
-          low.append(f"autoload wheel at {z:.1f} mm, safe is {safe:.1f} mm")
+        if not at_safe_z:
+          low.append("autoload wheel below its safe Z")
     return low
 
   async def stop(self):
