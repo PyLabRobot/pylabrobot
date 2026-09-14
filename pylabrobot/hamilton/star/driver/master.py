@@ -1187,8 +1187,8 @@ class STARDriver:
     for arm in arms:
       arm.narrow_travel_for_left_side_panel()
 
-    # Read once, at discovery, and recorded there: a device that would not say leaves None, which
-    # the confirmation below skips as it does for a feature that reported nothing.
+    # Read once, at discovery, and recorded there: a feature that would not say, or reported
+    # nothing, is left out.
     reported = {
       "master": self.configuration.firmware_version,
       "pipettes": next(
@@ -1380,6 +1380,17 @@ class STARDriver:
       if name in skipped:
         logger.debug("%s: initializing it was skipped", name)
         continue
+      # A STAR deck carries a trash for the 96-head. A head told nowhere else to eject ejects there,
+      # centred over it, as legacy does.
+      if (
+        name == "head96"
+        and head.configuration.tip_discard_location is None
+        and self.deck is not None
+        and self.deck.has_resource("trash_core96")
+      ):
+        head.configuration.tip_discard_location = cast(Head96, head)._position_centred_in(
+          self.deck.get_resource("trash_core96")
+        )
       if not await self.request_initialization_status(head.configuration.module):
         if head.configuration.tip_discard_location is None:
           logger.warning(

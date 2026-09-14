@@ -335,8 +335,8 @@ class TestConfiguringAnArm(unittest.IsolatedAsyncioTestCase):
       XArm(driver, side="left", configuration=BARE_X_ARM)
 
   async def test_a_simulated_device_then_answers_what_was_written(self):
-    """A simulated device answers from the configuration it was given, and that is the same object
-    this writes into - so on one of these, re-reading the device gives back what was written."""
+    """A simulated device answers from the configuration it was given, and its discovery keeps an
+    arm's device facts across a re-read as a physical device's does - so what was written stays."""
     driver = await _both_arms()
     arm = cast(XArm, driver.left_x_arm)
     arm.configuration = dataclasses.replace(arm.configuration, current_limit_default=3)

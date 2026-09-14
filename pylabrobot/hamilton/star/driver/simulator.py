@@ -9,6 +9,7 @@ Nothing reaches the wire. `send_command` raises, which is how a command that has
 simulated makes itself known: override the method that sends it, on the feature that owns it.
 """
 
+import copy
 import datetime
 import logging
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
@@ -1016,24 +1017,28 @@ class STARSimulationDriver(STARDriver):
     pass
 
   async def request_device_configuration(self) -> DeviceConfiguration:
-    return self.simulated_configuration
+    """What the device reports it carries, answered from what it was declared to be.
+
+    As the channels answer: the reads a device answers this with go on the link, and what comes back
+    is a configuration of its own rather than the declared one, so discovery records it and the
+    cross-check compares the two as it does on a physical device. An arm keeps the device facts
+    written to it across a re-read, as a physical device's discovery keeps them.
+    """
+    for command in ("RM", "QM", "RU", "UA"):
+      await self.send_command(module="C0", command=command)
+    answered = copy.deepcopy(self.simulated_configuration)
+    if self.configuration is not None:
+      for side in ("left_arm", "right_arm"):
+        carried, arm = getattr(self.configuration, side), getattr(answered, side)
+        if carried is not None and arm is not None:
+          setattr(answered, side, arm.with_device_facts_of(carried))
+    return answered
 
   async def request_cover_input_status(self) -> Tuple[bool, bool, bool]:
     return SIMULATED_COVER_INPUTS
 
-  def _check_declared_against(self, discovered: DeviceConfiguration) -> None:
-    """Nothing to cross-check: a simulated device answers from the declaration.
-
-    On a physical device the declaration is a claim about what is on the other end, and discovery
-    tests it. Here it is where the answers come from, so it cannot disagree with itself. A
-    `configuration` given outright is the caller saying to simulate that instead, which is a
-    substitution rather than a disagreement.
-
-    Args:
-      discovered: what this device answered, which is what it was told to answer.
-    """
-
   async def request_device_serial_number(self) -> str:
+    await self.send_command(module="C0", command="RI")
     # What it was told it is, or what it was told to call itself when the recording did not say.
     declared = self.simulated_configuration.serial_number
     if declared is None:
@@ -1041,6 +1046,7 @@ class STARSimulationDriver(STARDriver):
     return declared
 
   async def request_firmware_version(self) -> Tuple[str, datetime.date]:
+    await self.send_command(module="C0", command="RF")
     declared = self.simulated_configuration.firmware_version
     if declared is None:
       raise RuntimeError(

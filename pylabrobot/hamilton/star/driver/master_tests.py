@@ -192,6 +192,29 @@ class TestRecordings(unittest.TestCase):
               self.assertIsNotNone(carried[name].z_range)
 
 
+class TestDeclaredConfiguration(unittest.IsolatedAsyncioTestCase):
+  """A simulated device answers what it was declared to be, and discovery checks what it answered
+  against the declaration as it does on a physical device."""
+
+  async def test_setup_checks_what_the_device_answered(self):
+    star = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    check = master.STARDriver._check_declared_against
+    with unittest.mock.patch.object(
+      master.STARDriver, "_check_declared_against", autospec=True, side_effect=check
+    ) as checked:
+      await star.setup()
+    checked.assert_called_once()
+    self.assertIsNot(star.configuration, star.declared["device"])
+
+  async def test_a_device_that_is_not_what_was_declared_is_refused(self):
+    star = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    star.simulated_configuration = dataclasses.replace(
+      star.simulated_configuration, autoload_installed=False
+    )
+    with self.assertRaisesRegex(ValueError, "autoload_installed"):
+      await star.setup()
+
+
 class TestRepeatedSetup(unittest.IsolatedAsyncioTestCase):
   """Setup is repeatable: a second one re-reads the device over the link the first one opened."""
 
@@ -244,9 +267,11 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
   its own status has been asked. The 96-head retract runs on every setup, since that retract is
   what keeps it clear."""
 
-  async def run_setup(self, device_up: bool, head_up: bool, eject_position: bool) -> List[str]:
+  async def run_setup(
+    self, device_up: bool, head_up: bool, eject_position: bool, trash96: bool = True
+  ) -> List[str]:
     star = simulator.STARSimulationDriver(
-      deck=STARDeck(),
+      deck=STARDeck(with_trash96=trash96),
       initialized=device_up,
       declared_configuration_json=RECORDING_STAR,
     )
@@ -289,9 +314,10 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
 
   async def test_head_down_with_nowhere_to_eject(self):
     """It is still retracted, because that is what keeps it clear of the iSWAP; it is just not
-    initialized, since initializing throws off whatever is mounted and there is nowhere to drop it."""
+    initialized, since initializing throws off whatever is mounted and there is nowhere to drop it:
+    no location of its own, and a deck with no trash for it."""
     self.assertEqual(
-      await self.run_setup(device_up=True, head_up=False, eject_position=False),
+      await self.run_setup(device_up=True, head_up=False, eject_position=False, trash96=False),
       [
         "ZA channels to safe Z",
         "EV 96-head probe and retract",
@@ -303,13 +329,36 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
       ],
     )
 
-  async def warnings_after_setup(self, head_up: bool, eject_position: bool) -> List[str]:
+  async def warnings_after_setup(
+    self, head_up: bool, eject_position: bool, trash96: bool = True
+  ) -> List[str]:
     with unittest.mock.patch.object(master.logger, "warning") as warning:
-      await self.run_setup(device_up=True, head_up=head_up, eject_position=eject_position)
+      await self.run_setup(
+        device_up=True, head_up=head_up, eject_position=eject_position, trash96=trash96
+      )
     return [call.args[0] % call.args[1:] for call in warning.call_args_list]
 
+  async def test_a_head_told_nowhere_to_eject_ejects_at_the_decks_trash(self):
+    """A STAR deck carries a trash for the 96-head, and a head with no eject location of its own is
+    initialized over it, centred, as legacy does."""
+    star = simulator.STARSimulationDriver(
+      deck=STARDeck(), initialized=True, declared_configuration_json=RECORDING_STAR
+    )
+    star.initialized["H0"] = False
+    head = cast(Head96, star.head96)
+    assert star.deck is not None
+
+    with recorded_moves() as moves:
+      await star.setup()
+
+    self.assertIn("EI 96-head", moves)
+    self.assertEqual(
+      head.configuration.tip_discard_location,
+      head._position_centred_in(star.deck.get_resource("trash_core96")),
+    )
+
   async def test_a_feature_left_down_is_named_once_setup_has_run(self):
-    warnings = await self.warnings_after_setup(head_up=False, eject_position=False)
+    warnings = await self.warnings_after_setup(head_up=False, eject_position=False, trash96=False)
     self.assertTrue(
       any("setup finished with these not initialized" in w and "Head96" in w for w in warnings),
       warnings,
